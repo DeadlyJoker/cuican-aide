@@ -99,6 +99,7 @@ import {
   type OfficeMessage,
   type OfficeTask,
   type OfficeWorkspace,
+  type ToolConfig,
   type TraceStep,
   type KnowledgeData,
   type KnowledgeEntry,
@@ -108,9 +109,11 @@ import {
   readAgentConfigFiles as readStoredAgentConfigFiles,
   readAutomationConfigFiles as readStoredAutomationConfigFiles,
   readOfficeConfigFiles as readStoredOfficeConfigFiles,
+  readToolConfigFiles as readStoredToolConfigFiles,
   writeAgentConfigFile as writeStoredAgentConfigFile,
   writeAutomationConfigFile as writeStoredAutomationConfigFile,
   writeOfficeConfigFile as writeStoredOfficeConfigFile,
+  writeToolConfigFile as writeStoredToolConfigFile,
 } from "./lib/domainPersistence";
 export type {
   ActivityData,
@@ -133,6 +136,7 @@ export type {
   OfficeMessage,
   OfficeTask,
   OfficeWorkspace,
+  ToolConfig,
   TraceStep,
 } from "./lib/crewonDomain";
 
@@ -4849,9 +4853,10 @@ export function App() {
           );
         }
 
-        const [skillsResponse, pluginsResponse] = await Promise.all([
+        const [skillsResponse, pluginsResponse, workspaceToolItems] = await Promise.all([
           clientRef.current?.listSkills(effectiveCwd),
           clientRef.current?.listPlugins(effectiveCwd),
+          readToolConfigFiles(),
         ]);
         const servers = mcpResponse?.data ?? [];
         const pluginEntries = (pluginsResponse?.marketplaces ?? []).flatMap(
@@ -4944,8 +4949,8 @@ export function App() {
           title,
           subtitle:
             locale === "zh"
-              ? `${servers.length} 个 MCP · ${skills.length} 个 Skill`
-              : `${servers.length} MCP · ${skills.length} skills`,
+              ? `${servers.length} 个 MCP · ${skills.length} 个 Skill · ${workspaceToolItems.length} 个工作区配置`
+              : `${servers.length} MCP · ${skills.length} skills · ${workspaceToolItems.length} workspace configs`,
           body:
             locale === "zh"
               ? "工具库是智能体和办公室的能力市场。MCP 负责连接外部系统，Skill 负责沉淀可复用流程；新建后可以分配给某个智能体或办公室。"
@@ -4966,6 +4971,26 @@ export function App() {
             },
           ],
           items: [
+            ...(workspaceToolItems.length > 0
+              ? [
+                  {
+                    title:
+                      locale === "zh"
+                        ? "工作区工具配置"
+                        : "Workspace tool configs",
+                    meta:
+                      locale === "zh"
+                        ? `${workspaceToolItems.length} 个草稿`
+                        : `${workspaceToolItems.length} drafts`,
+                    description:
+                      locale === "zh"
+                        ? "这些 MCP 和 Skill 来自 app-server domain API 或 .crewon/tools，可继续编辑并分配给智能体。"
+                        : "These MCP and Skill entries come from the app-server domain API or .crewon/tools and can be assigned to agents.",
+                    section: true,
+                  },
+                  ...workspaceToolItems,
+                ]
+              : []),
             {
               title: "MCP",
               meta:
@@ -6511,6 +6536,71 @@ export function App() {
           configPath: filePath,
         },
       }));
+  }
+
+  async function writeToolConfigFile(config: ToolConfig): Promise<string | null> {
+    const toolCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (!toolCwd || !client) {
+      return null;
+    }
+    return writeStoredToolConfigFile(client, toolCwd, config);
+  }
+
+  async function readToolConfigFiles(): Promise<LibraryItem[]> {
+    const toolCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (!toolCwd || !client) {
+      return [];
+    }
+
+    const records = await readStoredToolConfigFiles(client, toolCwd);
+    return records.map(({ filePath, savedAt, config }) => ({
+      title: `${config.kind === "mcp" ? "MCP" : "Skill"} · ${config.title}`,
+      meta:
+        locale === "zh"
+          ? `工作区配置 · ${savedAt ? new Date(savedAt).toLocaleString("zh-CN") : pathBaseName(filePath)}`
+          : `Workspace config · ${savedAt ? new Date(savedAt).toLocaleString("en-US") : pathBaseName(filePath)}`,
+      description:
+        config.description ||
+        (config.kind === "mcp"
+          ? config.command
+          : config.path) ||
+        (locale === "zh"
+          ? "从工作区工具配置恢复。"
+          : "Restored from a workspace tool config."),
+      glyph: config.kind === "mcp" ? "⌁" : "◇",
+      accent: config.kind === "mcp" ? "blue" : "violet",
+      badge: {
+        label: config.kind === "mcp" ? "MCP" : "Skill",
+        tone: config.enabled === false ? "warning" : "planning",
+      },
+      action:
+        config.kind === "mcp"
+          ? {
+              type: "mcp-detail",
+              title: config.title,
+              subtitle: config.name,
+              body: [
+                config.description,
+                config.command
+                  ? `${locale === "zh" ? "命令" : "Command"}: ${config.command}`
+                  : null,
+                config.args?.length
+                  ? `${locale === "zh" ? "参数" : "Args"}: ${config.args.join(" ")}`
+                  : null,
+                locale === "zh" ? `配置文件：${filePath}` : `Config file: ${filePath}`,
+              ]
+                .filter(Boolean)
+                .join("\n"),
+            }
+          : {
+              type: "skill-file",
+              skillName: config.name,
+              path: config.path ?? filePath,
+              enabled: config.enabled ?? true,
+            },
+    }));
   }
 
   async function readRecruitableAgentConfig(
@@ -8737,10 +8827,12 @@ export function App() {
           return;
         }
 
+        const parsedArgs = args as string[];
+        const parsedEnv = env as Record<string, string>;
         const serverConfig = {
           command,
-          args,
-          env,
+          args: parsedArgs,
+          env: parsedEnv,
           enabled: false,
         };
 
@@ -8764,6 +8856,19 @@ export function App() {
             mergeStrategy: "upsert",
           },
         ]);
+        await writeToolConfigFile({
+          kind: "mcp",
+          title: rawName || serverName,
+          name: serverName,
+          description:
+            locale === "zh"
+              ? "从工具页创建的 MCP 草稿。"
+              : "MCP draft created from the tools page.",
+          command,
+          args: parsedArgs,
+          env: parsedEnv,
+          enabled: false,
+        });
         await clientRef.current?.reloadMcpServers();
         await openLibrary("tools");
         setNotice({
@@ -8838,6 +8943,14 @@ export function App() {
 
         await clientRef.current?.createDirectory(skillDir, true);
         await clientRef.current?.writeTextFile(skillFile, skillBody);
+        await writeToolConfigFile({
+          kind: "skill",
+          title: skillName,
+          name: skillName,
+          description,
+          path: skillFile,
+          enabled: true,
+        });
         const nextExtraRoots = mergeSkillExtraRoots(
           readStoredSkillExtraRoots(),
           [skillsRoot],

@@ -1264,6 +1264,16 @@ impl MessageProcessor {
                 .automation_save(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::ToolList { params, .. } => self
+                .crewon_domain_processor
+                .tool_list(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::ToolSave { params, .. } => self
+                .crewon_domain_processor
+                .tool_save(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::SkillsConfigWrite { params, .. } => {
                 self.catalog_processor.skills_config_write(params).await
             }

@@ -10,9 +10,12 @@ import type {
   AutomationConfigRecord,
   OfficeConfig,
   OfficeConfigRecord,
+  ToolConfig,
+  ToolConfigKind,
+  ToolConfigRecord,
 } from "./domainTypes";
 
-export type DomainConfigKind = "agent" | "automation" | "office";
+export type DomainConfigKind = "agent" | "automation" | "office" | "tool";
 
 export type DomainConfigRecord<TConfig> = {
   filePath: string;
@@ -47,6 +50,10 @@ export function automationConfigDirectory(cwd: string): string {
 
 export function officeConfigDirectory(cwd: string): string {
   return crewonConfigDirectory(cwd, "office");
+}
+
+export function toolConfigDirectory(cwd: string): string {
+  return crewonConfigDirectory(cwd, "tool");
 }
 
 export function slugifyDomainFileName(
@@ -146,6 +153,29 @@ export async function writeOfficeConfigFile(
   return filePath;
 }
 
+export async function writeToolConfigFile(
+  client: AppServerClient,
+  cwd: string,
+  config: ToolConfig,
+): Promise<string> {
+  try {
+    return (await client.saveToolConfig(cwd, config)).filePath;
+  } catch (error) {
+    if (!shouldFallbackToFsPersistence(error)) {
+      throw error;
+    }
+  }
+
+  const toolsDir = toolConfigDirectory(cwd);
+  const filePath = joinDomainPath(
+    toolsDir,
+    domainConfigFileName("tool", config.title, config.name),
+  );
+  const record: ToolConfigRecord = createToolConfigRecord(config);
+  await writeConfigRecord(client, toolsDir, filePath, record);
+  return filePath;
+}
+
 export async function readAgentConfigFiles(
   client: AppServerClient,
   cwd: string,
@@ -199,6 +229,29 @@ export async function readOfficeConfigFiles(
   );
 }
 
+export async function readToolConfigFiles(
+  client: AppServerClient,
+  cwd: string,
+  kind?: ToolConfigKind,
+): Promise<Array<DomainConfigRecord<ToolConfig>>> {
+  try {
+    return normalizeDomainConfigList(await client.listToolConfigs(cwd, kind));
+  } catch (error) {
+    if (!shouldFallbackToFsPersistence(error)) {
+      throw error;
+    }
+  }
+
+  const records = await readConfigRecords<ToolConfig>(
+    client,
+    toolConfigDirectory(cwd),
+    isToolConfigRecord,
+  );
+  return kind
+    ? records.filter((record) => record.config.kind === kind)
+    : records;
+}
+
 function configDirectoryName(kind: DomainConfigKind): string {
   switch (kind) {
     case "agent":
@@ -207,6 +260,8 @@ function configDirectoryName(kind: DomainConfigKind): string {
       return "automations";
     case "office":
       return "offices";
+    case "tool":
+      return "tools";
   }
 }
 
@@ -219,7 +274,8 @@ function normalizeDomainConfigList<TConfig>(
       savedAt: record.savedAt,
       config: record.config,
     }))
-    .sort((left, right) => right.savedAt.localeCompare(left.savedAt));
+    .sort((left, right) => right.savedAt.localeCompare(left.savedAt))
+    .slice(0, MAX_CONFIG_RECORDS);
 }
 
 function shouldFallbackToFsPersistence(error: unknown): boolean {
@@ -269,11 +325,24 @@ function createOfficeConfigRecord(config: OfficeConfig): OfficeConfigRecord {
   };
 }
 
+function createToolConfigRecord(config: ToolConfig): ToolConfigRecord {
+  return {
+    version: 1,
+    kind: "tool",
+    savedAt: new Date().toISOString(),
+    config,
+  };
+}
+
 async function writeConfigRecord(
   client: AppServerClient,
   directory: string,
   filePath: string,
-  record: AgentConfigRecord | AutomationConfigRecord | OfficeConfigRecord,
+  record:
+    | AgentConfigRecord
+    | AutomationConfigRecord
+    | OfficeConfigRecord
+    | ToolConfigRecord,
 ): Promise<void> {
   await client.createDirectory(directory, true);
   await client.writeTextFile(filePath, `${JSON.stringify(record, null, 2)}\n`);
@@ -285,7 +354,8 @@ async function readConfigRecords<TConfig>(
   isExpectedRecord: (value: unknown) => value is
     | AgentConfigRecord
     | AutomationConfigRecord
-    | OfficeConfigRecord,
+    | OfficeConfigRecord
+    | ToolConfigRecord,
 ): Promise<Array<DomainConfigRecord<TConfig>>> {
   let entries: Awaited<ReturnType<AppServerClient["readDirectory"]>>["entries"];
   try {
@@ -297,7 +367,6 @@ async function readConfigRecords<TConfig>(
   const records = await Promise.allSettled(
     entries
       .filter((entry) => entry.isFile && entry.fileName.endsWith(".json"))
-      .slice(0, MAX_CONFIG_RECORDS)
       .map(async (entry) => {
         const filePath = joinDomainPath(directory, entry.fileName);
         const response = await client.readFile(filePath);
@@ -317,7 +386,8 @@ async function readConfigRecords<TConfig>(
     .flatMap((result) =>
       result.status === "fulfilled" && result.value ? [result.value] : [],
     )
-    .sort((left, right) => right.savedAt.localeCompare(left.savedAt));
+    .sort((left, right) => right.savedAt.localeCompare(left.savedAt))
+    .slice(0, MAX_CONFIG_RECORDS);
 }
 
 function isAgentConfigRecord(value: unknown): value is AgentConfigRecord {
@@ -341,6 +411,16 @@ function isOfficeConfigRecord(value: unknown): value is OfficeConfigRecord {
     isRecord(value, "office") &&
     isObject(value.config) &&
     isObject(value.config.workspace)
+  );
+}
+
+function isToolConfigRecord(value: unknown): value is ToolConfigRecord {
+  return (
+    isRecord(value, "tool") &&
+    isObject(value.config) &&
+    (value.config.kind === "mcp" || value.config.kind === "skill") &&
+    typeof value.config.title === "string" &&
+    typeof value.config.name === "string"
   );
 }
 

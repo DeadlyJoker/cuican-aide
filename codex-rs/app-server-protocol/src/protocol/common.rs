@@ -752,6 +752,16 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AutomationSaveResponse,
     },
+    ToolList => "tool/list" {
+        params: v2::ToolListParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolListResponse,
+    },
+    ToolSave => "tool/save" {
+        params: v2::ToolSaveParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolSaveResponse,
+    },
     // File system requests are intentionally concurrent. Desktop already treats local
     // file system operations as concurrent, and app-server remote fs mirrors that model.
     FsReadFile => "fs/readFile" {

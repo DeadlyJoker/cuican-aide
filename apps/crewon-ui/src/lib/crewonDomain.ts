@@ -171,6 +171,27 @@ export type AutomationConfigRecord = {
   config: AutomationConfig;
 };
 
+export type ToolConfigKind = "mcp" | "skill";
+
+export type ToolConfig = {
+  kind: ToolConfigKind;
+  title: string;
+  name: string;
+  description?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  path?: string;
+  enabled?: boolean;
+};
+
+export type ToolConfigRecord = {
+  version: 1;
+  kind: "tool";
+  savedAt: string;
+  config: ToolConfig;
+};
+
 export type OfficeConfig = {
   title: string;
   subtitle: string;

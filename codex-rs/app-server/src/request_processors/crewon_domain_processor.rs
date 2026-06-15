@@ -13,11 +13,17 @@ use crewon_app_server_protocol::AutomationListResponse;
 use crewon_app_server_protocol::AutomationSaveParams;
 use crewon_app_server_protocol::AutomationSaveResponse;
 use crewon_app_server_protocol::CrewonDomainConfigRecord;
+use crewon_app_server_protocol::CrewonToolConfigRecord;
 use crewon_app_server_protocol::JSONRPCErrorError;
 use crewon_app_server_protocol::OfficeListParams;
 use crewon_app_server_protocol::OfficeListResponse;
 use crewon_app_server_protocol::OfficeSaveParams;
 use crewon_app_server_protocol::OfficeSaveResponse;
+use crewon_app_server_protocol::ToolConfigKind;
+use crewon_app_server_protocol::ToolListParams;
+use crewon_app_server_protocol::ToolListResponse;
+use crewon_app_server_protocol::ToolSaveParams;
+use crewon_app_server_protocol::ToolSaveResponse;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -34,6 +40,7 @@ enum DomainKind {
     Agent,
     Office,
     Automation,
+    Tool,
 }
 
 impl DomainKind {
@@ -42,6 +49,7 @@ impl DomainKind {
             Self::Agent => "agent",
             Self::Office => "office",
             Self::Automation => "automation",
+            Self::Tool => "tool",
         }
     }
 
@@ -50,13 +58,14 @@ impl DomainKind {
             Self::Agent => "agents",
             Self::Office => "offices",
             Self::Automation => "automations",
+            Self::Tool => "tools",
         }
     }
 
     fn title_field(self) -> &'static str {
         match self {
             Self::Agent => "name",
-            Self::Office | Self::Automation => "title",
+            Self::Office | Self::Automation | Self::Tool => "title",
         }
     }
 
@@ -71,6 +80,7 @@ impl DomainKind {
                 .get("workspace")
                 .and_then(|workspace| workspace.get("threadId"))
                 .and_then(JsonValue::as_str),
+            Self::Tool => tool_identity(config),
         }
     }
 
@@ -84,6 +94,12 @@ impl DomainKind {
                 .get("workspace")
                 .is_some_and(serde_json::Value::is_object),
             Self::Automation => config.contains_key("title"),
+            Self::Tool => {
+                matches!(
+                    config.get("kind").and_then(JsonValue::as_str),
+                    Some("mcp" | "skill")
+                ) && config.contains_key("title")
+            }
         }
     }
 }
@@ -154,6 +170,27 @@ impl CrewonDomainRequestProcessor {
             .await
             .map(|file_path| AutomationSaveResponse { file_path })
     }
+
+    pub(crate) async fn tool_list(
+        &self,
+        params: ToolListParams,
+    ) -> Result<ToolListResponse, JSONRPCErrorError> {
+        let (records, next_cursor) =
+            list_tool_records(&params.cwd, params.kind, params.cursor, params.limit).await?;
+        Ok(ToolListResponse {
+            data: records,
+            next_cursor,
+        })
+    }
+
+    pub(crate) async fn tool_save(
+        &self,
+        params: ToolSaveParams,
+    ) -> Result<ToolSaveResponse, JSONRPCErrorError> {
+        save_record(DomainKind::Tool, &params.cwd, params.config)
+            .await
+            .map(|file_path| ToolSaveResponse { file_path })
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -170,6 +207,16 @@ async fn list_records(
     cwd: &str,
     cursor: Option<String>,
     limit: Option<u32>,
+) -> Result<(Vec<CrewonDomainConfigRecord>, Option<String>), JSONRPCErrorError> {
+    list_records_matching(kind, cwd, cursor, limit, |_| true).await
+}
+
+async fn list_records_matching(
+    kind: DomainKind,
+    cwd: &str,
+    cursor: Option<String>,
+    limit: Option<u32>,
+    mut include_record: impl FnMut(&CrewonDomainConfigRecord) -> bool,
 ) -> Result<(Vec<CrewonDomainConfigRecord>, Option<String>), JSONRPCErrorError> {
     let offset = parse_cursor(cursor)?;
     let limit = normalize_limit(limit);
@@ -203,6 +250,9 @@ async fn list_records(
         let Some(record) = read_record(kind, &path).await? else {
             continue;
         };
+        if !include_record(&record) {
+            continue;
+        }
         records.push(record);
     }
 
@@ -240,6 +290,41 @@ async fn read_record(
         saved_at: record.saved_at.unwrap_or_default(),
         config: record.config,
     }))
+}
+
+async fn list_tool_records(
+    cwd: &str,
+    kind_filter: Option<ToolConfigKind>,
+    cursor: Option<String>,
+    limit: Option<u32>,
+) -> Result<(Vec<CrewonToolConfigRecord>, Option<String>), JSONRPCErrorError> {
+    let (records, next_cursor) =
+        list_records_matching(DomainKind::Tool, cwd, cursor, limit, |record| {
+            let Some(kind) = tool_kind(&record.config) else {
+                return false;
+            };
+            match kind_filter {
+                Some(kind_filter) => kind_filter == kind,
+                None => true,
+            }
+        })
+        .await?;
+    let records = records
+        .into_iter()
+        .filter_map(|record| {
+            let kind = tool_kind(&record.config)?;
+            if kind_filter.is_some_and(|kind_filter| kind_filter != kind) {
+                return None;
+            }
+            Some(CrewonToolConfigRecord {
+                file_path: record.file_path,
+                saved_at: record.saved_at,
+                kind,
+                config: record.config,
+            })
+        })
+        .collect();
+    Ok((records, next_cursor))
 }
 
 async fn save_record(
@@ -313,6 +398,21 @@ fn domain_file_name(kind: DomainKind, config: &JsonValue) -> String {
     let stem = slugify(title, kind.record_kind());
     let suffix = slugify(&suffix, &suffix);
     format!("{stem}-{suffix}.json")
+}
+
+fn tool_kind(config: &JsonValue) -> Option<ToolConfigKind> {
+    match config.get("kind").and_then(JsonValue::as_str) {
+        Some("mcp") => Some(ToolConfigKind::Mcp),
+        Some("skill") => Some(ToolConfigKind::Skill),
+        _ => None,
+    }
+}
+
+fn tool_identity(config: &JsonValue) -> Option<&str> {
+    config
+        .get("id")
+        .or_else(|| config.get("name"))
+        .and_then(JsonValue::as_str)
 }
 
 fn slugify(value: &str, fallback: &str) -> String {

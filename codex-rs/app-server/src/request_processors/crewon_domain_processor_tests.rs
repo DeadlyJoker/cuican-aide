@@ -2,6 +2,9 @@ use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::OfficeSaveParams;
+use crewon_app_server_protocol::ToolConfigKind;
+use crewon_app_server_protocol::ToolListParams;
+use crewon_app_server_protocol::ToolSaveParams;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use tempfile::TempDir;
@@ -98,6 +101,76 @@ async fn save_rejects_config_without_required_fields() {
     assert_eq!(
         error.message,
         "office config is missing required fields".to_string()
+    );
+}
+
+#[tokio::test]
+async fn saves_and_lists_tool_configs_by_kind() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let mcp_config = json!({
+        "kind": "mcp",
+        "title": "Issue Tracker",
+        "name": "linear"
+    });
+    let skill_config = json!({
+        "kind": "skill",
+        "title": "Release Writer",
+        "name": "release-writer"
+    });
+
+    let mcp_save_response = processor
+        .tool_save(ToolSaveParams {
+            cwd: temp_dir.path().to_string_lossy().into_owned(),
+            config: mcp_config.clone(),
+        })
+        .await
+        .expect("save mcp tool config");
+    processor
+        .tool_save(ToolSaveParams {
+            cwd: temp_dir.path().to_string_lossy().into_owned(),
+            config: skill_config,
+        })
+        .await
+        .expect("save skill tool config");
+
+    let list_response = processor
+        .tool_list(ToolListParams {
+            cwd: temp_dir.path().to_string_lossy().into_owned(),
+            kind: Some(ToolConfigKind::Mcp),
+            cursor: None,
+            limit: Some(1),
+        })
+        .await
+        .expect("list mcp tool configs");
+
+    assert_eq!(list_response.next_cursor, None);
+    assert_eq!(list_response.data.len(), 1);
+    assert_eq!(list_response.data[0].file_path, mcp_save_response.file_path);
+    assert_eq!(list_response.data[0].kind, ToolConfigKind::Mcp);
+    assert_eq!(list_response.data[0].config, mcp_config);
+}
+
+#[tokio::test]
+async fn tool_save_rejects_unknown_kind() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+
+    let error = processor
+        .tool_save(ToolSaveParams {
+            cwd: temp_dir.path().to_string_lossy().into_owned(),
+            config: json!({
+                "kind": "shell",
+                "title": "Shell"
+            }),
+        })
+        .await
+        .expect_err("unknown tool kind should fail");
+
+    assert_eq!(error.code, INVALID_PARAMS_ERROR_CODE);
+    assert_eq!(
+        error.message,
+        "tool config is missing required fields".to_string()
     );
 }
 

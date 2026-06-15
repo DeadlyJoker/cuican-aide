@@ -1945,9 +1945,9 @@ textarea:focus-visible {
   display: grid;
   align-content: start;
   gap: 34px;
-  width: min(640px, calc(100vw - 340px));
+  width: min(640px, calc(100vw - 320px));
   margin: 0 auto;
-  padding: 28px 0 96px;
+  padding: 28px 24px 96px;
 }
 
 .settings-heading {
@@ -1966,6 +1966,8 @@ textarea:focus-visible {
   margin: 0;
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .settings-card {
@@ -2007,13 +2009,17 @@ textarea:focus-visible {
 }
 
 .settings-field-list span {
+  min-width: 0;
   color: var(--text);
   font-size: 12px;
   font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
 .settings-field-list input,
 .settings-field-list select {
+  width: 100%;
+  min-width: 0;
   min-height: 30px;
   padding: 0 9px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -2179,6 +2185,14 @@ textarea:focus-visible {
   background: transparent;
 }
 
+.app-shell[data-inspector-open="true"]:not([data-right-sidebar-open="true"]) .message-list {
+  padding-right: min(286px, 26vw);
+}
+
+.app-shell[data-inspector-open="true"]:not([data-right-sidebar-open="true"]) .composer {
+  padding-right: min(286px, 26vw);
+}
+
 .turn-group,
 .message-list > .message {
   width: min(620px, 100%);
@@ -2271,9 +2285,11 @@ textarea:focus-visible {
   display: grid;
   gap: 8px;
   max-width: 760px;
+  min-width: 0;
   color: rgba(238, 238, 238, 0.78);
   font-size: 13px;
   line-height: 1.58;
+  overflow-wrap: anywhere;
 }
 
 .markdown-content :is(p, ul, ol, blockquote, pre, h3, h4) {
@@ -2371,10 +2387,12 @@ textarea:focus-visible {
 .message[data-kind="userMessage"] .markdown-content {
   display: inline-block;
   max-width: min(430px, 100%);
+  min-width: 0;
   padding: 6px 9px;
   border-radius: 8px;
   background: #2b2b2b;
   color: #eeeeee;
+  text-align: left;
 }
 
 :root:not([data-theme="dark"]) .message[data-kind="userMessage"] .message-body p,
@@ -4882,12 +4900,16 @@ button.library-item:hover .library-card-chevron {
 }
 
 /* Right rail and environment popover are separate surfaces. */
+.workspace {
+  grid-template-columns: 240px minmax(0, 1fr);
+}
+
 .app-shell[data-right-sidebar-open="true"] .workspace {
   grid-template-columns: 240px minmax(0, 1fr) minmax(320px, 38vw);
 }
 
 .app-shell[data-sidebar-open="false"][data-right-sidebar-open="true"] .workspace {
-  grid-template-columns: 0px minmax(0, 1fr) minmax(320px, 38vw);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 38vw);
 }
 
 .right-sidebar {
@@ -4913,6 +4935,21 @@ button.library-item:hover .library-card-chevron {
 
 .app-shell[data-inspector-open="true"] .notice-stack {
   right: 52px;
+}
+
+.inspector {
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  pointer-events: auto;
+}
+
+.app-shell[data-right-sidebar-open="true"] .inspector {
+  right: calc(max(320px, 38vw) + 12px);
+}
+
+.inspector-panel {
+  max-height: calc(100vh - 64px);
+  overflow: auto;
 }
 
 @media (max-width: 1120px) {
@@ -5067,6 +5104,26 @@ button.library-item:hover .library-card-chevron {
   .app-shell[data-sidebar-open="false"] .workspace,
   .workspace {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-sidebar {
+    position: absolute;
+    z-index: 5;
+    inset: 0 auto 0 0;
+    width: min(86vw, 320px);
+    min-width: 0;
+    box-shadow: 18px 0 42px rgba(18, 32, 51, 0.18);
+  }
+
+  .settings-content {
+    width: min(100%, 640px);
+    padding: 24px 18px 88px;
+  }
+
+  .settings-field-list label {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
   }
 
   .inspector {

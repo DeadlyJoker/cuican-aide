@@ -15,4 +15,7 @@ export type {
   AutomationConfigRecord,
   OfficeConfig,
   OfficeConfigRecord,
+  ToolConfig,
+  ToolConfigKind,
+  ToolConfigRecord,
 } from "./crewonDomain";

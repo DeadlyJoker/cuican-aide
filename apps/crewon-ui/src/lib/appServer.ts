@@ -90,6 +90,8 @@ import type {
   AgentConfig,
   AutomationConfig,
   OfficeConfig,
+  ToolConfig,
+  ToolConfigKind,
 } from "./domainTypes";
 
 type JsonRpcRequest = {
@@ -164,6 +166,16 @@ export type DomainConfigListResponse<TConfig> = {
 
 export type DomainConfigSaveResponse = {
   filePath: string;
+};
+
+export type ToolConfigListResponse = {
+  data: Array<{
+    filePath: string;
+    savedAt: string;
+    kind: ToolConfigKind;
+    config: ToolConfig;
+  }>;
+  nextCursor: string | null;
 };
 
 type ThreadTurnsListResponse = {
@@ -776,6 +788,25 @@ export class AppServerClient {
     config: AutomationConfig,
   ): Promise<DomainConfigSaveResponse> {
     return this.request<DomainConfigSaveResponse>("automation/save", { cwd, config });
+  }
+
+  async listToolConfigs(
+    cwd: string,
+    kind?: ToolConfigKind,
+  ): Promise<ToolConfigListResponse> {
+    return this.request<ToolConfigListResponse>("tool/list", {
+      cwd,
+      kind: kind ?? null,
+      cursor: null,
+      limit: 24,
+    });
+  }
+
+  async saveToolConfig(
+    cwd: string,
+    config: ToolConfig,
+  ): Promise<DomainConfigSaveResponse> {
+    return this.request<DomainConfigSaveResponse>("tool/save", { cwd, config });
   }
 
   async copyPath(sourcePath: string, destinationPath: string, recursive = false): Promise<void> {
