@@ -13336,7 +13336,8 @@
           "cwd": {
             "type": "string"
           },
-          "message": true
+          "message": true,
+          "workspace": true
         },
         "required": [
           "config",

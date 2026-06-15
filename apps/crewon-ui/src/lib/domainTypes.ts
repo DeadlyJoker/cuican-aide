@@ -17,6 +17,7 @@ export type {
   OfficeConfigRecord,
   OfficeMember,
   OfficeMessage,
+  OfficeWorkspace,
   ToolConfig,
   ToolConfigKind,
   ToolConfigRecord,

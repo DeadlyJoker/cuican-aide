@@ -303,6 +303,7 @@ async fn office_message_send_appends_message_and_saves_config() {
             cwd: cwd.clone(),
             config,
             message: message.clone(),
+            workspace: None,
         })
         .await
         .expect("send office message");
@@ -330,6 +331,63 @@ async fn office_message_send_appends_message_and_saves_config() {
             .file_path
             .ends_with(".crewon/offices/platform-office-office-t.json")
     );
+    assert_eq!(send_response.config, expected_config);
+    assert_eq!(
+        read_response.record.expect("office record").config,
+        expected_config
+    );
+}
+
+#[tokio::test]
+async fn office_message_send_saves_workspace_update() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let workspace = json!({
+        "threadId": "office-thread-123456789",
+        "messages": [
+            { "author": "User", "text": "@Reviewer ship demo" },
+            { "author": "Reviewer", "text": "I will take it." }
+        ],
+        "tasks": [
+            { "title": "ship demo", "owner": "Reviewer", "status": "doing" }
+        ]
+    });
+    let config = json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "messages": [],
+            "tasks": []
+        }
+    });
+    let message = json!({
+        "author": "Reviewer",
+        "text": "I will take it."
+    });
+
+    let send_response = processor
+        .office_message_send(OfficeMessageSendParams {
+            cwd: cwd.clone(),
+            config,
+            message,
+            workspace: Some(workspace.clone()),
+        })
+        .await
+        .expect("send office message with workspace update");
+    let read_response = processor
+        .office_read(OfficeReadParams {
+            cwd,
+            thread_id: Some("office-thread-123456789".to_string()),
+            title: None,
+        })
+        .await
+        .expect("read office config");
+
+    let expected_config = json!({
+        "title": "Platform Office",
+        "workspace": workspace
+    });
     assert_eq!(send_response.config, expected_config);
     assert_eq!(
         read_response.record.expect("office record").config,

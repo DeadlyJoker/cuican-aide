@@ -92,6 +92,7 @@ import type {
   OfficeConfig,
   OfficeMember,
   OfficeMessage,
+  OfficeWorkspace,
   ToolConfig,
   ToolConfigKind,
 } from "./domainTypes";
@@ -870,11 +871,13 @@ export class AppServerClient {
     cwd: string,
     config: OfficeConfig,
     message: OfficeMessage,
+    workspace?: OfficeWorkspace | null,
   ): Promise<OfficeMessageSendResponse> {
     return this.request<OfficeMessageSendResponse>("office/message/send", {
       cwd,
       config,
       message,
+      workspace: workspace ?? null,
     });
   }
 

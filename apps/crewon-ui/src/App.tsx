@@ -6346,6 +6346,7 @@ export function App() {
   async function persistOfficeMessage(
     panel: Pick<LibraryPanel, "title" | "subtitle">,
     workspaceBeforeMessage: OfficeWorkspace,
+    workspaceAfterMessage: OfficeWorkspace,
     message: OfficeMessage,
     threadId: string,
   ): Promise<OfficeConfig | null> {
@@ -6364,6 +6365,7 @@ export function App() {
           threadId,
         ),
         message,
+        workspaceAfterMessage,
       );
       return response.config;
     } catch (error) {
@@ -6372,10 +6374,7 @@ export function App() {
       }
       await persistOfficeWorkspace(
         panel,
-        {
-          ...workspaceBeforeMessage,
-          messages: [...workspaceBeforeMessage.messages, message],
-        },
+        workspaceAfterMessage,
         threadId,
       );
       return null;
@@ -7197,6 +7196,7 @@ export function App() {
       const savedConfig = await persistOfficeMessage(
         panel,
         panel.workspace,
+        nextWorkspace,
         message,
         threadId,
       );

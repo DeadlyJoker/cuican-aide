@@ -133,6 +133,8 @@ pub struct OfficeMessageSendParams {
     pub cwd: String,
     pub config: JsonValue,
     pub message: JsonValue,
+    #[ts(optional = nullable)]
+    pub workspace: Option<JsonValue>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

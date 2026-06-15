@@ -219,7 +219,7 @@ impl CrewonDomainRequestProcessor {
         &self,
         params: OfficeMessageSendParams,
     ) -> Result<OfficeMessageSendResponse, JSONRPCErrorError> {
-        let config = append_office_message(params.config, params.message)?;
+        let config = apply_office_message_update(params.config, params.message, params.workspace)?;
         save_record(DomainKind::Office, &params.cwd, config.clone())
             .await
             .map(|file_path| OfficeMessageSendResponse { file_path, config })
@@ -739,15 +739,27 @@ async fn read_agent_record(
     }))
 }
 
-fn append_office_message(
+fn apply_office_message_update(
     mut config: JsonValue,
     message: JsonValue,
+    workspace_update: Option<JsonValue>,
 ) -> Result<JsonValue, JSONRPCErrorError> {
     if !DomainKind::Office.config_matches(&config) {
         return Err(invalid_params("office config is missing required fields"));
     }
     if !message.is_object() {
         return Err(invalid_params("message must be an object"));
+    }
+
+    if let Some(workspace_update) = workspace_update {
+        if !workspace_update.is_object() {
+            return Err(invalid_params("workspace must be an object"));
+        }
+        let Some(config_object) = config.as_object_mut() else {
+            return Err(invalid_params("office config must be an object"));
+        };
+        config_object.insert("workspace".to_string(), workspace_update);
+        return Ok(config);
     }
 
     let Some(workspace) = config
