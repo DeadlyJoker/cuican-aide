@@ -1228,6 +1228,144 @@
       "title": "AutomationListResponse",
       "type": "object"
     },
+    "AutomationRunParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "title": "AutomationRunParams",
+      "type": "object"
+    },
+    "AutomationRunRecord": {
+      "properties": {
+        "automationTitle": {
+          "type": "string"
+        },
+        "completedAt": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "config": true,
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        },
+        "startedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "automationTitle",
+        "config",
+        "runId",
+        "startedAt",
+        "status"
+      ],
+      "type": "object"
+    },
+    "AutomationRunResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "filePath": {
+          "type": "string"
+        },
+        "run": {
+          "$ref": "#/definitions/AutomationRunRecord"
+        }
+      },
+      "required": [
+        "filePath",
+        "run"
+      ],
+      "title": "AutomationRunResponse",
+      "type": "object"
+    },
+    "AutomationRunsListParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "AutomationRunsListParams",
+      "type": "object"
+    },
+    "AutomationRunsListResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "data": {
+          "items": {
+            "$ref": "#/definitions/CrewonAutomationRunConfigRecord"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AutomationRunsListResponse",
+      "type": "object"
+    },
     "AutomationSaveParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -2515,6 +2653,54 @@
             "params"
           ],
           "title": "Automation/saveRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "automation/run"
+              ],
+              "title": "Automation/runRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AutomationRunParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Automation/runRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "automation/runs/list"
+              ],
+              "title": "Automation/runs/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AutomationRunsListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Automation/runs/listRequest",
           "type": "object"
         },
         {
@@ -5406,6 +5592,26 @@
       "required": [
         "hasCredits",
         "unlimited"
+      ],
+      "type": "object"
+    },
+    "CrewonAutomationRunConfigRecord": {
+      "properties": {
+        "filePath": {
+          "type": "string"
+        },
+        "run": {
+          "$ref": "#/definitions/AutomationRunRecord"
+        },
+        "savedAt": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "filePath",
+        "run",
+        "savedAt"
       ],
       "type": "object"
     },

@@ -243,6 +243,56 @@
       ],
       "type": "object"
     },
+    "AutomationRunParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AutomationRunsListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
     "AutomationSaveParams": {
       "properties": {
         "config": true,
@@ -5852,6 +5902,54 @@
         "params"
       ],
       "title": "Automation/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/run"
+          ],
+          "title": "Automation/runRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationRunParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/runRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/runs/list"
+          ],
+          "title": "Automation/runs/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationRunsListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/runs/listRequest",
       "type": "object"
     },
     {

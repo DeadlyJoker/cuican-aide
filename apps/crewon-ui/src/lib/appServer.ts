@@ -192,6 +192,31 @@ export type OfficeMemberAddResponse = {
   config: OfficeConfig;
 };
 
+export type AutomationRunRecord = {
+  runId: string;
+  automationTitle: string;
+  threadId: string | null;
+  status: string;
+  startedAt: number;
+  completedAt: number | null;
+  note: string | null;
+  config: AutomationConfig;
+};
+
+export type AutomationRunResponse = {
+  filePath: string;
+  run: AutomationRunRecord;
+};
+
+export type AutomationRunsListResponse = {
+  data: Array<{
+    filePath: string;
+    savedAt: number;
+    run: AutomationRunRecord;
+  }>;
+  nextCursor: string | null;
+};
+
 export type ToolConfigListResponse = {
   data: Array<{
     filePath: string;
@@ -869,6 +894,30 @@ export class AppServerClient {
     config: AutomationConfig,
   ): Promise<DomainConfigSaveResponse> {
     return this.request<DomainConfigSaveResponse>("automation/save", { cwd, config });
+  }
+
+  async runAutomationConfig(
+    cwd: string,
+    config: AutomationConfig,
+    note: string | null,
+  ): Promise<AutomationRunResponse> {
+    return this.request<AutomationRunResponse>("automation/run", {
+      cwd,
+      config,
+      note,
+    });
+  }
+
+  async listAutomationRuns(
+    cwd: string,
+    threadId?: string | null,
+  ): Promise<AutomationRunsListResponse> {
+    return this.request<AutomationRunsListResponse>("automation/runs/list", {
+      cwd,
+      threadId: threadId ?? null,
+      cursor: null,
+      limit: 24,
+    });
   }
 
   async deleteAutomationConfig(

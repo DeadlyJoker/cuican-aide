@@ -777,6 +777,16 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AutomationSaveResponse,
     },
+    AutomationRun => "automation/run" {
+        params: v2::AutomationRunParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationRunResponse,
+    },
+    AutomationRunsList => "automation/runs/list" {
+        params: v2::AutomationRunsListParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationRunsListResponse,
+    },
     AutomationDelete => "automation/delete" {
         params: v2::AutomationDeleteParams,
         serialization: global("crewon-domain"),

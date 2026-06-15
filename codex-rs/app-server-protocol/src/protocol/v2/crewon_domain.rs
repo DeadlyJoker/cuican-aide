@@ -193,6 +193,59 @@ pub struct AutomationSaveResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct AutomationRunParams {
+    pub cwd: String,
+    pub config: JsonValue,
+    #[ts(optional = nullable)]
+    pub note: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationRunRecord {
+    pub run_id: String,
+    pub automation_title: String,
+    pub thread_id: Option<String>,
+    pub status: String,
+    pub started_at: i64,
+    pub completed_at: Option<i64>,
+    pub note: Option<String>,
+    pub config: JsonValue,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationRunResponse {
+    pub file_path: String,
+    pub run: AutomationRunRecord,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationRunsListParams {
+    pub cwd: String,
+    #[ts(optional = nullable)]
+    pub thread_id: Option<String>,
+    #[ts(optional = nullable)]
+    pub cursor: Option<String>,
+    #[ts(optional = nullable)]
+    pub limit: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationRunsListResponse {
+    pub data: Vec<CrewonAutomationRunConfigRecord>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct AutomationDeleteParams {
     pub cwd: String,
     pub file_path: String,
@@ -281,4 +334,13 @@ pub struct CrewonToolConfigRecord {
     pub saved_at: String,
     pub kind: ToolConfigKind,
     pub config: JsonValue,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct CrewonAutomationRunConfigRecord {
+    pub file_path: String,
+    pub saved_at: i64,
+    pub run: AutomationRunRecord,
 }

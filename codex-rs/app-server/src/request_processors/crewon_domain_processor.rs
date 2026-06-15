@@ -14,8 +14,14 @@ use crewon_app_server_protocol::AutomationDeleteParams;
 use crewon_app_server_protocol::AutomationDeleteResponse;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::AutomationListResponse;
+use crewon_app_server_protocol::AutomationRunParams;
+use crewon_app_server_protocol::AutomationRunRecord;
+use crewon_app_server_protocol::AutomationRunResponse;
+use crewon_app_server_protocol::AutomationRunsListParams;
+use crewon_app_server_protocol::AutomationRunsListResponse;
 use crewon_app_server_protocol::AutomationSaveParams;
 use crewon_app_server_protocol::AutomationSaveResponse;
+use crewon_app_server_protocol::CrewonAutomationRunConfigRecord;
 use crewon_app_server_protocol::CrewonDomainConfigRecord;
 use crewon_app_server_protocol::CrewonToolConfigRecord;
 use crewon_app_server_protocol::JSONRPCErrorError;
@@ -41,13 +47,16 @@ use crewon_app_server_protocol::ToolSaveResponse;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
+use std::cmp::Reverse;
 use tokio::fs;
+use uuid::Uuid;
 
 use crate::error_code::internal_error;
 use crate::error_code::invalid_params;
 
 const MAX_CONFIG_RECORDS: usize = 24;
 const MAX_LIST_LIMIT: usize = 100;
+const AUTOMATION_RUNS_DIRECTORY: &str = "automation-runs";
 
 #[derive(Clone, Copy)]
 enum DomainKind {
@@ -240,6 +249,27 @@ impl CrewonDomainRequestProcessor {
             .map(|file_path| AutomationSaveResponse { file_path })
     }
 
+    pub(crate) async fn automation_run(
+        &self,
+        params: AutomationRunParams,
+    ) -> Result<AutomationRunResponse, JSONRPCErrorError> {
+        create_automation_run(&params.cwd, params.config, params.note).await
+    }
+
+    pub(crate) async fn automation_runs_list(
+        &self,
+        params: AutomationRunsListParams,
+    ) -> Result<AutomationRunsListResponse, JSONRPCErrorError> {
+        list_automation_runs(
+            &params.cwd,
+            params.thread_id.as_deref(),
+            params.cursor,
+            params.limit,
+        )
+        .await
+        .map(|(data, next_cursor)| AutomationRunsListResponse { data, next_cursor })
+    }
+
     pub(crate) async fn automation_delete(
         &self,
         params: AutomationDeleteParams,
@@ -287,6 +317,14 @@ struct PersistedDomainConfigRecord {
     kind: String,
     saved_at: Option<String>,
     config: JsonValue,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistedAutomationRunRecord {
+    version: u32,
+    saved_at: Option<i64>,
+    run: AutomationRunRecord,
 }
 
 async fn list_records(
@@ -445,6 +483,127 @@ async fn save_record(
     Ok(file_path.to_string_lossy().into_owned())
 }
 
+async fn create_automation_run(
+    cwd: &str,
+    config: JsonValue,
+    note: Option<String>,
+) -> Result<AutomationRunResponse, JSONRPCErrorError> {
+    if !DomainKind::Automation.config_matches(&config) {
+        return Err(invalid_params(
+            "automation config is missing required fields",
+        ));
+    }
+
+    let directory = automation_runs_directory(cwd)?;
+    fs::create_dir_all(&directory).await.map_err(map_io_error)?;
+    let now = Utc::now();
+    let started_at = now.timestamp();
+    let title = config
+        .get("title")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("automation")
+        .to_string();
+    let thread_id = config
+        .get("threadId")
+        .and_then(JsonValue::as_str)
+        .map(str::to_string);
+    let run_id = format!("run-{}", Uuid::now_v7());
+    let run = AutomationRunRecord {
+        run_id: run_id.clone(),
+        automation_title: title.clone(),
+        thread_id,
+        status: "running".to_string(),
+        started_at,
+        completed_at: None,
+        note,
+        config,
+    };
+    let file_path = directory.join(format!(
+        "{}-{}.json",
+        slugify(&title, "automation"),
+        slugify(&run_id, &run_id)
+    ));
+    let record = PersistedAutomationRunRecord {
+        version: 1,
+        saved_at: Some(started_at),
+        run: run.clone(),
+    };
+    let mut bytes = serde_json::to_vec_pretty(&record)
+        .map_err(|err| internal_error(format!("failed to serialize automation run: {err}")))?;
+    bytes.push(b'\n');
+    fs::write(&file_path, bytes).await.map_err(map_io_error)?;
+    Ok(AutomationRunResponse {
+        file_path: file_path.to_string_lossy().into_owned(),
+        run,
+    })
+}
+
+async fn list_automation_runs(
+    cwd: &str,
+    thread_id: Option<&str>,
+    cursor: Option<String>,
+    limit: Option<u32>,
+) -> Result<(Vec<CrewonAutomationRunConfigRecord>, Option<String>), JSONRPCErrorError> {
+    let offset = parse_cursor(cursor)?;
+    let limit = normalize_limit(limit);
+    let directory = automation_runs_directory(cwd)?;
+    let mut entries = match fs::read_dir(&directory).await {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok((Vec::new(), None)),
+        Err(err) => {
+            return Err(internal_error(format!(
+                "failed to read {}: {err}",
+                directory.display()
+            )));
+        }
+    };
+
+    let mut records = Vec::new();
+    while let Some(entry) = entries.next_entry().await.map_err(map_io_error)? {
+        let path = entry.path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
+            continue;
+        }
+        let Some(record) = read_automation_run_record(&path).await? else {
+            continue;
+        };
+        if thread_id.is_some_and(|thread_id| record.run.thread_id.as_deref() != Some(thread_id)) {
+            continue;
+        }
+        records.push(record);
+    }
+
+    records.sort_by_key(|record| Reverse(record.saved_at));
+    let next_cursor = if records.len() > offset + limit {
+        Some((offset + limit).to_string())
+    } else {
+        None
+    };
+    let records = records.into_iter().skip(offset).take(limit).collect();
+    Ok((records, next_cursor))
+}
+
+async fn read_automation_run_record(
+    path: &Path,
+) -> Result<Option<CrewonAutomationRunConfigRecord>, JSONRPCErrorError> {
+    let bytes = match fs::read(path).await {
+        Ok(bytes) => bytes,
+        Err(_) => return Ok(None),
+    };
+    let record = match serde_json::from_slice::<PersistedAutomationRunRecord>(&bytes) {
+        Ok(record) => record,
+        Err(_) => return Ok(None),
+    };
+    if record.version != 1 {
+        return Ok(None);
+    }
+    Ok(Some(CrewonAutomationRunConfigRecord {
+        file_path: path.to_string_lossy().into_owned(),
+        saved_at: record.saved_at.unwrap_or_default(),
+        run: record.run,
+    }))
+}
+
 fn ensure_agent_id(mut config: JsonValue) -> Result<(JsonValue, String), JSONRPCErrorError> {
     if !DomainKind::Agent.config_matches(&config) {
         return Err(invalid_params("agent config is missing required fields"));
@@ -587,6 +746,19 @@ fn domain_directory(cwd: &str, kind: DomainKind) -> Result<PathBuf, JSONRPCError
     }
 
     Ok(cwd.join(".crewon").join(kind.directory_name()))
+}
+
+fn automation_runs_directory(cwd: &str) -> Result<PathBuf, JSONRPCErrorError> {
+    if cwd.trim().is_empty() {
+        return Err(invalid_params("cwd must not be empty"));
+    }
+
+    let cwd = PathBuf::from(cwd);
+    if !cwd.is_absolute() {
+        return Err(invalid_params("cwd must be an absolute path"));
+    }
+
+    Ok(cwd.join(".crewon").join(AUTOMATION_RUNS_DIRECTORY))
 }
 
 fn validate_record_file_path(

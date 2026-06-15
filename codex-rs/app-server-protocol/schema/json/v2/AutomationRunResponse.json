@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "AutomationRunRecord": {
+      "properties": {
+        "automationTitle": {
+          "type": "string"
+        },
+        "completedAt": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "config": true,
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        },
+        "startedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "automationTitle",
+        "config",
+        "runId",
+        "startedAt",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "filePath": {
+      "type": "string"
+    },
+    "run": {
+      "$ref": "#/definitions/AutomationRunRecord"
+    }
+  },
+  "required": [
+    "filePath",
+    "run"
+  ],
+  "title": "AutomationRunResponse",
+  "type": "object"
+}

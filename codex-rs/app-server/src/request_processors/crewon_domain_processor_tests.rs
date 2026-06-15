@@ -2,6 +2,8 @@ use crewon_app_server_protocol::AgentDeleteParams;
 use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AutomationListParams;
+use crewon_app_server_protocol::AutomationRunParams;
+use crewon_app_server_protocol::AutomationRunsListParams;
 use crewon_app_server_protocol::OfficeMemberAddParams;
 use crewon_app_server_protocol::OfficeMessageSendParams;
 use crewon_app_server_protocol::OfficeReadParams;
@@ -132,6 +134,50 @@ async fn list_ignores_invalid_or_wrong_kind_records() {
         .expect("list automation configs");
 
     assert_eq!(list_response.data, Vec::new());
+}
+
+#[tokio::test]
+async fn automation_run_records_and_lists_runs() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let config = json!({
+        "title": "Nightly QA",
+        "threadId": "automation-thread-123456789",
+        "prompt": "Run QA"
+    });
+
+    let run_response = processor
+        .automation_run(AutomationRunParams {
+            cwd: cwd.clone(),
+            config: config.clone(),
+            note: Some("manual smoke".to_string()),
+        })
+        .await
+        .expect("record automation run");
+    let list_response = processor
+        .automation_runs_list(AutomationRunsListParams {
+            cwd,
+            thread_id: Some("automation-thread-123456789".to_string()),
+            cursor: None,
+            limit: None,
+        })
+        .await
+        .expect("list automation runs");
+
+    assert!(run_response.file_path.ends_with(".json"));
+    assert_eq!(run_response.run.automation_title, "Nightly QA");
+    assert_eq!(
+        run_response.run.thread_id,
+        Some("automation-thread-123456789".to_string())
+    );
+    assert_eq!(run_response.run.status, "running");
+    assert_eq!(run_response.run.note, Some("manual smoke".to_string()));
+    assert_eq!(run_response.run.config, config);
+    assert_eq!(list_response.next_cursor, None);
+    assert_eq!(list_response.data.len(), 1);
+    assert_eq!(list_response.data[0].file_path, run_response.file_path);
+    assert_eq!(list_response.data[0].run, run_response.run);
 }
 
 #[tokio::test]

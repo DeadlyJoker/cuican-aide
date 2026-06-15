@@ -1289,6 +1289,16 @@ impl MessageProcessor {
                 .automation_save(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::AutomationRun { params, .. } => self
+                .crewon_domain_processor
+                .automation_run(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AutomationRunsList { params, .. } => self
+                .crewon_domain_processor
+                .automation_runs_list(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::AutomationDelete { params, .. } => self
                 .crewon_domain_processor
                 .automation_delete(params)

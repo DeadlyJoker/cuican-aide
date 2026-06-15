@@ -50,6 +50,7 @@ import { Transcript, type WorkMode } from "./components/Transcript";
 import {
   AppServerClient,
   AppServerRpcError,
+  type AutomationRunRecord,
   type BackgroundTerminal,
   type AppServerNotification,
   type AppServerRequest,
@@ -1066,6 +1067,93 @@ function automationRunHistoryItems(
         locale === "zh"
           ? "来自 app-server 线程的最近运行记录。"
           : "Recent runs loaded from the app-server thread.",
+      section: true,
+    },
+    ...runs,
+  ];
+}
+
+function emptyAutomationRunItems(locale: Locale): LibraryItem[] {
+  return [
+    {
+      title: locale === "zh" ? "暂无运行记录" : "No run history",
+      meta: locale === "zh" ? "等待首次运行" : "Waiting for first run",
+      description:
+        locale === "zh"
+          ? "点击立即运行后，会把请求和结果写入后端执行线程。"
+          : "Run it once to write the request and result into the backend execution thread.",
+      glyph: "◷",
+      accent: "slate",
+    },
+  ];
+}
+
+function automationRunRecordItems(
+  records: Array<{
+    filePath: string;
+    savedAt: number;
+    run: AutomationRunRecord;
+  }>,
+  locale: Locale,
+): LibraryItem[] {
+  const runs = records.slice(0, 6).map(({ filePath, savedAt, run }): LibraryItem => {
+    const statusLabel =
+      locale === "zh"
+        ? run.status === "completed"
+          ? "完成"
+          : run.status === "running"
+            ? "运行中"
+            : "排队中"
+        : run.status === "completed"
+          ? "Completed"
+          : run.status === "running"
+            ? "Running"
+            : "Queued";
+    return {
+      title: run.automationTitle,
+      meta: [
+        statusLabel,
+        formatUnixSeconds(run.completedAt ?? run.startedAt ?? savedAt, locale),
+        run.runId,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      description: [
+        run.note,
+        run.threadId
+          ? locale === "zh"
+            ? `线程：${run.threadId}`
+            : `Thread: ${run.threadId}`
+          : null,
+        locale === "zh" ? `文件：${filePath}` : `File: ${filePath}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      glyph: run.status === "completed" ? "✓" : run.status === "running" ? "◷" : "•",
+      accent:
+        run.status === "completed"
+          ? "green"
+          : run.status === "running"
+            ? "blue"
+            : "slate",
+    };
+  });
+
+  if (runs.length === 0) {
+    return emptyAutomationRunItems(locale);
+  }
+
+  return [
+    {
+      title: locale === "zh" ? "后端运行记录" : "Backend run history",
+      meta:
+        locale === "zh"
+          ? `${records.length} 条记录`
+          : `${records.length} records`,
+      description:
+        locale === "zh"
+          ? "来自 app-server automation/runs/list 的最近运行记录。"
+          : "Recent runs loaded from app-server automation/runs/list.",
       section: true,
     },
     ...runs,
@@ -5778,6 +5866,28 @@ export function App() {
         const automationThreadId = action.threadId;
         void (async () => {
           try {
+            const automationCwd = await resolveBackendCwd();
+            if (automationCwd && clientRef.current) {
+              const runsResponse = await clientRef.current.listAutomationRuns(
+                automationCwd,
+                automationThreadId,
+              );
+              if (runsResponse.data.length > 0) {
+                setLibraryPanel((currentPanel) =>
+                  currentPanel?.title === action.title
+                    ? {
+                        ...currentPanel,
+                        items: automationRunRecordItems(
+                          runsResponse.data,
+                          locale,
+                        ),
+                        error: undefined,
+                      }
+                    : currentPanel,
+                );
+                return;
+              }
+            }
             const thread = await clientRef.current?.readThread(automationThreadId);
             if (!thread) {
               return;
@@ -6373,6 +6483,33 @@ export function App() {
       return null;
     }
     return writeStoredAutomationConfigFile(client, automationCwd, config);
+  }
+
+  async function runAutomationConfig(
+    config: AutomationConfig,
+    note: string | null,
+  ): Promise<{ runId: string; filePath: string } | null> {
+    const automationCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (!automationCwd || !client) {
+      return null;
+    }
+    try {
+      const response = await client.runAutomationConfig(
+        automationCwd,
+        config,
+        note,
+      );
+      return {
+        runId: response.run.runId,
+        filePath: response.filePath,
+      };
+    } catch (error) {
+      if (!(error instanceof AppServerRpcError)) {
+        throw error;
+      }
+      return null;
+    }
   }
 
   async function readAutomationConfigFiles(): Promise<LibraryItem[]> {
@@ -9071,6 +9208,8 @@ export function App() {
         };
         let automationConfigPath =
           await writeAutomationConfigFile(automationConfig);
+        let automationRunRecord: { runId: string; filePath: string } | null =
+          null;
         const runAutomationTurn = (targetThreadId: string) =>
           clientRef.current?.startTurn(
             targetThreadId,
@@ -9114,6 +9253,13 @@ export function App() {
           });
           response = await runAutomationTurn(replacementThread.id);
         }
+        automationRunRecord = await runAutomationConfig(
+          {
+            ...automationConfig,
+            threadId,
+          },
+          runNote || null,
+        );
         let latestAutomationThread: Thread | null = null;
         if (response) {
           setThreads((current) =>
@@ -9142,9 +9288,19 @@ export function App() {
                     : "Written to backend execution thread",
                 body: [
                   automationConfig.body,
+                  automationRunRecord
+                    ? locale === "zh"
+                      ? `运行记录：${automationRunRecord.runId}`
+                      : `Run record: ${automationRunRecord.runId}`
+                    : null,
                   locale === "zh"
                     ? `运行请求已发送到线程：${threadId}`
                     : `Run request sent to thread: ${threadId}`,
+                  automationRunRecord?.filePath
+                    ? locale === "zh"
+                      ? `运行文件：${automationRunRecord.filePath}`
+                      : `Run file: ${automationRunRecord.filePath}`
+                    : null,
                   automationConfigPath
                     ? locale === "zh"
                       ? `配置文件：${automationConfigPath}`
