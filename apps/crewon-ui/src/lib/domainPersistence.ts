@@ -252,6 +252,38 @@ export async function readToolConfigFiles(
     : records;
 }
 
+export async function deleteDomainConfigFile(
+  client: AppServerClient,
+  cwd: string,
+  filePath: string,
+): Promise<boolean> {
+  const kind = inferDomainConfigKind(cwd, filePath);
+  if (!kind) {
+    await client.removePath(filePath, false, true);
+    return true;
+  }
+
+  try {
+    switch (kind) {
+      case "agent":
+        return (await client.deleteAgentConfig(cwd, filePath)).deleted;
+      case "automation":
+        return (await client.deleteAutomationConfig(cwd, filePath)).deleted;
+      case "office":
+        return (await client.deleteOfficeConfig(cwd, filePath)).deleted;
+      case "tool":
+        return (await client.deleteToolConfig(cwd, filePath)).deleted;
+    }
+  } catch (error) {
+    if (!shouldFallbackToFsPersistence(error)) {
+      throw error;
+    }
+  }
+
+  await client.removePath(filePath, false, true);
+  return true;
+}
+
 function configDirectoryName(kind: DomainConfigKind): string {
   switch (kind) {
     case "agent":
@@ -263,6 +295,23 @@ function configDirectoryName(kind: DomainConfigKind): string {
     case "tool":
       return "tools";
   }
+}
+
+function inferDomainConfigKind(
+  cwd: string,
+  filePath: string,
+): DomainConfigKind | null {
+  const normalizedFilePath = normalizePath(filePath);
+  const kinds: DomainConfigKind[] = ["agent", "automation", "office", "tool"];
+  return (
+    kinds.find((kind) =>
+      normalizedFilePath.startsWith(`${normalizePath(crewonConfigDirectory(cwd, kind))}/`),
+    ) ?? null
+  );
+}
+
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 function normalizeDomainConfigList<TConfig>(

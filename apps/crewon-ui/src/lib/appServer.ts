@@ -168,6 +168,10 @@ export type DomainConfigSaveResponse = {
   filePath: string;
 };
 
+export type DomainConfigDeleteResponse = {
+  deleted: boolean;
+};
+
 export type ToolConfigListResponse = {
   data: Array<{
     filePath: string;
@@ -760,6 +764,16 @@ export class AppServerClient {
     return this.request<DomainConfigSaveResponse>("agent/save", { cwd, config });
   }
 
+  async deleteAgentConfig(
+    cwd: string,
+    filePath: string,
+  ): Promise<DomainConfigDeleteResponse> {
+    return this.request<DomainConfigDeleteResponse>("agent/delete", {
+      cwd,
+      filePath,
+    });
+  }
+
   async listOfficeConfigs(cwd: string): Promise<DomainConfigListResponse<OfficeConfig>> {
     return this.request<DomainConfigListResponse<OfficeConfig>>("office/list", {
       cwd,
@@ -775,6 +789,16 @@ export class AppServerClient {
     return this.request<DomainConfigSaveResponse>("office/save", { cwd, config });
   }
 
+  async deleteOfficeConfig(
+    cwd: string,
+    filePath: string,
+  ): Promise<DomainConfigDeleteResponse> {
+    return this.request<DomainConfigDeleteResponse>("office/delete", {
+      cwd,
+      filePath,
+    });
+  }
+
   async listAutomationConfigs(cwd: string): Promise<DomainConfigListResponse<AutomationConfig>> {
     return this.request<DomainConfigListResponse<AutomationConfig>>("automation/list", {
       cwd,
@@ -788,6 +812,16 @@ export class AppServerClient {
     config: AutomationConfig,
   ): Promise<DomainConfigSaveResponse> {
     return this.request<DomainConfigSaveResponse>("automation/save", { cwd, config });
+  }
+
+  async deleteAutomationConfig(
+    cwd: string,
+    filePath: string,
+  ): Promise<DomainConfigDeleteResponse> {
+    return this.request<DomainConfigDeleteResponse>("automation/delete", {
+      cwd,
+      filePath,
+    });
   }
 
   async listToolConfigs(
@@ -807,6 +841,16 @@ export class AppServerClient {
     config: ToolConfig,
   ): Promise<DomainConfigSaveResponse> {
     return this.request<DomainConfigSaveResponse>("tool/save", { cwd, config });
+  }
+
+  async deleteToolConfig(
+    cwd: string,
+    filePath: string,
+  ): Promise<DomainConfigDeleteResponse> {
+    return this.request<DomainConfigDeleteResponse>("tool/delete", {
+      cwd,
+      filePath,
+    });
   }
 
   async copyPath(sourcePath: string, destinationPath: string, recursive = false): Promise<void> {

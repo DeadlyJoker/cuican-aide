@@ -4,10 +4,14 @@ use std::path::PathBuf;
 
 use chrono::SecondsFormat;
 use chrono::Utc;
+use crewon_app_server_protocol::AgentDeleteParams;
+use crewon_app_server_protocol::AgentDeleteResponse;
 use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentListResponse;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AgentSaveResponse;
+use crewon_app_server_protocol::AutomationDeleteParams;
+use crewon_app_server_protocol::AutomationDeleteResponse;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::AutomationListResponse;
 use crewon_app_server_protocol::AutomationSaveParams;
@@ -15,11 +19,15 @@ use crewon_app_server_protocol::AutomationSaveResponse;
 use crewon_app_server_protocol::CrewonDomainConfigRecord;
 use crewon_app_server_protocol::CrewonToolConfigRecord;
 use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::OfficeDeleteParams;
+use crewon_app_server_protocol::OfficeDeleteResponse;
 use crewon_app_server_protocol::OfficeListParams;
 use crewon_app_server_protocol::OfficeListResponse;
 use crewon_app_server_protocol::OfficeSaveParams;
 use crewon_app_server_protocol::OfficeSaveResponse;
 use crewon_app_server_protocol::ToolConfigKind;
+use crewon_app_server_protocol::ToolDeleteParams;
+use crewon_app_server_protocol::ToolDeleteResponse;
 use crewon_app_server_protocol::ToolListParams;
 use crewon_app_server_protocol::ToolListResponse;
 use crewon_app_server_protocol::ToolSaveParams;
@@ -130,6 +138,15 @@ impl CrewonDomainRequestProcessor {
             .map(|file_path| AgentSaveResponse { file_path })
     }
 
+    pub(crate) async fn agent_delete(
+        &self,
+        params: AgentDeleteParams,
+    ) -> Result<AgentDeleteResponse, JSONRPCErrorError> {
+        delete_record(DomainKind::Agent, &params.cwd, &params.file_path)
+            .await
+            .map(|deleted| AgentDeleteResponse { deleted })
+    }
+
     pub(crate) async fn office_list(
         &self,
         params: OfficeListParams,
@@ -146,6 +163,15 @@ impl CrewonDomainRequestProcessor {
         save_record(DomainKind::Office, &params.cwd, params.config)
             .await
             .map(|file_path| OfficeSaveResponse { file_path })
+    }
+
+    pub(crate) async fn office_delete(
+        &self,
+        params: OfficeDeleteParams,
+    ) -> Result<OfficeDeleteResponse, JSONRPCErrorError> {
+        delete_record(DomainKind::Office, &params.cwd, &params.file_path)
+            .await
+            .map(|deleted| OfficeDeleteResponse { deleted })
     }
 
     pub(crate) async fn automation_list(
@@ -171,6 +197,15 @@ impl CrewonDomainRequestProcessor {
             .map(|file_path| AutomationSaveResponse { file_path })
     }
 
+    pub(crate) async fn automation_delete(
+        &self,
+        params: AutomationDeleteParams,
+    ) -> Result<AutomationDeleteResponse, JSONRPCErrorError> {
+        delete_record(DomainKind::Automation, &params.cwd, &params.file_path)
+            .await
+            .map(|deleted| AutomationDeleteResponse { deleted })
+    }
+
     pub(crate) async fn tool_list(
         &self,
         params: ToolListParams,
@@ -190,6 +225,15 @@ impl CrewonDomainRequestProcessor {
         save_record(DomainKind::Tool, &params.cwd, params.config)
             .await
             .map(|file_path| ToolSaveResponse { file_path })
+    }
+
+    pub(crate) async fn tool_delete(
+        &self,
+        params: ToolDeleteParams,
+    ) -> Result<ToolDeleteResponse, JSONRPCErrorError> {
+        delete_record(DomainKind::Tool, &params.cwd, &params.file_path)
+            .await
+            .map(|deleted| ToolDeleteResponse { deleted })
     }
 }
 
@@ -358,6 +402,28 @@ async fn save_record(
     Ok(file_path.to_string_lossy().into_owned())
 }
 
+async fn delete_record(
+    kind: DomainKind,
+    cwd: &str,
+    file_path: &str,
+) -> Result<bool, JSONRPCErrorError> {
+    let file_path = validate_record_file_path(cwd, kind, file_path)?;
+    if !fs::try_exists(&file_path).await.map_err(map_io_error)? {
+        return Ok(false);
+    }
+
+    match read_record(kind, &file_path).await? {
+        Some(_) => {
+            fs::remove_file(file_path).await.map_err(map_io_error)?;
+            Ok(true)
+        }
+        None => Err(invalid_params(format!(
+            "{} config file does not match the requested kind",
+            kind.record_kind()
+        ))),
+    }
+}
+
 fn domain_directory(cwd: &str, kind: DomainKind) -> Result<PathBuf, JSONRPCErrorError> {
     if cwd.trim().is_empty() {
         return Err(invalid_params("cwd must not be empty"));
@@ -369,6 +435,39 @@ fn domain_directory(cwd: &str, kind: DomainKind) -> Result<PathBuf, JSONRPCError
     }
 
     Ok(cwd.join(".crewon").join(kind.directory_name()))
+}
+
+fn validate_record_file_path(
+    cwd: &str,
+    kind: DomainKind,
+    file_path: &str,
+) -> Result<PathBuf, JSONRPCErrorError> {
+    let directory = domain_directory(cwd, kind)?;
+    let file_path = PathBuf::from(file_path);
+    if !file_path.is_absolute() {
+        return Err(invalid_params("filePath must be an absolute path"));
+    }
+    if file_path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(invalid_params("filePath must not contain parent segments"));
+    }
+    if file_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        != Some("json")
+    {
+        return Err(invalid_params("filePath must point to a JSON config file"));
+    }
+    if !file_path.starts_with(&directory) {
+        return Err(invalid_params(format!(
+            "filePath must be inside {}",
+            directory.display()
+        )));
+    }
+
+    Ok(file_path)
 }
 
 fn normalize_limit(limit: Option<u32>) -> usize {

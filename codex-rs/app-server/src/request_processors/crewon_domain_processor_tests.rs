@@ -1,8 +1,10 @@
+use crewon_app_server_protocol::AgentDeleteParams;
 use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::OfficeSaveParams;
 use crewon_app_server_protocol::ToolConfigKind;
+use crewon_app_server_protocol::ToolDeleteParams;
 use crewon_app_server_protocol::ToolListParams;
 use crewon_app_server_protocol::ToolSaveParams;
 use pretty_assertions::assert_eq;
@@ -51,6 +53,42 @@ async fn saves_and_lists_agent_configs() {
     assert_eq!(list_response.data[0].file_path, save_response.file_path);
     assert_eq!(list_response.data[0].config, config);
     assert!(!list_response.data[0].saved_at.is_empty());
+}
+
+#[tokio::test]
+async fn deletes_agent_config_records() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let save_response = processor
+        .agent_save(AgentSaveParams {
+            cwd: cwd.clone(),
+            config: json!({
+                "name": "Disposable Agent",
+                "threadId": "thread-delete",
+            }),
+        })
+        .await
+        .expect("save agent config");
+
+    let delete_response = processor
+        .agent_delete(AgentDeleteParams {
+            cwd: cwd.clone(),
+            file_path: save_response.file_path,
+        })
+        .await
+        .expect("delete agent config");
+    let list_response = processor
+        .agent_list(AgentListParams {
+            cwd,
+            cursor: None,
+            limit: None,
+        })
+        .await
+        .expect("list agent configs");
+
+    assert!(delete_response.deleted);
+    assert_eq!(list_response.data, Vec::new());
 }
 
 #[tokio::test]
@@ -149,6 +187,70 @@ async fn saves_and_lists_tool_configs_by_kind() {
     assert_eq!(list_response.data[0].file_path, mcp_save_response.file_path);
     assert_eq!(list_response.data[0].kind, ToolConfigKind::Mcp);
     assert_eq!(list_response.data[0].config, mcp_config);
+}
+
+#[tokio::test]
+async fn delete_rejects_config_file_outside_kind_directory() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let save_response = processor
+        .tool_save(ToolSaveParams {
+            cwd: cwd.clone(),
+            config: json!({
+                "kind": "mcp",
+                "title": "Issue Tracker",
+                "name": "linear"
+            }),
+        })
+        .await
+        .expect("save tool config");
+
+    let error = processor
+        .agent_delete(AgentDeleteParams {
+            cwd,
+            file_path: save_response.file_path,
+        })
+        .await
+        .expect_err("agent delete should reject tool path");
+
+    assert_eq!(error.code, INVALID_PARAMS_ERROR_CODE);
+    assert!(error.message.contains("filePath must be inside"));
+}
+
+#[tokio::test]
+async fn delete_rejects_wrong_kind_record() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let tools_dir = temp_dir.path().join(".crewon").join("tools");
+    std::fs::create_dir_all(&tools_dir).expect("create tools dir");
+    let file_path = tools_dir.join("wrong-kind.json");
+    std::fs::write(
+        &file_path,
+        serde_json::to_vec(&json!({
+            "version": 1,
+            "kind": "agent",
+            "savedAt": "2026-06-16T00:00:00.000Z",
+            "config": { "name": "Wrong kind" }
+        }))
+        .expect("serialize wrong kind record"),
+    )
+    .expect("write wrong kind record");
+
+    let error = processor
+        .tool_delete(ToolDeleteParams {
+            cwd,
+            file_path: file_path.to_string_lossy().into_owned(),
+        })
+        .await
+        .expect_err("tool delete should reject wrong kind record");
+
+    assert_eq!(error.code, INVALID_PARAMS_ERROR_CODE);
+    assert_eq!(
+        error.message,
+        "tool config file does not match the requested kind".to_string()
+    );
 }
 
 #[tokio::test]

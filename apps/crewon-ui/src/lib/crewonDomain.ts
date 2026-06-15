@@ -301,6 +301,7 @@ export type LibraryItem = {
         skillName: string;
         path: string;
         enabled?: boolean;
+        configPath?: string;
       }
     | {
         type: "plugin-skill";
@@ -325,6 +326,7 @@ export type LibraryItem = {
           label: string;
           inputSchema: string;
         };
+        configPath?: string;
       }
     | {
         type: "office-detail";

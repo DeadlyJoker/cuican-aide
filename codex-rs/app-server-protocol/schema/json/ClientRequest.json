@@ -34,6 +34,21 @@
       ],
       "type": "string"
     },
+    "AgentDeleteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
     "AgentListParams": {
       "properties": {
         "cursor": {
@@ -187,6 +202,21 @@
           "type": "object"
         }
       ]
+    },
+    "AutomationDeleteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
     },
     "AutomationListParams": {
       "properties": {
@@ -1717,6 +1747,21 @@
         "enabled"
       ],
       "type": "string"
+    },
+    "OfficeDeleteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
     },
     "OfficeListParams": {
       "properties": {
@@ -4164,6 +4209,21 @@
       ],
       "type": "string"
     },
+    "ToolDeleteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
     "ToolListParams": {
       "properties": {
         "cursor": {
@@ -5528,6 +5588,30 @@
         },
         "method": {
           "enum": [
+            "agent/delete"
+          ],
+          "title": "Agent/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/deleteRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
             "office/list"
           ],
           "title": "Office/listRequestMethod",
@@ -5567,6 +5651,30 @@
         "params"
       ],
       "title": "Office/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/delete"
+          ],
+          "title": "Office/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/deleteRequest",
       "type": "object"
     },
     {
@@ -5624,6 +5732,30 @@
         },
         "method": {
           "enum": [
+            "automation/delete"
+          ],
+          "title": "Automation/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/deleteRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
             "tool/list"
           ],
           "title": "Tool/listRequestMethod",
@@ -5663,6 +5795,30 @@
         "params"
       ],
       "title": "Tool/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "tool/delete"
+          ],
+          "title": "Tool/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ToolDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Tool/deleteRequest",
       "type": "object"
     },
     {

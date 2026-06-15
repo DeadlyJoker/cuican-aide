@@ -732,6 +732,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AgentSaveResponse,
     },
+    AgentDelete => "agent/delete" {
+        params: v2::AgentDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentDeleteResponse,
+    },
     OfficeList => "office/list" {
         params: v2::OfficeListParams,
         serialization: global("crewon-domain"),
@@ -741,6 +746,11 @@ client_request_definitions! {
         params: v2::OfficeSaveParams,
         serialization: global("crewon-domain"),
         response: v2::OfficeSaveResponse,
+    },
+    OfficeDelete => "office/delete" {
+        params: v2::OfficeDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDeleteResponse,
     },
     AutomationList => "automation/list" {
         params: v2::AutomationListParams,
@@ -752,6 +762,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AutomationSaveResponse,
     },
+    AutomationDelete => "automation/delete" {
+        params: v2::AutomationDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationDeleteResponse,
+    },
     ToolList => "tool/list" {
         params: v2::ToolListParams,
         serialization: global("crewon-domain"),
@@ -761,6 +776,11 @@ client_request_definitions! {
         params: v2::ToolSaveParams,
         serialization: global("crewon-domain"),
         response: v2::ToolSaveResponse,
+    },
+    ToolDelete => "tool/delete" {
+        params: v2::ToolDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolDeleteResponse,
     },
     // File system requests are intentionally concurrent. Desktop already treats local
     // file system operations as concurrent, and app-server remote fs mirrors that model.

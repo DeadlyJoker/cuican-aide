@@ -1244,6 +1244,11 @@ impl MessageProcessor {
                 .agent_save(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::AgentDelete { params, .. } => self
+                .crewon_domain_processor
+                .agent_delete(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::OfficeList { params, .. } => self
                 .crewon_domain_processor
                 .office_list(params)
@@ -1252,6 +1257,11 @@ impl MessageProcessor {
             ClientRequest::OfficeSave { params, .. } => self
                 .crewon_domain_processor
                 .office_save(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::OfficeDelete { params, .. } => self
+                .crewon_domain_processor
+                .office_delete(params)
                 .await
                 .map(|response| Some(response.into())),
             ClientRequest::AutomationList { params, .. } => self
@@ -1264,6 +1274,11 @@ impl MessageProcessor {
                 .automation_save(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::AutomationDelete { params, .. } => self
+                .crewon_domain_processor
+                .automation_delete(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::ToolList { params, .. } => self
                 .crewon_domain_processor
                 .tool_list(params)
@@ -1272,6 +1287,11 @@ impl MessageProcessor {
             ClientRequest::ToolSave { params, .. } => self
                 .crewon_domain_processor
                 .tool_save(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::ToolDelete { params, .. } => self
+                .crewon_domain_processor
+                .tool_delete(params)
                 .await
                 .map(|response| Some(response.into())),
             ClientRequest::SkillsConfigWrite { params, .. } => {

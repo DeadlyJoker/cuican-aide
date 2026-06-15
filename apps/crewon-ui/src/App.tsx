@@ -106,6 +106,7 @@ import {
   type KnowledgeSource,
 } from "./lib/crewonDomain";
 import {
+  deleteDomainConfigFile,
   readAgentConfigFiles as readStoredAgentConfigFiles,
   readAutomationConfigFiles as readStoredAutomationConfigFiles,
   readOfficeConfigFiles as readStoredOfficeConfigFiles,
@@ -5620,6 +5621,23 @@ export function App() {
           tone: action.authStatus === "notLoggedIn" ? undefined : "primary",
         });
       }
+      if (action.configPath) {
+        actions.push(
+          {
+            id: "open-path",
+            label: locale === "zh" ? "打开配置文件" : "Open config file",
+            pathToOpen: action.configPath,
+            pathKind: "file",
+          },
+          {
+            id: "delete-config-file",
+            label: locale === "zh" ? "删除配置文件" : "Delete config file",
+            pathToOpen: action.configPath,
+            pathKind: "file",
+            tone: "danger",
+          },
+        );
+      }
       setLibraryPanel((currentPanel) =>
         currentPanel
           ? {
@@ -6235,6 +6253,29 @@ export function App() {
                     skillPath: action.path,
                     tone: action.enabled === false ? "primary" : undefined,
                   },
+                  ...(action.configPath
+                    ? [
+                        {
+                          id: "open-path" as const,
+                          label:
+                            locale === "zh"
+                              ? "打开配置文件"
+                              : "Open config file",
+                          pathToOpen: action.configPath,
+                          pathKind: "file" as const,
+                        },
+                        {
+                          id: "delete-config-file" as const,
+                          label:
+                            locale === "zh"
+                              ? "删除配置文件"
+                              : "Delete config file",
+                          pathToOpen: action.configPath,
+                          pathKind: "file" as const,
+                          tone: "danger" as const,
+                        },
+                      ]
+                    : []),
                 ],
               }
             : currentPanel,
@@ -6593,12 +6634,14 @@ export function App() {
               ]
                 .filter(Boolean)
                 .join("\n"),
+              configPath: filePath,
             }
           : {
               type: "skill-file",
               skillName: config.name,
               path: config.path ?? filePath,
               enabled: config.enabled ?? true,
+              configPath: filePath,
             },
     }));
   }
@@ -8732,7 +8775,16 @@ export function App() {
         if (!action.pathToOpen) {
           return;
         }
-        await clientRef.current?.removePath(action.pathToOpen, false, true);
+        const configCwd = await resolveBackendCwd();
+        const client = clientRef.current;
+        if (!configCwd || !client) {
+          throw new Error(
+            locale === "zh"
+              ? "未连接本地 app-server"
+              : "Local app-server is not connected",
+          );
+        }
+        await deleteDomainConfigFile(client, configCwd, action.pathToOpen);
         setNotice({
           text:
             locale === "zh"
