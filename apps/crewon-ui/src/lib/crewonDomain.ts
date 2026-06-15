@@ -350,6 +350,7 @@ export type LibraryItem = {
         subtitle: string;
         body: string;
         prompt: string;
+        items?: LibraryItem[];
         threadId?: string;
         configPath?: string;
       }

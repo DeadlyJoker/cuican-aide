@@ -5802,7 +5802,7 @@ export function App() {
     }
 
     if (action.type === "automation-detail") {
-      const initialHistory: LibraryItem[] = action.threadId
+      const initialHistory: LibraryItem[] = action.items ?? (action.threadId
         ? [
             {
               title:
@@ -5832,7 +5832,7 @@ export function App() {
               glyph: "◷",
               accent: "slate",
             },
-          ];
+          ]);
       setLibraryPanel((currentPanel) =>
         currentPanel
           ? {
@@ -6572,6 +6572,28 @@ export function App() {
     }
   }
 
+  async function readAutomationRunItems(
+    threadId: string | null | undefined,
+  ): Promise<LibraryItem[]> {
+    if (!threadId) {
+      return emptyAutomationRunItems(locale);
+    }
+    const automationCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (!automationCwd || !client) {
+      return emptyAutomationRunItems(locale);
+    }
+    try {
+      const response = await client.listAutomationRuns(automationCwd, threadId);
+      return automationRunRecordItems(response.data, locale);
+    } catch (error) {
+      if (!(error instanceof AppServerRpcError)) {
+        throw error;
+      }
+      return emptyAutomationRunItems(locale);
+    }
+  }
+
   async function readAutomationConfigFiles(): Promise<LibraryItem[]> {
     const automationCwd = await resolveBackendCwd();
     const client = clientRef.current;
@@ -6580,6 +6602,18 @@ export function App() {
     }
 
     const records = await readStoredAutomationConfigFiles(client, automationCwd);
+    const runItemsByThreadId = new Map<string, LibraryItem[]>();
+    await Promise.all(
+      records.map(async ({ config }) => {
+        if (!config.threadId || runItemsByThreadId.has(config.threadId)) {
+          return;
+        }
+        runItemsByThreadId.set(
+          config.threadId,
+          await readAutomationRunItems(config.threadId),
+        );
+      }),
+    );
     return records.map(({ filePath, savedAt, config }) => ({
         title: config.title,
         meta:
@@ -6601,6 +6635,9 @@ export function App() {
           prompt: config.prompt,
           threadId: config.threadId,
           configPath: filePath,
+          items: config.threadId
+            ? runItemsByThreadId.get(config.threadId)
+            : emptyAutomationRunItems(locale),
         },
       }));
   }
