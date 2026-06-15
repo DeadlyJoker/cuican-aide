@@ -174,6 +174,10 @@ export type AgentSaveResponse = DomainConfigSaveResponse & {
   agentId: string;
 };
 
+export type AgentReadResponse = {
+  record: DomainConfigListResponse<AgentConfig>["data"][number] | null;
+};
+
 export type DomainConfigDeleteResponse = {
   deleted: boolean;
 };
@@ -808,6 +812,22 @@ export class AppServerClient {
     config: AgentConfig,
   ): Promise<AgentSaveResponse> {
     return this.request<AgentSaveResponse>("agent/save", { cwd, config });
+  }
+
+  async readAgentConfig(
+    cwd: string,
+    params: {
+      agentId?: string | null;
+      threadId?: string | null;
+      name?: string | null;
+    },
+  ): Promise<AgentReadResponse> {
+    return this.request<AgentReadResponse>("agent/read", {
+      cwd,
+      agentId: params.agentId ?? null,
+      threadId: params.threadId ?? null,
+      name: params.name ?? null,
+    });
   }
 
   async deleteAgentConfig(

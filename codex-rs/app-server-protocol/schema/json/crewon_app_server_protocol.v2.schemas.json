@@ -427,6 +427,54 @@
     "AgentPath": {
       "type": "string"
     },
+    "AgentReadParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "AgentReadParams",
+      "type": "object"
+    },
+    "AgentReadResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "record": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CrewonDomainConfigRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "title": "AgentReadResponse",
+      "type": "object"
+    },
     "AgentSaveParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -2494,6 +2542,30 @@
             "params"
           ],
           "title": "Agent/saveRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agent/read"
+              ],
+              "title": "Agent/readRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AgentReadParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Agent/readRequest",
           "type": "object"
         },
         {

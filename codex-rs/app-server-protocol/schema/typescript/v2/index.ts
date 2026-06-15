@@ -19,6 +19,8 @@ export type { AgentDeleteResponse } from "./AgentDeleteResponse";
 export type { AgentListParams } from "./AgentListParams";
 export type { AgentListResponse } from "./AgentListResponse";
 export type { AgentMessageDeltaNotification } from "./AgentMessageDeltaNotification";
+export type { AgentReadParams } from "./AgentReadParams";
+export type { AgentReadResponse } from "./AgentReadResponse";
 export type { AgentSaveParams } from "./AgentSaveParams";
 export type { AgentSaveResponse } from "./AgentSaveResponse";
 export type { AnalyticsConfig } from "./AnalyticsConfig";

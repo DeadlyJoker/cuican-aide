@@ -5685,6 +5685,7 @@ export function App() {
     }
 
     if (action.type === "agent-config") {
+      const selectedAgent = action.config;
       const initialHistory: LibraryItem[] = action.config.threadId
         ? [
             {
@@ -5706,7 +5707,7 @@ export function App() {
         currentPanel
           ? {
               ...currentPanel,
-              title: action.config.name,
+              title: selectedAgent.name,
               subtitle: locale === "zh" ? "智能体配置" : "Agent configuration",
               body: undefined,
               actions: action.configPath
@@ -5729,42 +5730,71 @@ export function App() {
                   ]
                 : undefined,
               items: initialHistory,
-              agentConfig: action.config,
+              agentConfig: selectedAgent,
               error: undefined,
             }
           : currentPanel,
       );
-      if (action.config.threadId && isConnected) {
-        const agentThreadId = action.config.threadId;
+      if (isConnected) {
+        const agentIdentity = {
+          agentId: selectedAgent.agentId ?? null,
+          threadId: selectedAgent.threadId ?? null,
+          name: selectedAgent.name,
+        };
         void (async () => {
           try {
-            const thread = await clientRef.current?.readThread(agentThreadId);
+            const agentCwd = await resolveBackendCwd();
+            const client = clientRef.current;
+            if (!client || !agentCwd) {
+              return;
+            }
+            const readResponse = await client.readAgentConfig(agentCwd, agentIdentity);
+            const latestAgentConfig =
+              readResponse.record?.config ?? selectedAgent;
+            const agentThreadId = latestAgentConfig.threadId;
+            const thread = agentThreadId
+              ? await client.readThread(agentThreadId)
+              : null;
             if (!thread) {
+              setLibraryPanel((currentPanel) =>
+                currentPanel?.agentConfig?.name === selectedAgent.name
+                  ? {
+                      ...currentPanel,
+                      title: latestAgentConfig.name,
+                      agentConfig: latestAgentConfig,
+                      items: [],
+                      error: undefined,
+                    }
+                  : currentPanel,
+              );
               return;
             }
             setLibraryPanel((currentPanel) =>
-              currentPanel?.agentConfig?.threadId === agentThreadId
+              currentPanel?.agentConfig?.name === selectedAgent.name
                 ? {
                     ...currentPanel,
+                    title: latestAgentConfig.name,
+                    agentConfig: latestAgentConfig,
                     items: agentThreadHistoryItems(thread, locale),
                     error: undefined,
                   }
                 : currentPanel,
             );
           } catch (error) {
-            setLibraryPanel((currentPanel) =>
-              currentPanel?.agentConfig?.threadId === agentThreadId
-                ? {
-                    ...currentPanel,
-                    error:
-                      error instanceof Error
-                        ? error.message
-                        : locale === "zh"
-                          ? "读取智能体后端记录失败"
-                          : "Unable to read agent backend records",
-                  }
-                : currentPanel,
-            );
+            setLibraryPanel((currentPanel) => {
+              if (!currentPanel || currentPanel.agentConfig?.name !== selectedAgent.name) {
+                return currentPanel;
+              }
+              return {
+                ...currentPanel,
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : locale === "zh"
+                      ? "读取智能体后端记录失败"
+                      : "Unable to read agent backend records",
+              };
+            });
           }
         })();
       }

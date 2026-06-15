@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "agentId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "threadId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "cwd"
+  ],
+  "title": "AgentReadParams",
+  "type": "object"
+}

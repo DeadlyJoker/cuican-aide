@@ -732,6 +732,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AgentSaveResponse,
     },
+    AgentRead => "agent/read" {
+        params: v2::AgentReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentReadResponse,
+    },
     AgentDelete => "agent/delete" {
         params: v2::AgentDeleteParams,
         serialization: global("crewon-domain"),

@@ -98,6 +98,35 @@
         }
       ]
     },
+    "AgentReadParams": {
+      "properties": {
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
     "AgentSaveParams": {
       "properties": {
         "config": true,
@@ -5718,6 +5747,30 @@
         "params"
       ],
       "title": "Agent/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/read"
+          ],
+          "title": "Agent/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/readRequest",
       "type": "object"
     },
     {

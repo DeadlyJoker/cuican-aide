@@ -1148,6 +1148,30 @@
             },
             "method": {
               "enum": [
+                "agent/read"
+              ],
+              "title": "Agent/readRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentReadParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Agent/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "agent/delete"
               ],
               "title": "Agent/deleteRequestMethod",
@@ -6580,6 +6604,54 @@
       },
       "AgentPath": {
         "type": "string"
+      },
+      "AgentReadParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cwd"
+        ],
+        "title": "AgentReadParams",
+        "type": "object"
+      },
+      "AgentReadResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "record": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/CrewonDomainConfigRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "AgentReadResponse",
+        "type": "object"
       },
       "AgentSaveParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",

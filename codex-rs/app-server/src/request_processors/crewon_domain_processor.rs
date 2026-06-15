@@ -8,6 +8,8 @@ use crewon_app_server_protocol::AgentDeleteParams;
 use crewon_app_server_protocol::AgentDeleteResponse;
 use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentListResponse;
+use crewon_app_server_protocol::AgentReadParams;
+use crewon_app_server_protocol::AgentReadResponse;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AgentSaveResponse;
 use crewon_app_server_protocol::AutomationDeleteParams;
@@ -157,6 +159,20 @@ impl CrewonDomainRequestProcessor {
                 file_path,
                 agent_id,
             })
+    }
+
+    pub(crate) async fn agent_read(
+        &self,
+        params: AgentReadParams,
+    ) -> Result<AgentReadResponse, JSONRPCErrorError> {
+        read_agent_record(
+            &params.cwd,
+            params.agent_id.as_deref(),
+            params.thread_id.as_deref(),
+            params.name.as_deref(),
+        )
+        .await
+        .map(|record| AgentReadResponse { record })
     }
 
     pub(crate) async fn agent_delete(
@@ -699,6 +715,27 @@ async fn read_office_record(
             || title.is_some_and(|title| {
                 record.config.get("title").and_then(JsonValue::as_str) == Some(title)
             })
+    }))
+}
+
+async fn read_agent_record(
+    cwd: &str,
+    agent_id: Option<&str>,
+    thread_id: Option<&str>,
+    name: Option<&str>,
+) -> Result<Option<CrewonDomainConfigRecord>, JSONRPCErrorError> {
+    if agent_id.is_none() && thread_id.is_none() && name.is_none() {
+        return Err(invalid_params("agentId, threadId, or name is required"));
+    }
+    let (records, _) =
+        list_records(DomainKind::Agent, cwd, None, Some(MAX_LIST_LIMIT as u32)).await?;
+    Ok(records.into_iter().find(|record| {
+        agent_id.is_some_and(|agent_id| {
+            record.config.get("agentId").and_then(JsonValue::as_str) == Some(agent_id)
+        }) || thread_id.is_some_and(|thread_id| {
+            record.config.get("threadId").and_then(JsonValue::as_str) == Some(thread_id)
+        }) || name
+            .is_some_and(|name| record.config.get("name").and_then(JsonValue::as_str) == Some(name))
     }))
 }
 

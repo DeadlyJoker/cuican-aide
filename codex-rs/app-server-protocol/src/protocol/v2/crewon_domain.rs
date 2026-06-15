@@ -26,6 +26,19 @@ pub struct AgentSaveParams {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct AgentReadParams {
+    pub cwd: String,
+    #[ts(optional = nullable)]
+    pub agent_id: Option<String>,
+    #[ts(optional = nullable)]
+    pub thread_id: Option<String>,
+    #[ts(optional = nullable)]
+    pub name: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct AgentListResponse {
     pub data: Vec<CrewonDomainConfigRecord>,
     pub next_cursor: Option<String>,
@@ -37,6 +50,13 @@ pub struct AgentListResponse {
 pub struct AgentSaveResponse {
     pub file_path: String,
     pub agent_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AgentReadResponse {
+    pub record: Option<CrewonDomainConfigRecord>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

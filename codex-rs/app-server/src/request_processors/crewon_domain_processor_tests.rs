@@ -1,5 +1,6 @@
 use crewon_app_server_protocol::AgentDeleteParams;
 use crewon_app_server_protocol::AgentListParams;
+use crewon_app_server_protocol::AgentReadParams;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::AutomationRunParams;
@@ -68,6 +69,38 @@ async fn saves_and_lists_agent_configs() {
     );
     assert!(!list_response.data[0].saved_at.is_empty());
     assert_eq!(save_response.agent_id, "agent-demo-agent");
+}
+
+#[tokio::test]
+async fn reads_agent_config_by_identity() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let config = json!({
+        "agentId": "agent-reviewer",
+        "name": "Reviewer",
+        "threadId": "agent-thread-123456789",
+        "role": "Review code"
+    });
+    processor
+        .agent_save(AgentSaveParams {
+            cwd: cwd.clone(),
+            config: config.clone(),
+        })
+        .await
+        .expect("save agent config");
+
+    let read_response = processor
+        .agent_read(AgentReadParams {
+            cwd,
+            agent_id: None,
+            thread_id: Some("agent-thread-123456789".to_string()),
+            name: None,
+        })
+        .await
+        .expect("read agent config");
+
+    assert_eq!(read_response.record.expect("agent record").config, config);
 }
 
 #[tokio::test]
