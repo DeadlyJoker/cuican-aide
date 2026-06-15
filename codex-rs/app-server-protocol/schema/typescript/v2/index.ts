@@ -396,6 +396,8 @@ export type { SkillToolDependency } from "./SkillToolDependency";
 export type { SkillsChangedNotification } from "./SkillsChangedNotification";
 export type { SkillsConfigWriteParams } from "./SkillsConfigWriteParams";
 export type { SkillsConfigWriteResponse } from "./SkillsConfigWriteResponse";
+export type { SkillsCreateParams } from "./SkillsCreateParams";
+export type { SkillsCreateResponse } from "./SkillsCreateResponse";
 export type { SkillsExtraRootsSetParams } from "./SkillsExtraRootsSetParams";
 export type { SkillsExtraRootsSetResponse } from "./SkillsExtraRootsSetResponse";
 export type { SkillsListEntry } from "./SkillsListEntry";

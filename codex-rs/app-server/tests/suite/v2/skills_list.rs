@@ -8,19 +8,23 @@ use app_test_support::create_mock_responses_server_repeating_assistant;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
 use app_test_support::write_mock_responses_config_toml_with_chatgpt_base_url;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::PluginListParams;
-use codex_app_server_protocol::PluginListResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::SkillsChangedNotification;
-use codex_app_server_protocol::SkillsExtraRootsSetParams;
-use codex_app_server_protocol::SkillsExtraRootsSetResponse;
-use codex_app_server_protocol::SkillsListParams;
-use codex_app_server_protocol::SkillsListResponse;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_exec_server::CODEX_EXEC_SERVER_URL_ENV_VAR;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server::INVALID_PARAMS_ERROR_CODE;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::PluginListParams;
+use crewon_app_server_protocol::PluginListResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::SkillsChangedNotification;
+use crewon_app_server_protocol::SkillsCreateParams;
+use crewon_app_server_protocol::SkillsCreateResponse;
+use crewon_app_server_protocol::SkillsExtraRootsSetParams;
+use crewon_app_server_protocol::SkillsExtraRootsSetResponse;
+use crewon_app_server_protocol::SkillsListParams;
+use crewon_app_server_protocol::SkillsListResponse;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_exec_server::CODEX_EXEC_SERVER_URL_ENV_VAR;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::time::timeout;
@@ -57,6 +61,116 @@ async fn expect_skills_changed_notification(
         .context("skills/changed params must be present")?;
     let notification: SkillsChangedNotification = serde_json::from_value(params)?;
     assert_eq!(notification, SkillsChangedNotification {});
+    Ok(())
+}
+
+#[tokio::test]
+async fn skills_create_writes_repo_skill_and_lists_it() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let cwd = TempDir::new()?;
+    let mut mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
+
+    let request_id = mcp
+        .send_skills_create_request(SkillsCreateParams {
+            cwd: AbsolutePathBuf::from_absolute_path(cwd.path())?,
+            name: "demo-skill".to_string(),
+            description: "Demo skill description".to_string(),
+            body: "# demo-skill\n\n## Workflow\nRun the demo.\n".to_string(),
+        })
+        .await?;
+    let response: JSONRPCResponse = timeout(
+        DEFAULT_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
+    )
+    .await??;
+    let created: SkillsCreateResponse = to_response(response)?;
+
+    let expected_root = AbsolutePathBuf::from_absolute_path(cwd.path().join(".crewon/skill"))?;
+    let expected_path = AbsolutePathBuf::from_absolute_path(std::fs::canonicalize(
+        cwd.path().join(".crewon/skill/demo-skill/SKILL.md"),
+    )?)?;
+    assert_eq!(created.root, expected_root);
+    assert_eq!(created.skill.name, "demo-skill");
+    assert_eq!(created.skill.description, "Demo skill description");
+    assert_eq!(created.skill.path, expected_path);
+    assert!(created.skill.enabled);
+    assert!(std::fs::read_to_string(expected_path.as_path())?.contains("Run the demo."));
+    expect_skills_changed_notification(&mut mcp, DEFAULT_TIMEOUT).await?;
+
+    let list_request_id = mcp
+        .send_skills_list_request(SkillsListParams {
+            cwds: vec![cwd.path().to_path_buf()],
+            force_reload: false,
+        })
+        .await?;
+    let list_response: JSONRPCResponse = timeout(
+        DEFAULT_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(list_request_id)),
+    )
+    .await??;
+    let SkillsListResponse { data } = to_response(list_response)?;
+
+    assert_eq!(data.len(), 1);
+    assert!(data[0].skills.contains(&created.skill));
+    Ok(())
+}
+
+#[tokio::test]
+async fn skills_create_rejects_invalid_or_existing_skill() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let cwd = TempDir::new()?;
+    let mut mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
+
+    let invalid_request_id = mcp
+        .send_skills_create_request(SkillsCreateParams {
+            cwd: AbsolutePathBuf::from_absolute_path(cwd.path())?,
+            name: "../bad".to_string(),
+            description: "bad".to_string(),
+            body: "# bad\n".to_string(),
+        })
+        .await?;
+    let invalid_error: JSONRPCError = timeout(
+        DEFAULT_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(invalid_request_id)),
+    )
+    .await??;
+    assert_eq!(invalid_error.error.code, INVALID_PARAMS_ERROR_CODE);
+
+    let create_request_id = mcp
+        .send_skills_create_request(SkillsCreateParams {
+            cwd: AbsolutePathBuf::from_absolute_path(cwd.path())?,
+            name: "stable-skill".to_string(),
+            description: "stable".to_string(),
+            body: "# stable\n".to_string(),
+        })
+        .await?;
+    let create_response: JSONRPCResponse = timeout(
+        DEFAULT_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(create_request_id)),
+    )
+    .await??;
+    let _: SkillsCreateResponse = to_response(create_response)?;
+    expect_skills_changed_notification(&mut mcp, DEFAULT_TIMEOUT).await?;
+
+    let skill_path = cwd.path().join(".crewon/skill/stable-skill/SKILL.md");
+    let original = std::fs::read_to_string(&skill_path)?;
+    let duplicate_request_id = mcp
+        .send_skills_create_request(SkillsCreateParams {
+            cwd: AbsolutePathBuf::from_absolute_path(cwd.path())?,
+            name: "stable-skill".to_string(),
+            description: "changed".to_string(),
+            body: "# changed\n".to_string(),
+        })
+        .await?;
+    let duplicate_error: JSONRPCError = timeout(
+        DEFAULT_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(duplicate_request_id)),
+    )
+    .await??;
+    assert_eq!(duplicate_error.error.code, INVALID_PARAMS_ERROR_CODE);
+    assert_eq!(std::fs::read_to_string(skill_path)?, original);
     Ok(())
 }
 
@@ -119,9 +233,9 @@ fn write_plugin_with_skill(
     )?;
 
     let plugin_root = repo_root.join(plugin_name);
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         format!(r#"{{"name":"{plugin_name}"}}"#),
     )?;
 
@@ -138,9 +252,9 @@ fn write_cached_remote_plugin_with_skill(
     codex_home: &std::path::Path,
 ) -> Result<std::path::PathBuf> {
     let plugin_root = codex_home.join("plugins/cache/openai-curated-remote/linear/local");
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"linear"}"#,
     )?;
 
@@ -336,7 +450,7 @@ async fn skills_list_loads_remote_installed_plugin_skills_from_cache() -> Result
 }
 
 #[tokio::test]
-async fn skills_list_excludes_plugin_skills_when_workspace_codex_plugins_disabled() -> Result<()> {
+async fn skills_list_excludes_plugin_skills_when_workspace_crewon_plugins_disabled() -> Result<()> {
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
     let server = MockServer::start().await;
@@ -395,7 +509,7 @@ async fn skills_list_excludes_plugin_skills_when_workspace_codex_plugins_disable
             .skills
             .iter()
             .all(|skill| skill.name != "demo-plugin:plugin-skill"),
-        "plugin skills should be hidden when workspace Codex plugins are disabled"
+        "plugin skills should be hidden when workspace Crewon plugins are disabled"
     );
     Ok(())
 }
@@ -405,7 +519,7 @@ async fn skills_list_skips_cwd_roots_when_environment_disabled() -> Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
     write_skill(&codex_home, "home-skill")?;
-    let repo_skill_dir = cwd.path().join(".codex/skills/repo-skill");
+    let repo_skill_dir = cwd.path().join(".crewon/skill/repo-skill");
     std::fs::create_dir_all(&repo_skill_dir)?;
     std::fs::write(
         repo_skill_dir.join("SKILL.md"),
@@ -544,7 +658,7 @@ async fn skills_list_uses_cached_result_until_force_reload() -> Result<()> {
             .all(|skill| skill.name != "late-extra-skill")
     );
 
-    let skill_dir = cwd.path().join(".codex/skills/late-extra-skill");
+    let skill_dir = cwd.path().join(".crewon/skill/late-extra-skill");
     std::fs::create_dir_all(&skill_dir)?;
     std::fs::write(
         skill_dir.join("SKILL.md"),

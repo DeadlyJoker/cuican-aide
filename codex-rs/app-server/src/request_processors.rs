@@ -160,6 +160,8 @@ use crewon_app_server_protocol::ServerRequestResolvedNotification;
 use crewon_app_server_protocol::SkillSummary;
 use crewon_app_server_protocol::SkillsConfigWriteParams;
 use crewon_app_server_protocol::SkillsConfigWriteResponse;
+use crewon_app_server_protocol::SkillsCreateParams;
+use crewon_app_server_protocol::SkillsCreateResponse;
 use crewon_app_server_protocol::SkillsExtraRootsSetParams;
 use crewon_app_server_protocol::SkillsExtraRootsSetResponse;
 use crewon_app_server_protocol::SkillsListParams;

@@ -209,6 +209,7 @@ Example with notification opt-out:
 - `plugin/read` — read one plugin by `marketplacePath` plus `pluginName`, returning marketplace info, a list-style `summary`, manifest descriptions/interface metadata, and bundled skills/hooks/apps/MCP server names. Returned plugin skills include their current `enabled` state after local config filtering; bundled hooks are returned as lightweight declaration summaries keyed for correlation with `hooks/list`. Use `plugin/install`'s `appsNeedingAuth` to drive post-install authentication and `app/list`'s `isAccessible` to determine current connector accessibility (**under development; do not call from production clients yet**).
 - `plugin/skill/read` — read remote plugin skill markdown on demand by `remoteMarketplaceName`, `remotePluginId`, and `skillName`. This lets clients preview uninstalled remote plugin skills without downloading the plugin bundle.
 - `skills/changed` — notification emitted when watched local skill files change.
+- `skills/create` — create a repo-scoped Skill under `.crewon/skill/<name>/SKILL.md`, emit `skills/changed`, and return the created skill metadata.
 - `app/list` — list available apps.
 - `agent/recruitable/list` — list saved Crewon agent configs for a workspace that are not already assigned to an office by `agentId` or display name; supports `cursor` and `limit` pagination.
 - `automation/create` — create a structured automation config with a manual trigger, target office, execution agent, status, and enabled state, then save it as a Crewon automation record.

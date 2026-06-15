@@ -647,6 +647,11 @@ client_request_definitions! {
         serialization: global_shared_read("config"),
         response: v2::SkillsListResponse,
     },
+    SkillsCreate => "skills/create" {
+        params: v2::SkillsCreateParams,
+        serialization: global("config"),
+        response: v2::SkillsCreateResponse,
+    },
     SkillsExtraRootsSet => "skills/extraRoots/set" {
         params: v2::SkillsExtraRootsSetParams,
         serialization: global("config"),

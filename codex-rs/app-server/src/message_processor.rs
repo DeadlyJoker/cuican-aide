@@ -1187,6 +1187,9 @@ impl MessageProcessor {
             ClientRequest::SkillsList { params, .. } => {
                 self.catalog_processor.skills_list(params).await
             }
+            ClientRequest::SkillsCreate { params, .. } => {
+                self.catalog_processor.skills_create(params).await
+            }
             ClientRequest::SkillsExtraRootsSet { params, .. } => {
                 self.catalog_processor.skills_extra_roots_set(params).await
             }

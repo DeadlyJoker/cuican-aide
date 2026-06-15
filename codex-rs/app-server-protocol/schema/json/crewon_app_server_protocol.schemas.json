@@ -740,6 +740,30 @@
             },
             "method": {
               "enum": [
+                "skills/create"
+              ],
+              "title": "Skills/createRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/SkillsCreateParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Skills/createRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "skills/extraRoots/set"
               ],
               "title": "Skills/extraRoots/setRequestMethod",
@@ -17076,6 +17100,48 @@
           "effectiveEnabled"
         ],
         "title": "SkillsConfigWriteResponse",
+        "type": "object"
+      },
+      "SkillsCreateParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "cwd": {
+            "$ref": "#/definitions/v2/AbsolutePathBuf"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "cwd",
+          "description",
+          "name"
+        ],
+        "title": "SkillsCreateParams",
+        "type": "object"
+      },
+      "SkillsCreateResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "root": {
+            "$ref": "#/definitions/v2/AbsolutePathBuf"
+          },
+          "skill": {
+            "$ref": "#/definitions/v2/SkillMetadata"
+          }
+        },
+        "required": [
+          "root",
+          "skill"
+        ],
+        "title": "SkillsCreateResponse",
         "type": "object"
       },
       "SkillsExtraRootsSetParams": {

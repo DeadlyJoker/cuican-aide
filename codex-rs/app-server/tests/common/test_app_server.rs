@@ -11,104 +11,105 @@ use tokio::process::ChildStdin;
 use tokio::process::ChildStdout;
 
 use anyhow::Context;
-use codex_app_server_protocol::AppsListParams;
-use codex_app_server_protocol::CancelLoginAccountParams;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::ClientNotification;
-use codex_app_server_protocol::CollaborationModeListParams;
-use codex_app_server_protocol::CommandExecParams;
-use codex_app_server_protocol::CommandExecResizeParams;
-use codex_app_server_protocol::CommandExecTerminateParams;
-use codex_app_server_protocol::CommandExecWriteParams;
-use codex_app_server_protocol::ConfigBatchWriteParams;
-use codex_app_server_protocol::ConfigReadParams;
-use codex_app_server_protocol::ConfigValueWriteParams;
-use codex_app_server_protocol::ExperimentalFeatureListParams;
-use codex_app_server_protocol::FeedbackUploadParams;
-use codex_app_server_protocol::FsCopyParams;
-use codex_app_server_protocol::FsCreateDirectoryParams;
-use codex_app_server_protocol::FsGetMetadataParams;
-use codex_app_server_protocol::FsReadDirectoryParams;
-use codex_app_server_protocol::FsReadFileParams;
-use codex_app_server_protocol::FsRemoveParams;
-use codex_app_server_protocol::FsUnwatchParams;
-use codex_app_server_protocol::FsWatchParams;
-use codex_app_server_protocol::FsWriteFileParams;
-use codex_app_server_protocol::GetAccountParams;
-use codex_app_server_protocol::GetAuthStatusParams;
-use codex_app_server_protocol::GetConversationSummaryParams;
-use codex_app_server_protocol::HooksListParams;
-use codex_app_server_protocol::InitializeCapabilities;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCRequest;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::ListMcpServerStatusParams;
-use codex_app_server_protocol::LoginAccountParams;
-use codex_app_server_protocol::MarketplaceAddParams;
-use codex_app_server_protocol::MarketplaceRemoveParams;
-use codex_app_server_protocol::MarketplaceUpgradeParams;
-use codex_app_server_protocol::McpResourceReadParams;
-use codex_app_server_protocol::McpServerToolCallParams;
-use codex_app_server_protocol::MockExperimentalMethodParams;
-use codex_app_server_protocol::ModelListParams;
-use codex_app_server_protocol::ModelProviderCapabilitiesReadParams;
-use codex_app_server_protocol::PermissionProfileListParams;
-use codex_app_server_protocol::PluginInstallParams;
-use codex_app_server_protocol::PluginInstalledParams;
-use codex_app_server_protocol::PluginListParams;
-use codex_app_server_protocol::PluginReadParams;
-use codex_app_server_protocol::PluginSkillReadParams;
-use codex_app_server_protocol::PluginUninstallParams;
-use codex_app_server_protocol::ProcessKillParams;
-use codex_app_server_protocol::ProcessResizePtyParams;
-use codex_app_server_protocol::ProcessSpawnParams;
-use codex_app_server_protocol::ProcessWriteStdinParams;
-use codex_app_server_protocol::RemoteControlClientsListParams;
-use codex_app_server_protocol::RemoteControlClientsRevokeParams;
-use codex_app_server_protocol::RemoteControlPairingStartParams;
-use codex_app_server_protocol::RemoteControlPairingStatusParams;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ReviewStartParams;
-use codex_app_server_protocol::SendAddCreditsNudgeEmailParams;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::SkillsExtraRootsSetParams;
-use codex_app_server_protocol::SkillsListParams;
-use codex_app_server_protocol::ThreadArchiveParams;
-use codex_app_server_protocol::ThreadCompactStartParams;
-use codex_app_server_protocol::ThreadDeleteParams;
-use codex_app_server_protocol::ThreadForkParams;
-use codex_app_server_protocol::ThreadInjectItemsParams;
-use codex_app_server_protocol::ThreadListParams;
-use codex_app_server_protocol::ThreadLoadedListParams;
-use codex_app_server_protocol::ThreadMemoryModeSetParams;
-use codex_app_server_protocol::ThreadMetadataUpdateParams;
-use codex_app_server_protocol::ThreadReadParams;
-use codex_app_server_protocol::ThreadRealtimeAppendAudioParams;
-use codex_app_server_protocol::ThreadRealtimeAppendTextParams;
-use codex_app_server_protocol::ThreadRealtimeListVoicesParams;
-use codex_app_server_protocol::ThreadRealtimeStartParams;
-use codex_app_server_protocol::ThreadRealtimeStopParams;
-use codex_app_server_protocol::ThreadResumeParams;
-use codex_app_server_protocol::ThreadRollbackParams;
-use codex_app_server_protocol::ThreadSearchParams;
-use codex_app_server_protocol::ThreadSetNameParams;
-use codex_app_server_protocol::ThreadSettingsUpdateParams;
-use codex_app_server_protocol::ThreadShellCommandParams;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadTurnsItemsListParams;
-use codex_app_server_protocol::ThreadTurnsListParams;
-use codex_app_server_protocol::ThreadUnarchiveParams;
-use codex_app_server_protocol::ThreadUnsubscribeParams;
-use codex_app_server_protocol::TurnCompletedNotification;
-use codex_app_server_protocol::TurnInterruptParams;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnSteerParams;
-use codex_app_server_protocol::WindowsSandboxSetupStartParams;
-use codex_login::default_client::CODEX_INTERNAL_ORIGINATOR_OVERRIDE_ENV_VAR;
+use crewon_app_server_protocol::AppsListParams;
+use crewon_app_server_protocol::CancelLoginAccountParams;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::ClientNotification;
+use crewon_app_server_protocol::CollaborationModeListParams;
+use crewon_app_server_protocol::CommandExecParams;
+use crewon_app_server_protocol::CommandExecResizeParams;
+use crewon_app_server_protocol::CommandExecTerminateParams;
+use crewon_app_server_protocol::CommandExecWriteParams;
+use crewon_app_server_protocol::ConfigBatchWriteParams;
+use crewon_app_server_protocol::ConfigReadParams;
+use crewon_app_server_protocol::ConfigValueWriteParams;
+use crewon_app_server_protocol::ExperimentalFeatureListParams;
+use crewon_app_server_protocol::FeedbackUploadParams;
+use crewon_app_server_protocol::FsCopyParams;
+use crewon_app_server_protocol::FsCreateDirectoryParams;
+use crewon_app_server_protocol::FsGetMetadataParams;
+use crewon_app_server_protocol::FsReadDirectoryParams;
+use crewon_app_server_protocol::FsReadFileParams;
+use crewon_app_server_protocol::FsRemoveParams;
+use crewon_app_server_protocol::FsUnwatchParams;
+use crewon_app_server_protocol::FsWatchParams;
+use crewon_app_server_protocol::FsWriteFileParams;
+use crewon_app_server_protocol::GetAccountParams;
+use crewon_app_server_protocol::GetAuthStatusParams;
+use crewon_app_server_protocol::GetConversationSummaryParams;
+use crewon_app_server_protocol::HooksListParams;
+use crewon_app_server_protocol::InitializeCapabilities;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCRequest;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::ListMcpServerStatusParams;
+use crewon_app_server_protocol::LoginAccountParams;
+use crewon_app_server_protocol::MarketplaceAddParams;
+use crewon_app_server_protocol::MarketplaceRemoveParams;
+use crewon_app_server_protocol::MarketplaceUpgradeParams;
+use crewon_app_server_protocol::McpResourceReadParams;
+use crewon_app_server_protocol::McpServerToolCallParams;
+use crewon_app_server_protocol::MockExperimentalMethodParams;
+use crewon_app_server_protocol::ModelListParams;
+use crewon_app_server_protocol::ModelProviderCapabilitiesReadParams;
+use crewon_app_server_protocol::PermissionProfileListParams;
+use crewon_app_server_protocol::PluginInstallParams;
+use crewon_app_server_protocol::PluginInstalledParams;
+use crewon_app_server_protocol::PluginListParams;
+use crewon_app_server_protocol::PluginReadParams;
+use crewon_app_server_protocol::PluginSkillReadParams;
+use crewon_app_server_protocol::PluginUninstallParams;
+use crewon_app_server_protocol::ProcessKillParams;
+use crewon_app_server_protocol::ProcessResizePtyParams;
+use crewon_app_server_protocol::ProcessSpawnParams;
+use crewon_app_server_protocol::ProcessWriteStdinParams;
+use crewon_app_server_protocol::RemoteControlClientsListParams;
+use crewon_app_server_protocol::RemoteControlClientsRevokeParams;
+use crewon_app_server_protocol::RemoteControlPairingStartParams;
+use crewon_app_server_protocol::RemoteControlPairingStatusParams;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ReviewStartParams;
+use crewon_app_server_protocol::SendAddCreditsNudgeEmailParams;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::SkillsCreateParams;
+use crewon_app_server_protocol::SkillsExtraRootsSetParams;
+use crewon_app_server_protocol::SkillsListParams;
+use crewon_app_server_protocol::ThreadArchiveParams;
+use crewon_app_server_protocol::ThreadCompactStartParams;
+use crewon_app_server_protocol::ThreadDeleteParams;
+use crewon_app_server_protocol::ThreadForkParams;
+use crewon_app_server_protocol::ThreadInjectItemsParams;
+use crewon_app_server_protocol::ThreadListParams;
+use crewon_app_server_protocol::ThreadLoadedListParams;
+use crewon_app_server_protocol::ThreadMemoryModeSetParams;
+use crewon_app_server_protocol::ThreadMetadataUpdateParams;
+use crewon_app_server_protocol::ThreadReadParams;
+use crewon_app_server_protocol::ThreadRealtimeAppendAudioParams;
+use crewon_app_server_protocol::ThreadRealtimeAppendTextParams;
+use crewon_app_server_protocol::ThreadRealtimeListVoicesParams;
+use crewon_app_server_protocol::ThreadRealtimeStartParams;
+use crewon_app_server_protocol::ThreadRealtimeStopParams;
+use crewon_app_server_protocol::ThreadResumeParams;
+use crewon_app_server_protocol::ThreadRollbackParams;
+use crewon_app_server_protocol::ThreadSearchParams;
+use crewon_app_server_protocol::ThreadSetNameParams;
+use crewon_app_server_protocol::ThreadSettingsUpdateParams;
+use crewon_app_server_protocol::ThreadShellCommandParams;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadTurnsItemsListParams;
+use crewon_app_server_protocol::ThreadTurnsListParams;
+use crewon_app_server_protocol::ThreadUnarchiveParams;
+use crewon_app_server_protocol::ThreadUnsubscribeParams;
+use crewon_app_server_protocol::TurnCompletedNotification;
+use crewon_app_server_protocol::TurnInterruptParams;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnSteerParams;
+use crewon_app_server_protocol::WindowsSandboxSetupStartParams;
+use crewon_login::default_client::CREWON_INTERNAL_ORIGINATOR_OVERRIDE_ENV_VAR;
 use tokio::process::Command;
 
 pub struct TestAppServer {
@@ -123,9 +124,9 @@ pub struct TestAppServer {
     pending_messages: VecDeque<JSONRPCMessage>,
 }
 
-pub const DEFAULT_CLIENT_NAME: &str = "codex-app-server-tests";
+pub const DEFAULT_CLIENT_NAME: &str = "crewon-app-server-tests";
 pub const DISABLE_PLUGIN_STARTUP_TASKS_ARG: &str = "--disable-plugin-startup-tasks-for-tests";
-const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CODEX_APP_SERVER_DISABLE_MANAGED_CONFIG";
+const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CREWON_APP_SERVER_DISABLE_MANAGED_CONFIG";
 
 impl TestAppServer {
     pub async fn new(codex_home: &Path) -> anyhow::Result<Self> {
@@ -198,8 +199,8 @@ impl TestAppServer {
         env_overrides: &[(&str, Option<&str>)],
         args: &[&str],
     ) -> anyhow::Result<Self> {
-        let program = codex_utils_cargo_bin::cargo_bin("codex-app-server")
-            .context("should find binary for codex-app-server")?;
+        let program = crewon_utils_cargo_bin::cargo_bin("crewon-app-server")
+            .context("should find binary for crewon-app-server")?;
         Self::new_with_program_env_and_args(codex_home, &program, env_overrides, args).await
     }
 
@@ -215,14 +216,16 @@ impl TestAppServer {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         cmd.current_dir(codex_home);
+        cmd.env("CREWON_HOME", codex_home);
         cmd.env("CODEX_HOME", codex_home);
+        cmd.env("CODEX_SQLITE_HOME", codex_home);
         cmd.env("RUST_LOG", "warn");
         // Keep integration tests isolated from host managed configuration.
         cmd.env(
-            "CODEX_APP_SERVER_MANAGED_CONFIG_PATH",
+            "CREWON_APP_SERVER_MANAGED_CONFIG_PATH",
             codex_home.join("managed_config.toml"),
         );
-        cmd.env_remove(CODEX_INTERNAL_ORIGINATOR_OVERRIDE_ENV_VAR);
+        cmd.env_remove(CREWON_INTERNAL_ORIGINATOR_OVERRIDE_ENV_VAR);
         cmd.args(args);
 
         for (k, v) in env_overrides {
@@ -239,7 +242,7 @@ impl TestAppServer {
         let mut process = cmd
             .kill_on_drop(true)
             .spawn()
-            .context("codex-mcp-server proc should start")?;
+            .context("crewon-mcp-server proc should start")?;
         let stdin = process
             .stdin
             .take()
@@ -632,7 +635,7 @@ impl TestAppServer {
     /// Send an `experimentalFeature/enablement/set` JSON-RPC request.
     pub async fn send_experimental_feature_enablement_set_request(
         &mut self,
-        params: codex_app_server_protocol::ExperimentalFeatureEnablementSetParams,
+        params: crewon_app_server_protocol::ExperimentalFeatureEnablementSetParams,
     ) -> anyhow::Result<i64> {
         let params = Some(serde_json::to_value(params)?);
         self.send_request("experimentalFeature/enablement/set", params)
@@ -727,6 +730,15 @@ impl TestAppServer {
     ) -> anyhow::Result<i64> {
         let params = Some(serde_json::to_value(params)?);
         self.send_request("skills/list", params).await
+    }
+
+    /// Send a `skills/create` JSON-RPC request.
+    pub async fn send_skills_create_request(
+        &mut self,
+        params: SkillsCreateParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("skills/create", params).await
     }
 
     /// Send a `skills/extraRoots/set` JSON-RPC request.
@@ -1568,7 +1580,7 @@ impl TestAppServer {
 
 impl Drop for TestAppServer {
     fn drop(&mut self) {
-        // These tests spawn a `codex-app-server` child process.
+        // These tests spawn a `crewon-app-server` child process.
         //
         // We keep that child alive for the test and rely on Tokio's `kill_on_drop(true)` when this
         // helper is dropped. Tokio documents kill-on-drop as best-effort: dropping requests

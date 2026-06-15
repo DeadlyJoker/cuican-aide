@@ -360,48 +360,6 @@ function createSkillAgentOption(
   };
 }
 
-const CREWON_SKILL_EXTRA_ROOTS_STORAGE_KEY = "crewon-ui-skill-extra-roots";
-
-function readStoredSkillExtraRoots(): string[] {
-  try {
-    const raw = localStorage.getItem(CREWON_SKILL_EXTRA_ROOTS_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((value): value is string => typeof value === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredSkillExtraRoots(roots: string[]): void {
-  try {
-    localStorage.setItem(
-      CREWON_SKILL_EXTRA_ROOTS_STORAGE_KEY,
-      JSON.stringify(roots),
-    );
-  } catch {
-    // Persisting this registry is best-effort; app-server still receives roots.
-  }
-}
-
-function mergeSkillExtraRoots(...rootGroups: string[][]): string[] {
-  const seen = new Set<string>();
-  const roots: string[] = [];
-  for (const root of rootGroups.flat()) {
-    const normalized = root.trim().replace(/[\\/]+$/, "");
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    roots.push(normalized);
-  }
-  return roots;
-}
-
 function userMessageText(item: ThreadItem): string {
   if (item.type !== "userMessage") {
     return "";
@@ -9170,19 +9128,7 @@ export function App() {
           return;
         }
 
-        const skillsRoot = [
-          skillCwd.replace(/[\\/]+$/, ""),
-          ".crewon",
-          "skills",
-        ].join(skillCwd.includes("\\") ? "\\" : "/");
-        const skillDir = joinPath(skillsRoot, skillName);
-        const skillFile = joinPath(skillDir, "SKILL.md");
         const skillBody = [
-          "---",
-          `name: ${skillName}`,
-          `description: ${description.replace(/\n/g, " ")}`,
-          "---",
-          "",
           `# ${skillName}`,
           "",
           description,
@@ -9205,28 +9151,30 @@ export function App() {
             : currentPanel,
         );
 
-        await clientRef.current?.createDirectory(skillDir, true);
-        await clientRef.current?.writeTextFile(skillFile, skillBody);
-        await writeToolConfigFile({
-          kind: "skill",
-          title: skillName,
+        const createResponse = await clientRef.current?.createSkill({
+          cwd: skillCwd,
           name: skillName,
           description,
-          path: skillFile,
-          enabled: true,
+          body: skillBody,
         });
-        const nextExtraRoots = mergeSkillExtraRoots(
-          readStoredSkillExtraRoots(),
-          [skillsRoot],
-        );
-        await clientRef.current?.setSkillExtraRoots(nextExtraRoots);
-        writeStoredSkillExtraRoots(nextExtraRoots);
+        if (!createResponse) {
+          return;
+        }
+        const skillPath = createResponse.skill.path;
+        await writeToolConfigFile({
+          kind: "skill",
+          title: createResponse.skill.name,
+          name: createResponse.skill.name,
+          description: createResponse.skill.description,
+          path: skillPath,
+          enabled: createResponse.skill.enabled,
+        });
         await openLibrary("tools");
         setNotice({
           text:
             locale === "zh"
-              ? `已保存 Skill：${skillName}，并注册 ${nextExtraRoots.length} 个 Skill root`
-              : `Saved skill: ${skillName} and registered ${nextExtraRoots.length} skill roots`,
+              ? `已保存 Skill：${createResponse.skill.name}`
+              : `Saved skill: ${createResponse.skill.name}`,
           tone: "success",
         });
         return;

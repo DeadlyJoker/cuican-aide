@@ -3564,6 +3564,29 @@
       ],
       "type": "object"
     },
+    "SkillsCreateParams": {
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "cwd": {
+          "$ref": "#/definitions/AbsolutePathBuf"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "body",
+        "cwd",
+        "description",
+        "name"
+      ],
+      "type": "object"
+    },
     "SkillsExtraRootsSetParams": {
       "properties": {
         "extraRoots": {
@@ -5481,6 +5504,30 @@
         "params"
       ],
       "title": "Skills/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "skills/create"
+          ],
+          "title": "Skills/createRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/SkillsCreateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Skills/createRequest",
       "type": "object"
     },
     {

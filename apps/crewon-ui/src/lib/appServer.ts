@@ -54,6 +54,7 @@ import type { PlanDeltaNotification } from "@crewon-protocol/v2/PlanDeltaNotific
 import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
 import type { SandboxPolicy } from "@crewon-protocol/v2/SandboxPolicy";
 import type { ServerRequestResolvedNotification } from "@crewon-protocol/v2/ServerRequestResolvedNotification";
+import type { SkillsCreateResponse } from "@crewon-protocol/v2/SkillsCreateResponse";
 import type { SkillsListResponse } from "@crewon-protocol/v2/SkillsListResponse";
 import type { SkillsConfigWriteResponse } from "@crewon-protocol/v2/SkillsConfigWriteResponse";
 import type { SkillsExtraRootsSetResponse } from "@crewon-protocol/v2/SkillsExtraRootsSetResponse";
@@ -1238,6 +1239,15 @@ export class AppServerClient {
       cwds: cwd ? [cwd] : [],
       forceReload: false,
     });
+  }
+
+  async createSkill(params: {
+    cwd: string;
+    name: string;
+    description: string;
+    body: string;
+  }): Promise<SkillsCreateResponse> {
+    return this.request<SkillsCreateResponse>("skills/create", params);
   }
 
   async writeSkillConfig(params: { path?: string | null; name?: string | null; enabled: boolean }): Promise<SkillsConfigWriteResponse> {
