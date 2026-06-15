@@ -8,7 +8,7 @@ use crate::export::GeneratedSchema;
 use crate::export::write_json_schema;
 use crate::protocol::v1;
 use crate::protocol::v2;
-use codex_experimental_api_macros::ExperimentalApi;
+use crewon_experimental_api_macros::ExperimentalApi;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -19,9 +19,9 @@ use ts_rs::TS;
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthMode {
-    /// OpenAI API key provided by the caller and stored by Codex.
+    /// OpenAI API key provided by the caller and stored by Crewon.
     ApiKey,
-    /// ChatGPT OAuth managed by Codex (tokens persisted and refreshed by Codex).
+    /// ChatGPT OAuth managed by Crewon (tokens persisted and refreshed by Crewon).
     Chatgpt,
     /// [UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE.
     ///
@@ -31,17 +31,17 @@ pub enum AuthMode {
     #[ts(rename = "chatgptAuthTokens")]
     #[strum(serialize = "chatgptAuthTokens")]
     ChatgptAuthTokens,
-    /// Programmatic Codex auth backed by a registered Agent Identity.
+    /// Programmatic Crewon auth backed by a registered Agent Identity.
     #[serde(rename = "agentIdentity")]
     #[ts(rename = "agentIdentity")]
     #[strum(serialize = "agentIdentity")]
     AgentIdentity,
-    /// Programmatic Codex auth backed by a personal access token.
+    /// Programmatic Crewon auth backed by a personal access token.
     #[serde(rename = "personalAccessToken")]
     #[ts(rename = "personalAccessToken")]
     #[strum(serialize = "personalAccessToken")]
     PersonalAccessToken,
-    /// Amazon Bedrock bearer token managed by Codex.
+    /// Amazon Bedrock bearer token managed by Crewon.
     #[serde(rename = "bedrockApiKey")]
     #[ts(rename = "bedrockApiKey")]
     #[strum(serialize = "bedrockApiKey")]
@@ -722,6 +722,36 @@ client_request_definitions! {
         serialization: None,
         response: v2::AppsListResponse,
     },
+    AgentList => "agent/list" {
+        params: v2::AgentListParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentListResponse,
+    },
+    AgentSave => "agent/save" {
+        params: v2::AgentSaveParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentSaveResponse,
+    },
+    OfficeList => "office/list" {
+        params: v2::OfficeListParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeListResponse,
+    },
+    OfficeSave => "office/save" {
+        params: v2::OfficeSaveParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeSaveResponse,
+    },
+    AutomationList => "automation/list" {
+        params: v2::AutomationListParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationListResponse,
+    },
+    AutomationSave => "automation/save" {
+        params: v2::AutomationSaveParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationSaveResponse,
+    },
     // File system requests are intentionally concurrent. Desktop already treats local
     // file system operations as concurrent, and app-server remote fs mirrors that model.
     FsReadFile => "fs/readFile" {
@@ -1036,7 +1066,7 @@ client_request_definitions! {
         response: v2::CommandExecResizeResponse,
     },
     #[experimental("process/spawn")]
-    /// Spawn a standalone process (argv vector) without a Codex sandbox.
+    /// Spawn a standalone process (argv vector) without a Crewon sandbox.
     ProcessSpawn => "process/spawn" {
         params: v2::ProcessSpawnParams,
         serialization: process_handle(params.process_handle),
@@ -1466,7 +1496,7 @@ pub struct FuzzyFileSearchParams {
     pub cancellation_token: Option<String>,
 }
 
-/// Superset of [`codex_file_search::FileMatch`]
+/// Superset of [`crewon_file_search::FileMatch`]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 pub struct FuzzyFileSearchResult {
     pub root: String,
@@ -1564,7 +1594,7 @@ server_notification_definitions! {
     ItemGuardianApprovalReviewStarted => "item/autoApprovalReview/started" (v2::ItemGuardianApprovalReviewStartedNotification),
     ItemGuardianApprovalReviewCompleted => "item/autoApprovalReview/completed" (v2::ItemGuardianApprovalReviewCompletedNotification),
     ItemCompleted => "item/completed" (v2::ItemCompletedNotification),
-    /// This event is internal-only. Used by Codex Cloud.
+    /// This event is internal-only. Used by Crewon Cloud.
     RawResponseItemCompleted => "rawResponseItem/completed" (v2::RawResponseItemCompletedNotification),
     AgentMessageDelta => "item/agentMessage/delta" (v2::AgentMessageDeltaNotification),
     /// EXPERIMENTAL - proposed plan streaming deltas for plan items.
@@ -1643,16 +1673,16 @@ client_notification_definitions! {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use codex_protocol::ThreadId;
-    use codex_protocol::account::PlanType;
-    use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
-    use codex_protocol::parse_command::ParsedCommand;
-    use codex_protocol::protocol::RealtimeConversationVersion;
-    use codex_protocol::protocol::RealtimeOutputModality;
-    use codex_protocol::protocol::RealtimeVoice;
-    use codex_utils_absolute_path::AbsolutePathBuf;
-    use codex_utils_absolute_path::test_support::PathBufExt;
-    use codex_utils_absolute_path::test_support::test_path_buf;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::account::PlanType;
+    use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
+    use crewon_protocol::parse_command::ParsedCommand;
+    use crewon_protocol::protocol::RealtimeConversationVersion;
+    use crewon_protocol::protocol::RealtimeOutputModality;
+    use crewon_protocol::protocol::RealtimeVoice;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
+    use crewon_utils_absolute_path::test_support::PathBufExt;
+    use crewon_utils_absolute_path::test_support::test_path_buf;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use std::path::PathBuf;
@@ -2123,8 +2153,8 @@ mod tests {
             request_id: RequestId::Integer(42),
             params: v1::InitializeParams {
                 client_info: v1::ClientInfo {
-                    name: "codex_vscode".to_string(),
-                    title: Some("Codex VS Code Extension".to_string()),
+                    name: "crewon_pc".to_string(),
+                    title: Some("Crewon PC Client".to_string()),
                     version: "0.1.0".to_string(),
                 },
                 capabilities: Some(v1::InitializeCapabilities {
@@ -2144,8 +2174,8 @@ mod tests {
                 "id": 42,
                 "params": {
                     "clientInfo": {
-                        "name": "codex_vscode",
-                        "title": "Codex VS Code Extension",
+                        "name": "crewon_pc",
+                        "title": "Crewon PC Client",
                         "version": "0.1.0"
                     },
                     "capabilities": {
@@ -2170,8 +2200,8 @@ mod tests {
             "id": 42,
             "params": {
                 "clientInfo": {
-                    "name": "codex_vscode",
-                    "title": "Codex VS Code Extension",
+                    "name": "crewon_pc",
+                    "title": "Crewon PC Client",
                     "version": "0.1.0"
                 },
                 "capabilities": {
@@ -2191,8 +2221,8 @@ mod tests {
                 request_id: RequestId::Integer(42),
                 params: v1::InitializeParams {
                     client_info: v1::ClientInfo {
-                        name: "codex_vscode".to_string(),
-                        title: Some("Codex VS Code Extension".to_string()),
+                        name: "crewon_pc".to_string(),
+                        title: Some("Crewon PC Client".to_string()),
                         version: "0.1.0".to_string(),
                     },
                     capabilities: Some(v1::InitializeCapabilities {
@@ -2374,7 +2404,7 @@ mod tests {
         let params = v2::McpServerElicitationRequestParams {
             thread_id: "thr_123".to_string(),
             turn_id: Some("turn_123".to_string()),
-            server_name: "codex_apps".to_string(),
+            server_name: "crewon_apps".to_string(),
             request: v2::McpServerElicitationRequest::Form {
                 meta: None,
                 message: "Allow this request?".to_string(),
@@ -2393,7 +2423,7 @@ mod tests {
                 "params": {
                     "threadId": "thr_123",
                     "turnId": "turn_123",
-                    "serverName": "codex_apps",
+                    "serverName": "crewon_apps",
                     "mode": "form",
                     "_meta": null,
                     "message": "Allow this request?",
@@ -2472,7 +2502,7 @@ mod tests {
                     status: v2::ThreadStatus::Idle,
                     path: None,
                     cwd: cwd.clone(),
-                    cli_version: "0.0.0".to_string(),
+                    client_version: "0.0.0".to_string(),
                     source: v2::SessionSource::Exec,
                     thread_source: None,
                     agent_nickname: None,
@@ -2517,7 +2547,7 @@ mod tests {
                         },
                         "path": null,
                         "cwd": absolute_path_string("tmp"),
-                        "cliVersion": "0.0.0",
+                        "clientVersion": "0.0.0",
                         "source": "exec",
                         "threadSource": null,
                         "agentNickname": null,
@@ -3349,9 +3379,9 @@ mod tests {
                     service_tier: None,
                     effort: None,
                     summary: None,
-                    collaboration_mode: codex_protocol::config_types::CollaborationMode {
-                        mode: codex_protocol::config_types::ModeKind::Default,
-                        settings: codex_protocol::config_types::Settings {
+                    collaboration_mode: crewon_protocol::config_types::CollaborationMode {
+                        mode: crewon_protocol::config_types::ModeKind::Default,
+                        settings: crewon_protocol::config_types::Settings {
                             model: "gpt-5.4".to_string(),
                             reasoning_effort: None,
                             developer_instructions: None,

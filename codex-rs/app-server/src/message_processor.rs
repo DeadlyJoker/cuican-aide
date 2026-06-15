@@ -22,6 +22,7 @@ use crate::request_processors::AppsRequestProcessor;
 use crate::request_processors::CatalogRequestProcessor;
 use crate::request_processors::CommandExecRequestProcessor;
 use crate::request_processors::ConfigRequestProcessor;
+use crate::request_processors::CrewonDomainRequestProcessor;
 use crate::request_processors::EnvironmentRequestProcessor;
 use crate::request_processors::ExternalAgentConfigRequestProcessor;
 use crate::request_processors::FeedbackRequestProcessor;
@@ -47,41 +48,41 @@ use crate::thread_state::ThreadStateManager;
 use crate::transport::AppServerTransport;
 use crate::transport::RemoteControlHandle;
 use async_trait::async_trait;
-use codex_analytics::AnalyticsEventsClient;
-use codex_analytics::AppServerRpcTransport;
-use codex_app_server_protocol::AuthMode as LoginAuthMode;
-use codex_app_server_protocol::ChatgptAuthTokensRefreshParams;
-use codex_app_server_protocol::ChatgptAuthTokensRefreshReason;
-use codex_app_server_protocol::ChatgptAuthTokensRefreshResponse;
-use codex_app_server_protocol::ClientNotification;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::ClientResponsePayload;
-use codex_app_server_protocol::ConfigWarningNotification;
-use codex_app_server_protocol::ExperimentalApi;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCRequest;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::ServerRequestPayload;
-use codex_app_server_protocol::experimental_required_message;
-use codex_arg0::Arg0DispatchPaths;
-use codex_chatgpt::workspace_settings;
-use codex_core::ThreadManager;
-use codex_core::config::Config;
-use codex_exec_server::EnvironmentManager;
-use codex_feedback::CodexFeedback;
-use codex_goal_extension::GoalService;
-use codex_login::AuthManager;
-use codex_login::auth::ExternalAuth;
-use codex_login::auth::ExternalAuthRefreshContext;
-use codex_login::auth::ExternalAuthRefreshReason;
-use codex_login::auth::ExternalAuthTokens;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::W3cTraceContext;
-use codex_rollout::StateDbHandle;
-use codex_state::log_db::LogDbLayer;
+use crewon_analytics::AnalyticsEventsClient;
+use crewon_analytics::AppServerRpcTransport;
+use crewon_app_server_protocol::AuthMode as LoginAuthMode;
+use crewon_app_server_protocol::ChatgptAuthTokensRefreshParams;
+use crewon_app_server_protocol::ChatgptAuthTokensRefreshReason;
+use crewon_app_server_protocol::ChatgptAuthTokensRefreshResponse;
+use crewon_app_server_protocol::ClientNotification;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::ClientResponsePayload;
+use crewon_app_server_protocol::ConfigWarningNotification;
+use crewon_app_server_protocol::ExperimentalApi;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCRequest;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::ServerRequestPayload;
+use crewon_app_server_protocol::experimental_required_message;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_chatgpt::workspace_settings;
+use crewon_core::ThreadManager;
+use crewon_core::config::Config;
+use crewon_exec_server::EnvironmentManager;
+use crewon_feedback::CrewonFeedback;
+use crewon_goal_extension::GoalService;
+use crewon_login::AuthManager;
+use crewon_login::auth::ExternalAuth;
+use crewon_login::auth::ExternalAuthRefreshContext;
+use crewon_login::auth::ExternalAuthRefreshReason;
+use crewon_login::auth::ExternalAuthTokens;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::W3cTraceContext;
+use crewon_rollout::StateDbHandle;
+use crewon_state::log_db::LogDbLayer;
 use tokio::sync::Mutex;
 use tokio::sync::Semaphore;
 use tokio::sync::broadcast;
@@ -169,6 +170,7 @@ pub(crate) struct MessageProcessor {
     apps_processor: AppsRequestProcessor,
     catalog_processor: CatalogRequestProcessor,
     command_exec_processor: CommandExecRequestProcessor,
+    crewon_domain_processor: CrewonDomainRequestProcessor,
     process_exec_processor: ProcessExecRequestProcessor,
     config_processor: ConfigRequestProcessor,
     environment_processor: EnvironmentRequestProcessor,
@@ -265,7 +267,7 @@ pub(crate) struct MessageProcessorArgs {
     pub(crate) config: Arc<Config>,
     pub(crate) config_manager: ConfigManager,
     pub(crate) environment_manager: Arc<EnvironmentManager>,
-    pub(crate) feedback: CodexFeedback,
+    pub(crate) feedback: CrewonFeedback,
     pub(crate) log_db: Option<LogDbLayer>,
     pub(crate) state_db: Option<StateDbHandle>,
     pub(crate) config_warnings: Vec<ConfigWarningNotification>,
@@ -306,12 +308,12 @@ impl MessageProcessor {
         // The thread store is intentionally process-scoped. Config reloads can
         // affect per-thread behavior, but they must not move newly started,
         // resumed, or forked threads to a different persistence backend/root.
-        let thread_store = codex_core::thread_store_from_config(config.as_ref(), state_db.clone());
+        let thread_store = crewon_core::thread_store_from_config(config.as_ref(), state_db.clone());
         let environment_manager_for_requests = Arc::clone(&environment_manager);
         let environment_manager_for_extensions = Arc::clone(&environment_manager);
         let restriction_product = session_source.restriction_product();
-        let executor_skill_provider: Arc<dyn codex_skills_extension::SkillProvider> = Arc::new(
-            codex_skills_extension::ExecutorSkillProvider::new_with_restriction_product(
+        let executor_skill_provider: Arc<dyn crewon_skills_extension::SkillProvider> = Arc::new(
+            crewon_skills_extension::ExecutorSkillProvider::new_with_restriction_product(
                 environment_manager_for_extensions,
                 restriction_product,
             ),
@@ -392,6 +394,7 @@ impl MessageProcessor {
             config_manager.clone(),
             Arc::clone(&environment_manager_for_requests),
         );
+        let crewon_domain_processor = CrewonDomainRequestProcessor::new();
         let process_exec_processor = ProcessExecRequestProcessor::new(
             outgoing.clone(),
             Arc::clone(&environment_manager_for_requests),
@@ -518,6 +521,7 @@ impl MessageProcessor {
             apps_processor,
             catalog_processor,
             command_exec_processor,
+            crewon_domain_processor,
             process_exec_processor,
             config_processor,
             environment_processor,
@@ -573,21 +577,21 @@ impl MessageProcessor {
             Arc::clone(&self.outgoing),
             request_context.clone(),
             async {
-                let codex_request = serde_json::to_value(&request)
+                let crewon_request = serde_json::to_value(&request)
                     .map_err(|err| invalid_request(format!("Invalid request: {err}")))
                     .and_then(|request_json| {
                         serde_json::from_value::<ClientRequest>(request_json)
                             .map_err(|err| invalid_request(format!("Invalid request: {err}")))
                     });
-                let result = match codex_request {
-                    Ok(codex_request) => {
+                let result = match crewon_request {
+                    Ok(crewon_request) => {
                         // Websocket callers finalize outbound readiness in lib.rs after mirroring
                         // session state into outbound state and sending initialize notifications to
                         // this specific connection. Passing `None` avoids marking the connection
                         // ready too early from inside the shared request handler.
                         self.handle_client_request(
                             request_id.clone(),
-                            codex_request,
+                            crewon_request,
                             Arc::clone(&session),
                             /*outbound_initialized*/ None,
                             request_context.clone(),
@@ -788,7 +792,7 @@ impl MessageProcessor {
     async fn handle_client_request(
         self: &Arc<Self>,
         connection_request_id: ConnectionRequestId,
-        codex_request: ClientRequest,
+        crewon_request: ClientRequest,
         session: Arc<ConnectionSessionState>,
         // `Some(...)` means the caller wants initialize to immediately mark the
         // connection outbound-ready. Websocket JSON-RPC calls pass `None` so
@@ -797,7 +801,7 @@ impl MessageProcessor {
         request_context: RequestContext,
     ) -> Result<(), JSONRPCErrorError> {
         let connection_id = connection_request_id.connection_id;
-        if let ClientRequest::Initialize { request_id, params } = codex_request {
+        if let ClientRequest::Initialize { request_id, params } = crewon_request {
             let connection_initialized = self
                 .initialize_processor
                 .initialize(
@@ -823,7 +827,7 @@ impl MessageProcessor {
 
         self.dispatch_initialized_client_request(
             connection_request_id,
-            codex_request,
+            crewon_request,
             session,
             request_context,
         )
@@ -833,7 +837,7 @@ impl MessageProcessor {
     async fn dispatch_initialized_client_request(
         self: &Arc<Self>,
         connection_request_id: ConnectionRequestId,
-        codex_request: ClientRequest,
+        crewon_request: ClientRequest,
         session: Arc<ConnectionSessionState>,
         request_context: RequestContext,
     ) -> Result<(), JSONRPCErrorError> {
@@ -841,7 +845,7 @@ impl MessageProcessor {
             return Err(invalid_request("Not initialized"));
         }
 
-        if let Some(reason) = codex_request.experimental_reason()
+        if let Some(reason) = crewon_request.experimental_reason()
             && !session.experimental_api_enabled()
         {
             return Err(invalid_request(experimental_required_message(reason)));
@@ -850,10 +854,10 @@ impl MessageProcessor {
         self.initialize_processor.track_initialized_request(
             connection_id,
             connection_request_id.request_id.clone(),
-            &codex_request,
+            &crewon_request,
         );
 
-        let serialization_scope = codex_request.serialization_scope();
+        let serialization_scope = crewon_request.serialization_scope();
         let app_server_client_name = session.app_server_client_name().map(str::to_string);
         let client_version = session.client_version().map(str::to_string);
         let error_request_id = connection_request_id.clone();
@@ -867,7 +871,7 @@ impl MessageProcessor {
                 let result = processor_for_request
                     .handle_initialized_client_request(
                         connection_request_id,
-                        codex_request,
+                        crewon_request,
                         request_context,
                         app_server_client_name,
                         client_version,
@@ -896,7 +900,7 @@ impl MessageProcessor {
     async fn handle_initialized_client_request(
         self: Arc<Self>,
         connection_request_id: ConnectionRequestId,
-        codex_request: ClientRequest,
+        crewon_request: ClientRequest,
         request_context: RequestContext,
         app_server_client_name: Option<String>,
         client_version: Option<String>,
@@ -904,10 +908,11 @@ impl MessageProcessor {
         let connection_id = connection_request_id.connection_id;
         let request_id = ConnectionRequestId {
             connection_id,
-            request_id: codex_request.id().clone(),
+            request_id: crewon_request.id().clone(),
         };
 
-        let result: Result<Option<ClientResponsePayload>, JSONRPCErrorError> = match codex_request {
+        let result: Result<Option<ClientResponsePayload>, JSONRPCErrorError> = match crewon_request
+        {
             ClientRequest::Initialize { .. } => {
                 panic!("Initialize should be handled before initialized request dispatch");
             }
@@ -1229,6 +1234,36 @@ impl MessageProcessor {
             ClientRequest::AppsList { params, .. } => {
                 self.apps_processor.apps_list(&request_id, params).await
             }
+            ClientRequest::AgentList { params, .. } => self
+                .crewon_domain_processor
+                .agent_list(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AgentSave { params, .. } => self
+                .crewon_domain_processor
+                .agent_save(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::OfficeList { params, .. } => self
+                .crewon_domain_processor
+                .office_list(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::OfficeSave { params, .. } => self
+                .crewon_domain_processor
+                .office_save(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AutomationList { params, .. } => self
+                .crewon_domain_processor
+                .automation_list(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AutomationSave { params, .. } => self
+                .crewon_domain_processor
+                .automation_save(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::SkillsConfigWrite { params, .. } => {
                 self.catalog_processor.skills_config_write(params).await
             }

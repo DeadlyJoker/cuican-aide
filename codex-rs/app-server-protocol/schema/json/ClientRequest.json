@@ -34,6 +34,31 @@
       ],
       "type": "string"
     },
+    "AgentListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
     "AgentMessageInputContent": {
       "oneOf": [
         {
@@ -57,6 +82,19 @@
           "type": "object"
         }
       ]
+    },
+    "AgentSaveParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
     },
     "ApprovalsReviewer": {
       "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
@@ -150,6 +188,44 @@
         }
       ]
     },
+    "AutomationListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AutomationSaveParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
     "ByteRange": {
       "properties": {
         "end": {
@@ -232,7 +308,7 @@
       "type": "object"
     },
     "CollaborationMode": {
-      "description": "Collaboration mode for a Codex session.",
+      "description": "Collaboration mode for a Crewon session.",
       "properties": {
         "mode": {
           "$ref": "#/definitions/ModeKind"
@@ -1353,7 +1429,7 @@
           "type": "object"
         },
         {
-          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.",
+          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Crewon-managed ChatGPT auth tokens have.",
           "properties": {
             "accessToken": {
               "description": "Access token (JWT) supplied by the client. This token is used for backend API requests and email extraction.",
@@ -1364,7 +1440,7 @@
               "type": "string"
             },
             "chatgptPlanType": {
-              "description": "Optional plan type supplied by the client.\n\nWhen `null`, Codex attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
+              "description": "Optional plan type supplied by the client.\n\nWhen `null`, Crewon attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
               "type": [
                 "string",
                 "null"
@@ -1597,7 +1673,7 @@
       "type": "object"
     },
     "ModeKind": {
-      "description": "Initial collaboration mode to use when the TUI starts.",
+      "description": "Initial collaboration mode to use when a client starts.",
       "enum": [
         "plan",
         "default"
@@ -1641,6 +1717,44 @@
         "enabled"
       ],
       "type": "string"
+    },
+    "OfficeListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "OfficeSaveParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
     },
     "PermissionProfileListParams": {
       "properties": {
@@ -3169,7 +3283,7 @@
     "ThreadApproveGuardianDeniedActionParams": {
       "properties": {
         "event": {
-          "description": "Serialized `codex_protocol::protocol::GuardianAssessmentEvent`."
+          "description": "Serialized `crewon_protocol::protocol::GuardianAssessmentEvent`."
         },
         "threadId": {
           "type": "string"
@@ -3488,7 +3602,7 @@
           "description": "Optional sort key; defaults to created_at."
         },
         "sourceKinds": {
-          "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to interactive sources.",
+          "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to client sessions.",
           "items": {
             "$ref": "#/definitions/ThreadSourceKind"
           },
@@ -3868,19 +3982,29 @@
       "type": "string"
     },
     "ThreadSourceKind": {
-      "enum": [
-        "cli",
-        "vscode",
-        "exec",
-        "appServer",
-        "subAgent",
-        "subAgentReview",
-        "subAgentCompact",
-        "subAgentThreadSpawn",
-        "subAgentOther",
-        "unknown"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "enum": [
+            "vscode",
+            "exec",
+            "appServer",
+            "subAgent",
+            "subAgentReview",
+            "subAgentCompact",
+            "subAgentThreadSpawn",
+            "subAgentOther",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Legacy source value for threads created before terminal CLI removal.",
+          "enum": [
+            "cli"
+          ],
+          "type": "string"
+        }
+      ]
     },
     "ThreadStartParams": {
       "properties": {
@@ -5292,6 +5416,150 @@
         "params"
       ],
       "title": "App/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/list"
+          ],
+          "title": "Agent/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/save"
+          ],
+          "title": "Agent/saveRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentSaveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/list"
+          ],
+          "title": "Office/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/save"
+          ],
+          "title": "Office/saveRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeSaveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/list"
+          ],
+          "title": "Automation/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/save"
+          ],
+          "title": "Automation/saveRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationSaveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/saveRequest",
       "type": "object"
     },
     {
