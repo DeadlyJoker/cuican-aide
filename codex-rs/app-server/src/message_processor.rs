@@ -1247,6 +1247,16 @@ impl MessageProcessor {
                 .agent_save(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::AgentCreate { params, .. } => self
+                .crewon_domain_processor
+                .agent_create(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AgentUpdate { params, .. } => self
+                .crewon_domain_processor
+                .agent_update(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::AgentRead { params, .. } => self
                 .crewon_domain_processor
                 .agent_read(params)

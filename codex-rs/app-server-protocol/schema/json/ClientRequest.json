@@ -34,6 +34,19 @@
       ],
       "type": "string"
     },
+    "AgentCreateParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
     "AgentDeleteParams": {
       "properties": {
         "cwd": {
@@ -180,6 +193,23 @@
       "required": [
         "config",
         "cwd"
+      ],
+      "type": "object"
+    },
+    "AgentUpdateParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "filePath"
       ],
       "type": "object"
     },
@@ -5936,6 +5966,54 @@
         "params"
       ],
       "title": "Agent/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/create"
+          ],
+          "title": "Agent/createRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentCreateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/createRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/update"
+          ],
+          "title": "Agent/updateRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentUpdateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/updateRequest",
       "type": "object"
     },
     {

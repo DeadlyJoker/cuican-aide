@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 use chrono::SecondsFormat;
 use chrono::Utc;
+use crewon_app_server_protocol::AgentCreateParams;
+use crewon_app_server_protocol::AgentCreateResponse;
 use crewon_app_server_protocol::AgentDeleteParams;
 use crewon_app_server_protocol::AgentDeleteResponse;
 use crewon_app_server_protocol::AgentListParams;
@@ -14,6 +16,8 @@ use crewon_app_server_protocol::AgentRecruitableListParams;
 use crewon_app_server_protocol::AgentRecruitableListResponse;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AgentSaveResponse;
+use crewon_app_server_protocol::AgentUpdateParams;
+use crewon_app_server_protocol::AgentUpdateResponse;
 use crewon_app_server_protocol::AutomationCreateParams;
 use crewon_app_server_protocol::AutomationCreateResponse;
 use crewon_app_server_protocol::AutomationDeleteParams;
@@ -166,6 +170,32 @@ impl CrewonDomainRequestProcessor {
         save_record(DomainKind::Agent, &params.cwd, config)
             .await
             .map(|file_path| AgentSaveResponse {
+                file_path,
+                agent_id,
+            })
+    }
+
+    pub(crate) async fn agent_create(
+        &self,
+        params: AgentCreateParams,
+    ) -> Result<AgentCreateResponse, JSONRPCErrorError> {
+        let (config, agent_id) = ensure_agent_id(params.config)?;
+        create_record(DomainKind::Agent, &params.cwd, config)
+            .await
+            .map(|file_path| AgentCreateResponse {
+                file_path,
+                agent_id,
+            })
+    }
+
+    pub(crate) async fn agent_update(
+        &self,
+        params: AgentUpdateParams,
+    ) -> Result<AgentUpdateResponse, JSONRPCErrorError> {
+        let (config, agent_id) = ensure_agent_id(params.config)?;
+        update_record(DomainKind::Agent, &params.cwd, &params.file_path, config)
+            .await
+            .map(|file_path| AgentUpdateResponse {
                 file_path,
                 agent_id,
             })
@@ -567,6 +597,70 @@ async fn save_record(
 
     let saved_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let file_path = directory.join(domain_file_name(kind, &config));
+    write_domain_record(kind, &file_path, saved_at, config).await?;
+    Ok(file_path.to_string_lossy().into_owned())
+}
+
+async fn create_record(
+    kind: DomainKind,
+    cwd: &str,
+    config: JsonValue,
+) -> Result<String, JSONRPCErrorError> {
+    if !kind.config_matches(&config) {
+        return Err(invalid_params(format!(
+            "{} config is missing required fields",
+            kind.record_kind()
+        )));
+    }
+
+    let directory = domain_directory(cwd, kind)?;
+    fs::create_dir_all(&directory).await.map_err(map_io_error)?;
+
+    let saved_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let file_path = directory.join(domain_file_name(kind, &config));
+    if fs::try_exists(&file_path).await.map_err(map_io_error)? {
+        return Err(invalid_params(format!(
+            "{} config already exists",
+            kind.record_kind()
+        )));
+    }
+    write_domain_record(kind, &file_path, saved_at, config).await?;
+    Ok(file_path.to_string_lossy().into_owned())
+}
+
+async fn update_record(
+    kind: DomainKind,
+    cwd: &str,
+    file_path: &str,
+    config: JsonValue,
+) -> Result<String, JSONRPCErrorError> {
+    if !kind.config_matches(&config) {
+        return Err(invalid_params(format!(
+            "{} config is missing required fields",
+            kind.record_kind()
+        )));
+    }
+
+    let file_path = validate_record_file_path(cwd, kind, file_path)?;
+    match read_record(kind, &file_path).await? {
+        Some(_) => {
+            let saved_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+            write_domain_record(kind, &file_path, saved_at, config).await?;
+            Ok(file_path.to_string_lossy().into_owned())
+        }
+        None => Err(invalid_params(format!(
+            "{} config file does not match the requested kind",
+            kind.record_kind()
+        ))),
+    }
+}
+
+async fn write_domain_record(
+    kind: DomainKind,
+    file_path: &Path,
+    saved_at: String,
+    config: JsonValue,
+) -> Result<(), JSONRPCErrorError> {
     let record = PersistedDomainConfigRecord {
         version: 1,
         kind: kind.record_kind().to_string(),
@@ -577,8 +671,8 @@ async fn save_record(
     let mut bytes = serde_json::to_vec_pretty(&record)
         .map_err(|err| internal_error(format!("failed to serialize domain config: {err}")))?;
     bytes.push(b'\n');
-    fs::write(&file_path, bytes).await.map_err(map_io_error)?;
-    Ok(file_path.to_string_lossy().into_owned())
+    fs::write(file_path, bytes).await.map_err(map_io_error)?;
+    Ok(())
 }
 
 async fn create_automation_run(

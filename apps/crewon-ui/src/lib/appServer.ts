@@ -43,6 +43,8 @@ import type { McpResourceReadResponse } from "@crewon-protocol/v2/McpResourceRea
 import type { McpServerToolCallResponse } from "@crewon-protocol/v2/McpServerToolCallResponse";
 import type { McpServerStatusUpdatedNotification } from "@crewon-protocol/v2/McpServerStatusUpdatedNotification";
 import type { McpServerOauthLoginResponse } from "@crewon-protocol/v2/McpServerOauthLoginResponse";
+import type { AgentCreateResponse } from "@crewon-protocol/v2/AgentCreateResponse";
+import type { AgentUpdateResponse } from "@crewon-protocol/v2/AgentUpdateResponse";
 import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
 import type { ModelProviderCapabilitiesReadResponse } from "@crewon-protocol/v2/ModelProviderCapabilitiesReadResponse";
 import type { PermissionProfileListResponse } from "@crewon-protocol/v2/PermissionProfileListResponse";
@@ -833,6 +835,25 @@ export class AppServerClient {
     config: AgentConfig,
   ): Promise<AgentSaveResponse> {
     return this.request<AgentSaveResponse>("agent/save", { cwd, config });
+  }
+
+  async createAgentConfig(
+    cwd: string,
+    config: unknown,
+  ): Promise<AgentCreateResponse> {
+    return this.request<AgentCreateResponse>("agent/create", { cwd, config });
+  }
+
+  async updateAgentConfig(
+    cwd: string,
+    filePath: string,
+    config: unknown,
+  ): Promise<AgentUpdateResponse> {
+    return this.request<AgentUpdateResponse>("agent/update", {
+      cwd,
+      filePath,
+      config,
+    });
   }
 
   async readAgentConfig(

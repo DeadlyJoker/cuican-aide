@@ -1,8 +1,10 @@
+use crewon_app_server_protocol::AgentCreateParams;
 use crewon_app_server_protocol::AgentDeleteParams;
 use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentReadParams;
 use crewon_app_server_protocol::AgentRecruitableListParams;
 use crewon_app_server_protocol::AgentSaveParams;
+use crewon_app_server_protocol::AgentUpdateParams;
 use crewon_app_server_protocol::AutomationCreateParams;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::AutomationRunParams;
@@ -74,6 +76,108 @@ async fn saves_and_lists_agent_configs() {
     );
     assert!(!list_response.data[0].saved_at.is_empty());
     assert_eq!(save_response.agent_id, "agent-demo-agent");
+}
+
+#[tokio::test]
+async fn creates_agent_config_without_overwriting_existing_record() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let config = json!({
+        "name": "Demo Agent",
+        "threadId": "thread-create",
+        "role": "Engineer"
+    });
+
+    let create_response = processor
+        .agent_create(AgentCreateParams {
+            cwd: cwd.clone(),
+            config: config.clone(),
+        })
+        .await
+        .expect("create agent config");
+    assert_eq!(create_response.agent_id, "agent-demo-agent");
+
+    let duplicate_error = processor
+        .agent_create(AgentCreateParams { cwd, config })
+        .await
+        .expect_err("duplicate create should fail");
+    assert_eq!(duplicate_error.code, INVALID_PARAMS_ERROR_CODE);
+}
+
+#[tokio::test]
+async fn updates_agent_config_in_place_when_name_changes() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let create_response = processor
+        .agent_create(AgentCreateParams {
+            cwd: cwd.clone(),
+            config: json!({
+                "name": "Original Agent",
+                "threadId": "thread-update",
+                "role": "Plan"
+            }),
+        })
+        .await
+        .expect("create agent config");
+
+    let update_response = processor
+        .agent_update(AgentUpdateParams {
+            cwd: cwd.clone(),
+            file_path: create_response.file_path.clone(),
+            config: json!({
+                "agentId": "agent-original-agent",
+                "name": "Renamed Agent",
+                "threadId": "thread-update",
+                "role": "Build"
+            }),
+        })
+        .await
+        .expect("update agent config");
+    assert_eq!(update_response.file_path, create_response.file_path);
+    assert_eq!(update_response.agent_id, "agent-original-agent");
+
+    let list_response = processor
+        .agent_list(AgentListParams {
+            cwd,
+            cursor: None,
+            limit: None,
+        })
+        .await
+        .expect("list agent configs");
+    assert_eq!(list_response.data.len(), 1);
+    assert_eq!(list_response.data[0].file_path, create_response.file_path);
+    assert_eq!(
+        list_response.data[0].config,
+        json!({
+            "agentId": "agent-original-agent",
+            "name": "Renamed Agent",
+            "threadId": "thread-update",
+            "role": "Build"
+        })
+    );
+}
+
+#[tokio::test]
+async fn update_agent_config_rejects_paths_outside_agent_directory() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let outside_path = temp_dir.path().join("outside.json");
+
+    let error = processor
+        .agent_update(AgentUpdateParams {
+            cwd,
+            file_path: outside_path.to_string_lossy().into_owned(),
+            config: json!({
+                "name": "Outside",
+                "role": "Invalid"
+            }),
+        })
+        .await
+        .expect_err("outside path should fail");
+    assert_eq!(error.code, INVALID_PARAMS_ERROR_CODE);
 }
 
 #[tokio::test]

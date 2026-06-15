@@ -296,6 +296,38 @@
       },
       "type": "object"
     },
+    "AgentCreateParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "title": "AgentCreateParams",
+      "type": "object"
+    },
+    "AgentCreateResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "filePath"
+      ],
+      "title": "AgentCreateResponse",
+      "type": "object"
+    },
     "AgentDeleteParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -572,6 +604,42 @@
         "filePath"
       ],
       "title": "AgentSaveResponse",
+      "type": "object"
+    },
+    "AgentUpdateParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "filePath"
+      ],
+      "title": "AgentUpdateParams",
+      "type": "object"
+    },
+    "AgentUpdateResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "filePath"
+      ],
+      "title": "AgentUpdateResponse",
       "type": "object"
     },
     "AnalyticsConfig": {
@@ -2691,6 +2759,54 @@
             "params"
           ],
           "title": "Agent/saveRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agent/create"
+              ],
+              "title": "Agent/createRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AgentCreateParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Agent/createRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agent/update"
+              ],
+              "title": "Agent/updateRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AgentUpdateParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Agent/updateRequest",
           "type": "object"
         },
         {

@@ -212,6 +212,8 @@ Example with notification opt-out:
 - `skills/create` — create a repo-scoped Skill under `.crewon/skill/<name>/SKILL.md`, emit `skills/changed`, and return the created skill metadata.
 - `app/list` — list available apps.
 - `agent/recruitable/list` — list saved Crewon agent configs for a workspace that are not already assigned to an office by `agentId` or display name; supports `cursor` and `limit` pagination.
+- `agent/create` — create a new Crewon agent config, assign an `agentId` when omitted, and reject duplicate target files.
+- `agent/update` — update an existing Crewon agent config by `filePath` in place so renames do not leave stale files.
 - `automation/create` — create a structured automation config with a manual trigger, target office, execution agent, status, and enabled state, then save it as a Crewon automation record.
 - `office/approval/decide` — update an office approval decision by `approvalId`, optionally append a system message, and return the saved office config.
 - `office/artifact/upsert` — add or replace an office artifact in workspace activity, optionally append a system message, and return the saved office config.

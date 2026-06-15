@@ -737,6 +737,16 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AgentSaveResponse,
     },
+    AgentCreate => "agent/create" {
+        params: v2::AgentCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentCreateResponse,
+    },
+    AgentUpdate => "agent/update" {
+        params: v2::AgentUpdateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentUpdateResponse,
+    },
     AgentRead => "agent/read" {
         params: v2::AgentReadParams,
         serialization: global("crewon-domain"),
