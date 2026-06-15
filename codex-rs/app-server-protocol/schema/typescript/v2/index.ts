@@ -49,6 +49,8 @@ export type { AutomationListResponse } from "./AutomationListResponse";
 export type { AutomationRunParams } from "./AutomationRunParams";
 export type { AutomationRunRecord } from "./AutomationRunRecord";
 export type { AutomationRunResponse } from "./AutomationRunResponse";
+export type { AutomationRunUpdateParams } from "./AutomationRunUpdateParams";
+export type { AutomationRunUpdateResponse } from "./AutomationRunUpdateResponse";
 export type { AutomationRunsListParams } from "./AutomationRunsListParams";
 export type { AutomationRunsListResponse } from "./AutomationRunsListResponse";
 export type { AutomationSaveParams } from "./AutomationSaveParams";

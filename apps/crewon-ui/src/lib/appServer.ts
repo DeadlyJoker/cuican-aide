@@ -196,6 +196,7 @@ export type AutomationRunRecord = {
   runId: string;
   automationTitle: string;
   threadId: string | null;
+  turnId: string | null;
   status: string;
   startedAt: number;
   completedAt: number | null;
@@ -900,11 +901,27 @@ export class AppServerClient {
     cwd: string,
     config: AutomationConfig,
     note: string | null,
+    turnId: string | null,
   ): Promise<AutomationRunResponse> {
     return this.request<AutomationRunResponse>("automation/run", {
       cwd,
       config,
       note,
+      turnId,
+    });
+  }
+
+  async updateAutomationRun(
+    cwd: string,
+    filePath: string,
+    status: string,
+    completedAt: number | null,
+  ): Promise<AutomationRunResponse> {
+    return this.request<AutomationRunResponse>("automation/run/update", {
+      cwd,
+      filePath,
+      status,
+      completedAt,
     });
   }
 

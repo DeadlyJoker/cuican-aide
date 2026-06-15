@@ -35,6 +35,12 @@
             "string",
             "null"
           ]
+        },
+        "turnId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

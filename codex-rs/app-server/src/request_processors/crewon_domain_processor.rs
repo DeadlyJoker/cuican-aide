@@ -17,6 +17,8 @@ use crewon_app_server_protocol::AutomationListResponse;
 use crewon_app_server_protocol::AutomationRunParams;
 use crewon_app_server_protocol::AutomationRunRecord;
 use crewon_app_server_protocol::AutomationRunResponse;
+use crewon_app_server_protocol::AutomationRunUpdateParams;
+use crewon_app_server_protocol::AutomationRunUpdateResponse;
 use crewon_app_server_protocol::AutomationRunsListParams;
 use crewon_app_server_protocol::AutomationRunsListResponse;
 use crewon_app_server_protocol::AutomationSaveParams;
@@ -253,7 +255,20 @@ impl CrewonDomainRequestProcessor {
         &self,
         params: AutomationRunParams,
     ) -> Result<AutomationRunResponse, JSONRPCErrorError> {
-        create_automation_run(&params.cwd, params.config, params.note).await
+        create_automation_run(&params.cwd, params.config, params.note, params.turn_id).await
+    }
+
+    pub(crate) async fn automation_run_update(
+        &self,
+        params: AutomationRunUpdateParams,
+    ) -> Result<AutomationRunUpdateResponse, JSONRPCErrorError> {
+        update_automation_run(
+            &params.cwd,
+            &params.file_path,
+            params.status,
+            params.completed_at,
+        )
+        .await
     }
 
     pub(crate) async fn automation_runs_list(
@@ -487,6 +502,7 @@ async fn create_automation_run(
     cwd: &str,
     config: JsonValue,
     note: Option<String>,
+    turn_id: Option<String>,
 ) -> Result<AutomationRunResponse, JSONRPCErrorError> {
     if !DomainKind::Automation.config_matches(&config) {
         return Err(invalid_params(
@@ -512,6 +528,7 @@ async fn create_automation_run(
         run_id: run_id.clone(),
         automation_title: title.clone(),
         thread_id,
+        turn_id,
         status: "running".to_string(),
         started_at,
         completed_at: None,
@@ -533,6 +550,29 @@ async fn create_automation_run(
     bytes.push(b'\n');
     fs::write(&file_path, bytes).await.map_err(map_io_error)?;
     Ok(AutomationRunResponse {
+        file_path: file_path.to_string_lossy().into_owned(),
+        run,
+    })
+}
+
+async fn update_automation_run(
+    cwd: &str,
+    file_path: &str,
+    status: String,
+    completed_at: Option<i64>,
+) -> Result<AutomationRunUpdateResponse, JSONRPCErrorError> {
+    if status.trim().is_empty() {
+        return Err(invalid_params("status must not be empty"));
+    }
+    let file_path = validate_automation_run_file_path(cwd, file_path)?;
+    let Some(mut record) = read_persisted_automation_run_record(&file_path).await? else {
+        return Err(invalid_params("automation run file was not found"));
+    };
+    record.run.status = status;
+    record.run.completed_at = completed_at;
+    let run = record.run.clone();
+    write_automation_run_record(&file_path, &record).await?;
+    Ok(AutomationRunUpdateResponse {
         file_path: file_path.to_string_lossy().into_owned(),
         run,
     })
@@ -564,7 +604,7 @@ async fn list_automation_runs(
         if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
             continue;
         }
-        let Some(record) = read_automation_run_record(&path).await? else {
+        let Some(record) = read_automation_run_config_record(&path).await? else {
             continue;
         };
         if thread_id.is_some_and(|thread_id| record.run.thread_id.as_deref() != Some(thread_id)) {
@@ -583,12 +623,26 @@ async fn list_automation_runs(
     Ok((records, next_cursor))
 }
 
-async fn read_automation_run_record(
+async fn read_automation_run_config_record(
     path: &Path,
 ) -> Result<Option<CrewonAutomationRunConfigRecord>, JSONRPCErrorError> {
+    let Some(record) = read_persisted_automation_run_record(path).await? else {
+        return Ok(None);
+    };
+    Ok(Some(CrewonAutomationRunConfigRecord {
+        file_path: path.to_string_lossy().into_owned(),
+        saved_at: record.saved_at.unwrap_or_default(),
+        run: record.run,
+    }))
+}
+
+async fn read_persisted_automation_run_record(
+    path: &Path,
+) -> Result<Option<PersistedAutomationRunRecord>, JSONRPCErrorError> {
     let bytes = match fs::read(path).await {
         Ok(bytes) => bytes,
-        Err(_) => return Ok(None),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(map_io_error(err)),
     };
     let record = match serde_json::from_slice::<PersistedAutomationRunRecord>(&bytes) {
         Ok(record) => record,
@@ -597,11 +651,17 @@ async fn read_automation_run_record(
     if record.version != 1 {
         return Ok(None);
     }
-    Ok(Some(CrewonAutomationRunConfigRecord {
-        file_path: path.to_string_lossy().into_owned(),
-        saved_at: record.saved_at.unwrap_or_default(),
-        run: record.run,
-    }))
+    Ok(Some(record))
+}
+
+async fn write_automation_run_record(
+    file_path: &Path,
+    record: &PersistedAutomationRunRecord,
+) -> Result<(), JSONRPCErrorError> {
+    let mut bytes = serde_json::to_vec_pretty(record)
+        .map_err(|err| internal_error(format!("failed to serialize automation run: {err}")))?;
+    bytes.push(b'\n');
+    fs::write(file_path, bytes).await.map_err(map_io_error)
 }
 
 fn ensure_agent_id(mut config: JsonValue) -> Result<(JsonValue, String), JSONRPCErrorError> {
@@ -759,6 +819,38 @@ fn automation_runs_directory(cwd: &str) -> Result<PathBuf, JSONRPCErrorError> {
     }
 
     Ok(cwd.join(".crewon").join(AUTOMATION_RUNS_DIRECTORY))
+}
+
+fn validate_automation_run_file_path(
+    cwd: &str,
+    file_path: &str,
+) -> Result<PathBuf, JSONRPCErrorError> {
+    let directory = automation_runs_directory(cwd)?;
+    let file_path = PathBuf::from(file_path);
+    if !file_path.is_absolute() {
+        return Err(invalid_params("filePath must be an absolute path"));
+    }
+    if file_path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(invalid_params("filePath must not contain parent segments"));
+    }
+    if file_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        != Some("json")
+    {
+        return Err(invalid_params("filePath must point to a JSON run file"));
+    }
+    if !file_path.starts_with(&directory) {
+        return Err(invalid_params(format!(
+            "filePath must be inside {}",
+            directory.display()
+        )));
+    }
+
+    Ok(file_path)
 }
 
 fn validate_record_file_path(

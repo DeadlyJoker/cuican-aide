@@ -198,6 +198,8 @@ pub struct AutomationRunParams {
     pub config: JsonValue,
     #[ts(optional = nullable)]
     pub note: Option<String>,
+    #[ts(optional = nullable)]
+    pub turn_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -207,6 +209,7 @@ pub struct AutomationRunRecord {
     pub run_id: String,
     pub automation_title: String,
     pub thread_id: Option<String>,
+    pub turn_id: Option<String>,
     pub status: String,
     pub started_at: i64,
     pub completed_at: Option<i64>,
@@ -218,6 +221,25 @@ pub struct AutomationRunRecord {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct AutomationRunResponse {
+    pub file_path: String,
+    pub run: AutomationRunRecord,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationRunUpdateParams {
+    pub cwd: String,
+    pub file_path: String,
+    pub status: String,
+    #[ts(optional = nullable)]
+    pub completed_at: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationRunUpdateResponse {
     pub file_path: String,
     pub run: AutomationRunRecord,
 }

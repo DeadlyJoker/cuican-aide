@@ -51,45 +51,20 @@
         "status"
       ],
       "type": "object"
-    },
-    "CrewonAutomationRunConfigRecord": {
-      "properties": {
-        "filePath": {
-          "type": "string"
-        },
-        "run": {
-          "$ref": "#/definitions/AutomationRunRecord"
-        },
-        "savedAt": {
-          "format": "int64",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "filePath",
-        "run",
-        "savedAt"
-      ],
-      "type": "object"
     }
   },
   "properties": {
-    "data": {
-      "items": {
-        "$ref": "#/definitions/CrewonAutomationRunConfigRecord"
-      },
-      "type": "array"
+    "filePath": {
+      "type": "string"
     },
-    "nextCursor": {
-      "type": [
-        "string",
-        "null"
-      ]
+    "run": {
+      "$ref": "#/definitions/AutomationRunRecord"
     }
   },
   "required": [
-    "data"
+    "filePath",
+    "run"
   ],
-  "title": "AutomationRunsListResponse",
+  "title": "AutomationRunUpdateResponse",
   "type": "object"
 }

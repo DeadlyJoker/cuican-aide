@@ -1388,6 +1388,30 @@
             },
             "method": {
               "enum": [
+                "automation/run/update"
+              ],
+              "title": "Automation/run/updateRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AutomationRunUpdateParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Automation/run/updateRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "automation/runs/list"
               ],
               "title": "Automation/runs/listRequestMethod",
@@ -7370,6 +7394,12 @@
               "string",
               "null"
             ]
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -7413,6 +7443,12 @@
               "string",
               "null"
             ]
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -7439,6 +7475,51 @@
           "run"
         ],
         "title": "AutomationRunResponse",
+        "type": "object"
+      },
+      "AutomationRunUpdateParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "completedAt": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cwd",
+          "filePath",
+          "status"
+        ],
+        "title": "AutomationRunUpdateParams",
+        "type": "object"
+      },
+      "AutomationRunUpdateResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "filePath": {
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/definitions/v2/AutomationRunRecord"
+          }
+        },
+        "required": [
+          "filePath",
+          "run"
+        ],
+        "title": "AutomationRunUpdateResponse",
         "type": "object"
       },
       "AutomationRunsListParams": {

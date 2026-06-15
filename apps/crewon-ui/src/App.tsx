@@ -1125,6 +1125,11 @@ function automationRunRecordItems(
             ? `线程：${run.threadId}`
             : `Thread: ${run.threadId}`
           : null,
+        run.turnId
+          ? locale === "zh"
+            ? `轮次：${run.turnId}`
+            : `Turn: ${run.turnId}`
+          : null,
         locale === "zh" ? `文件：${filePath}` : `File: ${filePath}`,
       ]
         .filter(Boolean)
@@ -6488,6 +6493,7 @@ export function App() {
   async function runAutomationConfig(
     config: AutomationConfig,
     note: string | null,
+    turnId: string | null,
   ): Promise<{ runId: string; filePath: string } | null> {
     const automationCwd = await resolveBackendCwd();
     const client = clientRef.current;
@@ -6499,6 +6505,7 @@ export function App() {
         automationCwd,
         config,
         note,
+        turnId,
       );
       return {
         runId: response.run.runId,
@@ -6509,6 +6516,30 @@ export function App() {
         throw error;
       }
       return null;
+    }
+  }
+
+  async function updateAutomationRun(
+    filePath: string,
+    status: string,
+    completedAt: number | null,
+  ): Promise<void> {
+    const automationCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (!automationCwd || !client) {
+      return;
+    }
+    try {
+      await client.updateAutomationRun(
+        automationCwd,
+        filePath,
+        status,
+        completedAt,
+      );
+    } catch (error) {
+      if (!(error instanceof AppServerRpcError)) {
+        throw error;
+      }
     }
   }
 
@@ -9259,7 +9290,15 @@ export function App() {
             threadId,
           },
           runNote || null,
+          response?.turn.id ?? null,
         );
+        if (automationRunRecord && response?.turn.status !== "inProgress") {
+          await updateAutomationRun(
+            automationRunRecord.filePath,
+            response?.turn.status ?? "failed",
+            response?.turn.completedAt ?? Math.floor(Date.now() / 1000),
+          );
+        }
         let latestAutomationThread: Thread | null = null;
         if (response) {
           setThreads((current) =>

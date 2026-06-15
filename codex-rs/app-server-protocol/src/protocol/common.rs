@@ -782,6 +782,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AutomationRunResponse,
     },
+    AutomationRunUpdate => "automation/run/update" {
+        params: v2::AutomationRunUpdateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationRunUpdateResponse,
+    },
     AutomationRunsList => "automation/runs/list" {
         params: v2::AutomationRunsListParams,
         serialization: global("crewon-domain"),

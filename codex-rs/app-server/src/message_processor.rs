@@ -1294,6 +1294,11 @@ impl MessageProcessor {
                 .automation_run(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::AutomationRunUpdate { params, .. } => self
+                .crewon_domain_processor
+                .automation_run_update(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::AutomationRunsList { params, .. } => self
                 .crewon_domain_processor
                 .automation_runs_list(params)

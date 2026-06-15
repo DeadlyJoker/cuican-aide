@@ -3,6 +3,7 @@ use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::AutomationRunParams;
+use crewon_app_server_protocol::AutomationRunUpdateParams;
 use crewon_app_server_protocol::AutomationRunsListParams;
 use crewon_app_server_protocol::OfficeMemberAddParams;
 use crewon_app_server_protocol::OfficeMessageSendParams;
@@ -152,32 +153,45 @@ async fn automation_run_records_and_lists_runs() {
             cwd: cwd.clone(),
             config: config.clone(),
             note: Some("manual smoke".to_string()),
+            turn_id: Some("turn-123456789".to_string()),
         })
         .await
         .expect("record automation run");
-    let list_response = processor
-        .automation_runs_list(AutomationRunsListParams {
-            cwd,
-            thread_id: Some("automation-thread-123456789".to_string()),
-            cursor: None,
-            limit: None,
-        })
-        .await
-        .expect("list automation runs");
-
     assert!(run_response.file_path.ends_with(".json"));
     assert_eq!(run_response.run.automation_title, "Nightly QA");
     assert_eq!(
         run_response.run.thread_id,
         Some("automation-thread-123456789".to_string())
     );
+    assert_eq!(run_response.run.turn_id, Some("turn-123456789".to_string()));
     assert_eq!(run_response.run.status, "running");
     assert_eq!(run_response.run.note, Some("manual smoke".to_string()));
     assert_eq!(run_response.run.config, config);
+    let update_response = processor
+        .automation_run_update(AutomationRunUpdateParams {
+            cwd: temp_dir.path().to_string_lossy().into_owned(),
+            file_path: run_response.file_path.clone(),
+            status: "completed".to_string(),
+            completed_at: Some(1_800_000_000),
+        })
+        .await
+        .expect("update automation run");
+    assert_eq!(update_response.run.status, "completed");
+    assert_eq!(update_response.run.completed_at, Some(1_800_000_000));
+
+    let list_response = processor
+        .automation_runs_list(AutomationRunsListParams {
+            cwd: temp_dir.path().to_string_lossy().into_owned(),
+            thread_id: Some("automation-thread-123456789".to_string()),
+            cursor: None,
+            limit: None,
+        })
+        .await
+        .expect("list updated automation runs");
     assert_eq!(list_response.next_cursor, None);
     assert_eq!(list_response.data.len(), 1);
     assert_eq!(list_response.data[0].file_path, run_response.file_path);
-    assert_eq!(list_response.data[0].run, run_response.run);
+    assert_eq!(list_response.data[0].run, update_response.run);
 }
 
 #[tokio::test]
