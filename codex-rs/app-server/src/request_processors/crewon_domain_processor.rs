@@ -31,6 +31,9 @@ use crewon_app_server_protocol::CrewonAutomationRunConfigRecord;
 use crewon_app_server_protocol::CrewonDomainConfigRecord;
 use crewon_app_server_protocol::CrewonToolConfigRecord;
 use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::OfficeApprovalDecideParams;
+use crewon_app_server_protocol::OfficeApprovalDecideResponse;
+use crewon_app_server_protocol::OfficeApprovalDecision;
 use crewon_app_server_protocol::OfficeDeleteParams;
 use crewon_app_server_protocol::OfficeDeleteResponse;
 use crewon_app_server_protocol::OfficeListParams;
@@ -251,6 +254,21 @@ impl CrewonDomainRequestProcessor {
         save_record(DomainKind::Office, &params.cwd, config.clone())
             .await
             .map(|file_path| OfficeMemberAddResponse { file_path, config })
+    }
+
+    pub(crate) async fn office_approval_decide(
+        &self,
+        params: OfficeApprovalDecideParams,
+    ) -> Result<OfficeApprovalDecideResponse, JSONRPCErrorError> {
+        let config = decide_office_approval(
+            params.config,
+            &params.approval_id,
+            params.decision,
+            params.message,
+        )?;
+        save_record(DomainKind::Office, &params.cwd, config.clone())
+            .await
+            .map(|file_path| OfficeApprovalDecideResponse { file_path, config })
     }
 
     pub(crate) async fn office_delete(
@@ -855,6 +873,79 @@ fn append_office_member(
     members
         .retain(|existing| existing.get("agentId").and_then(JsonValue::as_str) != Some(agent_id));
     members.push(member);
+    Ok(config)
+}
+
+fn decide_office_approval(
+    mut config: JsonValue,
+    approval_id: &str,
+    decision: OfficeApprovalDecision,
+    message: Option<JsonValue>,
+) -> Result<JsonValue, JSONRPCErrorError> {
+    let approval_id = approval_id.trim();
+    if approval_id.is_empty() {
+        return Err(invalid_params("approvalId must not be empty"));
+    }
+    if !DomainKind::Office.config_matches(&config) {
+        return Err(invalid_params("office config is missing required fields"));
+    }
+
+    let Some(workspace) = config
+        .get_mut("workspace")
+        .and_then(JsonValue::as_object_mut)
+    else {
+        return Err(invalid_params("office config is missing workspace"));
+    };
+    let Some(activity) = workspace
+        .get_mut("activity")
+        .and_then(JsonValue::as_object_mut)
+    else {
+        return Err(invalid_params("workspace.activity is required"));
+    };
+    let Some(approvals) = activity
+        .get_mut("approvals")
+        .and_then(JsonValue::as_array_mut)
+    else {
+        return Err(invalid_params(
+            "workspace.activity.approvals must be an array",
+        ));
+    };
+
+    let decision = match decision {
+        OfficeApprovalDecision::Approved => "approved",
+        OfficeApprovalDecision::Denied => "denied",
+    };
+    let mut found = false;
+    for approval in approvals {
+        if approval.get("id").and_then(JsonValue::as_str) == Some(approval_id) {
+            let Some(approval_object) = approval.as_object_mut() else {
+                return Err(invalid_params("approval must be an object"));
+            };
+            approval_object.insert(
+                "decision".to_string(),
+                JsonValue::String(decision.to_string()),
+            );
+            found = true;
+            break;
+        }
+    }
+    if !found {
+        return Err(invalid_params("approvalId was not found"));
+    }
+
+    if let Some(message) = message {
+        if !message.is_object() {
+            return Err(invalid_params("message must be an object"));
+        }
+        let messages = workspace
+            .entry("messages")
+            .or_insert_with(|| JsonValue::Array(Vec::new()));
+        let Some(messages) = messages.as_array_mut() else {
+            return Err(invalid_params("workspace.messages must be an array"));
+        };
+        messages.push(message);
+    }
+
     Ok(config)
 }
 

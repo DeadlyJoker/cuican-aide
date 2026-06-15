@@ -772,6 +772,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::OfficeMemberAddResponse,
     },
+    OfficeApprovalDecide => "office/approval/decide" {
+        params: v2::OfficeApprovalDecideParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeApprovalDecideResponse,
+    },
     OfficeDelete => "office/delete" {
         params: v2::OfficeDeleteParams,
         serialization: global("crewon-domain"),

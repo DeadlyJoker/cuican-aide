@@ -2810,6 +2810,30 @@
             },
             "method": {
               "enum": [
+                "office/approval/decide"
+              ],
+              "title": "Office/approval/decideRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/OfficeApprovalDecideParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/approval/decideRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
                 "office/delete"
               ],
               "title": "Office/deleteRequestMethod",
@@ -9784,6 +9808,52 @@
       "enum": [
         "review",
         "compact"
+      ],
+      "type": "string"
+    },
+    "OfficeApprovalDecideParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "approvalId": {
+          "type": "string"
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/OfficeApprovalDecision"
+        },
+        "message": true
+      },
+      "required": [
+        "approvalId",
+        "config",
+        "cwd",
+        "decision"
+      ],
+      "title": "OfficeApprovalDecideParams",
+      "type": "object"
+    },
+    "OfficeApprovalDecideResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "filePath"
+      ],
+      "title": "OfficeApprovalDecideResponse",
+      "type": "object"
+    },
+    "OfficeApprovalDecision": {
+      "enum": [
+        "approved",
+        "denied"
       ],
       "type": "string"
     },

@@ -7593,31 +7593,30 @@ export function App() {
       return;
     }
 
-    const nextActivity = panel.workspace.activity
+    const baseWorkspace = panel.workspace;
+    const nextActivity = baseWorkspace.activity
       ? {
-          ...panel.workspace.activity,
-          approvals: panel.workspace.activity.approvals.map((req) =>
+          ...baseWorkspace.activity,
+          approvals: baseWorkspace.activity.approvals.map((req) =>
             req.id === id ? { ...req, decision } : req,
           ),
         }
       : undefined;
+    const systemMessage: OfficeMessage = {
+      author: locale === "zh" ? "系统" : "System",
+      glyph: "⌗",
+      accent: decision === "approved" ? "green" : "rose",
+      time: locale === "zh" ? "现在" : "now",
+      kind: "system",
+      text:
+        locale === "zh"
+          ? `${decision === "approved" ? "已批准" : "已拒绝"}审批：${selectedApproval.actor} · ${selectedApproval.action}`
+          : `${decision === "approved" ? "Approved" : "Denied"} approval: ${selectedApproval.actor} · ${selectedApproval.action}`,
+    };
     const nextWorkspace: OfficeWorkspace = {
-      ...panel.workspace,
+      ...baseWorkspace,
       activity: nextActivity,
-      messages: [
-        ...panel.workspace.messages,
-        {
-          author: locale === "zh" ? "系统" : "System",
-          glyph: "⌗",
-          accent: decision === "approved" ? "green" : "rose",
-          time: locale === "zh" ? "现在" : "now",
-          kind: "system",
-          text:
-            locale === "zh"
-              ? `${decision === "approved" ? "已批准" : "已拒绝"}审批：${selectedApproval.actor} · ${selectedApproval.action}`
-              : `${decision === "approved" ? "Approved" : "Denied"} approval: ${selectedApproval.actor} · ${selectedApproval.action}`,
-        },
-      ],
+      messages: [...baseWorkspace.messages, systemMessage],
     };
     setLibraryPanel((currentPanel) =>
       currentPanel?.workspace
@@ -7634,62 +7633,32 @@ export function App() {
 
     void (async () => {
       try {
-        let threadId = await ensureOfficeThread(panel, nextWorkspace);
+        const threadId = await ensureOfficeThread(panel, baseWorkspace);
         if (!threadId) {
           return;
         }
-        const approvalInput = (targetThreadId: string) =>
-          [
-            locale === "zh"
-              ? `办公室「${panel.title}」审批决策：${decision === "approved" ? "批准" : "拒绝"}`
-              : `Office "${panel.title}" approval decision: ${decision}`,
-            `Actor: ${selectedApproval.actor}`,
-            `Action: ${selectedApproval.action}`,
-            `Risk: ${selectedApproval.risk}`,
-            `Detail: ${selectedApproval.detail}`,
-            "",
-            officeConfigPayload(
-              officeConfigForThread(
-                panel.title,
-                panel.subtitle,
-                nextWorkspace,
-                targetThreadId,
-              ),
-            ),
-          ].join("\n");
-        let response;
-        try {
-          response = await clientRef.current?.startTurn(
-            threadId,
-            approvalInput(threadId),
-          );
-        } catch (error) {
-          if (!isMissingThreadError(error)) {
-            throw error;
-          }
-          threadId = await ensureOfficeThread(panel, nextWorkspace, true);
-          if (!threadId) {
-            return;
-          }
-          response = await clientRef.current?.startTurn(
-            threadId,
-            approvalInput(threadId),
-          );
+        const officeCwd = await resolveBackendCwd();
+        if (!officeCwd || !clientRef.current) {
+          return;
         }
-        if (response) {
-          setThreads((current) =>
-            current.map((thread) =>
-              thread.id === threadId ? upsertTurn(thread, response.turn) : thread,
-            ),
-          );
-        }
-        await persistOfficeWorkspace(panel, nextWorkspace, threadId);
+        const response = await clientRef.current.decideOfficeApprovalConfig(
+          officeCwd,
+          officeConfigForThread(
+            panel.title,
+            panel.subtitle,
+            baseWorkspace,
+            threadId,
+          ),
+          id,
+          decision,
+          systemMessage,
+        );
         setLibraryPanel((currentPanel) =>
           currentPanel?.workspace
             ? {
                 ...currentPanel,
                 workspace: {
-                  ...nextWorkspace,
+                  ...response.config.workspace,
                   threadId,
                   backendStatus: "connected",
                 },

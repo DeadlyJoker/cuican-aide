@@ -200,6 +200,11 @@ export type OfficeMemberAddResponse = {
   config: OfficeConfig;
 };
 
+export type OfficeApprovalDecideResponse = {
+  filePath: string;
+  config: OfficeConfig;
+};
+
 export type AutomationRunRecord = {
   runId: string;
   automationTitle: string;
@@ -913,6 +918,22 @@ export class AppServerClient {
       config,
       agentId,
       member,
+    });
+  }
+
+  async decideOfficeApprovalConfig(
+    cwd: string,
+    config: OfficeConfig,
+    approvalId: string,
+    decision: "approved" | "denied",
+    message?: OfficeMessage | null,
+  ): Promise<OfficeApprovalDecideResponse> {
+    return this.request<OfficeApprovalDecideResponse>("office/approval/decide", {
+      cwd,
+      config,
+      approvalId,
+      decision,
+      message: message ?? null,
     });
   }
 

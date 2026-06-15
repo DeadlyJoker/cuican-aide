@@ -186,6 +186,34 @@ pub struct OfficeMemberAddResponse {
     pub config: JsonValue,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum OfficeApprovalDecision {
+    Approved,
+    Denied,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct OfficeApprovalDecideParams {
+    pub cwd: String,
+    pub config: JsonValue,
+    pub approval_id: String,
+    pub decision: OfficeApprovalDecision,
+    #[ts(optional = nullable)]
+    pub message: Option<JsonValue>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct OfficeApprovalDecideResponse {
+    pub file_path: String,
+    pub config: JsonValue,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
