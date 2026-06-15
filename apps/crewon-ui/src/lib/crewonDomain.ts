@@ -164,6 +164,13 @@ export type AutomationConfig = {
   subtitle: string;
   body: string;
   prompt: string;
+  trigger?: { type: "manual" | "schedule" | "event" | "file"; [key: string]: unknown };
+  targetOffice?: OfficeConfig | null;
+  executionAgent?: AgentConfig | null;
+  enabled?: boolean;
+  status?: "draft" | "enabled" | "disabled" | "needsAuth" | string;
+  createdAt?: number;
+  updatedAt?: number;
 };
 
 export type AutomationConfigRecord = {

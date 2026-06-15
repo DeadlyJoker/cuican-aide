@@ -8551,9 +8551,54 @@ export function App() {
           locale === "zh"
             ? `运行自动化「${title}」。目标办公室：${targetOffice?.title ?? "未绑定"}。执行智能体：${executionAgent?.name ?? "未绑定"}。请记录运行结果、下一步任务和风险。`
             : `Run automation "${title}". Target office: ${targetOffice?.title ?? "not bound"}. Agent: ${executionAgent?.name ?? "not bound"}. Record results, next tasks, and risks.`,
+        trigger: { type: "manual" },
+        targetOffice,
+        executionAgent,
+        enabled: true,
+        status: "enabled",
       };
-      const automationConfigPath =
-        await writeAutomationConfigFile(automationConfig);
+      let savedAutomationConfig = automationConfig;
+      let automationConfigPath: string | null = null;
+      const automationCwd = await resolveBackendCwd();
+      const createPrompt =
+        locale === "zh"
+          ? `运行自动化「${title}」。目标办公室：${targetOffice?.title ?? "未绑定"}。执行智能体：${executionAgent?.name ?? "未绑定"}。请记录运行结果、下一步任务和风险。`
+          : `Run automation "${title}". Target office: ${targetOffice?.title ?? "not bound"}. Agent: ${executionAgent?.name ?? "not bound"}. Record results, next tasks, and risks.`;
+      if (automationCwd && clientRef.current) {
+        try {
+          const createResult = await clientRef.current.createAutomationConfig(
+            automationCwd,
+            {
+              title,
+              threadId: thread.id,
+              targetOffice,
+              executionAgent,
+              prompt: createPrompt,
+              enabled: true,
+              status: "enabled",
+            },
+          );
+          savedAutomationConfig = {
+            ...automationConfig,
+            ...createResult.config,
+            subtitle:
+              locale === "zh"
+                ? automationConfig.subtitle
+                : createResult.config.subtitle,
+            body:
+              locale === "zh" ? automationConfig.body : createResult.config.body,
+          };
+          automationConfigPath = createResult.filePath;
+        } catch (error) {
+          if (!(error instanceof AppServerRpcError)) {
+            throw error;
+          }
+          automationConfigPath =
+            await writeAutomationConfigFile(automationConfig);
+        }
+      } else {
+        automationConfigPath = await writeAutomationConfigFile(automationConfig);
+      }
       const createResponse = await clientRef.current?.startTurn(
         thread.id,
         [
@@ -8561,7 +8606,7 @@ export function App() {
             ? `创建自动化：${title}`
             : `Create automation: ${title}`,
           "",
-          automationConfigPayload(automationConfig),
+          automationConfigPayload(savedAutomationConfig),
         ].join("\n"),
       );
       setThreads((current) => upsertThread(current, { ...thread, name: title }));
@@ -8601,10 +8646,10 @@ export function App() {
                   },
                   action: {
                     type: "automation-detail",
-                    title: automationConfig.title,
-                    subtitle: automationConfig.subtitle,
-                    body: automationConfig.body,
-                    prompt: automationConfig.prompt,
+                    title: savedAutomationConfig.title,
+                    subtitle: savedAutomationConfig.subtitle,
+                    body: savedAutomationConfig.body,
+                    prompt: savedAutomationConfig.prompt,
                     threadId: thread.id,
                     configPath: automationConfigPath ?? undefined,
                   },

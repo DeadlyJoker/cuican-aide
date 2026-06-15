@@ -3,6 +3,7 @@ use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentReadParams;
 use crewon_app_server_protocol::AgentRecruitableListParams;
 use crewon_app_server_protocol::AgentSaveParams;
+use crewon_app_server_protocol::AutomationCreateParams;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::AutomationRunParams;
 use crewon_app_server_protocol::AutomationRunUpdateParams;
@@ -286,6 +287,71 @@ async fn automation_run_records_and_lists_runs() {
     assert_eq!(list_response.data.len(), 1);
     assert_eq!(list_response.data[0].file_path, run_response.file_path);
     assert_eq!(list_response.data[0].run, update_response.run);
+}
+
+#[tokio::test]
+async fn automation_create_builds_structured_config_and_saves_record() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+
+    let create_response = processor
+        .automation_create(AutomationCreateParams {
+            cwd: cwd.clone(),
+            title: "Release Monitor".to_string(),
+            thread_id: Some("automation-thread-123456789".to_string()),
+            target_office: Some(json!({
+                "title": "Platform Office",
+                "workspace": { "threadId": "office-thread-123456789" }
+            })),
+            execution_agent: Some(json!({
+                "name": "Release Agent",
+                "agentId": "agent-release"
+            })),
+            prompt: Some("Watch release risk".to_string()),
+            enabled: Some(true),
+            status: Some("enabled".to_string()),
+        })
+        .await
+        .expect("create automation");
+
+    assert!(
+        create_response
+            .file_path
+            .contains(".crewon/automations/release-monitor-")
+    );
+    assert!(create_response.file_path.ends_with(".json"));
+    assert_eq!(
+        create_response.config["threadId"],
+        json!("automation-thread-123456789")
+    );
+    assert_eq!(create_response.config["title"], json!("Release Monitor"));
+    assert_eq!(
+        create_response.config["trigger"],
+        json!({ "type": "manual" })
+    );
+    assert_eq!(
+        create_response.config["targetOffice"]["title"],
+        json!("Platform Office")
+    );
+    assert_eq!(
+        create_response.config["executionAgent"]["name"],
+        json!("Release Agent")
+    );
+    assert_eq!(create_response.config["enabled"], json!(true));
+    assert_eq!(create_response.config["status"], json!("enabled"));
+
+    let list_response = processor
+        .automation_list(AutomationListParams {
+            cwd,
+            cursor: None,
+            limit: None,
+        })
+        .await
+        .expect("list automation configs");
+
+    assert_eq!(list_response.data.len(), 1);
+    assert_eq!(list_response.data[0].config, create_response.config);
 }
 
 #[tokio::test]

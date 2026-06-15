@@ -274,6 +274,26 @@ pub struct AutomationSaveParams {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct AutomationCreateParams {
+    pub cwd: String,
+    pub title: String,
+    #[ts(optional = nullable)]
+    pub thread_id: Option<String>,
+    #[ts(optional = nullable)]
+    pub target_office: Option<JsonValue>,
+    #[ts(optional = nullable)]
+    pub execution_agent: Option<JsonValue>,
+    #[ts(optional = nullable)]
+    pub prompt: Option<String>,
+    #[ts(optional = nullable)]
+    pub enabled: Option<bool>,
+    #[ts(optional = nullable)]
+    pub status: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct AutomationListResponse {
     pub data: Vec<CrewonDomainConfigRecord>,
     pub next_cursor: Option<String>,
@@ -284,6 +304,14 @@ pub struct AutomationListResponse {
 #[ts(export_to = "v2/")]
 pub struct AutomationSaveResponse {
     pub file_path: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationCreateResponse {
+    pub file_path: String,
+    pub config: JsonValue,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

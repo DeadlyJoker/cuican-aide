@@ -797,6 +797,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AutomationSaveResponse,
     },
+    AutomationCreate => "automation/create" {
+        params: v2::AutomationCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationCreateResponse,
+    },
     AutomationRun => "automation/run" {
         params: v2::AutomationRunParams,
         serialization: global("crewon-domain"),

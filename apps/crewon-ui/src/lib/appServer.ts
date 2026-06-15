@@ -228,6 +228,11 @@ export type AutomationRunResponse = {
   run: AutomationRunRecord;
 };
 
+export type AutomationCreateResponse = {
+  filePath: string;
+  config: AutomationConfig;
+};
+
 export type AutomationRunsListResponse = {
   data: Array<{
     filePath: string;
@@ -984,6 +989,30 @@ export class AppServerClient {
     config: AutomationConfig,
   ): Promise<DomainConfigSaveResponse> {
     return this.request<DomainConfigSaveResponse>("automation/save", { cwd, config });
+  }
+
+  async createAutomationConfig(
+    cwd: string,
+    params: {
+      title: string;
+      threadId?: string | null;
+      targetOffice?: OfficeConfig | null;
+      executionAgent?: AgentConfig | null;
+      prompt?: string | null;
+      enabled?: boolean | null;
+      status?: string | null;
+    },
+  ): Promise<AutomationCreateResponse> {
+    return this.request<AutomationCreateResponse>("automation/create", {
+      cwd,
+      title: params.title,
+      threadId: params.threadId ?? null,
+      targetOffice: params.targetOffice ?? null,
+      executionAgent: params.executionAgent ?? null,
+      prompt: params.prompt ?? null,
+      enabled: params.enabled ?? null,
+      status: params.status ?? null,
+    });
   }
 
   async runAutomationConfig(

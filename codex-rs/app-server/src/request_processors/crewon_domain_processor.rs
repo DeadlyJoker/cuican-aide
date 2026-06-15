@@ -14,6 +14,8 @@ use crewon_app_server_protocol::AgentRecruitableListParams;
 use crewon_app_server_protocol::AgentRecruitableListResponse;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AgentSaveResponse;
+use crewon_app_server_protocol::AutomationCreateParams;
+use crewon_app_server_protocol::AutomationCreateResponse;
 use crewon_app_server_protocol::AutomationDeleteParams;
 use crewon_app_server_protocol::AutomationDeleteResponse;
 use crewon_app_server_protocol::AutomationListParams;
@@ -321,6 +323,17 @@ impl CrewonDomainRequestProcessor {
             .map(|file_path| AutomationSaveResponse { file_path })
     }
 
+    pub(crate) async fn automation_create(
+        &self,
+        params: AutomationCreateParams,
+    ) -> Result<AutomationCreateResponse, JSONRPCErrorError> {
+        let cwd = params.cwd.clone();
+        let config = create_automation_config(params)?;
+        save_record(DomainKind::Automation, &cwd, config.clone())
+            .await
+            .map(|file_path| AutomationCreateResponse { file_path, config })
+    }
+
     pub(crate) async fn automation_run(
         &self,
         params: AutomationRunParams,
@@ -623,6 +636,93 @@ async fn create_automation_run(
         file_path: file_path.to_string_lossy().into_owned(),
         run,
     })
+}
+
+fn create_automation_config(
+    params: AutomationCreateParams,
+) -> Result<JsonValue, JSONRPCErrorError> {
+    let title = params.title.trim();
+    if title.is_empty() {
+        return Err(invalid_params("title must not be empty"));
+    }
+    if let Some(thread_id) = params.thread_id.as_deref()
+        && thread_id.trim().is_empty()
+    {
+        return Err(invalid_params("threadId must not be empty"));
+    }
+    if let Some(target_office) = params.target_office.as_ref()
+        && !target_office.is_object()
+    {
+        return Err(invalid_params("targetOffice must be an object"));
+    }
+    if let Some(execution_agent) = params.execution_agent.as_ref()
+        && !execution_agent.is_object()
+    {
+        return Err(invalid_params("executionAgent must be an object"));
+    }
+
+    let target_office_name = params
+        .target_office
+        .as_ref()
+        .and_then(display_name)
+        .unwrap_or("No office")
+        .to_string();
+    let execution_agent_name = params
+        .execution_agent
+        .as_ref()
+        .and_then(display_name)
+        .unwrap_or("No agent")
+        .to_string();
+    let prompt = params.prompt.unwrap_or_else(|| {
+        format!(
+            "Run automation \"{title}\". Target office: {target_office_name}. Agent: {execution_agent_name}. Record results, next tasks, and risks."
+        )
+    });
+    let enabled = params.enabled.unwrap_or(true);
+    let status = params.status.unwrap_or_else(|| {
+        if enabled {
+            "enabled".to_string()
+        } else {
+            "disabled".to_string()
+        }
+    });
+    let now = Utc::now().timestamp();
+    let subtitle = format!("Manual trigger · {target_office_name} · {execution_agent_name}");
+    let body = [
+        "Trigger: manual".to_string(),
+        format!("Target office: {target_office_name}"),
+        format!("Agent: {execution_agent_name}"),
+        format!("Status: {status}"),
+        format!("Enabled: {enabled}"),
+    ]
+    .join("\n");
+    let mut config = serde_json::json!({
+        "title": title,
+        "subtitle": subtitle,
+        "body": body,
+        "prompt": prompt,
+        "trigger": { "type": "manual" },
+        "targetOffice": params.target_office.unwrap_or(JsonValue::Null),
+        "executionAgent": params.execution_agent.unwrap_or(JsonValue::Null),
+        "enabled": enabled,
+        "status": status,
+        "createdAt": now,
+        "updatedAt": now,
+    });
+    if let Some(thread_id) = params.thread_id {
+        let Some(config_object) = config.as_object_mut() else {
+            return Err(invalid_params("automation config must be an object"));
+        };
+        config_object.insert("threadId".to_string(), JsonValue::String(thread_id));
+    }
+    Ok(config)
+}
+
+fn display_name(config: &JsonValue) -> Option<&str> {
+    config
+        .get("title")
+        .or_else(|| config.get("name"))
+        .and_then(JsonValue::as_str)
 }
 
 async fn update_automation_run(

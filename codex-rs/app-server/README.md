@@ -211,6 +211,7 @@ Example with notification opt-out:
 - `skills/changed` — notification emitted when watched local skill files change.
 - `app/list` — list available apps.
 - `agent/recruitable/list` — list saved Crewon agent configs for a workspace that are not already assigned to an office by `agentId` or display name; supports `cursor` and `limit` pagination.
+- `automation/create` — create a structured automation config with a manual trigger, target office, execution agent, status, and enabled state, then save it as a Crewon automation record.
 - `office/approval/decide` — update an office approval decision by `approvalId`, optionally append a system message, and return the saved office config.
 - `office/artifact/upsert` — add or replace an office artifact in workspace activity, optionally append a system message, and return the saved office config.
 - `remoteControl/enable` — experimental; enable remote control for the current app-server process and return the current remote-control status snapshot. The caller is responsible for persisting the desired setting outside app-server.

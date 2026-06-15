@@ -46,6 +46,8 @@ export type { AskForApproval } from "./AskForApproval";
 export type { AttestationGenerateParams } from "./AttestationGenerateParams";
 export type { AttestationGenerateResponse } from "./AttestationGenerateResponse";
 export type { AutoReviewDecisionSource } from "./AutoReviewDecisionSource";
+export type { AutomationCreateParams } from "./AutomationCreateParams";
+export type { AutomationCreateResponse } from "./AutomationCreateResponse";
 export type { AutomationDeleteParams } from "./AutomationDeleteParams";
 export type { AutomationDeleteResponse } from "./AutomationDeleteResponse";
 export type { AutomationListParams } from "./AutomationListParams";
