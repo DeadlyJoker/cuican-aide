@@ -6363,14 +6363,7 @@ export function App() {
     if (workspace.threadId && !forceNew) {
       try {
         await clientRef.current?.readThread(workspace.threadId);
-        await writeOfficeConfigFile(
-          officeConfigForThread(
-            panel.title,
-            panel.subtitle,
-            workspace,
-            workspace.threadId,
-          ),
-        );
+        await persistOfficeWorkspace(panel, workspace, workspace.threadId);
         setLibraryPanel((currentPanel) =>
           currentPanel?.workspace
             ? {
@@ -6427,7 +6420,7 @@ export function App() {
         officeConfigPayload(config),
       ].join("\n"),
     );
-    await writeOfficeConfigFile(config);
+    await persistOfficeWorkspace(panel, workspace, thread.id);
     const namedThread = { ...thread, name: panel.title };
     setThreads((current) => upsertThread(current, namedThread));
 
@@ -6452,6 +6445,25 @@ export function App() {
     );
 
     return thread.id;
+  }
+
+  async function persistOfficeWorkspace(
+    panel: Pick<LibraryPanel, "title" | "subtitle">,
+    workspace: OfficeWorkspace,
+    threadId?: string | null,
+  ): Promise<string | null> {
+    const stableThreadId = threadId ?? workspace.threadId;
+    if (!stableThreadId) {
+      return null;
+    }
+    return writeOfficeConfigFile(
+      officeConfigForThread(
+        panel.title,
+        panel.subtitle,
+        workspace,
+        stableThreadId,
+      ),
+    );
   }
 
   async function writeOfficeConfigFile(config: OfficeConfig): Promise<string | null> {
@@ -7093,7 +7105,7 @@ export function App() {
     }
 
     try {
-      let threadId = await ensureOfficeThread(panel);
+      let threadId = await ensureOfficeThread(panel, nextWorkspace);
       if (!threadId) {
         return;
       }
@@ -7145,14 +7157,7 @@ export function App() {
           }));
         }
       }
-      await writeOfficeConfigFile(
-        officeConfigForThread(
-          panel.title,
-          panel.subtitle,
-          nextWorkspace,
-          threadId,
-        ),
-      );
+      await persistOfficeWorkspace(panel, nextWorkspace, threadId);
       setLibraryPanel((currentPanel) =>
         currentPanel?.workspace
           ? {
@@ -7512,10 +7517,22 @@ export function App() {
         },
       ],
     };
+    setLibraryPanel((currentPanel) =>
+      currentPanel?.workspace
+        ? {
+            ...currentPanel,
+            workspace: {
+              ...nextWorkspace,
+              threadId: currentPanel.workspace.threadId,
+              backendStatus: currentPanel.workspace.backendStatus,
+            },
+          }
+        : currentPanel,
+    );
 
     void (async () => {
       try {
-        let threadId = await ensureOfficeThread(panel, panel.workspace);
+        let threadId = await ensureOfficeThread(panel, nextWorkspace);
         if (!threadId) {
           return;
         }
@@ -7564,6 +7581,19 @@ export function App() {
             ),
           );
         }
+        await persistOfficeWorkspace(panel, nextWorkspace, threadId);
+        setLibraryPanel((currentPanel) =>
+          currentPanel?.workspace
+            ? {
+                ...currentPanel,
+                workspace: {
+                  ...nextWorkspace,
+                  threadId,
+                  backendStatus: "connected",
+                },
+              }
+            : currentPanel,
+        );
       } catch (error) {
         setNotice({
           text:
@@ -7659,7 +7689,43 @@ export function App() {
         await clientRef.current?.writeTextFile(artifactPath, artifactBody);
         const metadata = await clientRef.current?.getMetadata(artifactPath);
         if (panel?.workspace) {
-          const threadId = await ensureOfficeThread(panel);
+          const savedArtifact: ArtifactItem = {
+            ...artifact,
+            meta:
+              locale === "zh"
+                ? `${artifact.meta} · 已保存 ${artifactPath}`
+                : `${artifact.meta} · saved ${artifactPath}`,
+          };
+          const nextActivity = panel.workspace.activity
+            ? {
+                ...panel.workspace.activity,
+                artifacts: [
+                  savedArtifact,
+                  ...panel.workspace.activity.artifacts.filter(
+                    (item) => item.title !== artifact.title,
+                  ),
+                ],
+              }
+            : panel.workspace.activity;
+          const nextWorkspace: OfficeWorkspace = {
+            ...panel.workspace,
+            activity: nextActivity,
+            messages: [
+              ...panel.workspace.messages,
+              {
+                author: locale === "zh" ? "系统" : "System",
+                glyph: "⌗",
+                accent: artifact.accent,
+                time: locale === "zh" ? "现在" : "now",
+                kind: "system",
+                text:
+                  locale === "zh"
+                    ? `已创建办公室产物：${artifact.title}，保存到 ${artifactPath}`
+                    : `Created office artifact: ${artifact.title}, saved to ${artifactPath}`,
+              },
+            ],
+          };
+          const threadId = await ensureOfficeThread(panel, nextWorkspace);
           if (threadId) {
             const artifactInput = [
               locale === "zh"
@@ -7672,7 +7738,7 @@ export function App() {
                 officeConfigForThread(
                   panel.title,
                   panel.subtitle,
-                  panel.workspace,
+                  nextWorkspace,
                   threadId,
                 ),
               ),
@@ -7685,6 +7751,19 @@ export function App() {
                 ),
               );
             }
+            await persistOfficeWorkspace(panel, nextWorkspace, threadId);
+            setLibraryPanel((currentPanel) =>
+              currentPanel?.workspace
+                ? {
+                    ...currentPanel,
+                    workspace: {
+                      ...nextWorkspace,
+                      threadId,
+                      backendStatus: "connected",
+                    },
+                  }
+                : currentPanel,
+            );
           }
         }
 
@@ -8132,7 +8211,7 @@ export function App() {
               }
             : currentPanel,
         );
-        let threadId = await ensureOfficeThread(panel);
+        let threadId = await ensureOfficeThread(panel, nextWorkspace);
         if (threadId) {
           const recruitTurnInput = (targetThreadId: string) =>
             [
@@ -8177,14 +8256,7 @@ export function App() {
               ),
             );
           }
-          await writeOfficeConfigFile(
-            officeConfigForThread(
-              panel.title,
-              panel.subtitle,
-              nextWorkspace,
-              threadId,
-            ),
-          );
+          await persistOfficeWorkspace(panel, nextWorkspace, threadId);
           setNotice({
             text:
               locale === "zh"
