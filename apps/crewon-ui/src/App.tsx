@@ -9684,11 +9684,25 @@ export function App() {
       }
 
       if (action.id === "toggle-skill") {
+        const nextEnabled = !action.skillEnabled;
         await clientRef.current?.writeSkillConfig({
           path: action.skillPath ?? null,
           name: action.skillPath ? null : (action.skillName ?? null),
-          enabled: !action.skillEnabled,
+          enabled: nextEnabled,
         });
+        if (action.skillName) {
+          await writeToolConfigFile({
+            kind: "skill",
+            title: action.skillName,
+            name: action.skillName,
+            path: action.skillPath,
+            description:
+              locale === "zh"
+                ? "从工具页同步的 Skill 启停状态。"
+                : "Skill enablement synchronized from the tools page.",
+            enabled: nextEnabled,
+          });
+        }
         setNotice({
           text:
             locale === "zh"
