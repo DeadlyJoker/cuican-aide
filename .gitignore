@@ -14,9 +14,8 @@ user.bazelrc
 build/
 out/
 storybook-static/
-
-# ignore README for publishing
-codex-cli/README.md
+apps/crewon-ui/src-tauri/target/
+apps/crewon-ui/showcase.zip
 
 # ignore Nix derivation results
 result
@@ -74,6 +73,8 @@ personal/
 .DS_Store
 Thumbs.db
 Icon?
+!apps/crewon-ui/src-tauri/icons/
+!apps/crewon-ui/src-tauri/icons/icon.png
 .Spotlight-V100/
 
 # Unwanted package managers
