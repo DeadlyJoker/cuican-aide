@@ -6687,6 +6687,23 @@ export function App() {
     );
     const agentCwd = await resolveBackendCwd();
     const client = clientRef.current;
+    if (agentCwd && client) {
+      try {
+        const response = await client.listRecruitableAgentConfigs(agentCwd, {
+          cursor: null,
+          existingAgentIds: [...memberAgentIds],
+          existingNames: [...memberNames],
+          limit: 24,
+        });
+        if (response.data.length > 0) {
+          return response.data[0].config;
+        }
+      } catch (error) {
+        if (!(error instanceof AppServerRpcError)) {
+          throw error;
+        }
+      }
+    }
     const savedConfigs =
       agentCwd && client
         ? (await readStoredAgentConfigFiles(client, agentCwd)).map(

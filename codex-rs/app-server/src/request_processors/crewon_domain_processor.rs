@@ -10,6 +10,8 @@ use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentListResponse;
 use crewon_app_server_protocol::AgentReadParams;
 use crewon_app_server_protocol::AgentReadResponse;
+use crewon_app_server_protocol::AgentRecruitableListParams;
+use crewon_app_server_protocol::AgentRecruitableListResponse;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AgentSaveResponse;
 use crewon_app_server_protocol::AutomationDeleteParams;
@@ -52,6 +54,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use std::cmp::Reverse;
+use std::collections::HashSet;
 use tokio::fs;
 use uuid::Uuid;
 
@@ -173,6 +176,21 @@ impl CrewonDomainRequestProcessor {
         )
         .await
         .map(|record| AgentReadResponse { record })
+    }
+
+    pub(crate) async fn agent_recruitable_list(
+        &self,
+        params: AgentRecruitableListParams,
+    ) -> Result<AgentRecruitableListResponse, JSONRPCErrorError> {
+        list_recruitable_agents(
+            &params.cwd,
+            params.cursor,
+            params.existing_agent_ids.unwrap_or_default(),
+            params.existing_names.unwrap_or_default(),
+            params.limit,
+        )
+        .await
+        .map(|(data, next_cursor)| AgentRecruitableListResponse { data, next_cursor })
     }
 
     pub(crate) async fn agent_delete(
@@ -737,6 +755,31 @@ async fn read_agent_record(
         }) || name
             .is_some_and(|name| record.config.get("name").and_then(JsonValue::as_str) == Some(name))
     }))
+}
+
+async fn list_recruitable_agents(
+    cwd: &str,
+    cursor: Option<String>,
+    existing_agent_ids: Vec<String>,
+    existing_names: Vec<String>,
+    limit: Option<u32>,
+) -> Result<(Vec<CrewonDomainConfigRecord>, Option<String>), JSONRPCErrorError> {
+    let existing_agent_ids: HashSet<String> = existing_agent_ids
+        .into_iter()
+        .filter(|agent_id| !agent_id.trim().is_empty())
+        .collect();
+    let existing_names: HashSet<String> = existing_names
+        .into_iter()
+        .filter(|name| !name.trim().is_empty())
+        .collect();
+
+    list_records_matching(DomainKind::Agent, cwd, cursor, limit, |record| {
+        let agent_id = record.config.get("agentId").and_then(JsonValue::as_str);
+        let name = record.config.get("name").and_then(JsonValue::as_str);
+        !agent_id.is_some_and(|agent_id| existing_agent_ids.contains(agent_id))
+            && !name.is_some_and(|name| existing_names.contains(name))
+    })
+    .await
 }
 
 fn apply_office_message_update(

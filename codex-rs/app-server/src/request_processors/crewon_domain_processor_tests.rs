@@ -1,6 +1,7 @@
 use crewon_app_server_protocol::AgentDeleteParams;
 use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentReadParams;
+use crewon_app_server_protocol::AgentRecruitableListParams;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::AutomationRunParams;
@@ -101,6 +102,63 @@ async fn reads_agent_config_by_identity() {
         .expect("read agent config");
 
     assert_eq!(read_response.record.expect("agent record").config, config);
+}
+
+#[tokio::test]
+async fn lists_recruitable_agent_configs() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    for config in [
+        json!({
+            "agentId": "agent-reviewer",
+            "name": "Reviewer",
+            "role": "Review code"
+        }),
+        json!({
+            "agentId": "agent-builder",
+            "name": "Builder",
+            "role": "Build features"
+        }),
+        json!({
+            "agentId": "agent-planner",
+            "name": "Planner",
+            "role": "Plan work"
+        }),
+    ] {
+        processor
+            .agent_save(AgentSaveParams {
+                cwd: cwd.clone(),
+                config,
+            })
+            .await
+            .expect("save agent config");
+    }
+
+    let list_response = processor
+        .agent_recruitable_list(AgentRecruitableListParams {
+            cwd,
+            cursor: None,
+            existing_agent_ids: Some(vec!["agent-builder".to_string()]),
+            existing_names: Some(vec!["Reviewer".to_string()]),
+            limit: Some(10),
+        })
+        .await
+        .expect("list recruitable agents");
+
+    assert_eq!(list_response.next_cursor, None);
+    assert_eq!(
+        list_response
+            .data
+            .into_iter()
+            .map(|record| record.config)
+            .collect::<Vec<_>>(),
+        vec![json!({
+            "agentId": "agent-planner",
+            "name": "Planner",
+            "role": "Plan work"
+        })]
+    );
 }
 
 #[tokio::test]

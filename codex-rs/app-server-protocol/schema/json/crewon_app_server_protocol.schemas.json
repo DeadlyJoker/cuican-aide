@@ -1172,6 +1172,30 @@
             },
             "method": {
               "enum": [
+                "agent/recruitable/list"
+              ],
+              "title": "Agent/recruitable/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentRecruitableListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Agent/recruitable/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "agent/delete"
               ],
               "title": "Agent/deleteRequestMethod",
@@ -6651,6 +6675,73 @@
           }
         },
         "title": "AgentReadResponse",
+        "type": "object"
+      },
+      "AgentRecruitableListParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "existingAgentIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "existingNames": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limit": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cwd"
+        ],
+        "title": "AgentRecruitableListParams",
+        "type": "object"
+      },
+      "AgentRecruitableListResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/definitions/v2/CrewonDomainConfigRecord"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "AgentRecruitableListResponse",
         "type": "object"
       },
       "AgentSaveParams": {

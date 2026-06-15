@@ -737,6 +737,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AgentReadResponse,
     },
+    AgentRecruitableList => "agent/recruitable/list" {
+        params: v2::AgentRecruitableListParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentRecruitableListResponse,
+    },
     AgentDelete => "agent/delete" {
         params: v2::AgentDeleteParams,
         serialization: global("crewon-domain"),

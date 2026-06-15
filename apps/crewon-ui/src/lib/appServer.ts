@@ -179,6 +179,9 @@ export type AgentReadResponse = {
   record: DomainConfigListResponse<AgentConfig>["data"][number] | null;
 };
 
+export type AgentRecruitableListResponse =
+  DomainConfigListResponse<AgentConfig>;
+
 export type DomainConfigDeleteResponse = {
   deleted: boolean;
 };
@@ -828,6 +831,24 @@ export class AppServerClient {
       agentId: params.agentId ?? null,
       threadId: params.threadId ?? null,
       name: params.name ?? null,
+    });
+  }
+
+  async listRecruitableAgentConfigs(
+    cwd: string,
+    params: {
+      cursor?: string | null;
+      existingAgentIds?: string[] | null;
+      existingNames?: string[] | null;
+      limit?: number | null;
+    },
+  ): Promise<AgentRecruitableListResponse> {
+    return this.request<AgentRecruitableListResponse>("agent/recruitable/list", {
+      cwd,
+      cursor: params.cursor ?? null,
+      existingAgentIds: params.existingAgentIds ?? null,
+      existingNames: params.existingNames ?? null,
+      limit: params.limit ?? 24,
     });
   }
 

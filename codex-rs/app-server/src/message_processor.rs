@@ -1249,6 +1249,11 @@ impl MessageProcessor {
                 .agent_read(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::AgentRecruitableList { params, .. } => self
+                .crewon_domain_processor
+                .agent_recruitable_list(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::AgentDelete { params, .. } => self
                 .crewon_domain_processor
                 .agent_delete(params)

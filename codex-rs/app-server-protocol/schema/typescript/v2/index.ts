@@ -21,6 +21,8 @@ export type { AgentListResponse } from "./AgentListResponse";
 export type { AgentMessageDeltaNotification } from "./AgentMessageDeltaNotification";
 export type { AgentReadParams } from "./AgentReadParams";
 export type { AgentReadResponse } from "./AgentReadResponse";
+export type { AgentRecruitableListParams } from "./AgentRecruitableListParams";
+export type { AgentRecruitableListResponse } from "./AgentRecruitableListResponse";
 export type { AgentSaveParams } from "./AgentSaveParams";
 export type { AgentSaveResponse } from "./AgentSaveResponse";
 export type { AnalyticsConfig } from "./AnalyticsConfig";
