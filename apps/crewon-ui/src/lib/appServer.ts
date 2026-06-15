@@ -90,6 +90,7 @@ import type {
   AgentConfig,
   AutomationConfig,
   OfficeConfig,
+  OfficeMember,
   OfficeMessage,
   ToolConfig,
   ToolConfigKind,
@@ -169,6 +170,10 @@ export type DomainConfigSaveResponse = {
   filePath: string;
 };
 
+export type AgentSaveResponse = DomainConfigSaveResponse & {
+  agentId: string;
+};
+
 export type DomainConfigDeleteResponse = {
   deleted: boolean;
 };
@@ -178,6 +183,11 @@ export type OfficeReadResponse = {
 };
 
 export type OfficeMessageSendResponse = {
+  filePath: string;
+  config: OfficeConfig;
+};
+
+export type OfficeMemberAddResponse = {
   filePath: string;
   config: OfficeConfig;
 };
@@ -770,8 +780,8 @@ export class AppServerClient {
   async saveAgentConfig(
     cwd: string,
     config: AgentConfig,
-  ): Promise<DomainConfigSaveResponse> {
-    return this.request<DomainConfigSaveResponse>("agent/save", { cwd, config });
+  ): Promise<AgentSaveResponse> {
+    return this.request<AgentSaveResponse>("agent/save", { cwd, config });
   }
 
   async deleteAgentConfig(
@@ -819,6 +829,20 @@ export class AppServerClient {
       cwd,
       config,
       message,
+    });
+  }
+
+  async addOfficeMemberConfig(
+    cwd: string,
+    config: OfficeConfig,
+    agentId: string,
+    member: OfficeMember,
+  ): Promise<OfficeMemberAddResponse> {
+    return this.request<OfficeMemberAddResponse>("office/member/add", {
+      cwd,
+      config,
+      agentId,
+      member,
     });
   }
 

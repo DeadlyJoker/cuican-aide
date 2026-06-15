@@ -1,17 +1,15 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "properties": {
-    "agentId": {
-      "type": "string"
-    },
+    "config": true,
     "filePath": {
       "type": "string"
     }
   },
   "required": [
-    "agentId",
+    "config",
     "filePath"
   ],
-  "title": "AgentSaveResponse",
+  "title": "OfficeMemberAddResponse",
   "type": "object"
 }

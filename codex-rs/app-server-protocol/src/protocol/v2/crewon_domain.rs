@@ -36,6 +36,7 @@ pub struct AgentListResponse {
 #[ts(export_to = "v2/")]
 pub struct AgentSaveResponse {
     pub file_path: String,
+    pub agent_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -118,6 +119,24 @@ pub struct OfficeMessageSendParams {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct OfficeMessageSendResponse {
+    pub file_path: String,
+    pub config: JsonValue,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct OfficeMemberAddParams {
+    pub cwd: String,
+    pub config: JsonValue,
+    pub agent_id: String,
+    pub member: JsonValue,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct OfficeMemberAddResponse {
     pub file_path: String,
     pub config: JsonValue,
 }

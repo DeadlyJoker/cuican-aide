@@ -4,14 +4,18 @@
     "agentId": {
       "type": "string"
     },
-    "filePath": {
+    "config": true,
+    "cwd": {
       "type": "string"
-    }
+    },
+    "member": true
   },
   "required": [
     "agentId",
-    "filePath"
+    "config",
+    "cwd",
+    "member"
   ],
-  "title": "AgentSaveResponse",
+  "title": "OfficeMemberAddParams",
   "type": "object"
 }

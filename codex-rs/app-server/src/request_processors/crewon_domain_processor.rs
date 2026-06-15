@@ -23,6 +23,8 @@ use crewon_app_server_protocol::OfficeDeleteParams;
 use crewon_app_server_protocol::OfficeDeleteResponse;
 use crewon_app_server_protocol::OfficeListParams;
 use crewon_app_server_protocol::OfficeListResponse;
+use crewon_app_server_protocol::OfficeMemberAddParams;
+use crewon_app_server_protocol::OfficeMemberAddResponse;
 use crewon_app_server_protocol::OfficeMessageSendParams;
 use crewon_app_server_protocol::OfficeMessageSendResponse;
 use crewon_app_server_protocol::OfficeReadParams;
@@ -137,9 +139,13 @@ impl CrewonDomainRequestProcessor {
         &self,
         params: AgentSaveParams,
     ) -> Result<AgentSaveResponse, JSONRPCErrorError> {
-        save_record(DomainKind::Agent, &params.cwd, params.config)
+        let (config, agent_id) = ensure_agent_id(params.config)?;
+        save_record(DomainKind::Agent, &params.cwd, config)
             .await
-            .map(|file_path| AgentSaveResponse { file_path })
+            .map(|file_path| AgentSaveResponse {
+                file_path,
+                agent_id,
+            })
     }
 
     pub(crate) async fn agent_delete(
@@ -190,6 +196,16 @@ impl CrewonDomainRequestProcessor {
         save_record(DomainKind::Office, &params.cwd, config.clone())
             .await
             .map(|file_path| OfficeMessageSendResponse { file_path, config })
+    }
+
+    pub(crate) async fn office_member_add(
+        &self,
+        params: OfficeMemberAddParams,
+    ) -> Result<OfficeMemberAddResponse, JSONRPCErrorError> {
+        let config = append_office_member(params.config, &params.agent_id, params.member)?;
+        save_record(DomainKind::Office, &params.cwd, config.clone())
+            .await
+            .map(|file_path| OfficeMemberAddResponse { file_path, config })
     }
 
     pub(crate) async fn office_delete(
@@ -429,6 +445,26 @@ async fn save_record(
     Ok(file_path.to_string_lossy().into_owned())
 }
 
+fn ensure_agent_id(mut config: JsonValue) -> Result<(JsonValue, String), JSONRPCErrorError> {
+    if !DomainKind::Agent.config_matches(&config) {
+        return Err(invalid_params("agent config is missing required fields"));
+    }
+    let agent_id = config
+        .get("agentId")
+        .and_then(JsonValue::as_str)
+        .filter(|agent_id| !agent_id.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            let title = DomainKind::Agent.title(&config).unwrap_or("agent");
+            format!("agent-{}", slugify(title, "agent"))
+        });
+    let Some(config_object) = config.as_object_mut() else {
+        return Err(invalid_params("agent config must be an object"));
+    };
+    config_object.insert("agentId".to_string(), JsonValue::String(agent_id.clone()));
+    Ok((config, agent_id))
+}
+
 async fn read_office_record(
     cwd: &str,
     thread_id: Option<&str>,
@@ -471,6 +507,43 @@ fn append_office_message(
         return Err(invalid_params("workspace.messages must be an array"));
     };
     messages.push(message);
+    Ok(config)
+}
+
+fn append_office_member(
+    mut config: JsonValue,
+    agent_id: &str,
+    mut member: JsonValue,
+) -> Result<JsonValue, JSONRPCErrorError> {
+    if agent_id.trim().is_empty() {
+        return Err(invalid_params("agentId must not be empty"));
+    }
+    if !DomainKind::Office.config_matches(&config) {
+        return Err(invalid_params("office config is missing required fields"));
+    }
+    let Some(member_object) = member.as_object_mut() else {
+        return Err(invalid_params("member must be an object"));
+    };
+    member_object.insert(
+        "agentId".to_string(),
+        JsonValue::String(agent_id.trim().to_string()),
+    );
+
+    let Some(workspace) = config
+        .get_mut("workspace")
+        .and_then(JsonValue::as_object_mut)
+    else {
+        return Err(invalid_params("office config is missing workspace"));
+    };
+    let members = workspace
+        .entry("members")
+        .or_insert_with(|| JsonValue::Array(Vec::new()));
+    let Some(members) = members.as_array_mut() else {
+        return Err(invalid_params("workspace.members must be an array"));
+    };
+    members
+        .retain(|existing| existing.get("agentId").and_then(JsonValue::as_str) != Some(agent_id));
+    members.push(member);
     Ok(config)
 }
 

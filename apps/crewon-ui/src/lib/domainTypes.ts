@@ -15,6 +15,7 @@ export type {
   AutomationConfigRecord,
   OfficeConfig,
   OfficeConfigRecord,
+  OfficeMember,
   OfficeMessage,
   ToolConfig,
   ToolConfigKind,

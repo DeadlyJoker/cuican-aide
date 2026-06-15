@@ -278,6 +278,8 @@ export type { OfficeDeleteParams } from "./OfficeDeleteParams";
 export type { OfficeDeleteResponse } from "./OfficeDeleteResponse";
 export type { OfficeListParams } from "./OfficeListParams";
 export type { OfficeListResponse } from "./OfficeListResponse";
+export type { OfficeMemberAddParams } from "./OfficeMemberAddParams";
+export type { OfficeMemberAddResponse } from "./OfficeMemberAddResponse";
 export type { OfficeMessageSendParams } from "./OfficeMessageSendParams";
 export type { OfficeMessageSendResponse } from "./OfficeMessageSendResponse";
 export type { OfficeReadParams } from "./OfficeReadParams";

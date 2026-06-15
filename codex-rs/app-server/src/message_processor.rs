@@ -1269,6 +1269,11 @@ impl MessageProcessor {
                 .office_message_send(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::OfficeMemberAdd { params, .. } => self
+                .crewon_domain_processor
+                .office_member_add(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::OfficeDelete { params, .. } => self
                 .crewon_domain_processor
                 .office_delete(params)

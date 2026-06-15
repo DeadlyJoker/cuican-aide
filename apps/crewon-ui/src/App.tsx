@@ -722,6 +722,7 @@ function agentConfigToOfficeMember(
   locale: Locale,
 ): OfficeMember {
   return {
+    agentId: config.agentId,
     name: config.name,
     role: config.role,
     glyph: config.glyph,
@@ -5861,7 +5862,12 @@ export function App() {
             null,
           );
           const payloadConfig = { ...importedConfig, threadId: thread.id };
-          const agentConfigPath = await writeAgentConfigFile(payloadConfig);
+          const agentWriteResult = await writeAgentConfigFile(payloadConfig);
+          const savedPayloadConfig = {
+            ...payloadConfig,
+            agentId: agentWriteResult?.agentId ?? payloadConfig.agentId,
+          };
+          const agentConfigPath = agentWriteResult?.filePath ?? null;
           const response = await clientRef.current?.startTurn(
             thread.id,
             [
@@ -5873,7 +5879,7 @@ export function App() {
               "",
               externalAgentMigrationSummary(action.item, locale),
               "",
-              agentConfigPayload(payloadConfig),
+              agentConfigPayload(savedPayloadConfig),
               agentConfigPath
                 ? locale === "zh"
                   ? `配置文件：${agentConfigPath}`
@@ -6231,6 +6237,50 @@ export function App() {
     }
   }
 
+  async function persistOfficeMember(
+    panel: Pick<LibraryPanel, "title" | "subtitle">,
+    workspaceBeforeMember: OfficeWorkspace,
+    agentId: string | undefined,
+    member: OfficeMember,
+    threadId: string,
+  ): Promise<OfficeConfig | null> {
+    if (!agentId) {
+      return null;
+    }
+    const officeCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (!officeCwd || !client) {
+      return null;
+    }
+    try {
+      const response = await client.addOfficeMemberConfig(
+        officeCwd,
+        officeConfigForThread(
+          panel.title,
+          panel.subtitle,
+          workspaceBeforeMember,
+          threadId,
+        ),
+        agentId,
+        member,
+      );
+      return response.config;
+    } catch (error) {
+      if (!(error instanceof AppServerRpcError)) {
+        throw error;
+      }
+      await persistOfficeWorkspace(
+        panel,
+        {
+          ...workspaceBeforeMember,
+          members: [...workspaceBeforeMember.members, member],
+        },
+        threadId,
+      );
+      return null;
+    }
+  }
+
   async function writeOfficeConfigFile(config: OfficeConfig): Promise<string | null> {
     const officeCwd = await resolveBackendCwd();
     const client = clientRef.current;
@@ -6274,7 +6324,9 @@ export function App() {
       }));
   }
 
-  async function writeAgentConfigFile(config: AgentConfig): Promise<string | null> {
+  async function writeAgentConfigFile(
+    config: AgentConfig,
+  ): Promise<{ filePath: string; agentId?: string } | null> {
     const agentCwd = await resolveBackendCwd();
     const client = clientRef.current;
     if (!agentCwd || !client) {
@@ -6431,6 +6483,19 @@ export function App() {
     }
 
     const memberNames = new Set(existingMembers.map((member) => member.name));
+    const memberAgentIds = new Set(
+      existingMembers
+        .map((member) => member.agentId)
+        .filter((agentId): agentId is string => Boolean(agentId)),
+    );
+    const agentCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    const savedConfigs =
+      agentCwd && client
+        ? (await readStoredAgentConfigFiles(client, agentCwd)).map(
+            (record) => record.config,
+          )
+        : [];
     const backendThreads = (await clientRef.current?.listThreads(false)) ?? [];
     const agentDetails = await Promise.allSettled(
       backendThreads.map(async (thread) => {
@@ -6456,10 +6521,15 @@ export function App() {
       )
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .map((entry) => entry.config);
+    const candidates = [...savedConfigs, ...configs];
 
     return (
-      configs.find((config) => !memberNames.has(config.name)) ??
-      configs[0] ??
+      candidates.find(
+        (config) =>
+          !memberNames.has(config.name) &&
+          (!config.agentId || !memberAgentIds.has(config.agentId)),
+      ) ??
+      candidates[0] ??
       null
     );
   }
@@ -7078,8 +7148,13 @@ export function App() {
               : `Persist agent "${config.name}" configuration and make it recruitable by offices.`,
             null,
           );
-          const savedConfig = { ...config, threadId: thread.id };
-          const agentConfigPath = await writeAgentConfigFile(savedConfig);
+          const draftConfig = { ...config, threadId: thread.id };
+          const agentWriteResult = await writeAgentConfigFile(draftConfig);
+          const savedConfig = {
+            ...draftConfig,
+            agentId: agentWriteResult?.agentId ?? draftConfig.agentId,
+          };
+          const agentConfigPath = agentWriteResult?.filePath ?? null;
           const summary =
             locale === "zh"
               ? [
@@ -7131,6 +7206,7 @@ export function App() {
                   ...currentPanel,
                   agentConfig: {
                     ...currentPanel.agentConfig,
+                    agentId: savedConfig.agentId,
                     threadId: thread.id,
                   },
                   body: agentConfigPath
@@ -7972,10 +8048,14 @@ export function App() {
                   ? `Recruited ${newMember.name} from agents. Model ${recruitConfig.model}; MCP: ${enabledMcp}; skills: ${enabledSkills}.`
                   : "New member joined the office chat and recruitment was written to the backend thread. No saved backend agent config was found yet.",
               };
+        const workspaceWithJoinMessage = {
+          ...workspace,
+          messages: [...workspace.messages, joinMessage],
+        };
         const nextWorkspace = {
           ...workspace,
           members: [...workspace.members, newMember],
-          messages: [...workspace.messages, joinMessage],
+          messages: workspaceWithJoinMessage.messages,
         };
         setLibraryPanel((currentPanel) =>
           currentPanel?.workspace
@@ -8030,7 +8110,29 @@ export function App() {
               ),
             );
           }
-          await persistOfficeWorkspace(panel, nextWorkspace, threadId);
+          const savedConfig = await persistOfficeMember(
+            panel,
+            workspaceWithJoinMessage,
+            newMember.agentId ?? recruitConfig?.agentId,
+            newMember,
+            threadId,
+          );
+          if (!savedConfig) {
+            await persistOfficeWorkspace(panel, nextWorkspace, threadId);
+          }
+          const connectedThreadId = threadId;
+          setLibraryPanel((currentPanel) =>
+            currentPanel?.workspace
+              ? {
+                  ...currentPanel,
+                  workspace: {
+                    ...(savedConfig?.workspace ?? nextWorkspace),
+                    threadId: connectedThreadId,
+                    backendStatus: "connected",
+                  },
+                }
+              : currentPanel,
+          );
           setNotice({
             text:
               locale === "zh"

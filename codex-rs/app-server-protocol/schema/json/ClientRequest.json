@@ -1788,6 +1788,25 @@
       ],
       "type": "object"
     },
+    "OfficeMemberAddParams": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "member": true
+      },
+      "required": [
+        "agentId",
+        "config",
+        "cwd",
+        "member"
+      ],
+      "type": "object"
+    },
     "OfficeMessageSendParams": {
       "properties": {
         "config": true,
@@ -5737,6 +5756,30 @@
         "params"
       ],
       "title": "Office/message/sendRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/member/add"
+          ],
+          "title": "Office/member/addRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeMemberAddParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/member/addRequest",
       "type": "object"
     },
     {

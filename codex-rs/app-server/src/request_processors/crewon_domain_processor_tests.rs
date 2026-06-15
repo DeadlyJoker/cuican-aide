@@ -2,6 +2,7 @@ use crewon_app_server_protocol::AgentDeleteParams;
 use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AutomationListParams;
+use crewon_app_server_protocol::OfficeMemberAddParams;
 use crewon_app_server_protocol::OfficeMessageSendParams;
 use crewon_app_server_protocol::OfficeReadParams;
 use crewon_app_server_protocol::OfficeSaveParams;
@@ -53,8 +54,17 @@ async fn saves_and_lists_agent_configs() {
 
     assert_eq!(list_response.data.len(), 1);
     assert_eq!(list_response.data[0].file_path, save_response.file_path);
-    assert_eq!(list_response.data[0].config, config);
+    assert_eq!(
+        list_response.data[0].config,
+        json!({
+            "agentId": "agent-demo-agent",
+            "name": "Demo Agent",
+            "threadId": "thread-123456789",
+            "role": "Engineer"
+        })
+    );
     assert!(!list_response.data[0].saved_at.is_empty());
+    assert_eq!(save_response.agent_id, "agent-demo-agent");
 }
 
 #[tokio::test]
@@ -228,6 +238,68 @@ async fn office_message_send_appends_message_and_saves_config() {
             .ends_with(".crewon/offices/platform-office-office-t.json")
     );
     assert_eq!(send_response.config, expected_config);
+    assert_eq!(
+        read_response.record.expect("office record").config,
+        expected_config
+    );
+}
+
+#[tokio::test]
+async fn office_member_add_attaches_agent_id_and_replaces_existing_member() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let config = json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "members": [
+                { "agentId": "agent-reviewer", "name": "Old reviewer" }
+            ]
+        }
+    });
+    let member = json!({
+        "name": "Reviewer",
+        "role": "Code review"
+    });
+
+    let add_response = processor
+        .office_member_add(OfficeMemberAddParams {
+            cwd: cwd.clone(),
+            config,
+            agent_id: "agent-reviewer".to_string(),
+            member,
+        })
+        .await
+        .expect("add office member");
+    let read_response = processor
+        .office_read(OfficeReadParams {
+            cwd,
+            thread_id: Some("office-thread-123456789".to_string()),
+            title: None,
+        })
+        .await
+        .expect("read office config");
+
+    let expected_config = json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "members": [
+                {
+                    "agentId": "agent-reviewer",
+                    "name": "Reviewer",
+                    "role": "Code review"
+                }
+            ]
+        }
+    });
+    assert!(
+        add_response
+            .file_path
+            .ends_with(".crewon/offices/platform-office-office-t.json")
+    );
+    assert_eq!(add_response.config, expected_config);
     assert_eq!(
         read_response.record.expect("office record").config,
         expected_config

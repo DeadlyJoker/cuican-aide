@@ -92,6 +92,7 @@ export type LibraryBadgeTone =
   | "warning";
 
 export type OfficeMember = {
+  agentId?: string;
   name: string;
   role: string;
   glyph: string;
@@ -135,6 +136,7 @@ export type AgentCapabilityOption = {
 };
 
 export type AgentConfig = {
+  agentId?: string;
   threadId?: string;
   name: string;
   glyph: string;

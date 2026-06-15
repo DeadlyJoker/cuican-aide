@@ -445,11 +445,15 @@
     "AgentSaveResponse": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
+        "agentId": {
+          "type": "string"
+        },
         "filePath": {
           "type": "string"
         }
       },
       "required": [
+        "agentId",
         "filePath"
       ],
       "title": "AgentSaveResponse",
@@ -2415,6 +2419,30 @@
             "params"
           ],
           "title": "Office/message/sendRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/member/add"
+              ],
+              "title": "Office/member/addRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/OfficeMemberAddParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/member/addRequest",
           "type": "object"
         },
         {
@@ -9386,6 +9414,42 @@
         "data"
       ],
       "title": "OfficeListResponse",
+      "type": "object"
+    },
+    "OfficeMemberAddParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "member": true
+      },
+      "required": [
+        "agentId",
+        "config",
+        "cwd",
+        "member"
+      ],
+      "title": "OfficeMemberAddParams",
+      "type": "object"
+    },
+    "OfficeMemberAddResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "filePath"
+      ],
+      "title": "OfficeMemberAddResponse",
       "type": "object"
     },
     "OfficeMessageSendParams": {

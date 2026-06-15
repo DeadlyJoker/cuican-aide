@@ -23,6 +23,11 @@ export type DomainConfigRecord<TConfig> = {
   config: TConfig;
 };
 
+export type AgentConfigWriteResult = {
+  filePath: string;
+  agentId?: string;
+};
+
 const MAX_CONFIG_RECORDS = 24;
 
 export function joinDomainPath(basePath: string, childName: string): string {
@@ -88,9 +93,10 @@ export async function writeAgentConfigFile(
   client: AppServerClient,
   cwd: string,
   config: AgentConfig,
-): Promise<string> {
+): Promise<AgentConfigWriteResult> {
   try {
-    return (await client.saveAgentConfig(cwd, config)).filePath;
+    const response = await client.saveAgentConfig(cwd, config);
+    return { filePath: response.filePath, agentId: response.agentId };
   } catch (error) {
     if (!shouldFallbackToFsPersistence(error)) {
       throw error;
@@ -104,7 +110,7 @@ export async function writeAgentConfigFile(
   );
   const record: AgentConfigRecord = createAgentConfigRecord(config);
   await writeConfigRecord(client, agentsDir, filePath, record);
-  return filePath;
+  return { filePath, agentId: config.agentId };
 }
 
 export async function writeAutomationConfigFile(
