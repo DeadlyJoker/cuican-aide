@@ -34,6 +34,8 @@ use crewon_app_server_protocol::JSONRPCErrorError;
 use crewon_app_server_protocol::OfficeApprovalDecideParams;
 use crewon_app_server_protocol::OfficeApprovalDecideResponse;
 use crewon_app_server_protocol::OfficeApprovalDecision;
+use crewon_app_server_protocol::OfficeArtifactUpsertParams;
+use crewon_app_server_protocol::OfficeArtifactUpsertResponse;
 use crewon_app_server_protocol::OfficeDeleteParams;
 use crewon_app_server_protocol::OfficeDeleteResponse;
 use crewon_app_server_protocol::OfficeListParams;
@@ -269,6 +271,16 @@ impl CrewonDomainRequestProcessor {
         save_record(DomainKind::Office, &params.cwd, config.clone())
             .await
             .map(|file_path| OfficeApprovalDecideResponse { file_path, config })
+    }
+
+    pub(crate) async fn office_artifact_upsert(
+        &self,
+        params: OfficeArtifactUpsertParams,
+    ) -> Result<OfficeArtifactUpsertResponse, JSONRPCErrorError> {
+        let config = upsert_office_artifact(params.config, params.artifact, params.message)?;
+        save_record(DomainKind::Office, &params.cwd, config.clone())
+            .await
+            .map(|file_path| OfficeArtifactUpsertResponse { file_path, config })
     }
 
     pub(crate) async fn office_delete(
@@ -932,6 +944,65 @@ fn decide_office_approval(
     if !found {
         return Err(invalid_params("approvalId was not found"));
     }
+
+    if let Some(message) = message {
+        if !message.is_object() {
+            return Err(invalid_params("message must be an object"));
+        }
+        let messages = workspace
+            .entry("messages")
+            .or_insert_with(|| JsonValue::Array(Vec::new()));
+        let Some(messages) = messages.as_array_mut() else {
+            return Err(invalid_params("workspace.messages must be an array"));
+        };
+        messages.push(message);
+    }
+
+    Ok(config)
+}
+
+fn upsert_office_artifact(
+    mut config: JsonValue,
+    artifact: JsonValue,
+    message: Option<JsonValue>,
+) -> Result<JsonValue, JSONRPCErrorError> {
+    if !DomainKind::Office.config_matches(&config) {
+        return Err(invalid_params("office config is missing required fields"));
+    }
+    if !artifact.is_object() {
+        return Err(invalid_params("artifact must be an object"));
+    }
+    let Some(artifact_title) = artifact.get("title").and_then(JsonValue::as_str) else {
+        return Err(invalid_params("artifact.title is required"));
+    };
+    if artifact_title.trim().is_empty() {
+        return Err(invalid_params("artifact.title must not be empty"));
+    }
+
+    let Some(workspace) = config
+        .get_mut("workspace")
+        .and_then(JsonValue::as_object_mut)
+    else {
+        return Err(invalid_params("office config is missing workspace"));
+    };
+    let Some(activity) = workspace
+        .get_mut("activity")
+        .and_then(JsonValue::as_object_mut)
+    else {
+        return Err(invalid_params("workspace.activity is required"));
+    };
+    let artifacts = activity
+        .entry("artifacts")
+        .or_insert_with(|| JsonValue::Array(Vec::new()));
+    let Some(artifacts) = artifacts.as_array_mut() else {
+        return Err(invalid_params(
+            "workspace.activity.artifacts must be an array",
+        ));
+    };
+    artifacts.retain(|existing| {
+        existing.get("title").and_then(JsonValue::as_str) != Some(artifact_title)
+    });
+    artifacts.insert(0, artifact);
 
     if let Some(message) = message {
         if !message.is_object() {

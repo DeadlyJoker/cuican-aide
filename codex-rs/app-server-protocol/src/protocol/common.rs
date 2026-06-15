@@ -777,6 +777,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::OfficeApprovalDecideResponse,
     },
+    OfficeArtifactUpsert => "office/artifact/upsert" {
+        params: v2::OfficeArtifactUpsertParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeArtifactUpsertResponse,
+    },
     OfficeDelete => "office/delete" {
         params: v2::OfficeDeleteParams,
         serialization: global("crewon-domain"),

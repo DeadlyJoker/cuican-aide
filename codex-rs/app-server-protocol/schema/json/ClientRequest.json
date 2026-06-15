@@ -1931,6 +1931,22 @@
       ],
       "type": "string"
     },
+    "OfficeArtifactUpsertParams": {
+      "properties": {
+        "artifact": true,
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "message": true
+      },
+      "required": [
+        "artifact",
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
     "OfficeDeleteParams": {
       "properties": {
         "cwd": {
@@ -6036,6 +6052,30 @@
         "params"
       ],
       "title": "Office/approval/decideRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/artifact/upsert"
+          ],
+          "title": "Office/artifact/upsertRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeArtifactUpsertParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/artifact/upsertRequest",
       "type": "object"
     },
     {

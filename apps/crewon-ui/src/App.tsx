@@ -7767,37 +7767,34 @@ export function App() {
                 ? `${artifact.meta} · 已保存 ${artifactPath}`
                 : `${artifact.meta} · saved ${artifactPath}`,
           };
-          const nextActivity = panel.workspace.activity
-            ? {
-                ...panel.workspace.activity,
-                artifacts: [
-                  savedArtifact,
-                  ...panel.workspace.activity.artifacts.filter(
-                    (item) => item.title !== artifact.title,
-                  ),
-                ],
-              }
-            : panel.workspace.activity;
+          const systemMessage: OfficeMessage = {
+            author: locale === "zh" ? "系统" : "System",
+            glyph: "⌗",
+            accent: artifact.accent,
+            time: locale === "zh" ? "现在" : "now",
+            kind: "system",
+            text:
+              locale === "zh"
+                ? `已创建办公室产物：${artifact.title}，保存到 ${artifactPath}`
+                : `Created office artifact: ${artifact.title}, saved to ${artifactPath}`,
+          };
           const nextWorkspace: OfficeWorkspace = {
             ...panel.workspace,
-            activity: nextActivity,
-            messages: [
-              ...panel.workspace.messages,
-              {
-                author: locale === "zh" ? "系统" : "System",
-                glyph: "⌗",
-                accent: artifact.accent,
-                time: locale === "zh" ? "现在" : "now",
-                kind: "system",
-                text:
-                  locale === "zh"
-                    ? `已创建办公室产物：${artifact.title}，保存到 ${artifactPath}`
-                    : `Created office artifact: ${artifact.title}, saved to ${artifactPath}`,
-              },
-            ],
+            messages: [...panel.workspace.messages, systemMessage],
           };
           const threadId = await ensureOfficeThread(panel, nextWorkspace);
           if (threadId) {
+            const savedConfig = await clientRef.current?.upsertOfficeArtifactConfig(
+              root,
+              officeConfigForThread(
+                panel.title,
+                panel.subtitle,
+                panel.workspace,
+                threadId,
+              ),
+              savedArtifact,
+              systemMessage,
+            );
             const artifactInput = [
               locale === "zh"
                 ? `办公室「${panel.title}」创建产物：${artifact.title}`
@@ -7822,13 +7819,12 @@ export function App() {
                 ),
               );
             }
-            await persistOfficeWorkspace(panel, nextWorkspace, threadId);
             setLibraryPanel((currentPanel) =>
               currentPanel?.workspace
                 ? {
                     ...currentPanel,
                     workspace: {
-                      ...nextWorkspace,
+                      ...(savedConfig?.config.workspace ?? nextWorkspace),
                       threadId,
                       backendStatus: "connected",
                     },

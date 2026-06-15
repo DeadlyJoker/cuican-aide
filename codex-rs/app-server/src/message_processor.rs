@@ -1289,6 +1289,11 @@ impl MessageProcessor {
                 .office_approval_decide(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::OfficeArtifactUpsert { params, .. } => self
+                .crewon_domain_processor
+                .office_artifact_upsert(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::OfficeDelete { params, .. } => self
                 .crewon_domain_processor
                 .office_delete(params)

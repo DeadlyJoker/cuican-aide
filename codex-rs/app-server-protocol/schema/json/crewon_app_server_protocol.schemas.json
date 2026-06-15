@@ -1364,6 +1364,30 @@
             },
             "method": {
               "enum": [
+                "office/artifact/upsert"
+              ],
+              "title": "Office/artifact/upsertRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeArtifactUpsertParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/artifact/upsertRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "office/delete"
               ],
               "title": "Office/deleteRequestMethod",
@@ -13374,6 +13398,39 @@
           "denied"
         ],
         "type": "string"
+      },
+      "OfficeArtifactUpsertParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "artifact": true,
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "message": true
+        },
+        "required": [
+          "artifact",
+          "config",
+          "cwd"
+        ],
+        "title": "OfficeArtifactUpsertParams",
+        "type": "object"
+      },
+      "OfficeArtifactUpsertResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "filePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "filePath"
+        ],
+        "title": "OfficeArtifactUpsertResponse",
+        "type": "object"
       },
       "OfficeDeleteParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",

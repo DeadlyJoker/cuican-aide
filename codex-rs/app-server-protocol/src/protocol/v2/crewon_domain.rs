@@ -217,6 +217,25 @@ pub struct OfficeApprovalDecideResponse {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct OfficeArtifactUpsertParams {
+    pub cwd: String,
+    pub config: JsonValue,
+    pub artifact: JsonValue,
+    #[ts(optional = nullable)]
+    pub message: Option<JsonValue>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct OfficeArtifactUpsertResponse {
+    pub file_path: String,
+    pub config: JsonValue,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct OfficeDeleteParams {
     pub cwd: String,
     pub file_path: String,

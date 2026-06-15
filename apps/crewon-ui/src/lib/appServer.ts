@@ -88,6 +88,7 @@ import type { WindowsSandboxSetupMode } from "@crewon-protocol/v2/WindowsSandbox
 import type { WindowsSandboxSetupStartResponse } from "@crewon-protocol/v2/WindowsSandboxSetupStartResponse";
 import type {
   AgentConfig,
+  ArtifactItem,
   AutomationConfig,
   OfficeConfig,
   OfficeMember,
@@ -201,6 +202,11 @@ export type OfficeMemberAddResponse = {
 };
 
 export type OfficeApprovalDecideResponse = {
+  filePath: string;
+  config: OfficeConfig;
+};
+
+export type OfficeArtifactUpsertResponse = {
   filePath: string;
   config: OfficeConfig;
 };
@@ -933,6 +939,20 @@ export class AppServerClient {
       config,
       approvalId,
       decision,
+      message: message ?? null,
+    });
+  }
+
+  async upsertOfficeArtifactConfig(
+    cwd: string,
+    config: OfficeConfig,
+    artifact: ArtifactItem,
+    message?: OfficeMessage | null,
+  ): Promise<OfficeArtifactUpsertResponse> {
+    return this.request<OfficeArtifactUpsertResponse>("office/artifact/upsert", {
+      cwd,
+      config,
+      artifact,
       message: message ?? null,
     });
   }

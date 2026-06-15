@@ -289,6 +289,8 @@ export type { NonSteerableTurnKind } from "./NonSteerableTurnKind";
 export type { OfficeApprovalDecideParams } from "./OfficeApprovalDecideParams";
 export type { OfficeApprovalDecideResponse } from "./OfficeApprovalDecideResponse";
 export type { OfficeApprovalDecision } from "./OfficeApprovalDecision";
+export type { OfficeArtifactUpsertParams } from "./OfficeArtifactUpsertParams";
+export type { OfficeArtifactUpsertResponse } from "./OfficeArtifactUpsertResponse";
 export type { OfficeDeleteParams } from "./OfficeDeleteParams";
 export type { OfficeDeleteResponse } from "./OfficeDeleteResponse";
 export type { OfficeListParams } from "./OfficeListParams";

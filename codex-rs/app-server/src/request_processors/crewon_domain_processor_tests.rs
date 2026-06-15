@@ -9,6 +9,7 @@ use crewon_app_server_protocol::AutomationRunUpdateParams;
 use crewon_app_server_protocol::AutomationRunsListParams;
 use crewon_app_server_protocol::OfficeApprovalDecideParams;
 use crewon_app_server_protocol::OfficeApprovalDecision;
+use crewon_app_server_protocol::OfficeArtifactUpsertParams;
 use crewon_app_server_protocol::OfficeMemberAddParams;
 use crewon_app_server_protocol::OfficeMessageSendParams;
 use crewon_app_server_protocol::OfficeReadParams;
@@ -614,6 +615,93 @@ async fn office_approval_decide_rejects_missing_approval_id() {
 
     assert_eq!(error.code, INVALID_PARAMS_ERROR_CODE);
     assert_eq!(error.message, "approvalId was not found".to_string());
+}
+
+#[tokio::test]
+async fn office_artifact_upsert_replaces_artifact_appends_message_and_saves_config() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let config = json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "messages": [],
+            "activity": {
+                "artifacts": [
+                    {
+                        "title": "Demo Plan",
+                        "kind": "markdown",
+                        "glyph": "#",
+                        "accent": "blue",
+                        "meta": "old"
+                    },
+                    {
+                        "title": "Release Notes",
+                        "kind": "markdown",
+                        "glyph": "#",
+                        "accent": "green",
+                        "meta": "kept"
+                    }
+                ]
+            }
+        }
+    });
+    let artifact = json!({
+        "title": "Demo Plan",
+        "kind": "markdown",
+        "glyph": "#",
+        "accent": "blue",
+        "meta": "saved .crewon/offices/artifacts/demo-plan.md"
+    });
+    let message = json!({
+        "author": "System",
+        "kind": "system",
+        "text": "Created office artifact: Demo Plan"
+    });
+
+    let upsert_response = processor
+        .office_artifact_upsert(OfficeArtifactUpsertParams {
+            cwd: cwd.clone(),
+            config,
+            artifact: artifact.clone(),
+            message: Some(message.clone()),
+        })
+        .await
+        .expect("upsert office artifact");
+    let read_response = processor
+        .office_read(OfficeReadParams {
+            cwd,
+            thread_id: Some("office-thread-123456789".to_string()),
+            title: None,
+        })
+        .await
+        .expect("read office config");
+
+    let expected_config = json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "messages": [message],
+            "activity": {
+                "artifacts": [
+                    artifact,
+                    {
+                        "title": "Release Notes",
+                        "kind": "markdown",
+                        "glyph": "#",
+                        "accent": "green",
+                        "meta": "kept"
+                    }
+                ]
+            }
+        }
+    });
+    assert_eq!(upsert_response.config, expected_config);
+    assert_eq!(
+        read_response.record.expect("office record").config,
+        expected_config
+    );
 }
 
 #[tokio::test]
