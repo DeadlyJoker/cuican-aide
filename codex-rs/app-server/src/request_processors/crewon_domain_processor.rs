@@ -242,7 +242,13 @@ impl CrewonDomainRequestProcessor {
         &self,
         params: OfficeMessageSendParams,
     ) -> Result<OfficeMessageSendResponse, JSONRPCErrorError> {
-        let config = apply_office_message_update(params.config, params.message, params.workspace)?;
+        let config = apply_office_message_update(
+            params.config,
+            params.message,
+            params.text.as_deref(),
+            params.locale.as_deref(),
+            params.workspace,
+        )?;
         save_record(DomainKind::Office, &params.cwd, config.clone())
             .await
             .map(|file_path| OfficeMessageSendResponse { file_path, config })
@@ -815,6 +821,8 @@ async fn list_recruitable_agents(
 fn apply_office_message_update(
     mut config: JsonValue,
     message: JsonValue,
+    text: Option<&str>,
+    locale: Option<&str>,
     workspace_update: Option<JsonValue>,
 ) -> Result<JsonValue, JSONRPCErrorError> {
     if !DomainKind::Office.config_matches(&config) {
@@ -841,6 +849,11 @@ fn apply_office_message_update(
     else {
         return Err(invalid_params("office config is missing workspace"));
     };
+    if let Some(text) = text {
+        apply_office_text_message(workspace, message, text, locale)?;
+        return Ok(config);
+    }
+
     let messages = workspace
         .entry("messages")
         .or_insert_with(|| JsonValue::Array(Vec::new()));
@@ -849,6 +862,126 @@ fn apply_office_message_update(
     };
     messages.push(message);
     Ok(config)
+}
+
+fn apply_office_text_message(
+    workspace: &mut serde_json::Map<String, JsonValue>,
+    message: JsonValue,
+    text: &str,
+    locale: Option<&str>,
+) -> Result<(), JSONRPCErrorError> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(invalid_params("text must not be empty"));
+    }
+    let is_zh = locale != Some("en");
+    let task_title = text
+        .split_whitespace()
+        .filter(|part| !part.starts_with('@'))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let task_title = if task_title.trim().is_empty() {
+        if is_zh { "新任务" } else { "New task" }
+    } else {
+        task_title.trim()
+    };
+    let task_title = task_title.chars().take(24).collect::<String>();
+    let now = Utc::now().format("%H:%M").to_string();
+    let member = find_office_reply_member(workspace, text)?;
+    let member_name = member
+        .get("name")
+        .and_then(JsonValue::as_str)
+        .unwrap_or(if is_zh { "智能体" } else { "Agent" })
+        .to_string();
+    let member_glyph = member
+        .get("glyph")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("A")
+        .to_string();
+    let member_accent = member
+        .get("accent")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("indigo")
+        .to_string();
+    let will_dispatch = text.contains('@') || text.chars().count() > 6;
+    let reply_text = if will_dispatch {
+        if is_zh {
+            format!("收到，我来跟进「{task_title}」，已加到任务看板，完成后在群里同步。")
+        } else {
+            format!(
+                "Got it. I'll take \"{task_title}\", added it to the task board and will report back here."
+            )
+        }
+    } else if is_zh {
+        "明白，我先评估一下，有进展同步到群聊。".to_string()
+    } else {
+        "Understood. I'll assess it and post progress to the chat.".to_string()
+    };
+
+    let messages = workspace
+        .entry("messages")
+        .or_insert_with(|| JsonValue::Array(Vec::new()));
+    let Some(messages) = messages.as_array_mut() else {
+        return Err(invalid_params("workspace.messages must be an array"));
+    };
+    messages.push(message);
+    messages.push(serde_json::json!({
+        "author": member_name,
+        "glyph": member_glyph,
+        "accent": member_accent,
+        "time": now,
+        "text": reply_text,
+        "kind": if will_dispatch { "task" } else { "message" }
+    }));
+
+    if will_dispatch {
+        let tasks = workspace
+            .entry("tasks")
+            .or_insert_with(|| JsonValue::Array(Vec::new()));
+        let Some(tasks) = tasks.as_array_mut() else {
+            return Err(invalid_params("workspace.tasks must be an array"));
+        };
+        tasks.insert(
+            0,
+            serde_json::json!({
+                "title": task_title,
+                "owner": member_name,
+                "status": "doing"
+            }),
+        );
+    }
+
+    Ok(())
+}
+
+fn find_office_reply_member<'a>(
+    workspace: &'a serde_json::Map<String, JsonValue>,
+    text: &str,
+) -> Result<&'a JsonValue, JSONRPCErrorError> {
+    let members = workspace
+        .get("members")
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| invalid_params("workspace.members must be an array"))?;
+    let mention = text
+        .split_whitespace()
+        .find_map(|part| part.strip_prefix('@'))
+        .map(|part| part.trim_matches(|ch: char| ch.is_ascii_punctuation()));
+    if let Some(mention) = mention
+        && let Some(member) = members.iter().find(|member| {
+            member.get("glyph").and_then(JsonValue::as_str) != Some("@")
+                && member
+                    .get("name")
+                    .and_then(JsonValue::as_str)
+                    .is_some_and(|name| name == mention || mention.starts_with(name))
+        })
+    {
+        return Ok(member);
+    }
+    members
+        .iter()
+        .find(|member| member.get("glyph").and_then(JsonValue::as_str) != Some("@"))
+        .or_else(|| members.first())
+        .ok_or_else(|| invalid_params("workspace.members must not be empty"))
 }
 
 fn append_office_member(

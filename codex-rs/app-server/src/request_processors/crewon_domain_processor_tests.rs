@@ -349,13 +349,25 @@ async fn office_message_send_appends_message_and_saves_config() {
         "title": "Platform Office",
         "workspace": {
             "threadId": "office-thread-123456789",
+            "members": [
+                {
+                    "name": "Reviewer",
+                    "glyph": "R",
+                    "accent": "blue"
+                }
+            ],
             "messages": [
                 { "author": "System", "text": "Ready" }
-            ]
+            ],
+            "tasks": []
         }
     });
     let message = json!({
         "author": "User",
+        "glyph": "@",
+        "accent": "slate",
+        "time": "09:10",
+        "kind": "message",
         "text": "Ship the demo"
     });
 
@@ -364,6 +376,8 @@ async fn office_message_send_appends_message_and_saves_config() {
             cwd: cwd.clone(),
             config,
             message: message.clone(),
+            text: Some("Ship the demo".to_string()),
+            locale: Some("en".to_string()),
             workspace: None,
         })
         .await
@@ -381,9 +395,31 @@ async fn office_message_send_appends_message_and_saves_config() {
         "title": "Platform Office",
         "workspace": {
             "threadId": "office-thread-123456789",
+            "members": [
+                {
+                    "name": "Reviewer",
+                    "glyph": "R",
+                    "accent": "blue"
+                }
+            ],
             "messages": [
                 { "author": "System", "text": "Ready" },
-                message
+                message,
+                {
+                    "author": "Reviewer",
+                    "glyph": "R",
+                    "accent": "blue",
+                    "time": send_response.config["workspace"]["messages"][2]["time"],
+                    "text": "Got it. I'll take \"Ship the demo\", added it to the task board and will report back here.",
+                    "kind": "task"
+                }
+            ],
+            "tasks": [
+                {
+                    "title": "Ship the demo",
+                    "owner": "Reviewer",
+                    "status": "doing"
+                }
             ]
         }
     });
@@ -432,6 +468,8 @@ async fn office_message_send_saves_workspace_update() {
             cwd: cwd.clone(),
             config,
             message,
+            text: None,
+            locale: None,
             workspace: Some(workspace.clone()),
         })
         .await

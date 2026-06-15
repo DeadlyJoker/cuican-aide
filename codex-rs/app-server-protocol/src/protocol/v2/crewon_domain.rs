@@ -157,6 +157,10 @@ pub struct OfficeMessageSendParams {
     pub config: JsonValue,
     pub message: JsonValue,
     #[ts(optional = nullable)]
+    pub text: Option<String>,
+    #[ts(optional = nullable)]
+    pub locale: Option<String>,
+    #[ts(optional = nullable)]
     pub workspace: Option<JsonValue>,
 }
 

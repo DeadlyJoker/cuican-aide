@@ -903,12 +903,16 @@ export class AppServerClient {
     cwd: string,
     config: OfficeConfig,
     message: OfficeMessage,
+    text?: string | null,
+    locale?: "zh" | "en" | null,
     workspace?: OfficeWorkspace | null,
   ): Promise<OfficeMessageSendResponse> {
     return this.request<OfficeMessageSendResponse>("office/message/send", {
       cwd,
       config,
       message,
+      text: text ?? null,
+      locale: locale ?? null,
       workspace: workspace ?? null,
     });
   }

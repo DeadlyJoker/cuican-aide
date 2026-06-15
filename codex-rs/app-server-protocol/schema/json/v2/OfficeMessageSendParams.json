@@ -5,7 +5,19 @@
     "cwd": {
       "type": "string"
     },
+    "locale": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "message": true,
+    "text": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "workspace": true
   },
   "required": [
