@@ -499,14 +499,14 @@
       "description": "Authentication mode for OpenAI-backed providers.",
       "oneOf": [
         {
-          "description": "OpenAI API key provided by the caller and stored by Codex.",
+          "description": "OpenAI API key provided by the caller and stored by Crewon.",
           "enum": [
             "apikey"
           ],
           "type": "string"
         },
         {
-          "description": "ChatGPT OAuth managed by Codex (tokens persisted and refreshed by Codex).",
+          "description": "ChatGPT OAuth managed by Crewon (tokens persisted and refreshed by Crewon).",
           "enum": [
             "chatgpt"
           ],
@@ -520,21 +520,21 @@
           "type": "string"
         },
         {
-          "description": "Programmatic Codex auth backed by a registered Agent Identity.",
+          "description": "Programmatic Crewon auth backed by a registered Agent Identity.",
           "enum": [
             "agentIdentity"
           ],
           "type": "string"
         },
         {
-          "description": "Programmatic Codex auth backed by a personal access token.",
+          "description": "Programmatic Crewon auth backed by a personal access token.",
           "enum": [
             "personalAccessToken"
           ],
           "type": "string"
         },
         {
-          "description": "Amazon Bedrock bearer token managed by Codex.",
+          "description": "Amazon Bedrock bearer token managed by Crewon.",
           "enum": [
             "bedrockApiKey"
           ],
@@ -569,7 +569,7 @@
       "type": "object"
     },
     "CodexErrorInfo": {
-      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
+      "description": "This translation layer makes sure that we expose Crewon error codes in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
       "oneOf": [
         {
           "enum": [
@@ -753,7 +753,7 @@
       "type": "string"
     },
     "CollaborationMode": {
-      "description": "Collaboration mode for a Codex session.",
+      "description": "Collaboration mode for a Crewon session.",
       "properties": {
         "mode": {
           "$ref": "#/definitions/ModeKind"
@@ -1435,7 +1435,7 @@
       "type": "string"
     },
     "FuzzyFileSearchResult": {
-      "description": "Superset of [`codex_file_search::FileMatch`]",
+      "description": "Superset of [`crewon_file_search::FileMatch`]",
       "properties": {
         "file_name": {
           "type": "string"
@@ -2379,7 +2379,7 @@
       ]
     },
     "ModeKind": {
-      "description": "Initial collaboration mode to use when the TUI starts.",
+      "description": "Initial collaboration mode to use when a client starts.",
       "enum": [
         "plan",
         "default"
@@ -3091,11 +3091,17 @@
       "oneOf": [
         {
           "enum": [
-            "cli",
             "vscode",
             "exec",
             "appServer",
             "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Legacy source value for threads created before terminal CLI removal.",
+          "enum": [
+            "cli"
           ],
           "type": "string"
         },
@@ -3370,8 +3376,8 @@
             "null"
           ]
         },
-        "cliVersion": {
-          "description": "Version of the CLI that created the thread.",
+        "clientVersion": {
+          "description": "Version of the client/runtime that created the thread.",
           "type": "string"
         },
         "createdAt": {
@@ -3451,7 +3457,7 @@
               "$ref": "#/definitions/SessionSource"
             }
           ],
-          "description": "Origin of the thread (CLI, VSCode, codex exec, codex app-server, etc.)."
+          "description": "Origin of the thread (legacy CLI, VSCode, Crewon app-server, etc.)."
         },
         "status": {
           "allOf": [
@@ -3486,7 +3492,7 @@
         }
       },
       "required": [
-        "cliVersion",
+        "clientVersion",
         "createdAt",
         "cwd",
         "ephemeral",

@@ -49,6 +49,7 @@ import { TitleBar } from "./components/TitleBar";
 import { Transcript, type WorkMode } from "./components/Transcript";
 import {
   AppServerClient,
+  AppServerRpcError,
   type BackgroundTerminal,
   type AppServerNotification,
   type AppServerRequest,
@@ -6191,6 +6192,45 @@ export function App() {
     );
   }
 
+  async function persistOfficeMessage(
+    panel: Pick<LibraryPanel, "title" | "subtitle">,
+    workspaceBeforeMessage: OfficeWorkspace,
+    message: OfficeMessage,
+    threadId: string,
+  ): Promise<OfficeConfig | null> {
+    const officeCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (!officeCwd || !client) {
+      return null;
+    }
+    try {
+      const response = await client.sendOfficeMessageConfig(
+        officeCwd,
+        officeConfigForThread(
+          panel.title,
+          panel.subtitle,
+          workspaceBeforeMessage,
+          threadId,
+        ),
+        message,
+      );
+      return response.config;
+    } catch (error) {
+      if (!(error instanceof AppServerRpcError)) {
+        throw error;
+      }
+      await persistOfficeWorkspace(
+        panel,
+        {
+          ...workspaceBeforeMessage,
+          messages: [...workspaceBeforeMessage.messages, message],
+        },
+        threadId,
+      );
+      return null;
+    }
+  }
+
   async function writeOfficeConfigFile(config: OfficeConfig): Promise<string | null> {
     const officeCwd = await resolveBackendCwd();
     const client = clientRef.current;
@@ -6819,6 +6859,10 @@ export function App() {
       return;
     }
     const nextWorkspace = appendOfficeUserMessage(panel.workspace, text, locale);
+    const message = nextWorkspace.messages[nextWorkspace.messages.length - 1];
+    if (!message) {
+      return;
+    }
 
     appendOfficeMessage(
       text,
@@ -6882,13 +6926,18 @@ export function App() {
           }));
         }
       }
-      await persistOfficeWorkspace(panel, nextWorkspace, threadId);
+      const savedConfig = await persistOfficeMessage(
+        panel,
+        panel.workspace,
+        message,
+        threadId,
+      );
       setLibraryPanel((currentPanel) =>
         currentPanel?.workspace
           ? {
               ...currentPanel,
               workspace: {
-                ...currentPanel.workspace,
+                ...(savedConfig?.workspace ?? currentPanel.workspace),
                 threadId,
                 backendStatus: "connected",
               },

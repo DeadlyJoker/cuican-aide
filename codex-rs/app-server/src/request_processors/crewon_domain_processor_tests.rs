@@ -2,6 +2,8 @@ use crewon_app_server_protocol::AgentDeleteParams;
 use crewon_app_server_protocol::AgentListParams;
 use crewon_app_server_protocol::AgentSaveParams;
 use crewon_app_server_protocol::AutomationListParams;
+use crewon_app_server_protocol::OfficeMessageSendParams;
+use crewon_app_server_protocol::OfficeReadParams;
 use crewon_app_server_protocol::OfficeSaveParams;
 use crewon_app_server_protocol::ToolConfigKind;
 use crewon_app_server_protocol::ToolDeleteParams;
@@ -139,6 +141,96 @@ async fn save_rejects_config_without_required_fields() {
     assert_eq!(
         error.message,
         "office config is missing required fields".to_string()
+    );
+}
+
+#[tokio::test]
+async fn reads_office_config_by_thread_id() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let config = json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "messages": []
+        }
+    });
+    processor
+        .office_save(OfficeSaveParams {
+            cwd: cwd.clone(),
+            config: config.clone(),
+        })
+        .await
+        .expect("save office config");
+
+    let read_response = processor
+        .office_read(OfficeReadParams {
+            cwd,
+            thread_id: Some("office-thread-123456789".to_string()),
+            title: None,
+        })
+        .await
+        .expect("read office config");
+
+    assert_eq!(read_response.record.expect("office record").config, config);
+}
+
+#[tokio::test]
+async fn office_message_send_appends_message_and_saves_config() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let config = json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "messages": [
+                { "author": "System", "text": "Ready" }
+            ]
+        }
+    });
+    let message = json!({
+        "author": "User",
+        "text": "Ship the demo"
+    });
+
+    let send_response = processor
+        .office_message_send(OfficeMessageSendParams {
+            cwd: cwd.clone(),
+            config,
+            message: message.clone(),
+        })
+        .await
+        .expect("send office message");
+    let read_response = processor
+        .office_read(OfficeReadParams {
+            cwd,
+            thread_id: Some("office-thread-123456789".to_string()),
+            title: None,
+        })
+        .await
+        .expect("read office config");
+
+    let expected_config = json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "messages": [
+                { "author": "System", "text": "Ready" },
+                message
+            ]
+        }
+    });
+    assert!(
+        send_response
+            .file_path
+            .ends_with(".crewon/offices/platform-office-office-t.json")
+    );
+    assert_eq!(send_response.config, expected_config);
+    assert_eq!(
+        read_response.record.expect("office record").config,
+        expected_config
     );
 }
 

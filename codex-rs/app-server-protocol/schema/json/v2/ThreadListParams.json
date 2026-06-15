@@ -29,19 +29,29 @@
       "type": "string"
     },
     "ThreadSourceKind": {
-      "enum": [
-        "cli",
-        "vscode",
-        "exec",
-        "appServer",
-        "subAgent",
-        "subAgentReview",
-        "subAgentCompact",
-        "subAgentThreadSpawn",
-        "subAgentOther",
-        "unknown"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "enum": [
+            "vscode",
+            "exec",
+            "appServer",
+            "subAgent",
+            "subAgentReview",
+            "subAgentCompact",
+            "subAgentThreadSpawn",
+            "subAgentOther",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Legacy source value for threads created before terminal CLI removal.",
+          "enum": [
+            "cli"
+          ],
+          "type": "string"
+        }
+      ]
     }
   },
   "properties": {
@@ -119,7 +129,7 @@
       "description": "Optional sort key; defaults to created_at."
     },
     "sourceKinds": {
-      "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to interactive sources.",
+      "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to client sessions.",
       "items": {
         "$ref": "#/definitions/ThreadSourceKind"
       },

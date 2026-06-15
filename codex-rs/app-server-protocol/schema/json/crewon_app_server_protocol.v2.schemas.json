@@ -296,6 +296,85 @@
       },
       "type": "object"
     },
+    "AgentDeleteParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "title": "AgentDeleteParams",
+      "type": "object"
+    },
+    "AgentDeleteResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "AgentDeleteResponse",
+      "type": "object"
+    },
+    "AgentListParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "AgentListParams",
+      "type": "object"
+    },
+    "AgentListResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "data": {
+          "items": {
+            "$ref": "#/definitions/CrewonDomainConfigRecord"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AgentListResponse",
+      "type": "object"
+    },
     "AgentMessageDeltaNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -347,6 +426,34 @@
     },
     "AgentPath": {
       "type": "string"
+    },
+    "AgentSaveParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "title": "AgentSaveParams",
+      "type": "object"
+    },
+    "AgentSaveResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePath"
+      ],
+      "title": "AgentSaveResponse",
+      "type": "object"
     },
     "AnalyticsConfig": {
       "additionalProperties": true,
@@ -969,14 +1076,14 @@
       "description": "Authentication mode for OpenAI-backed providers.",
       "oneOf": [
         {
-          "description": "OpenAI API key provided by the caller and stored by Codex.",
+          "description": "OpenAI API key provided by the caller and stored by Crewon.",
           "enum": [
             "apikey"
           ],
           "type": "string"
         },
         {
-          "description": "ChatGPT OAuth managed by Codex (tokens persisted and refreshed by Codex).",
+          "description": "ChatGPT OAuth managed by Crewon (tokens persisted and refreshed by Crewon).",
           "enum": [
             "chatgpt"
           ],
@@ -990,21 +1097,21 @@
           "type": "string"
         },
         {
-          "description": "Programmatic Codex auth backed by a registered Agent Identity.",
+          "description": "Programmatic Crewon auth backed by a registered Agent Identity.",
           "enum": [
             "agentIdentity"
           ],
           "type": "string"
         },
         {
-          "description": "Programmatic Codex auth backed by a personal access token.",
+          "description": "Programmatic Crewon auth backed by a personal access token.",
           "enum": [
             "personalAccessToken"
           ],
           "type": "string"
         },
         {
-          "description": "Amazon Bedrock bearer token managed by Codex.",
+          "description": "Amazon Bedrock bearer token managed by Crewon.",
           "enum": [
             "bedrockApiKey"
           ],
@@ -1037,6 +1144,113 @@
         "agent"
       ],
       "type": "string"
+    },
+    "AutomationDeleteParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "title": "AutomationDeleteParams",
+      "type": "object"
+    },
+    "AutomationDeleteResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "AutomationDeleteResponse",
+      "type": "object"
+    },
+    "AutomationListParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "AutomationListParams",
+      "type": "object"
+    },
+    "AutomationListResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "data": {
+          "items": {
+            "$ref": "#/definitions/CrewonDomainConfigRecord"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "AutomationListResponse",
+      "type": "object"
+    },
+    "AutomationSaveParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "title": "AutomationSaveParams",
+      "type": "object"
+    },
+    "AutomationSaveResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePath"
+      ],
+      "title": "AutomationSaveResponse",
+      "type": "object"
     },
     "ByteRange": {
       "properties": {
@@ -2033,6 +2247,342 @@
             "params"
           ],
           "title": "App/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agent/list"
+              ],
+              "title": "Agent/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AgentListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Agent/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agent/save"
+              ],
+              "title": "Agent/saveRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AgentSaveParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Agent/saveRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agent/delete"
+              ],
+              "title": "Agent/deleteRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AgentDeleteParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Agent/deleteRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/list"
+              ],
+              "title": "Office/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/OfficeListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/save"
+              ],
+              "title": "Office/saveRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/OfficeSaveParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/saveRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/read"
+              ],
+              "title": "Office/readRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/OfficeReadParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/message/send"
+              ],
+              "title": "Office/message/sendRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/OfficeMessageSendParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/message/sendRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/delete"
+              ],
+              "title": "Office/deleteRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/OfficeDeleteParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/deleteRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "automation/list"
+              ],
+              "title": "Automation/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AutomationListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Automation/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "automation/save"
+              ],
+              "title": "Automation/saveRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AutomationSaveParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Automation/saveRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "automation/delete"
+              ],
+              "title": "Automation/deleteRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/AutomationDeleteParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Automation/deleteRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "tool/list"
+              ],
+              "title": "Tool/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ToolListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Tool/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "tool/save"
+              ],
+              "title": "Tool/saveRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ToolSaveParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Tool/saveRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "tool/delete"
+              ],
+              "title": "Tool/deleteRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ToolDeleteParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Tool/deleteRequest",
           "type": "object"
         },
         {
@@ -3165,7 +3715,7 @@
       "title": "ClientRequest"
     },
     "CodexErrorInfo": {
-      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
+      "description": "This translation layer makes sure that we expose Crewon error codes in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
       "oneOf": [
         {
           "enum": [
@@ -3349,7 +3899,7 @@
       "type": "string"
     },
     "CollaborationMode": {
-      "description": "Collaboration mode for a Codex session.",
+      "description": "Collaboration mode for a Crewon session.",
       "properties": {
         "mode": {
           "$ref": "#/definitions/ModeKind"
@@ -4241,7 +4791,7 @@
           "type": "object"
         },
         {
-          "description": "User config layer from $CODEX_HOME/config.toml. This layer is special in that it is expected to be: - writable by the user - generally outside the workspace directory",
+          "description": "User config layer from the Crewon home config.toml. This layer is special in that it is expected to be: - writable by the user - generally outside the workspace directory",
           "properties": {
             "file": {
               "allOf": [
@@ -4831,6 +5381,44 @@
       ],
       "type": "object"
     },
+    "CrewonDomainConfigRecord": {
+      "properties": {
+        "config": true,
+        "filePath": {
+          "type": "string"
+        },
+        "savedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "filePath",
+        "savedAt"
+      ],
+      "type": "object"
+    },
+    "CrewonToolConfigRecord": {
+      "properties": {
+        "config": true,
+        "filePath": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/ToolConfigKind"
+        },
+        "savedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "filePath",
+        "kind",
+        "savedAt"
+      ],
+      "type": "object"
+    },
     "DeprecationNoticeNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -4987,7 +5575,7 @@
           "type": "boolean"
         },
         "name": {
-          "description": "Stable key used in config.toml and CLI flag toggles.",
+          "description": "Stable key used in config.toml and feature enablement requests.",
           "type": "string"
         },
         "stage": {
@@ -6089,7 +6677,7 @@
       "type": "object"
     },
     "FuzzyFileSearchResult": {
-      "description": "Superset of [`codex_file_search::FileMatch`]",
+      "description": "Superset of [`crewon_file_search::FileMatch`]",
       "properties": {
         "file_name": {
           "type": "string"
@@ -7383,7 +7971,7 @@
           "type": "object"
         },
         {
-          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.",
+          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Crewon-managed ChatGPT auth tokens have.",
           "properties": {
             "accessToken": {
               "description": "Access token (JWT) supplied by the client. This token is used for backend API requests and email extraction.",
@@ -7394,7 +7982,7 @@
               "type": "string"
             },
             "chatgptPlanType": {
-              "description": "Optional plan type supplied by the client.\n\nWhen `null`, Codex attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
+              "description": "Optional plan type supplied by the client.\n\nWhen `null`, Crewon attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
               "type": [
                 "string",
                 "null"
@@ -8261,7 +8849,7 @@
       "type": "object"
     },
     "ModeKind": {
-      "description": "Initial collaboration mode to use when the TUI starts.",
+      "description": "Initial collaboration mode to use when a client starts.",
       "enum": [
         "plan",
         "default"
@@ -8721,6 +9309,187 @@
       ],
       "type": "string"
     },
+    "OfficeDeleteParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "title": "OfficeDeleteParams",
+      "type": "object"
+    },
+    "OfficeDeleteResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "OfficeDeleteResponse",
+      "type": "object"
+    },
+    "OfficeListParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "OfficeListParams",
+      "type": "object"
+    },
+    "OfficeListResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "data": {
+          "items": {
+            "$ref": "#/definitions/CrewonDomainConfigRecord"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "OfficeListResponse",
+      "type": "object"
+    },
+    "OfficeMessageSendParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "message": true
+      },
+      "required": [
+        "config",
+        "cwd",
+        "message"
+      ],
+      "title": "OfficeMessageSendParams",
+      "type": "object"
+    },
+    "OfficeMessageSendResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "filePath"
+      ],
+      "title": "OfficeMessageSendResponse",
+      "type": "object"
+    },
+    "OfficeReadParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "OfficeReadParams",
+      "type": "object"
+    },
+    "OfficeReadResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "record": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CrewonDomainConfigRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "title": "OfficeReadResponse",
+      "type": "object"
+    },
+    "OfficeSaveParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "title": "OfficeSaveParams",
+      "type": "object"
+    },
+    "OfficeSaveResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePath"
+      ],
+      "title": "OfficeSaveResponse",
+      "type": "object"
+    },
     "OverriddenMetadata": {
       "properties": {
         "effectiveValue": true,
@@ -8944,7 +9713,7 @@
           "type": "string"
         },
         {
-          "description": "Plugin-service currently sends `\"ENABLED\"` for available remote plugins. Codex app-server exposes `\"AVAILABLE\"` in its API; the alias keeps decoding compatible with that upstream response.",
+          "description": "Plugin-service currently sends `\"ENABLED\"` for available remote plugins. Crewon app-server exposes `\"AVAILABLE\"` in its API; the alias keeps decoding compatible with that upstream response.",
           "enum": [
             "AVAILABLE"
           ],
@@ -13045,11 +13814,17 @@
       "oneOf": [
         {
           "enum": [
-            "cli",
             "vscode",
             "exec",
             "appServer",
             "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Legacy source value for threads created before terminal CLI removal.",
+          "enum": [
+            "cli"
           ],
           "type": "string"
         },
@@ -13695,8 +14470,8 @@
             "null"
           ]
         },
-        "cliVersion": {
-          "description": "Version of the CLI that created the thread.",
+        "clientVersion": {
+          "description": "Version of the client/runtime that created the thread.",
           "type": "string"
         },
         "createdAt": {
@@ -13776,7 +14551,7 @@
               "$ref": "#/definitions/SessionSource"
             }
           ],
-          "description": "Origin of the thread (CLI, VSCode, codex exec, codex app-server, etc.)."
+          "description": "Origin of the thread (legacy CLI, VSCode, Crewon app-server, etc.)."
         },
         "status": {
           "allOf": [
@@ -13811,7 +14586,7 @@
         }
       },
       "required": [
-        "cliVersion",
+        "clientVersion",
         "createdAt",
         "cwd",
         "ephemeral",
@@ -13837,7 +14612,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
         "event": {
-          "description": "Serialized `codex_protocol::protocol::GuardianAssessmentEvent`."
+          "description": "Serialized `crewon_protocol::protocol::GuardianAssessmentEvent`."
         },
         "threadId": {
           "type": "string"
@@ -15141,7 +15916,7 @@
           "description": "Optional sort key; defaults to created_at."
         },
         "sourceKinds": {
-          "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to interactive sources.",
+          "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to client sessions.",
           "items": {
             "$ref": "#/definitions/ThreadSourceKind"
           },
@@ -16007,19 +16782,29 @@
       "type": "string"
     },
     "ThreadSourceKind": {
-      "enum": [
-        "cli",
-        "vscode",
-        "exec",
-        "appServer",
-        "subAgent",
-        "subAgentReview",
-        "subAgentCompact",
-        "subAgentThreadSpawn",
-        "subAgentOther",
-        "unknown"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "enum": [
+            "vscode",
+            "exec",
+            "appServer",
+            "subAgent",
+            "subAgentReview",
+            "subAgentCompact",
+            "subAgentThreadSpawn",
+            "subAgentOther",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Legacy source value for threads created before terminal CLI removal.",
+          "enum": [
+            "cli"
+          ],
+          "type": "string"
+        }
+      ]
     },
     "ThreadStartParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -16510,6 +17295,130 @@
         "inputSchema",
         "name"
       ],
+      "type": "object"
+    },
+    "ToolConfigKind": {
+      "enum": [
+        "mcp",
+        "skill"
+      ],
+      "type": "string"
+    },
+    "ToolDeleteParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "title": "ToolDeleteParams",
+      "type": "object"
+    },
+    "ToolDeleteResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "ToolDeleteResponse",
+      "type": "object"
+    },
+    "ToolListParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ToolConfigKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "ToolListParams",
+      "type": "object"
+    },
+    "ToolListResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "data": {
+          "items": {
+            "$ref": "#/definitions/CrewonToolConfigRecord"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "ToolListResponse",
+      "type": "object"
+    },
+    "ToolSaveParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "title": "ToolSaveParams",
+      "type": "object"
+    },
+    "ToolSaveResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePath"
+      ],
+      "title": "ToolSaveResponse",
       "type": "object"
     },
     "ToolsV2": {
@@ -17495,6 +18404,6 @@
       "type": "string"
     }
   },
-  "title": "CodexAppServerProtocolV2",
+  "title": "CrewonAppServerProtocolV2",
   "type": "object"
 }

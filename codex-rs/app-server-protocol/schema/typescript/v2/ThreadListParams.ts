@@ -29,7 +29,7 @@ sortDirection?: SortDirection | null,
 modelProviders?: Array<string> | null,
 /**
  * Optional source filter; when set, only sessions from these source kinds
- * are returned. When omitted or empty, defaults to interactive sources.
+ * are returned. When omitted or empty, defaults to client sessions.
  */
 sourceKinds?: Array<ThreadSourceKind> | null,
 /**

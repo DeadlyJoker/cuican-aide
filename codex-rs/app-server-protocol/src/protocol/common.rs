@@ -747,6 +747,16 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::OfficeSaveResponse,
     },
+    OfficeRead => "office/read" {
+        params: v2::OfficeReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeReadResponse,
+    },
+    OfficeMessageSend => "office/message/send" {
+        params: v2::OfficeMessageSendParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMessageSendResponse,
+    },
     OfficeDelete => "office/delete" {
         params: v2::OfficeDeleteParams,
         serialization: global("crewon-domain"),

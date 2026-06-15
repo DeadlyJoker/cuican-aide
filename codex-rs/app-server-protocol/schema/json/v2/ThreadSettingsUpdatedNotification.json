@@ -85,7 +85,7 @@
       ]
     },
     "CollaborationMode": {
-      "description": "Collaboration mode for a Codex session.",
+      "description": "Collaboration mode for a Crewon session.",
       "properties": {
         "mode": {
           "$ref": "#/definitions/ModeKind"
@@ -101,7 +101,7 @@
       "type": "object"
     },
     "ModeKind": {
-      "description": "Initial collaboration mode to use when the TUI starts.",
+      "description": "Initial collaboration mode to use when a client starts.",
       "enum": [
         "plan",
         "default"

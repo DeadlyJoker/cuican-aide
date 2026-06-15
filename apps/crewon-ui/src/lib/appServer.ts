@@ -90,6 +90,7 @@ import type {
   AgentConfig,
   AutomationConfig,
   OfficeConfig,
+  OfficeMessage,
   ToolConfig,
   ToolConfigKind,
 } from "./domainTypes";
@@ -170,6 +171,15 @@ export type DomainConfigSaveResponse = {
 
 export type DomainConfigDeleteResponse = {
   deleted: boolean;
+};
+
+export type OfficeReadResponse = {
+  record: DomainConfigListResponse<OfficeConfig>["data"][number] | null;
+};
+
+export type OfficeMessageSendResponse = {
+  filePath: string;
+  config: OfficeConfig;
 };
 
 export type ToolConfigListResponse = {
@@ -787,6 +797,29 @@ export class AppServerClient {
     config: OfficeConfig,
   ): Promise<DomainConfigSaveResponse> {
     return this.request<DomainConfigSaveResponse>("office/save", { cwd, config });
+  }
+
+  async readOfficeConfig(
+    cwd: string,
+    params: { threadId?: string | null; title?: string | null },
+  ): Promise<OfficeReadResponse> {
+    return this.request<OfficeReadResponse>("office/read", {
+      cwd,
+      threadId: params.threadId ?? null,
+      title: params.title ?? null,
+    });
+  }
+
+  async sendOfficeMessageConfig(
+    cwd: string,
+    config: OfficeConfig,
+    message: OfficeMessage,
+  ): Promise<OfficeMessageSendResponse> {
+    return this.request<OfficeMessageSendResponse>("office/message/send", {
+      cwd,
+      config,
+      message,
+    });
   }
 
   async deleteOfficeConfig(

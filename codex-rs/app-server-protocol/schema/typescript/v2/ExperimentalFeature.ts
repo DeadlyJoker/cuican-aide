@@ -5,7 +5,7 @@ import type { ExperimentalFeatureStage } from "./ExperimentalFeatureStage";
 
 export type ExperimentalFeature = {
 /**
- * Stable key used in config.toml and CLI flag toggles.
+ * Stable key used in config.toml and feature enablement requests.
  */
 name: string,
 /**

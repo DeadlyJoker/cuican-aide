@@ -23,6 +23,10 @@ use crewon_app_server_protocol::OfficeDeleteParams;
 use crewon_app_server_protocol::OfficeDeleteResponse;
 use crewon_app_server_protocol::OfficeListParams;
 use crewon_app_server_protocol::OfficeListResponse;
+use crewon_app_server_protocol::OfficeMessageSendParams;
+use crewon_app_server_protocol::OfficeMessageSendResponse;
+use crewon_app_server_protocol::OfficeReadParams;
+use crewon_app_server_protocol::OfficeReadResponse;
 use crewon_app_server_protocol::OfficeSaveParams;
 use crewon_app_server_protocol::OfficeSaveResponse;
 use crewon_app_server_protocol::ToolConfigKind;
@@ -163,6 +167,29 @@ impl CrewonDomainRequestProcessor {
         save_record(DomainKind::Office, &params.cwd, params.config)
             .await
             .map(|file_path| OfficeSaveResponse { file_path })
+    }
+
+    pub(crate) async fn office_read(
+        &self,
+        params: OfficeReadParams,
+    ) -> Result<OfficeReadResponse, JSONRPCErrorError> {
+        read_office_record(
+            &params.cwd,
+            params.thread_id.as_deref(),
+            params.title.as_deref(),
+        )
+        .await
+        .map(|record| OfficeReadResponse { record })
+    }
+
+    pub(crate) async fn office_message_send(
+        &self,
+        params: OfficeMessageSendParams,
+    ) -> Result<OfficeMessageSendResponse, JSONRPCErrorError> {
+        let config = append_office_message(params.config, params.message)?;
+        save_record(DomainKind::Office, &params.cwd, config.clone())
+            .await
+            .map(|file_path| OfficeMessageSendResponse { file_path, config })
     }
 
     pub(crate) async fn office_delete(
@@ -400,6 +427,58 @@ async fn save_record(
     bytes.push(b'\n');
     fs::write(&file_path, bytes).await.map_err(map_io_error)?;
     Ok(file_path.to_string_lossy().into_owned())
+}
+
+async fn read_office_record(
+    cwd: &str,
+    thread_id: Option<&str>,
+    title: Option<&str>,
+) -> Result<Option<CrewonDomainConfigRecord>, JSONRPCErrorError> {
+    if thread_id.is_none() && title.is_none() {
+        return Err(invalid_params("threadId or title is required"));
+    }
+    let (records, _) =
+        list_records(DomainKind::Office, cwd, None, Some(MAX_LIST_LIMIT as u32)).await?;
+    Ok(records.into_iter().find(|record| {
+        thread_id.is_some_and(|thread_id| office_thread_id(&record.config) == Some(thread_id))
+            || title.is_some_and(|title| {
+                record.config.get("title").and_then(JsonValue::as_str) == Some(title)
+            })
+    }))
+}
+
+fn append_office_message(
+    mut config: JsonValue,
+    message: JsonValue,
+) -> Result<JsonValue, JSONRPCErrorError> {
+    if !DomainKind::Office.config_matches(&config) {
+        return Err(invalid_params("office config is missing required fields"));
+    }
+    if !message.is_object() {
+        return Err(invalid_params("message must be an object"));
+    }
+
+    let Some(workspace) = config
+        .get_mut("workspace")
+        .and_then(JsonValue::as_object_mut)
+    else {
+        return Err(invalid_params("office config is missing workspace"));
+    };
+    let messages = workspace
+        .entry("messages")
+        .or_insert_with(|| JsonValue::Array(Vec::new()));
+    let Some(messages) = messages.as_array_mut() else {
+        return Err(invalid_params("workspace.messages must be an array"));
+    };
+    messages.push(message);
+    Ok(config)
+}
+
+fn office_thread_id(config: &JsonValue) -> Option<&str> {
+    config
+        .get("workspace")
+        .and_then(|workspace| workspace.get("threadId"))
+        .and_then(JsonValue::as_str)
 }
 
 async fn delete_record(
