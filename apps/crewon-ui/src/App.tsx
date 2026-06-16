@@ -4223,6 +4223,9 @@ export function App() {
   const [activeTurnByThread, setActiveTurnByThread] = useState<
     Record<string, string>
   >({});
+  const automationRunByTurnRef = useRef<
+    Record<string, { filePath: string; threadId: string }>
+  >({});
   const [streamingTextByThread, setStreamingTextByThread] = useState<
     Record<string, string>
   >({});
@@ -6029,6 +6032,9 @@ export function App() {
                 {
                   id: "run-automation",
                   label: locale === "zh" ? "立即运行" : "Run now",
+                  ...(action.config
+                    ? { automationConfig: action.config }
+                    : {}),
                   automationTitle: action.title,
                   automationThreadId: action.threadId,
                   automationPrompt: action.prompt,
@@ -6808,6 +6814,7 @@ export function App() {
           ].join("\n"),
           prompt: config.prompt,
           threadId: config.threadId,
+          config,
           configPath: filePath,
           items: config.threadId
             ? runItemsByThreadId.get(config.threadId)
@@ -9494,17 +9501,26 @@ export function App() {
       }
 
       if (action.id === "run-automation") {
+        const savedAutomationConfig = action.automationConfig;
         const title =
+          savedAutomationConfig?.title ??
           action.automationTitle ??
           (locale === "zh" ? "自动化任务" : "Automation job");
         const runNote =
           libraryPanel?.fields
             ?.find((field) => field.id === "automation-run-note")
             ?.value.trim() ?? "";
-        const [targetOffice, executionAgent] = await Promise.all([
+        const [latestOffice, latestAgent] = await Promise.all([
           readLatestOfficeConfig(),
           readRecruitableAgentConfig([]),
         ]);
+        const targetOffice =
+          savedAutomationConfig?.targetOffice ?? latestOffice ?? null;
+        const executionAgent =
+          savedAutomationConfig?.executionAgent ?? latestAgent ?? null;
+        const triggerType =
+          savedAutomationConfig?.trigger?.type ??
+          (locale === "zh" ? "手动" : "manual");
         const enabledMcp =
           executionAgent?.mcp
             .filter((option) => option.enabled)
@@ -9518,7 +9534,7 @@ export function App() {
         const automationBody =
           locale === "zh"
             ? [
-                "触发器：手动",
+                `触发器：${triggerType}`,
                 `目标办公室：${targetOffice?.title ?? "待选择"}`,
                 `执行智能体：${executionAgent?.name ?? "待选择"}`,
                 `模型：${executionAgent?.model ?? "未配置"}`,
@@ -9527,7 +9543,7 @@ export function App() {
                 `动作：运行自动化「${title}」，并把执行记录写入当前后端线程。`,
               ].join("\n")
             : [
-                "Trigger: manual",
+                `Trigger: ${triggerType}`,
                 `Target office: ${targetOffice?.title ?? "pending"}`,
                 `Agent: ${executionAgent?.name ?? "pending"}`,
                 `Model: ${executionAgent?.model ?? "not configured"}`,
@@ -9540,7 +9556,7 @@ export function App() {
             ? `立即运行自动化「${title}」。目标办公室：${targetOffice?.title ?? "待选择"}。执行智能体：${executionAgent?.name ?? "待选择"}。请记录运行结果、下一步任务和风险。`
             : `Run automation "${title}" now. Target office: ${targetOffice?.title ?? "pending"}. Agent: ${executionAgent?.name ?? "pending"}. Record results, next tasks, and risks.`;
         const fullAutomationPrompt = [
-          action.automationPrompt,
+          action.automationPrompt ?? savedAutomationConfig?.prompt,
           automationPrompt,
           runNote
             ? locale === "zh"
@@ -9550,7 +9566,8 @@ export function App() {
         ]
           .filter(Boolean)
           .join("\n\n");
-        let threadId = action.automationThreadId;
+        let threadId =
+          action.automationThreadId ?? savedAutomationConfig?.threadId;
         if (threadId) {
           try {
             await clientRef.current?.readThread(threadId);
@@ -9584,14 +9601,19 @@ export function App() {
           return;
         }
         const automationConfig: AutomationConfig = {
+          ...savedAutomationConfig,
           threadId,
           title,
           subtitle:
-            locale === "zh"
+            savedAutomationConfig?.subtitle ||
+            (locale === "zh"
               ? `${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}`
-              : `${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}`,
-          body: automationBody,
+              : `${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}`),
+          body: savedAutomationConfig?.body || automationBody,
           prompt: fullAutomationPrompt,
+          trigger: savedAutomationConfig?.trigger ?? { type: "manual" },
+          targetOffice,
+          executionAgent,
         };
         let automationConfigPath =
           await writeAutomationConfigFile(automationConfig);
@@ -9648,12 +9670,19 @@ export function App() {
           runNote || null,
           response?.turn.id ?? null,
         );
-        if (automationRunRecord && response?.turn.status !== "inProgress") {
-          await updateAutomationRun(
-            automationRunRecord.filePath,
-            response?.turn.status ?? "failed",
-            response?.turn.completedAt ?? Math.floor(Date.now() / 1000),
-          );
+        if (automationRunRecord && response?.turn.id) {
+          if (response.turn.status === "inProgress") {
+            automationRunByTurnRef.current[response.turn.id] = {
+              filePath: automationRunRecord.filePath,
+              threadId,
+            };
+          } else {
+            await updateAutomationRun(
+              automationRunRecord.filePath,
+              response.turn.status ?? "failed",
+              response.turn.completedAt ?? Math.floor(Date.now() / 1000),
+            );
+          }
         }
         let latestAutomationThread: Thread | null = null;
         if (response) {
@@ -9711,6 +9740,10 @@ export function App() {
                   currentAction.id === "run-automation"
                     ? {
                         ...currentAction,
+                        automationConfig: {
+                          ...automationConfig,
+                          threadId,
+                        },
                         automationThreadId: threadId,
                         label: locale === "zh" ? "再次运行" : "Run again",
                       }
@@ -10495,6 +10528,26 @@ export function App() {
             const { [threadId]: _removed, ...next } = current;
             return next;
           });
+          const automationRunRecord = automationRunByTurnRef.current[turn.id];
+          if (automationRunRecord) {
+            delete automationRunByTurnRef.current[turn.id];
+            void updateAutomationRun(
+              automationRunRecord.filePath,
+              turn.status,
+              turn.completedAt ?? Math.floor(Date.now() / 1000),
+            ).then(async () => {
+              const items = await readAutomationRunItems(threadId);
+              setLibraryPanel((currentPanel) =>
+                currentPanel?.actions?.some(
+                  (action) =>
+                    action.id === "run-automation" &&
+                    action.automationThreadId === threadId,
+                )
+                  ? { ...currentPanel, items, error: undefined }
+                  : currentPanel,
+              );
+            });
+          }
           return;
         }
         case "turn/diff/updated":

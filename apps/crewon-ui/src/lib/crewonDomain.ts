@@ -66,6 +66,7 @@ export type LibraryPanelAction = {
   mcpToolName?: string;
   pathToOpen?: string;
   pathKind?: "directory" | "file";
+  automationConfig?: AutomationConfig;
   automationTitle?: string;
   automationThreadId?: string;
   automationPrompt?: string;
@@ -361,6 +362,7 @@ export type LibraryItem = {
         prompt: string;
         items?: LibraryItem[];
         threadId?: string;
+        config?: AutomationConfig;
         configPath?: string;
       }
     | {
