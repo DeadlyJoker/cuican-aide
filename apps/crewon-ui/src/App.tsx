@@ -154,6 +154,7 @@ import {
   automationBindingSubtitle,
   automationBodyText,
   automationConfigForRun,
+  automationRunLifecycleText,
   automationRunPrompt,
 } from "./lib/domainAutomationContent";
 import {
@@ -2460,7 +2461,7 @@ export function App() {
     Record<string, string>
   >({});
   const automationRunByTurnRef = useRef<
-    Record<string, { filePath: string; threadId: string }>
+    Record<string, { filePath: string; runId: string; threadId: string }>
   >({});
   const [streamingTextByThread, setStreamingTextByThread] = useState<
     Record<string, string>
@@ -7643,6 +7644,7 @@ export function App() {
           if (response.turn.status === "inProgress") {
             automationRunByTurnRef.current[response.turn.id] = {
               filePath: automationRunRecord.filePath,
+              runId: automationRunRecord.runId,
               threadId,
             };
           } else {
@@ -7682,25 +7684,18 @@ export function App() {
                     : "Written to backend execution thread",
                 body: [
                   automationConfig.body,
-                  automationRunRecord
-                    ? locale === "zh"
-                      ? `运行记录：${automationRunRecord.runId}`
-                      : `Run record: ${automationRunRecord.runId}`
-                    : null,
-                  locale === "zh"
-                    ? `运行请求已发送到线程：${threadId}`
-                    : `Run request sent to thread: ${threadId}`,
-                  automationRunRecord?.filePath
-                    ? locale === "zh"
-                      ? `运行文件：${automationRunRecord.filePath}`
-                      : `Run file: ${automationRunRecord.filePath}`
-                    : null,
+                  ...automationRunLifecycleText({
+                    threadId,
+                    runId: automationRunRecord?.runId,
+                    runFilePath: automationRunRecord?.filePath,
+                    configPath: automationConfigPath,
+                    locale,
+                    phase:
+                      response?.turn.status === "completed"
+                        ? "completed"
+                        : "started",
+                  }),
                   automationRunResult.warning,
-                  automationConfigPath
-                    ? locale === "zh"
-                      ? `后端记录：${automationConfigPath}`
-                      : `Backend record: ${automationConfigPath}`
-                    : null,
                 ]
                   .filter(Boolean)
                   .join("\n"),
@@ -8542,7 +8537,25 @@ export function App() {
                     action.id === "run-automation" &&
                     action.automationThreadId === threadId,
                 )
-                  ? { ...currentPanel, items, error: undefined }
+                  ? {
+                      ...currentPanel,
+                      body: [
+                        currentPanel.body,
+                        "",
+                        ...automationRunLifecycleText({
+                          threadId,
+                          runId: automationRunRecord.runId,
+                          runFilePath: automationRunRecord.filePath,
+                          configPath: null,
+                          locale,
+                          phase: "completed",
+                        }),
+                      ]
+                        .filter(Boolean)
+                        .join("\n"),
+                      items,
+                      error: undefined,
+                    }
                   : currentPanel,
               );
             });

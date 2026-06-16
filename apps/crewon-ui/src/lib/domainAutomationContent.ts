@@ -84,6 +84,47 @@ export function automationRunPrompt(params: {
   return `${immediate ? "Run" : "Run"} automation "${title}"${immediate ? " now" : ""}. Target office: ${targetOffice?.title ?? "pending"}. Agent: ${executionAgent?.name ?? "pending"}. Record results, next tasks, and risks.`;
 }
 
+export function automationRunLifecycleText(params: {
+  threadId: string;
+  runId?: string | null;
+  runFilePath?: string | null;
+  configPath?: string | null;
+  locale: Locale;
+  phase: "started" | "completed";
+}): string[] {
+  const { threadId, runId, runFilePath, configPath, locale, phase } = params;
+  const isZh = locale === "zh";
+  return [
+    isZh
+      ? `执行：turn/start 已发送到线程 ${threadId}`
+      : `Execution: turn/start sent to thread ${threadId}`,
+    runId
+      ? isZh
+        ? `运行记录：automation/run 已创建 ${runId}`
+        : `Run record: automation/run created ${runId}`
+      : isZh
+        ? "运行记录：当前 app-server 未返回 automation/run 记录"
+        : "Run record: automation/run did not return a record from this app-server",
+    phase === "completed"
+      ? isZh
+        ? "状态同步：automation/run/update 已提交完成状态"
+        : "Status sync: automation/run/update submitted the completed status"
+      : isZh
+        ? "状态同步：等待 turn/completed 后写入 automation/run/update"
+        : "Status sync: waiting for turn/completed before automation/run/update",
+    runFilePath
+      ? isZh
+        ? `运行文件：${runFilePath}`
+        : `Run file: ${runFilePath}`
+      : null,
+    configPath
+      ? isZh
+        ? `后端记录：${configPath}`
+        : `Backend record: ${configPath}`
+      : null,
+  ].filter((line): line is string => Boolean(line));
+}
+
 export function automationConfigForRun(params: {
   baseConfig: AutomationConfig | null | undefined;
   title: string;
