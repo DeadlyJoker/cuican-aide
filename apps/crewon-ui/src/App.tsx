@@ -7174,17 +7174,30 @@ export function App() {
         }
       }
     }
-    const savedConfigs =
-      agentCwd && client
-        ? (await readStoredAgentConfigFiles(client, agentCwd)).map(
-            (record) => record.config,
-          )
-        : [];
-    const backendThreads = (await clientRef.current?.listThreads(false)) ?? [];
+    if (agentCwd && client) {
+      try {
+        const response = await client.listAgentConfigs(agentCwd);
+        const candidates = response.data.map((record) => record.config);
+        return (
+          candidates.find(
+            (config) =>
+              !memberNames.has(config.name) &&
+              (!config.agentId || !memberAgentIds.has(config.agentId)),
+          ) ??
+          candidates[0] ??
+          null
+        );
+      } catch (error) {
+        if (!isUnsupportedRpcError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    const backendThreads = (await client?.listThreads(false)) ?? [];
     const agentDetails = await Promise.allSettled(
       backendThreads.map(async (thread) => {
-        const detailedThread =
-          (await clientRef.current?.readThread(thread.id)) ?? thread;
+        const detailedThread = (await client?.readThread(thread.id)) ?? thread;
         return {
           thread: detailedThread,
           config: parseAgentConfigFromThread(detailedThread, locale),
@@ -7205,15 +7218,14 @@ export function App() {
       )
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .map((entry) => entry.config);
-    const candidates = [...savedConfigs, ...configs];
 
     return (
-      candidates.find(
+      configs.find(
         (config) =>
           !memberNames.has(config.name) &&
           (!config.agentId || !memberAgentIds.has(config.agentId)),
       ) ??
-      candidates[0] ??
+      configs[0] ??
       null
     );
   }
