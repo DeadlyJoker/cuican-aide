@@ -84,7 +84,6 @@ import {
   AGENT_CONFIG_MARKER,
   AUTOMATION_CONFIG_MARKER,
   OFFICE_CONFIG_MARKER,
-  agentConfigPayload,
   officeConfigForThread,
   type ActivityData,
   type AgentCapabilityOption,
@@ -6258,13 +6257,16 @@ export function App() {
               action.item.cwd ? `CWD: ${action.item.cwd}` : "Scope: Home",
               "",
               externalAgentMigrationSummary(action.item, locale),
-              "",
-              agentConfigPayload(savedPayloadConfig),
               agentConfigPath
                 ? locale === "zh"
-                  ? `配置文件：${agentConfigPath}`
-                  : `Config file: ${agentConfigPath}`
-                : "",
+                  ? `后端配置：${agentConfigPath}`
+                  : `Backend config: ${agentConfigPath}`
+                : locale === "zh"
+                  ? "后端配置：已提交到 agent/save"
+                  : "Backend config: submitted to agent/save",
+              locale === "zh"
+                ? `后端智能体：${savedPayloadConfig.agentId ?? importedConfig.name}`
+                : `Backend agent: ${savedPayloadConfig.agentId ?? importedConfig.name}`,
             ].join("\n"),
           );
           setThreads((current) =>
