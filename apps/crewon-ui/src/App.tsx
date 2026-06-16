@@ -85,6 +85,12 @@ import {
 } from "./lib/i18n";
 import { defaultServerUrl, detectPlatform } from "./lib/platform";
 import {
+  joinPath,
+  pathBaseName,
+  pathDirName,
+  resolveSearchPath,
+} from "./lib/pathUtils";
+import {
   demoSettingsSectionForAction,
   isAuthDemoAction,
   worktreeDemoAction,
@@ -1143,29 +1149,6 @@ function getMcpElicitationDetails(params: unknown): {
       .join("\n"),
     placeholder: mode === "form" ? "{}" : "",
   };
-}
-
-function joinPath(basePath: string, childName: string): string {
-  const separator = basePath.includes("\\") ? "\\" : "/";
-  return `${basePath.replace(/[\\/]+$/, "")}${separator}${childName}`;
-}
-
-function resolveSearchPath(root: string, resultPath: string): string {
-  if (/^(?:[a-zA-Z]:[\\/]|[\\/])/.test(resultPath)) {
-    return resultPath;
-  }
-
-  return joinPath(root, resultPath);
-}
-
-function pathBaseName(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
-
-function pathDirName(path: string): string {
-  const normalized = path.replace(/[\\/]+$/, "");
-  const index = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
-  return index > 0 ? normalized.slice(0, index) : normalized;
 }
 
 function decodeBase64Text(dataBase64: string): string {
