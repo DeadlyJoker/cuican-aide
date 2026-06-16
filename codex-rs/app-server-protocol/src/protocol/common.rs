@@ -1074,6 +1074,30 @@ client_request_definitions! {
         response: v2::ListMcpServerStatusResponse,
     },
 
+    McpServerConfigList => "mcpServerConfig/list" {
+        params: v2::McpServerConfigListParams,
+        serialization: global_shared_read("config"),
+        response: v2::McpServerConfigListResponse,
+    },
+
+    McpServerConfigRead => "mcpServerConfig/read" {
+        params: v2::McpServerConfigReadParams,
+        serialization: global_shared_read("config"),
+        response: v2::McpServerConfigReadResponse,
+    },
+
+    McpServerConfigSave => "mcpServerConfig/save" {
+        params: v2::McpServerConfigSaveParams,
+        serialization: global("config"),
+        response: v2::McpServerConfigSaveResponse,
+    },
+
+    McpServerConfigDelete => "mcpServerConfig/delete" {
+        params: v2::McpServerConfigDeleteParams,
+        serialization: global("config"),
+        response: v2::McpServerConfigDeleteResponse,
+    },
+
     McpResourceRead => "mcpServer/resource/read" {
         params: v2::McpResourceReadParams,
         serialization: optional_thread_id(params.thread_id),

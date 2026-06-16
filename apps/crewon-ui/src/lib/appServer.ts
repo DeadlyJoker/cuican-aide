@@ -38,6 +38,10 @@ import type { ListMcpServerStatusResponse } from "@crewon-protocol/v2/ListMcpSer
 import type { LogoutAccountResponse } from "@crewon-protocol/v2/LogoutAccountResponse";
 import type { HooksListResponse } from "@crewon-protocol/v2/HooksListResponse";
 import type { McpServerOauthLoginCompletedNotification } from "@crewon-protocol/v2/McpServerOauthLoginCompletedNotification";
+import type { McpServerConfigDeleteResponse } from "@crewon-protocol/v2/McpServerConfigDeleteResponse";
+import type { McpServerConfigListResponse } from "@crewon-protocol/v2/McpServerConfigListResponse";
+import type { McpServerConfigReadResponse } from "@crewon-protocol/v2/McpServerConfigReadResponse";
+import type { McpServerConfigSaveResponse } from "@crewon-protocol/v2/McpServerConfigSaveResponse";
 import type { McpServerRefreshResponse } from "@crewon-protocol/v2/McpServerRefreshResponse";
 import type { McpResourceReadResponse } from "@crewon-protocol/v2/McpResourceReadResponse";
 import type { McpServerToolCallResponse } from "@crewon-protocol/v2/McpServerToolCallResponse";
@@ -1171,6 +1175,51 @@ export class AppServerClient {
       limit: 24,
       detail,
       threadId: threadId || null,
+    });
+  }
+
+  async listMcpServerConfigs(params: {
+    cwd?: string | null;
+    cursor?: string | null;
+    limit?: number | null;
+  } = {}): Promise<McpServerConfigListResponse> {
+    return this.request<McpServerConfigListResponse>("mcpServerConfig/list", {
+      cwd: params.cwd ?? null,
+      cursor: params.cursor ?? null,
+      limit: params.limit ?? null,
+    });
+  }
+
+  async readMcpServerConfig(name: string, cwd?: string | null): Promise<McpServerConfigReadResponse> {
+    return this.request<McpServerConfigReadResponse>("mcpServerConfig/read", {
+      cwd: cwd ?? null,
+      name,
+    });
+  }
+
+  async saveMcpServerConfig(params: {
+    name: string;
+    config: JsonValue;
+    expectedVersion?: string | null;
+    reload?: boolean;
+  }): Promise<McpServerConfigSaveResponse> {
+    return this.request<McpServerConfigSaveResponse>("mcpServerConfig/save", {
+      name: params.name,
+      config: params.config,
+      expectedVersion: params.expectedVersion ?? null,
+      reload: params.reload ?? false,
+    });
+  }
+
+  async deleteMcpServerConfig(params: {
+    name: string;
+    expectedVersion?: string | null;
+    reload?: boolean;
+  }): Promise<McpServerConfigDeleteResponse> {
+    return this.request<McpServerConfigDeleteResponse>("mcpServerConfig/delete", {
+      name: params.name,
+      expectedVersion: params.expectedVersion ?? null,
+      reload: params.reload ?? false,
     });
   }
 

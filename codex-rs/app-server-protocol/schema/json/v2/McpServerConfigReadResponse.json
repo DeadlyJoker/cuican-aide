@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "McpServerConfigRecord": {
+      "properties": {
+        "config": true,
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "record": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/McpServerConfigRecord"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "McpServerConfigReadResponse",
+  "type": "object"
+}

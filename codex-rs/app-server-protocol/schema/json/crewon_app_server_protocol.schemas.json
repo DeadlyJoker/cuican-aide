@@ -2299,6 +2299,102 @@
             },
             "method": {
               "enum": [
+                "mcpServerConfig/list"
+              ],
+              "title": "McpServerConfig/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/McpServerConfigListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "McpServerConfig/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "mcpServerConfig/read"
+              ],
+              "title": "McpServerConfig/readRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/McpServerConfigReadParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "McpServerConfig/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "mcpServerConfig/save"
+              ],
+              "title": "McpServerConfig/saveRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/McpServerConfigSaveParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "McpServerConfig/saveRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "mcpServerConfig/delete"
+              ],
+              "title": "McpServerConfig/deleteRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/McpServerConfigDeleteParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "McpServerConfig/deleteRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "mcpServer/resource/read"
               ],
               "title": "McpServer/resource/readRequestMethod",
@@ -12675,6 +12771,207 @@
           "contents"
         ],
         "title": "McpResourceReadResponse",
+        "type": "object"
+      },
+      "McpServerConfigDeleteParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "expectedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "reload": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "McpServerConfigDeleteParams",
+        "type": "object"
+      },
+      "McpServerConfigDeleteResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "reloadError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "write": {
+            "$ref": "#/definitions/v2/McpServerConfigWriteResult"
+          }
+        },
+        "required": [
+          "write"
+        ],
+        "title": "McpServerConfigDeleteResponse",
+        "type": "object"
+      },
+      "McpServerConfigListParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "title": "McpServerConfigListParams",
+        "type": "object"
+      },
+      "McpServerConfigListResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/definitions/v2/McpServerConfigRecord"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "McpServerConfigListResponse",
+        "type": "object"
+      },
+      "McpServerConfigReadParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "McpServerConfigReadParams",
+        "type": "object"
+      },
+      "McpServerConfigReadResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "record": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/McpServerConfigRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "McpServerConfigReadResponse",
+        "type": "object"
+      },
+      "McpServerConfigRecord": {
+        "properties": {
+          "config": true,
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "name"
+        ],
+        "type": "object"
+      },
+      "McpServerConfigSaveParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "expectedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "reload": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "config",
+          "name"
+        ],
+        "title": "McpServerConfigSaveParams",
+        "type": "object"
+      },
+      "McpServerConfigSaveResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "reloadError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "write": {
+            "$ref": "#/definitions/v2/McpServerConfigWriteResult"
+          }
+        },
+        "required": [
+          "write"
+        ],
+        "title": "McpServerConfigSaveResponse",
+        "type": "object"
+      },
+      "McpServerConfigWriteResult": {
+        "properties": {
+          "filePath": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filePath",
+          "status",
+          "version"
+        ],
         "type": "object"
       },
       "McpServerInfo": {

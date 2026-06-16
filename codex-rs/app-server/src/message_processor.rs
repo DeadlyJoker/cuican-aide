@@ -30,6 +30,7 @@ use crate::request_processors::FsRequestProcessor;
 use crate::request_processors::GitRequestProcessor;
 use crate::request_processors::InitializeRequestProcessor;
 use crate::request_processors::MarketplaceRequestProcessor;
+use crate::request_processors::McpConfigRequestProcessor;
 use crate::request_processors::McpRequestProcessor;
 use crate::request_processors::PluginRequestProcessor;
 use crate::request_processors::ProcessExecRequestProcessor;
@@ -180,6 +181,7 @@ pub(crate) struct MessageProcessor {
     git_processor: GitRequestProcessor,
     initialize_processor: InitializeRequestProcessor,
     marketplace_processor: MarketplaceRequestProcessor,
+    mcp_config_processor: McpConfigRequestProcessor,
     mcp_processor: McpRequestProcessor,
     plugin_processor: PluginRequestProcessor,
     remote_control_processor: RemoteControlRequestProcessor,
@@ -426,6 +428,8 @@ impl MessageProcessor {
             outgoing.clone(),
             config_manager.clone(),
         );
+        let mcp_config_processor =
+            McpConfigRequestProcessor::new(config_manager.clone(), Arc::clone(&thread_manager));
         let plugin_processor = PluginRequestProcessor::new(
             auth_manager.clone(),
             Arc::clone(&thread_manager),
@@ -531,6 +535,7 @@ impl MessageProcessor {
             git_processor,
             initialize_processor,
             marketplace_processor,
+            mcp_config_processor,
             mcp_processor,
             plugin_processor,
             remote_control_processor,
@@ -1447,6 +1452,18 @@ impl MessageProcessor {
                 self.mcp_processor
                     .mcp_server_status_list(&request_id, params)
                     .await
+            }
+            ClientRequest::McpServerConfigList { params, .. } => {
+                self.mcp_config_processor.list(params).await
+            }
+            ClientRequest::McpServerConfigRead { params, .. } => {
+                self.mcp_config_processor.read(params).await
+            }
+            ClientRequest::McpServerConfigSave { params, .. } => {
+                self.mcp_config_processor.save(params).await
+            }
+            ClientRequest::McpServerConfigDelete { params, .. } => {
+                self.mcp_config_processor.delete(params).await
             }
             ClientRequest::McpResourceRead { params, .. } => {
                 self.mcp_processor

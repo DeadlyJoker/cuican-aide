@@ -249,6 +249,16 @@ export type { McpElicitationUntitledMultiSelectEnumSchema } from "./McpElicitati
 export type { McpElicitationUntitledSingleSelectEnumSchema } from "./McpElicitationUntitledSingleSelectEnumSchema";
 export type { McpResourceReadParams } from "./McpResourceReadParams";
 export type { McpResourceReadResponse } from "./McpResourceReadResponse";
+export type { McpServerConfigDeleteParams } from "./McpServerConfigDeleteParams";
+export type { McpServerConfigDeleteResponse } from "./McpServerConfigDeleteResponse";
+export type { McpServerConfigListParams } from "./McpServerConfigListParams";
+export type { McpServerConfigListResponse } from "./McpServerConfigListResponse";
+export type { McpServerConfigReadParams } from "./McpServerConfigReadParams";
+export type { McpServerConfigReadResponse } from "./McpServerConfigReadResponse";
+export type { McpServerConfigRecord } from "./McpServerConfigRecord";
+export type { McpServerConfigSaveParams } from "./McpServerConfigSaveParams";
+export type { McpServerConfigSaveResponse } from "./McpServerConfigSaveResponse";
+export type { McpServerConfigWriteResult } from "./McpServerConfigWriteResult";
 export type { McpServerElicitationAction } from "./McpServerElicitationAction";
 export type { McpServerElicitationRequestParams } from "./McpServerElicitationRequestParams";
 export type { McpServerElicitationRequestResponse } from "./McpServerElicitationRequestResponse";

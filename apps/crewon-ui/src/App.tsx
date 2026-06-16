@@ -8682,8 +8682,8 @@ export function App() {
                   : "Draft · saved to config.toml",
               body:
                 locale === "zh"
-                  ? "填写 MCP server 名称、启动命令和参数。保存后会调用 config/batchWrite 并重载 MCP。"
-                  : "Fill in the MCP server name, command, and arguments. Saving calls config/batchWrite and reloads MCP.",
+                  ? "填写 MCP server 名称、启动命令和参数。保存后会写入 MCP 配置并重载 MCP。"
+                  : "Fill in the MCP server name, command, and arguments. Saving writes MCP config and reloads MCP.",
               fields: [
                 {
                   id: "mcp-draft-name",
@@ -9071,13 +9071,11 @@ export function App() {
             : currentPanel,
         );
 
-        await clientRef.current?.writeConfigBatch([
-          {
-            keyPath: `mcp_servers.${serverName}`,
-            value: serverConfig,
-            mergeStrategy: "upsert",
-          },
-        ]);
+        await clientRef.current?.saveMcpServerConfig({
+          name: serverName,
+          config: serverConfig,
+          reload: true,
+        });
         await writeToolConfigFile({
           kind: "mcp",
           title: rawName || serverName,
@@ -9091,7 +9089,6 @@ export function App() {
           env: parsedEnv,
           enabled: false,
         });
-        await clientRef.current?.reloadMcpServers();
         await openLibrary("tools");
         setNotice({
           text:
