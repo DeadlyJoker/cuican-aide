@@ -19,6 +19,21 @@ function promptPreview(text: string): string {
     : normalizedText;
 }
 
+function authStatusLabel(authStatus: string, locale: Locale): string {
+  const isZh = locale === "zh";
+  switch (authStatus) {
+    case "notLoggedIn":
+      return isZh ? "待授权" : "Needs auth";
+    case "loggedIn":
+    case "authorized":
+      return isZh ? "已授权" : "Authorized";
+    case "unsupported":
+      return isZh ? "免授权" : "No auth";
+    default:
+      return authStatus;
+  }
+}
+
 function mcpServerDetailText(server: McpServerStatus, locale: Locale): string {
   const tools = Object.values(server.tools).filter(
     (tool) => tool !== undefined,
@@ -167,35 +182,38 @@ export function toolLibraryPanelContent(params: {
         };
       }
       const endpoint = config ? mcpConfigEndpoint(config) : "";
-      const source =
-        locale === "zh"
-          ? "真实来源：MCP 配置记录"
-          : "Source of truth: MCP config record";
+      const enabled = mcpConfigEnabled(config);
       return {
-        title: `MCP · ${config?.name ?? ""}`,
-        meta: mcpConfigEnabled(config)
-          ? locale === "zh"
-            ? `${source} · 已配置 · 等待加载`
-            : `${source} · configured · waiting to load`
-          : locale === "zh"
-            ? `${source} · 已配置 · 停用`
-            : `${source} · configured · disabled`,
+        title: config?.name ?? "MCP",
+        meta: `MCP · ${
+          enabled
+            ? locale === "zh"
+              ? "已配置 · 等待加载"
+              : "Configured · waiting"
+            : locale === "zh"
+              ? "已配置 · 已停用"
+              : "Configured · disabled"
+        }`,
         description:
-          `${source} · ${
-            endpoint ||
-            (locale === "zh"
-              ? "已保存到 MCP 配置，但当前运行态未返回该服务器。"
-              : "Saved in MCP config, but not present in the current runtime status.")
-          }`,
+          endpoint ||
+          (locale === "zh"
+            ? "已保存到 MCP 配置，但当前运行态尚未返回该服务器。"
+            : "Saved in MCP config, but not yet reported by the runtime."),
         glyph: decor.glyph,
         accent: decor.accent,
         badge: {
-          label: locale === "zh" ? "配置" : "config",
-          tone: mcpConfigEnabled(config) ? "planning" : "warning",
+          label: enabled
+            ? locale === "zh"
+              ? "等待加载"
+              : "waiting"
+            : locale === "zh"
+              ? "已停用"
+              : "disabled",
+          tone: enabled ? "planning" : "warning",
         },
         tags: [
           "MCP",
-          mcpConfigEnabled(config)
+          enabled
             ? locale === "zh"
               ? "已配置"
               : "configured"
@@ -224,10 +242,6 @@ export function toolLibraryPanelContent(params: {
       status.resources.length + status.resourceTemplates.length;
     const serverTitle =
       status.serverInfo?.title || status.serverInfo?.name || status.name;
-    const runtimeSource =
-      locale === "zh"
-        ? "真实来源：运行态 MCP"
-        : "Source of truth: runtime MCP";
     const configState = config
       ? mcpConfigEnabled(config)
         ? locale === "zh"
@@ -238,10 +252,10 @@ export function toolLibraryPanelContent(params: {
           : "config disabled"
       : null;
     return {
-      title: `MCP · ${serverTitle}`,
-      meta: `${runtimeSource} · ${status.authStatus} · ${toolCount} ${locale === "zh" ? "工具" : "tools"} · ${resourceCount} ${
-        locale === "zh" ? "资源" : "resources"
-      }${configState ? ` · ${configState}` : ""}`,
+      title: serverTitle,
+      meta: `MCP · ${authStatusLabel(status.authStatus, locale)}${
+        status.serverInfo?.version ? ` · v${status.serverInfo.version}` : ""
+      }`,
       glyph: decor.glyph,
       accent: decor.accent,
       badge:
@@ -260,22 +274,19 @@ export function toolLibraryPanelContent(params: {
         configState,
       ].filter((tag): tag is string => Boolean(tag)),
       description:
-        `${runtimeSource} · ${
-          status.serverInfo?.description ||
-          (Object.keys(status.tools).length > 0
-            ? locale === "zh"
-              ? `已分配给工程师和自动化使用：${Object.keys(status.tools).slice(0, 5).join(", ")}`
-              : `Assigned to engineers and automations: ${Object.keys(status.tools).slice(0, 5).join(", ")}`
-            : locale === "zh"
-              ? "当前运行态未返回可调用工具。"
-              : "No callable tools are currently reported by the runtime.")
-        }`,
+        status.serverInfo?.description ||
+        (Object.keys(status.tools).length > 0
+          ? locale === "zh"
+            ? `可供工程师和自动化调用：${Object.keys(status.tools).slice(0, 5).join("、")}`
+            : `Callable by engineers and automations: ${Object.keys(status.tools).slice(0, 5).join(", ")}`
+          : locale === "zh"
+            ? "当前运行态未返回可调用工具。"
+            : "No callable tools are currently reported by the runtime."),
       action: {
         type: "mcp-detail",
         title: serverTitle,
         subtitle: status.name,
         body: [
-          runtimeSource,
           mcpServerDetailText(status, locale),
           config
             ? `\n${locale === "zh" ? "持久化配置" : "Persisted config"}\n${mcpConfigDetailText(config, locale)}`
@@ -309,14 +320,10 @@ export function toolLibraryPanelContent(params: {
   });
   const skillItems: LibraryItem[] = skills.map((skill, index) => {
     const source = skillSourceLabel(skill.path, locale);
-    const truthSource =
-      locale === "zh"
-        ? "真实来源：Skill 文件"
-        : "Source of truth: skill file";
     const decor = libraryToolDecor("skill", index);
     return {
-      title: `Skill · ${skill.name}`,
-      meta: `${truthSource} · ${source} · ${skill.enabled ? (locale === "zh" ? "可招募" : "recruitable") : locale === "zh" ? "停用" : "disabled"}`,
+      title: skill.name,
+      meta: `Skill · ${source}`,
       glyph: decor.glyph,
       accent: decor.accent,
       badge: {
@@ -331,18 +338,16 @@ export function toolLibraryPanelContent(params: {
       },
       tags: ["Skill", source],
       description:
-        `${truthSource} · ${
-          promptPreview(
-            skill.description ||
-              skill.shortDescription ||
-              (locale === "zh"
-                ? `可绑定到智能体或办公室：${skill.path}`
-                : `Assignable to agents or offices: ${skill.path}`),
-          ) ||
-          (locale === "zh"
-            ? "可绑定到智能体或办公室。"
-            : "Assignable to agents or offices.")
-        }`,
+        promptPreview(
+          skill.description ||
+            skill.shortDescription ||
+            (locale === "zh"
+              ? `可绑定到智能体或办公室：${skill.path}`
+              : `Assignable to agents or offices: ${skill.path}`),
+        ) ||
+        (locale === "zh"
+          ? "可绑定到智能体或办公室。"
+          : "Assignable to agents or offices."),
       action: skill.path
         ? {
             type: "skill-file",

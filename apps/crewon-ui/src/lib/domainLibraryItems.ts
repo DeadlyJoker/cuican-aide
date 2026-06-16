@@ -93,14 +93,6 @@ function sourceOfTruthLabel(locale: Locale, source: "skill-file" | "runtime-mcp"
   }
 }
 
-function sourcedDescription(
-  locale: Locale,
-  source: "skill-file" | "runtime-mcp" | "workspace-tool-record",
-  description: string,
-): string {
-  return `${sourceOfTruthLabel(locale, source)} · ${description}`;
-}
-
 export function officeConfigRecordsToLibraryItems(
   records: Array<DomainConfigRecord<OfficeConfig>>,
   locale: Locale,
@@ -192,7 +184,6 @@ export function toolConfigRecordsToLibraryItems(
   locale: Locale,
 ): LibraryItem[] {
   return records.map(({ filePath, savedAt, config }, index) => {
-    const source = sourceOfTruthLabel(locale, "workspace-tool-record");
     const restoredDescription =
       config.description ||
       (config.kind === "mcp" ? config.command : config.path) ||
@@ -201,13 +192,9 @@ export function toolConfigRecordsToLibraryItems(
         : "Restored from a backend tool record.");
     const decor = libraryToolDecor(config.kind === "mcp" ? "mcp" : "skill", index);
     return {
-      title: `${config.kind === "mcp" ? "MCP" : "Skill"} · ${config.title}`,
-      meta: `${backendRecordMeta(locale, filePath, savedAt)} · ${source}`,
-      description: sourcedDescription(
-        locale,
-        "workspace-tool-record",
-        restoredDescription,
-      ),
+      title: config.title,
+      meta: `${config.kind === "mcp" ? "MCP" : "Skill"} · ${backendRecordMeta(locale, filePath, savedAt)}`,
+      description: restoredDescription,
       glyph: decor.glyph,
       accent: decor.accent,
       badge: {
@@ -231,7 +218,7 @@ export function toolConfigRecordsToLibraryItems(
               title: config.title,
               subtitle: config.name,
               body: [
-                source,
+                sourceOfTruthLabel(locale, "workspace-tool-record"),
                 config.description,
                 config.command
                   ? `${locale === "zh" ? "命令" : "Command"}: ${config.command}`

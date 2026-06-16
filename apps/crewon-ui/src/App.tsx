@@ -6386,8 +6386,20 @@ export function App() {
 
     if (action.id === "create-automation" && isConnected) {
       try {
+        const automationCwd = await resolveBackendCwd();
+        const client = clientRef.current;
+        if (!automationCwd || !client) {
+          throw new Error(
+            locale === "zh"
+              ? "创建自动化需要可用的后端工作区。"
+              : "Creating an automation requires an available backend workspace.",
+          );
+        }
         const title =
-          locale === "zh"
+          libraryPanel?.fields
+            ?.find((field) => field.id === "automation-title")
+            ?.value.trim() ||
+          (locale === "zh"
             ? `自动化 ${new Date().toLocaleTimeString("zh-CN", {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -6395,11 +6407,116 @@ export function App() {
             : `Automation ${new Date().toLocaleTimeString("en-US", {
                 hour: "2-digit",
                 minute: "2-digit",
-              })}`;
-        const [targetOffice, executionAgent] = await Promise.all([
-          readLatestOfficeConfig(),
-          readRecruitableAgentConfig([]),
+              })}`);
+        const [officeResponse, agentResponse] = await Promise.all([
+          client.listOfficeConfigs(automationCwd),
+          client.listAgentConfigs(automationCwd),
         ]);
+        const officeRecords = officeResponse.data;
+        const agentRecords = agentResponse.data.filter((record) =>
+          Boolean(record.config.agentId),
+        );
+        const fieldValue = (fieldId: string) =>
+          libraryPanel?.fields
+            ?.find((field) => field.id === fieldId)
+            ?.value.trim() ?? "";
+        const selectedOfficePath = fieldValue("automation-office");
+        const selectedAgentPath = fieldValue("automation-agent");
+        const selectedTrigger = fieldValue("automation-trigger") || "manual";
+        const selectedPrompt = fieldValue("automation-prompt");
+        if (!selectedOfficePath || !selectedAgentPath) {
+          if (officeRecords.length === 0 || agentRecords.length === 0) {
+            const message =
+              locale === "zh"
+                ? "创建自动化需要已保存的办公室和后端智能体。请先创建办公室，并在智能体库中新建/保存智能体。"
+                : "Creating an automation requires a saved office and backend agent. Create an office and create/save an agent first.";
+            setLibraryPanel((currentPanel) =>
+              currentPanel ? { ...currentPanel, error: message } : currentPanel,
+            );
+            setNotice({ text: message, tone: "warning" });
+            return;
+          }
+          const defaultOffice = officeRecords[0];
+          const defaultAgent = agentRecords[0];
+          setLibraryPanel((currentPanel) =>
+            currentPanel
+              ? {
+                  ...currentPanel,
+                  title: locale === "zh" ? "新建自动化" : "New automation",
+                  subtitle:
+                    locale === "zh"
+                      ? `${officeRecords.length} 个办公室 · ${agentRecords.length} 个智能体`
+                      : `${officeRecords.length} offices · ${agentRecords.length} agents`,
+                  body:
+                    locale === "zh"
+                      ? "选择触发方式、目标办公室和执行智能体。保存后会写入后端自动化配置，可立即运行并沉淀运行记录。"
+                      : "Choose a trigger, target office, and execution agent. Saving writes a backend automation config that can run immediately and keep run history.",
+                  fields: [
+                    {
+                      id: "automation-title",
+                      label: locale === "zh" ? "名称" : "Name",
+                      value: title,
+                    },
+                    {
+                      id: "automation-trigger",
+                      label: locale === "zh" ? "触发方式" : "Trigger",
+                      value: "manual",
+                      options: [
+                        { label: locale === "zh" ? "手动" : "Manual", value: "manual" },
+                        { label: locale === "zh" ? "定时" : "Schedule", value: "schedule" },
+                        { label: locale === "zh" ? "事件" : "Event", value: "event" },
+                        { label: locale === "zh" ? "文件" : "File", value: "file" },
+                      ],
+                    },
+                    {
+                      id: "automation-office",
+                      label: locale === "zh" ? "目标办公室" : "Target office",
+                      value: defaultOffice.filePath,
+                      options: officeRecords.map((record) => ({
+                        label: record.config.title,
+                        value: record.filePath,
+                      })),
+                    },
+                    {
+                      id: "automation-agent",
+                      label: locale === "zh" ? "执行智能体" : "Execution agent",
+                      value: defaultAgent.filePath,
+                      options: agentRecords.map((record) => ({
+                        label: record.config.name,
+                        value: record.filePath,
+                      })),
+                    },
+                    {
+                      id: "automation-prompt",
+                      label: locale === "zh" ? "运行提示" : "Run prompt",
+                      value: automationRunPrompt({
+                        title,
+                        targetOffice: defaultOffice.config,
+                        executionAgent: defaultAgent.config,
+                        locale,
+                      }),
+                    },
+                  ],
+                  actions: [
+                    {
+                      id: "create-automation",
+                      label: locale === "zh" ? "保存自动化" : "Save automation",
+                      tone: "primary",
+                    },
+                  ],
+                  items: [],
+                  error: undefined,
+                }
+              : currentPanel,
+          );
+          return;
+        }
+        const targetOffice =
+          officeRecords.find((record) => record.filePath === selectedOfficePath)
+            ?.config ?? null;
+        const executionAgent =
+          agentRecords.find((record) => record.filePath === selectedAgentPath)
+            ?.config ?? null;
         if (!targetOffice || !executionAgent?.agentId) {
           const message =
             locale === "zh"
@@ -6440,16 +6557,31 @@ export function App() {
             title,
             targetOffice,
             executionAgent,
-            triggerType: locale === "zh" ? "手动" : "manual",
+            triggerType:
+              locale === "zh"
+                ? selectedTrigger === "schedule"
+                  ? "定时"
+                  : selectedTrigger === "event"
+                    ? "事件"
+                    : selectedTrigger === "file"
+                      ? "文件"
+                      : "手动"
+                : selectedTrigger,
             locale,
           }),
-          prompt: automationRunPrompt({
-            title,
-            targetOffice,
-            executionAgent,
-            locale,
-          }),
-          trigger: { type: "manual" },
+          prompt:
+            selectedPrompt ||
+            automationRunPrompt({
+              title,
+              targetOffice,
+              executionAgent,
+              locale,
+            }),
+          trigger: {
+            type: ["schedule", "event", "file"].includes(selectedTrigger)
+              ? (selectedTrigger as "schedule" | "event" | "file")
+              : "manual",
+          },
           targetOffice,
           executionAgent,
           enabled: true,
@@ -6457,46 +6589,46 @@ export function App() {
         };
         let savedAutomationConfig = automationConfig;
         let automationConfigPath: string | null = null;
-        const automationCwd = await resolveBackendCwd();
         const createPrompt = automationRunPrompt({
           title,
           targetOffice,
           executionAgent,
           locale,
         });
-        if (automationCwd && clientRef.current) {
-          try {
-            const createResult = await clientRef.current.createAutomationConfig(
-              automationCwd,
-              {
-                title,
-                threadId: thread.id,
-                targetOffice,
-                executionAgent,
-                prompt: createPrompt,
-                enabled: true,
-                status: "enabled",
-              },
-            );
-            savedAutomationConfig = {
-              ...automationConfig,
-              ...createResult.config,
-              subtitle:
-                locale === "zh"
-                  ? automationConfig.subtitle
-                  : createResult.config.subtitle,
-              body:
-                locale === "zh" ? automationConfig.body : createResult.config.body,
-            };
-            automationConfigPath = createResult.filePath;
-          } catch (error) {
-            if (!isUnsupportedRpcError(error)) {
-              throw error;
-            }
-            automationConfigPath =
-              await writeAutomationConfigFile(automationConfig);
+        try {
+          const createResult = await client.createAutomationConfig(
+            automationCwd,
+            {
+              title,
+              threadId: thread.id,
+              targetOffice,
+              executionAgent,
+              prompt: createPrompt,
+              enabled: true,
+              status: "enabled",
+            },
+          );
+          savedAutomationConfig = {
+            ...automationConfig,
+            ...createResult.config,
+            subtitle: automationConfig.subtitle,
+            body: automationConfig.body,
+            prompt: automationConfig.prompt,
+            trigger: automationConfig.trigger,
+            targetOffice,
+            executionAgent,
+          };
+          const updateResponse = await client.updateAutomationConfig(
+            automationCwd,
+            createResult.filePath,
+            savedAutomationConfig,
+          );
+          savedAutomationConfig = updateResponse.config;
+          automationConfigPath = updateResponse.filePath;
+        } catch (error) {
+          if (!isUnsupportedRpcError(error)) {
+            throw error;
           }
-        } else {
           automationConfigPath = await writeAutomationConfigFile(automationConfig);
         }
         const createResponse = await clientRef.current?.startTurn(

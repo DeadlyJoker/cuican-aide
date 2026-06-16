@@ -29,6 +29,8 @@ export type LibraryPanelField = {
   label: string;
   placeholder?: string;
   value: string;
+  options?: Array<{ label: string; value: string }>;
+  secret?: boolean;
 };
 
 export type LibraryPanelAction = {

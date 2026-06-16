@@ -43,14 +43,29 @@ export function GenericLibraryPage({
           {panel.fields.map((field) => (
             <label key={field.id}>
               <span>{field.label}</span>
-              <textarea
-                spellCheck={false}
-                value={field.value}
-                placeholder={field.placeholder}
-                onChange={(event) =>
-                  onPanelFieldChange(field.id, event.target.value)
-                }
-              />
+              {field.options ? (
+                <select
+                  value={field.value}
+                  onChange={(event) =>
+                    onPanelFieldChange(field.id, event.target.value)
+                  }
+                >
+                  {field.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <textarea
+                  spellCheck={false}
+                  value={field.value}
+                  placeholder={field.placeholder}
+                  onChange={(event) =>
+                    onPanelFieldChange(field.id, event.target.value)
+                  }
+                />
+              )}
             </label>
           ))}
         </div>
