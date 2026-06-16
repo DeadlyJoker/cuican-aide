@@ -151,6 +151,12 @@ import {
   updateAutomationRun as updateBackendAutomationRun,
 } from "./lib/domainAutomationBackend";
 import {
+  automationBindingSubtitle,
+  automationBodyText,
+  automationConfigForRun,
+  automationRunPrompt,
+} from "./lib/domainAutomationContent";
+import {
   deleteMcpToolConfigRecord,
   loadToolLibraryItems as loadBackendToolLibraryItems,
   refreshToolActionFromBackend as refreshBackendToolAction,
@@ -6421,47 +6427,28 @@ export function App() {
             : "Run automation with a target office and execution agent, keeping future run records.",
           null,
         );
-        const enabledMcp =
-          executionAgent?.mcp
-            .filter((option) => option.enabled)
-            .map((option) => option.name)
-            .join(", ") || (locale === "zh" ? "未配置" : "not configured");
-        const enabledSkills =
-          executionAgent?.skills
-            .filter((option) => option.enabled)
-            .map((option) => option.name)
-            .join(", ") || (locale === "zh" ? "未配置" : "not configured");
         const automationConfig: AutomationConfig = {
           threadId: thread.id,
           title,
-          subtitle:
-            locale === "zh"
-              ? `手动触发 · ${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}`
-              : `Manual trigger · ${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}`,
-          body:
-            locale === "zh"
-              ? [
-                  "触发器：手动",
-                  `目标办公室：${targetOffice?.title ?? "未绑定"}`,
-                  `执行智能体：${executionAgent?.name ?? "未绑定"}`,
-                  `模型：${executionAgent?.model ?? "未配置"}`,
-                  `MCP：${enabledMcp}`,
-                  `Skill：${enabledSkills}`,
-                  `动作：运行自动化「${title}」，并把执行记录写入 automation/run。`,
-                ].join("\n")
-              : [
-                  "Trigger: manual",
-                  `Target office: ${targetOffice?.title ?? "not bound"}`,
-                  `Agent: ${executionAgent?.name ?? "not bound"}`,
-                  `Model: ${executionAgent?.model ?? "not configured"}`,
-                  `MCP: ${enabledMcp}`,
-                  `Skills: ${enabledSkills}`,
-                  `Action: run automation "${title}" and write the execution record through automation/run.`,
-                ].join("\n"),
-          prompt:
-            locale === "zh"
-              ? `运行自动化「${title}」。目标办公室：${targetOffice?.title ?? "未绑定"}。执行智能体：${executionAgent?.name ?? "未绑定"}。请记录运行结果、下一步任务和风险。`
-              : `Run automation "${title}". Target office: ${targetOffice?.title ?? "not bound"}. Agent: ${executionAgent?.name ?? "not bound"}. Record results, next tasks, and risks.`,
+          subtitle: automationBindingSubtitle({
+            targetOffice,
+            executionAgent,
+            locale,
+            includeTrigger: true,
+          }),
+          body: automationBodyText({
+            title,
+            targetOffice,
+            executionAgent,
+            triggerType: locale === "zh" ? "手动" : "manual",
+            locale,
+          }),
+          prompt: automationRunPrompt({
+            title,
+            targetOffice,
+            executionAgent,
+            locale,
+          }),
           trigger: { type: "manual" },
           targetOffice,
           executionAgent,
@@ -6471,10 +6458,12 @@ export function App() {
         let savedAutomationConfig = automationConfig;
         let automationConfigPath: string | null = null;
         const automationCwd = await resolveBackendCwd();
-        const createPrompt =
-          locale === "zh"
-            ? `运行自动化「${title}」。目标办公室：${targetOffice?.title ?? "未绑定"}。执行智能体：${executionAgent?.name ?? "未绑定"}。请记录运行结果、下一步任务和风险。`
-            : `Run automation "${title}". Target office: ${targetOffice?.title ?? "not bound"}. Agent: ${executionAgent?.name ?? "not bound"}. Record results, next tasks, and risks.`;
+        const createPrompt = automationRunPrompt({
+          title,
+          targetOffice,
+          executionAgent,
+          locale,
+        });
         if (automationCwd && clientRef.current) {
           try {
             const createResult = await clientRef.current.createAutomationConfig(
@@ -7352,40 +7341,20 @@ export function App() {
         const triggerType =
           savedAutomationConfig?.trigger?.type ??
           (locale === "zh" ? "手动" : "manual");
-        const enabledMcp =
-          executionAgent?.mcp
-            .filter((option) => option.enabled)
-            .map((option) => option.name)
-            .join(", ") || (locale === "zh" ? "未配置" : "not configured");
-        const enabledSkills =
-          executionAgent?.skills
-            .filter((option) => option.enabled)
-            .map((option) => option.name)
-            .join(", ") || (locale === "zh" ? "未配置" : "not configured");
-        const automationBody =
-          locale === "zh"
-            ? [
-                `触发器：${triggerType}`,
-                `目标办公室：${targetOffice?.title ?? "待选择"}`,
-                `执行智能体：${executionAgent?.name ?? "待选择"}`,
-                `模型：${executionAgent?.model ?? "未配置"}`,
-                `MCP：${enabledMcp}`,
-                `Skill：${enabledSkills}`,
-                `动作：运行自动化「${title}」，并把执行记录写入 automation/run。`,
-              ].join("\n")
-            : [
-                `Trigger: ${triggerType}`,
-                `Target office: ${targetOffice?.title ?? "pending"}`,
-                `Agent: ${executionAgent?.name ?? "pending"}`,
-                `Model: ${executionAgent?.model ?? "not configured"}`,
-                `MCP: ${enabledMcp}`,
-                `Skills: ${enabledSkills}`,
-                `Action: run automation "${title}" and write the execution record through automation/run.`,
-              ].join("\n");
-        const automationPrompt =
-          locale === "zh"
-            ? `立即运行自动化「${title}」。目标办公室：${targetOffice?.title ?? "待选择"}。执行智能体：${executionAgent?.name ?? "待选择"}。请记录运行结果、下一步任务和风险。`
-            : `Run automation "${title}" now. Target office: ${targetOffice?.title ?? "pending"}. Agent: ${executionAgent?.name ?? "pending"}. Record results, next tasks, and risks.`;
+        const automationBody = automationBodyText({
+          title,
+          targetOffice,
+          executionAgent,
+          triggerType,
+          locale,
+        });
+        const automationPrompt = automationRunPrompt({
+          title,
+          targetOffice,
+          executionAgent,
+          locale,
+          immediate: true,
+        });
         const fullAutomationPrompt = [
           action.automationPrompt ?? savedAutomationConfig?.prompt,
           automationPrompt,
@@ -7429,21 +7398,16 @@ export function App() {
         if (!threadId) {
           return;
         }
-        const automationConfig: AutomationConfig = {
-          ...savedAutomationConfig,
+        const automationConfig = automationConfigForRun({
+          baseConfig: savedAutomationConfig,
           threadId,
           title,
-          subtitle:
-            savedAutomationConfig?.subtitle ||
-            (locale === "zh"
-              ? `${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}`
-              : `${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}`),
-          body: savedAutomationConfig?.body || automationBody,
           prompt: fullAutomationPrompt,
-          trigger: savedAutomationConfig?.trigger ?? { type: "manual" },
           targetOffice,
           executionAgent,
-        };
+          body: automationBody,
+          locale,
+        });
         let automationConfigPath = action.automationConfigPath ?? null;
         if (action.automationConfigPath) {
           const automationCwd = await resolveBackendCwd();
