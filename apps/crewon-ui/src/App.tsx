@@ -4734,6 +4734,8 @@ export function App() {
     const title = libraryTitle(kind, locale);
     const requestId = libraryLoadRequestRef.current + 1;
     libraryLoadRequestRef.current = requestId;
+    const isCurrentLibraryLoad = () =>
+      libraryLoadRequestRef.current === requestId;
     setAppView("library");
     setCapabilityDockOpen(false);
     setInspectorOpen(false);
@@ -4747,7 +4749,7 @@ export function App() {
       items: [],
     });
     const loadingFallbackTimer = window.setTimeout(() => {
-      if (libraryLoadRequestRef.current !== requestId) {
+      if (!isCurrentLibraryLoad()) {
         return;
       }
       setLibraryPanel((currentPanel) =>
@@ -4924,15 +4926,18 @@ export function App() {
                 : `Assignable to agents or offices: ${skill.path}`) ||
               undefined,
             action: skill.path
-              ? {
-                  type: "skill-file",
-                  skillName: skill.name,
-                  path: skill.path,
-                  enabled: skill.enabled,
-                }
+                ? {
+                    type: "skill-file",
+                    skillName: skill.name,
+                    path: skill.path,
+                    enabled: skill.enabled,
+                  }
               : (pluginSkillAction(skill.name, pluginEntries) ?? undefined),
           };
         });
+        if (!isCurrentLibraryLoad()) {
+          return;
+        }
         setLibraryPanel({
           kind,
           title,
@@ -5066,6 +5071,9 @@ export function App() {
           ...backendOfficeItems,
           ...uniqueWorkspaceOfficeItems,
         ];
+        if (!isCurrentLibraryLoad()) {
+          return;
+        }
         setLibraryPanel({
           ...basePanel,
           subtitle:
@@ -5151,6 +5159,9 @@ export function App() {
           ...backendAutomationItems,
           ...uniqueWorkspaceAutomationItems,
         ];
+        if (!isCurrentLibraryLoad()) {
+          return;
+        }
         setLibraryPanel({
           ...basePanel,
           subtitle:
@@ -5185,6 +5196,9 @@ export function App() {
 
       if (kind === "knowledge") {
         const knowledge = await createBackendKnowledgeData();
+        if (!isCurrentLibraryLoad()) {
+          return;
+        }
         setLibraryPanel({
           kind: "knowledge",
           title,
@@ -5268,6 +5282,9 @@ export function App() {
           },
         }));
         const basePanel = demoLibraryPanel("agents", locale);
+        if (!isCurrentLibraryLoad()) {
+          return;
+        }
         setLibraryPanel({
           ...basePanel,
           subtitle:
@@ -5323,6 +5340,9 @@ export function App() {
       }
 
       const response = await clientRef.current?.listPlugins(effectiveCwd);
+      if (!isCurrentLibraryLoad()) {
+        return;
+      }
       const marketplaces = response?.marketplaces ?? [];
       const pluginEntries = marketplaces.flatMap((marketplace) =>
         marketplace.plugins.map((plugin) => ({
@@ -5443,7 +5463,7 @@ export function App() {
             : undefined,
       });
     } catch (error) {
-      if (libraryLoadRequestRef.current !== requestId) {
+      if (!isCurrentLibraryLoad()) {
         return;
       }
       setLibraryPanel({
@@ -5464,18 +5484,24 @@ export function App() {
   }
 
   async function openLibraryItem(item: LibraryItem) {
-    if (!item.action || (!isConnected && !isDemo)) {
+    if (!item.action) {
       return;
     }
 
     const action = item.action;
+    const isLocalLibraryAction =
+      action.type === "mcp-detail" ||
+      action.type === "office-detail" ||
+      action.type === "agent-config" ||
+      action.type === "automation-detail";
+    if (!isConnected && !isDemo && !(isDemoPreview && isLocalLibraryAction)) {
+      return;
+    }
+    libraryLoadRequestRef.current += 1;
 
     if (
       isDemo &&
-      action.type !== "mcp-detail" &&
-      action.type !== "office-detail" &&
-      action.type !== "agent-config" &&
-      action.type !== "automation-detail"
+      !isLocalLibraryAction
     ) {
       return;
     }
