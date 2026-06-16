@@ -334,21 +334,10 @@ function normalizeDomainConfigList<TConfig>(
 }
 
 function shouldFallbackToFsPersistence(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
   if (error instanceof AppServerRpcError) {
     return error.code === -32601;
   }
-
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("app-server is not connected") ||
-    message.includes("app-server connection closed") ||
-    message.includes("unable to connect") ||
-    message.includes("unable to send app-server request")
-  );
+  return false;
 }
 
 function createAgentConfigRecord(config: AgentConfig): AgentConfigRecord {
