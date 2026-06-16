@@ -1,6 +1,7 @@
 import { AppServerRpcError, type AppServerClient } from "./appServer";
 import {
   officeConfigForThread,
+  type ArtifactItem,
   type LibraryPanel,
   type OfficeConfig,
   type OfficeMember,
@@ -114,6 +115,44 @@ export async function persistOfficeMember(
     }
     return null;
   }
+}
+
+export async function decideOfficeApproval(
+  client: AppServerClient,
+  cwd: string,
+  panel: OfficePanelIdentity,
+  workspace: OfficeWorkspace,
+  threadId: string,
+  approvalId: string,
+  decision: "approved" | "denied",
+  message?: OfficeMessage | null,
+): Promise<OfficeConfig> {
+  const response = await client.decideOfficeApprovalConfig(
+    cwd,
+    officeConfigForThread(panel.title, panel.subtitle, workspace, threadId),
+    approvalId,
+    decision,
+    message ?? null,
+  );
+  return response.config;
+}
+
+export async function upsertOfficeArtifact(
+  client: AppServerClient,
+  cwd: string,
+  panel: OfficePanelIdentity,
+  workspace: OfficeWorkspace,
+  threadId: string,
+  artifact: ArtifactItem,
+  message?: OfficeMessage | null,
+): Promise<OfficeConfig> {
+  const response = await client.upsertOfficeArtifactConfig(
+    cwd,
+    officeConfigForThread(panel.title, panel.subtitle, workspace, threadId),
+    artifact,
+    message ?? null,
+  );
+  return response.config;
 }
 
 function isUnsupportedRpcError(error: unknown): boolean {

@@ -119,9 +119,11 @@ import {
   writeAutomationConfigFile as writeStoredAutomationConfigFile,
 } from "./lib/domainPersistence";
 import {
+  decideOfficeApproval as decideBackendOfficeApproval,
   persistOfficeMember as persistBackendOfficeMember,
   persistOfficeMessage as persistBackendOfficeMessage,
   persistOfficeWorkspace as persistBackendOfficeWorkspace,
+  upsertOfficeArtifact as upsertBackendOfficeArtifact,
   writeOfficeConfig as writeBackendOfficeConfig,
 } from "./lib/domainOfficeBackend";
 import {
@@ -5911,14 +5913,12 @@ export function App() {
         if (!officeCwd || !clientRef.current) {
           return;
         }
-        const response = await clientRef.current.decideOfficeApprovalConfig(
+        const savedConfig = await decideBackendOfficeApproval(
+          clientRef.current,
           officeCwd,
-          officeConfigForThread(
-            panel.title,
-            panel.subtitle,
-            baseWorkspace,
-            threadId,
-          ),
+          panel,
+          baseWorkspace,
+          threadId,
           id,
           decision,
           systemMessage,
@@ -5928,7 +5928,7 @@ export function App() {
             ? {
                 ...currentPanel,
                 workspace: {
-                  ...response.config.workspace,
+                  ...savedConfig.workspace,
                   threadId,
                   backendStatus: "connected",
                 },
@@ -6054,17 +6054,18 @@ export function App() {
           };
           const threadId = await ensureOfficeThread(panel, nextWorkspace);
           if (threadId) {
-            const savedConfig = await clientRef.current?.upsertOfficeArtifactConfig(
-              root,
-              officeConfigForThread(
-                panel.title,
-                panel.subtitle,
-                panel.workspace,
-                threadId,
-              ),
-              savedArtifact,
-              systemMessage,
-            );
+            const savedConfig =
+              clientRef.current
+                ? await upsertBackendOfficeArtifact(
+                    clientRef.current,
+                    root,
+                    panel,
+                    panel.workspace,
+                    threadId,
+                    savedArtifact,
+                    systemMessage,
+                  )
+                : null;
             const artifactInput = [
               locale === "zh"
                 ? `办公室「${panel.title}」创建产物：${artifact.title}`
@@ -6088,7 +6089,7 @@ export function App() {
                 ? {
                     ...currentPanel,
                     workspace: {
-                      ...(savedConfig?.config.workspace ?? nextWorkspace),
+                      ...(savedConfig?.workspace ?? nextWorkspace),
                       threadId,
                       backendStatus: "connected",
                     },
