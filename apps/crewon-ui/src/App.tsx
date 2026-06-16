@@ -7641,7 +7641,18 @@ export function App() {
         );
         automationRunRecord = automationRunResult.record;
         if (automationRunRecord && response?.turn.id) {
-          if (response.turn.status === "inProgress") {
+          let latestTurn = response.turn;
+          try {
+            const currentThread = await clientRef.current?.readThread(threadId);
+            latestTurn =
+              currentThread?.turns.find((turn) => turn.id === response.turn.id) ??
+              response.turn;
+          } catch (error) {
+            if (!isMissingThreadError(error)) {
+              throw error;
+            }
+          }
+          if (latestTurn.status === "inProgress") {
             automationRunByTurnRef.current[response.turn.id] = {
               filePath: automationRunRecord.filePath,
               runId: automationRunRecord.runId,
@@ -7650,8 +7661,8 @@ export function App() {
           } else {
             await updateAutomationRun(
               automationRunRecord.filePath,
-              response.turn.status ?? "failed",
-              response.turn.completedAt ?? Math.floor(Date.now() / 1000),
+              latestTurn.status ?? "failed",
+              latestTurn.completedAt ?? Math.floor(Date.now() / 1000),
             );
           }
         }
@@ -7700,7 +7711,7 @@ export function App() {
                   .filter(Boolean)
                   .join("\n"),
                 items:
-                  latestRunItems.length > 0
+                  automationRunRecord
                     ? latestRunItems
                     : latestAutomationThread
                       ? automationRunHistoryItems(latestAutomationThread, locale)
@@ -8524,41 +8535,54 @@ export function App() {
           });
           const automationRunRecord = automationRunByTurnRef.current[turn.id];
           if (automationRunRecord) {
-            delete automationRunByTurnRef.current[turn.id];
-            void updateAutomationRun(
-              automationRunRecord.filePath,
-              turn.status,
-              turn.completedAt ?? Math.floor(Date.now() / 1000),
-            ).then(async () => {
-              const items = await readAutomationRunItems(threadId);
-              setLibraryPanel((currentPanel) =>
-                currentPanel?.actions?.some(
-                  (action) =>
-                    action.id === "run-automation" &&
-                    action.automationThreadId === threadId,
-                )
-                  ? {
-                      ...currentPanel,
-                      body: [
-                        currentPanel.body,
-                        "",
-                        ...automationRunLifecycleText({
-                          threadId,
-                          runId: automationRunRecord.runId,
-                          runFilePath: automationRunRecord.filePath,
-                          configPath: null,
-                          locale,
-                          phase: "completed",
-                        }),
-                      ]
-                        .filter(Boolean)
-                        .join("\n"),
-                      items,
-                      error: undefined,
-                    }
-                  : currentPanel,
-              );
-            });
+            void (async () => {
+              try {
+                await updateAutomationRun(
+                  automationRunRecord.filePath,
+                  turn.status,
+                  turn.completedAt ?? Math.floor(Date.now() / 1000),
+                );
+                delete automationRunByTurnRef.current[turn.id];
+                const items = await readAutomationRunItems(threadId);
+                setLibraryPanel((currentPanel) =>
+                  currentPanel?.actions?.some(
+                    (action) =>
+                      action.id === "run-automation" &&
+                      action.automationThreadId === threadId,
+                  )
+                    ? {
+                        ...currentPanel,
+                        body: [
+                          currentPanel.body,
+                          "",
+                          ...automationRunLifecycleText({
+                            threadId,
+                            runId: automationRunRecord.runId,
+                            runFilePath: automationRunRecord.filePath,
+                            configPath: null,
+                            locale,
+                            phase: "completed",
+                          }),
+                        ]
+                          .filter(Boolean)
+                          .join("\n"),
+                        items,
+                        error: undefined,
+                      }
+                    : currentPanel,
+                );
+              } catch (error) {
+                setNotice({
+                  text:
+                    error instanceof Error
+                      ? error.message
+                      : locale === "zh"
+                        ? "自动化运行状态同步失败"
+                        : "Unable to sync automation run status",
+                  tone: "warning",
+                });
+              }
+            })();
           }
           return;
         }

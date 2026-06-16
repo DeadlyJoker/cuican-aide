@@ -42,22 +42,11 @@ export function automationRunRecordItems(
   locale: Locale,
 ): LibraryItem[] {
   const runs = records.slice(0, 6).map(({ filePath, savedAt, run }): LibraryItem => {
-    const statusLabel =
-      locale === "zh"
-        ? run.status === "completed"
-          ? "完成"
-          : run.status === "running"
-            ? "运行中"
-            : "排队中"
-        : run.status === "completed"
-          ? "Completed"
-          : run.status === "running"
-            ? "Running"
-            : "Queued";
+    const status = automationRunStatusDisplay(run.status, locale);
     return {
       title: run.automationTitle,
       meta: [
-        statusLabel,
+        status.label,
         formatUnixSeconds(run.completedAt ?? run.startedAt ?? savedAt, locale),
         run.runId,
       ]
@@ -79,13 +68,8 @@ export function automationRunRecordItems(
       ]
         .filter(Boolean)
         .join("\n"),
-      glyph: run.status === "completed" ? "✓" : run.status === "running" ? "◷" : "•",
-      accent:
-        run.status === "completed"
-          ? "green"
-          : run.status === "running"
-            ? "blue"
-            : "slate",
+      glyph: status.glyph,
+      accent: status.accent,
     };
   });
 
@@ -108,6 +92,51 @@ export function automationRunRecordItems(
     },
     ...runs,
   ];
+}
+
+function automationRunStatusDisplay(
+  status: string,
+  locale: Locale,
+): Pick<LibraryItem, "accent" | "glyph"> & { label: string } {
+  switch (status) {
+    case "completed":
+      return {
+        label: locale === "zh" ? "完成" : "Completed",
+        glyph: "✓",
+        accent: "green",
+      };
+    case "inProgress":
+    case "running":
+      return {
+        label: locale === "zh" ? "运行中" : "Running",
+        glyph: "◷",
+        accent: "blue",
+      };
+    case "failed":
+      return {
+        label: locale === "zh" ? "失败" : "Failed",
+        glyph: "!",
+        accent: "rose",
+      };
+    case "interrupted":
+      return {
+        label: locale === "zh" ? "已中断" : "Interrupted",
+        glyph: "!",
+        accent: "amber",
+      };
+    case "queued":
+      return {
+        label: locale === "zh" ? "排队中" : "Queued",
+        glyph: "•",
+        accent: "slate",
+      };
+    default:
+      return {
+        label: status,
+        glyph: "•",
+        accent: "slate",
+      };
+  }
 }
 
 export async function runAutomationConfig(
