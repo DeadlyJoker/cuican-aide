@@ -2,6 +2,7 @@ import type { AgentMessageDeltaNotification } from "@crewon-protocol/v2/AgentMes
 import type { AccountLoginCompletedNotification } from "@crewon-protocol/v2/AccountLoginCompletedNotification";
 import type { AccountRateLimitsUpdatedNotification } from "@crewon-protocol/v2/AccountRateLimitsUpdatedNotification";
 import type { AccountUpdatedNotification } from "@crewon-protocol/v2/AccountUpdatedNotification";
+import type { AppListUpdatedNotification } from "@crewon-protocol/v2/AppListUpdatedNotification";
 import type { AppsListResponse } from "@crewon-protocol/v2/AppsListResponse";
 import type { AskForApproval } from "@crewon-protocol/v2/AskForApproval";
 import type { CommandExecutionOutputDeltaNotification } from "@crewon-protocol/v2/CommandExecutionOutputDeltaNotification";
@@ -11,8 +12,10 @@ import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse"
 import type { ConfigRequirementsReadResponse } from "@crewon-protocol/v2/ConfigRequirementsReadResponse";
 import type { ConfigWriteResponse } from "@crewon-protocol/v2/ConfigWriteResponse";
 import type { ConfigWarningNotification } from "@crewon-protocol/v2/ConfigWarningNotification";
+import type { ContextCompactedNotification } from "@crewon-protocol/v2/ContextCompactedNotification";
 import type { ErrorNotification } from "@crewon-protocol/v2/ErrorNotification";
 import type { ExternalAgentConfigDetectResponse } from "@crewon-protocol/v2/ExternalAgentConfigDetectResponse";
+import type { ExternalAgentConfigImportCompletedNotification } from "@crewon-protocol/v2/ExternalAgentConfigImportCompletedNotification";
 import type { ExternalAgentConfigImportResponse } from "@crewon-protocol/v2/ExternalAgentConfigImportResponse";
 import type { ExternalAgentConfigMigrationItem } from "@crewon-protocol/v2/ExternalAgentConfigMigrationItem";
 import type { FileChangePatchUpdatedNotification } from "@crewon-protocol/v2/FileChangePatchUpdatedNotification";
@@ -57,9 +60,11 @@ import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse"
 import type { PluginReadResponse } from "@crewon-protocol/v2/PluginReadResponse";
 import type { PluginSkillReadResponse } from "@crewon-protocol/v2/PluginSkillReadResponse";
 import type { PlanDeltaNotification } from "@crewon-protocol/v2/PlanDeltaNotification";
+import type { RemoteControlStatusChangedNotification } from "@crewon-protocol/v2/RemoteControlStatusChangedNotification";
 import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
 import type { SandboxPolicy } from "@crewon-protocol/v2/SandboxPolicy";
 import type { ServerRequestResolvedNotification } from "@crewon-protocol/v2/ServerRequestResolvedNotification";
+import type { SkillsChangedNotification } from "@crewon-protocol/v2/SkillsChangedNotification";
 import type { SkillsCreateResponse } from "@crewon-protocol/v2/SkillsCreateResponse";
 import type { SkillsListResponse } from "@crewon-protocol/v2/SkillsListResponse";
 import type { SkillsConfigWriteResponse } from "@crewon-protocol/v2/SkillsConfigWriteResponse";
@@ -76,6 +81,7 @@ import type { ThreadGoalUpdatedNotification } from "@crewon-protocol/v2/ThreadGo
 import type { ThreadListResponse } from "@crewon-protocol/v2/ThreadListResponse";
 import type { ThreadNameUpdatedNotification } from "@crewon-protocol/v2/ThreadNameUpdatedNotification";
 import type { ThreadResumeResponse } from "@crewon-protocol/v2/ThreadResumeResponse";
+import type { ThreadSettingsUpdatedNotification } from "@crewon-protocol/v2/ThreadSettingsUpdatedNotification";
 import type { ThreadStartResponse } from "@crewon-protocol/v2/ThreadStartResponse";
 import type { ThreadStartedNotification } from "@crewon-protocol/v2/ThreadStartedNotification";
 import type { ThreadStatusChangedNotification } from "@crewon-protocol/v2/ThreadStatusChangedNotification";
@@ -372,7 +378,9 @@ export type KnownAppServerNotification =
   | { method: "account/login/completed"; params: AccountLoginCompletedNotification }
   | { method: "account/rateLimits/updated"; params: AccountRateLimitsUpdatedNotification }
   | { method: "account/updated"; params: AccountUpdatedNotification }
+  | { method: "app/list/updated"; params: AppListUpdatedNotification }
   | { method: "configWarning"; params: ConfigWarningNotification }
+  | { method: "externalAgentConfig/import/completed"; params: ExternalAgentConfigImportCompletedNotification }
   | { method: "fs/changed"; params: FsChangedNotification }
   | { method: "command/exec/outputDelta"; params: CommandExecOutputDeltaNotification }
   | { method: "item/agentMessage/delta"; params: AgentMessageDeltaNotification }
@@ -383,12 +391,16 @@ export type KnownAppServerNotification =
   | { method: "item/started"; params: ItemStartedNotification }
   | { method: "mcpServer/oauthLogin/completed"; params: McpServerOauthLoginCompletedNotification }
   | { method: "mcpServer/startupStatus/updated"; params: McpServerStatusUpdatedNotification }
+  | { method: "remoteControl/status/changed"; params: RemoteControlStatusChangedNotification }
   | { method: "serverRequest/resolved"; params: ServerRequestResolvedNotification }
+  | { method: "skills/changed"; params: SkillsChangedNotification }
   | { method: "thread/archived"; params: ThreadArchivedNotification }
+  | { method: "thread/compacted"; params: ContextCompactedNotification }
   | { method: "thread/deleted"; params: ThreadDeletedNotification }
   | { method: "thread/goal/cleared"; params: ThreadGoalClearedNotification }
   | { method: "thread/goal/updated"; params: ThreadGoalUpdatedNotification }
   | { method: "thread/name/updated"; params: ThreadNameUpdatedNotification }
+  | { method: "thread/settings/updated"; params: ThreadSettingsUpdatedNotification }
   | { method: "thread/started"; params: ThreadStartedNotification }
   | { method: "thread/status/changed"; params: ThreadStatusChangedNotification }
   | { method: "thread/tokenUsage/updated"; params: ThreadTokenUsageUpdatedNotification }
@@ -1637,8 +1649,10 @@ function isKnownNotification(message: JsonRpcNotification): message is KnownAppS
     message.method === "account/login/completed" ||
     message.method === "account/rateLimits/updated" ||
     message.method === "account/updated" ||
+    message.method === "app/list/updated" ||
     message.method === "command/exec/outputDelta" ||
     message.method === "configWarning" ||
+    message.method === "externalAgentConfig/import/completed" ||
     message.method === "fs/changed" ||
     message.method === "item/agentMessage/delta" ||
     message.method === "item/commandExecution/outputDelta" ||
@@ -1648,12 +1662,16 @@ function isKnownNotification(message: JsonRpcNotification): message is KnownAppS
     message.method === "item/started" ||
     message.method === "mcpServer/oauthLogin/completed" ||
     message.method === "mcpServer/startupStatus/updated" ||
+    message.method === "remoteControl/status/changed" ||
     message.method === "serverRequest/resolved" ||
+    message.method === "skills/changed" ||
     message.method === "thread/archived" ||
+    message.method === "thread/compacted" ||
     message.method === "thread/deleted" ||
     message.method === "thread/goal/cleared" ||
     message.method === "thread/goal/updated" ||
     message.method === "thread/name/updated" ||
+    message.method === "thread/settings/updated" ||
     message.method === "thread/started" ||
     message.method === "thread/status/changed" ||
     message.method === "thread/tokenUsage/updated" ||

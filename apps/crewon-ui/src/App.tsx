@@ -2426,9 +2426,12 @@ export function App() {
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [appView, setAppView] = useState<AppView>(getInitialAppView);
+  const appViewRef = useRef<AppView>(appView);
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>(getInitialSettingsSection);
+  const settingsSectionRef = useRef<SettingsSection>(settingsSection);
   const [libraryPanel, setLibraryPanel] = useState<LibraryPanel | null>(null);
+  const libraryPanelRef = useRef<LibraryPanel | null>(libraryPanel);
   const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarOpen);
   const [capabilityDockOpen, setCapabilityDockOpen] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -2470,6 +2473,16 @@ export function App() {
   const [busyToolId, setBusyToolId] = useState<ToolId | null>(null);
   const [capabilityPanel, setCapabilityPanel] =
     useState<CapabilityPanel | null>(null);
+  const capabilityPanelRef = useRef<CapabilityPanel | null>(capabilityPanel);
+  const openLibraryRef = useRef<(kind: LibraryKind) => Promise<void>>(
+    async () => undefined,
+  );
+  const refreshSettingsSectionRef = useRef<
+    (section: SettingsSection) => Promise<void>
+  >(async () => undefined);
+  const openThreadSettingsPanelRef = useRef<() => Promise<void>>(
+    async () => undefined,
+  );
   const [pendingApprovalRequest, setPendingApprovalRequest] =
     useState<PendingApprovalRequest | null>(null);
   const [pendingUserInputRequest, setPendingUserInputRequest] =
@@ -2537,6 +2550,19 @@ export function App() {
   useEffect(() => {
     threadsRef.current = threads;
   }, [threads]);
+
+  useEffect(() => {
+    appViewRef.current = appView;
+    settingsSectionRef.current = settingsSection;
+    libraryPanelRef.current = libraryPanel;
+    capabilityPanelRef.current = capabilityPanel;
+  }, [appView, capabilityPanel, libraryPanel, settingsSection]);
+
+  useEffect(() => {
+    openLibraryRef.current = openLibrary;
+    refreshSettingsSectionRef.current = refreshSettingsSection;
+    openThreadSettingsPanelRef.current = openThreadSettingsPanel;
+  });
 
   useEffect(() => {
     selectedThreadIdRef.current = selectedThreadId;
@@ -8191,6 +8217,24 @@ export function App() {
           .catch(() => undefined);
       }
 
+      function refreshVisibleLibrary(kind: LibraryKind) {
+        if (
+          appViewRef.current === "library" &&
+          libraryPanelRef.current?.kind === kind
+        ) {
+          void openLibraryRef.current(kind);
+        }
+      }
+
+      function refreshVisibleSettings(sections: SettingsSection[]) {
+        if (
+          appViewRef.current === "settings" &&
+          sections.includes(settingsSectionRef.current)
+        ) {
+          void refreshSettingsSectionRef.current(settingsSectionRef.current);
+        }
+      }
+
       switch (notification.method) {
         case "account/login/completed": {
           const { success, error } = notification.params;
@@ -8227,6 +8271,10 @@ export function App() {
           refreshAccount();
           return;
         }
+        case "app/list/updated": {
+          refreshVisibleSettings(["browser", "connections"]);
+          return;
+        }
         case "command/exec/outputDelta": {
           const { processId, stream, deltaBase64, capReached } =
             notification.params;
@@ -8252,6 +8300,10 @@ export function App() {
             text: [summary, path, details].filter(Boolean).join("\n"),
             tone: "warning",
           });
+          return;
+        }
+        case "externalAgentConfig/import/completed": {
+          refreshVisibleLibrary("agents");
           return;
         }
         case "fs/changed": {
@@ -8403,6 +8455,10 @@ export function App() {
           });
           return;
         }
+        case "remoteControl/status/changed": {
+          refreshVisibleSettings(["computer-control"]);
+          return;
+        }
         case "serverRequest/resolved": {
           const { requestId } = notification.params;
           setCapabilityPanel((currentPanel) =>
@@ -8445,6 +8501,11 @@ export function App() {
           );
           return;
         }
+        case "skills/changed": {
+          refreshVisibleLibrary("tools");
+          refreshVisibleSettings(["mcp-servers"]);
+          return;
+        }
         case "thread/archived":
         case "thread/deleted": {
           const { threadId } = notification.params;
@@ -8462,6 +8523,10 @@ export function App() {
           setSelectedThreadId((currentThreadId) =>
             currentThreadId === threadId ? null : currentThreadId,
           );
+          return;
+        }
+        case "thread/compacted": {
+          refreshThread(notification.params.threadId);
           return;
         }
         case "thread/goal/cleared": {
@@ -8490,6 +8555,18 @@ export function App() {
                 : thread,
             ),
           );
+          return;
+        }
+        case "thread/settings/updated": {
+          refreshThread(notification.params.threadId);
+          if (
+            notification.params.threadId === selectedThreadIdRef.current &&
+            capabilityPanelRef.current?.fields?.some(
+              (field) => field.id === "thread-goal-objective",
+            )
+          ) {
+            void openThreadSettingsPanelRef.current();
+          }
           return;
         }
         case "thread/started": {
