@@ -159,29 +159,6 @@ export async function writeOfficeConfigFile(
   return filePath;
 }
 
-export async function writeToolConfigFile(
-  client: AppServerClient,
-  cwd: string,
-  config: ToolConfig,
-): Promise<string> {
-  try {
-    return (await client.saveToolConfig(cwd, config)).filePath;
-  } catch (error) {
-    if (!shouldFallbackToFsPersistence(error)) {
-      throw error;
-    }
-  }
-
-  const toolsDir = toolConfigDirectory(cwd);
-  const filePath = joinDomainPath(
-    toolsDir,
-    domainConfigFileName("tool", config.title, config.name),
-  );
-  const record: ToolConfigRecord = createToolConfigRecord(config);
-  await writeConfigRecord(client, toolsDir, filePath, record);
-  return filePath;
-}
-
 export async function readAgentConfigFiles(
   client: AppServerClient,
   cwd: string,
@@ -364,15 +341,6 @@ function createOfficeConfigRecord(config: OfficeConfig): OfficeConfigRecord {
   return {
     version: 1,
     kind: "office",
-    savedAt: new Date().toISOString(),
-    config,
-  };
-}
-
-function createToolConfigRecord(config: ToolConfig): ToolConfigRecord {
-  return {
-    version: 1,
-    kind: "tool",
     savedAt: new Date().toISOString(),
     config,
   };
