@@ -9497,19 +9497,6 @@ export function App() {
           config: serverConfig,
           reload: true,
         });
-        await writeToolConfigFile({
-          kind: "mcp",
-          title: rawName || serverName,
-          name: serverName,
-          description:
-            locale === "zh"
-              ? "从工具页创建的 MCP 草稿。"
-              : "MCP draft created from the tools page.",
-          command,
-          args: parsedArgs,
-          env: parsedEnv,
-          enabled: false,
-        });
         await openLibrary("tools");
         setNotice({
           text:
@@ -9578,15 +9565,6 @@ export function App() {
         if (!createResponse) {
           return;
         }
-        const skillPath = createResponse.skill.path;
-        await writeToolConfigFile({
-          kind: "skill",
-          title: createResponse.skill.name,
-          name: createResponse.skill.name,
-          description: createResponse.skill.description,
-          path: skillPath,
-          enabled: createResponse.skill.enabled,
-        });
         await openLibrary("tools");
         setNotice({
           text:
@@ -10160,19 +10138,6 @@ export function App() {
           name: action.skillPath ? null : (action.skillName ?? null),
           enabled: nextEnabled,
         });
-        if (action.skillName) {
-          await writeToolConfigFile({
-            kind: "skill",
-            title: action.skillName,
-            name: action.skillName,
-            path: action.skillPath,
-            description:
-              locale === "zh"
-                ? "从工具页同步的 Skill 启停状态。"
-                : "Skill enablement synchronized from the tools page.",
-            enabled: nextEnabled,
-          });
-        }
         setNotice({
           text:
             locale === "zh"
