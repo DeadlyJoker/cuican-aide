@@ -6580,7 +6580,7 @@ export function App() {
       );
       return response.config;
     } catch (error) {
-      if (!(error instanceof AppServerRpcError)) {
+      if (!isUnsupportedRpcError(error)) {
         throw error;
       }
       await persistOfficeWorkspace(
@@ -6621,7 +6621,7 @@ export function App() {
       );
       return response.config;
     } catch (error) {
-      if (!(error instanceof AppServerRpcError)) {
+      if (!isUnsupportedRpcError(error)) {
         throw error;
       }
       await persistOfficeWorkspace(
@@ -7032,7 +7032,7 @@ export function App() {
           return response.data[0].config;
         }
       } catch (error) {
-        if (!(error instanceof AppServerRpcError)) {
+        if (!isUnsupportedRpcError(error)) {
           throw error;
         }
       }
@@ -8871,7 +8871,7 @@ export function App() {
           };
           automationConfigPath = createResult.filePath;
         } catch (error) {
-          if (!(error instanceof AppServerRpcError)) {
+          if (!isUnsupportedRpcError(error)) {
             throw error;
           }
           automationConfigPath =
