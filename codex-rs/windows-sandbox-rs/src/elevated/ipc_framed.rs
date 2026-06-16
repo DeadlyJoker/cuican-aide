@@ -1,4 +1,4 @@
-//! Framed IPC protocol used between the parent (CLI) and the elevated command runner.
+//! Framed IPC protocol used between the parent process and the elevated command runner.
 //!
 //! This module defines the JSON message schema (spawn request/ready, output, stdin,
 //! exit, error, terminate) plus length‑prefixed framing helpers for a byte stream.
@@ -10,8 +10,8 @@
 use anyhow::Result;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use codex_protocol::models::PermissionProfile;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::models::PermissionProfile;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;

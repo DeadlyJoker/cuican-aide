@@ -2,19 +2,20 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::config::Config;
-use codex_config::McpServerConfig;
-use codex_core_plugins::PluginsManager;
-use codex_extension_api::ExtensionRegistry;
-use codex_extension_api::McpServerContribution;
-use codex_login::CodexAuth;
-use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
-use codex_mcp::EffectiveMcpServer;
-use codex_mcp::McpConfig;
-use codex_mcp::ToolPluginProvenance;
-use codex_mcp::codex_apps_mcp_server_config;
-use codex_mcp::configured_mcp_servers;
-use codex_mcp::effective_mcp_servers;
-use codex_mcp::tool_plugin_provenance as collect_tool_plugin_provenance;
+use crewon_config::McpServerConfig;
+use crewon_core_plugins::PluginsManager;
+use crewon_extension_api::ExtensionRegistry;
+use crewon_extension_api::McpServerContribution;
+use crewon_login::CrewonAuth;
+use crewon_mcp::CREWON_APPS_MCP_SERVER_NAME;
+use crewon_mcp::EffectiveMcpServer;
+use crewon_mcp::LEGACY_CODEX_APPS_MCP_SERVER_NAME;
+use crewon_mcp::McpConfig;
+use crewon_mcp::ToolPluginProvenance;
+use crewon_mcp::configured_mcp_servers;
+use crewon_mcp::crewon_apps_mcp_server_config;
+use crewon_mcp::effective_mcp_servers;
+use crewon_mcp::tool_plugin_provenance as collect_tool_plugin_provenance;
 
 #[derive(Clone)]
 pub struct McpManager {
@@ -26,7 +27,7 @@ impl McpManager {
     pub fn new(plugins_manager: Arc<PluginsManager>) -> Self {
         Self {
             plugins_manager,
-            extensions: codex_extension_api::empty_extension_registry(),
+            extensions: crewon_extension_api::empty_extension_registry(),
         }
     }
 
@@ -51,18 +52,32 @@ impl McpManager {
             .filter(|(_, server)| !server.enabled)
             .map(|(name, _)| name.clone())
             .collect::<Vec<_>>();
+        let legacy_apps_config = mcp_config
+            .configured_mcp_servers
+            .remove(LEGACY_CODEX_APPS_MCP_SERVER_NAME);
+        let legacy_apps_disabled = legacy_apps_config
+            .as_ref()
+            .is_some_and(|server| !server.enabled);
         if mcp_config.apps_enabled {
-            mcp_config.configured_mcp_servers.insert(
-                CODEX_APPS_MCP_SERVER_NAME.to_string(),
-                codex_apps_mcp_server_config(
-                    &mcp_config.chatgpt_base_url,
-                    mcp_config.apps_mcp_product_sku.as_deref(),
-                ),
-            );
+            mcp_config
+                .configured_mcp_servers
+                .insert(CREWON_APPS_MCP_SERVER_NAME.to_string(), {
+                    let mut server = crewon_apps_mcp_server_config(
+                        &mcp_config.chatgpt_base_url,
+                        mcp_config.apps_mcp_product_sku.as_deref(),
+                    );
+                    if legacy_apps_disabled {
+                        server.enabled = false;
+                    }
+                    server
+                });
         } else {
             mcp_config
                 .configured_mcp_servers
-                .remove(CODEX_APPS_MCP_SERVER_NAME);
+                .remove(CREWON_APPS_MCP_SERVER_NAME);
+            mcp_config
+                .configured_mcp_servers
+                .remove(LEGACY_CODEX_APPS_MCP_SERVER_NAME);
         }
         let contributions = self.contributions(config).await;
         Self::apply_to_configured_servers(&contributions, &mut mcp_config.configured_mcp_servers);
@@ -90,7 +105,7 @@ impl McpManager {
     pub async fn effective_servers(
         &self,
         config: &Config,
-        auth: Option<&CodexAuth>,
+        auth: Option<&CrewonAuth>,
     ) -> HashMap<String, EffectiveMcpServer> {
         let mcp_config = self.runtime_config(config).await;
         effective_mcp_servers(&mcp_config, auth)

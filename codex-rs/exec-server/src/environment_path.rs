@@ -5,7 +5,7 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 use crate::ExecutorFileSystem;
 use crate::FileMetadata;
@@ -126,10 +126,10 @@ mod tests {
     use super::*;
 
     use async_trait::async_trait;
-    use codex_protocol::models::PermissionProfile;
-    use codex_protocol::permissions::FileSystemSandboxPolicy;
-    use codex_protocol::permissions::NetworkSandboxPolicy;
-    use codex_utils_absolute_path::test_support::PathBufExt;
+    use crewon_protocol::models::PermissionProfile;
+    use crewon_protocol::permissions::FileSystemSandboxPolicy;
+    use crewon_protocol::permissions::NetworkSandboxPolicy;
+    use crewon_utils_absolute_path::test_support::PathBufExt;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
     use std::path::Path;

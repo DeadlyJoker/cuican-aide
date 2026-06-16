@@ -1,9 +1,9 @@
 use crate::state::ActiveTurn;
 use crate::state::MailboxDeliveryPhase;
 use crate::state::TurnState;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::user_input::UserInput;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::InterAgentCommunication;
+use crewon_protocol::user_input::UserInput;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -234,7 +234,7 @@ impl InputQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_protocol::AgentPath;
+    use crewon_protocol::AgentPath;
     use pretty_assertions::assert_eq;
 
     fn make_mail(

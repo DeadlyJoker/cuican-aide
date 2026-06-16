@@ -1,38 +1,24 @@
 ---
 name: "imagegen"
-description: "Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Codex should create a brand-new image, transform an existing image, or derive visual variants from references, and the output should be a bitmap asset rather than repo-native code or vector. Do not use when the task is better handled by editing existing SVG/vector/code-native assets, extending an established icon or logo system, or building the visual directly in HTML/CSS/canvas."
+description: "Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Crewon should create a brand-new image, transform an existing image, or derive visual variants from references, and the output should be a bitmap asset rather than repo-native code or vector. Do not use when the task is better handled by editing existing SVG/vector/code-native assets, extending an established icon or logo system, or building the visual directly in HTML/CSS/canvas."
 ---
 
 # Image Generation Skill
 
 Generates or edits images for the current project (for example website assets, game assets, UI mockups, product mockups, wireframes, logo design, photorealistic images, or infographics).
 
-## Top-level modes and rules
+## Top-level rules
 
-This skill has exactly two top-level modes:
-
-- **Default built-in tool mode (preferred):** built-in `image_gen` tool for normal image generation, editing, and simple transparent-image requests. Does not require `OPENAI_API_KEY`.
-- **Fallback CLI mode:** `scripts/image_gen.py` CLI. Use when the user explicitly asks for the CLI/API/model path, or after the user explicitly confirms a true model-native transparency fallback with `gpt-image-1.5`. Requires `OPENAI_API_KEY`.
-
-Within CLI fallback, the CLI exposes three subcommands:
-
-- `generate`
-- `edit`
-- `generate-batch`
+This skill uses the built-in `image_gen` tool for normal image generation, editing, and transparent-image requests. It does not require an external API key.
 
 Rules:
 - Use the built-in `image_gen` tool by default for normal image generation and editing requests.
-- Do not switch to CLI fallback for ordinary quality, size, or file-path control.
 - If the user explicitly asks for a transparent image/background, stay on built-in `image_gen` first: prompt for a flat removable chroma-key background, then remove it locally with the installed helper at `$CODEX_HOME/skills/.system/imagegen/scripts/remove_chroma_key.py`.
-- Never silently switch from built-in `image_gen` or CLI `gpt-image-2` to CLI `gpt-image-1.5`. Treat this as a model/path downgrade and ask the user before doing it, unless the user has already explicitly requested `gpt-image-1.5`, `scripts/image_gen.py`, or CLI fallback.
-- If a transparent request appears too complex for clean chroma-key removal, asks for true/native transparency, or local removal fails validation, explain that true transparency requires CLI `gpt-image-1.5 --background transparent --output-format png` because `gpt-image-2` does not support `background=transparent`, then ask whether to proceed. Run the CLI fallback only after the user confirms.
-- The word `batch` by itself does not mean CLI fallback. If the user asks for many assets or says to batch-generate assets without explicitly asking for CLI/API/model controls, stay on the built-in path and issue one built-in call per requested asset or variant.
-- If the built-in tool fails or is unavailable, tell the user the CLI fallback exists and that it requires `OPENAI_API_KEY`. Proceed only if the user explicitly asks for that fallback.
-- If the user explicitly asks for CLI mode, use the bundled `scripts/image_gen.py` workflow. Do not create one-off SDK runners.
-- Never modify `scripts/image_gen.py`. If something is missing, ask the user before doing anything else.
+- The word `batch` does not imply a separate execution mode. If the user asks for many assets or says to batch-generate assets, issue one built-in call per requested asset or variant.
+- If the built-in tool fails or is unavailable, explain the limitation and ask how the user wants to proceed.
 
 Built-in save-path policy:
-- In built-in tool mode, Codex saves generated images under `$CODEX_HOME/*` by default.
+- In built-in tool mode, Crewon saves generated images under `$CODEX_HOME/*` by default.
 - Do not describe or rely on OS temp as the default built-in destination.
 - Do not describe or rely on a destination-path argument (if any) on the built-in `image_gen` tool. If a specific location is needed, generate first and then move or copy the selected output from `$CODEX_HOME/generated_images/...`.
 - Save-path precedence in built-in mode:
@@ -42,13 +28,7 @@ Built-in save-path policy:
 - Never leave a project-referenced asset only at the default `$CODEX_HOME/*` path.
 - Do not overwrite an existing asset unless the user explicitly asked for replacement; otherwise create a sibling versioned filename such as `hero-v2.png` or `item-icon-edited.png`.
 
-Shared prompt guidance for both modes lives in `references/prompting.md` and `references/sample-prompts.md`.
-
-Fallback-only docs/resources for CLI mode:
-- `references/cli.md`
-- `references/image-api.md`
-- `references/codex-network.md`
-- `scripts/image_gen.py`
+Prompt guidance lives in `references/prompting.md` and `references/sample-prompts.md`.
 
 Local post-processing helper:
 - `$CODEX_HOME/skills/.system/imagegen/scripts/remove_chroma_key.py`: removes a flat chroma-key background from a generated image and writes a PNG/WebP with alpha. Prefer auto-key sampling, soft matte, and despill for antialiased edges.
@@ -81,21 +61,19 @@ Built-in edit semantics:
 - Built-in edit mode is for images already visible in the conversation context, such as attached images or images generated earlier in the thread.
 - If the user wants to edit a local image file with the built-in tool, first load it with built-in `view_image` tool so the image is visible in the conversation context, then proceed with the built-in edit flow.
 - Do not promise arbitrary filesystem-path editing through the built-in tool.
-- If a local file still needs direct file-path control, masks, or other explicit CLI-only parameters, use the explicit CLI fallback only when the user asks for it.
 - For edits, preserve invariants aggressively and save non-destructively by default.
 
 Execution strategy:
 - In the built-in default path, produce many assets or variants by issuing one `image_gen` call per requested asset or variant.
-- In the CLI fallback path, use the CLI `generate-batch` subcommand only when the user explicitly chose CLI mode and needs many prompts/assets.
-- For many distinct assets, do not use `n` as a substitute for separate prompts. `n` is for variants of one prompt; distinct assets need distinct built-in calls or distinct CLI `generate-batch` jobs.
+- For many distinct assets, do not use `n` as a substitute for separate prompts. `n` is for variants of one prompt; distinct assets need distinct built-in calls.
 
 Assume the user wants a new image unless they clearly ask to change an existing one.
 
 ## Workflow
-1. Decide the top-level mode: built-in by default, including simple transparent-output requests; fallback CLI only if explicitly requested or after the user explicitly confirms a transparent-output fallback.
+1. Use the built-in `image_gen` tool, including transparent-output requests.
 2. Decide the intent: `generate` or `edit`.
 3. Decide whether the output is preview-only or meant to be consumed by the current project.
-4. Decide the execution strategy: single asset vs repeated built-in calls vs CLI `generate-batch`.
+4. Decide the execution strategy: single asset vs repeated built-in calls.
 5. Collect inputs up front: prompt(s), exact text (verbatim), constraints/avoid list, and any input images.
 6. For every input image, label its role explicitly:
    - reference image
@@ -107,14 +85,13 @@ Assume the user wants a new image unless they clearly ask to change an existing 
    - If the user's prompt is already specific and detailed, normalize it into a clear spec without adding creative requirements.
    - If the user's prompt is generic, add tasteful augmentation only when it materially improves output quality.
 10. Use the built-in `image_gen` tool by default.
-11. For transparent-output requests, follow the transparent image guidance below: generate with built-in `image_gen` on a flat chroma-key background, copy the selected output into the workspace or `tmp/imagegen/`, run the installed `$CODEX_HOME/skills/.system/imagegen/scripts/remove_chroma_key.py` helper, and validate the alpha result before using it. If this path looks unsuitable or fails, ask before switching to CLI `gpt-image-1.5`.
+11. For transparent-output requests, follow the transparent image guidance below: generate with built-in `image_gen` on a flat chroma-key background, copy the selected output into the workspace or `tmp/imagegen/`, run the installed `$CODEX_HOME/skills/.system/imagegen/scripts/remove_chroma_key.py` helper, and validate the alpha result before using it.
 12. Inspect outputs and validate: subject, style, composition, text accuracy, and invariants/avoid items.
 13. Iterate with a single targeted change, then re-check.
 14. For preview-only work, render the image inline; the underlying file may remain at the default `$CODEX_HOME/generated_images/...` path.
 15. For project-bound work, move or copy the selected artifact into the workspace and update any consuming code or references. Never leave a project-referenced asset only at the default `$CODEX_HOME/generated_images/...` path.
 16. For batches or multi-asset requests, persist every requested deliverable final in the workspace unless the user explicitly asked to keep outputs preview-only. Discarded variants do not need to be kept unless requested.
-17. If the user explicitly chooses or confirms the CLI fallback, then use the fallback-only docs for model, quality, size, `input_fidelity`, masks, output format, output paths, and network setup.
-18. Always report the final saved path(s) for any workspace-bound asset(s), plus the final prompt or prompt set and whether the built-in tool or fallback CLI mode was used.
+17. Always report the final saved path(s) for any workspace-bound asset(s), plus the final prompt or prompt set.
 
 ## Transparent image requests
 
@@ -148,13 +125,7 @@ Do not use #00ff00 anywhere in the subject.
 No cast shadow, no contact shadow, no reflection, no watermark, and no text unless explicitly requested.
 ```
 
-Do not automatically use CLI `gpt-image-1.5 --background transparent --output-format png` instead of chroma keying. Ask the user first when the user asks for true/native transparency, when local removal fails validation, or when the requested image is complex: hair, fur, feathers, smoke, glass, liquids, translucent materials, reflective objects, soft shadows, realistic product grounding, or subject colors that conflict with all practical key colors.
-
-Use a concise confirmation like:
-
-```text
-This likely needs true native transparency. The default built-in path uses a chroma-key background plus local removal, but true transparency requires the CLI fallback with gpt-image-1.5 because gpt-image-2 does not support background=transparent. It also requires OPENAI_API_KEY. Should I proceed with that CLI fallback?
-```
+If a transparent request is too complex for clean chroma-key removal or local removal fails validation, explain the limitation and ask how the user wants to proceed.
 
 ## Prompt augmentation
 
@@ -202,14 +173,14 @@ Edit:
 - identity-preserve — try-on, person-in-scene; lock face/body/pose.
 - precise-object-edit — remove/replace a specific element (including interior swaps).
 - lighting-weather — time-of-day/season/atmosphere changes only.
-- background-extraction — transparent background / clean cutout. Use built-in `image_gen` with chroma-key removal first for simple opaque subjects; ask before using CLI true transparency for complex subjects.
+- background-extraction — transparent background / clean cutout. Use built-in `image_gen` with chroma-key removal for simple opaque subjects.
 - style-transfer — apply reference style while changing subject/scene.
 - compositing — multi-image insert/merge with matched lighting/perspective.
 - sketch-to-render — drawing/line art to photoreal render.
 
 ## Shared prompt schema
 
-Use the following labeled spec as shared prompt scaffolding for both top-level modes:
+Use the following labeled spec as prompt scaffolding:
 
 ```text
 Use case: <taxonomy slug>
@@ -229,9 +200,9 @@ Avoid: <negative constraints>
 ```
 
 Notes:
-- `Asset type` and `Input images` are prompt scaffolding, not dedicated CLI flags.
-- `Scene/backdrop` refers to the visual setting. It is not the same as the fallback CLI `background` parameter, which controls output transparency behavior.
-- Fallback-only execution notes such as `Quality:`, `Input fidelity:`, masks, output format, and output paths belong in the CLI path only. Do not treat them as built-in `image_gen` tool arguments.
+- `Asset type` and `Input images` are prompt scaffolding.
+- `Scene/backdrop` refers to the visual setting, not an execution parameter.
+- Do not treat execution notes such as `Quality:`, `Input fidelity:`, masks, output format, and output paths as built-in `image_gen` tool arguments.
 
 Augmentation rules:
 - Keep it short.
@@ -272,53 +243,15 @@ Constraints: change only the background; keep the product and its edges unchange
 - Iterate with single-change follow-ups.
 - If the prompt is generic, add only the extra detail that will materially help.
 - If the prompt is already detailed, normalize it instead of expanding it.
-- For CLI fallback only, see `references/cli.md` and `references/image-api.md` for model, `quality`, `input_fidelity`, masks, output format, and output-path guidance.
-- For transparent images, use the built-in-first chroma-key workflow unless the request is complex enough to need true CLI transparency; ask before switching to CLI `gpt-image-1.5`.
+- For transparent images, use the built-in chroma-key workflow.
 
-More principles shared by both modes: `references/prompting.md`.
-Copy/paste specs shared by both modes: `references/sample-prompts.md`.
+More prompting principles: `references/prompting.md`.
+Copy/paste specs: `references/sample-prompts.md`.
 
 ## Guidance by asset type
 Asset-type templates (website assets, game assets, wireframes, logo) are consolidated in `references/sample-prompts.md`.
 
-## gpt-image-2 guidance for CLI fallback
-
-The fallback CLI defaults to `gpt-image-2`.
-
-- Use `gpt-image-2` for new CLI/API workflows unless the request needs true model-native transparent output.
-- If a transparent request may need CLI fallback, ask before using `gpt-image-1.5` unless the user already explicitly requested `gpt-image-1.5`, `scripts/image_gen.py`, or CLI fallback. Explain that the built-in chroma-key path is the default, but true transparency requires `gpt-image-1.5` because `gpt-image-2` does not support `background=transparent`.
-- `gpt-image-2` always uses high fidelity for image inputs; do not set `input_fidelity` with this model.
-- `gpt-image-2` supports `quality` values `low`, `medium`, `high`, and `auto`.
-- Use `quality low` for fast drafts, thumbnails, and quick iterations. Use `medium`, `high`, or `auto` for final assets, dense text, diagrams, identity-sensitive edits, or high-resolution outputs.
-- Square images are typically fastest to generate. Use `1024x1024` for fast square drafts.
-- If the user asks for 4K-style output, use `3840x2160` for landscape or `2160x3840` for portrait.
-- `gpt-image-2` size may be `auto` or `WIDTHxHEIGHT` if all constraints hold: max edge `<= 3840px`, both edges multiples of `16px`, long-to-short ratio `<= 3:1`, total pixels between `655,360` and `8,294,400`.
-
-Popular `gpt-image-2` sizes:
-- `1024x1024` square
-- `1536x1024` landscape
-- `1024x1536` portrait
-- `2048x2048` 2K square
-- `2048x1152` 2K landscape
-- `3840x2160` 4K landscape
-- `2160x3840` 4K portrait
-- `auto`
-
-## Fallback CLI mode only
-
-### Temp and output conventions
-These conventions apply only to the CLI fallback. They do not describe built-in `image_gen` output behavior.
-- Use `tmp/imagegen/` for intermediate files (for example JSONL batches); delete them when done.
-- Write final artifacts under `output/imagegen/`.
-- Use `--out` or `--out-dir` to control output paths; keep filenames stable and descriptive.
-
-### Dependencies
-Prefer `uv` for dependency management in this repo.
-
-Required Python package:
-```bash
-uv pip install openai
-```
+## Local Helper Dependencies
 
 Required for local chroma-key removal and optional downscaling:
 ```bash
@@ -329,28 +262,9 @@ Portability note:
 - If you are using the installed skill outside this repo, install dependencies into that environment with its package manager.
 - In uv-managed environments, `uv pip install ...` remains the preferred path.
 
-### Environment
-- `OPENAI_API_KEY` must be set for live API calls.
-- Do not ask the user for `OPENAI_API_KEY` when using the built-in `image_gen` tool.
-- Never ask the user to paste the full key in chat. Ask them to set it locally and confirm when ready.
-
-If the key is missing, give the user these steps:
-1. Create an API key in the OpenAI platform UI: https://platform.openai.com/api-keys
-2. Set `OPENAI_API_KEY` as an environment variable in their system.
-3. Offer to guide them through setting the environment variable for their OS/shell if needed.
-
 If installation is not possible in this environment, tell the user which dependency is missing and how to install it into their active environment.
 
-### Script-mode notes
-- CLI commands + examples: `references/cli.md`
-- API parameter quick reference: `references/image-api.md`
-- Network approvals / sandbox settings for CLI mode: `references/codex-network.md`
-
 ## Reference map
-- `references/prompting.md`: shared prompting principles for both modes.
-- `references/sample-prompts.md`: shared copy/paste prompt recipes for both modes.
-- `references/cli.md`: fallback-only CLI usage via `scripts/image_gen.py`.
-- `references/image-api.md`: fallback-only API/CLI parameter reference.
-- `references/codex-network.md`: fallback-only network/sandbox troubleshooting for CLI mode.
-- `scripts/image_gen.py`: fallback-only CLI implementation. Do not load or use it unless the user explicitly chooses CLI mode or explicitly confirms a transparent request's true CLI transparency fallback.
+- `references/prompting.md`: prompting principles.
+- `references/sample-prompts.md`: copy/paste prompt recipes.
 - `$CODEX_HOME/skills/.system/imagegen/scripts/remove_chroma_key.py`: local post-processing helper for built-in transparent-image requests.

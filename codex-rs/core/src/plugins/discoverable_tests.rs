@@ -4,15 +4,15 @@ use crate::plugins::test_support::write_curated_plugin_sha;
 use crate::plugins::test_support::write_file;
 use crate::plugins::test_support::write_openai_curated_marketplace;
 use crate::plugins::test_support::write_plugins_feature_config;
-use codex_core_plugins::OPENAI_BUNDLED_MARKETPLACE_NAME;
-use codex_core_plugins::PluginInstallRequest;
-use codex_core_plugins::PluginsManager;
-use codex_core_plugins::remote::REMOTE_GLOBAL_MARKETPLACE_NAME;
-use codex_core_plugins::remote::RemotePluginServiceConfig;
-use codex_core_plugins::remote::fetch_and_cache_global_remote_plugin_catalog;
-use codex_core_plugins::startup_sync::curated_plugins_repo_path;
-use codex_tools::DiscoverablePluginInfo;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_core_plugins::OPENAI_BUNDLED_MARKETPLACE_NAME;
+use crewon_core_plugins::PluginInstallRequest;
+use crewon_core_plugins::PluginsManager;
+use crewon_core_plugins::remote::REMOTE_GLOBAL_MARKETPLACE_NAME;
+use crewon_core_plugins::remote::RemotePluginServiceConfig;
+use crewon_core_plugins::remote::fetch_and_cache_global_remote_plugin_catalog;
+use crewon_core_plugins::startup_sync::curated_plugins_repo_path;
+use crewon_tools::DiscoverablePluginInfo;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use tempfile::tempdir;
@@ -30,7 +30,7 @@ async fn list_discoverable_plugins(
 
 async fn list_discoverable_plugins_with_auth(
     config: &crate::config::Config,
-    auth: Option<&codex_login::CodexAuth>,
+    auth: Option<&crewon_login::CrewonAuth>,
     loaded_plugin_app_connector_ids: &[String],
 ) -> anyhow::Result<Vec<DiscoverablePluginInfo>> {
     let plugins_manager = PluginsManager::new(config.codex_home.to_path_buf());
@@ -46,7 +46,7 @@ async fn list_discoverable_plugins_with_auth(
 async fn list_discoverable_plugins_with_manager_and_auth(
     config: &crate::config::Config,
     plugins_manager: &PluginsManager,
-    auth: Option<&codex_login::CodexAuth>,
+    auth: Option<&crewon_login::CrewonAuth>,
     loaded_plugin_app_connector_ids: &[String],
 ) -> anyhow::Result<Vec<DiscoverablePluginInfo>> {
     super::list_tool_suggest_discoverable_plugins(
@@ -155,7 +155,7 @@ async fn list_tool_suggest_discoverable_plugins_filters_microsoft_by_installed_a
 
 #[tokio::test]
 async fn list_tool_suggest_discoverable_plugins_includes_cached_remote_global_plugins() {
-    use codex_login::CodexAuth;
+    use crewon_login::CrewonAuth;
     use serde_json::json;
     use wiremock::Mock;
     use wiremock::MockServer;
@@ -316,7 +316,7 @@ remote_plugin = true
         .mount(&server)
         .await;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let mut config = load_plugins_config(codex_home.path()).await;
     config.chatgpt_base_url = format!("{}/backend-api", server.uri());
     let plugins_manager = PluginsManager::new(config.codex_home.to_path_buf());
@@ -666,7 +666,7 @@ async fn list_tool_suggest_discoverable_plugins_normalizes_description() {
     write_openai_curated_marketplace(&curated_root, &["installed", "slack"]);
     write_plugins_feature_config(codex_home.path());
     write_file(
-        &curated_root.join("plugins/slack/.codex-plugin/plugin.json"),
+        &curated_root.join("plugins/slack/.crewon-plugin/plugin.json"),
         r#"{
   "name": "slack",
   "description": "  Plugin\n   with   extra   spacing  "
@@ -841,7 +841,7 @@ async fn list_tool_suggest_discoverable_plugins_does_not_reload_marketplace_per_
     let too_long_prompt = "x".repeat(129);
     for plugin_name in ["gmail", "openai-developers"] {
         write_file(
-            &curated_root.join(format!("plugins/{plugin_name}/.codex-plugin/plugin.json")),
+            &curated_root.join(format!("plugins/{plugin_name}/.crewon-plugin/plugin.json")),
             &format!(
                 r#"{{
   "name": "{plugin_name}",
@@ -883,13 +883,13 @@ async fn list_tool_suggest_discoverable_plugins_does_not_reload_marketplace_per_
     let normalized_logs = logs.replace('\\', "/");
     assert_eq!(
         normalized_logs
-            .matches("gmail/.codex-plugin/plugin.json")
+            .matches("gmail/.crewon-plugin/plugin.json")
             .count(),
         4
     );
     assert_eq!(
         normalized_logs
-            .matches("openai-developers/.codex-plugin/plugin.json")
+            .matches("openai-developers/.crewon-plugin/plugin.json")
             .count(),
         4
     );

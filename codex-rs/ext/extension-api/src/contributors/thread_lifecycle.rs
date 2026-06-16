@@ -1,5 +1,5 @@
 use crate::ExtensionData;
-use codex_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SessionSource;
 
 /// Input supplied when the host starts a runtime for a thread.
 pub struct ThreadStartInput<'a, C> {

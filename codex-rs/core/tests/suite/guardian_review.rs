@@ -1,14 +1,6 @@
 #![cfg(not(target_os = "windows"))]
 
 use anyhow::Result;
-use codex_core::config::Constrained;
-use codex_core::sandboxing::SandboxPermissions;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::user_input::UserInput;
 use core_test_support::fs_wait;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -19,9 +11,17 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_core::config::Constrained;
+use crewon_core::sandboxing::SandboxPermissions;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -58,7 +58,7 @@ printf '%s\n' "${@: -1}" >> "${payload_path}""#,
     let notify_script_str = notify_script.to_str().unwrap().to_string();
     let sandbox_policy_for_config = sandbox_policy.clone();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.notify = Some(vec![notify_script_str]);
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
@@ -110,7 +110,7 @@ printf '%s\n' "${@: -1}" >> "${payload_path}""#,
     )
     .await;
 
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "run a command that requires Guardian review".into(),
@@ -119,7 +119,7 @@ printf '%s\n' "${@: -1}" >> "${payload_path}""#,
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(approval_policy),
                 approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
@@ -128,7 +128,7 @@ printf '%s\n' "${@: -1}" >> "${payload_path}""#,
             },
         })
         .await?;
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -160,7 +160,7 @@ printf '%s\n' "${@: -1}" >> "${payload_path}""#,
     assert_eq!(payloads[0]["last-assistant-message"], json!("done"));
     assert!(
         !notify_payload_raw.contains(
-            "The following is the Codex agent history whose request action you are assessing."
+            "The following is the Crewon agent history whose request action you are assessing."
         ),
         "Guardian review transcript leaked into legacy notify payload: {notify_payload_raw}"
     );

@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
-use codex_rollout::ARCHIVED_SESSIONS_SUBDIR;
+use crewon_rollout::ARCHIVED_SESSIONS_SUBDIR;
 use uuid::Uuid;
 
 use super::LocalThreadStoreConfig;

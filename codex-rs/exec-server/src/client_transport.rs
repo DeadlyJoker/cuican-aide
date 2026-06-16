@@ -7,7 +7,7 @@ use tokio_tungstenite::connect_async;
 use tracing::debug;
 use tracing::warn;
 
-use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
+use crewon_utils_rustls_provider::ensure_rustls_crypto_provider;
 
 use crate::ExecServerClient;
 use crate::ExecServerError;
@@ -17,7 +17,7 @@ use crate::client_api::StdioExecServerConnectArgs;
 use crate::connection::JsonRpcConnection;
 use crate::relay::harness_connection_from_websocket;
 
-const ENVIRONMENT_CLIENT_NAME: &str = "codex-environment";
+const ENVIRONMENT_CLIENT_NAME: &str = "crewon-environment";
 
 impl ExecServerClient {
     pub(crate) async fn connect_for_transport(

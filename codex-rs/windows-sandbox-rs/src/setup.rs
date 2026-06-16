@@ -30,8 +30,8 @@ use anyhow::Result;
 use anyhow::anyhow;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use codex_protocol::models::PermissionProfile;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::models::PermissionProfile;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::GetLastError;
@@ -41,12 +41,12 @@ use windows_sys::Win32::Security::FreeSid;
 use windows_sys::Win32::Security::SECURITY_NT_AUTHORITY;
 
 pub const SETUP_VERSION: u32 = 5;
-pub const OFFLINE_USERNAME: &str = "CodexSandboxOffline";
-pub const ONLINE_USERNAME: &str = "CodexSandboxOnline";
+pub const OFFLINE_USERNAME: &str = "CrewonSandboxOffline";
+pub const ONLINE_USERNAME: &str = "CrewonSandboxOnline";
 const ERROR_CANCELLED: u32 = 1223;
 const SECURITY_BUILTIN_DOMAIN_RID: u32 = 0x0000_0020;
 const DOMAIN_ALIAS_RID_ADMINS: u32 = 0x0000_0220;
-const SETUP_EXE_FILENAME: &str = "codex-windows-sandbox-setup.exe";
+const SETUP_EXE_FILENAME: &str = "crewon-windows-sandbox-setup.exe";
 const USERPROFILE_ROOT_EXCLUSIONS: &[&str] = &[
     ".ssh",
     ".tsh",
@@ -518,7 +518,7 @@ struct ElevationPayload {
     proxy_ports: Vec<u16>,
     #[serde(default)]
     allow_local_binding: bool,
-    otel: Option<codex_otel::StatsigMetricsSettings>,
+    otel: Option<crewon_otel::StatsigMetricsSettings>,
     real_user: String,
     mode: SetupMode,
     #[serde(default)]
@@ -573,7 +573,7 @@ const PROXY_ENV_KEYS: &[&str] = &[
     "ws_proxy",
     "wss_proxy",
 ];
-const ALLOW_LOCAL_BINDING_ENV_KEY: &str = "CODEX_NETWORK_ALLOW_LOCAL_BINDING";
+const ALLOW_LOCAL_BINDING_ENV_KEY: &str = "CREWON_NETWORK_ALLOW_LOCAL_BINDING";
 
 pub(crate) fn offline_proxy_settings_from_env(
     env_map: &HashMap<String, String>,
@@ -852,7 +852,7 @@ pub fn run_elevated_setup(
         proxy_ports: offline_proxy_settings.proxy_ports,
         allow_local_binding: offline_proxy_settings.allow_local_binding,
         real_user: std::env::var("USERNAME").unwrap_or_else(|_| "Administrators".to_string()),
-        otel: codex_otel::global_statsig_metrics_settings(),
+        otel: crewon_otel::global_statsig_metrics_settings(),
         mode: SetupMode::Full,
         refresh_only: false,
     };
@@ -896,7 +896,7 @@ pub fn run_elevated_provisioning_setup(codex_home: &Path, real_user: &str) -> Re
         deny_write_paths: Vec::new(),
         proxy_ports: Vec::new(),
         allow_local_binding: false,
-        otel: codex_otel::global_statsig_metrics_settings(),
+        otel: crewon_otel::global_statsig_metrics_settings(),
         real_user: real_user.to_string(),
         mode: SetupMode::ProvisionOnly,
         refresh_only: false,
@@ -1112,9 +1112,9 @@ mod tests {
     use crate::setup_error::SetupErrorReport;
     use crate::setup_error::extract_failure;
     use crate::setup_error::write_setup_error_report;
-    use codex_protocol::models::PermissionProfile;
-    use codex_protocol::permissions::NetworkSandboxPolicy;
-    use codex_utils_absolute_path::AbsolutePathBuf;
+    use crewon_protocol::models::PermissionProfile;
+    use crewon_protocol::permissions::NetworkSandboxPolicy;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
     use std::collections::HashSet;
@@ -1173,7 +1173,7 @@ mod tests {
     #[test]
     fn report_helper_failure_uses_setup_error_report_when_clear_succeeded() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         write_setup_error_report(
             codex_home.as_path(),
             &SetupErrorReport {
@@ -1202,7 +1202,7 @@ mod tests {
     #[test]
     fn report_helper_failure_ignores_setup_error_report_when_clear_failed() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         write_setup_error_report(
             codex_home.as_path(),
             &SetupErrorReport {
@@ -1232,7 +1232,7 @@ mod tests {
     fn setup_refresh_skips_profiles_without_managed_filesystem_permissions() {
         let tmp = TempDir::new().expect("tempdir");
         let command_cwd = tmp.path().join("workspace");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         fs::create_dir_all(&command_cwd).expect("create workspace");
         let workspace_roots = workspace_roots_for(command_cwd.as_path());
 
@@ -1289,9 +1289,9 @@ mod tests {
         let resources_dir = package_dir.join(RESOURCES_DIRNAME);
         fs::create_dir_all(&bin_dir).expect("create bin dir");
         fs::create_dir_all(&resources_dir).expect("create resources dir");
-        let exe = bin_dir.join("codex.exe");
-        let setup_exe = resources_dir.join("codex-windows-sandbox-setup.exe");
-        fs::write(&exe, b"codex").expect("write exe");
+        let exe = bin_dir.join("crewon-app-server.exe");
+        let setup_exe = resources_dir.join("crewon-windows-sandbox-setup.exe");
+        fs::write(&exe, b"crewon").expect("write exe");
         fs::write(&setup_exe, b"setup").expect("write setup");
 
         let resolved = find_setup_exe_for_current_exe(&exe).expect("setup exe");
@@ -1337,7 +1337,7 @@ mod tests {
             "http://127.0.0.1:8080".to_string(),
         );
         env.insert(
-            "CODEX_NETWORK_ALLOW_LOCAL_BINDING".to_string(),
+            "CREWON_NETWORK_ALLOW_LOCAL_BINDING".to_string(),
             "1".to_string(),
         );
 
@@ -1362,7 +1362,7 @@ mod tests {
             "socks5h://127.0.0.1:1081".to_string(),
         );
         env.insert(
-            "CODEX_NETWORK_ALLOW_LOCAL_BINDING".to_string(),
+            "CREWON_NETWORK_ALLOW_LOCAL_BINDING".to_string(),
             "1".to_string(),
         );
 
@@ -1563,7 +1563,7 @@ mod tests {
         let user_profile = tmp.path().join("user-profile");
         let codex_home = user_profile.join("CodexHome");
         let documents = user_profile.join("Documents");
-        fs::create_dir_all(&codex_home).expect("create codex home");
+        fs::create_dir_all(&codex_home).expect("create crewon home");
         fs::create_dir_all(&documents).expect("create documents");
 
         let mut roots =
@@ -1579,7 +1579,7 @@ mod tests {
     #[test]
     fn gather_read_roots_includes_helper_bin_dir() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         let command_cwd = tmp.path().join("workspace");
         fs::create_dir_all(&command_cwd).expect("create workspace");
         let permission_profile = PermissionProfile::read_only();
@@ -1596,7 +1596,7 @@ mod tests {
     #[test]
     fn workspace_write_roots_remain_readable() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         let command_cwd = tmp.path().join("workspace");
         let writable_root = tmp.path().join("extra-write-root");
         fs::create_dir_all(&command_cwd).expect("create workspace");
@@ -1622,7 +1622,7 @@ mod tests {
     #[test]
     fn build_payload_roots_preserves_helper_roots_when_read_override_is_provided() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         let workspace_root = tmp.path().join("workspace-root");
         let command_cwd = tmp.path().join("workspace");
         let readable_root = tmp.path().join("docs");
@@ -1669,7 +1669,7 @@ mod tests {
     #[test]
     fn build_payload_roots_replaces_full_read_policy_when_read_override_is_provided() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         let workspace_root = tmp.path().join("workspace-root");
         let command_cwd = tmp.path().join("workspace");
         let readable_root = tmp.path().join("docs");
@@ -1716,11 +1716,11 @@ mod tests {
     #[test]
     fn effective_write_roots_match_payload_filtering_for_overrides() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         let command_cwd = tmp.path().join("workspace");
         let extra_root = tmp.path().join("extra-root");
         let sandbox_root = super::sandbox_dir(&codex_home);
-        fs::create_dir_all(&codex_home).expect("create codex home");
+        fs::create_dir_all(&codex_home).expect("create crewon home");
         fs::create_dir_all(&command_cwd).expect("create workspace");
         fs::create_dir_all(&extra_root).expect("create extra root");
         fs::create_dir_all(&sandbox_root).expect("create sandbox root");
@@ -1763,7 +1763,7 @@ mod tests {
 
         let expected_workspace = dunce::canonicalize(&command_cwd).expect("canonical workspace");
         let expected_extra = dunce::canonicalize(&extra_root).expect("canonical extra root");
-        let forbidden_codex_home = dunce::canonicalize(&codex_home).expect("canonical codex home");
+        let forbidden_codex_home = dunce::canonicalize(&codex_home).expect("canonical crewon home");
         let forbidden_sandbox = dunce::canonicalize(&sandbox_root).expect("canonical sandbox root");
         assert_eq!(effective_write_roots, payload_write_roots);
         assert!(effective_write_roots.contains(&expected_workspace));
@@ -1775,10 +1775,10 @@ mod tests {
     #[test]
     fn effective_write_roots_use_runtime_workspace_roots_for_workspace_root() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         let workspace_root = tmp.path().join("workspace");
         let command_cwd = workspace_root.join("subdir");
-        fs::create_dir_all(&codex_home).expect("create codex home");
+        fs::create_dir_all(&codex_home).expect("create crewon home");
         fs::create_dir_all(&command_cwd).expect("create command cwd");
 
         let permission_profile = workspace_write_profile(
@@ -1806,7 +1806,7 @@ mod tests {
     #[test]
     fn payload_deny_write_paths_merge_explicit_and_protected_children() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         let command_cwd = tmp.path().join("workspace");
         let extra_write_root = tmp.path().join("extra-write-root");
         let command_git = command_cwd.join(".git");
@@ -1850,7 +1850,7 @@ mod tests {
     #[test]
     fn full_read_roots_preserve_legacy_platform_defaults() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         let command_cwd = tmp.path().join("workspace");
         fs::create_dir_all(&command_cwd).expect("create workspace");
         let permission_profile = PermissionProfile::read_only();

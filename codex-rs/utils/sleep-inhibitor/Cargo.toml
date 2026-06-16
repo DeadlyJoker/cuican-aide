@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-sleep-inhibitor"
+name = "crewon-utils-sleep-inhibitor"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -25,4 +25,5 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 
 [lib]
+name = "crewon_utils_sleep_inhibitor"
 doctest = false

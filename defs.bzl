@@ -164,7 +164,7 @@ workspace_root_test = rule(
     },
 )
 
-def codex_rust_crate(
+def crewon_rust_crate(
         name,
         crate_name,
         crate_features = [],
@@ -197,7 +197,7 @@ def codex_rust_crate(
         name: Bazel target name for the library, should be the directory name.
             Example: `app-server`.
         crate_name: Cargo crate name from Cargo.toml
-            Example: `codex_app_server`.
+            Example: `crewon_app_server`.
         crate_features: Cargo features to enable for this crate.
             Crates are only compiled in a single configuration across the workspace, i.e.
             with all features in this list enabled. So use sparingly, and prefer to refactor
@@ -314,7 +314,7 @@ def codex_rust_crate(
             # Bazel has emitted both `codex-rs/<crate>/...` and
             # `../codex-rs/<crate>/...` paths for `file!()`. Strip either
             # prefix so the workspace-root launcher sees Cargo-like metadata
-            # such as `tui/src/...`.
+            # such as `core/src/...`.
             rustc_flags = rustc_flags_extra + WINDOWS_RUSTC_LINK_FLAGS + [
                 "--remap-path-prefix=../codex-rs=",
                 "--remap-path-prefix=codex-rs=",
@@ -346,6 +346,12 @@ def codex_rust_crate(
     cargo_env = {}
     cargo_env_runfiles = {}
     for binary, main in binaries.items():
+        if main.startswith("../"):
+            # Cargo allows a package to expose a helper binary whose source lives
+            # in a sibling package so integration tests get CARGO_BIN_EXE_*.
+            # Bazel crate roots must stay inside their own package; expose those
+            # helpers through extra_binaries with a real label instead.
+            continue
         #binary = binary.replace("-", "_")
         sanitized_binaries.append(binary)
         cargo_env_runfiles[":" + binary] = "CARGO_BIN_EXE_" + binary

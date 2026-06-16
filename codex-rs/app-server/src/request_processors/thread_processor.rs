@@ -1,9 +1,9 @@
 use super::*;
 use crate::error_code::method_not_found;
-use codex_app_server_protocol::SelectedCapabilityRoot;
-use codex_extension_api::ExtensionDataInit;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
+use crewon_app_server_protocol::SelectedCapabilityRoot;
+use crewon_extension_api::ExtensionDataInit;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
 
 const THREAD_LIST_DEFAULT_LIMIT: usize = 25;
 const THREAD_LIST_MAX_LIMIT: usize = 100;
@@ -75,7 +75,7 @@ fn collect_resume_override_mismatches(
         }
     }
     if let Some(requested_review_policy) = request.approvals_reviewer.as_ref() {
-        let active_review_policy: codex_app_server_protocol::ApprovalsReviewer =
+        let active_review_policy: crewon_app_server_protocol::ApprovalsReviewer =
             config_snapshot.approvals_reviewer.into();
         if requested_review_policy != &active_review_policy {
             mismatch_details.push(format!(
@@ -89,16 +89,16 @@ fn collect_resume_override_mismatches(
             (requested_sandbox, &active_sandbox),
             (
                 SandboxMode::ReadOnly,
-                codex_protocol::protocol::SandboxPolicy::ReadOnly { .. }
+                crewon_protocol::protocol::SandboxPolicy::ReadOnly { .. }
             ) | (
                 SandboxMode::WorkspaceWrite,
-                codex_protocol::protocol::SandboxPolicy::WorkspaceWrite { .. }
+                crewon_protocol::protocol::SandboxPolicy::WorkspaceWrite { .. }
             ) | (
                 SandboxMode::DangerFullAccess,
-                codex_protocol::protocol::SandboxPolicy::DangerFullAccess
+                crewon_protocol::protocol::SandboxPolicy::DangerFullAccess
             ) | (
                 SandboxMode::DangerFullAccess,
-                codex_protocol::protocol::SandboxPolicy::ExternalSandbox { .. }
+                crewon_protocol::protocol::SandboxPolicy::ExternalSandbox { .. }
             )
         );
         if !sandbox_matches {
@@ -301,7 +301,7 @@ fn validate_dynamic_tools(tools: &[ApiDynamicToolSpec]) -> Result<(), String> {
             ));
         }
 
-        if let Err(err) = codex_tools::parse_tool_input_schema(&tool.input_schema) {
+        if let Err(err) = crewon_tools::parse_tool_input_schema(&tool.input_schema) {
             return Err(format!(
                 "dynamic tool input schema is not supported for {name}: {err}"
             ));
@@ -686,7 +686,7 @@ impl ThreadRequestProcessor {
     async fn load_thread(
         &self,
         thread_id: &str,
-    ) -> Result<(ThreadId, Arc<CodexThread>), JSONRPCErrorError> {
+    ) -> Result<(ThreadId, Arc<CrewonThread>), JSONRPCErrorError> {
         // Resolve the core conversation handle from a v2 thread id string.
         let thread_id = ThreadId::from_string(thread_id)
             .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
@@ -711,7 +711,7 @@ impl ThreadRequestProcessor {
     }
 
     async fn set_app_server_client_info(
-        thread: &CodexThread,
+        thread: &CrewonThread,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<(), JSONRPCErrorError> {
@@ -825,7 +825,7 @@ impl ThreadRequestProcessor {
     async fn ensure_listener_task_running(
         &self,
         conversation_id: ThreadId,
-        conversation: Arc<CodexThread>,
+        conversation: Arc<CrewonThread>,
         thread_state: Arc<Mutex<ThreadState>>,
     ) -> Result<(), JSONRPCErrorError> {
         super::thread_lifecycle::ensure_listener_task_running(
@@ -964,16 +964,16 @@ impl ThreadRequestProcessor {
     async fn request_trace_context(
         &self,
         request_id: &ConnectionRequestId,
-    ) -> Option<codex_protocol::protocol::W3cTraceContext> {
+    ) -> Option<crewon_protocol::protocol::W3cTraceContext> {
         self.outgoing.request_trace_context(request_id).await
     }
 
     async fn submit_core_op(
         &self,
         request_id: &ConnectionRequestId,
-        thread: &CodexThread,
+        thread: &CrewonThread,
         op: Op,
-    ) -> CodexResult<String> {
+    ) -> CrewonResult<String> {
         thread
             .submit_with_trace(op, self.request_trace_context(request_id).await)
             .await
@@ -990,8 +990,8 @@ impl ThreadRequestProcessor {
         typesafe_overrides: ConfigOverrides,
         dynamic_tools: Option<Vec<ApiDynamicToolSpec>>,
         selected_capability_roots: Vec<SelectedCapabilityRoot>,
-        session_start_source: Option<codex_app_server_protocol::ThreadStartSource>,
-        thread_source: Option<codex_protocol::protocol::ThreadSource>,
+        session_start_source: Option<crewon_app_server_protocol::ThreadStartSource>,
+        thread_source: Option<crewon_protocol::protocol::ThreadSource>,
         environments: Option<Vec<TurnEnvironmentSelection>>,
         service_name: Option<String>,
         experimental_raw_events: bool,
@@ -1023,10 +1023,10 @@ impl ThreadRequestProcessor {
             let trust_target = resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &config.cwd)
                 .await
                 .unwrap_or_else(|| config.cwd.clone());
-            let current_cli_overrides = config_manager.current_cli_overrides();
-            let cli_overrides_with_trust;
-            let cli_overrides_for_reload = if let Err(err) =
-                codex_core::config::set_project_trust_level(
+            let current_config_overrides = config_manager.current_config_overrides();
+            let config_overrides_with_trust;
+            let config_overrides_for_reload = if let Err(err) =
+                crewon_core::config::set_project_trust_level(
                     &listener_task_context.codex_home,
                     trust_target.as_path(),
                     TrustLevel::Trusted,
@@ -1045,7 +1045,7 @@ impl ThreadRequestProcessor {
                     project_trust_key(trust_target.as_path()),
                     TomlValue::Table(project),
                 );
-                cli_overrides_with_trust = current_cli_overrides
+                config_overrides_with_trust = current_config_overrides
                     .iter()
                     .cloned()
                     .chain(std::iter::once((
@@ -1053,14 +1053,14 @@ impl ThreadRequestProcessor {
                         TomlValue::Table(projects),
                     )))
                     .collect::<Vec<_>>();
-                cli_overrides_with_trust.as_slice()
+                config_overrides_with_trust.as_slice()
             } else {
-                current_cli_overrides.as_slice()
+                current_config_overrides.as_slice()
             };
 
             config = config_manager
-                .load_with_cli_overrides(
-                    cli_overrides_for_reload,
+                .load_with_config_overrides(
+                    config_overrides_for_reload,
                     config_overrides,
                     typesafe_overrides,
                     /*fallback_cwd*/ None,
@@ -1106,10 +1106,10 @@ impl ThreadRequestProcessor {
             .start_thread_with_options(StartThreadOptions {
                 config,
                 initial_history: match session_start_source
-                    .unwrap_or(codex_app_server_protocol::ThreadStartSource::Startup)
+                    .unwrap_or(crewon_app_server_protocol::ThreadStartSource::Startup)
                 {
-                    codex_app_server_protocol::ThreadStartSource::Startup => InitialHistory::New,
-                    codex_app_server_protocol::ThreadStartSource::Clear => InitialHistory::Cleared,
+                    crewon_app_server_protocol::ThreadStartSource::Startup => InitialHistory::New,
+                    crewon_app_server_protocol::ThreadStartSource::Clear => InitialHistory::Cleared,
                 },
                 session_source: None,
                 thread_source,
@@ -1254,8 +1254,8 @@ impl ThreadRequestProcessor {
         service_tier: Option<Option<String>>,
         cwd: Option<String>,
         runtime_workspace_roots: Option<Vec<AbsolutePathBuf>>,
-        approval_policy: Option<codex_app_server_protocol::AskForApproval>,
-        approvals_reviewer: Option<codex_app_server_protocol::ApprovalsReviewer>,
+        approval_policy: Option<crewon_app_server_protocol::AskForApproval>,
+        approvals_reviewer: Option<crewon_app_server_protocol::ApprovalsReviewer>,
         sandbox: Option<SandboxMode>,
         permissions: Option<String>,
         base_instructions: Option<String>,
@@ -1270,11 +1270,11 @@ impl ThreadRequestProcessor {
             workspace_roots: runtime_workspace_roots,
             default_permissions: permissions,
             approval_policy: approval_policy
-                .map(codex_app_server_protocol::AskForApproval::to_core),
+                .map(crewon_app_server_protocol::AskForApproval::to_core),
             approvals_reviewer: approvals_reviewer
-                .map(codex_app_server_protocol::ApprovalsReviewer::to_core),
+                .map(crewon_app_server_protocol::ApprovalsReviewer::to_core),
             sandbox_mode: sandbox.map(SandboxMode::to_core),
-            codex_linux_sandbox_exe: self.arg0_paths.codex_linux_sandbox_exe.clone(),
+            crewon_linux_sandbox_exe: self.arg0_paths.crewon_linux_sandbox_exe.clone(),
             main_execve_wrapper_exe: self.arg0_paths.main_execve_wrapper_exe.clone(),
             base_instructions,
             developer_instructions,
@@ -1476,7 +1476,7 @@ impl ThreadRequestProcessor {
         let ThreadSetNameParams { thread_id, name } = params;
         let thread_id = ThreadId::from_string(&thread_id)
             .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
-        let Some(name) = codex_core::util::normalize_thread_name(&name) else {
+        let Some(name) = crewon_core::util::normalize_thread_name(&name) else {
             return Err(invalid_request("thread name must not be empty"));
         };
 
@@ -2250,7 +2250,7 @@ impl ThreadRequestProcessor {
         &self,
         thread_id: ThreadId,
         include_turns: bool,
-        loaded_thread: &CodexThread,
+        loaded_thread: &CrewonThread,
         persisted_thread: Option<Thread>,
     ) -> Result<Thread, ThreadReadViewError> {
         let config_snapshot = loaded_thread.config_snapshot().await;
@@ -2281,7 +2281,7 @@ impl ThreadRequestProcessor {
         thread_id: ThreadId,
         thread: &mut Thread,
         include_turns: bool,
-        loaded_thread: &CodexThread,
+        loaded_thread: &CrewonThread,
     ) -> Result<(), ThreadReadViewError> {
         self.attach_thread_name(thread_id, thread).await;
 
@@ -2633,12 +2633,12 @@ impl ThreadRequestProcessor {
         {
             Ok(NewThread {
                 thread_id,
-                thread: codex_thread,
+                thread: crewon_thread,
                 session_configured,
                 ..
             }) => {
                 if let Err(err) = Self::set_app_server_client_info(
-                    codex_thread.as_ref(),
+                    crewon_thread.as_ref(),
                     app_server_client_name,
                     app_server_client_version,
                 )
@@ -2647,7 +2647,7 @@ impl ThreadRequestProcessor {
                     self.outgoing.send_error(request_id, err).await;
                     return Ok(());
                 }
-                let instruction_sources = codex_thread.instruction_sources().await;
+                let instruction_sources = crewon_thread.instruction_sources().await;
                 let SessionConfiguredEvent { rollout_path, .. } = session_configured;
                 let Some(rollout_path) = rollout_path else {
                     let error =
@@ -2671,7 +2671,7 @@ impl ThreadRequestProcessor {
                 let mut thread = match self
                     .load_thread_from_resume_source_or_send_internal(
                         thread_id,
-                        codex_thread.as_ref(),
+                        crewon_thread.as_ref(),
                         &response_history,
                         rollout_path.as_path(),
                         resume_source_thread,
@@ -2687,7 +2687,7 @@ impl ThreadRequestProcessor {
                         return Ok(());
                     }
                 };
-                thread.thread_source = codex_thread
+                thread.thread_source = crewon_thread
                     .config_snapshot()
                     .await
                     .thread_source
@@ -2707,7 +2707,7 @@ impl ThreadRequestProcessor {
                     thread_status,
                     /*has_live_in_progress_turn*/ false,
                 );
-                let config_snapshot = codex_thread.config_snapshot().await;
+                let config_snapshot = crewon_thread.config_snapshot().await;
                 let sandbox = thread_response_sandbox_policy(
                     &config_snapshot.permission_profile,
                     config_snapshot.cwd().as_path(),
@@ -2773,13 +2773,13 @@ impl ThreadRequestProcessor {
                         connection_id,
                         thread_id,
                         &token_usage_thread,
-                        codex_thread.as_ref(),
+                        crewon_thread.as_ref(),
                         token_usage_turn_id,
                     )
                     .await;
                 }
                 self.thread_goal_processor
-                    .emit_resume_goal_snapshot_and_continue(thread_id, codex_thread.as_ref())
+                    .emit_resume_goal_snapshot_and_continue(thread_id, crewon_thread.as_ref())
                     .await;
             }
             Err(err) => {
@@ -3058,7 +3058,7 @@ impl ThreadRequestProcessor {
         if stored_thread.archived_at.is_some() {
             let thread_id = stored_thread.thread_id;
             return Err(invalid_request(format!(
-                "session {thread_id} is archived. Run `codex unarchive {thread_id}` to unarchive it first."
+                "session {thread_id} is archived. Unarchive the session before resuming it."
             )));
         }
 
@@ -3122,7 +3122,7 @@ impl ThreadRequestProcessor {
     async fn load_thread_from_resume_source_or_send_internal(
         &self,
         thread_id: ThreadId,
-        thread: &CodexThread,
+        thread: &CrewonThread,
         thread_history: &InitialHistory,
         rollout_path: &Path,
         resume_source_thread: Option<StoredThread>,
@@ -3254,7 +3254,7 @@ impl ThreadRequestProcessor {
             approvals_reviewer,
             sandbox,
             permissions,
-            config: cli_overrides,
+            config: config_overrides,
             base_instructions,
             developer_instructions,
             ephemeral,
@@ -3274,7 +3274,7 @@ impl ThreadRequestProcessor {
         let source_thread_name = source_thread
             .name
             .as_deref()
-            .and_then(codex_core::util::normalize_thread_name);
+            .and_then(crewon_core::util::normalize_thread_name);
         let history_items = source_thread
             .history
             .as_ref()
@@ -3287,15 +3287,15 @@ impl ThreadRequestProcessor {
         let history_cwd = Some(source_thread.cwd.clone());
 
         // Persist Windows sandbox mode.
-        let mut cli_overrides = cli_overrides.unwrap_or_default();
+        let mut config_overrides = config_overrides.unwrap_or_default();
         if cfg!(windows) {
             match WindowsSandboxLevel::from_config(&self.config) {
                 WindowsSandboxLevel::Elevated => {
-                    cli_overrides
+                    config_overrides
                         .insert("windows.sandbox".to_string(), serde_json::json!("elevated"));
                 }
                 WindowsSandboxLevel::RestrictedToken => {
-                    cli_overrides.insert(
+                    config_overrides.insert(
                         "windows.sandbox".to_string(),
                         serde_json::json!("unelevated"),
                     );
@@ -3303,10 +3303,10 @@ impl ThreadRequestProcessor {
                 WindowsSandboxLevel::Disabled => {}
             }
         }
-        let request_overrides = if cli_overrides.is_empty() {
+        let request_overrides = if config_overrides.is_empty() {
             None
         } else {
-            Some(cli_overrides)
+            Some(config_overrides)
         };
         let runtime_workspace_roots = runtime_workspace_roots.map(resolve_runtime_workspace_roots);
         let mut typesafe_overrides = self.build_thread_config_overrides(
@@ -3821,7 +3821,7 @@ pub(super) fn build_thread_resume_initial_turns_page(
     has_live_running_thread: bool,
     active_turn: Option<Turn>,
     params: &ThreadResumeInitialTurnsPageParams,
-) -> Result<codex_app_server_protocol::TurnsPage, JSONRPCErrorError> {
+) -> Result<crewon_app_server_protocol::TurnsPage, JSONRPCErrorError> {
     build_thread_turns_page_response(
         items,
         loaded_status,
@@ -4078,7 +4078,7 @@ pub(crate) fn thread_from_stored_thread(
     thread: StoredThread,
     fallback_provider: &str,
     fallback_cwd: &AbsolutePathBuf,
-) -> (Thread, Option<codex_thread_store::StoredThreadHistory>) {
+) -> (Thread, Option<crewon_thread_store::StoredThreadHistory>) {
     let path = thread.rollout_path;
     let git_info = thread.git_info.map(|info| ApiGitInfo {
         sha: info.commit_hash.map(|sha| sha.0),
@@ -4116,7 +4116,7 @@ pub(crate) fn thread_from_stored_thread(
         status: ThreadStatus::NotLoaded,
         path,
         cwd,
-        cli_version: thread.cli_version,
+        client_version: thread.cli_version,
         agent_nickname: source.get_nickname(),
         agent_role: source.get_agent_role(),
         source: source.into(),
@@ -4184,7 +4184,7 @@ fn summary_from_state_db_metadata(
     cwd: PathBuf,
     cli_version: String,
     source: String,
-    _thread_source: Option<codex_protocol::protocol::ThreadSource>,
+    _thread_source: Option<crewon_protocol::protocol::ThreadSource>,
     agent_nickname: Option<String>,
     agent_role: Option<String>,
     git_sha: Option<String>,
@@ -4194,7 +4194,7 @@ fn summary_from_state_db_metadata(
     let preview = preview.or(first_user_message).unwrap_or_default();
     let source = serde_json::from_str(&source)
         .or_else(|_| serde_json::from_value(serde_json::Value::String(source.clone())))
-        .unwrap_or(codex_protocol::protocol::SessionSource::Unknown);
+        .unwrap_or(crewon_protocol::protocol::SessionSource::Unknown);
     let source = with_thread_spawn_agent_metadata(source, agent_nickname, agent_role);
     let git_info = if git_sha.is_none() && git_branch.is_none() && git_origin_url.is_none() {
         None
@@ -4249,8 +4249,8 @@ fn preview_from_rollout_items(items: &[RolloutItem]) -> String {
     items
         .iter()
         .find_map(|item| match item {
-            RolloutItem::ResponseItem(item) => match codex_core::parse_turn_item(item) {
-                Some(codex_protocol::items::TurnItem::UserMessage(user)) => Some(user.message()),
+            RolloutItem::ResponseItem(item) => match crewon_core::parse_turn_item(item) {
+                Some(crewon_protocol::items::TurnItem::UserMessage(user)) => Some(user.message()),
                 _ => None,
             },
             _ => None,
@@ -4266,8 +4266,8 @@ fn requested_permissions_trust_project(overrides: &ConfigOverrides, cwd: &Path) 
     if matches!(
         overrides.sandbox_mode,
         Some(
-            codex_protocol::config_types::SandboxMode::WorkspaceWrite
-                | codex_protocol::config_types::SandboxMode::DangerFullAccess
+            crewon_protocol::config_types::SandboxMode::WorkspaceWrite
+                | crewon_protocol::config_types::SandboxMode::DangerFullAccess
         )
     ) {
         return true;
@@ -4289,13 +4289,13 @@ fn requested_permissions_trust_project(overrides: &ConfigOverrides, cwd: &Path) 
 }
 
 fn permission_profile_trusts_project(
-    profile: &codex_protocol::models::PermissionProfile,
+    profile: &crewon_protocol::models::PermissionProfile,
     cwd: &Path,
 ) -> bool {
     match profile {
-        codex_protocol::models::PermissionProfile::Disabled
-        | codex_protocol::models::PermissionProfile::External { .. } => true,
-        codex_protocol::models::PermissionProfile::Managed { .. } => profile
+        crewon_protocol::models::PermissionProfile::Disabled
+        | crewon_protocol::models::PermissionProfile::External { .. } => true,
+        crewon_protocol::models::PermissionProfile::Managed { .. } => profile
             .file_system_sandbox_policy()
             .can_write_path_with_cwd(cwd, cwd),
     }
@@ -4321,7 +4321,7 @@ fn build_thread_from_snapshot(
         status: ThreadStatus::NotLoaded,
         path,
         cwd: config_snapshot.cwd().clone(),
-        cli_version: env!("CARGO_PKG_VERSION").to_string(),
+        client_version: env!("CARGO_PKG_VERSION").to_string(),
         agent_nickname: config_snapshot.session_source.get_nickname(),
         agent_role: config_snapshot.session_source.get_agent_role(),
         source: config_snapshot.session_source.clone().into(),
@@ -4363,7 +4363,7 @@ fn paginate_background_terminals(
 fn build_thread_from_loaded_snapshot(
     thread_id: ThreadId,
     config_snapshot: &ThreadConfigSnapshot,
-    loaded_thread: &CodexThread,
+    loaded_thread: &CrewonThread,
 ) -> Thread {
     build_thread_from_snapshot(
         thread_id,

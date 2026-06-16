@@ -1,9 +1,4 @@
 use anyhow::Result;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::ByteRange;
-use codex_protocol::user_input::TextElement;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_reasoning_item;
@@ -13,10 +8,15 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::TestCodexBuilder;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::TestCrewonBuilder;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::ByteRange;
+use crewon_protocol::user_input::TextElement;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,12 +25,12 @@ use tempfile::TempDir;
 use wiremock::MockServer;
 
 async fn resume_until_initial_messages(
-    builder: &mut TestCodexBuilder,
+    builder: &mut TestCrewonBuilder,
     server: &MockServer,
     home: Arc<TempDir>,
     rollout_path: PathBuf,
     predicate: impl Fn(&[EventMsg]) -> bool,
-) -> Result<TestCodex> {
+) -> Result<TestCrewon> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
     let poll_interval = Duration::from_millis(10);
     let mut last_initial_messages = "<missing initial messages>".to_string();
@@ -62,9 +62,9 @@ async fn resume_includes_initial_messages_from_rollout_events() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let initial = builder.build(&server).await?;
-    let codex = Arc::clone(&initial.codex);
+    let codex = Arc::clone(&initial.crewon);
     let home = initial.home.clone();
     let rollout_path = initial
         .session_configured
@@ -150,11 +150,11 @@ async fn resume_includes_initial_messages_from_reasoning_events() -> Result<()> 
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config.show_raw_agent_reasoning = true;
     });
     let initial = builder.build(&server).await?;
-    let codex = Arc::clone(&initial.codex);
+    let codex = Arc::clone(&initial.crewon);
     let home = initial.home.clone();
     let rollout_path = initial
         .session_configured
@@ -241,11 +241,11 @@ async fn resume_switches_models_preserves_base_instructions() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config.model = Some("gpt-5.2".to_string());
     });
     let initial = builder.build(&server).await?;
-    let codex = Arc::clone(&initial.codex);
+    let codex = Arc::clone(&initial.crewon);
     let home = initial.home.clone();
     let rollout_path = initial
         .session_configured
@@ -298,12 +298,12 @@ async fn resume_switches_models_preserves_base_instructions() -> Result<()> {
     )
     .await;
 
-    let mut resume_builder = test_codex().with_config(|config| {
+    let mut resume_builder = test_crewon().with_config(|config| {
         config.model = Some("gpt-5.3-codex".to_string());
     });
     let resumed = resume_builder.resume(&server, home, rollout_path).await?;
     resumed
-        .codex
+        .crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "Resume with different model".into(),
@@ -315,13 +315,13 @@ async fn resume_switches_models_preserves_base_instructions() -> Result<()> {
             thread_settings: Default::default(),
         })
         .await?;
-    wait_for_event(&resumed.codex, |event| {
+    wait_for_event(&resumed.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
     resumed
-        .codex
+        .crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "Second turn after resume".into(),
@@ -333,7 +333,7 @@ async fn resume_switches_models_preserves_base_instructions() -> Result<()> {
             thread_settings: Default::default(),
         })
         .await?;
-    wait_for_event(&resumed.codex, |event| {
+    wait_for_event(&resumed.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -373,11 +373,11 @@ async fn resume_model_switch_is_not_duplicated_after_pre_turn_override() -> Resu
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config.model = Some("gpt-5.2".to_string());
     });
     let initial = builder.build(&server).await?;
-    let codex = Arc::clone(&initial.codex);
+    let codex = Arc::clone(&initial.crewon);
     let home = initial.home.clone();
     let rollout_path = initial
         .session_configured
@@ -419,20 +419,20 @@ async fn resume_model_switch_is_not_duplicated_after_pre_turn_override() -> Resu
     )
     .await;
 
-    let mut resume_builder = test_codex().with_config(|config| {
+    let mut resume_builder = test_crewon().with_config(|config| {
         config.model = Some("gpt-5.3-codex".to_string());
     });
     let resumed = resume_builder.resume(&server, home, rollout_path).await?;
     core_test_support::submit_thread_settings(
-        &resumed.codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        &resumed.crewon,
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             model: Some("gpt-5.4".to_string()),
             ..Default::default()
         },
     )
     .await?;
     resumed
-        .codex
+        .crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "first turn after override".into(),
@@ -444,7 +444,7 @@ async fn resume_model_switch_is_not_duplicated_after_pre_turn_override() -> Resu
             thread_settings: Default::default(),
         })
         .await?;
-    wait_for_event(&resumed.codex, |event| {
+    wait_for_event(&resumed.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;

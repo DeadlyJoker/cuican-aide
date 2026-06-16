@@ -1,8 +1,8 @@
-use codex_backend_client::Client as BackendClient;
-use codex_core::config::Config;
-use codex_login::AuthManager;
-use codex_protocol::protocol::RateLimitSnapshot;
-use codex_protocol::protocol::RateLimitWindow;
+use crewon_backend_client::Client as BackendClient;
+use crewon_core::config::Config;
+use crewon_login::AuthManager;
+use crewon_protocol::protocol::RateLimitSnapshot;
+use crewon_protocol::protocol::RateLimitWindow;
 use tracing::info;
 use tracing::warn;
 
@@ -14,7 +14,7 @@ pub(crate) async fn rate_limits_ok(auth_manager: &AuthManager, config: &Config) 
 
 async fn rate_limits_check(auth_manager: &AuthManager, config: &Config) -> Option<bool> {
     let auth = auth_manager.auth().await?;
-    if !auth.uses_codex_backend() {
+    if !auth.uses_crewon_backend() {
         return None;
     }
 
@@ -39,7 +39,7 @@ async fn rate_limits_check(auth_manager: &AuthManager, config: &Config) -> Optio
     if !allowed {
         info!(
             min_remaining_percent,
-            "skipping memories startup because Codex rate limits are below the configured threshold"
+            "skipping memories startup because Crewon rate limits are below the configured threshold"
         );
     }
 

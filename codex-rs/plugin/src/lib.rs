@@ -1,13 +1,13 @@
 //! Shared plugin identifiers and telemetry-facing summaries.
 
-pub use codex_utils_plugins::mention_syntax;
-pub use codex_utils_plugins::plugin_namespace_for_skill_path;
+pub use crewon_utils_plugins::mention_syntax;
+pub use crewon_utils_plugins::plugin_namespace_for_skill_path;
 
 mod load_outcome;
 mod plugin_id;
 
-use codex_config::HookEventsToml;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_config::HookEventsToml;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 pub use load_outcome::EffectiveSkillRoots;
 pub use load_outcome::LoadedPlugin;
 pub use load_outcome::PluginLoadOutcome;

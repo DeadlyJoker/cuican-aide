@@ -1,8 +1,8 @@
-//! Rollout persistence and discovery for Codex session files.
+//! Rollout persistence and discovery for Crewon session files.
 
 use std::sync::LazyLock;
 
-use codex_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SessionSource;
 
 pub(crate) mod compression;
 pub(crate) mod config;
@@ -16,23 +16,22 @@ mod sqlite_metrics;
 pub mod state_db;
 
 pub(crate) mod default_client {
-    pub use codex_login::default_client::*;
+    pub use crewon_login::default_client::*;
 }
 
-pub(crate) use codex_protocol::protocol;
+pub(crate) use crewon_protocol::protocol;
 
 pub const SESSIONS_SUBDIR: &str = "sessions";
 pub const ARCHIVED_SESSIONS_SUBDIR: &str = "archived_sessions";
 pub static INTERACTIVE_SESSION_SOURCES: LazyLock<Vec<SessionSource>> = LazyLock::new(|| {
     vec![
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
         SessionSource::VSCode,
         SessionSource::Custom("atlas".to_string()),
         SessionSource::Custom("chatgpt".to_string()),
     ]
 });
 
-pub use codex_protocol::protocol::SessionMeta;
 pub use compression::RolloutLineReader;
 pub use compression::existing_rollout_path;
 pub use compression::open_rollout_line_reader;
@@ -41,6 +40,7 @@ pub use compression::spawn_rollout_compression_worker;
 pub use config::Config;
 pub use config::RolloutConfig;
 pub use config::RolloutConfigView;
+pub use crewon_protocol::protocol::SessionMeta;
 pub use list::Cursor;
 pub use list::SortDirection;
 pub use list::ThreadItem;

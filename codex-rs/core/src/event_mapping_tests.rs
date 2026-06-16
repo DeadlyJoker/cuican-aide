@@ -4,19 +4,19 @@ use super::parse_turn_item;
 use crate::context::ContextualUserFragment;
 use crate::context::InternalContextSource;
 use crate::context::InternalModelContextFragment;
-use codex_protocol::items::AgentMessageContent;
-use codex_protocol::items::HookPromptFragment;
-use codex_protocol::items::TurnItem;
-use codex_protocol::items::WebSearchItem;
-use codex_protocol::items::build_hook_prompt_message;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
-use codex_protocol::models::ReasoningItemContent;
-use codex_protocol::models::ReasoningItemReasoningSummary;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::models::WebSearchAction;
-use codex_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
-use codex_protocol::user_input::UserInput;
+use crewon_protocol::items::AgentMessageContent;
+use crewon_protocol::items::HookPromptFragment;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::items::WebSearchItem;
+use crewon_protocol::items::build_hook_prompt_message;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::DEFAULT_IMAGE_DETAIL;
+use crewon_protocol::models::ReasoningItemContent;
+use crewon_protocol::models::ReasoningItemReasoningSummary;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::models::WebSearchAction;
+use crewon_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -171,7 +171,7 @@ fn parses_assistant_message_input_text_for_backward_compatibility() {
 #[test]
 fn skips_unnamed_image_label_text() {
     let image_url = "data:image/png;base64,abc".to_string();
-    let label = codex_protocol::models::image_open_tag_text();
+    let label = crewon_protocol::models::image_open_tag_text();
     let user_text = "Please review this image.".to_string();
 
     let item = ResponseItem::Message {
@@ -184,7 +184,7 @@ fn skips_unnamed_image_label_text() {
                 detail: Some(DEFAULT_IMAGE_DETAIL),
             },
             ContentItem::InputText {
-                text: codex_protocol::models::image_close_tag_text(),
+                text: crewon_protocol::models::image_close_tag_text(),
             },
             ContentItem::InputText {
                 text: user_text.clone(),
@@ -364,7 +364,7 @@ fn parses_agent_message() {
         id: Some("msg-1".to_string()),
         role: "assistant".to_string(),
         content: vec![ContentItem::OutputText {
-            text: "Hello from Codex".to_string(),
+            text: "Hello from Crewon".to_string(),
         }],
         phase: None,
     };
@@ -376,7 +376,7 @@ fn parses_agent_message() {
             let Some(AgentMessageContent::Text { text }) = message.content.first() else {
                 panic!("expected agent message text content");
             };
-            assert_eq!(text, "Hello from Codex");
+            assert_eq!(text, "Hello from Crewon");
         }
         other => panic!("expected TurnItem::AgentMessage, got {other:?}"),
     }

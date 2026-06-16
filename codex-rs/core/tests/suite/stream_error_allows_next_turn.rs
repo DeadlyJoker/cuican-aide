@@ -1,15 +1,15 @@
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::WireApi;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::sse;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::WireApi;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
@@ -83,7 +83,7 @@ async fn continue_after_stream_error() {
         supports_websockets: false,
     };
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config.base_instructions = Some("You are a helpful assistant".to_string());
             config.model_provider = provider;

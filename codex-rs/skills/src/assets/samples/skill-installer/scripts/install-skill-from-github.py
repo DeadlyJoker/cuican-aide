@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""Install a skill from a GitHub repo path into $CODEX_HOME/skills."""
-
-from __future__ import annotations
+"""Install a skill from a GitHub repo path into Crewon's skills directory."""
 
 import argparse
 from dataclasses import dataclass
@@ -42,18 +40,22 @@ class InstallError(Exception):
     pass
 
 
-def _codex_home() -> str:
-    return os.environ.get("CODEX_HOME", os.path.expanduser("~/.codex"))
+def _crewon_home() -> str:
+    return (
+        os.environ.get("CREWON_HOME")
+        or os.environ.get("CODEX_HOME")
+        or os.path.expanduser("~/.codex")
+    )
 
 
 def _tmp_root() -> str:
-    base = os.path.join(tempfile.gettempdir(), "codex")
+    base = os.path.join(tempfile.gettempdir(), "crewon")
     os.makedirs(base, exist_ok=True)
     return base
 
 
 def _request(url: str) -> bytes:
-    return github_request(url, "codex-skill-install")
+    return github_request(url, "crewon-skill-install")
 
 
 def _parse_github_url(url: str, default_ref: str) -> tuple[str, str, str, str | None]:
@@ -241,7 +243,7 @@ def _resolve_source(args: Args) -> Source:
 
 
 def _default_dest() -> str:
-    return os.path.join(_codex_home(), "skills")
+    return os.path.join(_crewon_home(), "skills")
 
 
 def _parse_args(argv: list[str]) -> Args:

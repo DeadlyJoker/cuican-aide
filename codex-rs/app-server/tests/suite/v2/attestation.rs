@@ -4,23 +4,23 @@ use app_test_support::ChatGptAuthFixture;
 use app_test_support::TestAppServer;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
-use codex_app_server_protocol::AttestationGenerateResponse;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::InitializeCapabilities;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_config::types::AuthCredentialsStoreMode;
 use core_test_support::responses;
 use core_test_support::responses::WebSocketConnectionConfig;
 use core_test_support::responses::start_websocket_server_with_headers;
 use core_test_support::skip_if_no_network;
+use crewon_app_server_protocol::AttestationGenerateResponse;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::InitializeCapabilities;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_config::types::AuthCredentialsStoreMode;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use tempfile::TempDir;
@@ -82,8 +82,8 @@ async fn attestation_generate_round_trip_adds_header_to_responses_websocket_hand
         DEFAULT_READ_TIMEOUT,
         mcp.initialize_with_capabilities(
             ClientInfo {
-                name: "codex_desktop".to_string(),
-                title: Some("Codex Desktop".to_string()),
+                name: "crewon_desktop".to_string(),
+                title: Some("Crewon Desktop".to_string()),
                 version: "0.1.0".to_string(),
             },
             Some(InitializeCapabilities {

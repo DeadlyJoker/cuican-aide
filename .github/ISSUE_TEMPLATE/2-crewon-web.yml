@@ -1,0 +1,53 @@
+name: 🌐 Crewon Web Bug
+description: Report an issue with the Crewon web client
+labels:
+  - web
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting a new issue, please search for existing issues to see if your issue has already been reported.
+        If it has, please add a 👍 reaction (no need to leave a comment) to the existing issue instead of creating a new one.
+
+  - type: input
+    id: version
+    attributes:
+      label: What version or deployment of Crewon Web are you using?
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: What browser and version are you using?
+      description: For example, Chrome 131, Safari 18, Firefox 133, or Edge 131.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: What operating system are you using?
+      description: For example, macOS, Windows, Linux, iOS, or Android.
+  - type: textarea
+    id: actual
+    attributes:
+      label: What issue are you seeing?
+      description: Please include full error messages and prompts with PII redacted. If possible, provide text instead of a screenshot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What steps can reproduce the bug?
+      description: Include the page or workflow, account state, model/provider if relevant, and any browser console/network clues.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What is the expected behavior?
+      description: If possible, please provide text instead of a screenshot.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional information
+      description: Is there anything else you think we should know?

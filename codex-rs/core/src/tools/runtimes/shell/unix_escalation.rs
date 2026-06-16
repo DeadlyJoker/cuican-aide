@@ -24,46 +24,46 @@ use crate::tools::sandboxing::ToolError;
 use crate::tools::sandboxing::managed_network_for_sandbox_permissions;
 use crate::tools::sandboxing::sandbox_permissions_preserving_denied_reads;
 use crate::tools::sandboxing::unsandboxed_execution_allowed;
-use codex_execpolicy::Decision;
-use codex_execpolicy::Evaluation;
-use codex_execpolicy::MatchOptions;
-use codex_execpolicy::Policy;
-use codex_execpolicy::RuleMatch;
-use codex_features::Feature;
-use codex_hooks::PermissionRequestDecision;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::SandboxErr;
-use codex_protocol::exec_output::ExecToolCallOutput;
-use codex_protocol::exec_output::StreamOutput;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::GuardianCommandSource;
-use codex_protocol::protocol::NetworkPolicyRuleAction;
-use codex_protocol::protocol::ReviewDecision;
-use codex_sandboxing::SandboxCommand;
-use codex_sandboxing::SandboxManager;
-use codex_sandboxing::SandboxTransformRequest;
-use codex_sandboxing::SandboxType;
-use codex_sandboxing::SandboxablePreference;
-use codex_shell_command::bash::parse_shell_lc_plain_commands;
-use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
-use codex_shell_escalation::EscalateServer;
-use codex_shell_escalation::EscalationDecision;
-use codex_shell_escalation::EscalationExecution;
-use codex_shell_escalation::EscalationPermissions;
-use codex_shell_escalation::EscalationPolicy;
-use codex_shell_escalation::EscalationSession;
-use codex_shell_escalation::ExecParams;
-use codex_shell_escalation::ExecResult;
-use codex_shell_escalation::PreparedExec;
-use codex_shell_escalation::ResolvedPermissionProfile;
-use codex_shell_escalation::ShellCommandExecutor;
-use codex_shell_escalation::Stopwatch;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_execpolicy::Decision;
+use crewon_execpolicy::Evaluation;
+use crewon_execpolicy::MatchOptions;
+use crewon_execpolicy::Policy;
+use crewon_execpolicy::RuleMatch;
+use crewon_features::Feature;
+use crewon_hooks::PermissionRequestDecision;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::SandboxErr;
+use crewon_protocol::exec_output::ExecToolCallOutput;
+use crewon_protocol::exec_output::StreamOutput;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::GuardianCommandSource;
+use crewon_protocol::protocol::NetworkPolicyRuleAction;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_sandboxing::SandboxCommand;
+use crewon_sandboxing::SandboxManager;
+use crewon_sandboxing::SandboxTransformRequest;
+use crewon_sandboxing::SandboxType;
+use crewon_sandboxing::SandboxablePreference;
+use crewon_shell_command::bash::parse_shell_lc_plain_commands;
+use crewon_shell_command::bash::parse_shell_lc_single_command_prefix;
+use crewon_shell_escalation::EscalateServer;
+use crewon_shell_escalation::EscalationDecision;
+use crewon_shell_escalation::EscalationExecution;
+use crewon_shell_escalation::EscalationPermissions;
+use crewon_shell_escalation::EscalationPolicy;
+use crewon_shell_escalation::EscalationSession;
+use crewon_shell_escalation::ExecParams;
+use crewon_shell_escalation::ExecResult;
+use crewon_shell_escalation::PreparedExec;
+use crewon_shell_escalation::ResolvedPermissionProfile;
+use crewon_shell_escalation::ShellCommandExecutor;
+use crewon_shell_escalation::Stopwatch;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -141,7 +141,7 @@ pub(super) async fn try_run_zsh_fork(
             options,
             managed_network_for_sandbox_permissions(req.network.as_ref(), req.sandbox_permissions),
         )
-        .map_err(|err| ToolError::Codex(err.into()))?;
+        .map_err(|err| ToolError::Crewon(err.into()))?;
     let crate::sandboxing::ExecRequest {
         command,
         cwd: sandbox_cwd,
@@ -182,7 +182,7 @@ pub(super) async fn try_run_zsh_fork(
         arg0,
         sandbox_policy_cwd,
         windows_sandbox_workspace_roots,
-        codex_linux_sandbox_exe: ctx.turn.codex_linux_sandbox_exe.clone(),
+        crewon_linux_sandbox_exe: ctx.turn.crewon_linux_sandbox_exe.clone(),
         use_legacy_landlock: ctx.turn.features.use_legacy_landlock(),
     };
     let main_execve_wrapper_exe = ctx
@@ -283,7 +283,7 @@ pub(crate) async fn prepare_unified_exec_zsh_fork(
         arg0: exec_request.arg0.clone(),
         sandbox_policy_cwd: exec_request.windows_sandbox_policy_cwd.clone(),
         windows_sandbox_workspace_roots: exec_request.windows_sandbox_workspace_roots.clone(),
-        codex_linux_sandbox_exe: ctx.turn.codex_linux_sandbox_exe.clone(),
+        crewon_linux_sandbox_exe: ctx.turn.crewon_linux_sandbox_exe.clone(),
         use_legacy_landlock: ctx.turn.features.use_legacy_landlock(),
     };
     let escalation_policy = CoreShellActionProvider {
@@ -427,7 +427,7 @@ impl CoreShellActionProvider {
             .pause_for(async move {
                 // 1) Run PermissionRequest hooks
                 let permission_request = PermissionRequestPayload::bash(
-                    codex_shell_command::parse_command::shlex_join(&command),
+                    crewon_shell_command::parse_command::shlex_join(&command),
                     /*description*/ None,
                 );
                 let effective_approval_id = approval_id.clone().unwrap_or_else(|| call_id.clone());
@@ -770,12 +770,12 @@ struct CoreShellCommandExecutor {
     network_sandbox_policy: NetworkSandboxPolicy,
     sandbox: SandboxType,
     env: HashMap<String, String>,
-    network: Option<codex_network_proxy::NetworkProxy>,
+    network: Option<crewon_network_proxy::NetworkProxy>,
     windows_sandbox_level: WindowsSandboxLevel,
     arg0: Option<String>,
     sandbox_policy_cwd: AbsolutePathBuf,
     windows_sandbox_workspace_roots: Vec<AbsolutePathBuf>,
-    codex_linux_sandbox_exe: Option<PathBuf>,
+    crewon_linux_sandbox_exe: Option<PathBuf>,
     use_legacy_landlock: bool,
 }
 
@@ -946,7 +946,7 @@ impl CoreShellCommandExecutor {
             enforce_managed_network: self.network.is_some(),
             network: self.network.as_ref(),
             sandbox_policy_cwd: &self.sandbox_policy_cwd,
-            codex_linux_sandbox_exe: self.codex_linux_sandbox_exe.as_deref(),
+            crewon_linux_sandbox_exe: self.crewon_linux_sandbox_exe.as_deref(),
             use_legacy_landlock: self.use_legacy_landlock,
             windows_sandbox_level: self.windows_sandbox_level,
             windows_sandbox_private_desktop: false,
@@ -1016,13 +1016,13 @@ fn map_exec_result(
     };
 
     if result.timed_out {
-        return Err(ToolError::Codex(CodexErr::Sandbox(SandboxErr::Timeout {
+        return Err(ToolError::Crewon(CodexErr::Sandbox(SandboxErr::Timeout {
             output: Box::new(output),
         })));
     }
 
     if is_likely_sandbox_denied(sandbox, &output) {
-        return Err(ToolError::Codex(CodexErr::Sandbox(SandboxErr::Denied {
+        return Err(ToolError::Crewon(CodexErr::Sandbox(SandboxErr::Denied {
             output: Box::new(output),
             network_policy_decision: None,
         })));

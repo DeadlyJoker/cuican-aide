@@ -3,13 +3,6 @@
 
 use anyhow::Context;
 use anyhow::Result;
-use codex_config::types::McpServerConfig;
-use codex_config::types::McpServerTransportConfig;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::TempDirExt;
 use core_test_support::assert_regex_match;
 use core_test_support::responses;
@@ -22,10 +15,17 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::stdio_server_bin;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_mcp_server;
+use crewon_config::types::McpServerConfig;
+use crewon_config::types::McpServerTransportConfig;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use serde_json::Value;
 use serde_json::json;
 use std::collections::HashMap;
@@ -48,7 +48,7 @@ async fn tool_call_output_configured_limit_chars_type() -> Result<()> {
     let server = start_mock_server().await;
 
     // Use a model that exposes the shell_command tool.
-    let mut builder = test_codex().with_model("gpt-5.2").with_config(|config| {
+    let mut builder = test_crewon().with_model("gpt-5.2").with_config(|config| {
         config.tool_output_token_limit = Some(100_000);
     });
 
@@ -127,7 +127,7 @@ async fn tool_call_output_exceeds_limit_truncated_chars_limit() -> Result<()> {
     let server = start_mock_server().await;
 
     // Use a model that exposes the shell_command tool.
-    let mut builder = test_codex().with_model("gpt-5.2");
+    let mut builder = test_crewon().with_model("gpt-5.2");
 
     let fixture = builder.build(&server).await?;
 
@@ -204,7 +204,7 @@ async fn tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> {
     let server = start_mock_server().await;
 
     // Use a model that exposes the shell_command tool.
-    let mut builder = test_codex().with_model("gpt-5.4");
+    let mut builder = test_crewon().with_model("gpt-5.4");
     let fixture = builder.build(&server).await?;
 
     let call_id = "shell-too-large";
@@ -283,7 +283,7 @@ async fn tool_call_output_truncated_only_once() -> Result<()> {
 
     let server = start_mock_server().await;
 
-    let mut builder = test_codex().with_model("gpt-5.4");
+    let mut builder = test_crewon().with_model("gpt-5.4");
     let fixture = builder.build(&server).await?;
     let call_id = "shell-single-truncation";
     let command = if cfg!(windows) {
@@ -378,12 +378,12 @@ async fn mcp_tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> 
     // Compile the rmcp stdio test server and configure it.
     let rmcp_test_server_bin = stdio_server_bin()?;
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         let mut servers = config.mcp_servers.get().clone();
         servers.insert(
             server_name.to_string(),
-            codex_config::types::McpServerConfig {
-                transport: codex_config::types::McpServerTransportConfig::Stdio {
+            crewon_config::types::McpServerConfig {
+                transport: crewon_config::types::McpServerTransportConfig::Stdio {
                     command: rmcp_test_server_bin,
                     args: Vec::new(),
                     env: None,
@@ -413,7 +413,7 @@ async fn mcp_tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> 
         config.tool_output_token_limit = Some(500);
     });
     let fixture = builder.build(&server).await?;
-    wait_for_mcp_server(&fixture.codex, server_name).await?;
+    wait_for_mcp_server(&fixture.crewon, server_name).await?;
 
     fixture
         .submit_turn_with_permission_profile(
@@ -476,7 +476,7 @@ async fn mcp_image_output_preserves_image_and_no_text_summary() -> Result<()> {
     // 1x1 PNG data URL
     let openai_png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/ee9bQAAAABJRU5ErkJggg==";
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         let mut servers = config.mcp_servers.get().clone();
         servers.insert(
             server_name.to_string(),
@@ -513,13 +513,13 @@ async fn mcp_image_output_preserves_image_and_no_text_summary() -> Result<()> {
             .expect("test mcp servers should accept any configuration");
     });
     let fixture = builder.build(&server).await?;
-    wait_for_mcp_server(&fixture.codex, server_name).await?;
+    wait_for_mcp_server(&fixture.crewon, server_name).await?;
     let session_model = fixture.session_configured.model.clone();
     let permission_profile = PermissionProfile::read_only();
     let sandbox_policy = permission_profile.to_legacy_sandbox_policy(fixture.cwd.path())?;
 
     fixture
-        .codex
+        .crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "call the rmcp image tool".into(),
@@ -528,14 +528,14 @@ async fn mcp_image_output_preserves_image_and_no_text_summary() -> Result<()> {
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(fixture.cwd.abs())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile: Some(permission_profile),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: session_model,
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -547,7 +547,10 @@ async fn mcp_image_output_preserves_image_and_no_text_summary() -> Result<()> {
         .await?;
 
     // Wait for completion to ensure the outbound request is captured.
-    wait_for_event(&fixture.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&fixture.crewon, |ev| {
+        matches!(ev, EventMsg::TurnComplete(_))
+    })
+    .await;
     let output_item = final_mock.single_request().function_call_output(call_id);
     // Expect exactly the wall-time text and image item; no trailing truncation summary.
     let output = output_item.get("output").expect("output");
@@ -573,7 +576,7 @@ async fn token_policy_marker_reports_tokens() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.4").with_config(|config| {
+    let mut builder = test_crewon().with_model("gpt-5.4").with_config(|config| {
         config.tool_output_token_limit = Some(50); // small budget to force truncation
     });
     let fixture = builder.build(&server).await?;
@@ -624,7 +627,7 @@ async fn byte_policy_marker_reports_bytes() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.2").with_config(|config| {
+    let mut builder = test_crewon().with_model("gpt-5.2").with_config(|config| {
         config.tool_output_token_limit = Some(50); // ~200 byte cap
     });
     let fixture = builder.build(&server).await?;
@@ -675,7 +678,7 @@ async fn shell_command_output_not_truncated_with_custom_limit() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.4").with_config(|config| {
+    let mut builder = test_crewon().with_model("gpt-5.4").with_config(|config| {
         config.tool_output_token_limit = Some(50_000); // ample budget
     });
     let fixture = builder.build(&server).await?;
@@ -767,13 +770,13 @@ async fn mcp_tool_call_output_not_truncated_with_custom_limit() -> Result<()> {
 
     let rmcp_test_server_bin = stdio_server_bin()?;
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.tool_output_token_limit = Some(50_000);
         let mut servers = config.mcp_servers.get().clone();
         servers.insert(
             server_name.to_string(),
-            codex_config::types::McpServerConfig {
-                transport: codex_config::types::McpServerTransportConfig::Stdio {
+            crewon_config::types::McpServerConfig {
+                transport: crewon_config::types::McpServerTransportConfig::Stdio {
                     command: rmcp_test_server_bin,
                     args: Vec::new(),
                     env: None,
@@ -802,7 +805,7 @@ async fn mcp_tool_call_output_not_truncated_with_custom_limit() -> Result<()> {
             .expect("test mcp servers should accept any configuration");
     });
     let fixture = builder.build(&server).await?;
-    wait_for_mcp_server(&fixture.codex, server_name).await?;
+    wait_for_mcp_server(&fixture.crewon, server_name).await?;
 
     fixture
         .submit_turn_with_permission_profile(

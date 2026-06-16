@@ -1,10 +1,10 @@
-use codex_features::Feature;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
+use crewon_features::Feature;
 
 const HIERARCHICAL_AGENTS_SNIPPET: &str =
     "Files called AGENTS.md commonly appear in many places inside a container";
@@ -18,7 +18,7 @@ async fn hierarchical_agents_appends_to_project_doc_in_user_instructions() {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_config(|config| {
             config
                 .features
@@ -69,7 +69,7 @@ async fn hierarchical_agents_emits_when_no_project_doc() {
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::ChildAgentsMd)

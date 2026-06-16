@@ -1,21 +1,4 @@
 use anyhow::Result;
-use codex_core::config::Config;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_models_manager::manager::RefreshStrategy;
-use codex_models_manager::manager::SharedModelsManager;
-use codex_models_manager::model_info::model_info_from_slug;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ToolMode;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::ThreadSettingsOverrides;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -25,8 +8,25 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::skip_if_no_network;
 use core_test_support::submit_thread_settings;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_core::config::Config;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_models_manager::manager::RefreshStrategy;
+use crewon_models_manager::manager::SharedModelsManager;
+use crewon_models_manager::model_info::model_info_from_slug;
+use crewon_protocol::openai_models::InputModality;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelPreset;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::openai_models::ToolMode;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::ThreadSettingsOverrides;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use tokio::time::Duration;
@@ -104,8 +104,8 @@ async fn response_body_for_remote_model(
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(configure);
     let test = builder.build(&server).await?;
     let models_manager = test.thread_manager.get_models_manager();
@@ -114,14 +114,14 @@ async fn response_body_for_remote_model(
     assert_eq!(models_mock.requests().len(), 1);
 
     submit_thread_settings(
-        &test.codex,
+        &test.crewon,
         ThreadSettingsOverrides {
             model: Some(model_slug),
             ..Default::default()
         },
     )
     .await?;
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "list tools".into(),
@@ -133,7 +133,7 @@ async fn response_body_for_remote_model(
             thread_settings: Default::default(),
         })
         .await?;
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -158,8 +158,8 @@ async fn remote_tool_mode_selector_overrides_feature_flags() -> Result<()> {
     assert!(
         direct_tools
             .iter()
-            .all(|name| name != codex_code_mode::PUBLIC_TOOL_NAME
-                && name != codex_code_mode::WAIT_TOOL_NAME),
+            .all(|name| name != crewon_code_mode::PUBLIC_TOOL_NAME
+                && name != crewon_code_mode::WAIT_TOOL_NAME),
         "direct mode should override enabled code mode flags: {direct_tools:?}"
     );
 
@@ -171,8 +171,8 @@ async fn remote_tool_mode_selector_overrides_feature_flags() -> Result<()> {
         tool_names(&code_mode_only_body),
         vec![
             // Code-mode entrypoints.
-            codex_code_mode::PUBLIC_TOOL_NAME.to_string(),
-            codex_code_mode::WAIT_TOOL_NAME.to_string(),
+            crewon_code_mode::PUBLIC_TOOL_NAME.to_string(),
+            crewon_code_mode::WAIT_TOOL_NAME.to_string(),
             // Hosted Responses tools.
             "web_search".to_string(),
             "image_generation".to_string(),
@@ -246,8 +246,8 @@ async fn remote_multi_agent_selector_uses_model_selected_before_first_turn() -> 
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some(ROOT_MODEL.to_string());
         });
@@ -255,22 +255,22 @@ async fn remote_multi_agent_selector_uses_model_selected_before_first_turn() -> 
     assert_eq!(
         (
             models_mock.requests().len(),
-            test.codex.multi_agent_version(),
+            test.crewon.multi_agent_version(),
         ),
         (1, None)
     );
 
     submit_thread_settings(
-        &test.codex,
+        &test.crewon,
         ThreadSettingsOverrides {
             model: Some(CHILD_MODEL.to_string()),
             ..Default::default()
         },
     )
     .await?;
-    assert_eq!(test.codex.multi_agent_version(), None);
+    assert_eq!(test.crewon.multi_agent_version(), None);
 
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: ROOT_PROMPT.into(),
@@ -282,7 +282,7 @@ async fn remote_multi_agent_selector_uses_model_selected_before_first_turn() -> 
             thread_settings: Default::default(),
         })
         .await?;
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -290,7 +290,7 @@ async fn remote_multi_agent_selector_uses_model_selected_before_first_turn() -> 
     assert_eq!(
         (
             models_mock.requests().len(),
-            test.codex.multi_agent_version(),
+            test.crewon.multi_agent_version(),
             tool_names(
                 &response_mock
                     .last_request()

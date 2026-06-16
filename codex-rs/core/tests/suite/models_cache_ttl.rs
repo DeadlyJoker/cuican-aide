@@ -1,4 +1,4 @@
-use core_test_support::test_codex::local_selections;
+use core_test_support::test_crewon::local_selections;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -6,31 +6,31 @@ use anyhow::Result;
 use chrono::DateTime;
 use chrono::TimeZone;
 use chrono::Utc;
-use codex_login::CodexAuth;
-use codex_models_manager::client_version_to_whole;
-use codex_models_manager::manager::RefreshStrategy;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::openai_models::ReasoningEffortPreset;
-use codex_protocol::openai_models::TruncationPolicyConfig;
-use codex_protocol::openai_models::default_input_modalities;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
+use crewon_login::CrewonAuth;
+use crewon_models_manager::client_version_to_whole;
+use crewon_models_manager::manager::RefreshStrategy;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::openai_models::ReasoningEffortPreset;
+use crewon_protocol::openai_models::TruncationPolicyConfig;
+use crewon_protocol::openai_models::default_input_modalities;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde::Deserialize;
 use serde::Serialize;
@@ -57,7 +57,7 @@ async fn renews_cache_ttl_on_matching_models_etag() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let mut builder = test_crewon().with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing());
     builder = builder.with_config(|config| {
         config.model = Some("gpt-5.2".to_string());
         config.model_provider.request_max_retries = Some(0);
@@ -65,7 +65,7 @@ async fn renews_cache_ttl_on_matching_models_etag() -> Result<()> {
     });
 
     let test = builder.build(&server).await?;
-    let codex = Arc::clone(&test.codex);
+    let codex = Arc::clone(&test.crewon);
     let config = test.config.clone();
 
     // Populate cache via initial refresh.
@@ -101,14 +101,14 @@ async fn renews_cache_ttl_on_matching_models_etag() -> Result<()> {
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(test.config.cwd.clone())),
-                approval_policy: Some(codex_protocol::protocol::AskForApproval::Never),
+                approval_policy: Some(crewon_protocol::protocol::AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: test.session_configured.model.clone(),
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -159,7 +159,7 @@ async fn uses_cache_when_version_matches() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let mut builder = test_crewon().with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing());
     builder = builder
         .with_pre_build_hook(move |home| {
             let cache = ModelsCache {
@@ -206,7 +206,7 @@ async fn refreshes_when_cache_version_missing() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let mut builder = test_crewon().with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing());
     builder = builder
         .with_pre_build_hook(move |home| {
             let cache = ModelsCache {
@@ -253,7 +253,7 @@ async fn refreshes_when_cache_version_differs() -> Result<()> {
         models_mocks.push(responses::mount_models_once(&server, models_response.clone()).await);
     }
 
-    let mut builder = test_codex().with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let mut builder = test_crewon().with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing());
     builder = builder
         .with_pre_build_hook(move |home| {
             let client_version = client_version_to_whole();

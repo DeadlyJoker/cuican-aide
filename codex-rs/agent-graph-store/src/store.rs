@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use codex_protocol::ThreadId;
+use crewon_protocol::ThreadId;
 
 use crate::AgentGraphStoreResult;
 use crate::ThreadSpawnEdgeStatus;

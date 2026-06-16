@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use codex_extension_api::ExtensionEventSink;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ThreadGoal;
-use codex_protocol::protocol::ThreadGoalUpdatedEvent;
+use crewon_extension_api::ExtensionEventSink;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ThreadGoal;
+use crewon_protocol::protocol::ThreadGoalUpdatedEvent;
 
 #[derive(Clone)]
 pub(crate) struct GoalEventEmitter {

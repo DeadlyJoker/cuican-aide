@@ -5,9 +5,9 @@
 //! thread-local event methods here avoids repeatedly plumbing `thread_id`
 //! through session code.
 
-use codex_protocol::protocol::AgentStatus;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::AgentStatus;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::SessionSource;
 use serde::Serialize;
 use std::path::Path;
 use std::path::PathBuf;
@@ -32,7 +32,7 @@ use crate::ToolCallId;
 use crate::ToolDispatchInvocation;
 use crate::ToolDispatchTraceContext;
 use crate::TraceWriter;
-use crate::protocol_event::codex_turn_trace_event;
+use crate::protocol_event::crewon_turn_trace_event;
 use crate::protocol_event::tool_runtime_trace_event;
 use crate::protocol_event::wrapped_protocol_event_type;
 
@@ -41,6 +41,12 @@ use crate::protocol_event::wrapped_protocol_event_type;
 /// The value is a root directory. Each independent root session gets one child
 /// bundle directory. Spawned child threads share their root session's bundle so
 /// one reduced `state.json` describes the whole multi-agent rollout tree.
+pub const CREWON_ROLLOUT_TRACE_ROOT_ENV: &str = "CREWON_ROLLOUT_TRACE_ROOT";
+
+/// Legacy environment variable for local trace-bundle recording.
+///
+/// Prefer [`CREWON_ROLLOUT_TRACE_ROOT_ENV`]. This remains as a fallback so
+/// existing diagnostic scripts keep working during the rename.
 pub const CODEX_ROLLOUT_TRACE_ROOT_ENV: &str = "CODEX_ROLLOUT_TRACE_ROOT";
 
 /// Metadata captured once at thread/session start.
@@ -98,13 +104,13 @@ impl ThreadTraceContext {
         }
     }
 
-    /// Starts a root thread trace from `CODEX_ROLLOUT_TRACE_ROOT`, or disables tracing.
+    /// Starts a root thread trace from `CREWON_ROLLOUT_TRACE_ROOT`, or disables tracing.
     ///
-    /// Trace startup is best-effort. A tracing failure must not make the Codex
+    /// Trace startup is best-effort. A tracing failure must not make the Crewon
     /// session unusable, because traces are diagnostic and can be enabled while
     /// debugging unrelated production failures.
     pub fn start_root_or_disabled(metadata: ThreadStartedTraceMetadata) -> Self {
-        let Some(root) = std::env::var_os(CODEX_ROLLOUT_TRACE_ROOT_ENV) else {
+        let Some(root) = rollout_trace_root_from_env() else {
             return Self::disabled();
         };
         let root = PathBuf::from(root);
@@ -213,13 +219,13 @@ impl ThreadTraceContext {
         });
     }
 
-    /// Emits typed Codex turn lifecycle events from protocol lifecycle events.
-    pub fn record_codex_turn_event(&self, default_turn_id: &str, event: &EventMsg) {
+    /// Emits typed Crewon turn lifecycle events from protocol lifecycle events.
+    pub fn record_crewon_turn_event(&self, default_turn_id: &str, event: &EventMsg) {
         let ThreadTraceContextState::Enabled(context) = &self.state else {
             return;
         };
         let Some(trace_event) =
-            codex_turn_trace_event(context.thread_id.clone(), default_turn_id, event)
+            crewon_turn_trace_event(context.thread_id.clone(), default_turn_id, event)
         else {
             return;
         };
@@ -233,7 +239,7 @@ impl ThreadTraceContext {
     ///
     /// These events are runtime observations on an already-dispatched tool. The
     /// dispatch trace records the caller-facing boundary; these payloads explain
-    /// what Codex did while executing that boundary.
+    /// what Crewon did while executing that boundary.
     pub fn record_tool_call_event(&self, codex_turn_id: impl Into<CodexTurnId>, event: &EventMsg) {
         let ThreadTraceContextState::Enabled(context) = &self.state else {
             return;
@@ -349,7 +355,7 @@ impl ThreadTraceContext {
         ToolDispatchTraceContext::start(Arc::clone(&context.writer), invocation)
     }
 
-    /// Builds reusable inference trace context for one Codex turn.
+    /// Builds reusable inference trace context for one Crewon turn.
     ///
     /// The returned context is intentionally not "an inference call" yet.
     /// Transport code owns retry/fallback attempts and calls `start_attempt`
@@ -415,6 +421,20 @@ impl ThreadTraceContext {
         });
         trace
     }
+}
+
+fn rollout_trace_root_from_env() -> Option<std::ffi::OsString> {
+    rollout_trace_root_from_env_values(
+        std::env::var_os(CREWON_ROLLOUT_TRACE_ROOT_ENV),
+        std::env::var_os(CODEX_ROLLOUT_TRACE_ROOT_ENV),
+    )
+}
+
+fn rollout_trace_root_from_env_values(
+    crewon_root: Option<std::ffi::OsString>,
+    legacy_codex_root: Option<std::ffi::OsString>,
+) -> Option<std::ffi::OsString> {
+    crewon_root.or(legacy_codex_root)
 }
 
 fn start_root_in_root(

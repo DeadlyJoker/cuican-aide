@@ -2,14 +2,14 @@ use anyhow::Result;
 use app_test_support::TestAppServer;
 use app_test_support::to_response;
 use chrono::Utc;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::MemoryResetResponse;
-use codex_app_server_protocol::RequestId;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::SessionSource;
-use codex_state::Stage1JobClaimOutcome;
-use codex_state::StateRuntime;
-use codex_state::ThreadMetadataBuilder;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::MemoryResetResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::SessionSource;
+use crewon_state::Stage1JobClaimOutcome;
+use crewon_state::StateRuntime;
+use crewon_state::ThreadMetadataBuilder;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use std::sync::Arc;
@@ -76,7 +76,7 @@ async fn seed_stage1_output(state_db: &Arc<StateRuntime>, codex_home: &Path) -> 
         thread_id,
         codex_home.join("sessions").join("test.jsonl"),
         now,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     builder.updated_at = Some(now);
     builder.cwd = codex_home.to_path_buf();

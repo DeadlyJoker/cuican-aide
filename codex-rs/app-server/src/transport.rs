@@ -1,7 +1,7 @@
 use crate::message_processor::ConnectionSessionState;
 use crate::outgoing_message::OutgoingEnvelope;
-use codex_app_server_protocol::ExperimentalApi;
-use codex_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ExperimentalApi;
+use crewon_app_server_protocol::ServerRequest;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -12,25 +12,25 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-pub use codex_app_server_transport::AppServerTransport;
-pub(crate) use codex_app_server_transport::CHANNEL_CAPACITY;
-pub(crate) use codex_app_server_transport::ConnectionId;
-pub(crate) use codex_app_server_transport::ConnectionOrigin;
-pub(crate) use codex_app_server_transport::OutgoingMessage;
-pub(crate) use codex_app_server_transport::QueuedOutgoingMessage;
-pub(crate) use codex_app_server_transport::RemoteControlHandle;
-pub(crate) use codex_app_server_transport::RemoteControlStartConfig;
-pub(crate) use codex_app_server_transport::RemoteControlUnavailable;
-pub(crate) use codex_app_server_transport::TransportEvent;
-pub(crate) use codex_app_server_transport::acquire_app_server_startup_lock;
-pub use codex_app_server_transport::app_server_control_socket_path;
-pub(crate) use codex_app_server_transport::app_server_startup_lock_path;
-pub use codex_app_server_transport::auth;
-pub(crate) use codex_app_server_transport::prepare_control_socket_path;
-pub(crate) use codex_app_server_transport::start_control_socket_acceptor;
-pub(crate) use codex_app_server_transport::start_remote_control;
-pub(crate) use codex_app_server_transport::start_stdio_connection;
-pub(crate) use codex_app_server_transport::start_websocket_acceptor;
+pub use crewon_app_server_transport::AppServerTransport;
+pub(crate) use crewon_app_server_transport::CHANNEL_CAPACITY;
+pub(crate) use crewon_app_server_transport::ConnectionId;
+pub(crate) use crewon_app_server_transport::ConnectionOrigin;
+pub(crate) use crewon_app_server_transport::OutgoingMessage;
+pub(crate) use crewon_app_server_transport::QueuedOutgoingMessage;
+pub(crate) use crewon_app_server_transport::RemoteControlHandle;
+pub(crate) use crewon_app_server_transport::RemoteControlStartConfig;
+pub(crate) use crewon_app_server_transport::RemoteControlUnavailable;
+pub(crate) use crewon_app_server_transport::TransportEvent;
+pub(crate) use crewon_app_server_transport::acquire_app_server_startup_lock;
+pub use crewon_app_server_transport::app_server_control_socket_path;
+pub(crate) use crewon_app_server_transport::app_server_startup_lock_path;
+pub use crewon_app_server_transport::auth;
+pub(crate) use crewon_app_server_transport::prepare_control_socket_path;
+pub(crate) use crewon_app_server_transport::start_control_socket_acceptor;
+pub(crate) use crewon_app_server_transport::start_remote_control;
+pub(crate) use crewon_app_server_transport::start_stdio_connection;
+pub(crate) use crewon_app_server_transport::start_websocket_acceptor;
 
 pub(crate) struct ConnectionState {
     pub(crate) outbound_initialized: Arc<AtomicBool>,

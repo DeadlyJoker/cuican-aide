@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CODEX_RS_ROOT = REPO_ROOT / "codex-rs"
+RUST_WORKSPACE_ROOT = REPO_ROOT / "codex-rs"
 
 
 @dataclass(frozen=True)
@@ -39,16 +39,6 @@ def formatter_groups(*, check: bool) -> tuple[FormatterGroup, ...]:
     cargo_args = ["cargo", "fmt", "--", "--config", "imports_granularity=Item"]
     # Use an unpinned overlay so Ruff is available without syncing project
     # dependencies. Each `--project` still retains its local configuration context.
-    sdk_uv_run_args = [
-        "uv",
-        "run",
-        "--frozen",
-        "--project",
-        "sdk/python",
-        "--no-sync",
-        "--with",
-        "ruff",
-    ]
     scripts_uv_run_args = [
         "uv",
         "run",
@@ -59,11 +49,6 @@ def formatter_groups(*, check: bool) -> tuple[FormatterGroup, ...]:
         "--with",
         "ruff",
     ]
-    sdk_format_args = [
-        *sdk_uv_run_args,
-        "ruff",
-        "format",
-    ]
     scripts_format_args = [
         *scripts_uv_run_args,
         "ruff",
@@ -73,15 +58,7 @@ def formatter_groups(*, check: bool) -> tuple[FormatterGroup, ...]:
     if check:
         just_args.append("--check")
         cargo_args.append("--check")
-        sdk_format_args.append("--check")
         scripts_format_args.append("--check")
-        # `ruff check --diff` reports lint-driven rewrites without changing files.
-        # It is the check-mode counterpart of `--fix --fix-only`, not a full lint gate.
-        sdk_lint_args = ["ruff", "check", "--diff"]
-    else:
-        # Ruff's lint fixer and formatter are separate passes: the first applies
-        # fixable lint rewrites, while the second formats source layout.
-        sdk_lint_args = ["ruff", "check", "--fix", "--fix-only"]
 
     return (
         FormatterGroup("Just", (Command(tuple(just_args)),)),
@@ -89,20 +66,7 @@ def formatter_groups(*, check: bool) -> tuple[FormatterGroup, ...]:
             "Rust",
             # Stable rustfmt repeats a nightly-only `imports_granularity` warning
             # for each crate, so suppress that expected stderr noise.
-            (Command(tuple(cargo_args), CODEX_RS_ROOT, discard_stderr=True),),
-        ),
-        FormatterGroup(
-            "Python SDK",
-            (
-                Command(
-                    (
-                        *sdk_uv_run_args,
-                        *sdk_lint_args,
-                        "sdk/python",
-                    )
-                ),
-                Command((*sdk_format_args, "sdk/python")),
-            ),
+            (Command(tuple(cargo_args), RUST_WORKSPACE_ROOT, discard_stderr=True),),
         ),
         FormatterGroup(
             "Python scripts",

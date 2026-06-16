@@ -1,18 +1,19 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-utils-output-truncation"
+name = "crewon-utils-output-truncation"
 version.workspace = true
 
 [lints]
 workspace = true
 
 [dependencies]
-codex-protocol = { workspace = true }
-codex-utils-string = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-utils-string = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 
 [lib]
 doctest = false
+name = "crewon_utils_output_truncation"

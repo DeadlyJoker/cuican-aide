@@ -13,18 +13,18 @@ use crate::workspace::memory_workspace_diff;
 use crate::workspace::prepare_memory_workspace;
 use crate::workspace::reset_memory_workspace_baseline;
 use crate::workspace::write_workspace_diff;
-use codex_config::Constrained;
-use codex_core::config::Config;
-use codex_features::Feature;
-use codex_model_provider::ModelProvider;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::AgentStatus;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::user_input::UserInput;
-use codex_state::Stage1Output;
-use codex_state::StateRuntime;
+use crewon_config::Constrained;
+use crewon_core::config::Config;
+use crewon_features::Feature;
+use crewon_model_provider::ModelProvider;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::AgentStatus;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::user_input::UserInput;
+use crewon_state::Stage1Output;
+use crewon_state::StateRuntime;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -227,7 +227,7 @@ mod job {
                 "failed_claim"
             })?;
         let (token, watermark) = match claim {
-            codex_state::Phase2JobClaimOutcome::Claimed {
+            crewon_state::Phase2JobClaimOutcome::Claimed {
                 ownership_token,
                 input_watermark,
             } => {
@@ -238,13 +238,13 @@ mod job {
                 );
                 (ownership_token, input_watermark)
             }
-            codex_state::Phase2JobClaimOutcome::SkippedRetryUnavailable => {
+            crewon_state::Phase2JobClaimOutcome::SkippedRetryUnavailable => {
                 return Err("skipped_retry_unavailable");
             }
-            codex_state::Phase2JobClaimOutcome::SkippedCooldown => {
+            crewon_state::Phase2JobClaimOutcome::SkippedCooldown => {
                 return Err("skipped_cooldown");
             }
-            codex_state::Phase2JobClaimOutcome::SkippedRunning => return Err("skipped_running"),
+            crewon_state::Phase2JobClaimOutcome::SkippedRunning => return Err("skipped_running"),
         };
 
         Ok(Claim { token, watermark })
@@ -283,7 +283,7 @@ mod job {
         db: &StateRuntime,
         claim: &Claim,
         completion_watermark: i64,
-        selected_outputs: &[codex_state::Stage1Output],
+        selected_outputs: &[crewon_state::Stage1Output],
         reason: &'static str,
     ) -> bool {
         context.counter(MEMORY_PHASE_TWO_JOBS, /*inc*/ 1, &[("status", reason)]);
@@ -361,10 +361,10 @@ mod agent {
         context: Arc<MemoryStartupContext>,
         claim: Claim,
         new_watermark: i64,
-        selected_outputs: Vec<codex_state::Stage1Output>,
-        memory_root: codex_utils_absolute_path::AbsolutePathBuf,
+        selected_outputs: Vec<crewon_state::Stage1Output>,
+        memory_root: crewon_utils_absolute_path::AbsolutePathBuf,
         agent: SpawnedConsolidationAgent,
-        phase_two_e2e_timer: Option<codex_otel::Timer>,
+        phase_two_e2e_timer: Option<crewon_otel::Timer>,
     ) {
         let Some(db) = context.state_db() else {
             return;
@@ -453,7 +453,7 @@ mod agent {
         db: Arc<StateRuntime>,
         token: String,
         thread_id: ThreadId,
-        thread: &codex_core::CodexThread,
+        thread: &crewon_core::CrewonThread,
     ) -> AgentStatus {
         let mut heartbeat_interval =
             tokio::time::interval(Duration::from_secs(crate::stage_two::JOB_HEARTBEAT_SECONDS));
@@ -519,7 +519,7 @@ mod agent {
 
 pub(super) fn get_watermark(
     claimed_watermark: i64,
-    latest_memories: &[codex_state::Stage1Output],
+    latest_memories: &[crewon_state::Stage1Output],
 ) -> i64 {
     latest_memories
         .iter()

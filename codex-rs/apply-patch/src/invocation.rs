@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::LazyLock;
 
-use codex_exec_server::ExecutorFileSystem;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_exec_server::ExecutorFileSystem;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use tree_sitter::Parser;
 use tree_sitter::Query;
 use tree_sitter::QueryCursor;
@@ -135,7 +135,7 @@ pub async fn maybe_parse_apply_patch_verified(
     argv: &[String],
     cwd: &AbsolutePathBuf,
     fs: &dyn ExecutorFileSystem,
-    sandbox: Option<&codex_exec_server::FileSystemSandboxContext>,
+    sandbox: Option<&crewon_exec_server::FileSystemSandboxContext>,
 ) -> MaybeApplyPatchVerified {
     // Detect a raw patch body passed directly as the command or as the body of a shell
     // script. In these cases, report an explicit error rather than applying the patch.
@@ -162,7 +162,7 @@ pub async fn verify_apply_patch_args(
     args: ApplyPatchArgs,
     cwd: &AbsolutePathBuf,
     fs: &dyn ExecutorFileSystem,
-    sandbox: Option<&codex_exec_server::FileSystemSandboxContext>,
+    sandbox: Option<&crewon_exec_server::FileSystemSandboxContext>,
 ) -> MaybeApplyPatchVerified {
     let ApplyPatchArgs {
         patch,
@@ -389,8 +389,8 @@ mod tests {
     use super::*;
     use crate::unified_diff_from_chunks;
     use assert_matches::assert_matches;
-    use codex_exec_server::LOCAL_FS;
-    use codex_utils_absolute_path::test_support::PathExt;
+    use crewon_exec_server::LOCAL_FS;
+    use crewon_utils_absolute_path::test_support::PathExt;
     use pretty_assertions::assert_eq;
     use std::fs;
     use std::path::PathBuf;

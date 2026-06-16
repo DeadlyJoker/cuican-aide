@@ -8,8 +8,8 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::SecondsFormat;
 use chrono::Utc;
-use codex_protocol::auth::PlanType as AuthPlanType;
-use codex_protocol::protocol::SessionSource;
+use crewon_protocol::auth::PlanType as AuthPlanType;
+use crewon_protocol::protocol::SessionSource;
 use crypto_box::SecretKey as Curve25519SecretKey;
 use ed25519_dalek::Signer as _;
 use ed25519_dalek::SigningKey;
@@ -32,7 +32,7 @@ use sha2::Sha512;
 
 const AGENT_TASK_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(30);
 const AGENT_IDENTITY_JWKS_TIMEOUT: Duration = Duration::from_secs(10);
-const AGENT_IDENTITY_JWT_AUDIENCE: &str = "codex-app-server";
+const AGENT_IDENTITY_JWT_AUDIENCE: &str = "crewon-app-server";
 const AGENT_IDENTITY_JWT_ISSUER: &str = "https://chatgpt.com/codex-backend/agent-identity";
 
 /// Stored key material for a registered agent identity.
@@ -326,7 +326,7 @@ pub fn agent_identity_request_id() -> Result<String> {
         .try_fill_bytes(&mut request_id_bytes)
         .context("failed to generate agent identity request id")?;
     Ok(format!(
-        "codex-agent-identity-{}",
+        "crewon-agent-identity-{}",
         URL_SAFE_NO_PAD.encode(request_id_bytes)
     ))
 }
@@ -336,13 +336,13 @@ pub fn build_abom(session_source: SessionSource) -> AgentBillOfMaterials {
         agent_version: env!("CARGO_PKG_VERSION").to_string(),
         agent_harness_id: match &session_source {
             SessionSource::VSCode => "codex-app".to_string(),
-            SessionSource::Cli
+            SessionSource::LegacyCli
             | SessionSource::Exec
             | SessionSource::Mcp
             | SessionSource::Custom(_)
             | SessionSource::Internal(_)
             | SessionSource::SubAgent(_)
-            | SessionSource::Unknown => "codex-cli".to_string(),
+            | SessionSource::Unknown => "crewon".to_string(),
         },
         running_location: format!("{}-{}", session_source, std::env::consts::OS),
     }
@@ -408,7 +408,7 @@ mod tests {
     use jsonwebtoken::Header;
     use pretty_assertions::assert_eq;
 
-    use codex_protocol::auth::KnownPlan;
+    use crewon_protocol::auth::KnownPlan;
 
     use super::*;
 

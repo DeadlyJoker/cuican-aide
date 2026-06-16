@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use codex_features::Feature;
-use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
-use codex_mcp::ToolInfo;
-use codex_tools::ToolName;
+use crewon_features::Feature;
+use crewon_mcp::CREWON_APPS_MCP_SERVER_NAME;
+use crewon_mcp::ToolInfo;
+use crewon_tools::ToolName;
 use pretty_assertions::assert_eq;
 use rmcp::model::JsonObject;
 use rmcp::model::Meta;
@@ -77,7 +77,7 @@ fn numbered_mcp_tools(count: usize) -> Vec<ToolInfo> {
 fn tool_names(tools: &[ToolInfo]) -> HashSet<ToolName> {
     tools
         .iter()
-        .map(codex_mcp::ToolInfo::canonical_tool_name)
+        .map(crewon_mcp::ToolInfo::canonical_tool_name)
         .collect()
 }
 
@@ -139,9 +139,9 @@ async fn excludes_tools_hidden_from_model_exposure() {
     );
     let visible_app_tool = with_visibility(
         make_mcp_tool(
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             "calendar_read",
-            "mcp__codex_apps__calendar",
+            "mcp__crewon_apps__calendar",
             "read",
             Some("calendar"),
             Some("Calendar"),
@@ -150,9 +150,9 @@ async fn excludes_tools_hidden_from_model_exposure() {
     );
     let hidden_app_tool = with_visibility(
         make_mcp_tool(
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             "calendar_open",
-            "mcp__codex_apps__calendar",
+            "mcp__crewon_apps__calendar",
             "open",
             Some("calendar"),
             Some("Calendar"),
@@ -216,9 +216,9 @@ async fn always_defer_feature_defers_apps_too() {
             /*connector_name*/ None,
         ),
         make_mcp_tool(
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             "calendar_create_event",
-            "mcp__codex_apps__calendar",
+            "mcp__crewon_apps__calendar",
             "_create_event",
             Some("calendar"),
             Some("Calendar"),
@@ -241,7 +241,7 @@ async fn always_defer_feature_defers_apps_too() {
     let deferred_tool_names = tool_names(deferred_tools);
     assert!(deferred_tool_names.contains(&ToolName::namespaced("mcp__rmcp", "tool")));
     assert!(deferred_tool_names.contains(&ToolName::namespaced(
-        "mcp__codex_apps__calendar",
+        "mcp__crewon_apps__calendar",
         "_create_event"
     )));
 }

@@ -1,45 +1,45 @@
-use codex_core::CodexThread;
-use codex_core::ModelClient;
-use codex_core::NewThread;
-use codex_core::Prompt;
-use codex_core::ResponseEvent;
-use codex_core::StartThreadOptions;
-use codex_core::ThreadManager;
-use codex_core::config::Config;
-use codex_core::content_items_to_text;
-use codex_core::resolve_installation_id;
-use codex_features::Feature;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::auth_env_telemetry::collect_auth_env_telemetry;
-use codex_login::default_client::originator;
-use codex_model_provider::ModelProvider;
-use codex_model_provider::SharedModelProvider;
-use codex_model_provider::create_model_provider;
-use codex_otel::SessionTelemetry;
-use codex_otel::TelemetryAuthMode;
-use codex_protocol::SessionId;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::InternalSessionSource;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::ThreadSource;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::user_input::UserInput;
-use codex_rollout_trace::InferenceTraceContext;
-use codex_state::StateRuntime;
-use codex_terminal_detection::user_agent;
+use crewon_core::CrewonThread;
+use crewon_core::ModelClient;
+use crewon_core::NewThread;
+use crewon_core::Prompt;
+use crewon_core::ResponseEvent;
+use crewon_core::StartThreadOptions;
+use crewon_core::ThreadManager;
+use crewon_core::config::Config;
+use crewon_core::content_items_to_text;
+use crewon_core::resolve_installation_id;
+use crewon_features::Feature;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_login::auth_env_telemetry::collect_auth_env_telemetry;
+use crewon_login::default_client::originator;
+use crewon_model_provider::ModelProvider;
+use crewon_model_provider::SharedModelProvider;
+use crewon_model_provider::create_model_provider;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::TelemetryAuthMode;
+use crewon_protocol::SessionId;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::InternalSessionSource;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::user_input::UserInput;
+use crewon_rollout_trace::InferenceTraceContext;
+use crewon_state::StateRuntime;
+use crewon_terminal_detection::user_agent;
 use futures::StreamExt;
 use std::sync::Arc;
 use std::time::Duration;
 
 pub(crate) struct SpawnedConsolidationAgent {
     pub(crate) thread_id: ThreadId,
-    pub(crate) thread: Arc<CodexThread>,
+    pub(crate) thread: Arc<CrewonThread>,
 }
 
 #[derive(Clone, Debug)]
@@ -53,7 +53,7 @@ pub(crate) struct StageOneRequestContext {
 }
 
 impl StageOneRequestContext {
-    pub(crate) fn start_timer(&self, name: &str) -> Option<codex_otel::Timer> {
+    pub(crate) fn start_timer(&self, name: &str) -> Option<crewon_otel::Timer> {
         self.session_telemetry.start_timer(name, &[]).ok()
     }
 
@@ -68,7 +68,7 @@ impl StageOneRequestContext {
 
 pub(crate) struct MemoryStartupContext {
     thread_id: ThreadId,
-    thread: Arc<CodexThread>,
+    thread: Arc<CrewonThread>,
     thread_manager: Arc<ThreadManager>,
     auth_manager: Arc<AuthManager>,
     provider: SharedModelProvider,
@@ -80,7 +80,7 @@ impl MemoryStartupContext {
         thread_manager: Arc<ThreadManager>,
         auth_manager: Arc<AuthManager>,
         thread_id: ThreadId,
-        thread: Arc<CodexThread>,
+        thread: Arc<CrewonThread>,
         config: &Config,
         source: SessionSource,
     ) -> Self {
@@ -104,7 +104,7 @@ impl MemoryStartupContext {
         thread_manager: Arc<ThreadManager>,
         auth_manager: Arc<AuthManager>,
         thread_id: ThreadId,
-        thread: Arc<CodexThread>,
+        thread: Arc<CrewonThread>,
         config: &Config,
         source: SessionSource,
         provider: SharedModelProvider,
@@ -124,16 +124,16 @@ impl MemoryStartupContext {
         thread_manager: Arc<ThreadManager>,
         auth_manager: Arc<AuthManager>,
         thread_id: ThreadId,
-        thread: Arc<CodexThread>,
+        thread: Arc<CrewonThread>,
         config: &Config,
         source: SessionSource,
         provider: SharedModelProvider,
     ) -> Self {
         let auth = auth_manager.auth_cached();
         let auth = auth.as_ref();
-        let auth_mode = auth.map(CodexAuth::auth_mode).map(TelemetryAuthMode::from);
-        let account_id = auth.and_then(CodexAuth::get_account_id);
-        let account_email = auth.and_then(CodexAuth::get_account_email);
+        let auth_mode = auth.map(CrewonAuth::auth_mode).map(TelemetryAuthMode::from);
+        let account_id = auth.and_then(CrewonAuth::get_account_id);
+        let account_email = auth.and_then(CrewonAuth::get_account_email);
         let model = config.model.as_deref().unwrap_or("unknown");
         let auth_env_telemetry = collect_auth_env_telemetry(
             &config.model_provider,
@@ -183,7 +183,7 @@ impl MemoryStartupContext {
         self.session_telemetry.histogram(name, value, tags);
     }
 
-    pub(crate) fn start_timer(&self, name: &str) -> Option<codex_otel::Timer> {
+    pub(crate) fn start_timer(&self, name: &str) -> Option<crewon_otel::Timer> {
         self.session_telemetry.start_timer(name, &[]).ok()
     }
 
@@ -200,7 +200,7 @@ impl MemoryStartupContext {
             .get_model_info(model_name, &config.to_models_manager_config())
             .await;
         let turn_metadata_header =
-            codex_core::build_turn_metadata_header(&config.cwd, /*sandbox*/ None).await;
+            crewon_core::build_turn_metadata_header(&config.cwd, /*sandbox*/ None).await;
         let reasoning_summary = config
             .model_reasoning_summary
             .unwrap_or(model_info.default_reasoning_summary);
@@ -265,7 +265,7 @@ impl MemoryStartupContext {
                 ResponseEvent::OutputTextDelta(delta) => result.push_str(&delta),
                 ResponseEvent::OutputItemDone(item) => {
                     if result.is_empty()
-                        && let codex_protocol::models::ResponseItem::Message { content, .. } = item
+                        && let crewon_protocol::models::ResponseItem::Message { content, .. } = item
                         && let Some(text) = content_items_to_text(&content)
                     {
                         result.push_str(&text);

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use codex_app_server_protocol::AppInfo;
+use crewon_app_server_protocol::AppInfo;
 use serde::Deserialize;
 use serde::Serialize;
 use sha1::Digest;
@@ -10,7 +10,7 @@ use tracing::warn;
 use crate::ConnectorDirectoryCacheKey;
 
 pub(crate) const CONNECTOR_DIRECTORY_DISK_CACHE_SCHEMA_VERSION: u8 = 1;
-const CONNECTOR_DIRECTORY_DISK_CACHE_DIR: &str = "cache/codex_app_directory";
+const CONNECTOR_DIRECTORY_DISK_CACHE_DIR: &str = "cache/crewon_app_directory";
 
 #[derive(Clone)]
 pub struct ConnectorDirectoryCacheContext {

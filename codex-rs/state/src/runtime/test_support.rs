@@ -3,13 +3,13 @@ use chrono::DateTime;
 #[cfg(test)]
 use chrono::Utc;
 #[cfg(test)]
-use codex_protocol::ThreadId;
+use crewon_protocol::ThreadId;
 #[cfg(test)]
-use codex_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::openai_models::ReasoningEffort;
 #[cfg(test)]
-use codex_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::AskForApproval;
 #[cfg(test)]
-use codex_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::SandboxPolicy;
 #[cfg(test)]
 use std::path::Path;
 #[cfg(test)]
@@ -30,7 +30,7 @@ pub(super) fn unique_temp_dir() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_nanos());
     std::env::temp_dir().join(format!(
-        "codex-state-runtime-test-{nanos}-{}",
+        "crewon-state-runtime-test-{nanos}-{}",
         Uuid::new_v4()
     ))
 }
@@ -47,7 +47,7 @@ pub(super) fn test_thread_metadata(
         rollout_path: codex_home.join(format!("rollout-{thread_id}.jsonl")),
         created_at: now,
         updated_at: now,
-        source: "cli".to_string(),
+        source: "app-server".to_string(),
         thread_source: None,
         agent_nickname: None,
         agent_role: None,

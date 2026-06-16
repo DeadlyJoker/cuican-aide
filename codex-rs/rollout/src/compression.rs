@@ -867,21 +867,21 @@ mod metrics {
     }
 
     fn counter(name: &str, tags: &[(&str, &str)]) {
-        let Some(metrics) = codex_otel::global() else {
+        let Some(metrics) = crewon_otel::global() else {
             return;
         };
         let _ = metrics.counter(name, /*inc*/ 1, tags);
     }
 
     fn histogram(name: &str, value: i64, tags: &[(&str, &str)]) {
-        let Some(metrics) = codex_otel::global() else {
+        let Some(metrics) = crewon_otel::global() else {
             return;
         };
         let _ = metrics.histogram(name, value, tags);
     }
 
     fn duration_histogram(name: &str, duration: Duration, tags: &[(&str, &str)]) {
-        let Some(metrics) = codex_otel::global() else {
+        let Some(metrics) = crewon_otel::global() else {
             return;
         };
         let _ = metrics.record_duration(name, duration, tags);

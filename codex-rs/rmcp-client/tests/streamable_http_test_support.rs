@@ -17,15 +17,15 @@ use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::Context as _;
-use codex_config::types::OAuthCredentialsStoreMode;
-use codex_exec_server::Environment;
-use codex_exec_server::ExecServerClient;
-use codex_exec_server::HttpClient;
-use codex_exec_server::RemoteExecServerConnectArgs;
-use codex_rmcp_client::ElicitationAction;
-use codex_rmcp_client::ElicitationResponse;
-use codex_rmcp_client::RmcpClient;
-use codex_utils_cargo_bin::CargoBinError;
+use crewon_config::types::OAuthCredentialsStoreMode;
+use crewon_exec_server::Environment;
+use crewon_exec_server::ExecServerClient;
+use crewon_exec_server::HttpClient;
+use crewon_exec_server::RemoteExecServerConnectArgs;
+use crewon_rmcp_client::ElicitationAction;
+use crewon_rmcp_client::ElicitationResponse;
+use crewon_rmcp_client::RmcpClient;
+use crewon_utils_cargo_bin::CargoBinError;
 use futures::FutureExt as _;
 use pretty_assertions::assert_eq;
 use rmcp::model::CallToolResult;
@@ -50,7 +50,7 @@ const INITIALIZED_NOTIFICATION_POST_FAILURE_CONTROL_PATH: &str =
     "/test/control/initialized-notification-post-failure";
 
 fn streamable_http_server_bin() -> Result<PathBuf, CargoBinError> {
-    codex_utils_cargo_bin::cargo_bin("test_streamable_http_server")
+    crewon_utils_cargo_bin::cargo_bin("test_streamable_http_server")
 }
 
 fn init_params() -> InitializeRequestParams {
@@ -63,7 +63,7 @@ fn init_params() -> InitializeRequestParams {
     });
     InitializeRequestParams::new(
         capabilities,
-        Implementation::new("codex-test", "0.0.0-test").with_title("Codex rmcp recovery test"),
+        Implementation::new("crewon-test", "0.0.0-test").with_title("Crewon rmcp recovery test"),
     )
     .with_protocol_version(ProtocolVersion::V_2025_06_18)
 }
@@ -314,7 +314,7 @@ pub(crate) async fn spawn_streamable_http_server() -> anyhow::Result<(Child, Str
 
 /// Owns the exec-server process used by the remote-client integration test.
 pub(crate) struct ExecServerProcess {
-    _codex_home: TempDir,
+    crewon_home: TempDir,
     child: Child,
     pub(crate) client: ExecServerClient,
 }
@@ -328,14 +328,14 @@ impl Drop for ExecServerProcess {
 
 /// Starts a local exec-server and connects an initialized `ExecServerClient`.
 pub(crate) async fn spawn_exec_server() -> anyhow::Result<ExecServerProcess> {
-    let codex_home = TempDir::new()?;
-    let mut child = Command::new(codex_utils_cargo_bin::cargo_bin("codex")?)
+    let crewon_home = TempDir::new()?;
+    let mut child = Command::new(crewon_utils_cargo_bin::cargo_bin("crewon")?)
         .args(["exec-server", "--listen", "ws://127.0.0.1:0"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .kill_on_drop(true)
-        .env("CODEX_HOME", codex_home.path())
+        .env("CREWON_HOME", crewon_home.path())
         .spawn()?;
 
     let websocket_url = read_exec_server_listen_url(&mut child).await?;
@@ -346,13 +346,13 @@ pub(crate) async fn spawn_exec_server() -> anyhow::Result<ExecServerProcess> {
     .await?;
 
     Ok(ExecServerProcess {
-        _codex_home: codex_home,
+        crewon_home,
         child,
         client,
     })
 }
 
-/// Reads the websocket URL printed by `codex exec-server --listen`.
+/// Reads the websocket URL printed by the exec-server `--listen` mode.
 async fn read_exec_server_listen_url(child: &mut Child) -> anyhow::Result<String> {
     let stdout = child
         .stdout

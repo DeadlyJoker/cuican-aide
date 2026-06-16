@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
-use codex_extension_api::ExtensionData;
+use crewon_extension_api::ExtensionData;
 use futures::future::BoxFuture;
 use tokio::select;
 use tokio::sync::Notify;
@@ -21,9 +21,9 @@ use tracing::info_span;
 use tracing::trace;
 use tracing::warn;
 
-use crate::codex_thread::BackgroundTerminalInfo;
 use crate::config::Config;
 use crate::context::ContextualUserFragment;
+use crate::crewon_thread::BackgroundTerminalInfo;
 use crate::hook_runtime::inspect_pending_input;
 use crate::hook_runtime::record_additional_contexts;
 use crate::hook_runtime::record_pending_input;
@@ -33,28 +33,28 @@ use crate::session::turn_context::TurnContext;
 use crate::state::ActiveTurn;
 use crate::state::RunningTask;
 use crate::state::TaskKind;
-use codex_analytics::TurnProfileFact;
-use codex_analytics::TurnTokenUsageFact;
-use codex_login::AuthManager;
-use codex_models_manager::manager::SharedModelsManager;
-use codex_otel::SessionTelemetry;
-use codex_otel::TURN_E2E_DURATION_METRIC;
-use codex_otel::TURN_MEMORY_METRIC;
-use codex_otel::TURN_NETWORK_PROXY_METRIC;
-use codex_otel::TURN_TOKEN_USAGE_METRIC;
-use codex_otel::TURN_TOOL_CALL_METRIC;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::protocol::TurnAbortReason;
-use codex_protocol::protocol::TurnAbortedEvent;
-use codex_protocol::protocol::TurnCompleteEvent;
-use codex_protocol::protocol::WarningEvent;
+use crewon_analytics::TurnProfileFact;
+use crewon_analytics::TurnTokenUsageFact;
+use crewon_login::AuthManager;
+use crewon_models_manager::manager::SharedModelsManager;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::TURN_E2E_DURATION_METRIC;
+use crewon_otel::TURN_MEMORY_METRIC;
+use crewon_otel::TURN_NETWORK_PROXY_METRIC;
+use crewon_otel::TURN_TOKEN_USAGE_METRIC;
+use crewon_otel::TURN_TOOL_CALL_METRIC;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::protocol::TurnAbortReason;
+use crewon_protocol::protocol::TurnAbortedEvent;
+use crewon_protocol::protocol::TurnCompleteEvent;
+use crewon_protocol::protocol::WarningEvent;
 
-use codex_features::Feature;
-use codex_protocol::models::ContentItem;
 pub(crate) use compact::CompactTask;
+use crewon_features::Feature;
+use crewon_protocol::models::ContentItem;
 pub(crate) use regular::RegularTask;
 pub(crate) use review::ReviewTask;
 pub(crate) use user_shell::UserShellCommandMode;
@@ -62,7 +62,7 @@ pub(crate) use user_shell::UserShellCommandTask;
 pub(crate) use user_shell::execute_user_shell_command;
 
 const GRACEFULL_INTERRUPTION_TIMEOUT_MS: u64 = 100;
-const TASK_COMPACT_METRIC: &str = "codex.task.compact";
+const TASK_COMPACT_METRIC: &str = "crewon.task.compact";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InterruptedTurnHistoryMarker {
@@ -199,7 +199,7 @@ impl SessionTaskContext {
 
 /// Async task that drives a [`Session`] turn.
 ///
-/// Implementations encapsulate a specific Codex workflow (regular chat,
+/// Implementations encapsulate a specific Crewon workflow (regular chat,
 /// reviews, ghost snapshots, etc.). Each task instance is owned by a
 /// [`Session`] and executed on a background Tokio task. The trait is
 /// intentionally small: implementers identify themselves via
@@ -382,13 +382,13 @@ impl Session {
             thread.id = %self.thread_id,
             turn.id = %turn_context.sub_id,
             model = %turn_context.model_info.slug,
-            codex.turn.reasoning_effort = %reasoning_effort,
-            codex.turn.token_usage.input_tokens = field::Empty,
-            codex.turn.token_usage.cached_input_tokens = field::Empty,
-            codex.turn.token_usage.non_cached_input_tokens = field::Empty,
-            codex.turn.token_usage.output_tokens = field::Empty,
-            codex.turn.token_usage.reasoning_output_tokens = field::Empty,
-            codex.turn.token_usage.total_tokens = field::Empty,
+            crewon.turn.reasoning_effort = %reasoning_effort,
+            crewon.turn.token_usage.input_tokens = field::Empty,
+            crewon.turn.token_usage.cached_input_tokens = field::Empty,
+            crewon.turn.token_usage.non_cached_input_tokens = field::Empty,
+            crewon.turn.token_usage.output_tokens = field::Empty,
+            crewon.turn.token_usage.reasoning_output_tokens = field::Empty,
+            crewon.turn.token_usage.total_tokens = field::Empty,
         );
         let handle = tokio::spawn(
             async move {
@@ -408,7 +408,7 @@ impl Session {
                         ctx_for_finish.as_ref(),
                         EventMsg::Warning(WarningEvent {
                             message: format!(
-                                "Failed to save the conversation transcript; Codex will continue retrying. Error: {err}"
+                                "Failed to save the conversation transcript; Crewon will continue retrying. Error: {err}"
                             ),
                         }),
                     )
@@ -661,27 +661,27 @@ impl Session {
             };
             let current_span = Span::current();
             current_span.record(
-                "codex.turn.token_usage.input_tokens",
+                "crewon.turn.token_usage.input_tokens",
                 turn_token_usage.input_tokens,
             );
             current_span.record(
-                "codex.turn.token_usage.cached_input_tokens",
+                "crewon.turn.token_usage.cached_input_tokens",
                 turn_token_usage.cached_input(),
             );
             current_span.record(
-                "codex.turn.token_usage.non_cached_input_tokens",
+                "crewon.turn.token_usage.non_cached_input_tokens",
                 turn_token_usage.non_cached_input(),
             );
             current_span.record(
-                "codex.turn.token_usage.output_tokens",
+                "crewon.turn.token_usage.output_tokens",
                 turn_token_usage.output_tokens,
             );
             current_span.record(
-                "codex.turn.token_usage.reasoning_output_tokens",
+                "crewon.turn.token_usage.reasoning_output_tokens",
                 turn_token_usage.reasoning_output_tokens,
             );
             current_span.record(
-                "codex.turn.token_usage.total_tokens",
+                "crewon.turn.token_usage.total_tokens",
                 turn_token_usage.total_tokens,
             );
             self.services

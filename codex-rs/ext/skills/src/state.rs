@@ -1,4 +1,4 @@
-use codex_protocol::capabilities::SelectedCapabilityRoot;
+use crewon_protocol::capabilities::SelectedCapabilityRoot;
 use std::future::Future;
 use std::sync::Mutex;
 use tokio::sync::OnceCell;

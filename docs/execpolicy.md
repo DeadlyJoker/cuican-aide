@@ -1,3 +1,5 @@
 # Execution policy
 
-For an overview of execution policy rules, see [this documentation](https://developers.openai.com/codex/exec-policy).
+Execution policy rules constrain commands issued through the backend execution
+runtime. Keep policy examples aligned with the app-server and execution server
+crates.

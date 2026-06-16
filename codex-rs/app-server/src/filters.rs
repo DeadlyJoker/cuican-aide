@@ -1,17 +1,22 @@
-use codex_app_server_protocol::ThreadSourceKind;
-use codex_core::INTERACTIVE_SESSION_SOURCES;
-use codex_protocol::protocol::SessionSource as CoreSessionSource;
-use codex_protocol::protocol::SubAgentSource as CoreSubAgentSource;
+use crewon_app_server_protocol::ThreadSourceKind;
+use crewon_protocol::protocol::SessionSource as CoreSessionSource;
+use crewon_protocol::protocol::SubAgentSource as CoreSubAgentSource;
+
+const DEFAULT_CLIENT_SESSION_SOURCES: &[CoreSessionSource] = &[
+    CoreSessionSource::LegacyCli,
+    CoreSessionSource::VSCode,
+    CoreSessionSource::Mcp,
+];
 
 pub(crate) fn compute_source_filters(
     source_kinds: Option<Vec<ThreadSourceKind>>,
 ) -> (Vec<CoreSessionSource>, Option<Vec<ThreadSourceKind>>) {
     let Some(source_kinds) = source_kinds else {
-        return (INTERACTIVE_SESSION_SOURCES.to_vec(), None);
+        return (DEFAULT_CLIENT_SESSION_SOURCES.to_vec(), None);
     };
 
     if source_kinds.is_empty() {
-        return (INTERACTIVE_SESSION_SOURCES.to_vec(), None);
+        return (DEFAULT_CLIENT_SESSION_SOURCES.to_vec(), None);
     }
 
     let requires_post_filter = source_kinds.iter().any(|kind| {
@@ -34,7 +39,7 @@ pub(crate) fn compute_source_filters(
         let interactive_sources = source_kinds
             .iter()
             .filter_map(|kind| match kind {
-                ThreadSourceKind::Cli => Some(CoreSessionSource::Cli),
+                ThreadSourceKind::LegacyCli => Some(CoreSessionSource::LegacyCli),
                 ThreadSourceKind::VsCode => Some(CoreSessionSource::VSCode),
                 ThreadSourceKind::Exec
                 | ThreadSourceKind::AppServer
@@ -52,7 +57,7 @@ pub(crate) fn compute_source_filters(
 
 pub(crate) fn source_kind_matches(source: &CoreSessionSource, filter: &[ThreadSourceKind]) -> bool {
     filter.iter().any(|kind| match kind {
-        ThreadSourceKind::Cli => matches!(source, CoreSessionSource::Cli),
+        ThreadSourceKind::LegacyCli => matches!(source, CoreSessionSource::LegacyCli),
         ThreadSourceKind::VsCode => matches!(source, CoreSessionSource::VSCode),
         ThreadSourceKind::Exec => matches!(source, CoreSessionSource::Exec),
         ThreadSourceKind::AppServer => matches!(source, CoreSessionSource::Mcp),
@@ -84,34 +89,34 @@ pub(crate) fn source_kind_matches(source: &CoreSessionSource, filter: &[ThreadSo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_protocol::ThreadId;
+    use crewon_protocol::ThreadId;
     use pretty_assertions::assert_eq;
     use uuid::Uuid;
 
     #[test]
-    fn compute_source_filters_defaults_to_interactive_sources() {
+    fn compute_source_filters_defaults_to_client_sources() {
         let (allowed_sources, filter) = compute_source_filters(/*source_kinds*/ None);
 
-        assert_eq!(allowed_sources, INTERACTIVE_SESSION_SOURCES.to_vec());
+        assert_eq!(allowed_sources, DEFAULT_CLIENT_SESSION_SOURCES.to_vec());
         assert_eq!(filter, None);
     }
 
     #[test]
-    fn compute_source_filters_empty_means_interactive_sources() {
+    fn compute_source_filters_empty_means_client_sources() {
         let (allowed_sources, filter) = compute_source_filters(Some(Vec::new()));
 
-        assert_eq!(allowed_sources, INTERACTIVE_SESSION_SOURCES.to_vec());
+        assert_eq!(allowed_sources, DEFAULT_CLIENT_SESSION_SOURCES.to_vec());
         assert_eq!(filter, None);
     }
 
     #[test]
-    fn compute_source_filters_interactive_only_skips_post_filtering() {
-        let source_kinds = vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode];
+    fn compute_source_filters_legacy_cli_and_vscode_skip_post_filtering() {
+        let source_kinds = vec![ThreadSourceKind::LegacyCli, ThreadSourceKind::VsCode];
         let (allowed_sources, filter) = compute_source_filters(Some(source_kinds.clone()));
 
         assert_eq!(
             allowed_sources,
-            vec![CoreSessionSource::Cli, CoreSessionSource::VSCode]
+            vec![CoreSessionSource::LegacyCli, CoreSessionSource::VSCode]
         );
         assert_eq!(filter, Some(source_kinds));
     }

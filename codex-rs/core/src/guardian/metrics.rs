@@ -1,22 +1,22 @@
 use std::time::Duration;
 
-use codex_analytics::GuardianApprovalRequestSource;
-use codex_analytics::GuardianReviewAnalyticsResult;
-use codex_analytics::GuardianReviewDecision;
-use codex_analytics::GuardianReviewFailureReason;
-use codex_analytics::GuardianReviewSessionKind;
-use codex_analytics::GuardianReviewTerminalStatus;
-use codex_analytics::GuardianReviewedAction;
-use codex_otel::GUARDIAN_REVIEW_COUNT_METRIC;
-use codex_otel::GUARDIAN_REVIEW_DURATION_METRIC;
-use codex_otel::GUARDIAN_REVIEW_TOKEN_USAGE_METRIC;
-use codex_otel::GUARDIAN_REVIEW_TTFT_DURATION_METRIC;
-use codex_otel::SessionTelemetry;
-use codex_otel::sanitize_metric_tag_value;
-use codex_protocol::protocol::GuardianAssessmentOutcome;
-use codex_protocol::protocol::GuardianRiskLevel;
-use codex_protocol::protocol::GuardianUserAuthorization;
-use codex_protocol::protocol::TokenUsage;
+use crewon_analytics::GuardianApprovalRequestSource;
+use crewon_analytics::GuardianReviewAnalyticsResult;
+use crewon_analytics::GuardianReviewDecision;
+use crewon_analytics::GuardianReviewFailureReason;
+use crewon_analytics::GuardianReviewSessionKind;
+use crewon_analytics::GuardianReviewTerminalStatus;
+use crewon_analytics::GuardianReviewedAction;
+use crewon_otel::GUARDIAN_REVIEW_COUNT_METRIC;
+use crewon_otel::GUARDIAN_REVIEW_DURATION_METRIC;
+use crewon_otel::GUARDIAN_REVIEW_TOKEN_USAGE_METRIC;
+use crewon_otel::GUARDIAN_REVIEW_TTFT_DURATION_METRIC;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::sanitize_metric_tag_value;
+use crewon_protocol::protocol::GuardianAssessmentOutcome;
+use crewon_protocol::protocol::GuardianRiskLevel;
+use crewon_protocol::protocol::GuardianUserAuthorization;
+use crewon_protocol::protocol::TokenUsage;
 
 pub(crate) fn emit_guardian_review_metrics(
     session_telemetry: &SessionTelemetry,
@@ -235,10 +235,10 @@ fn outcome_tag(outcome: Option<GuardianAssessmentOutcome>) -> &'static str {
 mod tests {
     use super::*;
 
-    use codex_otel::MetricsClient;
-    use codex_otel::MetricsConfig;
-    use codex_protocol::ThreadId;
-    use codex_protocol::protocol::SessionSource;
+    use crewon_otel::MetricsClient;
+    use crewon_otel::MetricsConfig;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::protocol::SessionSource;
     use opentelemetry::KeyValue;
     use opentelemetry_sdk::metrics::InMemoryMetricExporter;
     use opentelemetry_sdk::metrics::data::AggregatedMetrics;
@@ -251,7 +251,7 @@ mod tests {
     fn test_session_telemetry() -> SessionTelemetry {
         let exporter = InMemoryMetricExporter::default();
         let metrics = MetricsClient::new(
-            MetricsConfig::in_memory("test", "codex-core", env!("CARGO_PKG_VERSION"), exporter)
+            MetricsConfig::in_memory("test", "crewon-core", env!("CARGO_PKG_VERSION"), exporter)
                 .with_runtime_reader(),
         )
         .expect("in-memory metrics client");
@@ -265,7 +265,7 @@ mod tests {
             "test_originator".to_string(),
             /*log_user_prompts*/ false,
             "tty".to_string(),
-            SessionSource::Cli,
+            SessionSource::LegacyCli,
         )
         .with_metrics_without_metadata_tags(metrics)
     }
@@ -361,7 +361,7 @@ mod tests {
             &result,
             GuardianApprovalRequestSource::DelegatedSubagent,
             &GuardianReviewedAction::NetworkAccess {
-                protocol: codex_protocol::approvals::NetworkApprovalProtocol::Https,
+                protocol: crewon_protocol::approvals::NetworkApprovalProtocol::Https,
                 port: 443,
             },
             /*completion_latency_ms*/ 456,

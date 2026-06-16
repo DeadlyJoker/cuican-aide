@@ -1,9 +1,9 @@
-use codex_execpolicy::Decision;
-use codex_execpolicy::Policy;
-use codex_execpolicy::RuleRef;
-use codex_execpolicy::rule::PatternToken;
-use codex_execpolicy::rule::PrefixPattern;
-use codex_execpolicy::rule::PrefixRule;
+use crewon_execpolicy::Decision;
+use crewon_execpolicy::Policy;
+use crewon_execpolicy::RuleRef;
+use crewon_execpolicy::rule::PatternToken;
+use crewon_execpolicy::rule::PrefixPattern;
+use crewon_execpolicy::rule::PrefixRule;
 use multimap::MultiMap;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -114,14 +114,14 @@ pub enum RequirementsExecPolicyParseError {
     MissingDecision { rule_index: usize },
 
     #[error(
-        "rules prefix_rule at index {rule_index} has decision 'allow', which is not permitted in requirements.toml: Codex merges these rules with other config and uses the most restrictive result (use 'prompt' or 'forbidden')"
+        "rules prefix_rule at index {rule_index} has decision 'allow', which is not permitted in requirements.toml: Crewon merges these rules with other config and uses the most restrictive result (use 'prompt' or 'forbidden')"
     )]
     AllowDecisionNotAllowed { rule_index: usize },
 }
 
 impl RequirementsExecPolicyToml {
     /// Convert requirements TOML rules into the internal `.rules`
-    /// representation used by `codex-execpolicy`.
+    /// representation used by `crewon-execpolicy`.
     pub fn to_policy(&self) -> Result<Policy, RequirementsExecPolicyParseError> {
         if self.prefix_rules.is_empty() {
             return Err(RequirementsExecPolicyParseError::EmptyPrefixRules);

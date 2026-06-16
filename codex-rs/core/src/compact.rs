@@ -15,37 +15,37 @@ use crate::session::turn::get_last_assistant_message_from_turn;
 use crate::session::turn_context::TurnContext;
 use crate::turn_metadata::CompactionTurnMetadata;
 use crate::util::backoff;
-use codex_analytics::CodexCompactionEvent;
-use codex_analytics::CompactionImplementation;
-use codex_analytics::CompactionPhase;
-use codex_analytics::CompactionReason;
-use codex_analytics::CompactionStatus;
-use codex_analytics::CompactionStrategy;
-use codex_analytics::CompactionTrigger;
-use codex_analytics::now_unix_seconds;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::items::ContextCompactionItem;
-use codex_protocol::items::TurnItem;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::CompactedItem;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::TurnStartedEvent;
-use codex_protocol::protocol::WarningEvent;
-use codex_protocol::user_input::UserInput;
-use codex_rollout_trace::InferenceTraceContext;
-use codex_utils_output_truncation::TruncationPolicy;
-use codex_utils_output_truncation::approx_token_count;
-use codex_utils_output_truncation::truncate_text;
+use crewon_analytics::CompactionImplementation;
+use crewon_analytics::CompactionPhase;
+use crewon_analytics::CompactionReason;
+use crewon_analytics::CompactionStatus;
+use crewon_analytics::CompactionStrategy;
+use crewon_analytics::CompactionTrigger;
+use crewon_analytics::CrewonCompactionEvent;
+use crewon_analytics::now_unix_seconds;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
+use crewon_protocol::items::ContextCompactionItem;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::CompactedItem;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::TurnStartedEvent;
+use crewon_protocol::protocol::WarningEvent;
+use crewon_protocol::user_input::UserInput;
+use crewon_rollout_trace::InferenceTraceContext;
+use crewon_utils_output_truncation::TruncationPolicy;
+use crewon_utils_output_truncation::approx_token_count;
+use crewon_utils_output_truncation::truncate_text;
 use futures::prelude::*;
 use tracing::error;
 
-use codex_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::ModelProviderInfo;
 
-pub use codex_prompts::SUMMARIZATION_PROMPT;
-pub use codex_prompts::SUMMARY_PREFIX;
+pub use crewon_prompts::SUMMARIZATION_PROMPT;
+pub use crewon_prompts::SUMMARY_PREFIX;
 const COMPACT_USER_MESSAGE_MAX_TOKENS: usize = 20_000;
 
 /// Controls whether compaction replacement history must include initial context.
@@ -73,7 +73,7 @@ pub(crate) async fn run_inline_auto_compact_task(
     initial_context_injection: InitialContextInjection,
     reason: CompactionReason,
     phase: CompactionPhase,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let prompt = turn_context.compact_prompt().to_string();
     let input = vec![UserInput::Text {
         text: prompt,
@@ -98,7 +98,7 @@ pub(crate) async fn run_compact_task(
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
     input: Vec<UserInput>,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let start_event = EventMsg::TurnStarted(TurnStartedEvent {
         turn_id: turn_context.sub_id.clone(),
         trace_id: turn_context.trace_id.clone(),
@@ -128,7 +128,7 @@ async fn run_compact_task_inner(
     trigger: CompactionTrigger,
     reason: CompactionReason,
     phase: CompactionPhase,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let compaction_metadata =
         CompactionTurnMetadata::new(trigger, reason, CompactionImplementation::Responses, phase);
     let attempt = CompactionAnalyticsAttempt::begin(
@@ -197,7 +197,7 @@ async fn run_compact_task_inner_impl(
     input: Vec<UserInput>,
     initial_context_injection: InitialContextInjection,
     compaction_metadata: CompactionTurnMetadata,
-) -> CodexResult<String> {
+) -> CrewonResult<String> {
     let compaction_item = TurnItem::ContextCompaction(ContextCompactionItem::new());
     sess.emit_turn_item_started(&turn_context, &compaction_item)
         .await;
@@ -260,7 +260,7 @@ async fn run_compact_task_inner_impl(
                     continue;
                 }
                 sess.set_total_tokens_full(turn_context.as_ref()).await;
-                sess.track_turn_codex_error(turn_context.as_ref(), &e);
+                sess.track_turn_crewon_error(turn_context.as_ref(), &e);
                 let event = EventMsg::Error(e.to_error_event(/*message_prefix*/ None));
                 sess.send_event(&turn_context, event).await;
                 return Err(e);
@@ -278,7 +278,7 @@ async fn run_compact_task_inner_impl(
                     tokio::time::sleep(delay).await;
                     continue;
                 } else {
-                    sess.track_turn_codex_error(turn_context.as_ref(), &e);
+                    sess.track_turn_crewon_error(turn_context.as_ref(), &e);
                     let event = EventMsg::Error(e.to_error_event(/*message_prefix*/ None));
                     sess.send_event(&turn_context, event).await;
                     return Err(e);
@@ -387,7 +387,7 @@ impl CompactionAnalyticsAttempt {
         let active_context_tokens_after = sess.get_total_token_usage().await;
         sess.services
             .analytics_events_client
-            .track_compaction(CodexCompactionEvent {
+            .track_compaction(CrewonCompactionEvent {
                 thread_id: self.thread_id,
                 turn_id: self.turn_id,
                 trigger: self.trigger,
@@ -396,8 +396,8 @@ impl CompactionAnalyticsAttempt {
                 phase: self.phase,
                 strategy: CompactionStrategy::Memento,
                 status,
-                codex_error_kind: codex_error.map(Into::into),
-                codex_error_http_status_code: codex_error
+                crewon_error_kind: codex_error.map(Into::into),
+                crewon_error_http_status_code: codex_error
                     .and_then(CodexErr::http_status_code_value),
                 active_context_tokens_before,
                 active_context_tokens_after,
@@ -413,7 +413,7 @@ impl CompactionAnalyticsAttempt {
     }
 }
 
-pub(crate) fn compaction_status_from_result<T>(result: &CodexResult<T>) -> CompactionStatus {
+pub(crate) fn compaction_status_from_result<T>(result: &CrewonResult<T>) -> CompactionStatus {
     match result {
         Ok(_) => CompactionStatus::Completed,
         Err(CodexErr::Interrupted | CodexErr::TurnAborted) => CompactionStatus::Interrupted,
@@ -590,7 +590,7 @@ async fn drain_to_completed(
     window_id: &str,
     turn_metadata_header: Option<&str>,
     prompt: &Prompt,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let mut stream = client_session
         .stream(
             window_id,

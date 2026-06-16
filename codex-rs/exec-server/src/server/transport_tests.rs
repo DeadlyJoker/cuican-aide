@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCRequest;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCRequest;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
 use pretty_assertions::assert_eq;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
@@ -160,7 +160,7 @@ async fn write_jsonrpc_line(writer: &mut tokio::io::DuplexStream, message: &JSON
 fn test_runtime_paths() -> ExecServerRuntimePaths {
     ExecServerRuntimePaths::new(
         std::env::current_exe().expect("current exe"),
-        /*codex_linux_sandbox_exe*/ None,
+        /*crewon_linux_sandbox_exe*/ None,
     )
     .expect("runtime paths")
 }

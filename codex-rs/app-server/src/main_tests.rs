@@ -4,9 +4,9 @@ use pretty_assertions::assert_eq;
 use toml::Value as TomlValue;
 
 #[test]
-fn app_server_accepts_cli_config_overrides() {
+fn app_server_accepts_config_overrides() {
     let args = AppServerArgs::try_parse_from([
-        "codex-app-server",
+        "crewon-app-server",
         "-c",
         "model=\"gpt-5-codex\"",
         "--config",

@@ -1,6 +1,6 @@
-use codex_protocol::parse_command::ParsedCommand;
-use codex_shell_command::is_safe_command::is_known_safe_command;
-use codex_shell_command::parse_command::parse_command;
+use crewon_protocol::parse_command::ParsedCommand;
+use crewon_shell_command::is_safe_command::is_known_safe_command;
+use crewon_shell_command::parse_command::parse_command;
 
 pub use crate::metrics::MEMORIES_USAGE_METRIC;
 

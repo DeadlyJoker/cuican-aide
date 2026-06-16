@@ -123,7 +123,7 @@ impl TraceReducer {
         Ok(())
     }
 
-    /// Starts a Codex turn inside an existing thread.
+    /// Starts a Crewon turn inside an existing thread.
     pub(super) fn start_codex_turn(
         &mut self,
         seq: RawEventSeq,
@@ -132,7 +132,7 @@ impl TraceReducer {
         thread_id: String,
     ) -> Result<()> {
         if self.rollout.codex_turns.contains_key(&codex_turn_id) {
-            bail!("duplicate codex turn start for {codex_turn_id}");
+            bail!("duplicate Crewon turn start for {codex_turn_id}");
         }
 
         self.thread_mut(&thread_id)?;
@@ -155,7 +155,7 @@ impl TraceReducer {
         Ok(())
     }
 
-    /// Marks a Codex turn terminal and validates any thread id carried by the raw event.
+    /// Marks a Crewon turn terminal and validates any thread id carried by the raw event.
     pub(super) fn end_codex_turn(
         &mut self,
         seq: RawEventSeq,
@@ -169,14 +169,14 @@ impl TraceReducer {
             && turn.thread_id != event_thread_id
         {
             bail!(
-                "codex turn end for {codex_turn_id} used thread {event_thread_id}, \
+                "Crewon turn end for {codex_turn_id} used thread {event_thread_id}, \
                  but the turn belongs to {}",
                 turn.thread_id
             );
         }
 
         let Some(turn) = self.rollout.codex_turns.get_mut(&codex_turn_id) else {
-            bail!("codex turn end referenced unknown turn {codex_turn_id}");
+            bail!("Crewon turn end referenced unknown turn {codex_turn_id}");
         };
         turn.execution.ended_at_unix_ms = Some(wall_time_unix_ms);
         turn.execution.ended_seq = Some(seq);

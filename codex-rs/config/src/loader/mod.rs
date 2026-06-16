@@ -19,7 +19,7 @@ use crate::diagnostics::config_error_from_toml;
 use crate::diagnostics::first_layer_config_error_from_entries as typed_first_layer_config_error_from_entries;
 use crate::diagnostics::io_error_from_config_error;
 use crate::merge::merge_toml_values;
-use crate::overrides::build_cli_overrides_layer;
+use crate::overrides::build_config_overrides_layer;
 use crate::project_root_markers::default_project_root_markers;
 use crate::project_root_markers::project_root_markers_from_config;
 use crate::state::ConfigLayerEntry;
@@ -31,15 +31,15 @@ use crate::strict_config::ignored_toml_value_field;
 use crate::strict_config::unknown_feature_toml_value_field;
 use crate::thread_config::ThreadConfigContext;
 use crate::thread_config::ThreadConfigLoader;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_file_system::ExecutorFileSystem;
-use codex_git_utils::resolve_root_git_project_for_trust;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::config_types::SandboxMode;
-use codex_protocol::config_types::TrustLevel;
-use codex_protocol::protocol::AskForApproval;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_absolute_path::AbsolutePathBufGuard;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_file_system::ExecutorFileSystem;
+use crewon_git_utils::resolve_root_git_project_for_trust;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::config_types::SandboxMode;
+use crewon_protocol::config_types::TrustLevel;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBufGuard;
 use dunce::canonicalize as normalize_path;
 use serde::Deserialize;
 use std::io;
@@ -81,7 +81,7 @@ async fn first_layer_config_error_from_entries(layers: &[ConfigLayerEntry]) -> O
 /// hooks, rules, deny-read permissions, and remote sandbox config:
 ///
 /// - system    `/etc/codex/requirements.toml` (Unix) or
-///   `%ProgramData%\OpenAI\Codex\requirements.toml` (Windows)
+///   `%ProgramData%\OpenAI\Crewon\requirements.toml` (Windows)
 /// - cloud:    enterprise-managed cloud config bundle requirements
 /// - legacy:   managed_config.toml reinterpreted as requirements.toml
 /// - admin:    managed preferences (*)
@@ -92,19 +92,19 @@ async fn first_layer_config_error_from_entries(layers: &[ConfigLayerEntry]) -> O
 /// Configuration is built up from multiple layers in the following order:
 ///
 /// - admin:    managed preferences (*)
-/// - system    `/etc/codex/config.toml` (Unix) or
-///   `%ProgramData%\OpenAI\Codex\config.toml` (Windows)
+/// - system    legacy `/etc/codex/config.toml` (Unix) or
+///   `%ProgramData%\OpenAI\Crewon\config.toml` (Windows)
 /// - cloud     enterprise-managed cloud config bundle fragments
-/// - user      `${CODEX_HOME}/config.toml`
-/// - profile   `${CODEX_HOME}/<name>.config.toml`, when selected
+/// - user      `${CREWON_HOME}/config.toml` (or legacy `${CODEX_HOME}` fallback)
+/// - profile   `${CREWON_HOME}/<name>.config.toml`, when selected
 /// - cwd       `${PWD}/config.toml` (loaded but disabled when the directory is untrusted)
-/// - tree      parent directories up to root looking for `./.codex/config.toml` (loaded but disabled when untrusted)
+/// - tree      parent directories up to root looking for legacy `./.codex/config.toml` (loaded but disabled when untrusted)
 /// - repo      `$(git rev-parse --show-toplevel)/.codex/config.toml` (loaded but disabled when untrusted)
 /// - runtime   e.g., --config flags, model selector in UI
 ///
 /// (*) Only available on macOS via managed device profiles.
 ///
-/// See https://developers.openai.com/codex/security for details.
+/// See the repository security policy for sandbox and trust-boundary details.
 ///
 /// When loading the config stack for a thread, there should be a `cwd`
 /// associated with it such that `cwd` should be `Some(...)`. Only for
@@ -115,7 +115,7 @@ pub async fn load_config_layers_state(
     fs: &dyn ExecutorFileSystem,
     codex_home: &Path,
     cwd: Option<AbsolutePathBuf>,
-    cli_overrides: &[(String, TomlValue)],
+    config_overrides: &[(String, TomlValue)],
     options: impl Into<ConfigLoadOptions>,
     thread_config_loader: &dyn ThreadConfigLoader,
 ) -> io::Result<ConfigLayerStack> {
@@ -199,19 +199,19 @@ pub async fn load_config_layers_state(
 
     let mut layers = Vec::<ConfigLayerEntry>::new();
 
-    let cli_overrides_layer = if cli_overrides.is_empty() {
+    let config_overrides_layer = if config_overrides.is_empty() {
         None
     } else {
-        let cli_overrides_layer = build_cli_overrides_layer(cli_overrides);
+        let config_overrides_layer = build_config_overrides_layer(config_overrides);
         let base_dir = cwd
             .as_ref()
             .map(AbsolutePathBuf::as_path)
             .unwrap_or(codex_home);
         if strict_config {
-            validate_cli_overrides_strictly(&cli_overrides_layer, base_dir)?;
+            validate_config_overrides_strictly(&config_overrides_layer, base_dir)?;
         }
         Some(resolve_relative_paths_in_config_toml(
-            cli_overrides_layer,
+            config_overrides_layer,
             base_dir,
         )?)
     };
@@ -264,7 +264,7 @@ pub async fn load_config_layers_state(
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "--profile `{active_user_profile}` cannot be used while {} contains legacy `profile = \"{active_user_profile}\"` or `[profiles.{active_user_profile}]` config; move those settings into {} and remove the legacy profile selector/table. See https://developers.openai.com/codex/config-advanced#profiles for more information.",
+                    "--profile `{active_user_profile}` cannot be used while {} contains legacy `profile = \"{active_user_profile}\"` or `[profiles.{active_user_profile}]` config; move those settings into {} and remove the legacy profile selector/table.",
                     base_user_file.as_path().display(),
                     active_user_file.as_path().display()
                 ),
@@ -292,8 +292,8 @@ pub async fn load_config_layers_state(
         for layer in &layers {
             merge_toml_values(&mut merged_so_far, &layer.config);
         }
-        if let Some(cli_overrides_layer) = cli_overrides_layer.as_ref() {
-            merge_toml_values(&mut merged_so_far, cli_overrides_layer);
+        if let Some(config_overrides_layer) = config_overrides_layer.as_ref() {
+            merge_toml_values(&mut merged_so_far, config_overrides_layer);
         }
 
         let project_root_markers = match project_root_markers_from_config(&merged_so_far) {
@@ -348,11 +348,11 @@ pub async fn load_config_layers_state(
         startup_warnings = Some(project_layers.startup_warnings);
     }
 
-    // Add a layer for runtime overrides from the CLI or UI, if any exist.
-    if let Some(cli_overrides_layer) = cli_overrides_layer {
+    // Add a layer for runtime overrides from process flags or client state, if any exist.
+    if let Some(config_overrides_layer) = config_overrides_layer {
         layers.push(ConfigLayerEntry::new(
             ConfigLayerSource::SessionFlags,
-            cli_overrides_layer,
+            config_overrides_layer,
         ));
     }
 
@@ -363,8 +363,8 @@ pub async fn load_config_layers_state(
     // Make a best-effort to support the legacy `managed_config.toml` as a
     // config layer on top of everything else. For fields in
     // `managed_config.toml` that do not have an equivalent in
-    // `ConfigRequirements`, note users can still override these values on a
-    // per-turn basis in the TUI and VS Code.
+    // `ConfigRequirements`, note clients can still override these values on a
+    // per-turn basis through app-server turn settings.
     let LoadedConfigLayers {
         managed_config,
         managed_config_from_mdm,
@@ -537,12 +537,13 @@ fn validate_config_toml_strictly(
     }
 }
 
-fn validate_cli_overrides_strictly(
-    cli_overrides_layer: &TomlValue,
+fn validate_config_overrides_strictly(
+    config_overrides_layer: &TomlValue,
     base_dir: &Path,
 ) -> io::Result<()> {
     let _guard = AbsolutePathBufGuard::new(base_dir);
-    if let Some(ignored_path) = ignored_toml_value_field::<ConfigToml>(cli_overrides_layer.clone())
+    if let Some(ignored_path) =
+        ignored_toml_value_field::<ConfigToml>(config_overrides_layer.clone())
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -550,7 +551,7 @@ fn validate_cli_overrides_strictly(
         ));
     }
 
-    if let Some(ignored_path) = unknown_feature_toml_value_field(cli_overrides_layer) {
+    if let Some(ignored_path) = unknown_feature_toml_value_field(config_overrides_layer) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("unknown configuration field `{ignored_path}` in -c/--config override"),
@@ -654,7 +655,7 @@ fn windows_codex_system_dir() -> PathBuf {
         );
         PathBuf::from(DEFAULT_PROGRAM_DATA_DIR_WINDOWS)
     });
-    program_data.join("OpenAI").join("Codex")
+    program_data.join("OpenAI").join("Crewon")
 }
 
 #[cfg(windows)]
@@ -789,7 +790,7 @@ fn legacy_requirements_to_toml_value(legacy: LegacyManagedConfigToml) -> io::Res
     }
     if let Some(sandbox_mode) = sandbox_mode {
         let required_mode: SandboxModeRequirement = sandbox_mode.into();
-        // Allowing read-only is a requirement for Codex to function correctly.
+        // Allowing read-only is a requirement for Crewon to function correctly.
         // So in this backfill path, we append read-only if it's not already specified.
         let mut allowed_modes = vec![SandboxModeRequirement::ReadOnly];
         if required_mode != SandboxModeRequirement::ReadOnly {
@@ -1499,7 +1500,7 @@ foo = "xyzzy"
         let expected = windows_program_data_dir_from_known_folder()
             .unwrap_or_else(|_| PathBuf::from(DEFAULT_PROGRAM_DATA_DIR_WINDOWS))
             .join("OpenAI")
-            .join("Codex")
+            .join("Crewon")
             .join("requirements.toml");
         assert_eq!(
             windows_system_requirements_toml_file()
@@ -1511,7 +1512,7 @@ foo = "xyzzy"
             windows_system_requirements_toml_file()
                 .expect("requirements.toml path")
                 .as_path()
-                .ends_with(Path::new("OpenAI").join("Codex").join("requirements.toml"))
+                .ends_with(Path::new("OpenAI").join("Crewon").join("requirements.toml"))
         );
     }
 
@@ -1521,7 +1522,7 @@ foo = "xyzzy"
         let expected = windows_program_data_dir_from_known_folder()
             .unwrap_or_else(|_| PathBuf::from(DEFAULT_PROGRAM_DATA_DIR_WINDOWS))
             .join("OpenAI")
-            .join("Codex")
+            .join("Crewon")
             .join("config.toml");
         assert_eq!(
             windows_system_config_toml_file()
@@ -1533,7 +1534,7 @@ foo = "xyzzy"
             windows_system_config_toml_file()
                 .expect("config.toml path")
                 .as_path()
-                .ends_with(Path::new("OpenAI").join("Codex").join("config.toml"))
+                .ends_with(Path::new("OpenAI").join("Crewon").join("config.toml"))
         );
     }
 }

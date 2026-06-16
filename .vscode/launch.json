@@ -7,14 +7,14 @@
       "name": "Cargo launch",
       "cargo": {
         "cwd": "${workspaceFolder}/codex-rs",
-        "args": ["build", "--bin=codex-tui"]
+        "args": ["build", "-p", "crewon-app-server", "--bin", "crewon-app-server"]
       },
       "args": []
     },
     {
       "type": "lldb",
       "request": "attach",
-      "name": "Attach to running codex CLI",
+      "name": "Attach to running Crewon backend",
       "pid": "${command:pickProcess}",
       "sourceLanguages": ["rust"]
     }

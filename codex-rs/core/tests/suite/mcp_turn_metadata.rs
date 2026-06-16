@@ -2,20 +2,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use anyhow::Result;
-use codex_config::types::AppToolApproval;
-use codex_core::config::Config;
-use codex_features::Feature;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::Settings;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::ElicitationAction;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::request_user_input::RequestUserInputAnswer;
-use codex_protocol::request_user_input::RequestUserInputResponse;
-use codex_protocol::user_input::UserInput;
 use core_test_support::PathExt;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::apps_test_server::SEARCH_CALENDAR_CREATE_TOOL;
@@ -31,11 +17,25 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
+use crewon_config::types::AppToolApproval;
+use crewon_core::config::Config;
+use crewon_features::Feature;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::Settings;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::ElicitationAction;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::request_user_input::RequestUserInputAnswer;
+use crewon_protocol::request_user_input::RequestUserInputResponse;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::HashMap;
@@ -60,7 +60,7 @@ default_tools_approval_mode = "{approval_mode}"
 }
 
 async fn submit_user_turn(
-    test: &TestCodex,
+    test: &TestCrewon,
     text: &str,
     approval_policy: AskForApproval,
     collaboration_mode: Option<CollaborationMode>,
@@ -68,7 +68,7 @@ async fn submit_user_turn(
     let session_model = test.session_configured.model.clone();
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, test.cwd.path());
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: text.to_string(),
@@ -77,15 +77,15 @@ async fn submit_user_turn(
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(approval_policy),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
                 collaboration_mode: collaboration_mode.or({
-                    Some(codex_protocol::config_types::CollaborationMode {
-                        mode: codex_protocol::config_types::ModeKind::Default,
-                        settings: codex_protocol::config_types::Settings {
+                    Some(crewon_protocol::config_types::CollaborationMode {
+                        mode: crewon_protocol::config_types::ModeKind::Default,
+                        settings: crewon_protocol::config_types::Settings {
                             model: session_model,
                             reasoning_effort: None,
                             developer_instructions: None,
@@ -150,7 +150,7 @@ async fn approved_mcp_tool_call_metadata_records_prior_user_input_request() -> R
     )
     .await?;
 
-    let EventMsg::McpToolCallBegin(begin) = wait_for_event(&test.codex, |event| {
+    let EventMsg::McpToolCallBegin(begin) = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::McpToolCallBegin(_))
     })
     .await
@@ -159,7 +159,7 @@ async fn approved_mcp_tool_call_metadata_records_prior_user_input_request() -> R
     };
     assert_eq!(begin.call_id, call_id);
 
-    let EventMsg::ElicitationRequest(request) = wait_for_event(&test.codex, |event| {
+    let EventMsg::ElicitationRequest(request) = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::ElicitationRequest(_))
     })
     .await
@@ -167,7 +167,7 @@ async fn approved_mcp_tool_call_metadata_records_prior_user_input_request() -> R
         unreachable!("event guard guarantees ElicitationRequest");
     };
 
-    test.codex
+    test.crewon
         .submit(Op::ResolveElicitation {
             server_name: request.server_name,
             request_id: request.id,
@@ -177,7 +177,7 @@ async fn approved_mcp_tool_call_metadata_records_prior_user_input_request() -> R
         })
         .await?;
 
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -273,14 +273,14 @@ async fn mcp_tool_call_metadata_records_prior_request_user_input_tool() -> Resul
     )
     .await?;
 
-    let request = wait_for_event_match(&test.codex, |event| match event {
+    let request = wait_for_event_match(&test.crewon, |event| match event {
         EventMsg::RequestUserInput(request) => Some(request.clone()),
         _ => None,
     })
     .await;
     assert_eq!(request.call_id, request_user_input_call_id);
 
-    test.codex
+    test.crewon
         .submit(Op::UserInputAnswer {
             id: request.turn_id,
             response: RequestUserInputResponse {
@@ -294,7 +294,7 @@ async fn mcp_tool_call_metadata_records_prior_request_user_input_tool() -> Resul
         })
         .await?;
 
-    let EventMsg::McpToolCallBegin(begin) = wait_for_event(&test.codex, |event| {
+    let EventMsg::McpToolCallBegin(begin) = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::McpToolCallBegin(_))
     })
     .await
@@ -303,7 +303,7 @@ async fn mcp_tool_call_metadata_records_prior_request_user_input_tool() -> Resul
     };
     assert_eq!(begin.call_id, calendar_call_id);
 
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;

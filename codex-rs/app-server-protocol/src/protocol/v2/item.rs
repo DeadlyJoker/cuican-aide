@@ -9,28 +9,28 @@ use super::RequestPermissionProfile;
 use super::UserInput;
 use super::shared::v2_enum_from_core;
 use crate::protocol::item_builders::convert_patch_changes;
-use codex_experimental_api_macros::ExperimentalApi;
-use codex_protocol::approvals::GuardianAssessmentAction as CoreGuardianAssessmentAction;
-use codex_protocol::approvals::GuardianAssessmentDecisionSource as CoreGuardianAssessmentDecisionSource;
-use codex_protocol::approvals::GuardianCommandSource as CoreGuardianCommandSource;
-use codex_protocol::items::AgentMessageContent as CoreAgentMessageContent;
-use codex_protocol::items::McpToolCallStatus as CoreMcpToolCallStatus;
-use codex_protocol::items::TurnItem as CoreTurnItem;
-use codex_protocol::memory_citation::MemoryCitation as CoreMemoryCitation;
-use codex_protocol::memory_citation::MemoryCitationEntry as CoreMemoryCitationEntry;
-use codex_protocol::models::MessagePhase;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::parse_command::ParsedCommand as CoreParsedCommand;
-use codex_protocol::protocol::AgentStatus as CoreAgentStatus;
-use codex_protocol::protocol::ExecCommandSource as CoreExecCommandSource;
-use codex_protocol::protocol::ExecCommandStatus as CoreExecCommandStatus;
-use codex_protocol::protocol::GuardianRiskLevel as CoreGuardianRiskLevel;
-use codex_protocol::protocol::GuardianUserAuthorization as CoreGuardianUserAuthorization;
-use codex_protocol::protocol::PatchApplyStatus as CorePatchApplyStatus;
-use codex_protocol::protocol::ReviewDecision as CoreReviewDecision;
-use codex_protocol::protocol::SubAgentActivityKind as CoreSubAgentActivityKind;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_experimental_api_macros::ExperimentalApi;
+use crewon_protocol::approvals::GuardianAssessmentAction as CoreGuardianAssessmentAction;
+use crewon_protocol::approvals::GuardianAssessmentDecisionSource as CoreGuardianAssessmentDecisionSource;
+use crewon_protocol::approvals::GuardianCommandSource as CoreGuardianCommandSource;
+use crewon_protocol::items::AgentMessageContent as CoreAgentMessageContent;
+use crewon_protocol::items::McpToolCallStatus as CoreMcpToolCallStatus;
+use crewon_protocol::items::TurnItem as CoreTurnItem;
+use crewon_protocol::memory_citation::MemoryCitation as CoreMemoryCitation;
+use crewon_protocol::memory_citation::MemoryCitationEntry as CoreMemoryCitationEntry;
+use crewon_protocol::models::MessagePhase;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::parse_command::ParsedCommand as CoreParsedCommand;
+use crewon_protocol::protocol::AgentStatus as CoreAgentStatus;
+use crewon_protocol::protocol::ExecCommandSource as CoreExecCommandSource;
+use crewon_protocol::protocol::ExecCommandStatus as CoreExecCommandStatus;
+use crewon_protocol::protocol::GuardianRiskLevel as CoreGuardianRiskLevel;
+use crewon_protocol::protocol::GuardianUserAuthorization as CoreGuardianUserAuthorization;
+use crewon_protocol::protocol::PatchApplyStatus as CorePatchApplyStatus;
+use crewon_protocol::protocol::ReviewDecision as CoreReviewDecision;
+use crewon_protocol::protocol::SubAgentActivityKind as CoreSubAgentActivityKind;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -768,19 +768,19 @@ pub enum WebSearchAction {
     Other,
 }
 
-impl From<codex_protocol::models::WebSearchAction> for WebSearchAction {
-    fn from(value: codex_protocol::models::WebSearchAction) -> Self {
+impl From<crewon_protocol::models::WebSearchAction> for WebSearchAction {
+    fn from(value: crewon_protocol::models::WebSearchAction) -> Self {
         match value {
-            codex_protocol::models::WebSearchAction::Search { query, queries } => {
+            crewon_protocol::models::WebSearchAction::Search { query, queries } => {
                 WebSearchAction::Search { query, queries }
             }
-            codex_protocol::models::WebSearchAction::OpenPage { url } => {
+            crewon_protocol::models::WebSearchAction::OpenPage { url } => {
                 WebSearchAction::OpenPage { url }
             }
-            codex_protocol::models::WebSearchAction::FindInPage { url, pattern } => {
+            crewon_protocol::models::WebSearchAction::FindInPage { url, pattern } => {
                 WebSearchAction::FindInPage { url, pattern }
             }
-            codex_protocol::models::WebSearchAction::Other => WebSearchAction::Other,
+            crewon_protocol::models::WebSearchAction::Other => WebSearchAction::Other,
         }
     }
 }
@@ -875,8 +875,8 @@ impl From<CoreTurnItem> for ThreadItem {
     }
 }
 
-impl From<codex_protocol::items::HookPromptFragment> for HookPromptFragment {
-    fn from(value: codex_protocol::items::HookPromptFragment) -> Self {
+impl From<crewon_protocol::items::HookPromptFragment> for HookPromptFragment {
+    fn from(value: crewon_protocol::items::HookPromptFragment) -> Self {
         Self {
             text: value.text,
             hook_run_id: value.hook_run_id,
@@ -1419,7 +1419,7 @@ pub enum DynamicToolCallOutputContentItem {
 }
 
 impl From<DynamicToolCallOutputContentItem>
-    for codex_protocol::dynamic_tools::DynamicToolCallOutputContentItem
+    for crewon_protocol::dynamic_tools::DynamicToolCallOutputContentItem
 {
     fn from(item: DynamicToolCallOutputContentItem) -> Self {
         match item {

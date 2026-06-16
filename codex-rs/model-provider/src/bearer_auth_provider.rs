@@ -1,8 +1,8 @@
-use codex_api::AuthProvider;
+use crewon_api::AuthProvider;
 use http::HeaderMap;
 use http::HeaderValue;
 
-/// Bearer-token auth provider for OpenAI-compatible model-provider requests.
+/// Bearer-token auth provider for Responses-compatible model-provider requests.
 #[derive(Clone, Default)]
 pub struct BearerAuthProvider {
     pub token: Option<String>,
@@ -60,8 +60,8 @@ mod tests {
         };
 
         assert_eq!(
-            codex_api::auth_header_telemetry(&auth),
-            codex_api::AuthHeaderTelemetry {
+            crewon_api::auth_header_telemetry(&auth),
+            crewon_api::AuthHeaderTelemetry {
                 attached: true,
                 name: Some("authorization"),
             }

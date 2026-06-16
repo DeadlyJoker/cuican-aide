@@ -11,9 +11,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 use anyhow::anyhow;
-use codex_login::AuthEnvTelemetry;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::SessionSource;
+use crewon_login::AuthEnvTelemetry;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::SessionSource;
 use tracing::Event;
 use tracing::Level;
 use tracing::field::Visit;
@@ -27,8 +27,8 @@ pub use feedback_diagnostics::FEEDBACK_DIAGNOSTICS_ATTACHMENT_FILENAME;
 pub use feedback_diagnostics::FeedbackDiagnostic;
 pub use feedback_diagnostics::FeedbackDiagnostics;
 
-/// Filename used for the redacted `codex doctor --json` feedback attachment.
-pub const DOCTOR_REPORT_ATTACHMENT_FILENAME: &str = "codex-doctor-report.json";
+/// Filename used for the redacted doctor feedback attachment.
+pub const DOCTOR_REPORT_ATTACHMENT_FILENAME: &str = "crewon-doctor-report.json";
 /// Filename used for the Windows sandbox log feedback attachment.
 pub const WINDOWS_SANDBOX_LOG_ATTACHMENT_FILENAME: &str = "windows-sandbox.log";
 const DEFAULT_MAX_BYTES: usize = 4 * 1024 * 1024; // 4 MiB
@@ -161,17 +161,17 @@ pub fn emit_feedback_request_tags_with_auth_env(
 }
 
 #[derive(Clone)]
-pub struct CodexFeedback {
+pub struct CrewonFeedback {
     inner: Arc<FeedbackInner>,
 }
 
-impl Default for CodexFeedback {
+impl Default for CrewonFeedback {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl CodexFeedback {
+impl CrewonFeedback {
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_MAX_BYTES)
     }
@@ -375,7 +375,7 @@ pub struct FeedbackUploadOptions<'a> {
     pub include_logs: bool,
     /// Generated attachments that are already buffered and safe to upload.
     ///
-    /// These are included after `codex-logs.log` and before path-backed rollout
+    /// These are included after `crewon-logs.log` and before path-backed rollout
     /// attachments. They are only passed by the caller after any user consent
     /// gate has decided logs and diagnostics should be uploaded.
     pub extra_attachments: &'a [FeedbackAttachment],
@@ -408,7 +408,7 @@ impl FeedbackSnapshot {
 
     pub fn save_to_temp_file(&self) -> io::Result<PathBuf> {
         let dir = std::env::temp_dir();
-        let filename = format!("codex-feedback-{}.log", self.thread_id);
+        let filename = format!("crewon-feedback-{}.log", self.thread_id);
         let path = dir.join(filename);
         fs::write(&path, self.as_bytes())?;
         Ok(path)
@@ -449,7 +449,7 @@ impl FeedbackSnapshot {
 
         let mut envelope = Envelope::new();
         let title = format!(
-            "[{}]: Codex session {}",
+            "[{}]: Crewon session {}",
             display_classification(options.classification),
             self.thread_id
         );
@@ -493,11 +493,11 @@ impl FeedbackSnapshot {
         client_tags: Option<&BTreeMap<String, String>>,
         session_source: Option<&SessionSource>,
     ) -> BTreeMap<String, String> {
-        let cli_version = env!("CARGO_PKG_VERSION");
+        let client_version = env!("CARGO_PKG_VERSION");
         let mut tags = BTreeMap::from([
             (String::from("thread_id"), self.thread_id.to_string()),
             (String::from("classification"), classification.to_string()),
-            (String::from("cli_version"), cli_version.to_string()),
+            (String::from("client_version"), client_version.to_string()),
         ]);
         if let Some(source) = session_source {
             tags.insert(String::from("session_source"), source.to_string());
@@ -509,6 +509,7 @@ impl FeedbackSnapshot {
         let reserved = [
             "thread_id",
             "classification",
+            "client_version",
             "cli_version",
             "session_source",
             "reason",
@@ -549,7 +550,7 @@ impl FeedbackSnapshot {
         if include_logs {
             attachments.push(Attachment {
                 buffer: logs_override.unwrap_or_else(|| self.bytes.clone()),
-                filename: String::from("codex-logs.log"),
+                filename: String::from("crewon-logs.log"),
                 content_type: Some("text/plain".to_string()),
                 ty: None,
             });
@@ -698,7 +699,7 @@ mod tests {
 
     #[test]
     fn ring_buffer_drops_front_when_full() {
-        let fb = CodexFeedback::with_capacity(/*max_bytes*/ 8);
+        let fb = CrewonFeedback::with_capacity(/*max_bytes*/ 8);
         {
             let mut w = fb.make_writer().make_writer();
             w.write_all(b"abcdefgh").unwrap();
@@ -711,7 +712,7 @@ mod tests {
 
     #[test]
     fn metadata_layer_records_tags_from_feedback_target() {
-        let fb = CodexFeedback::new();
+        let fb = CrewonFeedback::new();
         let _guard = tracing_subscriber::registry()
             .with(fb.metadata_layer())
             .set_default();
@@ -725,7 +726,7 @@ mod tests {
 
     #[test]
     fn feedback_attachments_gate_connectivity_diagnostics() {
-        let extra_filename = format!("codex-feedback-extra-{}.jsonl", ThreadId::new());
+        let extra_filename = format!("crewon-feedback-extra-{}.jsonl", ThreadId::new());
         let extra_path = std::env::temp_dir().join(&extra_filename);
         let extra_attachment_path = FeedbackAttachmentPath {
             path: extra_path.clone(),
@@ -733,7 +734,7 @@ mod tests {
         };
         fs::write(&extra_path, "rollout").expect("extra attachment should be written");
 
-        let snapshot_with_diagnostics = CodexFeedback::new()
+        let snapshot_with_diagnostics = CrewonFeedback::new()
             .snapshot(/*session_id*/ None)
             .with_feedback_diagnostics(FeedbackDiagnostics::new(vec![FeedbackDiagnostic {
                 headline: "Proxy environment variables are set and may affect connectivity."
@@ -758,7 +759,7 @@ mod tests {
                 .map(|attachment| attachment.filename.as_str())
                 .collect::<Vec<_>>(),
             vec![
-                "codex-logs.log",
+                "crewon-logs.log",
                 DOCTOR_REPORT_ATTACHMENT_FILENAME,
                 FEEDBACK_DIAGNOSTICS_ATTACHMENT_FILENAME,
                 extra_filename.as_str()
@@ -778,7 +779,7 @@ mod tests {
             OsStr::new(attachments_with_diagnostics[3].filename.as_str()),
             OsStr::new(extra_filename.as_str())
         );
-        let attachments_without_diagnostics = CodexFeedback::new()
+        let attachments_without_diagnostics = CrewonFeedback::new()
             .snapshot(/*session_id*/ None)
             .with_feedback_diagnostics(FeedbackDiagnostics::default())
             .feedback_attachments(/*include_logs*/ true, &[], &[], Some(vec![1]));
@@ -788,7 +789,7 @@ mod tests {
                 .iter()
                 .map(|attachment| attachment.filename.as_str())
                 .collect::<Vec<_>>(),
-            vec!["codex-logs.log"]
+            vec!["crewon-logs.log"]
         );
         assert_eq!(attachments_without_diagnostics[0].buffer, vec![1]);
         fs::remove_file(extra_path).expect("extra attachment should be removed");
@@ -803,7 +804,11 @@ mod tests {
             "classification".to_string(),
             "wrong-classification".to_string(),
         );
-        tags.insert("cli_version".to_string(), "wrong-version".to_string());
+        tags.insert("client_version".to_string(), "wrong-version".to_string());
+        tags.insert(
+            "cli_version".to_string(),
+            "wrong-legacy-version".to_string(),
+        );
         tags.insert("session_source".to_string(), "wrong-source".to_string());
         tags.insert("reason".to_string(), "wrong-reason".to_string());
         tags.insert("account_id".to_string(), "actual-account".to_string());
@@ -822,8 +827,12 @@ mod tests {
             "wrong-client-classification".to_string(),
         );
         client_tags.insert(
-            "cli_version".to_string(),
+            "client_version".to_string(),
             "wrong-client-version".to_string(),
+        );
+        client_tags.insert(
+            "cli_version".to_string(),
+            "wrong-client-legacy-version".to_string(),
         );
         client_tags.insert(
             "session_source".to_string(),
@@ -836,7 +845,7 @@ mod tests {
             "bug",
             Some("actual reason"),
             Some(&client_tags),
-            Some(&SessionSource::Cli),
+            Some(&SessionSource::LegacyCli),
         );
 
         assert_eq!(
@@ -868,5 +877,6 @@ mod tests {
             Some("from-client")
         );
         assert_eq!(upload_tags.get("model").map(String::as_str), Some("gpt-5"));
+        assert_eq!(upload_tags.get("cli_version"), None);
     }
 }

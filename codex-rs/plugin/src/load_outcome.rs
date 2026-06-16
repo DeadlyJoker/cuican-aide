@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_plugins::PluginSkillRoot;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_plugins::PluginSkillRoot;
 
 use crate::AppConnectorId;
 use crate::PluginCapabilitySummary;
@@ -188,7 +188,7 @@ impl<M: Clone> PluginLoadOutcome<M> {
     }
 }
 
-/// Implemented by [`PluginLoadOutcome`] so callers (e.g. skills) can depend on `codex-plugin`
+/// Implemented by [`PluginLoadOutcome`] so callers (e.g. skills) can depend on `crewon-plugin`
 /// without naming the MCP config type parameter.
 pub trait EffectiveSkillRoots {
     fn effective_skill_roots(&self) -> Vec<AbsolutePathBuf>;

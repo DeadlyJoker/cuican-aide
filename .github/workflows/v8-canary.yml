@@ -42,6 +42,7 @@ on:
 # Cargo's libgit2 transport has been flaky when fetching git dependencies with
 # nested submodules. Prefer the system git CLI for Cargo builds and smoke tests.
 env:
+  CREWON_TRUSTED_UPSTREAM_REPOSITORY: ${{ github.repository }}
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
 concurrency:
@@ -279,7 +280,7 @@ jobs:
             exit 1
           fi
 
-          cargo_args=(test -p codex-v8-poc)
+          cargo_args=(test -p crewon-code-mode)
           if [[ "${SANDBOX}" == "true" ]]; then
             cargo_args+=(--features sandbox)
           fi
@@ -334,7 +335,7 @@ jobs:
           python-version: "3.11"
           architecture: x64
 
-      - name: Set up Codex Rust toolchain for Cargo smoke
+      - name: Set up Crewon Rust toolchain for Cargo smoke
         uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           toolchain: "1.95.0"
@@ -426,7 +427,7 @@ jobs:
             cd codex-rs
             RUSTY_V8_ARCHIVE="${GITHUB_WORKSPACE}/${archive}" \
             RUSTY_V8_SRC_BINDING_PATH="${GITHUB_WORKSPACE}/${binding}" \
-            cargo +1.95.0 test -p codex-v8-poc --target "${TARGET}" --features sandbox --no-run
+            cargo +1.95.0 test -p crewon-code-mode --target "${TARGET}" --features sandbox --no-run
           )
 
       - name: Upload staged artifacts

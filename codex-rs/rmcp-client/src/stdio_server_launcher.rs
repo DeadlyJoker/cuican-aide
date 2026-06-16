@@ -29,16 +29,16 @@ use std::time::Duration;
 
 use anyhow::Result;
 use anyhow::anyhow;
-use codex_config::types::McpServerEnvVar;
-use codex_exec_server::ExecBackend;
-use codex_exec_server::ExecEnvPolicy;
-use codex_exec_server::ExecParams;
-use codex_exec_server::ExecProcess;
-use codex_protocol::config_types::ShellEnvironmentPolicyInherit;
+use crewon_config::types::McpServerEnvVar;
+use crewon_exec_server::ExecBackend;
+use crewon_exec_server::ExecEnvPolicy;
+use crewon_exec_server::ExecParams;
+use crewon_exec_server::ExecProcess;
+use crewon_protocol::config_types::ShellEnvironmentPolicyInherit;
 #[cfg(unix)]
-use codex_utils_pty::process_group::kill_process_group;
+use crewon_utils_pty::process_group::kill_process_group;
 #[cfg(unix)]
-use codex_utils_pty::process_group::terminate_process_group;
+use crewon_utils_pty::process_group::terminate_process_group;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use rmcp::service::RoleClient;
@@ -553,7 +553,7 @@ impl ExecutorStdioServerLauncher {
             Vec::new()
         } else {
             // `source = "remote"` means the value is read from the executor's
-            // environment, not copied from Codex. Start from `All` only so the
+            // environment, not copied from Crewon. Start from `All` only so the
             // named remote variable is available to the filter below; the
             // effective child env is still limited by `include_only`.
             crate::utils::DEFAULT_ENV_VARS
@@ -579,9 +579,9 @@ impl ExecutorStdioServerLauncher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_protocol::config_types::EnvironmentVariablePattern;
-    use codex_protocol::config_types::ShellEnvironmentPolicy;
-    use codex_protocol::shell_environment;
+    use crewon_protocol::config_types::EnvironmentVariablePattern;
+    use crewon_protocol::config_types::ShellEnvironmentPolicy;
+    use crewon_protocol::shell_environment;
 
     #[test]
     fn remote_env_policy_uses_core_env_without_remote_source_vars() {

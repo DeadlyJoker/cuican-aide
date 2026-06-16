@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use codex_connectors::metadata::connector_mention_slug;
-use codex_protocol::user_input::UserInput;
+use crewon_connectors::metadata::connector_mention_slug;
+use crewon_protocol::user_input::UserInput;
 
 use crate::connectors;
 use crate::injection::ToolMentionKind;

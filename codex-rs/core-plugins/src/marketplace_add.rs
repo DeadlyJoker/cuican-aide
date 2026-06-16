@@ -1,6 +1,6 @@
 use crate::OPENAI_CURATED_MARKETPLACE_NAME;
 use crate::installed_marketplaces::marketplace_install_root;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -246,7 +246,7 @@ mod tests {
                 .is_file()
         );
 
-        let config = fs::read_to_string(codex_home.path().join(codex_config::CONFIG_TOML_FILE))?;
+        let config = fs::read_to_string(codex_home.path().join(crewon_config::CONFIG_TOML_FILE))?;
         assert!(config.contains("[marketplaces.debug]"));
         assert!(config.contains("source_type = \"git\""));
         assert!(config.contains("source = \"https://github.com/owner/repo.git\""));
@@ -284,7 +284,7 @@ mod tests {
                 .exists()
         );
 
-        let config = fs::read_to_string(codex_home.path().join(codex_config::CONFIG_TOML_FILE))?;
+        let config = fs::read_to_string(codex_home.path().join(crewon_config::CONFIG_TOML_FILE))?;
         let config: toml::Value = toml::from_str(&config)?;
         assert_eq!(
             config["marketplaces"]["debug"]["source_type"].as_str(),
@@ -323,7 +323,7 @@ mod tests {
         assert!(
             !codex_home
                 .path()
-                .join(codex_config::CONFIG_TOML_FILE)
+                .join(crewon_config::CONFIG_TOML_FILE)
                 .exists()
         );
         Ok(())
@@ -361,7 +361,7 @@ mod tests {
 
     fn write_marketplace_source(source: &Path, marker: &str) -> std::io::Result<()> {
         fs::create_dir_all(source.join(".agents/plugins"))?;
-        fs::create_dir_all(source.join("plugins/sample/.codex-plugin"))?;
+        fs::create_dir_all(source.join("plugins/sample/.crewon-plugin"))?;
         fs::write(
             source.join(".agents/plugins/marketplace.json"),
             r#"{
@@ -378,7 +378,7 @@ mod tests {
 }"#,
         )?;
         fs::write(
-            source.join("plugins/sample/.codex-plugin/plugin.json"),
+            source.join("plugins/sample/.crewon-plugin/plugin.json"),
             r#"{"name":"sample"}"#,
         )?;
         fs::write(source.join("plugins/sample/marker.txt"), marker)?;

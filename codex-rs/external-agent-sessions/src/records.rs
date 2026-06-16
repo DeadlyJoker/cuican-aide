@@ -406,13 +406,13 @@ mod tests {
     fn converts_tool_result_blocks_to_bounded_external_agent_tags() {
         let block = serde_json::json!({
             "type": "tool_result",
-            "content": "codex-rs/external-agent-sessions/src/records.rs"
+            "content": "crewon-rs/external-agent-sessions/src/records.rs"
         });
 
         assert_eq!(
             tool_result_note(&block),
             "[external_agent_tool_result]\n\
-             codex-rs/external-agent-sessions/src/records.rs\n\
+             crewon-rs/external-agent-sessions/src/records.rs\n\
              [/external_agent_tool_result]"
         );
     }

@@ -9,30 +9,9 @@ use crate::tools::context::ToolCallSource;
 use crate::tools::context::ToolOutput;
 use crate::tools::context::ToolPayload;
 use crate::turn_diff_tracker::TurnDiffTracker;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_config::ConfigLayerEntry;
-use codex_config::ConfigRequirements;
-use codex_config::ConfigRequirementsToml;
-use codex_exec_server::EnvironmentManager;
-use codex_execpolicy::Decision;
-use codex_execpolicy::Evaluation;
-use codex_execpolicy::RuleMatch;
-use codex_features::Feature;
-use codex_model_provider::create_model_provider;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::models::AdditionalPermissionProfile as PermissionProfile;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::NetworkPermissions;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::request_permissions::PermissionGrantScope;
-use codex_protocol::request_permissions::RequestPermissionProfile;
-use codex_protocol::request_permissions::RequestPermissionsArgs;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
 use core_test_support::PathExt;
 use core_test_support::TempDirExt;
-use core_test_support::codex_linux_sandbox_exe_or_skip;
+use core_test_support::crewon_linux_sandbox_exe_or_skip;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
@@ -41,6 +20,27 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_config::ConfigLayerEntry;
+use crewon_config::ConfigRequirements;
+use crewon_config::ConfigRequirementsToml;
+use crewon_exec_server::EnvironmentManager;
+use crewon_execpolicy::Decision;
+use crewon_execpolicy::Evaluation;
+use crewon_execpolicy::RuleMatch;
+use crewon_features::Feature;
+use crewon_model_provider::create_model_provider;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::models::AdditionalPermissionProfile as PermissionProfile;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::NetworkPermissions;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::request_permissions::PermissionGrantScope;
+use crewon_protocol::request_permissions::RequestPermissionProfile;
+use crewon_protocol::request_permissions::RequestPermissionsArgs;
+use crewon_protocol::request_permissions::RequestPermissionsResponse;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::sync::Arc;
@@ -156,7 +156,7 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
     );
     assert_eq!(
         session
-            .granted_turn_permissions(codex_exec_server::LOCAL_ENVIRONMENT_ID)
+            .granted_turn_permissions(crewon_exec_server::LOCAL_ENVIRONMENT_ID)
             .await,
         Some(requested_permissions.into())
     );
@@ -246,7 +246,7 @@ async fn request_permissions_guardian_review_stops_when_cancelled() {
             let event = rx_event.recv().await.expect("event channel should be open");
             if matches!(
                 event.msg,
-                codex_protocol::protocol::EventMsg::GuardianAssessment(_)
+                crewon_protocol::protocol::EventMsg::GuardianAssessment(_)
             ) {
                 break;
             }
@@ -264,7 +264,7 @@ async fn request_permissions_guardian_review_stops_when_cancelled() {
     assert_eq!(response, None);
     assert_eq!(
         session
-            .granted_turn_permissions(codex_exec_server::LOCAL_ENVIRONMENT_ID)
+            .granted_turn_permissions(crewon_exec_server::LOCAL_ENVIRONMENT_ID)
             .await,
         None
     );
@@ -293,7 +293,7 @@ async fn guardian_allows_shell_command_additional_permissions_requests_past_poli
     .await;
 
     let (mut session, mut turn_context_raw) = make_session_and_context().await;
-    turn_context_raw.codex_linux_sandbox_exe = codex_linux_sandbox_exe_or_skip!();
+    turn_context_raw.crewon_linux_sandbox_exe = crewon_linux_sandbox_exe_or_skip!();
     turn_context_raw
         .approval_policy
         .set(AskForApproval::OnRequest)
@@ -306,7 +306,7 @@ async fn guardian_allows_shell_command_additional_permissions_requests_past_poli
         .features
         .enable(Feature::ExecPermissionApprovals)
         .expect("test setup should allow enabling request permissions");
-    turn_context_raw.permission_profile = codex_protocol::models::PermissionProfile::Disabled;
+    turn_context_raw.permission_profile = crewon_protocol::models::PermissionProfile::Disabled;
     let mut config = (*turn_context_raw.config).clone();
     config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
     let config = Arc::new(config);
@@ -326,7 +326,7 @@ async fn guardian_allows_shell_command_additional_permissions_requests_past_poli
     let expiration_ms: u64 = if cfg!(windows) { 2_500 } else { 1_000 };
 
     let handler = crate::tools::handlers::ShellCommandHandler::from(
-        codex_tools::ShellCommandBackendConfig::Classic,
+        crewon_tools::ShellCommandBackendConfig::Classic,
     );
     #[allow(deprecated)]
     let workdir = Some(turn_context.cwd.to_string_lossy().to_string());
@@ -337,7 +337,7 @@ async fn guardian_allows_shell_command_additional_permissions_requests_past_poli
             cancellation_token: CancellationToken::new(),
             tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
             call_id: "test-call".to_string(),
-            tool_name: codex_tools::ToolName::plain("shell_command"),
+            tool_name: crewon_tools::ToolName::plain("shell_command"),
             source: crate::tools::context::ToolCallSource::Direct,
             payload: ToolPayload::Function {
                 arguments: serde_json::json!({
@@ -401,7 +401,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_shell_command_policy_
                 scope: PermissionGrantScope::Turn,
                 strict_auto_review: true,
             },
-            codex_exec_server::LOCAL_ENVIRONMENT_ID,
+            crewon_exec_server::LOCAL_ENVIRONMENT_ID,
             Some(&originating_turn_state),
         )
         .await;
@@ -410,7 +410,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_shell_command_policy_
         .approval_policy
         .set(AskForApproval::OnFailure)
         .expect("test setup should allow updating approval policy");
-    turn_context_raw.permission_profile = codex_protocol::models::PermissionProfile::Disabled;
+    turn_context_raw.permission_profile = crewon_protocol::models::PermissionProfile::Disabled;
     let mut config = (*turn_context_raw.config).clone();
     config.approvals_reviewer = ApprovalsReviewer::User;
     config.model_provider.base_url = Some(format!("{}/v1", server.uri()));
@@ -430,7 +430,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_shell_command_policy_
     let turn_context = Arc::new(turn_context_raw);
 
     let handler = crate::tools::handlers::ShellCommandHandler::from(
-        codex_tools::ShellCommandBackendConfig::Classic,
+        crewon_tools::ShellCommandBackendConfig::Classic,
     );
     #[allow(deprecated)]
     let workdir = Some(turn_context.cwd.to_string_lossy().to_string());
@@ -441,7 +441,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_shell_command_policy_
             cancellation_token: CancellationToken::new(),
             tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
             call_id: "strict-shell-command-call".to_string(),
-            tool_name: codex_tools::ToolName::plain("shell_command"),
+            tool_name: crewon_tools::ToolName::plain("shell_command"),
             source: ToolCallSource::Direct,
             payload: ToolPayload::Function {
                 arguments: serde_json::json!({
@@ -488,7 +488,7 @@ async fn guardian_allows_unified_exec_additional_permissions_requests_past_polic
             cancellation_token: CancellationToken::new(),
             tracker: Arc::clone(&tracker),
             call_id: "exec-call".to_string(),
-            tool_name: codex_tools::ToolName::plain("exec_command"),
+            tool_name: crewon_tools::ToolName::plain("exec_command"),
             source: crate::tools::context::ToolCallSource::Direct,
             payload: ToolPayload::Function {
                 arguments: serde_json::json!({
@@ -587,7 +587,7 @@ async fn shell_command_allows_sticky_turn_permissions_without_inline_request_per
         let active_turn = active_turn.as_mut().expect("active turn");
         let mut turn_state = active_turn.turn_state.lock().await;
         turn_state.record_granted_permissions(
-            codex_exec_server::LOCAL_ENVIRONMENT_ID,
+            crewon_exec_server::LOCAL_ENVIRONMENT_ID,
             PermissionProfile {
                 network: Some(NetworkPermissions {
                     enabled: Some(true),
@@ -601,7 +601,7 @@ async fn shell_command_allows_sticky_turn_permissions_without_inline_request_per
     let turn_context = Arc::new(turn_context_raw);
 
     let handler = crate::tools::handlers::ShellCommandHandler::from(
-        codex_tools::ShellCommandBackendConfig::Classic,
+        crewon_tools::ShellCommandBackendConfig::Classic,
     );
     #[allow(deprecated)]
     let workdir = Some(turn_context.cwd.to_string_lossy().to_string());
@@ -612,7 +612,7 @@ async fn shell_command_allows_sticky_turn_permissions_without_inline_request_per
             cancellation_token: CancellationToken::new(),
             tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
             call_id: "sticky-turn-grant".to_string(),
-            tool_name: codex_tools::ToolName::plain("shell_command"),
+            tool_name: crewon_tools::ToolName::plain("shell_command"),
             source: crate::tools::context::ToolCallSource::Direct,
             payload: ToolPayload::Function {
                 arguments: serde_json::json!({
@@ -643,7 +643,7 @@ async fn shell_command_allows_sticky_turn_permissions_without_inline_request_per
 
 #[tokio::test]
 async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
-    let codex_home = tempdir().expect("create codex home");
+    let codex_home = tempdir().expect("create engine home");
     let project_dir = tempdir().expect("create project dir");
     let rules_dir = project_dir.path().join("rules");
     fs::create_dir_all(&rules_dir).expect("create rules dir");
@@ -686,7 +686,7 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
         }
     );
 
-    let auth_manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key("Test API Key"));
+    let auth_manager = AuthManager::from_auth_for_testing(CrewonAuth::from_api_key("Test API Key"));
     let models_manager = models_manager_with_provider(
         config.codex_home.to_path_buf(),
         auth_manager.clone(),
@@ -698,12 +698,12 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
         /*bundled_skills_enabled*/ true,
     ));
     let mcp_manager = Arc::new(McpManager::new(Arc::clone(&plugins_manager)));
-    let thread_store = Arc::new(codex_thread_store::LocalThreadStore::new(
-        codex_thread_store::LocalThreadStoreConfig::from_config(&config),
+    let thread_store = Arc::new(crewon_thread_store::LocalThreadStore::new(
+        crewon_thread_store::LocalThreadStoreConfig::from_config(&config),
         /*state_db*/ None,
     ));
 
-    let CodexSpawnOk { codex, .. } = Codex::spawn(CodexSpawnArgs {
+    let CrewonSpawnOk { engine, .. } = Crewon::spawn(CrewonSpawnArgs {
         config,
         installation_id: "11111111-1111-4111-8111-111111111111".to_string(),
         auth_manager,
@@ -712,7 +712,7 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
         skills_manager,
         plugins_manager,
         mcp_manager,
-        extensions: codex_extension_api::empty_extension_registry(),
+        extensions: crewon_extension_api::empty_extension_registry(),
         conversation_history: InitialHistory::New,
         session_source: SessionSource::SubAgent(SubAgentSource::Other(
             GUARDIAN_REVIEWER_NAME.to_string(),
@@ -725,13 +725,13 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
         metrics_service_name: None,
         inherited_shell_snapshot: None,
         inherited_exec_policy: Some(Arc::new(parent_exec_policy)),
-        parent_rollout_thread_trace: codex_rollout_trace::ThreadTraceContext::disabled(),
+        parent_rollout_thread_trace: crewon_rollout_trace::ThreadTraceContext::disabled(),
         user_shell_override: None,
         parent_trace: None,
         environment_selections: ResolvedTurnEnvironments {
             turn_environments: Vec::new(),
         },
-        thread_extension_init: codex_extension_api::ExtensionDataInit::default(),
+        thread_extension_init: crewon_extension_api::ExtensionDataInit::default(),
         analytics_events_client: None,
         thread_store,
         attestation_provider: None,
@@ -741,7 +741,7 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
     .expect("spawn guardian subagent");
 
     assert_eq!(
-        codex
+        engine
             .session
             .services
             .exec_policy
@@ -755,5 +755,5 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
             }],
         }
     );
-    drop(codex);
+    drop(engine);
 }

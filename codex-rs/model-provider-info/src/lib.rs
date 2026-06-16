@@ -1,18 +1,18 @@
-//! Registry of model providers supported by Codex.
+//! Registry of model providers supported by Crewon.
 //!
 //! Providers can be defined in two places:
-//!   1. Built-in defaults compiled into the binary so Codex works out-of-the-box.
-//!   2. User-defined entries inside `~/.codex/config.toml` under the `model_providers`
+//!   1. Built-in defaults compiled into the binary so Crewon works out-of-the-box.
+//!   2. User-defined entries inside `~/.crewon/config.toml` under the `model_providers`
 //!      key. These override or extend the defaults at runtime.
 
-use codex_api::Provider as ApiProvider;
-use codex_api::RetryConfig as ApiRetryConfig;
-use codex_api::is_azure_responses_provider;
-use codex_app_server_protocol::AuthMode;
-use codex_protocol::config_types::ModelProviderAuthInfo;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::EnvVarError;
-use codex_protocol::error::Result as CodexResult;
+use crewon_api::Provider as ApiProvider;
+use crewon_api::RetryConfig as ApiRetryConfig;
+use crewon_api::is_azure_responses_provider;
+use crewon_app_server_protocol::AuthMode;
+use crewon_protocol::config_types::ModelProviderAuthInfo;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::EnvVarError;
+use crewon_protocol::error::Result as CodexResult;
 use http::HeaderMap;
 use http::header::HeaderName;
 use http::header::HeaderValue;
@@ -42,16 +42,16 @@ pub const AMAZON_BEDROCK_GPT_5_4_MODEL_ID: &str = "openai.gpt-5.4";
 pub const AMAZON_BEDROCK_DEFAULT_BASE_URL: &str =
     "https://bedrock-mantle.us-east-1.api.aws/openai/v1";
 const AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_HEADER: &str = "x-amzn-mantle-client-agent";
-const AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_VALUE: &str = "codex";
-const CHAT_WIRE_API_REMOVED_ERROR: &str = "`wire_api = \"chat\"` is no longer supported.\nHow to fix: set `wire_api = \"responses\"` in your provider config.\nMore info: https://github.com/openai/codex/discussions/7782";
+const AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_VALUE: &str = "crewon";
+const CHAT_WIRE_API_REMOVED_ERROR: &str = "`wire_api = \"chat\"` is no longer supported.\nHow to fix: set `wire_api = \"responses\"` in your provider config.";
 pub const LEGACY_OLLAMA_CHAT_PROVIDER_ID: &str = "ollama-chat";
-pub const OLLAMA_CHAT_PROVIDER_REMOVED_ERROR: &str = "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`.\nMore info: https://github.com/openai/codex/discussions/7782";
+pub const OLLAMA_CHAT_PROVIDER_REMOVED_ERROR: &str = "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`.";
 
 /// Wire protocol that the provider speaks.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum WireApi {
-    /// The Responses API exposed by OpenAI at `/v1/responses`.
+    /// Responses-compatible API exposed at `/v1/responses`.
     #[default]
     Responses,
 }
@@ -86,7 +86,7 @@ pub struct ModelProviderInfo {
     /// Friendly display name.
     #[serde(default)]
     pub name: String,
-    /// Base URL for the provider's OpenAI-compatible API.
+    /// Base URL for the provider's Responses-compatible API.
     pub base_url: Option<String>,
     /// Environment variable that stores the user's API key for this provider.
     pub env_key: Option<String>,
@@ -125,10 +125,11 @@ pub struct ModelProviderInfo {
     /// Maximum time (in milliseconds) to wait for a websocket connection attempt before treating
     /// it as failed.
     pub websocket_connect_timeout_ms: Option<u64>,
-    /// Does this provider require an OpenAI API Key or ChatGPT login token? If true,
-    /// user is presented with login screen on first run, and login preference and token/key
-    /// are stored in auth.json. If false (which is the default), login screen is skipped,
-    /// and API key (if needed) comes from the "env_key" environment variable.
+    /// Legacy compatibility flag for providers that use the built-in OpenAI API key or ChatGPT
+    /// login flow. If true, the user is presented with the built-in login flow on first run, and
+    /// login preference and token/key are stored in auth.json. If false (which is the default),
+    /// that login flow is skipped, and API key material (if needed) comes from provider-specific
+    /// auth such as "env_key", "auth", or "aws".
     #[serde(default)]
     pub requires_openai_auth: bool,
     /// Whether this provider supports the Responses API WebSocket transport.
@@ -419,10 +420,10 @@ pub fn built_in_model_providers(
     let openai_provider = P::create_openai_provider(openai_base_url);
     let amazon_bedrock_provider = P::create_amazon_bedrock_provider(/*aws*/ None);
 
-    // We do not want to be in the business of adjucating which third-party
-    // providers are bundled with Codex CLI, so we only include the OpenAI and
-    // open source ("oss") providers by default. Users are encouraged to add to
-    // `model_providers` in config.toml to add their own providers.
+    // We do not want to adjudicate which third-party providers are bundled with
+    // Crewon, so the built-ins stay intentionally small. Users can add Claude,
+    // Qwen, GLM, private gateways, or other Responses-compatible adapters through
+    // `model_providers` in config.toml.
     [
         (OPENAI_PROVIDER_ID, openai_provider),
         (AMAZON_BEDROCK_PROVIDER_ID, amazon_bedrock_provider),
@@ -479,22 +480,24 @@ pub fn merge_configured_model_providers(
 }
 
 pub fn create_oss_provider(default_provider_port: u16, wire_api: WireApi) -> ModelProviderInfo {
-    // These CODEX_OSS_ environment variables are experimental: we may
+    // These CREWON_OSS_ environment variables are experimental: we may
     // switch to reading values from config.toml instead.
-    let default_codex_oss_base_url = format!(
-        "http://localhost:{codex_oss_port}/v1",
-        codex_oss_port = std::env::var("CODEX_OSS_PORT")
+    let default_crewon_oss_base_url = format!(
+        "http://localhost:{crewon_oss_port}/v1",
+        crewon_oss_port = std::env::var("CREWON_OSS_PORT")
+            .or_else(|_| std::env::var("CODEX_OSS_PORT"))
             .ok()
             .filter(|value| !value.trim().is_empty())
             .and_then(|value| value.parse::<u16>().ok())
             .unwrap_or(default_provider_port)
     );
 
-    let codex_oss_base_url = std::env::var("CODEX_OSS_BASE_URL")
+    let crewon_oss_base_url = std::env::var("CREWON_OSS_BASE_URL")
+        .or_else(|_| std::env::var("CODEX_OSS_BASE_URL"))
         .ok()
         .filter(|v| !v.trim().is_empty())
-        .unwrap_or(default_codex_oss_base_url);
-    create_oss_provider_with_base_url(&codex_oss_base_url, wire_api)
+        .unwrap_or(default_crewon_oss_base_url);
+    create_oss_provider_with_base_url(&crewon_oss_base_url, wire_api)
 }
 
 pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> ModelProviderInfo {

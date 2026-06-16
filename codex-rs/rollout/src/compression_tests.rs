@@ -5,15 +5,15 @@ use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 use std::time::SystemTime;
 
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::UserMessageEvent;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::UserMessageEvent;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -462,8 +462,8 @@ fn write_rollout(path: &std::path::Path, thread_id: ThreadId, message: &str) -> 
             timestamp: "2025-01-03T12:00:00Z".to_string(),
             cwd: parent.to_path_buf(),
             originator: "test".to_string(),
-            cli_version: "test".to_string(),
-            source: SessionSource::Cli,
+            client_version: "test".to_string(),
+            source: SessionSource::LegacyCli,
             thread_source: None,
             agent_path: None,
             agent_nickname: None,

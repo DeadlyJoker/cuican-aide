@@ -1,4 +1,4 @@
-use codex_protocol::protocol::AgentStatus;
+use crewon_protocol::protocol::AgentStatus;
 
 use crate::context::ContextualUserFragment;
 use crate::context::SubagentNotification;

@@ -1,4 +1,4 @@
-use codex_utils_string::take_bytes_at_char_boundary;
+use crewon_utils_string::take_bytes_at_char_boundary;
 
 use crate::catalog::SkillCatalog;
 use crate::catalog::SkillCatalogEntry;

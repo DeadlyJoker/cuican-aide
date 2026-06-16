@@ -1,8 +1,8 @@
-//! Root of the `codex-core` library.
+//! Root of the `crewon-core` library.
 
 // Prevent accidental direct writes to stdout/stderr in library code. All
 // user-visible output must go through the appropriate abstraction (e.g.,
-// the TUI or the tracing stack).
+// the app-server client or the tracing stack).
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
 mod apply_patch;
@@ -15,25 +15,25 @@ mod realtime_prompt;
 mod responses_retry;
 pub(crate) mod session;
 pub use session::SteerInputError;
-mod codex_thread;
 mod compact_remote;
 mod compact_remote_v2;
 mod config_lock;
-pub use codex_thread::BackgroundTerminalInfo;
-pub use codex_thread::CodexThread;
-pub use codex_thread::CodexThreadSettingsOverrides;
-pub use codex_thread::ThreadConfigSnapshot;
-pub use codex_thread::TryStartTurnIfIdleError;
-pub use codex_thread::TryStartTurnIfIdleRejectionReason;
+mod crewon_thread;
+pub use crewon_thread::BackgroundTerminalInfo;
+pub use crewon_thread::CrewonThread;
+pub use crewon_thread::CrewonThreadSettingsOverrides;
+pub use crewon_thread::ThreadConfigSnapshot;
+pub use crewon_thread::TryStartTurnIfIdleError;
+pub use crewon_thread::TryStartTurnIfIdleRejectionReason;
 pub use session::turn_context::TurnContext;
 mod agent;
 mod attestation;
-mod codex_delegate;
 mod command_canonicalization;
 pub mod config;
 pub mod connectors;
 pub mod context;
 mod context_manager;
+mod crewon_delegate;
 mod environment_selection;
 pub mod exec;
 pub mod exec_env;
@@ -57,7 +57,7 @@ pub use network_proxy_loader::MtimeConfigReloader;
 pub use network_proxy_loader::build_network_proxy_state;
 pub use network_proxy_loader::build_network_proxy_state_and_reloader;
 mod original_image_detail;
-pub use codex_mcp::SandboxState;
+pub use crewon_mcp::SandboxState;
 mod mcp_openai_file;
 mod mcp_tool_call;
 pub(crate) mod mention_syntax;
@@ -102,10 +102,10 @@ pub mod test_support;
 mod unified_exec;
 pub mod windows_sandbox;
 pub use client::X_RESPONSESAPI_INCLUDE_TIMING_METRICS_HEADER;
-pub use codex_protocol::config_types::ModelProviderAuthInfo;
+pub use crewon_protocol::config_types::ModelProviderAuthInfo;
 mod event_mapping;
 pub mod review_format;
-pub use codex_prompts as review_prompts;
+pub use crewon_prompts as review_prompts;
 mod thread_manager;
 pub(crate) mod web_search;
 pub(crate) mod windows_sandbox_read_grants;
@@ -123,8 +123,8 @@ pub use windows_sandbox_read_grants::grant_read_root_non_elevated;
 pub type ConversationManager = ThreadManager;
 #[deprecated(note = "use NewThread")]
 pub type NewConversation = NewThread;
-#[deprecated(note = "use CodexThread")]
-pub type CodexConversation = CodexThread;
+#[deprecated(note = "use CrewonThread")]
+pub type CrewonConversation = CrewonThread;
 pub(crate) mod agents_md;
 pub use agents_md::AgentsMdManager;
 pub use agents_md::DEFAULT_AGENTS_MD_FILENAME;
@@ -183,8 +183,8 @@ pub use client::X_CODEX_TURN_METADATA_HEADER;
 pub use client_common::Prompt;
 pub use client_common::ResponseEvent;
 pub use client_common::ResponseStream;
-pub use codex_prompts::REVIEW_PROMPT;
 pub use compact::content_items_to_text;
+pub use crewon_prompts::REVIEW_PROMPT;
 pub use event_mapping::parse_turn_item;
 pub use exec_policy::ExecPolicyError;
 pub use exec_policy::check_execpolicy_for_warnings;

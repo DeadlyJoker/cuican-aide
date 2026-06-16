@@ -11,6 +11,7 @@ mod config_rpc;
 mod connection_handling_websocket;
 #[cfg(unix)]
 mod connection_handling_websocket_unix;
+mod crewon_domain;
 mod dynamic_tools;
 mod executor_skills;
 mod experimental_api;

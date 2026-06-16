@@ -1,32 +1,32 @@
 use crate::events::AppServerRpcTransport;
-use crate::events::CodexRuntimeMetadata;
+use crate::events::CrewonRuntimeMetadata;
 use crate::events::GuardianReviewEventParams;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::ClientResponsePayload;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ServerResponse;
-use codex_plugin::PluginTelemetryMetadata;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::Personality;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::error::CodexErr;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::HookEventName;
-use codex_protocol::protocol::HookRunStatus;
-use codex_protocol::protocol::HookSource;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SkillScope;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::ClientResponsePayload;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ServerResponse;
+use crewon_plugin::PluginTelemetryMetadata;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::HookEventName;
+use crewon_protocol::protocol::HookRunStatus;
+use crewon_protocol::protocol::HookSource;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SkillScope;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::request_permissions::RequestPermissionsResponse;
 use serde::Serialize;
 use std::path::PathBuf;
 
@@ -119,25 +119,25 @@ pub struct TurnProfileFact {
 }
 
 #[derive(Clone)]
-pub struct TurnCodexErrorFact {
+pub struct TurnCrewonErrorFact {
     pub(crate) turn_id: String,
     pub(crate) thread_id: String,
-    pub(crate) error: TurnCodexError,
+    pub(crate) error: TurnCrewonError,
 }
 
-impl TurnCodexErrorFact {
+impl TurnCrewonErrorFact {
     pub fn from_codex_err(thread_id: String, turn_id: String, error: &CodexErr) -> Self {
         Self {
             turn_id,
             thread_id,
-            error: TurnCodexError::from_codex_err(error),
+            error: TurnCrewonError::from_codex_err(error),
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum CodexErrKind {
+pub enum CrewonErrKind {
     TurnAborted,
     Stream,
     ContextWindowExceeded,
@@ -177,12 +177,12 @@ pub enum CodexErrKind {
 }
 
 #[derive(Clone)]
-pub(crate) struct TurnCodexError {
-    pub(crate) kind: CodexErrKind,
+pub(crate) struct TurnCrewonError {
+    pub(crate) kind: CrewonErrKind,
     pub(crate) http_status_code: Option<u16>,
 }
 
-impl TurnCodexError {
+impl TurnCrewonError {
     fn from_codex_err(error: &CodexErr) -> Self {
         Self {
             kind: error.into(),
@@ -191,49 +191,49 @@ impl TurnCodexError {
     }
 }
 
-impl From<&CodexErr> for CodexErrKind {
+impl From<&CodexErr> for CrewonErrKind {
     fn from(error: &CodexErr) -> Self {
         match error {
-            CodexErr::TurnAborted => CodexErrKind::TurnAborted,
-            CodexErr::Stream(..) => CodexErrKind::Stream,
-            CodexErr::ContextWindowExceeded => CodexErrKind::ContextWindowExceeded,
-            CodexErr::ThreadNotFound(_) => CodexErrKind::ThreadNotFound,
-            CodexErr::AgentLimitReached { .. } => CodexErrKind::AgentLimitReached,
+            CodexErr::TurnAborted => CrewonErrKind::TurnAborted,
+            CodexErr::Stream(..) => CrewonErrKind::Stream,
+            CodexErr::ContextWindowExceeded => CrewonErrKind::ContextWindowExceeded,
+            CodexErr::ThreadNotFound(_) => CrewonErrKind::ThreadNotFound,
+            CodexErr::AgentLimitReached { .. } => CrewonErrKind::AgentLimitReached,
             CodexErr::SessionConfiguredNotFirstEvent => {
-                CodexErrKind::SessionConfiguredNotFirstEvent
+                CrewonErrKind::SessionConfiguredNotFirstEvent
             }
-            CodexErr::Timeout => CodexErrKind::Timeout,
-            CodexErr::RequestTimeout => CodexErrKind::RequestTimeout,
-            CodexErr::Spawn => CodexErrKind::Spawn,
-            CodexErr::Interrupted => CodexErrKind::Interrupted,
-            CodexErr::UnexpectedStatus(_) => CodexErrKind::UnexpectedStatus,
-            CodexErr::InvalidRequest(_) => CodexErrKind::InvalidRequest,
-            CodexErr::InvalidImageRequest() => CodexErrKind::InvalidImageRequest,
-            CodexErr::UsageLimitReached(_) => CodexErrKind::UsageLimitReached,
-            CodexErr::ServerOverloaded => CodexErrKind::ServerOverloaded,
-            CodexErr::CyberPolicy { .. } => CodexErrKind::CyberPolicy,
-            CodexErr::ResponseStreamFailed(_) => CodexErrKind::ResponseStreamFailed,
-            CodexErr::ConnectionFailed(_) => CodexErrKind::ConnectionFailed,
-            CodexErr::QuotaExceeded => CodexErrKind::QuotaExceeded,
-            CodexErr::UsageNotIncluded => CodexErrKind::UsageNotIncluded,
-            CodexErr::InternalServerError => CodexErrKind::InternalServerError,
-            CodexErr::RetryLimit(_) => CodexErrKind::RetryLimit,
-            CodexErr::InternalAgentDied => CodexErrKind::InternalAgentDied,
-            CodexErr::Sandbox(_) => CodexErrKind::Sandbox,
+            CodexErr::Timeout => CrewonErrKind::Timeout,
+            CodexErr::RequestTimeout => CrewonErrKind::RequestTimeout,
+            CodexErr::Spawn => CrewonErrKind::Spawn,
+            CodexErr::Interrupted => CrewonErrKind::Interrupted,
+            CodexErr::UnexpectedStatus(_) => CrewonErrKind::UnexpectedStatus,
+            CodexErr::InvalidRequest(_) => CrewonErrKind::InvalidRequest,
+            CodexErr::InvalidImageRequest() => CrewonErrKind::InvalidImageRequest,
+            CodexErr::UsageLimitReached(_) => CrewonErrKind::UsageLimitReached,
+            CodexErr::ServerOverloaded => CrewonErrKind::ServerOverloaded,
+            CodexErr::CyberPolicy { .. } => CrewonErrKind::CyberPolicy,
+            CodexErr::ResponseStreamFailed(_) => CrewonErrKind::ResponseStreamFailed,
+            CodexErr::ConnectionFailed(_) => CrewonErrKind::ConnectionFailed,
+            CodexErr::QuotaExceeded => CrewonErrKind::QuotaExceeded,
+            CodexErr::UsageNotIncluded => CrewonErrKind::UsageNotIncluded,
+            CodexErr::InternalServerError => CrewonErrKind::InternalServerError,
+            CodexErr::RetryLimit(_) => CrewonErrKind::RetryLimit,
+            CodexErr::InternalAgentDied => CrewonErrKind::InternalAgentDied,
+            CodexErr::Sandbox(_) => CrewonErrKind::Sandbox,
             CodexErr::LandlockSandboxExecutableNotProvided => {
-                CodexErrKind::LandlockSandboxExecutableNotProvided
+                CrewonErrKind::LandlockSandboxExecutableNotProvided
             }
-            CodexErr::UnsupportedOperation(_) => CodexErrKind::UnsupportedOperation,
-            CodexErr::RefreshTokenFailed(_) => CodexErrKind::RefreshTokenFailed,
-            CodexErr::Fatal(_) => CodexErrKind::Fatal,
-            CodexErr::Io(_) => CodexErrKind::Io,
-            CodexErr::Json(_) => CodexErrKind::Json,
+            CodexErr::UnsupportedOperation(_) => CrewonErrKind::UnsupportedOperation,
+            CodexErr::RefreshTokenFailed(_) => CrewonErrKind::RefreshTokenFailed,
+            CodexErr::Fatal(_) => CrewonErrKind::Fatal,
+            CodexErr::Io(_) => CrewonErrKind::Io,
+            CodexErr::Json(_) => CrewonErrKind::Json,
             #[cfg(target_os = "linux")]
-            CodexErr::LandlockRuleset(_) => CodexErrKind::LandlockRuleset,
+            CodexErr::LandlockRuleset(_) => CrewonErrKind::LandlockRuleset,
             #[cfg(target_os = "linux")]
-            CodexErr::LandlockPathFd(_) => CodexErrKind::LandlockPathFd,
-            CodexErr::TokioJoin(_) => CodexErrKind::TokioJoin,
-            CodexErr::EnvVar(_) => CodexErrKind::EnvVar,
+            CodexErr::LandlockPathFd(_) => CrewonErrKind::LandlockPathFd,
+            CodexErr::TokioJoin(_) => CrewonErrKind::TokioJoin,
+            CodexErr::EnvVar(_) => CrewonErrKind::EnvVar,
         }
     }
 }
@@ -265,7 +265,7 @@ pub enum TurnSteerRejectionReason {
 }
 
 #[derive(Clone)]
-pub struct CodexTurnSteerEvent {
+pub struct CrewonTurnSteerEvent {
     pub expected_turn_id: Option<String>,
     pub accepted_turn_id: Option<String>,
     pub num_input_images: usize,
@@ -399,7 +399,7 @@ pub enum CompactionStatus {
 }
 
 #[derive(Clone)]
-pub struct CodexCompactionEvent {
+pub struct CrewonCompactionEvent {
     pub thread_id: String,
     pub turn_id: String,
     pub trigger: CompactionTrigger,
@@ -408,8 +408,8 @@ pub struct CodexCompactionEvent {
     pub phase: CompactionPhase,
     pub strategy: CompactionStrategy,
     pub status: CompactionStatus,
-    pub codex_error_kind: Option<CodexErrKind>,
-    pub codex_error_http_status_code: Option<u16>,
+    pub crewon_error_kind: Option<CrewonErrKind>,
+    pub crewon_error_http_status_code: Option<u16>,
     pub active_context_tokens_before: i64,
     pub active_context_tokens_after: i64,
     pub retained_image_count: Option<usize>,
@@ -430,12 +430,12 @@ pub enum GoalEventKind {
 }
 
 #[derive(Clone)]
-pub struct CodexGoalEvent {
+pub struct CrewonGoalEvent {
     pub thread_id: String,
     pub turn_id: Option<String>,
     pub goal_id: String,
     pub event_kind: GoalEventKind,
-    pub goal_status: codex_state::ThreadGoalStatus,
+    pub goal_status: crewon_state::ThreadGoalStatus,
     pub has_token_budget: bool,
     pub cumulative_tokens_accounted: Option<i64>,
     pub cumulative_time_accounted_seconds: Option<i64>,
@@ -447,7 +447,7 @@ pub(crate) enum AnalyticsFact {
         connection_id: u64,
         params: InitializeParams,
         product_client_id: String,
-        runtime: CodexRuntimeMetadata,
+        runtime: CrewonRuntimeMetadata,
         rpc_transport: AppServerRpcTransport,
     },
     ClientRequest {
@@ -491,13 +491,13 @@ pub(crate) enum AnalyticsFact {
 
 pub(crate) enum CustomAnalyticsFact {
     SubAgentThreadStarted(SubAgentThreadStartedInput),
-    Compaction(Box<CodexCompactionEvent>),
-    Goal(Box<CodexGoalEvent>),
+    Compaction(Box<CrewonCompactionEvent>),
+    Goal(Box<CrewonGoalEvent>),
     GuardianReview(Box<GuardianReviewEventParams>),
     TurnResolvedConfig(Box<TurnResolvedConfigFact>),
     TurnTokenUsage(Box<TurnTokenUsageFact>),
     TurnProfile(Box<TurnProfileFact>),
-    TurnCodexError(Box<TurnCodexErrorFact>),
+    TurnCrewonError(Box<TurnCrewonErrorFact>),
     SkillInvoked(SkillInvokedInput),
     AppMentioned(AppMentionedInput),
     AppUsed(AppUsedInput),

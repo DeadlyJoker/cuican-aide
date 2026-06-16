@@ -29,6 +29,7 @@ runs:
       if: ${{ runner.os != 'Windows' }}
       env:
         BUILDBUDDY_API_KEY: ${{ inputs.buildbuddy-api-key }}
+        CREWON_TRUSTED_UPSTREAM_REPOSITORY: ${{ github.repository }}
       shell: bash
       run: |
         bazel_targets="$(./tools/argument-comment-lint/list-bazel-targets.sh)"
@@ -45,6 +46,7 @@ runs:
       if: ${{ runner.os == 'Windows' }}
       env:
         BUILDBUDDY_API_KEY: ${{ inputs.buildbuddy-api-key }}
+        CREWON_TRUSTED_UPSTREAM_REPOSITORY: ${{ github.repository }}
       shell: bash
       run: |
         ./.github/scripts/run-argument-comment-lint-bazel.sh \

@@ -1,27 +1,27 @@
 use super::*;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use codex_protocol::AgentPath;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
-use codex_protocol::models::FunctionCallOutputBody;
-use codex_protocol::models::FunctionCallOutputContentItem;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ImageDetail;
-use codex_protocol::models::LocalShellAction;
-use codex_protocol::models::LocalShellExecAction;
-use codex_protocol::models::LocalShellStatus;
-use codex_protocol::models::ReasoningItemContent;
-use codex_protocol::models::ReasoningItemReasoningSummary;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::default_input_modalities;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::TurnContextItem;
-use codex_utils_output_truncation::TruncationPolicy;
-use codex_utils_output_truncation::truncate_text;
+use crewon_protocol::AgentPath;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::DEFAULT_IMAGE_DETAIL;
+use crewon_protocol::models::FunctionCallOutputBody;
+use crewon_protocol::models::FunctionCallOutputContentItem;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::ImageDetail;
+use crewon_protocol::models::LocalShellAction;
+use crewon_protocol::models::LocalShellExecAction;
+use crewon_protocol::models::LocalShellStatus;
+use crewon_protocol::models::ReasoningItemContent;
+use crewon_protocol::models::ReasoningItemReasoningSummary;
+use crewon_protocol::openai_models::InputModality;
+use crewon_protocol::openai_models::default_input_modalities;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::InterAgentCommunication;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_utils_output_truncation::TruncationPolicy;
+use crewon_utils_output_truncation::truncate_text;
 use image::ImageBuffer;
 use image::ImageFormat;
 use image::Luma;
@@ -136,7 +136,7 @@ fn reference_context_item() -> TurnContextItem {
         multi_agent_version: None,
         realtime_active: Some(false),
         effort: None,
-        summary: codex_protocol::config_types::ReasoningSummary::Auto,
+        summary: crewon_protocol::config_types::ReasoningSummary::Auto,
     }
 }
 

@@ -1,12 +1,12 @@
 use super::*;
 use async_trait::async_trait;
-use codex_file_system::CopyOptions;
-use codex_file_system::CreateDirectoryOptions;
-use codex_file_system::FileMetadata;
-use codex_file_system::FileSystemResult;
-use codex_file_system::FileSystemSandboxContext;
-use codex_file_system::ReadDirectoryEntry;
-use codex_file_system::RemoveOptions;
+use crewon_file_system::CopyOptions;
+use crewon_file_system::CreateDirectoryOptions;
+use crewon_file_system::FileMetadata;
+use crewon_file_system::FileSystemResult;
+use crewon_file_system::FileSystemSandboxContext;
+use crewon_file_system::ReadDirectoryEntry;
+use crewon_file_system::RemoveOptions;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use tempfile::tempdir;
@@ -152,7 +152,7 @@ model = "gpt-work"
         "unexpected error message: {message}"
     );
     assert!(
-        message.contains("https://developers.openai.com/codex/config-advanced#profiles"),
+        message.contains("move those settings into"),
         "unexpected error message: {message}"
     );
 }

@@ -1,12 +1,12 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-core-api"
+name = "crewon-core-api"
 version.workspace = true
 
 [lib]
 doctest = false
-name = "codex_core_api"
+name = "crewon_core_api"
 path = "src/lib.rs"
 test = false
 
@@ -14,16 +14,16 @@ test = false
 workspace = true
 
 [dependencies]
-codex-app-server-protocol = { workspace = true }
-codex-arg0 = { workspace = true }
-codex-analytics = { workspace = true }
-codex-config = { workspace = true }
-codex-core = { workspace = true }
-codex-extension-api = { workspace = true }
-codex-exec-server = { workspace = true }
-codex-features = { workspace = true }
-codex-login = { workspace = true }
-codex-model-provider-info = { workspace = true }
-codex-models-manager = { workspace = true }
-codex-protocol = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
+crewon-app-server-protocol = { workspace = true }
+crewon-arg0 = { workspace = true }
+crewon-analytics = { workspace = true }
+crewon-config = { workspace = true }
+crewon-core = { workspace = true }
+crewon-extension-api = { workspace = true }
+crewon-exec-server = { workspace = true }
+crewon-features = { workspace = true }
+crewon-login = { workspace = true }
+crewon-model-provider-info = { workspace = true }
+crewon-models-manager = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }

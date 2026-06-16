@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-home-dir"
+name = "crewon-utils-home-dir"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-codex-utils-absolute-path = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
 dirs = { workspace = true }
 
 [dev-dependencies]
@@ -16,4 +16,5 @@ pretty_assertions = { workspace = true }
 tempfile = { workspace = true }
 
 [lib]
+name = "crewon_utils_home_dir"
 doctest = false

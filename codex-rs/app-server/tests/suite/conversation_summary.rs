@@ -3,32 +3,32 @@ use app_test_support::TestAppServer;
 use app_test_support::create_fake_rollout;
 use app_test_support::rollout_path;
 use app_test_support::to_response;
-use codex_app_server::in_process;
-use codex_app_server::in_process::InProcessStartArgs;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::ConversationSummary;
-use codex_app_server_protocol::GetConversationSummaryParams;
-use codex_app_server_protocol::GetConversationSummaryResponse;
-use codex_app_server_protocol::InitializeCapabilities;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_arg0::Arg0DispatchPaths;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::LoaderOverrides;
-use codex_core::config::ConfigBuilder;
-use codex_exec_server::EnvironmentManager;
-use codex_feedback::CodexFeedback;
-use codex_protocol::ThreadId;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::ThreadMemoryMode;
-use codex_thread_store::CreateThreadParams;
-use codex_thread_store::InMemoryThreadStore;
-use codex_thread_store::ThreadPersistenceMetadata;
-use codex_thread_store::ThreadStore;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server::in_process;
+use crewon_app_server::in_process::InProcessStartArgs;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::ConversationSummary;
+use crewon_app_server_protocol::GetConversationSummaryParams;
+use crewon_app_server_protocol::GetConversationSummaryResponse;
+use crewon_app_server_protocol::InitializeCapabilities;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::LoaderOverrides;
+use crewon_core::config::ConfigBuilder;
+use crewon_exec_server::EnvironmentManager;
+use crewon_feedback::CrewonFeedback;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::ThreadMemoryMode;
+use crewon_thread_store::CreateThreadParams;
+use crewon_thread_store::InMemoryThreadStore;
+use crewon_thread_store::ThreadPersistenceMetadata;
+use crewon_thread_store::ThreadStore;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use std::path::PathBuf;
@@ -55,7 +55,7 @@ fn expected_summary(conversation_id: ThreadId, path: PathBuf) -> ConversationSum
         model_provider: MODEL_PROVIDER.to_string(),
         cwd: PathBuf::from("/"),
         cli_version: "0.0.0".to_string(),
-        source: SessionSource::Cli,
+        source: SessionSource::LegacyCli,
         git_info: None,
     }
 }
@@ -125,7 +125,7 @@ async fn get_conversation_summary_by_thread_id_reads_pathless_store_thread() -> 
             extra_config: None,
             forked_from_id: None,
             parent_thread_id: None,
-            source: SessionSource::Cli,
+            source: SessionSource::LegacyCli,
             thread_source: None,
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),
@@ -148,21 +148,21 @@ async fn get_conversation_summary_by_thread_id_reads_pathless_store_thread() -> 
     let client = in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
         config: Arc::new(config),
-        cli_overrides: Vec::new(),
+        config_overrides: Vec::new(),
         loader_overrides,
         strict_config: false,
         cloud_config_bundle: CloudConfigBundleLoader::default(),
-        thread_config_loader: Arc::new(codex_config::NoopThreadConfigLoader),
-        feedback: CodexFeedback::new(),
+        thread_config_loader: Arc::new(crewon_config::NoopThreadConfigLoader),
+        feedback: CrewonFeedback::new(),
         log_db: None,
         state_db: None,
         environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
         config_warnings: Vec::new(),
-        session_source: SessionSource::Cli,
+        session_source: SessionSource::LegacyCli,
         enable_codex_api_key_env: false,
         initialize: InitializeParams {
             client_info: ClientInfo {
-                name: "codex-app-server-tests".to_string(),
+                name: "crewon-app-server-tests".to_string(),
                 title: None,
                 version: "0.1.0".to_string(),
             },

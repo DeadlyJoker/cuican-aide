@@ -1,11 +1,11 @@
 use crate::model::ThreadMetadata;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::TurnContextItem;
-use codex_protocol::protocol::USER_MESSAGE_BEGIN;
-use codex_protocol::protocol::UserMessageEvent;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_protocol::protocol::USER_MESSAGE_BEGIN;
+use crewon_protocol::protocol::UserMessageEvent;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -57,8 +57,8 @@ fn apply_session_meta_from_item(metadata: &mut ThreadMetadata, meta_line: &Sessi
     if let Some(provider) = meta_line.meta.model_provider.as_deref() {
         metadata.model_provider = provider.to_string();
     }
-    if !meta_line.meta.cli_version.is_empty() {
-        metadata.cli_version = meta_line.meta.cli_version.clone();
+    if !meta_line.meta.client_version.is_empty() {
+        metadata.cli_version = meta_line.meta.client_version.clone();
     }
     if !meta_line.meta.cwd.as_os_str().is_empty() {
         metadata.cwd = meta_line.meta.cwd.clone();
@@ -156,24 +156,24 @@ mod tests {
     use crate::model::ThreadMetadata;
     use chrono::DateTime;
     use chrono::Utc;
-    use codex_protocol::ThreadId;
-    use codex_protocol::models::ContentItem;
-    use codex_protocol::models::PermissionProfile;
-    use codex_protocol::models::ResponseItem;
-    use codex_protocol::openai_models::ReasoningEffort;
-    use codex_protocol::protocol::AskForApproval;
-    use codex_protocol::protocol::EventMsg;
-    use codex_protocol::protocol::RolloutItem;
-    use codex_protocol::protocol::SandboxPolicy;
-    use codex_protocol::protocol::SessionMeta;
-    use codex_protocol::protocol::SessionMetaLine;
-    use codex_protocol::protocol::SessionSource;
-    use codex_protocol::protocol::ThreadGoal;
-    use codex_protocol::protocol::ThreadGoalStatus;
-    use codex_protocol::protocol::ThreadGoalUpdatedEvent;
-    use codex_protocol::protocol::TurnContextItem;
-    use codex_protocol::protocol::USER_MESSAGE_BEGIN;
-    use codex_protocol::protocol::UserMessageEvent;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::models::ContentItem;
+    use crewon_protocol::models::PermissionProfile;
+    use crewon_protocol::models::ResponseItem;
+    use crewon_protocol::openai_models::ReasoningEffort;
+    use crewon_protocol::protocol::AskForApproval;
+    use crewon_protocol::protocol::EventMsg;
+    use crewon_protocol::protocol::RolloutItem;
+    use crewon_protocol::protocol::SandboxPolicy;
+    use crewon_protocol::protocol::SessionMeta;
+    use crewon_protocol::protocol::SessionMetaLine;
+    use crewon_protocol::protocol::SessionSource;
+    use crewon_protocol::protocol::ThreadGoal;
+    use crewon_protocol::protocol::ThreadGoalStatus;
+    use crewon_protocol::protocol::ThreadGoalUpdatedEvent;
+    use crewon_protocol::protocol::TurnContextItem;
+    use crewon_protocol::protocol::USER_MESSAGE_BEGIN;
+    use crewon_protocol::protocol::UserMessageEvent;
 
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
@@ -325,9 +325,9 @@ mod tests {
                     parent_thread_id: None,
                     timestamp: "2026-02-26T00:00:00.000Z".to_string(),
                     cwd: PathBuf::from("/child/worktree"),
-                    originator: "codex_cli_rs".to_string(),
-                    cli_version: "0.0.0".to_string(),
-                    source: SessionSource::Cli,
+                    originator: "legacy_cli".to_string(),
+                    client_version: "0.0.0".to_string(),
+                    source: SessionSource::LegacyCli,
                     thread_source: None,
                     agent_path: None,
                     agent_nickname: None,
@@ -362,7 +362,7 @@ mod tests {
                 multi_agent_version: None,
                 realtime_active: None,
                 effort: None,
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
+                summary: crewon_protocol::config_types::ReasoningSummary::Auto,
             }),
             "test-provider",
         );
@@ -401,7 +401,7 @@ mod tests {
                 multi_agent_version: None,
                 realtime_active: None,
                 effort: None,
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
+                summary: crewon_protocol::config_types::ReasoningSummary::Auto,
             }),
             "test-provider",
         );
@@ -437,7 +437,7 @@ mod tests {
                 multi_agent_version: None,
                 realtime_active: None,
                 effort: Some(ReasoningEffort::High),
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
+                summary: crewon_protocol::config_types::ReasoningSummary::Auto,
             }),
             "test-provider",
         );
@@ -469,7 +469,7 @@ mod tests {
                 multi_agent_version: None,
                 realtime_active: None,
                 effort: Some(ReasoningEffort::High),
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
+                summary: crewon_protocol::config_types::ReasoningSummary::Auto,
             }),
             "test-provider",
         );
@@ -492,9 +492,9 @@ mod tests {
                     parent_thread_id: None,
                     timestamp: "2026-02-26T00:00:00.000Z".to_string(),
                     cwd: PathBuf::from("/workspace"),
-                    originator: "codex_cli_rs".to_string(),
-                    cli_version: "0.0.0".to_string(),
-                    source: SessionSource::Cli,
+                    originator: "legacy_cli".to_string(),
+                    client_version: "0.0.0".to_string(),
+                    source: SessionSource::LegacyCli,
                     thread_source: None,
                     agent_path: None,
                     agent_nickname: None,
@@ -522,7 +522,7 @@ mod tests {
             rollout_path: PathBuf::from("/tmp/a.jsonl"),
             created_at,
             updated_at: created_at,
-            source: "cli".to_string(),
+            source: "app-server".to_string(),
             thread_source: None,
             agent_path: None,
             agent_nickname: None,

@@ -1,27 +1,27 @@
 use super::*;
 use crate::config::CONFIG_TOML_FILE;
 use crate::config::ConfigBuilder;
-use codex_config::AppRequirementToml;
-use codex_config::AppToolRequirementToml;
-use codex_config::AppToolsRequirementsToml;
-use codex_config::AppsRequirementsToml;
-use codex_config::ConfigLayerStack;
-use codex_config::ConfigRequirements;
-use codex_config::ConfigRequirementsToml;
-use codex_config::test_support::CloudConfigBundleFixture;
-use codex_config::types::AppConfig;
-use codex_config::types::AppToolConfig;
-use codex_config::types::AppToolsConfig;
-use codex_config::types::ApprovalsReviewer;
-use codex_config::types::AppsDefaultConfig;
-use codex_connectors::merge::plugin_connector_to_app_info;
-use codex_connectors::metadata::connector_install_url;
-use codex_connectors::metadata::sanitize_name;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
-use codex_mcp::ToolInfo;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_config::AppRequirementToml;
+use crewon_config::AppToolRequirementToml;
+use crewon_config::AppToolsRequirementsToml;
+use crewon_config::AppsRequirementsToml;
+use crewon_config::ConfigLayerStack;
+use crewon_config::ConfigRequirements;
+use crewon_config::ConfigRequirementsToml;
+use crewon_config::test_support::CloudConfigBundleFixture;
+use crewon_config::types::AppConfig;
+use crewon_config::types::AppToolConfig;
+use crewon_config::types::AppToolsConfig;
+use crewon_config::types::ApprovalsReviewer;
+use crewon_config::types::AppsDefaultConfig;
+use crewon_connectors::merge::plugin_connector_to_app_info;
+use crewon_connectors::metadata::connector_install_url;
+use crewon_connectors::metadata::sanitize_name;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_mcp::CREWON_APPS_MCP_SERVER_NAME;
+use crewon_mcp::ToolInfo;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use rmcp::model::JsonObject;
 use rmcp::model::Tool;
@@ -67,7 +67,7 @@ fn test_tool_definition(tool_name: &str) -> Tool {
     Tool::new_with_raw(tool_name.to_string(), None, Arc::new(JsonObject::default()))
 }
 
-fn codex_app_tool(
+fn crewon_app_tool(
     tool_name: &str,
     connector_id: &str,
     connector_name: Option<&str>,
@@ -75,11 +75,11 @@ fn codex_app_tool(
 ) -> ToolInfo {
     let tool_namespace = connector_name
         .map(sanitize_name)
-        .map(|connector_name| format!("mcp__{CODEX_APPS_MCP_SERVER_NAME}__{connector_name}"))
-        .unwrap_or_else(|| CODEX_APPS_MCP_SERVER_NAME.to_string());
+        .map(|connector_name| format!("mcp__{CREWON_APPS_MCP_SERVER_NAME}__{connector_name}"))
+        .unwrap_or_else(|| CREWON_APPS_MCP_SERVER_NAME.to_string());
 
     ToolInfo {
-        server_name: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+        server_name: CREWON_APPS_MCP_SERVER_NAME.to_string(),
         supports_parallel_tool_calls: false,
         server_origin: None,
         callable_name: tool_name.to_string(),
@@ -110,13 +110,13 @@ fn with_accessible_connectors_cache_cleared<R>(f: impl FnOnce() -> R) -> R {
 #[test]
 fn accessible_connectors_from_mcp_tools_carries_plugin_display_names() {
     let tools = vec![
-        codex_app_tool(
+        crewon_app_tool(
             "calendar_list_events",
             "calendar",
             /*connector_name*/ None,
             &["sample", "sample"],
         ),
-        codex_app_tool(
+        crewon_app_tool(
             "calendar_create_event",
             "calendar",
             Some("Google Calendar"),
@@ -169,13 +169,13 @@ async fn refresh_accessible_connectors_cache_from_mcp_tools_writes_latest_instal
     let _ = config.features.set_enabled(Feature::Apps, /*enabled*/ true);
     let cache_key = accessible_connectors_cache_key(&config, /*auth*/ None);
     let tools = vec![
-        codex_app_tool(
+        crewon_app_tool(
             "calendar_list_events",
             "calendar",
             Some("Google Calendar"),
             &["calendar-plugin"],
         ),
-        codex_app_tool(
+        crewon_app_tool(
             "openai_hidden",
             "connector_openai_hidden",
             Some("Hidden"),
@@ -228,11 +228,11 @@ async fn refresh_accessible_connectors_cache_from_mcp_tools_writes_latest_instal
 #[test]
 fn accessible_connectors_from_mcp_tools_preserves_description() {
     let mcp_tools = vec![ToolInfo {
-        server_name: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+        server_name: CREWON_APPS_MCP_SERVER_NAME.to_string(),
         supports_parallel_tool_calls: false,
         server_origin: None,
         callable_name: "calendar_create_event".to_string(),
-        callable_namespace: "mcp__codex_apps__calendar".to_string(),
+        callable_namespace: "mcp__crewon_apps__calendar".to_string(),
         namespace_description: Some("Plan events".to_string()),
         tool: Tool::new(
             "calendar_create_event",
@@ -428,11 +428,11 @@ approvals_reviewer = "{app}"
             .expect("config should build");
 
         assert_eq!(
-            mcp_approvals_reviewer(&config, CODEX_APPS_MCP_SERVER_NAME, Some("calendar")),
+            mcp_approvals_reviewer(&config, CREWON_APPS_MCP_SERVER_NAME, Some("calendar")),
             expected_app
         );
         assert_eq!(
-            mcp_approvals_reviewer(&config, CODEX_APPS_MCP_SERVER_NAME, Some("drive")),
+            mcp_approvals_reviewer(&config, CREWON_APPS_MCP_SERVER_NAME, Some("drive")),
             expected_global
         );
         assert_eq!(
@@ -467,7 +467,7 @@ approvals_reviewer = "user"
         .expect("config should build");
 
     assert_eq!(
-        mcp_approvals_reviewer(&config, CODEX_APPS_MCP_SERVER_NAME, Some("calendar")),
+        mcp_approvals_reviewer(&config, CREWON_APPS_MCP_SERVER_NAME, Some("calendar")),
         ApprovalsReviewer::AutoReview
     );
 }
@@ -1303,7 +1303,7 @@ discoverables = [
         .build()
         .await
         .expect("config should load");
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let plugins_manager = PluginsManager::new(config.codex_home.to_path_buf());
 
     let discoverable_tools = list_tool_suggest_discoverable_tools_with_auth(
@@ -1340,7 +1340,7 @@ apps = true
         .build()
         .await
         .expect("config should load");
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let loaded_plugin_app_connector_ids = vec!["asdk_app_databricks_workspace".to_string()];
     let plugins_manager = PluginsManager::new(config.codex_home.to_path_buf());
 

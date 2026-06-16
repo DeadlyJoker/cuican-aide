@@ -5,38 +5,38 @@ use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 
-use codex_config::permissions_toml::FilesystemPermissionToml;
-use codex_config::permissions_toml::FilesystemPermissionsToml;
-use codex_config::permissions_toml::NetworkDomainPermissionToml;
-use codex_config::permissions_toml::NetworkDomainPermissionsToml;
-use codex_config::permissions_toml::NetworkToml;
-use codex_config::permissions_toml::NetworkUnixSocketPermissionToml;
-use codex_config::permissions_toml::NetworkUnixSocketPermissionsToml;
-use codex_config::permissions_toml::PermissionProfileToml;
-use codex_config::permissions_toml::PermissionsToml;
-use codex_config::permissions_toml::WorkspaceRootsToml;
-use codex_config::types::SandboxWorkspaceWrite;
-use codex_features::NetworkProxyConfigToml;
-use codex_features::NetworkProxyDomainPermissionToml;
-use codex_features::NetworkProxyModeToml;
-use codex_features::NetworkProxyUnixSocketPermissionToml;
-use codex_network_proxy::NetworkMode;
-use codex_network_proxy::NetworkProxyConfig;
+use crewon_config::permissions_toml::FilesystemPermissionToml;
+use crewon_config::permissions_toml::FilesystemPermissionsToml;
+use crewon_config::permissions_toml::NetworkDomainPermissionToml;
+use crewon_config::permissions_toml::NetworkDomainPermissionsToml;
+use crewon_config::permissions_toml::NetworkToml;
+use crewon_config::permissions_toml::NetworkUnixSocketPermissionToml;
+use crewon_config::permissions_toml::NetworkUnixSocketPermissionsToml;
+use crewon_config::permissions_toml::PermissionProfileToml;
+use crewon_config::permissions_toml::PermissionsToml;
+use crewon_config::permissions_toml::WorkspaceRootsToml;
+use crewon_config::types::SandboxWorkspaceWrite;
+use crewon_features::NetworkProxyConfigToml;
+use crewon_features::NetworkProxyDomainPermissionToml;
+use crewon_features::NetworkProxyModeToml;
+use crewon_features::NetworkProxyUnixSocketPermissionToml;
+use crewon_network_proxy::NetworkMode;
+use crewon_network_proxy::NetworkProxyConfig;
 #[cfg(test)]
-use codex_network_proxy::NetworkUnixSocketPermission as ProxyNetworkUnixSocketPermission;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::permissions::project_roots_glob_pattern;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_network_proxy::NetworkUnixSocketPermission as ProxyNetworkUnixSocketPermission;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::permissions::project_roots_glob_pattern;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 use super::ProjectConfig;
 
@@ -476,7 +476,7 @@ pub(crate) fn reject_unknown_builtin_permission_profile(profile_name: &str) -> i
 }
 
 /// Returns a list of paths that must be readable by shell tools in order
-/// for Codex to function. These should always be added to the
+/// for Crewon to function. These should always be added to the
 /// `FileSystemSandboxPolicy` for a thread.
 pub(crate) fn get_readable_roots_required_for_codex_runtime(
     codex_home: &Path,
@@ -772,7 +772,7 @@ fn remove_trailing_glob_suffix(path: &str) -> &str {
 }
 
 // WARNING: keep this parser forward-compatible.
-// Adding a new `:special_path` must not make older Codex versions reject the
+// Adding a new `:special_path` must not make older Crewon versions reject the
 // config. Unknown values intentionally round-trip through
 // `FileSystemSpecialPath::Unknown` so they can be surfaced as warnings and
 // ignored, rather than aborting config load.
@@ -886,7 +886,7 @@ fn push_warning(startup_warnings: &mut Vec<String>, message: String) {
 
 fn missing_filesystem_entries_warning(profile_name: &str) -> String {
     format!(
-        "Permissions profile `{profile_name}` does not define any recognized filesystem entries for this version of Codex. Filesystem access will remain restricted. Upgrade Codex if this profile expects filesystem permissions."
+        "Permissions profile `{profile_name}` does not define any recognized filesystem entries for this version of Crewon. Filesystem access will remain restricted. Upgrade Crewon if this profile expects filesystem permissions."
     )
 }
 
@@ -901,11 +901,11 @@ fn maybe_push_unknown_special_path_warning(
         startup_warnings,
         match subpath.as_deref() {
             Some(subpath) => format!(
-                "Configured filesystem path `{path}` with nested entry `{}` is not recognized by this version of Codex and will be ignored. Upgrade Codex if this path is required.",
+                "Configured filesystem path `{path}` with nested entry `{}` is not recognized by this version of Crewon and will be ignored. Upgrade Crewon if this path is required.",
                 subpath.display()
             ),
             None => format!(
-                "Configured filesystem path `{path}` is not recognized by this version of Codex and will be ignored. Upgrade Codex if this path is required."
+                "Configured filesystem path `{path}` is not recognized by this version of Crewon and will be ignored. Upgrade Crewon if this path is required."
             ),
         },
     );

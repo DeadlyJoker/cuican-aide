@@ -1,3 +1,3 @@
 # Sample configuration
 
-For a sample configuration file, see [this documentation](https://developers.openai.com/codex/config-sample).
+Sample configuration should be derived from the active Crewon backend schema.

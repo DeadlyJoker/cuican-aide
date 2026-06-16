@@ -1,23 +1,3 @@
-use codex_config::types::Personality;
-use codex_features::Feature;
-use codex_models_manager::manager::RefreshStrategy;
-use codex_models_manager::manager::SharedModelsManager;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelInstructionsVariables;
-use codex_protocol::openai_models::ModelMessages;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::openai_models::ReasoningEffortPreset;
-use codex_protocol::openai_models::TruncationPolicyConfig;
-use codex_protocol::openai_models::default_input_modalities;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::load_default_config_for_test;
 use core_test_support::responses::mount_models_once;
 use core_test_support::responses::mount_sse_once;
@@ -25,11 +5,31 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse_completed;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
+use crewon_config::types::Personality;
+use crewon_features::Feature;
+use crewon_models_manager::manager::RefreshStrategy;
+use crewon_models_manager::manager::SharedModelsManager;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelInstructionsVariables;
+use crewon_protocol::openai_models::ModelMessages;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::openai_models::ReasoningEffortPreset;
+use crewon_protocol::openai_models::TruncationPolicyConfig;
+use crewon_protocol::openai_models::default_input_modalities;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::time::Duration;
@@ -43,7 +43,7 @@ const LOCAL_FRIENDLY_TEMPLATE: &str =
 const LOCAL_PRAGMATIC_TEMPLATE: &str = "You are a deeply pragmatic, effective software engineer.";
 
 fn read_only_text_turn(
-    test: &TestCodex,
+    test: &TestCrewon,
     text: &str,
     model: String,
     approval_policy: AskForApproval,
@@ -53,7 +53,7 @@ fn read_only_text_turn(
 }
 
 fn read_only_text_turn_with_personality(
-    test: &TestCodex,
+    test: &TestCrewon,
     text: &str,
     model: String,
     approval_policy: AskForApproval,
@@ -69,15 +69,15 @@ fn read_only_text_turn_with_personality(
         final_output_json_schema: None,
         responsesapi_client_metadata: None,
         additional_context: Default::default(),
-        thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+        thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(test.config.cwd.clone())),
             approval_policy: Some(approval_policy),
             sandbox_policy: Some(sandbox_policy),
             permission_profile,
             personality,
-            collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                mode: codex_protocol::config_types::ModeKind::Default,
-                settings: codex_protocol::config_types::Settings {
+            collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                mode: crewon_protocol::config_types::ModeKind::Default,
+                settings: crewon_protocol::config_types::Settings {
                     model,
                     reasoning_effort: test.config.model_reasoning_effort.clone(),
                     developer_instructions: None,
@@ -98,7 +98,7 @@ async fn personality_does_not_mutate_base_instructions_without_template() {
         .expect("test config should allow feature update");
     config.personality = Some(Personality::Friendly);
 
-    let model_info = codex_core::test_support::construct_model_info_offline("gpt-5.4", &config);
+    let model_info = crewon_core::test_support::construct_model_info_offline("gpt-5.4", &config);
     assert_eq!(
         model_info.get_model_instructions(config.personality),
         model_info.base_instructions
@@ -117,7 +117,7 @@ async fn base_instructions_override_disables_personality_template() {
     config.base_instructions = Some("override instructions".to_string());
 
     let model_info =
-        codex_core::test_support::construct_model_info_offline("gpt-5.3-codex", &config);
+        crewon_core::test_support::construct_model_info_offline("gpt-5.3-codex", &config);
 
     assert_eq!(model_info.base_instructions, "override instructions");
     assert_eq!(
@@ -132,7 +132,7 @@ async fn user_turn_personality_none_does_not_add_update_message() -> anyhow::Res
 
     let server = start_mock_server().await;
     let resp_mock = mount_sse_once(&server, sse_completed("resp-1")).await;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("gpt-5.3-codex")
         .with_config(|config| {
             config
@@ -142,7 +142,7 @@ async fn user_turn_personality_none_does_not_add_update_message() -> anyhow::Res
         });
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -151,7 +151,7 @@ async fn user_turn_personality_none_does_not_add_update_message() -> anyhow::Res
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let request = resp_mock.single_request();
     let developer_texts = request.message_input_texts("developer");
@@ -171,7 +171,7 @@ async fn config_personality_some_sets_instructions_template() -> anyhow::Result<
 
     let server = start_mock_server().await;
     let resp_mock = mount_sse_once(&server, sse_completed("resp-1")).await;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("gpt-5.3-codex")
         .with_config(|config| {
             config
@@ -182,7 +182,7 @@ async fn config_personality_some_sets_instructions_template() -> anyhow::Result<
         });
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -191,7 +191,7 @@ async fn config_personality_some_sets_instructions_template() -> anyhow::Result<
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let request = resp_mock.single_request();
     let instructions_text = request.instructions_text();
@@ -218,7 +218,7 @@ async fn config_personality_none_sends_no_personality() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
     let resp_mock = mount_sse_once(&server, sse_completed("resp-1")).await;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("gpt-5.3-codex")
         .with_config(|config| {
             config
@@ -229,7 +229,7 @@ async fn config_personality_none_sends_no_personality() -> anyhow::Result<()> {
         });
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -238,7 +238,7 @@ async fn config_personality_none_sends_no_personality() -> anyhow::Result<()> {
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let request = resp_mock.single_request();
     let instructions_text = request.instructions_text();
@@ -272,7 +272,7 @@ async fn default_personality_is_pragmatic_without_config_toml() -> anyhow::Resul
 
     let server = start_mock_server().await;
     let resp_mock = mount_sse_once(&server, sse_completed("resp-1")).await;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("gpt-5.3-codex")
         .with_config(|config| {
             config
@@ -282,7 +282,7 @@ async fn default_personality_is_pragmatic_without_config_toml() -> anyhow::Resul
         });
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -291,7 +291,7 @@ async fn default_personality_is_pragmatic_without_config_toml() -> anyhow::Resul
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let request = resp_mock.single_request();
     let instructions_text = request.instructions_text();
@@ -313,7 +313,7 @@ async fn user_turn_personality_some_adds_update_message() -> anyhow::Result<()> 
         vec![sse_completed("resp-1"), sse_completed("resp-2")],
     )
     .await;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("exp-codex-personality")
         .with_config(|config| {
             config
@@ -323,7 +323,7 @@ async fn user_turn_personality_some_adds_update_message() -> anyhow::Result<()> 
         });
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -332,18 +332,18 @@ async fn user_turn_personality_some_adds_update_message() -> anyhow::Result<()> 
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     core_test_support::submit_thread_settings(
-        &test.codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        &test.crewon,
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             personality: Some(Personality::Friendly),
             ..Default::default()
         },
     )
     .await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -352,7 +352,7 @@ async fn user_turn_personality_some_adds_update_message() -> anyhow::Result<()> 
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = resp_mock.requests();
     assert_eq!(requests.len(), 2, "expected two requests");
@@ -388,7 +388,7 @@ async fn user_turn_personality_same_value_does_not_add_update_message() -> anyho
         vec![sse_completed("resp-1"), sse_completed("resp-2")],
     )
     .await;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("exp-codex-personality")
         .with_config(|config| {
             config
@@ -399,7 +399,7 @@ async fn user_turn_personality_same_value_does_not_add_update_message() -> anyho
         });
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -408,18 +408,18 @@ async fn user_turn_personality_same_value_does_not_add_update_message() -> anyho
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     core_test_support::submit_thread_settings(
-        &test.codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        &test.crewon,
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             personality: Some(Personality::Pragmatic),
             ..Default::default()
         },
     )
     .await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -428,7 +428,7 @@ async fn user_turn_personality_same_value_does_not_add_update_message() -> anyho
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = resp_mock.requests();
     assert_eq!(requests.len(), 2, "expected two requests");
@@ -459,7 +459,7 @@ async fn instructions_uses_base_if_feature_disabled() -> anyhow::Result<()> {
     config.personality = Some(Personality::Friendly);
 
     let model_info =
-        codex_core::test_support::construct_model_info_offline("gpt-5.3-codex", &config);
+        crewon_core::test_support::construct_model_info_offline("gpt-5.3-codex", &config);
     assert_eq!(
         model_info.get_model_instructions(config.personality),
         model_info.base_instructions
@@ -478,7 +478,7 @@ async fn user_turn_personality_skips_if_feature_disabled() -> anyhow::Result<()>
         vec![sse_completed("resp-1"), sse_completed("resp-2")],
     )
     .await;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("exp-codex-personality")
         .with_config(|config| {
             config
@@ -488,7 +488,7 @@ async fn user_turn_personality_skips_if_feature_disabled() -> anyhow::Result<()>
         });
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -497,18 +497,18 @@ async fn user_turn_personality_skips_if_feature_disabled() -> anyhow::Result<()>
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     core_test_support::submit_thread_settings(
-        &test.codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        &test.crewon,
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             personality: Some(Personality::Pragmatic),
             ..Default::default()
         },
     )
     .await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -517,7 +517,7 @@ async fn user_turn_personality_skips_if_feature_disabled() -> anyhow::Result<()>
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = resp_mock.requests();
     assert_eq!(requests.len(), 2, "expected two requests");
@@ -609,8 +609,8 @@ async fn remote_model_friendly_personality_instructions_with_feature() -> anyhow
 
     let resp_mock = mount_sse_once(&server, sse_completed("resp-1")).await;
 
-    let mut builder = test_codex()
-        .with_auth(codex_login::CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(crewon_login::CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config
                 .features
@@ -623,7 +623,7 @@ async fn remote_model_friendly_personality_instructions_with_feature() -> anyhow
 
     wait_for_model_available(&test.thread_manager.get_models_manager(), remote_slug).await;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn_with_personality(
             &test,
             "hello",
@@ -633,7 +633,7 @@ async fn remote_model_friendly_personality_instructions_with_feature() -> anyhow
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let request = resp_mock.single_request();
     let instructions_text = request.instructions_text();
@@ -728,8 +728,8 @@ async fn user_turn_personality_remote_model_template_includes_update_message() -
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(codex_login::CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(crewon_login::CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config
                 .features
@@ -741,7 +741,7 @@ async fn user_turn_personality_remote_model_template_includes_update_message() -
 
     wait_for_model_available(&test.thread_manager.get_models_manager(), remote_slug).await;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -750,18 +750,18 @@ async fn user_turn_personality_remote_model_template_includes_update_message() -
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     core_test_support::submit_thread_settings(
-        &test.codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        &test.crewon,
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             personality: Some(Personality::Friendly),
             ..Default::default()
         },
     )
     .await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_text_turn(
             &test,
             "hello",
@@ -770,7 +770,7 @@ async fn user_turn_personality_remote_model_template_includes_update_message() -
         ))
         .await?;
 
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = resp_mock.requests();
     assert_eq!(requests.len(), 2, "expected two requests");

@@ -1,9 +1,9 @@
 use super::*;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::PermissionProfile;
-use codex_sandboxing::SandboxType;
 use core_test_support::PathBufExt;
 use core_test_support::PathExt;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::PermissionProfile;
+use crewon_sandboxing::SandboxType;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -62,7 +62,7 @@ fn sandbox_detection_ignores_network_policy_text_in_non_sandbox_mode() {
         /*exit_code*/ 0,
         "",
         "",
-        r#"CODEX_NETWORK_POLICY_DECISION {"decision":"ask","reason":"not_allowed","source":"decider","protocol":"http","host":"google.com","port":80}"#,
+        r#"CREWON_NETWORK_POLICY_DECISION {"decision":"ask","reason":"not_allowed","source":"decider","protocol":"http","host":"google.com","port":80}"#,
     );
     assert!(!is_likely_sandbox_denied(SandboxType::None, &output));
 }
@@ -87,7 +87,7 @@ fn sandbox_detection_ignores_network_policy_text_with_zero_exit_code() {
         /*exit_code*/ 0,
         "",
         "",
-        r#"CODEX_NETWORK_POLICY_DECISION {"decision":"ask","source":"decider","protocol":"http","host":"google.com","port":80}"#,
+        r#"CREWON_NETWORK_POLICY_DECISION {"decision":"ask","source":"decider","protocol":"http","host":"google.com","port":80}"#,
     );
 
     assert!(!is_likely_sandbox_denied(
@@ -268,7 +268,7 @@ async fn exec_full_buffer_capture_ignores_expiration() -> Result<()> {
     let output = exec(
         ExecParams {
             command,
-            cwd: codex_utils_absolute_path::AbsolutePathBuf::current_dir()?,
+            cwd: crewon_utils_absolute_path::AbsolutePathBuf::current_dir()?,
             expiration: 1.into(),
             capture_policy: ExecCapturePolicy::FullBuffer,
             env,
@@ -304,7 +304,7 @@ async fn exec_full_buffer_capture_keeps_io_drain_timeout_when_descendant_holds_p
                     "-c".to_string(),
                     "printf hello; sleep 30 &".to_string(),
                 ],
-                cwd: codex_utils_absolute_path::AbsolutePathBuf::current_dir()?,
+                cwd: crewon_utils_absolute_path::AbsolutePathBuf::current_dir()?,
                 expiration: 1.into(),
                 capture_policy: ExecCapturePolicy::FullBuffer,
                 env: std::env::vars().collect(),
@@ -346,7 +346,7 @@ async fn process_exec_tool_call_preserves_full_buffer_capture_policy() -> Result
         format!("sleep 0.05; head -c {byte_count} /dev/zero | tr '\\0' 'a'"),
     ];
 
-    let cwd = codex_utils_absolute_path::AbsolutePathBuf::current_dir()?;
+    let cwd = crewon_utils_absolute_path::AbsolutePathBuf::current_dir()?;
     let permission_profile = PermissionProfile::Disabled;
     let output = process_exec_tool_call(
         ExecParams {
@@ -433,11 +433,11 @@ fn windows_restricted_token_rejects_network_only_restrictions() {
 #[test]
 fn windows_restricted_token_rejects_managed_root_write_profiles() {
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::Root,
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -500,15 +500,15 @@ fn windows_restricted_token_allows_workspace_write_profiles() {
 #[test]
 fn windows_elevated_allows_split_restricted_read_policies() {
     let temp_dir = tempfile::TempDir::new().expect("tempdir");
-    let docs = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
+    let docs = crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
         temp_dir.path().join("docs"),
     )
     .expect("absolute docs");
     std::fs::create_dir_all(docs.as_path()).expect("create docs");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path { path: docs },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path { path: docs },
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -533,20 +533,20 @@ fn windows_restricted_token_rejects_split_only_filesystem_policies() {
     let docs = temp_dir.path().join("docs");
     std::fs::create_dir_all(&docs).expect("create docs");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::project_roots(
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::project_roots(
                     /*subpath*/ None,
                 ),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path {
-                path: codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path {
+                path: crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
                     .expect("absolute docs"),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -574,18 +574,18 @@ fn windows_restricted_token_rejects_root_write_read_only_carveouts() {
     let docs = temp_dir.path().join("docs");
     std::fs::create_dir_all(&docs).expect("create docs");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::Root,
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path {
-                path: codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path {
+                path: crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
                     .expect("absolute docs"),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -616,23 +616,23 @@ fn windows_restricted_token_supports_full_read_split_write_read_carveouts() {
     let docs = cwd.join("docs");
     std::fs::create_dir_all(docs.as_path()).expect("create docs");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::Root,
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::project_roots(
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::project_roots(
                     /*subpath*/ None,
                 ),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path { path: docs.clone() },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path { path: docs.clone() },
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -671,23 +671,23 @@ fn windows_restricted_token_rejects_unreadable_split_carveouts() {
     let blocked = cwd.join("blocked");
     std::fs::create_dir_all(blocked.as_path()).expect("create blocked");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::Root,
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::project_roots(
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::project_roots(
                     /*subpath*/ None,
                 ),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path { path: blocked },
-            access: codex_protocol::permissions::FileSystemAccessMode::Deny,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path { path: blocked },
+            access: crewon_protocol::permissions::FileSystemAccessMode::Deny,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -716,12 +716,12 @@ fn windows_elevated_supports_split_restricted_read_roots() {
     std::fs::create_dir_all(&docs).expect("create docs");
     let expected_docs = dunce::canonicalize(&docs).expect("canonical docs");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path {
-                path: codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path {
+                path: crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
                     .expect("absolute docs"),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -753,26 +753,26 @@ fn windows_elevated_supports_split_write_read_carveouts() {
     std::fs::create_dir_all(&docs).expect("create docs");
     let expected_docs = dunce::canonicalize(&docs).expect("canonical docs");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::Root,
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::project_roots(
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::project_roots(
                     /*subpath*/ None,
                 ),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path {
-                path: codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path {
+                path: crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
                     .expect("absolute docs"),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -793,7 +793,7 @@ fn windows_elevated_supports_split_write_read_carveouts() {
             write_roots_override: None,
             additional_deny_read_paths: vec![],
             additional_deny_write_paths: vec![
-                codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(expected_docs)
+                crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(expected_docs)
                     .expect("absolute docs"),
             ],
         }))
@@ -807,26 +807,26 @@ fn windows_elevated_supports_unreadable_split_carveouts() {
     std::fs::create_dir_all(&blocked).expect("create blocked");
     let expected_blocked = dunce::canonicalize(&blocked).expect("canonical blocked");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::Root,
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::project_roots(
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::project_roots(
                     /*subpath*/ None,
                 ),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path {
-                path: codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&blocked)
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path {
+                path: crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&blocked)
                     .expect("absolute blocked"),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Deny,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Deny,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -846,13 +846,13 @@ fn windows_elevated_supports_unreadable_split_carveouts() {
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
             additional_deny_read_paths: vec![
-                codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
+                crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
                     expected_blocked.clone(),
                 )
                 .expect("absolute blocked"),
             ],
             additional_deny_write_paths: vec![
-                codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(expected_blocked)
+                crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(expected_blocked)
                     .expect("absolute blocked"),
             ],
         }))
@@ -866,25 +866,25 @@ fn windows_elevated_supports_unreadable_globs() {
     std::fs::create_dir_all(secret.parent().expect("parent")).expect("create parent");
     std::fs::write(&secret, "secret").expect("write secret");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::Root,
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::project_roots(
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::project_roots(
                     /*subpath*/ None,
                 ),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::GlobPattern {
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::GlobPattern {
                 pattern: "**/*.env".to_string(),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Deny,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Deny,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -904,7 +904,7 @@ fn windows_elevated_supports_unreadable_globs() {
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
             additional_deny_read_paths: vec![
-                codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(secret)
+                crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(secret)
                     .expect("absolute secret"),
             ],
             additional_deny_write_paths: vec![],
@@ -919,33 +919,33 @@ fn windows_elevated_rejects_reopened_writable_descendants() {
     let nested = docs.join("nested");
     std::fs::create_dir_all(&nested).expect("create nested");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::Root,
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Special {
-                value: codex_protocol::permissions::FileSystemSpecialPath::project_roots(
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Special {
+                value: crewon_protocol::permissions::FileSystemSpecialPath::project_roots(
                     /*subpath*/ None,
                 ),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path {
-                path: codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path {
+                path: crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&docs)
                     .expect("absolute docs"),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Read,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Read,
         },
-        codex_protocol::permissions::FileSystemSandboxEntry {
-            path: codex_protocol::permissions::FileSystemPath::Path {
-                path: codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&nested)
+        crewon_protocol::permissions::FileSystemSandboxEntry {
+            path: crewon_protocol::permissions::FileSystemPath::Path {
+                path: crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&nested)
                     .expect("absolute nested"),
             },
-            access: codex_protocol::permissions::FileSystemAccessMode::Write,
+            access: crewon_protocol::permissions::FileSystemAccessMode::Write,
         },
     ]);
     let permission_profile = PermissionProfile::from_runtime_permissions(
@@ -969,14 +969,14 @@ fn windows_elevated_rejects_reopened_writable_descendants() {
 
 #[test]
 fn process_exec_tool_call_uses_platform_sandbox_for_network_only_restrictions() {
-    let expected = codex_sandboxing::get_platform_sandbox(/*windows_sandbox_enabled*/ false)
+    let expected = crewon_sandboxing::get_platform_sandbox(/*windows_sandbox_enabled*/ false)
         .unwrap_or(SandboxType::None);
 
     assert_eq!(
         select_process_exec_tool_sandbox_type(
             &FileSystemSandboxPolicy::unrestricted(),
             NetworkSandboxPolicy::Restricted,
-            codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+            crewon_protocol::config_types::WindowsSandboxLevel::Disabled,
             /*enforce_managed_network*/ false,
         ),
         expected
@@ -1043,7 +1043,7 @@ async fn kill_child_process_group_kills_grandchildren_on_timeout() -> Result<()>
         "-c".to_string(),
         "sleep 60 & echo $!; sleep 60".to_string(),
     ];
-    let cwd = codex_utils_absolute_path::AbsolutePathBuf::current_dir()?;
+    let cwd = crewon_utils_absolute_path::AbsolutePathBuf::current_dir()?;
     let env: HashMap<String, String> = std::env::vars().collect();
     let params = ExecParams {
         command,
@@ -1053,7 +1053,7 @@ async fn kill_child_process_group_kills_grandchildren_on_timeout() -> Result<()>
         env,
         network: None,
         sandbox_permissions: SandboxPermissions::UseDefault,
-        windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+        windows_sandbox_level: crewon_protocol::config_types::WindowsSandboxLevel::Disabled,
         windows_sandbox_private_desktop: false,
         justification: None,
         arg0: None,
@@ -1096,7 +1096,7 @@ async fn kill_child_process_group_kills_grandchildren_on_timeout() -> Result<()>
 #[tokio::test]
 async fn process_exec_tool_call_respects_cancellation_token() -> Result<()> {
     let command = long_running_command();
-    let cwd = codex_utils_absolute_path::AbsolutePathBuf::current_dir()?;
+    let cwd = crewon_utils_absolute_path::AbsolutePathBuf::current_dir()?;
     let env: HashMap<String, String> = std::env::vars().collect();
     let cancel_token = CancellationToken::new();
     let cancel_tx = cancel_token.clone();
@@ -1108,7 +1108,7 @@ async fn process_exec_tool_call_respects_cancellation_token() -> Result<()> {
         env,
         network: None,
         sandbox_permissions: SandboxPermissions::UseDefault,
-        windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+        windows_sandbox_level: crewon_protocol::config_types::WindowsSandboxLevel::Disabled,
         windows_sandbox_private_desktop: false,
         justification: None,
         arg0: None,
@@ -1157,7 +1157,7 @@ printf ready > "$READY_MARKER"
 while :; do sleep 1; done"#
             .to_string(),
     ];
-    let cwd = codex_utils_absolute_path::AbsolutePathBuf::current_dir()?;
+    let cwd = crewon_utils_absolute_path::AbsolutePathBuf::current_dir()?;
     let mut env: HashMap<String, String> = std::env::vars().collect();
     env.insert(
         "READY_MARKER".to_string(),
@@ -1191,7 +1191,7 @@ while :; do sleep 1; done"#
         env,
         network: None,
         sandbox_permissions: SandboxPermissions::UseDefault,
-        windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+        windows_sandbox_level: crewon_protocol::config_types::WindowsSandboxLevel::Disabled,
         windows_sandbox_private_desktop: false,
         justification: None,
         arg0: None,

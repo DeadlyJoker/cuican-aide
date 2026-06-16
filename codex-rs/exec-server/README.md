@@ -1,43 +1,43 @@
-# codex-exec-server
+# crewon-exec-server
 
-`codex-exec-server` is the library backing `codex exec-server`, a small
-JSON-RPC server for spawning and controlling subprocesses through
-`codex-utils-pty`.
+`crewon-exec-server` is the library for a small JSON-RPC server that spawns and
+controls subprocesses through
+`crewon-utils-pty`.
 
 It provides:
 
-- a CLI entrypoint: `codex exec-server`
+- an embedded server entrypoint for rich clients and hosted environments
 - a Rust client: `ExecServerClient`
 - a small protocol module with shared request/response types
 
 This crate owns the transport, protocol, and filesystem/process handlers. The
-top-level `codex` binary owns hidden helper dispatch for sandboxed
-filesystem operations and `codex-linux-sandbox`.
+host process owns hidden helper dispatch for sandboxed filesystem operations
+and `crewon-linux-sandbox`.
 
 ## Transport
 
-The server speaks the shared `codex-app-server-protocol` message envelope on
+The server speaks the shared `crewon-app-server-protocol` message envelope on
 the wire.
 
-The CLI entrypoint supports:
+The server entrypoint supports:
 
 - `ws://IP:PORT` (default)
 - `--remote URL --environment-id ID [--name NAME]`
 
 Remote mode registers the local exec-server with the environment registry,
 then reconnects to the service-provided rendezvous websocket as the environment.
-It uses the standard Codex ChatGPT sign-in state; run `codex login` first when
+It uses the standard Crewon ChatGPT sign-in state; sign in to Crewon first when
 remote registration needs authentication. Containerized callers that receive an
 Agent Identity JWT in `CODEX_ACCESS_TOKEN` can opt into that auth path with
-`--use-agent-identity-auth`; Codex then registers an Agent task and sends the
+`--use-agent-identity-auth`; Crewon then registers an Agent task and sends the
 derived AgentAssertion headers on the registry request.
 
 Alternatively, API users can instead use `CODEX_API_KEY`;
-Codex sends it as a bearer token on the registration request. For example:
+Crewon sends it as a bearer token on the registration request. For example:
 
 ```sh
 CODEX_API_KEY="$OPENAI_API_KEY" \
-codex exec-server \
+crewon-exec-server \
   --remote ... \
   --environment-id "$ENVIRONMENT_ID"
 ```
@@ -50,8 +50,8 @@ Wire framing:
 ## Remote Relay Message Format
 
 In remote mode, the harness and environment communicate through rendezvous using
-`codex.exec_server.relay.v1.RelayMessageFrame`; the checked-in schema is in
-`src/proto/codex.exec_server.relay.v1.proto`. The relay frame carries stream
+`crewon.exec_server.relay.v1.RelayMessageFrame`; the checked-in schema is in
+`src/proto/crewon.exec_server.relay.v1.proto`. The relay frame carries stream
 identity plus endpoint-owned reliability metadata:
 
 ```text
@@ -175,7 +175,7 @@ Field definitions:
 - `env`: environment variables passed to the child process.
 - `tty`: when `true`, spawn a PTY-backed interactive process.
 - `pipeStdin`: when `true`, keep non-PTY stdin writable via `process/write`.
-- `arg0`: optional argv0 override forwarded to `codex-utils-pty`.
+- `arg0`: optional argv0 override forwarded to `crewon-utils-pty`.
 
 Response:
 
@@ -351,7 +351,7 @@ or unavailable paths:
 
 Each filesystem request accepts an optional `sandbox` object. When `sandbox`
 contains a `ReadOnly` or `WorkspaceWrite` policy, the operation runs in a
-hidden helper process launched from the top-level `codex` executable and
+hidden helper process launched by the Crewon backend runtime and
 prepared through the shared sandbox transform path. Helper requests and
 responses are passed over stdin/stdout.
 
@@ -388,11 +388,10 @@ The crate exports:
 - `RemoteEnvironmentConfig` and `run_remote_environment()` for embedding remote
   registration mode
 
-Callers must pass `ExecServerRuntimePaths` to `run_main()`. The top-level
-`codex exec-server` command builds these paths from the `codex` arg0 dispatch
-state. `RemoteEnvironmentConfig::new(...)` also takes the auth provider that
-remote registration should use; the CLI builds that provider from Codex auth
-state before starting remote mode.
+Callers must pass `ExecServerRuntimePaths` to `run_main()`. The host process
+builds these paths from its arg0 dispatch state. `RemoteEnvironmentConfig::new(...)`
+also takes the auth provider that remote registration should use; the host
+builds that provider from Crewon auth state before starting remote mode.
 
 ## Example session
 

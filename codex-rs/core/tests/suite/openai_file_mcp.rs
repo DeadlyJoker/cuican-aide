@@ -5,8 +5,6 @@ use std::path::Path;
 
 use anyhow::Context;
 use anyhow::Result;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::apps_test_server::CALENDAR_EXTRACT_TEXT_TOOL_NAME;
 use core_test_support::apps_test_server::DIRECT_CALENDAR_EXTRACT_TEXT_TOOL as DOCUMENT_EXTRACT_HOOK_MATCHER;
@@ -23,6 +21,8 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -83,7 +83,7 @@ fn read_post_tool_use_hook_inputs(home: &Path) -> Result<Vec<Value>> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn codex_apps_file_params_upload_local_paths_before_mcp_tool_call() -> Result<()> {
+async fn crewon_apps_file_params_upload_local_paths_before_mcp_tool_call() -> Result<()> {
     let server = start_mock_server().await;
     let apps_server = AppsTestServer::mount(&server).await?;
 
@@ -93,7 +93,7 @@ async fn codex_apps_file_params_upload_local_paths_before_mcp_tool_call() -> Res
         .and(body_json(json!({
             "file_name": "report.txt",
             "file_size": 11,
-            "use_case": "codex",
+            "use_case": "crewon",
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "file_id": "file_123",
@@ -196,7 +196,7 @@ async fn codex_apps_file_params_upload_local_paths_before_mcp_tool_call() -> Res
         }))
     );
     assert_eq!(
-        apps_tool_call.pointer("/params/_meta/_codex_apps"),
+        apps_tool_call.pointer("/params/_meta/_crewon_apps"),
         Some(&json!({
             "call_id": "extract-call-1",
             "resource_uri": DOCUMENT_EXTRACT_TEXT_RESOURCE_URI,

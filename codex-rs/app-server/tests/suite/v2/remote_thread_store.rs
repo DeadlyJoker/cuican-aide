@@ -19,40 +19,40 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use app_test_support::create_mock_responses_server_repeating_assistant;
-use codex_app_server::in_process;
-use codex_app_server::in_process::InProcessClientHandle;
-use codex_app_server::in_process::InProcessServerEvent;
-use codex_app_server::in_process::InProcessStartArgs;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ThreadDeleteParams;
-use codex_app_server_protocol::ThreadDeleteResponse;
-use codex_app_server_protocol::ThreadListParams;
-use codex_app_server_protocol::ThreadListResponse;
-use codex_app_server_protocol::ThreadResumeParams;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_arg0::Arg0DispatchPaths;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::LoaderOverrides;
-use codex_config::NoopThreadConfigLoader;
-use codex_core::config::Config;
-use codex_core::config::ConfigBuilder;
-use codex_exec_server::EnvironmentManager;
-use codex_feedback::CodexFeedback;
-use codex_protocol::ThreadId;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::ThreadMemoryMode;
-use codex_thread_store::CreateThreadParams as StoreCreateThreadParams;
-use codex_thread_store::InMemoryThreadStore;
-use codex_thread_store::ThreadPersistenceMetadata;
-use codex_thread_store::ThreadStore;
+use crewon_app_server::in_process;
+use crewon_app_server::in_process::InProcessClientHandle;
+use crewon_app_server::in_process::InProcessServerEvent;
+use crewon_app_server::in_process::InProcessStartArgs;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ThreadDeleteParams;
+use crewon_app_server_protocol::ThreadDeleteResponse;
+use crewon_app_server_protocol::ThreadListParams;
+use crewon_app_server_protocol::ThreadListResponse;
+use crewon_app_server_protocol::ThreadResumeParams;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::LoaderOverrides;
+use crewon_config::NoopThreadConfigLoader;
+use crewon_core::config::Config;
+use crewon_core::config::ConfigBuilder;
+use crewon_exec_server::EnvironmentManager;
+use crewon_feedback::CrewonFeedback;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::ThreadMemoryMode;
+use crewon_thread_store::CreateThreadParams as StoreCreateThreadParams;
+use crewon_thread_store::InMemoryThreadStore;
+use crewon_thread_store::ThreadPersistenceMetadata;
+use crewon_thread_store::ThreadStore;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::time::timeout;
@@ -150,7 +150,7 @@ async fn thread_delete_with_non_local_thread_store_does_not_create_local_persist
             extra_config: None,
             forked_from_id: None,
             parent_thread_id: None,
-            source: SessionSource::Cli,
+            source: SessionSource::LegacyCli,
             thread_source: None,
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),
@@ -294,21 +294,21 @@ async fn start_in_process_client(
     in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
         config,
-        cli_overrides: Vec::new(),
+        config_overrides: Vec::new(),
         loader_overrides,
         strict_config: false,
         cloud_config_bundle: CloudConfigBundleLoader::default(),
         thread_config_loader: Arc::new(NoopThreadConfigLoader),
-        feedback: CodexFeedback::new(),
+        feedback: CrewonFeedback::new(),
         log_db: None,
         state_db: None,
         environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
         config_warnings: Vec::new(),
-        session_source: SessionSource::Cli,
+        session_source: SessionSource::LegacyCli,
         enable_codex_api_key_env: false,
         initialize: InitializeParams {
             client_info: ClientInfo {
-                name: "codex-app-server-tests".to_string(),
+                name: "crewon-app-server-tests".to_string(),
                 title: None,
                 version: "0.1.0".to_string(),
             },
@@ -349,7 +349,7 @@ fn assert_no_local_persistence_artifacts(codex_home: &Path) -> Result<()> {
         "non-local thread persistence should not create archived rollout sessions"
     );
     assert!(
-        !codex_state::state_db_path(codex_home).exists(),
+        !crewon_state::state_db_path(codex_home).exists(),
         "non-local thread persistence should not create local thread sqlite"
     );
 

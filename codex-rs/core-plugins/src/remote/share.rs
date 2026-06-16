@@ -1,9 +1,9 @@
 use super::*;
 use crate::plugin_bundle_archive::PluginBundlePackError;
 use crate::plugin_bundle_archive::pack_plugin_bundle_tar_gz;
-use codex_login::CodexAuth;
-use codex_login::default_client::build_reqwest_client;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_login::CrewonAuth;
+use crewon_login::default_client::build_reqwest_client;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use reqwest::RequestBuilder;
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -137,7 +137,7 @@ struct RemotePluginShareUpdateTargetsResponse {
 
 pub async fn save_remote_plugin_share(
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     codex_home: &Path,
     plugin_path: &AbsolutePathBuf,
     remote_plugin_id: Option<&str>,
@@ -204,7 +204,7 @@ pub async fn save_remote_plugin_share(
 
 pub async fn list_remote_plugin_shares(
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     codex_home: &Path,
 ) -> Result<Vec<RemotePluginShareSummary>, RemotePluginCatalogError> {
     let auth = ensure_chatgpt_auth(auth)?;
@@ -272,7 +272,7 @@ pub fn load_plugin_share_remote_ids_by_local_path(
 
 pub async fn delete_remote_plugin_share(
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     codex_home: &Path,
     remote_plugin_id: &str,
 ) -> Result<(), RemotePluginCatalogError> {
@@ -293,7 +293,7 @@ pub async fn delete_remote_plugin_share(
 
 pub async fn update_remote_plugin_share_targets(
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     remote_plugin_id: &str,
     targets: Vec<RemotePluginShareTarget>,
     discoverability: RemotePluginShareUpdateDiscoverability,
@@ -327,7 +327,7 @@ pub async fn update_remote_plugin_share_targets(
 }
 
 fn ensure_unlisted_workspace_target(
-    auth: &CodexAuth,
+    auth: &CrewonAuth,
     discoverability: Option<RemotePluginShareDiscoverability>,
     targets: Option<Vec<RemotePluginShareTarget>>,
 ) -> Result<Option<Vec<RemotePluginShareTarget>>, RemotePluginCatalogError> {
@@ -355,7 +355,7 @@ fn ensure_unlisted_workspace_target(
 
 async fn fetch_created_workspace_plugins(
     config: &RemotePluginServiceConfig,
-    auth: &CodexAuth,
+    auth: &CrewonAuth,
 ) -> Result<Vec<RemotePluginDirectoryItem>, RemotePluginCatalogError> {
     let mut plugins = Vec::new();
     let mut page_token = None;
@@ -373,7 +373,7 @@ async fn fetch_created_workspace_plugins(
 
 async fn get_created_workspace_plugins_page(
     config: &RemotePluginServiceConfig,
-    auth: &CodexAuth,
+    auth: &CrewonAuth,
     page_token: Option<&str>,
 ) -> Result<RemotePluginListResponse, RemotePluginCatalogError> {
     let base_url = config.chatgpt_base_url.trim_end_matches('/');
@@ -389,7 +389,7 @@ async fn get_created_workspace_plugins_page(
 
 async fn create_workspace_plugin_upload(
     config: &RemotePluginServiceConfig,
-    auth: &CodexAuth,
+    auth: &CrewonAuth,
     filename: &str,
     size_bytes: usize,
     remote_plugin_id: Option<&str>,
@@ -440,7 +440,7 @@ async fn put_workspace_plugin_upload(
 
 async fn finalize_workspace_plugin_upload(
     config: &RemotePluginServiceConfig,
-    auth: &CodexAuth,
+    auth: &CrewonAuth,
     remote_plugin_id: Option<&str>,
     body: RemoteWorkspacePluginCreateRequest,
 ) -> Result<RemoteWorkspacePluginCreateResponse, RemotePluginCatalogError> {

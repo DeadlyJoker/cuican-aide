@@ -1,5 +1,5 @@
 use super::*;
-use crate::CodexThread;
+use crate::CrewonThread;
 use crate::StateDbHandle;
 use crate::ThreadManager;
 use crate::agent::agent_status_from_event;
@@ -10,27 +10,27 @@ use crate::context::ContextualUserFragment;
 use crate::context::SubagentNotification;
 use crate::init_state_db;
 use assert_matches::assert_matches;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_protocol::AgentPath;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::MessagePhase;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::CompactedItem;
-use codex_protocol::protocol::ErrorEvent;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::TurnAbortReason;
-use codex_protocol::protocol::TurnAbortedEvent;
-use codex_protocol::protocol::TurnCompleteEvent;
-use codex_protocol::protocol::TurnStartedEvent;
-use codex_thread_store::ArchiveThreadParams;
-use codex_thread_store::LocalThreadStore;
-use codex_thread_store::LocalThreadStoreConfig;
-use codex_thread_store::ThreadStore;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_protocol::AgentPath;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::MessagePhase;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::CompactedItem;
+use crewon_protocol::protocol::ErrorEvent;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::InterAgentCommunication;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::TurnAbortReason;
+use crewon_protocol::protocol::TurnAbortedEvent;
+use crewon_protocol::protocol::TurnCompleteEvent;
+use crewon_protocol::protocol::TurnStartedEvent;
+use crewon_thread_store::ArchiveThreadParams;
+use crewon_thread_store::LocalThreadStore;
+use crewon_thread_store::LocalThreadStoreConfig;
+use crewon_thread_store::ThreadStore;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::time::Duration;
@@ -38,13 +38,13 @@ use tokio::time::sleep;
 use tokio::time::timeout;
 use toml::Value as TomlValue;
 
-async fn test_config_with_cli_overrides(
-    cli_overrides: Vec<(String, TomlValue)>,
+async fn test_config_with_config_overrides(
+    config_overrides: Vec<(String, TomlValue)>,
 ) -> (TempDir, Config) {
     let home = TempDir::new().expect("create temp dir");
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(home.path().to_path_buf())
-        .cli_overrides(cli_overrides)
+        .config_overrides(config_overrides)
         .build()
         .await
         .expect("load default test config");
@@ -52,7 +52,7 @@ async fn test_config_with_cli_overrides(
 }
 
 async fn test_config() -> (TempDir, Config) {
-    test_config_with_cli_overrides(Vec::new()).await
+    test_config_with_config_overrides(Vec::new()).await
 }
 
 fn text_input(text: &str) -> Op {
@@ -110,10 +110,10 @@ impl AgentControlHarness {
     async fn new_with_config(home: TempDir, config: Config) -> Self {
         let state_db = init_state_db(&config).await;
         let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
-            CodexAuth::from_api_key("dummy"),
+            CrewonAuth::from_api_key("dummy"),
             config.model_provider.clone(),
             config.codex_home.to_path_buf(),
-            std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+            std::sync::Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
             state_db.clone(),
         );
         let control = manager.agent_control();
@@ -126,7 +126,7 @@ impl AgentControlHarness {
         }
     }
 
-    async fn start_thread(&self) -> (ThreadId, Arc<CodexThread>) {
+    async fn start_thread(&self) -> (ThreadId, Arc<CrewonThread>) {
         let new_thread = self
             .manager
             .start_thread(self.config.clone())
@@ -191,11 +191,11 @@ fn history_contains_assistant_inter_agent_communication(
     })
 }
 
-async fn wait_for_subagent_notification(parent_thread: &Arc<CodexThread>) -> bool {
+async fn wait_for_subagent_notification(parent_thread: &Arc<CrewonThread>) -> bool {
     let wait = async {
         loop {
             let history_items = parent_thread
-                .codex
+                .engine
                 .session
                 .clone_history()
                 .await
@@ -212,13 +212,13 @@ async fn wait_for_subagent_notification(parent_thread: &Arc<CodexThread>) -> boo
     timeout(Duration::from_secs(10), wait).await.is_ok()
 }
 
-async fn persist_thread_for_tree_resume(thread: &Arc<CodexThread>, message: &str) {
+async fn persist_thread_for_tree_resume(thread: &Arc<CrewonThread>, message: &str) {
     thread
         .inject_user_message_without_turn(message.to_string())
         .await;
-    thread.codex.session.ensure_rollout_materialized().await;
+    thread.engine.session.ensure_rollout_materialized().await;
     thread
-        .codex
+        .engine
         .session
         .flush_rollout()
         .await
@@ -511,10 +511,10 @@ async fn send_inter_agent_communication_without_turn_queues_message_without_trig
     timeout(Duration::from_secs(5), async {
         loop {
             if thread
-                .codex
+                .engine
                 .session
                 .input_queue
-                .has_pending_input(&thread.codex.session.active_turn)
+                .has_pending_input(&thread.engine.session.active_turn)
                 .await
             {
                 break;
@@ -526,7 +526,7 @@ async fn send_inter_agent_communication_without_turn_queues_message_without_trig
     .expect("inter-agent communication should stay pending");
 
     let history_items = thread
-        .codex
+        .engine
         .session
         .clone_history()
         .await
@@ -696,10 +696,10 @@ async fn resume_agent_from_rollout_does_not_reopen_v2_descendants() {
     assert_eq!(report.timed_out, Vec::<ThreadId>::new());
 
     let resumed_manager = ThreadManager::with_models_provider_home_and_state_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         harness.config.model_provider.clone(),
         harness.config.codex_home.to_path_buf(),
-        std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        std::sync::Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
         harness.state_db.clone(),
     );
     let resumed_control = resumed_manager.agent_control();
@@ -839,7 +839,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
     parent_thread
         .inject_user_message_without_turn("parent seed context".to_string())
         .await;
-    let turn_context = parent_thread.codex.session.new_default_turn().await;
+    let turn_context = parent_thread.engine.session.new_default_turn().await;
     let parent_spawn_call_id = "spawn-call-history".to_string();
     let trigger_message = InterAgentCommunication::new(
         AgentPath::root(),
@@ -849,7 +849,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
         /*trigger_turn*/ true,
     );
     parent_thread
-        .codex
+        .engine
         .session
         .record_conversation_items(
             turn_context.as_ref(),
@@ -886,19 +886,19 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
         .await;
     let parent_reference_context_item = turn_context.to_turn_context_item();
     parent_thread
-        .codex
+        .engine
         .session
         .persist_rollout_items(&[RolloutItem::TurnContext(
             parent_reference_context_item.clone(),
         )])
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .ensure_rollout_materialized()
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .flush_rollout()
         .await
@@ -932,7 +932,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
         .await
         .expect("child thread should be registered");
     assert_ne!(child_thread_id, parent_thread_id);
-    let history = child_thread.codex.session.clone_history().await;
+    let history = child_thread.engine.session.clone_history().await;
     let expected_history = [
         ResponseItem::Message {
             id: None,
@@ -958,7 +958,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
         "full-history forked child history should replace parent usage hints with the child subagent hint while filtering non-final assistant/tool chatter"
     );
     assert_eq!(
-        serde_json::to_value(child_thread.codex.session.reference_context_item().await)
+        serde_json::to_value(child_thread.engine.session.reference_context_item().await)
             .expect("serialize child reference context item"),
         serde_json::to_value(Some(parent_reference_context_item))
             .expect("serialize expected reference context item"),
@@ -1000,7 +1000,7 @@ async fn spawn_agent_can_fork_parent_thread_history_with_sanitized_items() {
         .await
         .expect("disabled-hint child thread should be registered");
     let disabled_hint_history = disabled_hint_child_thread
-        .codex
+        .engine
         .session
         .clone_history()
         .await;
@@ -1070,7 +1070,7 @@ async fn spawn_agent_fork_strips_parent_usage_hints_from_compacted_history() {
         .expect("start parent thread");
     let parent_thread_id = new_thread.thread_id;
     let parent_thread = new_thread.thread;
-    let turn_context = parent_thread.codex.session.new_default_turn().await;
+    let turn_context = parent_thread.engine.session.new_default_turn().await;
     let parent_spawn_call_id = "spawn-call-compacted-usage-hints".to_string();
     let replacement_history = vec![
         ResponseItem::Message {
@@ -1091,7 +1091,7 @@ async fn spawn_agent_fork_strips_parent_usage_hints_from_compacted_history() {
         },
     ];
     parent_thread
-        .codex
+        .engine
         .session
         .persist_rollout_items(&[
             RolloutItem::Compacted(CompactedItem {
@@ -1104,12 +1104,12 @@ async fn spawn_agent_fork_strips_parent_usage_hints_from_compacted_history() {
         ])
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .ensure_rollout_materialized()
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .flush_rollout()
         .await
@@ -1142,7 +1142,7 @@ async fn spawn_agent_fork_strips_parent_usage_hints_from_compacted_history() {
         .get_thread(child_thread_id)
         .await
         .expect("child thread should be registered");
-    let history = child_thread.codex.session.clone_history().await;
+    let history = child_thread.engine.session.clone_history().await;
     assert!(
         history_contains_text(history.raw_items(), "compacted parent summary"),
         "forked child history should retain compacted non-hint content"
@@ -1171,10 +1171,10 @@ async fn spawn_agent_fork_strips_parent_usage_hints_from_compacted_history() {
 async fn spawn_agent_fork_flushes_parent_rollout_before_loading_history() {
     let harness = AgentControlHarness::new().await;
     let (parent_thread_id, parent_thread) = harness.start_thread().await;
-    let turn_context = parent_thread.codex.session.new_default_turn().await;
+    let turn_context = parent_thread.engine.session.new_default_turn().await;
     let parent_spawn_call_id = "spawn-call-unflushed".to_string();
     parent_thread
-        .codex
+        .engine
         .session
         .record_conversation_items(
             turn_context.as_ref(),
@@ -1212,7 +1212,7 @@ async fn spawn_agent_fork_flushes_parent_rollout_before_loading_history() {
         .get_thread(child_thread_id)
         .await
         .expect("child thread should be registered");
-    let history = child_thread.codex.session.clone_history().await;
+    let history = child_thread.engine.session.clone_history().await;
     assert!(
         history_contains_text(history.raw_items(), "unflushed final answer"),
         "forked child history should include unflushed assistant final answers after flushing the parent rollout"
@@ -1244,9 +1244,9 @@ async fn spawn_agent_fork_last_n_turns_keeps_only_recent_turns() {
         "queued message".to_string(),
         /*trigger_turn*/ false,
     );
-    let queued_turn_context = parent_thread.codex.session.new_default_turn().await;
+    let queued_turn_context = parent_thread.engine.session.new_default_turn().await;
     parent_thread
-        .codex
+        .engine
         .session
         .record_conversation_items(
             queued_turn_context.as_ref(),
@@ -1261,9 +1261,9 @@ async fn spawn_agent_fork_last_n_turns_keeps_only_recent_turns() {
         "triggered context".to_string(),
         /*trigger_turn*/ true,
     );
-    let triggered_turn_context = parent_thread.codex.session.new_default_turn().await;
+    let triggered_turn_context = parent_thread.engine.session.new_default_turn().await;
     parent_thread
-        .codex
+        .engine
         .session
         .record_conversation_items(
             triggered_turn_context.as_ref(),
@@ -1273,10 +1273,10 @@ async fn spawn_agent_fork_last_n_turns_keeps_only_recent_turns() {
     parent_thread
         .inject_user_message_without_turn("current parent task".to_string())
         .await;
-    let spawn_turn_context = parent_thread.codex.session.new_default_turn().await;
+    let spawn_turn_context = parent_thread.engine.session.new_default_turn().await;
     let parent_spawn_call_id = "spawn-call-last-n".to_string();
     parent_thread
-        .codex
+        .engine
         .session
         .record_conversation_items(
             spawn_turn_context.as_ref(),
@@ -1284,19 +1284,19 @@ async fn spawn_agent_fork_last_n_turns_keeps_only_recent_turns() {
         )
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .persist_rollout_items(&[RolloutItem::TurnContext(
             spawn_turn_context.to_turn_context_item(),
         )])
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .ensure_rollout_materialized()
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .flush_rollout()
         .await
@@ -1329,7 +1329,7 @@ async fn spawn_agent_fork_last_n_turns_keeps_only_recent_turns() {
         .get_thread(child_thread_id)
         .await
         .expect("child thread should be registered");
-    let history = child_thread.codex.session.clone_history().await;
+    let history = child_thread.engine.session.clone_history().await;
 
     assert!(
         !history_contains_text(history.raw_items(), "old parent context"),
@@ -1349,7 +1349,7 @@ async fn spawn_agent_fork_last_n_turns_keeps_only_recent_turns() {
     );
     assert!(
         child_thread
-            .codex
+            .engine
             .session
             .reference_context_item()
             .await
@@ -1372,9 +1372,9 @@ async fn spawn_agent_fork_last_n_turns_keeps_only_recent_turns() {
 async fn spawn_agent_fork_last_n_turns_drops_parent_startup_prefix_when_under_limit() {
     let harness = AgentControlHarness::new().await;
     let (parent_thread_id, parent_thread) = harness.start_thread().await;
-    let startup_turn_context = parent_thread.codex.session.new_default_turn().await;
+    let startup_turn_context = parent_thread.engine.session.new_default_turn().await;
     parent_thread
-        .codex
+        .engine
         .session
         .record_conversation_items(
             startup_turn_context.as_ref(),
@@ -1391,10 +1391,10 @@ async fn spawn_agent_fork_last_n_turns_drops_parent_startup_prefix_when_under_li
     parent_thread
         .inject_user_message_without_turn("current parent task".to_string())
         .await;
-    let spawn_turn_context = parent_thread.codex.session.new_default_turn().await;
+    let spawn_turn_context = parent_thread.engine.session.new_default_turn().await;
     let parent_spawn_call_id = "spawn-call-last-n-under-limit".to_string();
     parent_thread
-        .codex
+        .engine
         .session
         .record_conversation_items(
             spawn_turn_context.as_ref(),
@@ -1402,12 +1402,12 @@ async fn spawn_agent_fork_last_n_turns_drops_parent_startup_prefix_when_under_li
         )
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .ensure_rollout_materialized()
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .flush_rollout()
         .await
@@ -1440,7 +1440,7 @@ async fn spawn_agent_fork_last_n_turns_drops_parent_startup_prefix_when_under_li
         .get_thread(child_thread_id)
         .await
         .expect("child thread should be registered");
-    let history = child_thread.codex.session.clone_history().await;
+    let history = child_thread.engine.session.clone_history().await;
     assert!(
         history_contains_text(history.raw_items(), "current parent task"),
         "bounded fork should retain the requested recent parent turn"
@@ -1451,7 +1451,7 @@ async fn spawn_agent_fork_last_n_turns_drops_parent_startup_prefix_when_under_li
     );
     assert!(
         child_thread
-            .codex
+            .engine
             .session
             .reference_context_item()
             .await
@@ -1491,10 +1491,10 @@ async fn spawn_agent_fork_last_n_turns_strips_parent_usage_hints() {
     parent_thread
         .inject_user_message_without_turn("parent task".to_string())
         .await;
-    let turn_context = parent_thread.codex.session.new_default_turn().await;
+    let turn_context = parent_thread.engine.session.new_default_turn().await;
     let parent_spawn_call_id = "spawn-call-last-n-usage-hints".to_string();
     parent_thread
-        .codex
+        .engine
         .session
         .record_conversation_items(
             turn_context.as_ref(),
@@ -1512,12 +1512,12 @@ async fn spawn_agent_fork_last_n_turns_strips_parent_usage_hints() {
         )
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .ensure_rollout_materialized()
         .await;
     parent_thread
-        .codex
+        .engine
         .session
         .flush_rollout()
         .await
@@ -1550,7 +1550,7 @@ async fn spawn_agent_fork_last_n_turns_strips_parent_usage_hints() {
         .get_thread(child_thread_id)
         .await
         .expect("child thread should be registered");
-    let history = child_thread.codex.session.clone_history().await;
+    let history = child_thread.engine.session.clone_history().await;
     assert!(
         history_contains_text(history.raw_items(), "parent task"),
         "bounded fork should retain the requested recent parent turn"
@@ -1574,16 +1574,16 @@ async fn spawn_agent_fork_last_n_turns_strips_parent_usage_hints() {
 #[tokio::test]
 async fn spawn_agent_respects_max_threads_limit() {
     let max_threads = 1usize;
-    let (_home, config) = test_config_with_cli_overrides(vec![(
+    let (_home, config) = test_config_with_config_overrides(vec![(
         "agents.max_threads".to_string(),
         TomlValue::Integer(max_threads as i64),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
-        std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        std::sync::Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
     );
     let control = manager.agent_control();
 
@@ -1626,16 +1626,16 @@ async fn spawn_agent_respects_max_threads_limit() {
 #[tokio::test]
 async fn spawn_agent_releases_slot_after_shutdown() {
     let max_threads = 1usize;
-    let (_home, config) = test_config_with_cli_overrides(vec![(
+    let (_home, config) = test_config_with_config_overrides(vec![(
         "agents.max_threads".to_string(),
         TomlValue::Integer(max_threads as i64),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
-        std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        std::sync::Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
     );
     let control = manager.agent_control();
 
@@ -1669,16 +1669,16 @@ async fn spawn_agent_releases_slot_after_shutdown() {
 #[tokio::test]
 async fn spawn_agent_limit_shared_across_clones() {
     let max_threads = 1usize;
-    let (_home, config) = test_config_with_cli_overrides(vec![(
+    let (_home, config) = test_config_with_config_overrides(vec![(
         "agents.max_threads".to_string(),
         TomlValue::Integer(max_threads as i64),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
-        std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        std::sync::Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
     );
     let control = manager.agent_control();
     let cloned = control.clone();
@@ -1714,16 +1714,16 @@ async fn spawn_agent_limit_shared_across_clones() {
 #[tokio::test]
 async fn resume_agent_respects_max_threads_limit() {
     let max_threads = 1usize;
-    let (_home, config) = test_config_with_cli_overrides(vec![(
+    let (_home, config) = test_config_with_config_overrides(vec![(
         "agents.max_threads".to_string(),
         TomlValue::Integer(max_threads as i64),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
-        std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        std::sync::Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
     );
     let control = manager.agent_control();
 
@@ -1770,16 +1770,16 @@ async fn resume_agent_respects_max_threads_limit() {
 #[tokio::test]
 async fn resume_agent_releases_slot_after_resume_failure() {
     let max_threads = 1usize;
-    let (_home, config) = test_config_with_cli_overrides(vec![(
+    let (_home, config) = test_config_with_config_overrides(vec![(
         "agents.max_threads".to_string(),
         TomlValue::Integer(max_threads as i64),
     )])
     .await;
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
-        std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        std::sync::Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
     );
     let control = manager.agent_control();
 
@@ -1887,9 +1887,9 @@ async fn multi_agent_v2_completion_ignores_dead_direct_parent() {
         .get_thread(tester_thread_id)
         .await
         .expect("tester thread should exist");
-    let tester_turn = tester_thread.codex.session.new_default_turn().await;
+    let tester_turn = tester_thread.engine.session.new_default_turn().await;
     tester_thread
-        .codex
+        .engine
         .session
         .send_event(
             tester_turn.as_ref(),
@@ -1923,7 +1923,7 @@ async fn multi_agent_v2_completion_ignores_dead_direct_parent() {
     );
 
     let root_history_items = root_thread
-        .codex
+        .engine
         .session
         .clone_history()
         .await
@@ -1974,9 +1974,9 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
         tester_path.to_string(),
         Some(tester_path.clone()),
     );
-    let tester_turn = tester_thread.codex.session.new_default_turn().await;
+    let tester_turn = tester_thread.engine.session.new_default_turn().await;
     tester_thread
-        .codex
+        .engine
         .session
         .send_event(
             tester_turn.as_ref(),
@@ -2024,7 +2024,7 @@ async fn multi_agent_v2_completion_queues_message_for_direct_parent() {
     .expect("completion watcher should queue a direct-parent message");
 
     let root_history_items = root_thread
-        .codex
+        .engine
         .session
         .clone_history()
         .await
@@ -2064,7 +2064,7 @@ async fn completion_watcher_notifies_parent_when_child_is_missing() {
     assert_eq!(wait_for_subagent_notification(&parent_thread).await, true);
 
     let history_items = parent_thread
-        .codex
+        .engine
         .session
         .clone_history()
         .await
@@ -2180,10 +2180,10 @@ async fn resume_thread_subagent_restores_stored_nickname_and_role() {
         .expect("test config should allow sqlite");
     let state_db = init_state_db(&config).await;
     let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
-        std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        std::sync::Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
         state_db.clone(),
     );
     let control = manager.agent_control();
@@ -2494,10 +2494,10 @@ async fn list_agent_subtree_thread_ids_includes_anonymous_and_closed_descendants
 async fn list_agent_subtree_thread_ids_finds_live_descendants_of_unloaded_root() {
     let (_home, config) = test_config().await;
     let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
-        std::sync::Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        std::sync::Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
         /*state_db*/ None,
     );
     let control = manager.agent_control();

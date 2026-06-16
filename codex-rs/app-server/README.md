@@ -1,6 +1,6 @@
-# codex-app-server
+# crewon-app-server
 
-`codex app-server` is the interface Codex uses to power rich interfaces such as the [Codex VS Code extension](https://marketplace.visualstudio.com/items?itemName=openai.chatgpt).
+`crewon-app-server` is the primary backend interface for Crewon PC, web, and mobile clients.
 
 ## Table of Contents
 
@@ -19,13 +19,13 @@
 
 ## Protocol
 
-Similar to [MCP](https://modelcontextprotocol.io/), `codex app-server` supports bidirectional communication using JSON-RPC 2.0 messages (with the `"jsonrpc":"2.0"` header omitted on the wire).
+Similar to [MCP](https://modelcontextprotocol.io/), `crewon-app-server` supports bidirectional communication using JSON-RPC 2.0 messages (with the `"jsonrpc":"2.0"` header omitted on the wire).
 
 Supported transports:
 
 - stdio (`--stdio` or `--listen stdio://`, default): newline-delimited JSON (JSONL)
 - websocket (`--listen ws://IP:PORT`): one JSON-RPC message per websocket text frame (**experimental / unsupported**)
-- unix socket (`--listen unix://` or `--listen unix://PATH`): websocket connections over `$CODEX_HOME/app-server-control/app-server-control.sock` or a custom socket path, using the standard HTTP Upgrade handshake
+- unix socket (`--listen unix://` or `--listen unix://PATH`): websocket connections over the legacy `$CODEX_HOME/app-server-control/app-server-control.sock` path or a custom socket path, using the standard HTTP Upgrade handshake
 - off (`--listen off`): do not expose a local transport
 
 When running with `--listen ws://IP:PORT`, the same listener also serves basic HTTP health probes:
@@ -36,8 +36,8 @@ When running with `--listen ws://IP:PORT`, the same listener also serves basic H
 
 Websocket transport is currently experimental and unsupported. Do not rely on it for production workloads.
 
-The unix socket transport is intended for local app-server control-plane clients. `codex app-server proxy`
-opens exactly one raw stream connection to `$CODEX_HOME/app-server-control/app-server-control.sock`
+The unix socket transport is intended for local app-server control-plane clients. `crewon-app-server proxy`
+opens exactly one raw stream connection to the legacy `$CODEX_HOME/app-server-control/app-server-control.sock`
 by default, or to `--sock PATH` when provided, and proxies bytes between that socket and stdin/stdout.
 The proxied stream carries the websocket HTTP Upgrade handshake followed by websocket frames.
 
@@ -54,18 +54,18 @@ Backpressure behavior:
 
 ## Message Schema
 
-Currently, you can dump a TypeScript version of the schema using `codex app-server generate-ts`, or a JSON Schema bundle via `codex app-server generate-json-schema`. Each output is specific to the version of Codex you used to run the command, so the generated artifacts are guaranteed to match that version.
+Currently, you can dump a TypeScript version of the schema using `crewon-app-server generate-ts`, or a JSON Schema bundle via `crewon-app-server generate-json-schema`. Each output is specific to the version of Crewon you used to run the command, so the generated artifacts are guaranteed to match that version.
 
 ```
-codex app-server generate-ts --out DIR
-codex app-server generate-json-schema --out DIR
+crewon-app-server generate-ts --out DIR
+crewon-app-server generate-json-schema --out DIR
 ```
 
 ## Core Primitives
 
-The API exposes three top level primitives representing an interaction between a user and Codex:
+The API exposes three top level primitives representing an interaction between a user and Crewon:
 
-- **Thread**: A conversation between a user and the Codex agent. Each thread contains multiple turns.
+- **Thread**: A conversation between a user and the Crewon agent. Each thread contains multiple turns.
 - **Turn**: One turn of the conversation, typically starting with a user message and finishing with an agent message. Each turn contains multiple items.
 - **Item**: Represents user inputs and agent outputs as part of the turn, persisted and used as the context for future conversations. Example items include user message, agent reasoning, agent message, shell command, file edit, etc.
 
@@ -82,17 +82,17 @@ Use the thread APIs to create, list, or archive conversations. Drive a conversat
 
 ## Initialization
 
-Clients must send a single `initialize` request per transport connection before invoking any other method on that connection, then acknowledge with an `initialized` notification. The server returns the user agent string it will present to upstream services, `codexHome` for the server's Codex home directory, and `platformFamily` and `platformOs` strings describing the app-server runtime target; subsequent requests issued before initialization receive a `"Not initialized"` error, and repeated `initialize` calls on the same connection receive an `"Already initialized"` error.
+Clients must send a single `initialize` request per transport connection before invoking any other method on that connection, then acknowledge with an `initialized` notification. The server returns the user agent string it will present to upstream services, `codexHome` for the server's Crewon home directory, and `platformFamily` and `platformOs` strings describing the app-server runtime target; subsequent requests issued before initialization receive a `"Not initialized"` error, and repeated `initialize` calls on the same connection receive an `"Already initialized"` error.
 
 `initialize.params.capabilities` also supports per-connection notification opt-out via `optOutNotificationMethods`, which is a list of exact method names to suppress for that connection. Matching is exact (no wildcards/prefixes). Unknown method names are accepted and ignored.
 
-Applications building on top of `codex app-server` should identify themselves via the `clientInfo` parameter.
+Applications building on top of `crewon-app-server` should identify themselves via the `clientInfo` parameter.
 
 **Important**: `clientInfo.name` is used to identify the client for the OpenAI Compliance Logs Platform. If
-you are developing a new Codex integration that is intended for enterprise use, please contact us to get it
-added to a known clients list. For more context: https://chatgpt.com/admin/api-reference#tag/Logs:-Codex
+you are developing a new Crewon integration that is intended for enterprise use, please contact us to get it
+added to a known clients list. For more context, see the OpenAI compliance logs documentation.
 
-Example (from OpenAI's official VSCode extension):
+Example:
 
 ```json
 {
@@ -100,8 +100,8 @@ Example (from OpenAI's official VSCode extension):
   "id": 0,
   "params": {
     "clientInfo": {
-      "name": "codex_vscode",
-      "title": "Codex VS Code Extension",
+      "name": "crewon_web",
+      "title": "Crewon Web",
       "version": "0.1.0"
     }
   }
@@ -142,7 +142,7 @@ Example with notification opt-out:
 - `thread/metadata/update` — patch stored thread metadata in sqlite; currently supports updating persisted `gitInfo` fields and returns the refreshed `thread`.
 - `thread/settings/update` — experimental; queue a partial update to a loaded thread’s next-turn settings without starting a turn or adding transcript items. Omitted fields leave settings unchanged; `serviceTier: null` clears the tier; `sandboxPolicy` and `permissions` cannot be combined. Returns `{}` when the update is accepted and emits `thread/settings/updated` with the full effective settings only if they actually change. `turn/start` settings overrides emit the same notification when they change the stored settings.
 - `thread/memoryMode/set` — experimental; set a thread’s persisted memory eligibility to `"enabled"` or `"disabled"` for either a loaded thread or a stored rollout; returns `{}` on success.
-- `memory/reset` — experimental; clear the current `CODEX_HOME/memories` directory and reset persisted memory stage data in sqlite while preserving existing thread memory modes; returns `{}` on success.
+- `memory/reset` — experimental; clear the current legacy `CODEX_HOME/memories` directory and reset persisted memory stage data in sqlite while preserving existing thread memory modes; returns `{}` on success.
 - `thread/goal/set` — create or update the single persisted goal for a materialized thread; returns the current goal and emits `thread/goal/updated`.
 - `thread/goal/get` — fetch the current persisted goal for a materialized thread; returns `goal: null` when no goal exists.
 - `thread/goal/clear` — clear the current persisted goal for a materialized thread; returns whether a goal was removed and emits `thread/goal/cleared` when state changes.
@@ -161,7 +161,7 @@ Example with notification opt-out:
 - `thread/backgroundTerminals/list` — list running background terminals for a loaded thread (experimental; requires `capabilities.experimentalApi`); returns `data` with the running terminal ids.
 - `thread/backgroundTerminals/terminate` — terminate one running background terminal by app-server `processId` (experimental; requires `capabilities.experimentalApi`); returns whether a process was terminated.
 - `thread/rollback` — drop the last N turns from the agent’s in-memory context and persist a rollback marker in the rollout so future resumes see the pruned history; returns the updated `thread` (with `turns` populated) on success.
-- `turn/start` — add user input to a thread and begin Codex generation; responds with the initial `turn` object and streams `turn/started`, `item/*`, and `turn/completed` notifications. `clientUserMessageId` is optional; when supplied, the corresponding `userMessage` item echoes it as `clientId`. Experimental `runtimeWorkspaceRoots` replaces the thread-scoped runtime workspace roots used to materialize `:workspace_roots`; paths must be absolute. Prefer experimental `permissions` profile selection by id for permission overrides; the legacy `sandboxPolicy` field is still accepted but cannot be combined with `permissions`. For `collaborationMode`, `settings.developer_instructions: null` means "use built-in instructions for the selected mode".
+- `turn/start` — add user input to a thread and begin Crewon generation; responds with the initial `turn` object and streams `turn/started`, `item/*`, and `turn/completed` notifications. `clientUserMessageId` is optional; when supplied, the corresponding `userMessage` item echoes it as `clientId`. Experimental `runtimeWorkspaceRoots` replaces the thread-scoped runtime workspace roots used to materialize `:workspace_roots`; paths must be absolute. Prefer experimental `permissions` profile selection by id for permission overrides; the legacy `sandboxPolicy` field is still accepted but cannot be combined with `permissions`. For `collaborationMode`, `settings.developer_instructions: null` means "use built-in instructions for the selected mode".
 - `thread/inject_items` — append raw Responses API items to a loaded thread’s model-visible history without starting a user turn; returns `{}` on success.
 - `turn/steer` — add user input to an already in-flight regular turn without starting a new turn; returns the active `turnId` that accepted the input. `clientUserMessageId` is optional; when supplied, the corresponding `userMessage` item echoes it as `clientId`. Review and manual compaction turns reject `turn/steer`.
 - `turn/interrupt` — request cancellation of an in-flight turn by `(thread_id, turn_id)`; success is an empty `{}` response and the turn finishes with `status: "interrupted"`.
@@ -169,13 +169,13 @@ Example with notification opt-out:
 - `thread/realtime/appendAudio` — append an input audio chunk to the active realtime session (experimental); returns `{}`.
 - `thread/realtime/appendText` — append text input to the active realtime session (experimental); returns `{}`.
 - `thread/realtime/stop` — stop the active realtime session for the thread (experimental); returns `{}`.
-- `review/start` — kick off Codex’s automated reviewer for a thread; responds like `turn/start` and emits `item/started`/`item/completed` notifications with `enteredReviewMode` and `exitedReviewMode` items, plus a final assistant `agentMessage` containing the review.
+- `review/start` — kick off Crewon’s automated reviewer for a thread; responds like `turn/start` and emits `item/started`/`item/completed` notifications with `enteredReviewMode` and `exitedReviewMode` items, plus a final assistant `agentMessage` containing the review.
 - `command/exec` — run a single command under the server sandbox without starting a thread/turn (handy for utilities and validation).
 - `command/exec/write` — write base64-decoded stdin bytes to a running `command/exec` session or close stdin; returns `{}`.
 - `command/exec/resize` — resize a running PTY-backed `command/exec` session by `processId`; returns `{}`.
 - `command/exec/terminate` — terminate a running `command/exec` session by `processId`; returns `{}`.
 - `command/exec/outputDelta` — notification emitted for base64-encoded stdout/stderr chunks from a streaming `command/exec` session.
-- `process/spawn` — experimental; spawn a standalone process without the Codex sandbox on the host where the app server is running; returns after the process starts and emits `process/outputDelta` and `process/exited` notifications.
+- `process/spawn` — experimental; spawn a standalone process without the Crewon sandbox on the host where the app server is running; returns after the process starts and emits `process/outputDelta` and `process/exited` notifications.
 - `process/writeStdin` — experimental; write base64-decoded stdin bytes to a running `process/spawn` session or close stdin; returns `{}`.
 - `process/resizePty` — experimental; resize a running PTY-backed `process/spawn` session by `processHandle`; returns `{}`.
 - `process/kill` — experimental; terminate a running `process/spawn` session by `processHandle`; returns `{}`.
@@ -197,7 +197,7 @@ Example with notification opt-out:
 - `permissionProfile/list` — beta; list available permission profile ids with optional display `description` text, using cursor pagination. Pass `cwd` when the caller needs project-local `[permissions.<id>]` entries to be included in the current catalog view.
 - `experimentalFeature/enablement/set` — patch the in-memory process-wide runtime feature enablement for currently supported feature keys. For each feature, precedence is: cloud requirements > --enable <feature_name> > config.toml > experimentalFeature/enablement/set (new) > code default. Invalid keys will be ignored.
 - `environment/add` — experimental; add or replace a named remote environment by `environmentId` and `execServerUrl` for later selection by `thread/start` or `turn/start`; returns `{}` and does not change the default environment.
-- `collaborationMode/list` — list available collaboration mode presets (experimental, no pagination). Built-in presets do not select a model; the Plan preset selects medium reasoning effort. This response omits built-in developer instructions; clients should either pass `settings.developer_instructions: null` when setting a mode to use Codex's built-in instructions, or provide their own instructions explicitly.
+- `collaborationMode/list` — list available collaboration mode presets (experimental, no pagination). Built-in presets do not select a model; the Plan preset selects medium reasoning effort. This response omits built-in developer instructions; clients should either pass `settings.developer_instructions: null` when setting a mode to use Crewon's built-in instructions, or provide their own instructions explicitly.
 - `skills/list` — list skills for one or more `cwd` values (optional `forceReload`).
 - `skills/extraRoots/set` — replace the app-server process runtime extra standalone skill roots. The roots are not persisted; missing directories are accepted and simply load no skills.
 - `hooks/list` — list discovered hooks for one or more `cwd` values.
@@ -209,12 +209,8 @@ Example with notification opt-out:
 - `plugin/read` — read one plugin by `marketplacePath` plus `pluginName`, returning marketplace info, a list-style `summary`, manifest descriptions/interface metadata, and bundled skills/hooks/apps/MCP server names. Returned plugin skills include their current `enabled` state after local config filtering; bundled hooks are returned as lightweight declaration summaries keyed for correlation with `hooks/list`. Use `plugin/install`'s `appsNeedingAuth` to drive post-install authentication and `app/list`'s `isAccessible` to determine current connector accessibility (**under development; do not call from production clients yet**).
 - `plugin/skill/read` — read remote plugin skill markdown on demand by `remoteMarketplaceName`, `remotePluginId`, and `skillName`. This lets clients preview uninstalled remote plugin skills without downloading the plugin bundle.
 - `skills/changed` — notification emitted when watched local skill files change.
-- `skills/create` — create a repo-scoped Skill under `.crewon/skill/<name>/SKILL.md`, emit `skills/changed`, and return the created skill metadata.
 - `app/list` — list available apps.
 - `agent/recruitable/list` — list saved Crewon agent configs for a workspace that are not already assigned to an office by `agentId` or display name; supports `cursor` and `limit` pagination.
-- `agent/create` — create a new Crewon agent config, assign an `agentId` when omitted, and reject duplicate target files.
-- `agent/update` — update an existing Crewon agent config by `filePath` in place so renames do not leave stale files.
-- `automation/create` — create a structured automation config with a manual trigger, target office, execution agent, status, and enabled state, then save it as a Crewon automation record.
 - `office/approval/decide` — update an office approval decision by `approvalId`, optionally append a system message, and return the saved office config.
 - `office/artifact/upsert` — add or replace an office artifact in workspace activity, optionally append a system message, and return the saved office config.
 - `knowledge/list` — list workspace knowledge memories and indexed source files for an absolute `cwd`.
@@ -248,7 +244,7 @@ Example with notification opt-out:
 
 ### Example: Start or resume a thread
 
-Start a fresh thread when you need a new Codex conversation.
+Start a fresh thread when you need a new Crewon conversation.
 
 ```json
 { "method": "thread/start", "id": 10, "params": {
@@ -368,7 +364,7 @@ Like `thread/resume`, experimental clients can pass `excludeTurns: true` to `thr
 - `sortKey` — `created_at` (default) or `updated_at`.
 - `sortDirection` — `desc` (default) or `asc`.
 - `modelProviders` — restrict results to specific providers; unset, null, or an empty array will include all providers.
-- `sourceKinds` — restrict results to specific sources; omit or pass `[]` for interactive sessions only (`cli`, `vscode`).
+- `sourceKinds` — restrict results to specific sources; omit or pass `[]` for active client sessions (`appServer`). Pass `["vscode"]` or `["cli"]` only when reading legacy IDE-extension or CLI rollouts explicitly.
 - `archived` — when `true`, list archived threads only. When `false` or `null`, list non-archived threads (default).
 - `cwd` — restrict results to threads whose session cwd exactly matches this path, or one of these paths when an array is provided. Relative paths are resolved against the app-server process cwd before matching.
 - `useStateDbOnly` — when `true`, return from the state DB without scanning JSONL rollouts to repair metadata. Omit or pass `false` to preserve the default scan-and-repair behavior.
@@ -387,7 +383,7 @@ Example:
 } }
 { "id": 20, "result": {
     "data": [
-        { "id": "thr_a", "preview": "Create a TUI", "modelProvider": "openai", "createdAt": 1730831111, "updatedAt": 1730831111, "status": { "type": "notLoaded" }, "agentNickname": "Atlas", "agentRole": "explorer" },
+        { "id": "thr_a", "preview": "Create a web client", "modelProvider": "openai", "createdAt": 1730831111, "updatedAt": 1730831111, "status": { "type": "notLoaded" }, "agentNickname": "Atlas", "agentRole": "explorer" },
         { "id": "thr_b", "preview": "Fix tests", "modelProvider": "openai", "createdAt": 1730750000, "updatedAt": 1730750000, "status": { "type": "notLoaded" } }
     ],
     "nextCursor": "opaque-token-or-null",
@@ -492,12 +488,16 @@ Every returned `Turn` includes `itemsView`, which tells clients whether the `ite
 `thread/turns/items/list` is the planned hydration API for fetching full items for one turn:
 
 ```json
-{ "method": "thread/turns/items/list", "id": 25, "params": {
+{
+  "method": "thread/turns/items/list",
+  "id": 25,
+  "params": {
     "threadId": "thr_123",
     "turnId": "turn_456",
     "limit": 100,
     "sortDirection": "asc"
-} }
+  }
+}
 ```
 
 This method currently returns JSON-RPC `-32601` with message `thread/turns/items/list is not supported yet`.
@@ -540,7 +540,7 @@ Experimental: use `thread/memoryMode/set` to change whether a thread remains eli
 { "id": 26, "result": {} }
 ```
 
-Experimental: use `memory/reset` to clear local memory artifacts and sqlite-backed memory stage data for the current Codex home. This preserves existing thread memory modes; use `thread/memoryMode/set` separately when a thread's future memory eligibility should change.
+Experimental: use `memory/reset` to clear local memory artifacts and sqlite-backed memory stage data for the current Crewon home. This preserves existing thread memory modes; use `thread/memoryMode/set` separately when a thread's future memory eligibility should change.
 
 ```json
 { "method": "memory/reset", "id": 27 }
@@ -661,7 +661,7 @@ While compaction is running, the thread is effectively in a turn so clients shou
 
 ### Example: Run a thread shell command
 
-Use `thread/shellCommand` for the TUI `!` workflow. The request returns immediately with `{}`.
+Use `thread/shellCommand` for client-initiated shell commands. The request returns immediately with `{}`.
 This API runs unsandboxed with full access; it does not inherit the thread
 sandbox policy.
 
@@ -686,7 +686,7 @@ If the thread does not already have an active turn, the server starts a standalo
 
 ### Example: Start a turn (send user input)
 
-Turns attach user input (text or images) to a thread and trigger Codex generation. The `input` field is a list of discriminated unions:
+Turns attach user input (text or images) to a thread and trigger Crewon generation. The `input` field is a list of discriminated unions:
 
 - `{"type":"text","text":"Explain this diff"}`
 - `{"type":"image","url":"https://…png"}`
@@ -750,7 +750,7 @@ Invoke a skill explicitly by including `$<skill-name>` in the text input and add
     "threadId": "thr_123",
     "input": [
         { "type": "text", "text": "$skill-creator Add a new skill for triaging flaky CI and include step-by-step usage." },
-        { "type": "skill", "name": "skill-creator", "path": "/Users/me/.codex/skills/skill-creator/SKILL.md" }
+        { "type": "skill", "name": "skill-creator", "path": "/Users/me/.crewon/skill/skill-creator/SKILL.md" }
     ]
 } }
 { "id": 33, "result": { "turn": {
@@ -841,7 +841,7 @@ const offer = await pc.createOffer();
 await pc.setLocalDescription(offer);
 ```
 
-Then send `offer.sdp` to app-server. Core uses `experimental_realtime_ws_backend_prompt` for the backend instructions and the thread conversation id as the default Realtime API session identifier. This `realtimeSessionId` value refers to the upstream Realtime API session, not a Codex session/thread-group id. The start response is `{}`; the remote answer SDP arrives later as `thread/realtime/sdp` and should be passed to `setRemoteDescription()`:
+Then send `offer.sdp` to app-server. Core uses `experimental_realtime_ws_backend_prompt` for the backend instructions and the thread conversation id as the default Realtime API session identifier. This `realtimeSessionId` value refers to the upstream Realtime API session, not a Crewon session/thread-group id. The start response is `{}`; the remote answer SDP arrives later as `thread/realtime/sdp` and should be passed to `setRemoteDescription()`:
 
 ```json
 { "method": "thread/realtime/start", "id": 40, "params": {
@@ -858,7 +858,7 @@ Then send `offer.sdp` to app-server. Core uses `experimental_realtime_ws_backend
 } }
 ```
 
-Omit `prompt` to use Codex's default realtime backend prompt. Send `prompt: null` or
+Omit `prompt` to use Crewon's default realtime backend prompt. Send `prompt: null` or
 `prompt: ""` when the session should start without that default backend prompt.
 Clients may also pass `model` and `version` on `thread/realtime/start` to select a
 different realtime session configuration without changing thread or user config.
@@ -942,10 +942,10 @@ manual compaction), the request fails with an `invalid request` error.
 
 ### Example: Request a code review
 
-Use `review/start` to run Codex’s reviewer on the currently checked-out project. The request takes the thread id plus a `target` describing what should be reviewed:
+Use `review/start` to run Crewon’s reviewer on the currently checked-out project. The request takes the thread id plus a `target` describing what should be reviewed:
 
 - `{"type":"uncommittedChanges"}` — staged, unstaged, and untracked files.
-- `{"type":"baseBranch","branch":"main"}` — diff against the provided branch’s upstream (see prompt for the exact `git merge-base`/`git diff` instructions Codex will run).
+- `{"type":"baseBranch","branch":"main"}` — diff against the provided branch’s upstream (see prompt for the exact `git merge-base`/`git diff` instructions Crewon will run).
 - `{"type":"commit","sha":"abc1234","title":"Optional subject"}` — review a specific commit.
 - `{"type":"custom","instructions":"Free-form reviewer instructions"}` — fallback prompt equivalent to the legacy manual review request.
 - `delivery` (`"inline"` or `"detached"`, default `"inline"`) — where the review runs:
@@ -958,14 +958,14 @@ Example request/response:
 { "method": "review/start", "id": 40, "params": {
     "threadId": "thr_123",
     "delivery": "inline",
-    "target": { "type": "commit", "sha": "1234567deadbeef", "title": "Polish tui colors" }
+    "target": { "type": "commit", "sha": "1234567deadbeef", "title": "Polish client colors" }
 } }
 { "id": 40, "result": {
     "turn": {
         "id": "turn_900",
         "status": "inProgress",
         "items": [
-            { "type": "userMessage", "id": "turn_900", "content": [ { "type": "text", "text": "Review commit 1234567: Polish tui colors" } ] }
+            { "type": "userMessage", "id": "turn_900", "content": [ { "type": "text", "text": "Review commit 1234567: Polish client colors" } ] }
         ],
         "error": null
     },
@@ -975,7 +975,7 @@ Example request/response:
 
 For a detached review, use `"delivery": "detached"`. The response is the same shape, but `reviewThreadId` will be the id of the new review thread (different from the original `threadId`). The server also emits a `thread/started` notification for that new thread before streaming the review turn.
 
-Codex streams the usual `turn/started` notification followed by an `item/started`
+Crewon streams the usual `turn/started` notification followed by an `item/started`
 with an `enteredReviewMode` item so clients can show progress:
 
 ```json
@@ -1034,7 +1034,7 @@ Run a standalone command (argv vector) in the server’s sandbox without creatin
 ```
 
 - Prefer using `process/spawn` when you want an explicitly unsandboxed process execution API with immediate spawn acknowledgement, handle-based control, output notifications, and an exit notification.
-- For clients that are already sandboxed externally, set the legacy `sandboxPolicy` to `{"type":"externalSandbox","networkAccess":"enabled"}` (or omit `networkAccess` to keep it restricted). Codex will not enforce its own sandbox in this mode; it tells the model it has full file-system access and passes the `networkAccess` state through `environment_context`.
+- For clients that are already sandboxed externally, set the legacy `sandboxPolicy` to `{"type":"externalSandbox","networkAccess":"enabled"}` (or omit `networkAccess` to keep it restricted). Crewon will not enforce its own sandbox in this mode; it tells the model it has full file-system access and passes the `networkAccess` state through `environment_context`.
 
 Notes:
 
@@ -1045,7 +1045,7 @@ Notes:
 - When omitted, `outputBytesCap` falls back to the server default of 1 MiB per stream.
 - `disableOutputCap: true` disables stdout/stderr capture truncation for that `command/exec` request. It cannot be combined with `outputBytesCap`.
 - `disableTimeout: true` disables the timeout entirely for that `command/exec` request. It cannot be combined with `timeoutMs`.
-- `processId` is optional for buffered execution. When omitted, Codex generates an internal id for lifecycle tracking, but `tty`, `streamStdin`, and `streamStdoutStderr` must stay disabled and follow-up `command/exec/write` / `command/exec/terminate` calls are not available for that command.
+- `processId` is optional for buffered execution. When omitted, Crewon generates an internal id for lifecycle tracking, but `tty`, `streamStdin`, and `streamStdoutStderr` must stay disabled and follow-up `command/exec/write` / `command/exec/terminate` calls are not available for that command.
 - `size` is only valid when `tty: true`. It sets the initial PTY size in character cells.
 - Buffered Windows sandbox execution accepts `processId` for correlation, but `command/exec/write` and `command/exec/terminate` are still unsupported for those requests.
 - Buffered Windows sandbox execution also requires the default output cap; custom `outputBytesCap` and `disableOutputCap` are unsupported there.
@@ -1107,7 +1107,7 @@ Streaming stdin/stdout uses base64 so PTY sessions can carry arbitrary bytes:
 
 ### Example: Process lifecycle execution
 
-Use `process/spawn` to start a standalone argv-based process without the Codex sandbox on the host where the app server is running. The `process/*` API is experimental and requires `initialize.params.capabilities.experimentalApi: true`. The spawn response means the process has started and the `processHandle` is registered; completion is reported later through `process/exited`.
+Use `process/spawn` to start a standalone argv-based process without the Crewon sandbox on the host where the app server is running. The `process/*` API is experimental and requires `initialize.params.capabilities.experimentalApi: true`. The spawn response means the process has started and the `processHandle` is registered; completion is reported later through `process/exited`.
 
 ```json
 { "method": "process/spawn", "id": 40, "params": {
@@ -1280,7 +1280,7 @@ The fuzzy file search session API emits per-query notifications:
 
 The thread realtime API emits thread-scoped notifications for session lifecycle and streaming media:
 
-- `thread/realtime/started` — `{ threadId, realtimeSessionId }` once realtime starts for the thread (experimental). `realtimeSessionId` is the upstream Realtime API session identifier, not a Codex session/thread-group id.
+- `thread/realtime/started` — `{ threadId, realtimeSessionId }` once realtime starts for the thread (experimental). `realtimeSessionId` is the upstream Realtime API session identifier, not a Crewon session/thread-group id.
 - `thread/realtime/itemAdded` — `{ threadId, item }` for raw non-audio realtime items that do not have a dedicated typed app-server notification, including `handoff_request` (experimental). `item` is forwarded as raw JSON while the upstream websocket item schema remains unstable.
 - `thread/realtime/transcript/delta` — `{ threadId, role, delta }` for live realtime transcript deltas (experimental).
 - `thread/realtime/transcript/done` — `{ threadId, role, text }` when realtime emits the final full text for a transcript part (experimental).
@@ -1328,8 +1328,8 @@ Today both notifications carry an empty `items` array even when item events were
 - `imageView` — `{id, path}` emitted when the agent invokes the image viewer tool.
 - `enteredReviewMode` — `{id, review}` sent when the reviewer starts; `review` is a short user-facing label such as `"current changes"` or the requested target description.
 - `exitedReviewMode` — `{id, review}` emitted when the reviewer finishes; `review` is the full plain-text review (usually, overall notes plus bullet point findings).
-- `contextCompaction` — `{id}` emitted when codex compacts the conversation history. This can happen automatically.
-- `compacted` - `{threadId, turnId}` when codex compacts the conversation history. This can happen automatically. **Deprecated:** Use `contextCompaction` instead.
+- `contextCompaction` — `{id}` emitted when Crewon compacts the conversation history. This can happen automatically.
+- `compacted` - `{threadId, turnId}` when Crewon compacts the conversation history. This can happen automatically. **Deprecated:** Use `contextCompaction` instead.
 
 All items emit shared lifecycle events:
 
@@ -1390,7 +1390,7 @@ When an upstream HTTP status is available (for example, from the Responses API o
 
 ## Approvals
 
-Certain actions (shell commands or modifying files) may require explicit user approval depending on the user's config. When `turn/start` is used, the app-server drives an approval flow by sending a server-initiated JSON-RPC request to the client. The client must respond to tell Codex whether to proceed. UIs should present these requests inline with the active turn so users can review the proposed command or diff before choosing.
+Certain actions (shell commands or modifying files) may require explicit user approval depending on the user's config. When `turn/start` is used, the app-server drives an approval flow by sending a server-initiated JSON-RPC request to the client. The client must respond to tell Crewon whether to proceed. UIs should present these requests inline with the active turn so users can review the proposed command or diff before choosing.
 
 - Requests include `threadId` and `turnId`—use them to scope UI state to the active conversation.
 - Respond with a single `{ "decision": ... }` payload. Command approvals support `accept`, `acceptForSession`, `acceptWithExecpolicyAmendment`, `applyNetworkPolicyAmendment`, `decline`, or `cancel`. The server resumes or declines the work and ends the item with `item/completed`.
@@ -1423,7 +1423,7 @@ When the client responds to `item/tool/requestUserInput`, the server emits `serv
 
 ### Attestation generation
 
-Desktop hosts that provide upstream attestation should set `capabilities.requestAttestation` during `initialize` and handle the server-initiated `attestation/generate` request. App-server issues it just in time before ChatGPT Codex requests that forward `x-oai-attestation`; the client responds with `{ "token": "v1.<opaque>" }`, where `token` is an opaque client-owned value. When app-server receives a client response, it forwards a consistent outer envelope such as `{ "v": 1, "s": 0, "t": "v1.<opaque>" }`, where `t` contains the client token unchanged. If app-server attempts attestation but fails within its own boundary, it sends the same envelope shape with an app-server status code and without `t` (`1 = timeout`, `2 = request failed`, `3 = request canceled`, `4 = malformed response`). If no initialized client opted into attestation, app-server omits `x-oai-attestation` for that upstream request.
+Desktop hosts that provide upstream attestation should set `capabilities.requestAttestation` during `initialize` and handle the server-initiated `attestation/generate` request. App-server issues it just in time before ChatGPT Crewon requests that forward `x-oai-attestation`; the client responds with `{ "token": "v1.<opaque>" }`, where `token` is an opaque client-owned value. When app-server receives a client response, it forwards a consistent outer envelope such as `{ "v": 1, "s": 0, "t": "v1.<opaque>" }`, where `t` contains the client token unchanged. If app-server attempts attestation but fails within its own boundary, it sends the same envelope shape with an app-server status code and without `t` (`1 = timeout`, `2 = request failed`, `3 = request canceled`, `4 = malformed response`). If no initialized client opted into attestation, app-server omits `x-oai-attestation` for that upstream request.
 
 ### MCP server elicitations
 
@@ -1440,7 +1440,7 @@ Order of messages:
 `turnId` is best-effort. When the elicitation is correlated with an active turn, the request includes that turn id; otherwise it is `null`.
 
 For MCP tool approval elicitations, form request `meta` includes
-`codex_approval_kind: "mcp_tool_call"` and may include `persist: "session"`,
+`crewon_approval_kind: "mcp_tool_call"` and may include `persist: "session"`,
 `persist: "always"`, or `persist: ["session", "always"]` to advertise whether
 the client can offer session-scoped and/or persistent approval choices.
 
@@ -1558,14 +1558,14 @@ Invoke a skill by including `$<skill-name>` in the text input. Add a `skill` inp
       {
         "type": "skill",
         "name": "skill-creator",
-        "path": "/Users/me/.codex/skills/skill-creator/SKILL.md"
+        "path": "/Users/me/.crewon/skill/skill-creator/SKILL.md"
       }
     ]
   }
 }
 ```
 
-If you omit the `skill` item, the model will still parse the `$<skill-name>` marker and try to locate the skill, which can add latency.
+If you omit the `skill` item, the model will still parse the `$<skill-name>` marker and try to locate the skill, which can add latency. Crewon-owned repository skills live under `.crewon/skill`; the legacy `$CODEX_HOME/skills` location remains a compatibility source for existing local agent skills.
 
 Example:
 
@@ -1589,11 +1589,11 @@ Use `skills/extraRoots/set` to replace additional standalone skill roots for the
         "skills": [
             {
               "name": "skill-creator",
-              "description": "Create or update a Codex skill",
+              "description": "Create or update a Crewon skill",
               "enabled": true,
               "interface": {
                 "displayName": "Skill Creator",
-                "shortDescription": "Create or update a Codex skill",
+                "shortDescription": "Create or update a Crewon skill",
                 "iconSmall": "icon.svg",
                 "iconLarge": "icon-large.svg",
                 "brandColor": "#111111",
@@ -1631,7 +1631,7 @@ To enable or disable a skill by absolute path:
   "method": "skills/config/write",
   "id": 27,
   "params": {
-    "path": "/Users/alice/.codex/skills/skill-creator/SKILL.md",
+    "path": "/Users/alice/.crewon/skill/skill-creator/SKILL.md",
     "name": null,
     "enabled": false
   }
@@ -1654,7 +1654,7 @@ To enable or disable a skill by name:
 
 Use `hooks/list` to fetch discovered hooks for one or more `cwds`. Each result is evaluated with that `cwd`'s effective config, so feature gates and discovered config layers can differ within a single response.
 
-For linked Git worktrees, project hook declarations come from the matching `.codex/` folders in the root checkout rather than from divergent hook declarations stored only in the linked worktree. This keeps each repo on one authoritative project-hook definition and one trust state.
+For linked Git worktrees, project hook declarations come from the matching legacy `.codex/` folders in the root checkout rather than from divergent hook declarations stored only in the linked worktree. This keeps each repo on one authoritative project-hook definition and one trust state.
 
 Hooks are returned even when disabled so clients can render and re-enable them. User-controlled state lives under `hooks.state`. Managed hooks are non-configurable, and user entries for managed hook keys are ignored during loading.
 
@@ -1674,28 +1674,32 @@ For unmanaged hooks, `currentHash` and `trustStatus` describe whether the curren
 {
   "id": 28,
   "result": {
-    "data": [{
-      "cwd": "/Users/me/project",
-      "hooks": [{
-        "key": "/Users/me/.codex/config.toml:pre_tool_use:0:0",
-        "eventName": "pre_tool_use",
-        "handlerType": "command",
-        "isManaged": false,
-        "matcher": "Bash",
-        "command": "python3 /Users/me/hook.py",
-        "timeoutSec": 5,
-        "statusMessage": "running hook",
-        "sourcePath": "/Users/me/.codex/config.toml",
-        "source": "user",
-        "pluginId": null,
-        "displayOrder": 0,
-        "enabled": true,
-        "currentHash": "sha256:...",
-        "trustStatus": "untrusted"
-      }],
-      "warnings": [],
-      "errors": []
-    }]
+    "data": [
+      {
+        "cwd": "/Users/me/project",
+        "hooks": [
+          {
+            "key": "/Users/me/.codex/config.toml:pre_tool_use:0:0",
+            "eventName": "pre_tool_use",
+            "handlerType": "command",
+            "isManaged": false,
+            "matcher": "Bash",
+            "command": "python3 /Users/me/hook.py",
+            "timeoutSec": 5,
+            "statusMessage": "running hook",
+            "sourcePath": "/Users/me/.codex/config.toml",
+            "source": "user",
+            "pluginId": null,
+            "displayOrder": 0,
+            "enabled": true,
+            "currentHash": "sha256:...",
+            "trustStatus": "untrusted"
+          }
+        ],
+        "warnings": [],
+        "errors": []
+      }
+    ]
   }
 }
 ```
@@ -1707,21 +1711,24 @@ To disable a non-managed hook, upsert a state entry at `hooks.state` with `confi
   "method": "config/batchWrite",
   "id": 29,
   "params": {
-    "edits": [{
-      "keyPath": "hooks.state",
-      "value": {
-        "/Users/me/.codex/config.toml:pre_tool_use:0:0": {
-          "enabled": false
-        }
-      },
-      "mergeStrategy": "upsert"
-    }],
+    "edits": [
+      {
+        "keyPath": "hooks.state",
+        "value": {
+          "/Users/me/.codex/config.toml:pre_tool_use:0:0": {
+            "enabled": false
+          }
+        },
+        "mergeStrategy": "upsert"
+      }
+    ],
     "reloadUserConfig": true
   }
 }
 ```
 
 To re-enable it, upsert the same hook key with `"enabled": true`.
+
 ## Apps
 
 Use `app/list` to fetch available apps (connectors). Each entry includes metadata like the app `id`, display `name`, `installUrl`, `branding`, `appMetadata`, `labels`, whether it is currently accessible, and whether it is enabled in config.
@@ -1829,11 +1836,11 @@ The JSON-RPC auth/account surface exposes request/response methods plus server-i
 
 ### Authentication modes
 
-Codex supports these authentication modes. The current mode is surfaced in `account/updated` (`authMode`), which also includes the current ChatGPT `planType` when available, and can be inferred from `account/read`.
+Crewon supports these authentication modes. The current mode is surfaced in `account/updated` (`authMode`), which also includes the current ChatGPT `planType` when available, and can be inferred from `account/read`.
 
 - **API key (`apiKey`)**: Caller supplies an OpenAI API key via `account/login/start` with `type: "apiKey"`. The API key is saved and used for API requests.
-- **ChatGPT managed (`chatgpt`)** (recommended): Codex owns the ChatGPT OAuth flow and refresh tokens. Start via `account/login/start` with `type: "chatgpt"` for the browser flow or `type: "chatgptDeviceCode"` for device code; Codex persists tokens to disk and refreshes them automatically.
-- **Personal access token (`personalAccessToken`)**: Codex uses a ChatGPT-backed personal access token loaded outside the app-server login RPCs, such as with `codex login --with-access-token` or `CODEX_ACCESS_TOKEN`.
+- **ChatGPT managed (`chatgpt`)** (recommended): Crewon owns the ChatGPT OAuth flow and refresh tokens. Start via `account/login/start` with `type: "chatgpt"` for the browser flow or `type: "chatgptDeviceCode"` for device code; Crewon persists tokens to disk and refreshes them automatically.
+- **Personal access token (`personalAccessToken`)**: Crewon uses a ChatGPT-backed personal access token loaded outside the app-server login RPCs, such as from the legacy `CODEX_ACCESS_TOKEN` environment variable.
 
 ### API Overview
 
@@ -1870,7 +1877,7 @@ Response examples:
 Field notes:
 
 - `refreshToken` (bool): set `true` to force a token refresh.
-- `requiresOpenaiAuth` reflects the active provider; when `false`, Codex can run without OpenAI credentials.
+- `requiresOpenaiAuth` reflects the active provider; when `false`, Crewon can run without OpenAI credentials.
 
 ### 2) Log in with an API key
 
@@ -1969,16 +1976,16 @@ Some app-server methods and fields are intentionally gated behind an experimenta
 
 ### Generating stable vs experimental client schemas
 
-`codex app-server` schema generation defaults to the stable API surface (experimental fields and methods filtered out). Pass `--experimental` to include experimental methods/fields in generated TypeScript or JSON schema:
+`crewon-app-server` schema generation defaults to the stable API surface (experimental fields and methods filtered out). Pass `--experimental` to include experimental methods/fields in generated TypeScript or JSON schema:
 
 ```bash
 # Stable-only output (default)
-codex app-server generate-ts --out DIR
-codex app-server generate-json-schema --out DIR
+crewon-app-server generate-ts --out DIR
+crewon-app-server generate-json-schema --out DIR
 
 # Include experimental API surface
-codex app-server generate-ts --out DIR --experimental
-codex app-server generate-json-schema --out DIR --experimental
+crewon-app-server generate-ts --out DIR --experimental
+crewon-app-server generate-json-schema --out DIR --experimental
 ```
 
 ### How clients opt in at runtime
@@ -2071,5 +2078,5 @@ For server-initiated request payloads, annotate the field the same way so schema
 5. Verify the protocol crate:
 
    ```bash
-   just test -p codex-app-server-protocol
+   just test -p crewon-app-server-protocol
    ```

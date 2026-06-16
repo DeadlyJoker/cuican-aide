@@ -1,26 +1,26 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use codex_core::NewThread;
-use codex_login::CodexAuth;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::ResumedHistory;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::TurnCompleteEvent;
-use codex_protocol::protocol::TurnContextItem;
-use codex_protocol::protocol::TurnStartedEvent;
-use codex_protocol::protocol::UserMessageEvent;
-use codex_protocol::protocol::WarningEvent;
 use core::time::Duration;
 use core_test_support::load_default_config_for_test;
 use core_test_support::wait_for_event;
+use crewon_core::NewThread;
+use crewon_login::CrewonAuth;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::ResumedHistory;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::TurnCompleteEvent;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_protocol::protocol::TurnStartedEvent;
+use crewon_protocol::protocol::UserMessageEvent;
+use crewon_protocol::protocol::WarningEvent;
 use tempfile::TempDir;
 
 fn resume_history(
-    config: &codex_core::config::Config,
+    config: &crewon_core::config::Config,
     previous_model: &str,
     rollout_path: &std::path::Path,
 ) -> InitialHistory {
@@ -93,12 +93,12 @@ async fn emits_warning_when_resumed_model_differs() {
 
     let initial_history = resume_history(&config, "previous-model", &rollout_path);
 
-    let thread_manager = codex_core::test_support::thread_manager_with_models_provider(
-        CodexAuth::from_api_key("test"),
+    let thread_manager = crewon_core::test_support::thread_manager_with_models_provider(
+        CrewonAuth::from_api_key("test"),
         config.model_provider.clone(),
     );
     let auth_manager =
-        codex_core::test_support::auth_manager_from_auth(CodexAuth::from_api_key("test"));
+        crewon_core::test_support::auth_manager_from_auth(CrewonAuth::from_api_key("test"));
 
     // Act: resume the conversation.
     let NewThread {

@@ -2,15 +2,15 @@
 
 use std::os::unix::fs::PermissionsExt;
 
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::fs_wait;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -49,7 +49,7 @@ mv "${tmp_path}" "${payload_path}""#,
     let notify_file = notify_dir.path().join("notify.txt");
     let notify_script_str = notify_script.to_str().unwrap().to_string();
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |cfg| cfg.notify = Some(vec![notify_script_str]))
         .build(&server)
         .await?;

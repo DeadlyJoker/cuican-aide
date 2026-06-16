@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use codex_exec_server::EnvironmentManager;
-use codex_exec_server::ExecutorFileSystem;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::protocol::TurnEnvironmentSelection;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_exec_server::EnvironmentManager;
+use crewon_exec_server::ExecutorFileSystem;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
+use crewon_protocol::protocol::TurnEnvironmentSelection;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 use crate::session::turn_context::TurnEnvironment;
 
@@ -41,7 +41,7 @@ impl ResolvedTurnEnvironments {
         self.turn_environments.first()
     }
 
-    pub(crate) fn primary_environment(&self) -> Option<Arc<codex_exec_server::Environment>> {
+    pub(crate) fn primary_environment(&self) -> Option<Arc<crewon_exec_server::Environment>> {
         self.primary()
             .map(|environment| Arc::clone(&environment.environment))
     }
@@ -63,7 +63,7 @@ impl ResolvedTurnEnvironments {
 pub(crate) fn resolve_environment_selections(
     environment_manager: &EnvironmentManager,
     environments: &[TurnEnvironmentSelection],
-) -> CodexResult<ResolvedTurnEnvironments> {
+) -> CrewonResult<ResolvedTurnEnvironments> {
     let mut seen_environment_ids = HashSet::with_capacity(environments.len());
     let mut turn_environments = Vec::with_capacity(environments.len());
     for selected_environment in environments {
@@ -92,11 +92,11 @@ pub(crate) fn resolve_environment_selections(
 
 #[cfg(test)]
 mod tests {
-    use codex_exec_server::ExecServerRuntimePaths;
-    use codex_exec_server::LOCAL_ENVIRONMENT_ID;
-    use codex_exec_server::REMOTE_ENVIRONMENT_ID;
-    use codex_protocol::protocol::TurnEnvironmentSelection;
-    use codex_utils_absolute_path::AbsolutePathBuf;
+    use crewon_exec_server::ExecServerRuntimePaths;
+    use crewon_exec_server::LOCAL_ENVIRONMENT_ID;
+    use crewon_exec_server::REMOTE_ENVIRONMENT_ID;
+    use crewon_protocol::protocol::TurnEnvironmentSelection;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -104,7 +104,7 @@ mod tests {
     fn test_runtime_paths() -> ExecServerRuntimePaths {
         ExecServerRuntimePaths::new(
             std::env::current_exe().expect("current exe"),
-            /*codex_linux_sandbox_exe*/ None,
+            /*crewon_linux_sandbox_exe*/ None,
         )
         .expect("runtime paths")
     }

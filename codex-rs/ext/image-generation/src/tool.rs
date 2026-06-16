@@ -1,37 +1,37 @@
 use std::collections::HashSet;
 
-use codex_api::ImageBackground;
-use codex_api::ImageEditRequest;
-use codex_api::ImageGenerationRequest;
-use codex_api::ImageQuality;
-use codex_api::ImageUrl;
-use codex_core::context::extension_image_generation_output_hint;
-use codex_core::image_generation_artifact_path;
-use codex_extension_api::ExtensionTurnItem;
-use codex_extension_api::FunctionCallError;
-use codex_extension_api::ToolCall;
-use codex_extension_api::ToolExecutor;
-use codex_extension_api::ToolName;
-use codex_extension_api::ToolOutput;
-use codex_extension_api::ToolPayload;
-use codex_extension_api::ToolSpec;
-use codex_extension_api::parse_tool_input_schema;
-use codex_protocol::items::ImageGenerationItem;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
-use codex_protocol::models::FunctionCallOutputBody;
-use codex_protocol::models::FunctionCallOutputContentItem;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::models::ResponseItem;
-use codex_tools::ResponsesApiNamespace;
-use codex_tools::ResponsesApiNamespaceTool;
-use codex_tools::ResponsesApiTool;
-use codex_tools::ToolExposure;
-use codex_tools::default_namespace_description;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_image::PromptImageMode;
-use codex_utils_image::load_for_prompt_bytes;
+use crewon_api::ImageBackground;
+use crewon_api::ImageEditRequest;
+use crewon_api::ImageGenerationRequest;
+use crewon_api::ImageQuality;
+use crewon_api::ImageUrl;
+use crewon_core::context::extension_image_generation_output_hint;
+use crewon_core::image_generation_artifact_path;
+use crewon_extension_api::ExtensionTurnItem;
+use crewon_extension_api::FunctionCallError;
+use crewon_extension_api::ToolCall;
+use crewon_extension_api::ToolExecutor;
+use crewon_extension_api::ToolName;
+use crewon_extension_api::ToolOutput;
+use crewon_extension_api::ToolPayload;
+use crewon_extension_api::ToolSpec;
+use crewon_extension_api::parse_tool_input_schema;
+use crewon_protocol::items::ImageGenerationItem;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::DEFAULT_IMAGE_DETAIL;
+use crewon_protocol::models::FunctionCallOutputBody;
+use crewon_protocol::models::FunctionCallOutputContentItem;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_tools::ResponsesApiNamespace;
+use crewon_tools::ResponsesApiNamespaceTool;
+use crewon_tools::ResponsesApiTool;
+use crewon_tools::ToolExposure;
+use crewon_tools::default_namespace_description;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_image::PromptImageMode;
+use crewon_utils_image::load_for_prompt_bytes;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaSettings;
 use serde::Deserialize;
@@ -95,7 +95,7 @@ impl ToolExecutor<ToolCall> for ImageGenerationTool {
     }
 
     /// Executes the selected image operation and returns the completed image result.
-    fn handle(&self, call: ToolCall) -> codex_extension_api::ToolExecutorFuture<'_> {
+    fn handle(&self, call: ToolCall) -> crewon_extension_api::ToolExecutorFuture<'_> {
         Box::pin(self.handle_call(call))
     }
 }

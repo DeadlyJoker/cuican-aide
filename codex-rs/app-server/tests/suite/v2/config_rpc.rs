@@ -3,33 +3,33 @@ use app_test_support::TestAppServer;
 use app_test_support::test_path_buf_with_windows;
 use app_test_support::test_tmp_path_buf;
 use app_test_support::to_response;
-use codex_app_server_protocol::AppConfig;
-use codex_app_server_protocol::AppToolApproval;
-use codex_app_server_protocol::ApprovalsReviewer;
-use codex_app_server_protocol::AppsConfig;
-use codex_app_server_protocol::AskForApproval;
-use codex_app_server_protocol::ConfigBatchWriteParams;
-use codex_app_server_protocol::ConfigEdit;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_app_server_protocol::ConfigReadParams;
-use codex_app_server_protocol::ConfigReadResponse;
-use codex_app_server_protocol::ConfigValueWriteParams;
-use codex_app_server_protocol::ConfigWriteResponse;
-use codex_app_server_protocol::ForcedChatgptWorkspaceIds;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::MergeStrategy;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::SandboxMode;
-use codex_app_server_protocol::ToolsV2;
-use codex_app_server_protocol::WriteStatus;
-use codex_core::config::set_project_trust_level;
-use codex_protocol::config_types::TrustLevel;
-use codex_protocol::config_types::WebSearchContextSize;
-use codex_protocol::config_types::WebSearchLocation;
-use codex_protocol::config_types::WebSearchToolConfig;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::AppConfig;
+use crewon_app_server_protocol::AppToolApproval;
+use crewon_app_server_protocol::ApprovalsReviewer;
+use crewon_app_server_protocol::AppsConfig;
+use crewon_app_server_protocol::AskForApproval;
+use crewon_app_server_protocol::ConfigBatchWriteParams;
+use crewon_app_server_protocol::ConfigEdit;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_app_server_protocol::ConfigReadParams;
+use crewon_app_server_protocol::ConfigReadResponse;
+use crewon_app_server_protocol::ConfigValueWriteParams;
+use crewon_app_server_protocol::ConfigWriteResponse;
+use crewon_app_server_protocol::ForcedChatgptWorkspaceIds;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::MergeStrategy;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::SandboxMode;
+use crewon_app_server_protocol::ToolsV2;
+use crewon_app_server_protocol::WriteStatus;
+use crewon_core::config::set_project_trust_level;
+use crewon_protocol::config_types::TrustLevel;
+use crewon_protocol::config_types::WebSearchContextSize;
+use crewon_protocol::config_types::WebSearchLocation;
+use crewon_protocol::config_types::WebSearchToolConfig;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use tempfile::TempDir;
@@ -560,7 +560,7 @@ writable_roots = [{}]
     let mut mcp = TestAppServer::new_with_env(
         codex_home.path(),
         &[(
-            "CODEX_APP_SERVER_MANAGED_CONFIG_PATH",
+            "CREWON_APP_SERVER_MANAGED_CONFIG_PATH",
             Some(&managed_path_str),
         )],
     )
@@ -1033,7 +1033,7 @@ async fn config_batch_write_updates_multiple_desktop_settings() -> Result<()> {
 }
 
 fn assert_layers_user_then_optional_system(
-    layers: &[codex_app_server_protocol::ConfigLayer],
+    layers: &[crewon_app_server_protocol::ConfigLayer],
     user_file: AbsolutePathBuf,
 ) -> Result<()> {
     let mut first_index = 0;
@@ -1059,7 +1059,7 @@ fn assert_layers_user_then_optional_system(
 }
 
 fn assert_layers_managed_user_then_optional_system(
-    layers: &[codex_app_server_protocol::ConfigLayer],
+    layers: &[crewon_app_server_protocol::ConfigLayer],
     managed_file: AbsolutePathBuf,
     user_file: AbsolutePathBuf,
 ) -> Result<()> {

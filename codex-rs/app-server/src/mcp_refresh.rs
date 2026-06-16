@@ -1,10 +1,10 @@
 use crate::config_manager::ConfigManager;
-use codex_core::CodexThread;
-use codex_core::ThreadManager;
-use codex_core::config::Config;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::McpServerRefreshConfig;
-use codex_protocol::protocol::Op;
+use crewon_core::CrewonThread;
+use crewon_core::ThreadManager;
+use crewon_core::config::Config;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::McpServerRefreshConfig;
+use crewon_protocol::protocol::Op;
 use std::io;
 use std::sync::Arc;
 use tracing::warn;
@@ -79,7 +79,7 @@ async fn build_refresh_config(
 
 async fn queue_refresh(
     thread_id: ThreadId,
-    thread: Arc<CodexThread>,
+    thread: Arc<CrewonThread>,
     config: McpServerRefreshConfig,
 ) -> io::Result<()> {
     thread
@@ -100,23 +100,23 @@ mod tests {
     use crate::extensions::guardian_agent_spawner;
     use crate::extensions::thread_extensions;
     use async_trait::async_trait;
-    use codex_arg0::Arg0DispatchPaths;
-    use codex_config::CloudConfigBundleLoader;
-    use codex_config::LoaderOverrides;
-    use codex_config::ThreadConfigContext;
-    use codex_config::ThreadConfigLoadError;
-    use codex_config::ThreadConfigLoadErrorCode;
-    use codex_config::ThreadConfigLoader;
-    use codex_config::ThreadConfigSource;
-    use codex_core::config::ConfigOverrides;
-    use codex_core::init_state_db;
-    use codex_core::thread_store_from_config;
-    use codex_exec_server::EnvironmentManager;
-    use codex_extension_api::NoopExtensionEventSink;
-    use codex_login::AuthManager;
-    use codex_login::CodexAuth;
-    use codex_protocol::protocol::SessionSource;
-    use codex_utils_absolute_path::AbsolutePathBuf;
+    use crewon_arg0::Arg0DispatchPaths;
+    use crewon_config::CloudConfigBundleLoader;
+    use crewon_config::LoaderOverrides;
+    use crewon_config::ThreadConfigContext;
+    use crewon_config::ThreadConfigLoadError;
+    use crewon_config::ThreadConfigLoadErrorCode;
+    use crewon_config::ThreadConfigLoader;
+    use crewon_config::ThreadConfigSource;
+    use crewon_core::config::ConfigOverrides;
+    use crewon_core::init_state_db;
+    use crewon_core::thread_store_from_config;
+    use crewon_exec_server::EnvironmentManager;
+    use crewon_extension_api::NoopExtensionEventSink;
+    use crewon_login::AuthManager;
+    use crewon_login::CrewonAuth;
+    use crewon_protocol::protocol::SessionSource;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
@@ -174,14 +174,14 @@ mod tests {
             )
             .await?;
 
-        let auth_manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key("dummy"));
+        let auth_manager = AuthManager::from_auth_for_testing(CrewonAuth::from_api_key("dummy"));
         let state_db = init_state_db(&good_config)
             .await
             .expect("refresh tests require state db");
         let thread_store = thread_store_from_config(&good_config, Some(state_db.clone()));
         let environment_manager = Arc::new(EnvironmentManager::default_for_tests());
-        let executor_skill_provider: Arc<dyn codex_skills_extension::SkillProvider> = Arc::new(
-            codex_skills_extension::ExecutorSkillProvider::new_with_restriction_product(
+        let executor_skill_provider: Arc<dyn crewon_skills_extension::SkillProvider> = Arc::new(
+            crewon_skills_extension::ExecutorSkillProvider::new_with_restriction_product(
                 Arc::clone(&environment_manager),
                 SessionSource::Exec.restriction_product(),
             ),
@@ -198,9 +198,10 @@ mod tests {
                         event_sink: Arc::new(NoopExtensionEventSink),
                         auth_manager: auth_manager.clone(),
                         state_db: Some(state_db.clone()),
-                        analytics_events_client: codex_analytics::AnalyticsEventsClient::disabled(),
+                        analytics_events_client: crewon_analytics::AnalyticsEventsClient::disabled(
+                        ),
                         thread_manager: thread_manager.clone(),
-                        goal_service: Arc::new(codex_goal_extension::GoalService::new()),
+                        goal_service: Arc::new(crewon_goal_extension::GoalService::new()),
                         executor_skill_provider: Arc::clone(&executor_skill_provider),
                         thread_store: Arc::clone(&thread_store),
                     },

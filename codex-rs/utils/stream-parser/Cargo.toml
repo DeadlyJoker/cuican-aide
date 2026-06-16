@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-stream-parser"
+name = "crewon-utils-stream-parser"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,4 +11,5 @@ workspace = true
 pretty_assertions = { workspace = true }
 
 [lib]
+name = "crewon_utils_stream_parser"
 doctest = false

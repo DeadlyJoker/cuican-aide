@@ -4,28 +4,28 @@ use app_test_support::TestAppServer;
 use app_test_support::create_final_assistant_message_sse_response;
 use app_test_support::create_mock_responses_server_sequence_unchecked;
 use app_test_support::to_response;
-use codex_app_server_protocol::DynamicToolCallOutputContentItem;
-use codex_app_server_protocol::DynamicToolCallParams;
-use codex_app_server_protocol::DynamicToolCallResponse;
-use codex_app_server_protocol::DynamicToolCallStatus;
-use codex_app_server_protocol::DynamicToolSpec;
-use codex_app_server_protocol::ItemCompletedNotification;
-use codex_app_server_protocol::ItemStartedNotification;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
-use codex_protocol::models::FunctionCallOutputBody;
-use codex_protocol::models::FunctionCallOutputContentItem;
-use codex_protocol::models::FunctionCallOutputPayload;
 use core_test_support::responses;
+use crewon_app_server_protocol::DynamicToolCallOutputContentItem;
+use crewon_app_server_protocol::DynamicToolCallParams;
+use crewon_app_server_protocol::DynamicToolCallResponse;
+use crewon_app_server_protocol::DynamicToolCallStatus;
+use crewon_app_server_protocol::DynamicToolSpec;
+use crewon_app_server_protocol::ItemCompletedNotification;
+use crewon_app_server_protocol::ItemStartedNotification;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ThreadItem;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_protocol::models::DEFAULT_IMAGE_DETAIL;
+use crewon_protocol::models::FunctionCallOutputBody;
+use crewon_protocol::models::FunctionCallOutputContentItem;
+use crewon_protocol::models::FunctionCallOutputPayload;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -139,7 +139,7 @@ async fn thread_start_keeps_hidden_dynamic_tools_out_of_model_requests() -> Resu
     timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
 
     let dynamic_tool = DynamicToolSpec {
-        namespace: Some("codex_app".to_string()),
+        namespace: Some("crewon_app".to_string()),
         name: "hidden_tool".to_string(),
         description: "Hidden dynamic tool".to_string(),
         input_schema: json!({
@@ -285,7 +285,7 @@ async fn thread_start_rejects_dynamic_tools_not_supported_by_responses() -> Resu
 #[tokio::test]
 async fn dynamic_tool_call_round_trip_sends_text_content_items_to_model() -> Result<()> {
     let call_id = "dyn-call-1";
-    let tool_namespace = "codex_app";
+    let tool_namespace = "crewon_app";
     let tool_name = "demo_tool";
     let tool_args = json!({ "city": "Paris" });
     let tool_call_arguments = serde_json::to_string(&tool_args)?;

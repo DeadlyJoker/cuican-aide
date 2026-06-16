@@ -21,25 +21,25 @@ use crate::session::session::Session;
 use crate::session::turn::built_tools;
 use crate::session::turn_context::TurnContext;
 use crate::turn_metadata::CompactionTurnMetadata;
-use codex_analytics::CompactionImplementation;
-use codex_analytics::CompactionPhase;
-use codex_analytics::CompactionReason;
-use codex_analytics::CompactionTrigger;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::items::ContextCompactionItem;
-use codex_protocol::items::TurnItem;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::CompactedItem;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::protocol::TruncationPolicy;
-use codex_protocol::protocol::TurnStartedEvent;
-use codex_rollout_trace::CompactionCheckpointTracePayload;
-use codex_rollout_trace::InferenceTraceContext;
-use codex_utils_output_truncation::approx_token_count;
-use codex_utils_output_truncation::truncate_text;
+use crewon_analytics::CompactionImplementation;
+use crewon_analytics::CompactionPhase;
+use crewon_analytics::CompactionReason;
+use crewon_analytics::CompactionTrigger;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
+use crewon_protocol::items::ContextCompactionItem;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::CompactedItem;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::protocol::TruncationPolicy;
+use crewon_protocol::protocol::TurnStartedEvent;
+use crewon_rollout_trace::CompactionCheckpointTracePayload;
+use crewon_rollout_trace::InferenceTraceContext;
+use crewon_utils_output_truncation::approx_token_count;
+use crewon_utils_output_truncation::truncate_text;
 use futures::StreamExt;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -58,7 +58,7 @@ pub(crate) async fn run_inline_remote_auto_compact_task(
     initial_context_injection: InitialContextInjection,
     reason: CompactionReason,
     phase: CompactionPhase,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     run_remote_compact_task_inner(
         &sess,
         &turn_context,
@@ -74,7 +74,7 @@ pub(crate) async fn run_inline_remote_auto_compact_task(
 pub(crate) async fn run_remote_compact_task(
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let start_event = EventMsg::TurnStarted(TurnStartedEvent {
         turn_id: turn_context.sub_id.clone(),
         trace_id: turn_context.trace_id.clone(),
@@ -104,7 +104,7 @@ async fn run_remote_compact_task_inner(
     trigger: CompactionTrigger,
     reason: CompactionReason,
     phase: CompactionPhase,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let compaction_metadata = CompactionTurnMetadata::new(
         trigger,
         reason,
@@ -132,7 +132,7 @@ async fn run_remote_compact_task_inner(
             attempt
                 .track(
                     sess.as_ref(),
-                    codex_analytics::CompactionStatus::Interrupted,
+                    crewon_analytics::CompactionStatus::Interrupted,
                     Some(&error),
                     analytics_details,
                 )
@@ -164,7 +164,7 @@ async fn run_remote_compact_task_inner(
         .track(sess.as_ref(), status, codex_error, analytics_details)
         .await;
     if let Err(err) = result {
-        sess.track_turn_codex_error(turn_context, &err);
+        sess.track_turn_crewon_error(turn_context, &err);
         let event = EventMsg::Error(
             err.to_error_event(Some("Error running remote compact task".to_string())),
         );
@@ -181,7 +181,7 @@ async fn run_remote_compact_task_inner_impl(
     initial_context_injection: InitialContextInjection,
     compaction_metadata: CompactionTurnMetadata,
     analytics_details: &mut CompactionAnalyticsDetails,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let context_compaction_item = ContextCompactionItem::new();
     let compaction_trace = sess.services.rollout_thread_trace.compaction_trace_context(
         turn_context.sub_id.as_str(),
@@ -329,7 +329,7 @@ async fn run_remote_compaction_request_v2(
     prompt: &Prompt,
     window_id: &str,
     turn_metadata_header: Option<&str>,
-) -> CodexResult<RemoteCompactionV2Output> {
+) -> CrewonResult<RemoteCompactionV2Output> {
     let max_retries = turn_context
         .provider
         .info()
@@ -376,7 +376,7 @@ async fn run_remote_compaction_request_v2(
 
 async fn collect_compaction_output(
     mut stream: ResponseStream,
-) -> CodexResult<RemoteCompactionV2Output> {
+) -> CrewonResult<RemoteCompactionV2Output> {
     let mut output_item_count = 0usize;
     let mut compaction_count = 0usize;
     let mut compaction_output = None;
@@ -558,8 +558,8 @@ fn truncate_message_text_to_token_budget(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_protocol::models::ContentItem;
-    use codex_protocol::models::MessagePhase;
+    use crewon_protocol::models::ContentItem;
+    use crewon_protocol::models::MessagePhase;
     use pretty_assertions::assert_eq;
     use tokio::sync::mpsc;
     use tokio_util::sync::CancellationToken;
@@ -575,7 +575,7 @@ mod tests {
         }
     }
 
-    fn response_stream(events: Vec<CodexResult<ResponseEvent>>) -> ResponseStream {
+    fn response_stream(events: Vec<CrewonResult<ResponseEvent>>) -> ResponseStream {
         let (tx_event, rx_event) = mpsc::channel(events.len().max(1));
         for event in events {
             tx_event

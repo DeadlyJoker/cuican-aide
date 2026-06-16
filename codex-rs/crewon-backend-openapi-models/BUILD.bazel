@@ -1,0 +1,6 @@
+load("//:defs.bzl", "crewon_rust_crate")
+
+crewon_rust_crate(
+    name = "crewon-backend-openapi-models",
+    crate_name = "crewon_backend_openapi_models",
+)

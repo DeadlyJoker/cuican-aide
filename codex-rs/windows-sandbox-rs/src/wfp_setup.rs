@@ -1,16 +1,16 @@
 use crate::install_wfp_filters_for_account;
 use crate::setup_error::sanitize_setup_metric_tag_value;
 use anyhow::Result;
-use codex_otel::OtelExporter;
-use codex_otel::OtelProvider;
-use codex_otel::OtelSettings;
-use codex_otel::StatsigMetricsSettings;
+use crewon_otel::OtelExporter;
+use crewon_otel::OtelProvider;
+use crewon_otel::OtelSettings;
+use crewon_otel::StatsigMetricsSettings;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-const WFP_SETUP_SERVICE_NAME: &str = "codex-windows-sandbox-setup";
-const WFP_SETUP_SUCCESS_METRIC: &str = "codex.windows_sandbox.wfp_setup_success";
-const WFP_SETUP_FAILURE_METRIC: &str = "codex.windows_sandbox.wfp_setup_failure";
+const WFP_SETUP_SERVICE_NAME: &str = "crewon-windows-sandbox-setup";
+const WFP_SETUP_SUCCESS_METRIC: &str = "crewon.windows_sandbox.wfp_setup_success";
+const WFP_SETUP_FAILURE_METRIC: &str = "crewon.windows_sandbox.wfp_setup_failure";
 
 #[derive(Debug, Clone, Copy)]
 enum WfpSetupMetricOutcome {
@@ -42,7 +42,7 @@ fn build_wfp_metrics_provider(
     let Some(otel) = otel else {
         return Ok(None);
     };
-    // The setup helper cannot call codex-core's OTEL builder because core
+    // The setup helper cannot call crewon-core's OTEL builder because core
     // depends on this crate, so the parent process passes only the resolved
     // Statsig environment in the elevation payload. Other exporters are
     // intentionally omitted from this helper path.

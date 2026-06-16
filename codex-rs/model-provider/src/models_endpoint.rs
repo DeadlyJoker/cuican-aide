@@ -2,27 +2,27 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use codex_api::ModelsClient;
-use codex_api::RequestTelemetry;
-use codex_api::ReqwestTransport;
-use codex_api::TransportError;
-use codex_api::auth_header_telemetry;
-use codex_api::map_api_error;
-use codex_feedback::FeedbackRequestTags;
-use codex_feedback::emit_feedback_request_tags_with_auth_env;
-use codex_login::AuthEnvTelemetry;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::collect_auth_env_telemetry;
-use codex_login::default_client::build_reqwest_client;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_models_manager::manager::ModelsEndpointClient;
-use codex_otel::TelemetryAuthMode;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CoreResult;
-use codex_protocol::openai_models::ModelInfo;
-use codex_response_debug_context::extract_response_debug_context;
-use codex_response_debug_context::telemetry_transport_error_message;
+use crewon_api::ModelsClient;
+use crewon_api::RequestTelemetry;
+use crewon_api::ReqwestTransport;
+use crewon_api::TransportError;
+use crewon_api::auth_header_telemetry;
+use crewon_api::map_api_error;
+use crewon_feedback::FeedbackRequestTags;
+use crewon_feedback::emit_feedback_request_tags_with_auth_env;
+use crewon_login::AuthEnvTelemetry;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_login::collect_auth_env_telemetry;
+use crewon_login::default_client::build_reqwest_client;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_models_manager::manager::ModelsEndpointClient;
+use crewon_otel::TelemetryAuthMode;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CoreResult;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_response_debug_context::extract_response_debug_context;
+use crewon_response_debug_context::telemetry_transport_error_message;
 use http::HeaderMap;
 use tokio::time::timeout;
 
@@ -31,7 +31,7 @@ use crate::auth::resolve_provider_auth;
 const MODELS_REFRESH_TIMEOUT: Duration = Duration::from_secs(5);
 const MODELS_ENDPOINT: &str = "/models";
 
-/// Provider-owned OpenAI-compatible `/models` endpoint.
+/// Provider-owned Responses-compatible `/models` endpoint.
 #[derive(Debug)]
 pub(crate) struct OpenAiModelsEndpoint {
     provider_info: ModelProviderInfo,
@@ -49,7 +49,7 @@ impl OpenAiModelsEndpoint {
         }
     }
 
-    async fn auth(&self) -> Option<CodexAuth> {
+    async fn auth(&self) -> Option<CrewonAuth> {
         match self.auth_manager.as_ref() {
             Some(auth_manager) => auth_manager.auth().await,
             None => None,
@@ -71,11 +71,11 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
         self.provider_info.has_command_auth()
     }
 
-    async fn uses_codex_backend(&self) -> bool {
+    async fn uses_crewon_backend(&self) -> bool {
         self.auth()
             .await
             .as_ref()
-            .is_some_and(CodexAuth::uses_codex_backend)
+            .is_some_and(CrewonAuth::uses_crewon_backend)
     }
 
     async fn list_models(
@@ -83,9 +83,9 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
         client_version: &str,
     ) -> CoreResult<(Vec<ModelInfo>, Option<String>)> {
         let _timer =
-            codex_otel::start_global_timer("codex.remote_models.fetch_update.duration_ms", &[]);
+            crewon_otel::start_global_timer("crewon.remote_models.fetch_update.duration_ms", &[]);
         let auth = self.auth().await;
-        let auth_mode = auth.as_ref().map(CodexAuth::auth_mode);
+        let auth_mode = auth.as_ref().map(CrewonAuth::auth_mode);
         let api_provider = self.provider_info.to_api_provider(auth_mode)?;
         let api_auth = resolve_provider_auth(auth.as_ref(), &self.provider_info)?;
         let transport = ReqwestTransport::new(build_reqwest_client());
@@ -132,9 +132,9 @@ impl RequestTelemetry for ModelsRequestTelemetry {
             .unwrap_or_default();
         let status = status.map(|status| status.as_u16());
         tracing::event!(
-            target: "codex_otel.log_only",
+            target: "crewon_otel.log_only",
             tracing::Level::INFO,
-            event.name = "codex.api_request",
+            event.name = "crewon.api_request",
             duration_ms = %duration.as_millis(),
             http.response.status_code = status,
             success = success,
@@ -156,9 +156,9 @@ impl RequestTelemetry for ModelsRequestTelemetry {
             auth.mode = self.auth_mode.as_deref(),
         );
         tracing::event!(
-            target: "codex_otel.trace_safe",
+            target: "crewon_otel.trace_safe",
             tracing::Level::INFO,
-            event.name = "codex.api_request",
+            event.name = "crewon.api_request",
             duration_ms = %duration.as_millis(),
             http.response.status_code = status,
             success = success,
@@ -206,7 +206,7 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
-    use codex_protocol::config_types::ModelProviderAuthInfo;
+    use crewon_protocol::config_types::ModelProviderAuthInfo;
 
     fn provider_info_with_command_auth() -> ModelProviderInfo {
         ModelProviderInfo {

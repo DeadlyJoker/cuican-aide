@@ -1,14 +1,14 @@
 use super::*;
 
 use crate::sandbox_tags::permission_profile_sandbox_tag;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::ThreadSource;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathBufExt;
 use core_test_support::PathExt;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use std::collections::HashMap;

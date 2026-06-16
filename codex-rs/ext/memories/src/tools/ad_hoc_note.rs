@@ -1,9 +1,9 @@
-use codex_extension_api::JsonToolOutput;
-use codex_extension_api::ToolCall;
-use codex_extension_api::ToolExecutor;
-use codex_extension_api::ToolName;
-use codex_extension_api::ToolSpec;
-use codex_otel::MetricsClient;
+use crewon_extension_api::JsonToolOutput;
+use crewon_extension_api::ToolCall;
+use crewon_extension_api::ToolExecutor;
+use crewon_extension_api::ToolName;
+use crewon_extension_api::ToolSpec;
+use crewon_otel::MetricsClient;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
@@ -52,11 +52,11 @@ where
     fn spec(&self) -> ToolSpec {
         memory_function_tool::<AddAdHocNoteArgs, AddAdHocMemoryNoteResponse>(
             ADD_AD_HOC_NOTE_TOOL_NAME,
-            "Create one append-only ad-hoc memory note after the user explicitly asks Codex to remember, forget, or update something.",
+            "Create one append-only ad-hoc memory note after the user explicitly asks Crewon to remember, forget, or update something.",
         )
     }
 
-    fn handle(&self, call: ToolCall) -> codex_extension_api::ToolExecutorFuture<'_> {
+    fn handle(&self, call: ToolCall) -> crewon_extension_api::ToolExecutorFuture<'_> {
         Box::pin(self.handle_call(call))
     }
 }
@@ -68,7 +68,7 @@ where
     async fn handle_call(
         &self,
         call: ToolCall,
-    ) -> Result<Box<dyn codex_extension_api::ToolOutput>, codex_extension_api::FunctionCallError>
+    ) -> Result<Box<dyn crewon_extension_api::ToolOutput>, crewon_extension_api::FunctionCallError>
     {
         let backend = self.backend.clone();
         let args: AddAdHocNoteArgs = parse_args(&call)?;

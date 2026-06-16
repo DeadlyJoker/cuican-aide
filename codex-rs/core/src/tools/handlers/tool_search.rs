@@ -10,15 +10,15 @@ use bm25::Document;
 use bm25::Language;
 use bm25::SearchEngine;
 use bm25::SearchEngineBuilder;
-use codex_tools::LoadableToolSpec;
-use codex_tools::TOOL_SEARCH_DEFAULT_LIMIT;
-use codex_tools::TOOL_SEARCH_TOOL_NAME;
-use codex_tools::ToolName;
-use codex_tools::ToolSearchEntry;
-use codex_tools::ToolSearchInfo;
-use codex_tools::ToolSearchSourceInfo;
-use codex_tools::ToolSpec;
-use codex_tools::coalesce_loadable_tool_specs;
+use crewon_tools::LoadableToolSpec;
+use crewon_tools::TOOL_SEARCH_DEFAULT_LIMIT;
+use crewon_tools::TOOL_SEARCH_TOOL_NAME;
+use crewon_tools::ToolName;
+use crewon_tools::ToolSearchEntry;
+use crewon_tools::ToolSearchInfo;
+use crewon_tools::ToolSearchSourceInfo;
+use crewon_tools::ToolSpec;
+use crewon_tools::coalesce_loadable_tool_specs;
 
 pub struct ToolSearchHandler {
     entries: Vec<ToolSearchEntry>,
@@ -66,7 +66,7 @@ impl ToolExecutor<ToolInvocation> for ToolSearchHandler {
         true
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle(&self, invocation: ToolInvocation) -> crewon_tools::ToolExecutorFuture<'_> {
         Box::pin(self.handle_call(invocation))
     }
 }
@@ -143,11 +143,11 @@ mod tests {
     use super::*;
     use crate::tools::handlers::DynamicToolHandler;
     use crate::tools::handlers::McpHandler;
-    use codex_mcp::ToolInfo;
-    use codex_protocol::dynamic_tools::DynamicToolSpec;
-    use codex_tools::ResponsesApiNamespace;
-    use codex_tools::ResponsesApiNamespaceTool;
-    use codex_tools::ResponsesApiTool;
+    use crewon_mcp::ToolInfo;
+    use crewon_protocol::dynamic_tools::DynamicToolSpec;
+    use crewon_tools::ResponsesApiNamespace;
+    use crewon_tools::ResponsesApiNamespaceTool;
+    use crewon_tools::ResponsesApiTool;
     use pretty_assertions::assert_eq;
     use rmcp::model::Tool;
     use std::sync::Arc;
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn mixed_search_results_coalesce_mcp_namespaces() {
         let dynamic_tools = [DynamicToolSpec {
-            namespace: Some("codex_app".to_string()),
+            namespace: Some("crewon_app".to_string()),
             name: "automation_update".to_string(),
             description: "Create, update, view, or delete recurring automations.".to_string(),
             input_schema: serde_json::json!({
@@ -210,7 +210,7 @@ mod tests {
                             description: "Create events desktop tool".to_string(),
                             strict: false,
                             defer_loading: Some(true),
-                            parameters: codex_tools::JsonSchema::object(
+                            parameters: crewon_tools::JsonSchema::object(
                                 Default::default(),
                                 /*required*/ None,
                                 Some(false.into()),
@@ -222,7 +222,7 @@ mod tests {
                             description: "List events desktop tool".to_string(),
                             strict: false,
                             defer_loading: Some(true),
-                            parameters: codex_tools::JsonSchema::object(
+                            parameters: crewon_tools::JsonSchema::object(
                                 Default::default(),
                                 /*required*/ None,
                                 Some(false.into()),
@@ -232,18 +232,18 @@ mod tests {
                     ],
                 }),
                 LoadableToolSpec::Namespace(ResponsesApiNamespace {
-                    name: "codex_app".to_string(),
-                    description: "Tools in the codex_app namespace.".to_string(),
+                    name: "crewon_app".to_string(),
+                    description: "Tools in the crewon_app namespace.".to_string(),
                     tools: vec![ResponsesApiNamespaceTool::Function(ResponsesApiTool {
                         name: "automation_update".to_string(),
                         description: "Create, update, view, or delete recurring automations."
                             .to_string(),
                         strict: false,
                         defer_loading: Some(true),
-                        parameters: codex_tools::JsonSchema::object(
+                        parameters: crewon_tools::JsonSchema::object(
                             std::collections::BTreeMap::from([(
                                 "mode".to_string(),
-                                codex_tools::JsonSchema::string(/*description*/ None),
+                                crewon_tools::JsonSchema::string(/*description*/ None),
                             )]),
                             Some(vec!["mode".to_string()]),
                             Some(false.into()),

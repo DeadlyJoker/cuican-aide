@@ -3,25 +3,6 @@ use std::path::Path;
 
 use anyhow::Context;
 use anyhow::Result;
-use codex_core::config::Config;
-use codex_core::config::Constrained;
-use codex_features::Feature;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::built_in_model_providers;
-use codex_plugin::PluginHookSource;
-use codex_plugin::PluginId;
-use codex_protocol::items::parse_hook_prompt_fragment;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::user_input::UserInput;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::hooks::trust_discovered_hooks;
 use core_test_support::hooks::trust_hooks;
 use core_test_support::managed_network_requirements_loader;
@@ -42,8 +23,27 @@ use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_windows;
 use core_test_support::streaming_sse::StreamingSseChunk;
 use core_test_support::streaming_sse::start_streaming_sse_server;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_core::config::Config;
+use crewon_core::config::Constrained;
+use crewon_features::Feature;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::built_in_model_providers;
+use crewon_plugin::PluginHookSource;
+use crewon_plugin::PluginId;
+use crewon_protocol::items::parse_hook_prompt_fragment;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::user_input::UserInput;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use std::sync::Arc;
@@ -87,14 +87,14 @@ fn non_openai_model_provider(server: &wiremock::MockServer) -> ModelProviderInfo
 }
 
 fn trust_plugin_hooks(config: &mut Config, plugin_hook_sources: Vec<PluginHookSource>) {
-    if let Err(err) = config.features.enable(Feature::CodexHooks) {
+    if let Err(err) = config.features.enable(Feature::Hooks) {
         panic!("test config should allow feature update: {err}");
     }
-    let listed = codex_hooks::list_hooks(codex_hooks::HooksConfig {
+    let listed = crewon_hooks::list_hooks(crewon_hooks::HooksConfig {
         feature_enabled: true,
         config_layer_stack: Some(config.config_layer_stack.clone()),
         plugin_hook_sources,
-        ..codex_hooks::HooksConfig::default()
+        ..crewon_hooks::HooksConfig::default()
     });
     assert!(
         !listed.hooks.is_empty(),
@@ -1077,7 +1077,7 @@ async fn stop_hook_can_block_multiple_times_in_same_turn() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_stop_hook(
                 home,
@@ -1144,7 +1144,7 @@ async fn stop_hook_can_block_multiple_times_in_same_turn() -> Result<()> {
         vec![false, true, true],
     );
 
-    let rollout_path = test.codex.rollout_path().expect("rollout path");
+    let rollout_path = test.crewon.rollout_path().expect("rollout path");
     let rollout_text = fs::read_to_string(&rollout_path)?;
     let hook_prompt_texts = rollout_hook_prompt_texts(&rollout_text)?;
     assert!(
@@ -1174,7 +1174,7 @@ async fn session_start_hook_sees_materialized_transcript_path() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_session_start_hook_recording_transcript(home) {
                 panic!("failed to write session start hook test fixture: {error}");
@@ -1214,7 +1214,7 @@ async fn session_start_runs_before_user_prompt_submit_on_first_turn() -> Result<
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_session_start_and_user_prompt_submit_order_hooks(home) {
                 panic!("failed to write hook ordering fixtures: {error}");
@@ -1263,7 +1263,7 @@ async fn session_start_hook_spills_large_additional_context() -> Result<()> {
     .await;
     let additional_context = "remember the reef ".repeat(800);
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook({
             let additional_context = additional_context.clone();
             move |home| {
@@ -1321,7 +1321,7 @@ async fn pre_tool_use_hook_spills_large_additional_context() -> Result<()> {
     .await;
     let additional_context = "remember the pre tool reef ".repeat(800);
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook({
             let additional_context = additional_context.clone();
             move |home| {
@@ -1381,7 +1381,7 @@ async fn compact_session_start_hook_records_additional_context_for_next_turn() -
     let additional_context = "remember the compacted reef";
     let model_provider = non_openai_model_provider(&server);
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(move |home| {
             if let Err(error) =
                 write_compact_session_start_hook_with_context(home, additional_context)
@@ -1396,8 +1396,8 @@ async fn compact_session_start_hook_records_additional_context_for_next_turn() -
     let test = builder.build(&server).await?;
 
     test.submit_turn("hello before compact").await?;
-    test.codex.submit(Op::Compact).await?;
-    wait_for_event(&test.codex, |event| {
+    test.crewon.submit(Op::Compact).await?;
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -1467,7 +1467,7 @@ async fn resumed_thread_runs_resume_then_compact_session_start_hooks() -> Result
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(move |home| {
             if let Err(error) = write_resume_and_compact_session_start_hook_with_context(
                 home,
@@ -1492,7 +1492,7 @@ async fn resumed_thread_runs_resume_then_compact_session_start_hooks() -> Result
     initial.submit_turn("hello before resume").await?;
     assert_eq!(responses_mock.requests().len(), 1);
 
-    let mut resume_builder = test_codex().with_config(move |config| {
+    let mut resume_builder = test_crewon().with_config(move |config| {
         config.model_auto_compact_token_limit = Some(limit);
         trust_discovered_hooks(config);
     });
@@ -1552,7 +1552,7 @@ async fn stop_hook_spills_large_continuation_prompt() -> Result<()> {
         .collect::<Vec<_>>()
         .join(" ");
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook({
             let continuation_prompt = continuation_prompt.clone();
             move |home| {
@@ -1600,7 +1600,7 @@ async fn resumed_thread_keeps_stop_continuation_prompt_in_history() -> Result<()
     )
     .await;
 
-    let mut initial_builder = test_codex()
+    let mut initial_builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_stop_hook(home, &[FIRST_CONTINUATION_PROMPT]) {
                 panic!("failed to write stop hook test fixture: {error}");
@@ -1629,7 +1629,7 @@ async fn resumed_thread_keeps_stop_continuation_prompt_in_history() -> Result<()
     )
     .await;
 
-    let mut resume_builder = test_codex().with_config(trust_discovered_hooks);
+    let mut resume_builder = test_crewon().with_config(trust_discovered_hooks);
     let resumed = resume_builder.resume(&server, home, rollout_path).await?;
 
     resumed.submit_turn("and now continue").await?;
@@ -1666,7 +1666,7 @@ async fn multiple_blocking_stop_hooks_persist_multiple_hook_prompt_fragments() -
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_parallel_stop_hooks(
                 home,
@@ -1691,7 +1691,7 @@ async fn multiple_blocking_stop_hooks_persist_multiple_hook_prompt_fragments() -
         "second request should receive one user hook prompt message with both fragments",
     );
 
-    let rollout_path = test.codex.rollout_path().expect("rollout path");
+    let rollout_path = test.crewon.rollout_path().expect("rollout path");
     let rollout_text = fs::read_to_string(&rollout_path)?;
     assert_eq!(
         rollout_hook_prompt_texts(&rollout_text)?,
@@ -1720,7 +1720,7 @@ async fn blocked_user_prompt_submit_persists_additional_context_for_next_turn() 
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_user_prompt_submit_hook(home, "blocked first prompt", BLOCKED_PROMPT_CONTEXT)
@@ -1821,7 +1821,7 @@ async fn blocked_queued_prompt_does_not_strand_earlier_accepted_prompt() -> Resu
     let (server, _completions) =
         start_streaming_sse_server(vec![first_chunks, second_chunks]).await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("gpt-5.4")
         .with_pre_build_hook(|home| {
             if let Err(error) =
@@ -1833,7 +1833,7 @@ async fn blocked_queued_prompt_does_not_strand_earlier_accepted_prompt() -> Resu
         .with_config(trust_discovered_hooks);
     let test = builder.build_with_streaming_server(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "initial prompt".to_string(),
@@ -1846,13 +1846,13 @@ async fn blocked_queued_prompt_does_not_strand_earlier_accepted_prompt() -> Resu
         })
         .await?;
 
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::AgentMessageContentDelta(_))
     })
     .await;
 
     for text in ["accepted queued prompt", "blocked queued prompt"] {
-        test.codex
+        test.crewon
             .submit(Op::UserInput {
                 items: vec![UserInput::Text {
                     text: text.to_string(),
@@ -1975,7 +1975,7 @@ async fn permission_request_hook_allows_shell_command_without_user_approval() ->
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = install_allow_permission_request_hook(home) {
                 panic!("failed to write permission request hook test fixture: {error}");
@@ -2050,7 +2050,7 @@ async fn permission_request_hook_allows_apply_patch_with_write_alias() -> Result
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_permission_request_hook(
                 home,
@@ -2128,7 +2128,7 @@ async fn permission_request_hook_sees_raw_exec_command_input() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = install_allow_permission_request_hook(home) {
                 panic!("failed to write permission request hook test fixture: {error}");
@@ -2212,7 +2212,7 @@ allow_local_binding = true
     let approval_policy = AskForApproval::OnFailure;
     let permission_profile = network_workspace_write_profile();
     let permission_profile_for_config = permission_profile.clone();
-    let test = test_codex()
+    let test = test_crewon()
         .with_home(Arc::clone(&home))
         .with_pre_build_hook(|home| {
             if let Err(error) = install_allow_permission_request_hook(home) {
@@ -2268,7 +2268,7 @@ allow_local_binding = true
     assert!(
         timeout(
             Duration::from_secs(2),
-            wait_for_event(&test.codex, |event| matches!(
+            wait_for_event(&test.crewon, |event| matches!(
                 event,
                 EventMsg::ExecApprovalRequest(_)
             ))
@@ -2284,8 +2284,8 @@ allow_local_binding = true
         Some("network-access http://codex-network-test.invalid:80"),
     )?;
 
-    test.codex.submit(Op::Shutdown {}).await?;
-    wait_for_event(&test.codex, |event| {
+    test.crewon.submit(Op::Shutdown {}).await?;
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::ShutdownComplete)
     })
     .await;
@@ -2324,7 +2324,7 @@ async fn permission_request_hook_sees_retry_context_after_sandbox_denial() -> Re
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = install_allow_permission_request_hook(home) {
                 panic!("failed to write permission request hook test fixture: {error}");
@@ -2389,7 +2389,7 @@ async fn pre_tool_use_blocks_shell_command_before_execution() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_pre_tool_use_hook(home, Some("^Bash$"), "json_deny", "blocked by pre hook")
@@ -2486,7 +2486,7 @@ async fn pre_tool_use_records_additional_context_for_shell_command() -> Result<(
     .await;
 
     let pre_context = "Remember the bash pre-tool note.";
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_pre_tool_use_hook(home, Some("^Bash$"), "context", pre_context)
@@ -2552,7 +2552,7 @@ async fn blocked_pre_tool_use_records_additional_context_for_shell_command() -> 
     .await;
 
     let pre_context = "blocked by pre hook with context";
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_pre_tool_use_hook(home, Some("^Bash$"), "json_deny_with_context", pre_context)
@@ -2681,7 +2681,7 @@ async fn assert_pre_tool_use_rewrites_bash_surface(surface: BashRewriteSurface) 
     .await;
 
     let updated_input = serde_json::json!({ "command": rewritten_command });
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(move |home| {
             if let Err(error) = write_updating_pre_tool_use_hook(home, "^Bash$", &updated_input) {
                 panic!("failed to write updating pre tool use hook fixture: {error}");
@@ -2768,7 +2768,7 @@ text(output.output);
     .await;
 
     let updated_input = serde_json::json!({ "command": rewritten_command });
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("test-gpt-5.1-codex")
         .with_pre_build_hook(move |home| {
             if let Err(error) = write_updating_pre_tool_use_hook(home, "^Bash$", &updated_input) {
@@ -2847,11 +2847,11 @@ async fn plugin_pre_tool_use_blocks_shell_command_before_execution() -> Result<(
     let home = Arc::new(TempDir::new()?);
     let plugin_root = home.path().join("plugins/cache/test/sample/local");
     let hooks_dir = plugin_root.join("hooks");
-    fs::create_dir_all(plugin_root.join(".codex-plugin"))
+    fs::create_dir_all(plugin_root.join(".crewon-plugin"))
         .context("create plugin manifest directory")?;
     fs::create_dir_all(&hooks_dir).context("create plugin hooks directory")?;
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )
     .context("write plugin manifest")?;
@@ -2913,12 +2913,12 @@ print(json.dumps({{
         plugin_data_root,
         source_path: plugin_hooks_path_abs,
         source_relative_path: "hooks/hooks.json".to_string(),
-        hooks: serde_json::from_str::<codex_config::HooksFile>(plugin_hooks_json)
+        hooks: serde_json::from_str::<crewon_config::HooksFile>(plugin_hooks_json)
             .context("parse plugin hooks")?
             .hooks,
     }];
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(Arc::clone(&home))
         .with_config(move |config| {
             config
@@ -2935,7 +2935,7 @@ print(json.dumps({{
 
     test.submit_turn_with_policy(
         "run the shell command blocked by a plugin hook",
-        codex_protocol::protocol::SandboxPolicy::DangerFullAccess,
+        crewon_protocol::protocol::SandboxPolicy::DangerFullAccess,
     )
     .await?;
 
@@ -2995,7 +2995,7 @@ async fn pre_tool_use_blocks_shell_when_defined_in_config_toml() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_pre_tool_use_hook_toml(
                 home,
@@ -3079,7 +3079,7 @@ async fn pre_tool_use_merges_hooks_json_and_config_toml() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_pre_tool_use_hook(home, Some("^Bash$"), "allow", "unused") {
                 panic!("failed to write hooks.json hook fixture: {error}");
@@ -3183,7 +3183,7 @@ async fn pre_tool_use_blocks_exec_command_before_execution() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_pre_tool_use_hook(home, Some("^Bash$"), "exit_2", "blocked exec command")
@@ -3267,7 +3267,7 @@ async fn pre_tool_use_blocks_apply_patch_before_execution() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_pre_tool_use_hook(
                 home,
@@ -3348,7 +3348,7 @@ async fn pre_tool_use_rewrites_apply_patch_before_execution() -> Result<()> {
     .await;
 
     let updated_input = serde_json::json!({ "command": rewritten_patch });
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(move |home| {
             if let Err(error) =
                 write_updating_pre_tool_use_hook(home, "^apply_patch$", &updated_input)
@@ -3413,7 +3413,7 @@ async fn pre_tool_use_blocks_apply_patch_with_write_alias() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_pre_tool_use_hook(home, Some("^Write$"), "json_deny", "blocked write alias")
@@ -3479,7 +3479,7 @@ async fn pre_tool_use_blocks_local_function_tool_before_execution() -> Result<()
     .await;
 
     let reason = "blocked local function pre hook";
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("test-gpt-5.1-codex")
         .with_pre_build_hook(|home| {
             if let Err(error) =
@@ -3552,7 +3552,7 @@ async fn pre_tool_use_rewrites_local_function_tool_before_execution() -> Result<
     .await;
 
     let updated_input = serde_json::json!({});
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("test-gpt-5.1-codex")
         .with_pre_build_hook(move |home| {
             if let Err(error) =
@@ -3613,7 +3613,7 @@ async fn post_tool_use_records_additional_context_for_shell_command() -> Result<
     .await;
 
     let post_context = "Remember the bash post-tool note.";
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_post_tool_use_hook(home, Some("^Bash$"), "context", post_context)
@@ -3705,7 +3705,7 @@ async fn post_tool_use_block_decision_replaces_shell_command_output_with_reason(
     .await;
 
     let reason = "bash output looked sketchy";
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_post_tool_use_hook(home, Some("^Bash$"), "decision_block", reason)
@@ -3769,7 +3769,7 @@ async fn post_tool_use_continue_false_replaces_shell_command_output_with_stop_re
     .await;
 
     let stop_reason = "Execution halted by post-tool hook";
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_post_tool_use_hook(home, Some("^Bash$"), "continue_false", stop_reason)
@@ -3832,7 +3832,7 @@ async fn post_tool_use_exit_two_replaces_one_shot_exec_command_output_with_feedb
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_post_tool_use_hook(home, Some("^Bash$"), "exit_2", "blocked by post hook")
@@ -3904,7 +3904,7 @@ async fn post_tool_use_spills_large_feedback_message() -> Result<()> {
     .await;
     let feedback = "blocked by post hook ".repeat(800);
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook({
             let feedback = feedback.clone();
             move |home| {
@@ -3994,7 +3994,7 @@ async fn post_tool_use_blocks_when_exec_session_completes_via_write_stdin() -> R
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_logging_pre_and_blocking_post_tool_use_hooks(home, feedback) {
                 panic!("failed to write tool use hook test fixture: {error}");
@@ -4076,7 +4076,7 @@ async fn post_tool_use_records_additional_context_for_apply_patch() -> Result<()
     .await;
 
     let post_context = "Remember the apply_patch post-tool note.";
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_post_tool_use_hook(home, Some("^apply_patch$"), "context", post_context)
@@ -4150,7 +4150,7 @@ async fn post_tool_use_records_apply_patch_context_with_edit_alias() -> Result<(
     .await;
 
     let post_context = "Remember the edit alias post-tool note.";
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_post_tool_use_hook(home, Some("^Edit$"), "context", post_context)

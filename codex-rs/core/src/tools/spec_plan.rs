@@ -55,35 +55,35 @@ use crate::tools::registry::ToolRegistry;
 use crate::tools::registry::override_tool_exposure;
 use crate::tools::router::ToolRouter;
 use crate::tools::router::ToolRouterParams;
-use codex_features::Feature;
-use codex_login::AuthManager;
-use codex_mcp::ToolInfo;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::ToolMode;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_tools::DiscoverableTool;
-use codex_tools::ResponsesApiNamespace;
-use codex_tools::ResponsesApiNamespaceTool;
-use codex_tools::TOOL_SEARCH_TOOL_NAME;
-use codex_tools::ToolCall as ExtensionToolCall;
-use codex_tools::ToolEnvironmentMode;
-use codex_tools::ToolExecutor;
-use codex_tools::ToolName;
-use codex_tools::ToolSearchInfo;
-use codex_tools::ToolSpec;
-use codex_tools::UnifiedExecShellMode;
-use codex_tools::can_request_original_image_detail;
-use codex_tools::collect_code_mode_exec_prompt_tool_definitions;
-use codex_tools::collect_request_plugin_install_entries;
-use codex_tools::default_namespace_description;
-use codex_tools::request_user_input_available_modes;
-use codex_tools::shell_command_backend_for_features;
-use codex_tools::shell_type_for_model_and_features;
+use crewon_features::Feature;
+use crewon_login::AuthManager;
+use crewon_mcp::ToolInfo;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::dynamic_tools::DynamicToolSpec;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::InputModality;
+use crewon_protocol::openai_models::ToolMode;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_tools::DiscoverableTool;
+use crewon_tools::ResponsesApiNamespace;
+use crewon_tools::ResponsesApiNamespaceTool;
+use crewon_tools::TOOL_SEARCH_TOOL_NAME;
+use crewon_tools::ToolCall as ExtensionToolCall;
+use crewon_tools::ToolEnvironmentMode;
+use crewon_tools::ToolExecutor;
+use crewon_tools::ToolName;
+use crewon_tools::ToolSearchInfo;
+use crewon_tools::ToolSpec;
+use crewon_tools::UnifiedExecShellMode;
+use crewon_tools::can_request_original_image_detail;
+use crewon_tools::collect_code_mode_exec_prompt_tool_definitions;
+use crewon_tools::collect_request_plugin_install_entries;
+use crewon_tools::default_namespace_description;
+use crewon_tools::request_user_input_available_modes;
+use crewon_tools::shell_command_backend_for_features;
+use crewon_tools::shell_type_for_model_and_features;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -242,9 +242,9 @@ fn spec_for_model_request(
         ToolMode::CodeMode | ToolMode::CodeModeOnly
     ) && exposure != ToolExposure::DirectModelOnly
         && !is_excluded_from_code_mode(turn_context, tool_name)
-        && codex_code_mode::is_code_mode_nested_tool(spec.name())
+        && crewon_code_mode::is_code_mode_nested_tool(spec.name())
     {
-        codex_tools::augment_tool_spec_for_code_mode(spec)
+        crewon_tools::augment_tool_spec_for_code_mode(spec)
     } else {
         spec
     }
@@ -342,7 +342,7 @@ fn image_generation_runtime_enabled(turn_context: &TurnContext) -> bool {
     turn_context
         .auth_manager
         .as_deref()
-        .is_some_and(AuthManager::current_auth_uses_codex_backend)
+        .is_some_and(AuthManager::current_auth_uses_crewon_backend)
         && turn_context.provider.capabilities().image_generation
         && turn_context
             .model_info
@@ -408,7 +408,7 @@ fn is_hidden_by_code_mode_only(
 ) -> bool {
     turn_context.tool_mode == ToolMode::CodeModeOnly
         && exposure != ToolExposure::DirectModelOnly
-        && codex_code_mode::is_code_mode_nested_tool(&codex_tools::code_mode_name_for_tool_name(
+        && crewon_code_mode::is_code_mode_nested_tool(&crewon_tools::code_mode_name_for_tool_name(
             tool_name,
         ))
 }
@@ -533,7 +533,7 @@ fn merge_into_namespaces(specs: Vec<ToolSpec>) -> Vec<ToolSpec> {
 
 fn code_mode_namespace_descriptions(
     specs: &[ToolSpec],
-) -> BTreeMap<String, codex_code_mode::ToolNamespaceDescription> {
+) -> BTreeMap<String, crewon_code_mode::ToolNamespaceDescription> {
     let mut namespace_descriptions = BTreeMap::new();
     for spec in specs {
         let ToolSpec::Namespace(namespace) = spec else {
@@ -542,7 +542,7 @@ fn code_mode_namespace_descriptions(
 
         let entry = namespace_descriptions
             .entry(namespace.name.clone())
-            .or_insert_with(|| codex_code_mode::ToolNamespaceDescription {
+            .or_insert_with(|| crewon_code_mode::ToolNamespaceDescription {
                 name: namespace.name.clone(),
                 description: namespace.description.clone(),
             });
@@ -883,8 +883,8 @@ fn append_extension_tool_executors(
         turn_context.tool_mode,
         ToolMode::CodeMode | ToolMode::CodeModeOnly
     ) {
-        reserved_tool_names.insert(ToolName::plain(codex_code_mode::PUBLIC_TOOL_NAME));
-        reserved_tool_names.insert(ToolName::plain(codex_code_mode::WAIT_TOOL_NAME));
+        reserved_tool_names.insert(ToolName::plain(crewon_code_mode::PUBLIC_TOOL_NAME));
+        reserved_tool_names.insert(ToolName::plain(crewon_code_mode::WAIT_TOOL_NAME));
     }
     if search_tool_enabled(turn_context)
         && namespace_tools_enabled(turn_context)
@@ -965,7 +965,7 @@ impl ToolExecutor<ToolInvocation> for MultiAgentV2NamespaceOverride {
         self.handler.search_info()
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle(&self, invocation: ToolInvocation) -> crewon_tools::ToolExecutorFuture<'_> {
         self.handler.handle(invocation)
     }
 }
@@ -983,9 +983,9 @@ impl CoreToolRuntime for MultiAgentV2NamespaceOverride {
 }
 
 fn compare_code_mode_tools(
-    left: &codex_code_mode::ToolDefinition,
-    right: &codex_code_mode::ToolDefinition,
-    namespace_descriptions: &BTreeMap<String, codex_code_mode::ToolNamespaceDescription>,
+    left: &crewon_code_mode::ToolDefinition,
+    right: &crewon_code_mode::ToolDefinition,
+    namespace_descriptions: &BTreeMap<String, crewon_code_mode::ToolNamespaceDescription>,
 ) -> std::cmp::Ordering {
     let left_namespace = code_mode_namespace_name(left, namespace_descriptions);
     let right_namespace = code_mode_namespace_name(right, namespace_descriptions);
@@ -997,8 +997,8 @@ fn compare_code_mode_tools(
 }
 
 fn code_mode_namespace_name<'a>(
-    tool: &codex_code_mode::ToolDefinition,
-    namespace_descriptions: &'a BTreeMap<String, codex_code_mode::ToolNamespaceDescription>,
+    tool: &crewon_code_mode::ToolDefinition,
+    namespace_descriptions: &'a BTreeMap<String, crewon_code_mode::ToolNamespaceDescription>,
 ) -> Option<&'a str> {
     tool.tool_name
         .namespace

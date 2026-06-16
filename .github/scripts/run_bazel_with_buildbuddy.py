@@ -9,11 +9,11 @@ from collections.abc import Sequence
 from pathlib import Path
 
 
-OPENAI_REPOSITORY = "openai/codex"
+TRUSTED_UPSTREAM_REPOSITORY_ENV = "CREWON_TRUSTED_UPSTREAM_REPOSITORY"
 # Remote configurations select cache/BES/download endpoints. Their -rbe forms
 # also select the matching remote executor endpoint.
 GENERIC_REMOTE_CONFIG = "buildbuddy-generic"
-OPENAI_REMOTE_CONFIG = "buildbuddy-openai"
+PRIVATE_REMOTE_CONFIG = "buildbuddy-private"
 # These CI configurations require remote build execution. The wrapper supplies
 # an RBE configuration, which also includes the common `remote` settings.
 REMOTE_EXECUTION_CONFIGS = {
@@ -64,18 +64,25 @@ def startup_args(args: Sequence[str], env: Mapping[str, str]) -> list[str]:
 
 
 # Only authenticated workflow runs executing trusted upstream code may use the
-# OpenAI BuildBuddy host. A pull request event without proof that its head is
+# private BuildBuddy host. A pull request event without proof that its head is
 # in the upstream repository fails closed to the generic host.
+def trusted_upstream_repository(env: Mapping[str, str]) -> str | None:
+    repository = env.get(TRUSTED_UPSTREAM_REPOSITORY_ENV, "").strip()
+    return repository or None
+
+
 def is_trusted_upstream_run(env: Mapping[str, str]) -> bool:
+    trusted_repository = trusted_upstream_repository(env)
     # `GITHUB_REPOSITORY` is easy to set locally. Requiring GitHub's workflow
-    # marker prevents a local command from opting itself into the OpenAI host.
+    # marker prevents a local command from opting itself into the private host.
     if (
-        env.get("GITHUB_ACTIONS") != "true"
-        or env.get("GITHUB_REPOSITORY") != OPENAI_REPOSITORY
+        trusted_repository is None
+        or env.get("GITHUB_REPOSITORY") != trusted_repository
+        or env.get("GITHUB_ACTIONS") != "true"
     ):
         return False
-    # Non-PR workflow runs in `openai/codex` execute upstream refs, so they are
-    # trusted. Fork code reaches these workflows only through pull requests.
+    # Non-PR workflow runs in the trusted repository execute upstream refs, so
+    # they are trusted. Fork code reaches these workflows only through pull requests.
     if env.get("GITHUB_EVENT_NAME") != "pull_request":
         return True
 
@@ -93,7 +100,7 @@ def is_trusted_upstream_run(env: Mapping[str, str]) -> bool:
         return False
 
 
-def uses_openai_host(env: Mapping[str, str]) -> bool:
+def uses_private_host(env: Mapping[str, str]) -> bool:
     return bool(env.get("BUILDBUDDY_API_KEY")) and is_trusted_upstream_run(env)
 
 
@@ -109,7 +116,7 @@ def remote_config(args: Sequence[str], env: Mapping[str, str]) -> str | None:
     if not env.get("BUILDBUDDY_API_KEY"):
         return None
 
-    config = OPENAI_REMOTE_CONFIG if uses_openai_host(env) else GENERIC_REMOTE_CONFIG
+    config = PRIVATE_REMOTE_CONFIG if uses_private_host(env) else GENERIC_REMOTE_CONFIG
     if uses_remote_execution(args):
         config += "-rbe"
     return config
@@ -154,7 +161,7 @@ def bazel_args_with_remote_config(
 
 def bazel_command(*args: str, env: Mapping[str, str] | None = None) -> list[str]:
     env = os.environ if env is None else env
-    bazel = env.get("CODEX_BAZEL_BIN", "bazel")
+    bazel = env.get("CREWON_BAZEL_BIN") or env.get("CODEX_BAZEL_BIN", "bazel")
     return [bazel, *startup_args(args, env), *bazel_args_with_remote_config(args, env)]
 
 
@@ -167,7 +174,7 @@ def main() -> None:
         )
     else:
         host_description = (
-            "OpenAI tenant" if uses_openai_host(os.environ) else "generic"
+            "private tenant" if uses_private_host(os.environ) else "generic"
         )
         print(
             f"Using {host_description} BuildBuddy configuration: {config}.",

@@ -1,16 +1,16 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use codex_config::CONFIG_TOML_FILE;
-use codex_core::NewThread;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::WarningEvent;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core::time::Duration;
 use core_test_support::load_default_config_for_test;
 use core_test_support::wait_for_event;
+use crewon_config::CONFIG_TOML_FILE;
+use crewon_core::NewThread;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::WarningEvent;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use tempfile::TempDir;
 use tokio::time::timeout;
 use toml::toml;
@@ -31,12 +31,12 @@ async fn emits_warning_when_unstable_features_enabled_via_config() {
         toml! { features = { child_agents_md = true } }.into(),
     );
 
-    let thread_manager = codex_core::test_support::thread_manager_with_models_provider(
-        CodexAuth::from_api_key("test"),
+    let thread_manager = crewon_core::test_support::thread_manager_with_models_provider(
+        CrewonAuth::from_api_key("test"),
         config.model_provider.clone(),
     );
     let auth_manager =
-        codex_core::test_support::auth_manager_from_auth(CodexAuth::from_api_key("test"));
+        crewon_core::test_support::auth_manager_from_auth(CrewonAuth::from_api_key("test"));
 
     let NewThread {
         thread: conversation,
@@ -77,12 +77,12 @@ async fn suppresses_warning_when_configured() {
         toml! { features = { child_agents_md = true } }.into(),
     );
 
-    let thread_manager = codex_core::test_support::thread_manager_with_models_provider(
-        CodexAuth::from_api_key("test"),
+    let thread_manager = crewon_core::test_support::thread_manager_with_models_provider(
+        CrewonAuth::from_api_key("test"),
         config.model_provider.clone(),
     );
     let auth_manager =
-        codex_core::test_support::auth_manager_from_auth(CodexAuth::from_api_key("test"));
+        crewon_core::test_support::auth_manager_from_auth(CrewonAuth::from_api_key("test"));
 
     let NewThread {
         thread: conversation,

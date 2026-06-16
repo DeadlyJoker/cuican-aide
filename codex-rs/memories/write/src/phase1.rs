@@ -5,19 +5,19 @@ use crate::metrics::MEMORY_PHASE_ONE_OUTPUT;
 use crate::metrics::MEMORY_PHASE_ONE_TOKEN_USAGE;
 use crate::runtime::MemoryStartupContext;
 use crate::runtime::StageOneRequestContext;
-use codex_config::types::MemoriesConfig;
-use codex_core::Prompt;
-use codex_core::RolloutRecorder;
-use codex_core::config::Config;
-use codex_protocol::error::CodexErr;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::TokenUsage;
-use codex_rollout::INTERACTIVE_SESSION_SOURCES;
-use codex_rollout::should_persist_response_item_for_memories;
-use codex_secrets::redact_secrets;
+use crewon_config::types::MemoriesConfig;
+use crewon_core::Prompt;
+use crewon_core::RolloutRecorder;
+use crewon_core::config::Config;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_rollout::INTERACTIVE_SESSION_SOURCES;
+use crewon_rollout::should_persist_response_item_for_memories;
+use crewon_secrets::redact_secrets;
 use futures::StreamExt;
 use serde::Deserialize;
 use serde_json::Value;
@@ -149,7 +149,7 @@ pub fn output_schema() -> Value {
 async fn claim_startup_jobs(
     context: &MemoryStartupContext,
     memories_config: &MemoriesConfig,
-) -> Option<Vec<codex_state::Stage1JobClaim>> {
+) -> Option<Vec<crewon_state::Stage1JobClaim>> {
     let Some(state_db) = context.state_db() else {
         // This should not happen.
         warn!("state db unavailable while claiming phase-1 startup jobs; skipping");
@@ -165,7 +165,7 @@ async fn claim_startup_jobs(
         .memories()
         .claim_stage1_jobs_for_startup(
             context.thread_id(),
-            codex_state::Stage1StartupClaimParams {
+            crewon_state::Stage1StartupClaimParams {
                 scan_limit: crate::stage_one::THREAD_SCAN_LIMIT,
                 max_claimed: memories_config.max_rollouts_per_startup,
                 max_age_days: memories_config.max_rollout_age_days,
@@ -204,7 +204,7 @@ async fn build_request_context(
 async fn run_jobs(
     context: Arc<MemoryStartupContext>,
     config: Arc<Config>,
-    claimed_candidates: Vec<codex_state::Stage1JobClaim>,
+    claimed_candidates: Vec<crewon_state::Stage1JobClaim>,
     stage_one_context: StageOneRequestContext,
 ) -> Vec<JobResult> {
     futures::stream::iter(claimed_candidates)
@@ -227,7 +227,7 @@ mod job {
     pub(crate) async fn run(
         context: &MemoryStartupContext,
         config: &Config,
-        claim: codex_state::Stage1JobClaim,
+        claim: crewon_state::Stage1JobClaim,
         stage_one_context: &StageOneRequestContext,
     ) -> JobResult {
         let claimed_thread = claim.thread;
@@ -327,7 +327,7 @@ mod job {
 
         pub(crate) async fn failed(
             context: &MemoryStartupContext,
-            thread_id: codex_protocol::ThreadId,
+            thread_id: crewon_protocol::ThreadId,
             ownership_token: &str,
             reason: &str,
         ) {
@@ -347,7 +347,7 @@ mod job {
 
         pub(crate) async fn no_output(
             context: &MemoryStartupContext,
-            thread_id: codex_protocol::ThreadId,
+            thread_id: crewon_protocol::ThreadId,
             ownership_token: &str,
         ) -> JobOutcome {
             let Some(state_db) = context.state_db() else {
@@ -368,7 +368,7 @@ mod job {
 
         pub(crate) async fn success(
             context: &MemoryStartupContext,
-            thread_id: codex_protocol::ThreadId,
+            thread_id: crewon_protocol::ThreadId,
             ownership_token: &str,
             source_updated_at: i64,
             raw_memory: &str,
@@ -402,7 +402,7 @@ mod job {
     /// Serializes filtered stage-1 memory items for prompt inclusion.
     pub(super) fn serialize_filtered_rollout_response_items(
         items: &[RolloutItem],
-    ) -> codex_protocol::error::Result<String> {
+    ) -> crewon_protocol::error::Result<String> {
         let filtered = items
             .iter()
             .filter_map(|item| {
@@ -723,8 +723,8 @@ mod tests {
             job::serialize_filtered_rollout_response_items(&[RolloutItem::ResponseItem(
                 ResponseItem::FunctionCallOutput {
                     call_id: "call_123".to_string(),
-                    output: codex_protocol::models::FunctionCallOutputPayload {
-                        body: codex_protocol::models::FunctionCallOutputBody::Text(
+                    output: crewon_protocol::models::FunctionCallOutputPayload {
+                        body: crewon_protocol::models::FunctionCallOutputBody::Text(
                             r#"{"token":"sk-abcdefghijklmnopqrstuvwxyz123456"}"#.to_string(),
                         ),
                         success: Some(true),

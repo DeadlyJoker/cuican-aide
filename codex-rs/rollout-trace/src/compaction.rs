@@ -2,7 +2,7 @@
 //!
 //! Remote compaction is a model-facing request with a different semantic role
 //! from normal sampling. Keeping the no-op capable trace handle in this crate
-//! lets `codex-core` record exact endpoint payloads without owning trace schema
+//! lets `crewon-core` record exact endpoint payloads without owning trace schema
 //! details.
 
 use std::fmt::Display;
@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
-use codex_protocol::models::ResponseItem;
+use crewon_protocol::models::ResponseItem;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use tracing::warn;

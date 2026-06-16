@@ -1,31 +1,31 @@
 use std::sync::Arc;
 
-use codex_prompts::render_review_exit_interrupted;
-use codex_prompts::render_review_exit_success;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::items::TurnItem;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::AgentMessageContentDeltaEvent;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ExitedReviewModeEvent;
-use codex_protocol::protocol::ItemCompletedEvent;
-use codex_protocol::protocol::ReviewOutputEvent;
-use codex_protocol::protocol::SubAgentSource;
+use crewon_prompts::render_review_exit_interrupted;
+use crewon_prompts::render_review_exit_success;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::AgentMessageContentDeltaEvent;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ExitedReviewModeEvent;
+use crewon_protocol::protocol::ItemCompletedEvent;
+use crewon_protocol::protocol::ReviewOutputEvent;
+use crewon_protocol::protocol::SubAgentSource;
 use tokio_util::sync::CancellationToken;
 
-use crate::codex_delegate::run_codex_thread_one_shot;
 use crate::config::Constrained;
+use crate::crewon_delegate::run_crewon_thread_one_shot;
 use crate::review_format::format_review_findings_block;
 use crate::review_format::render_review_output_text;
 use crate::session::TurnInput;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::state::TaskKind;
-use codex_features::Feature;
-use codex_protocol::user_input::UserInput;
+use crewon_features::Feature;
+use crewon_protocol::user_input::UserInput;
 
 use super::SessionTask;
 use super::SessionTaskContext;
@@ -56,7 +56,7 @@ impl SessionTask for ReviewTask {
         cancellation_token: CancellationToken,
     ) -> Option<String> {
         session.session.services.session_telemetry.counter(
-            "codex.task.review",
+            "crewon.task.review",
             /*inc*/ 1,
             &[],
         );
@@ -69,7 +69,7 @@ impl SessionTask for ReviewTask {
             }
         }
 
-        // Start sub-codex conversation and get the receiver for events.
+        // Start sub-crewon conversation and get the receiver for events.
         let output = match start_review_conversation(
             session.clone(),
             ctx.clone(),
@@ -121,7 +121,7 @@ async fn start_review_conversation(
         .clone()
         .unwrap_or_else(|| ctx.model_info.slug.clone());
     sub_agent_config.model = Some(model);
-    (run_codex_thread_one_shot(
+    (run_crewon_thread_one_shot(
         sub_agent_config,
         session.auth_manager(),
         session.models_manager(),

@@ -17,22 +17,22 @@ use crate::test_support::load_plugins_config as load_plugins_config_input;
 use crate::test_support::write_curated_plugin_sha_with as write_curated_plugin_sha;
 use crate::test_support::write_file;
 use crate::test_support::write_openai_curated_marketplace;
-use codex_app_server_protocol::AuthMode;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_config::AppToolApproval;
-use codex_config::CONFIG_TOML_FILE;
-use codex_config::ConfigLayerEntry;
-use codex_config::ConfigLayerStack;
-use codex_config::ConfigRequirements;
-use codex_config::ConfigRequirementsToml;
-use codex_config::McpServerConfig;
-use codex_config::McpServerOAuthConfig;
-use codex_config::McpServerToolConfig;
-use codex_config::types::McpServerTransportConfig;
-use codex_login::CodexAuth;
-use codex_protocol::protocol::HookEventName;
-use codex_protocol::protocol::Product;
-use codex_utils_absolute_path::test_support::PathBufExt;
+use crewon_app_server_protocol::AuthMode;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_config::AppToolApproval;
+use crewon_config::CONFIG_TOML_FILE;
+use crewon_config::ConfigLayerEntry;
+use crewon_config::ConfigLayerStack;
+use crewon_config::ConfigRequirements;
+use crewon_config::ConfigRequirementsToml;
+use crewon_config::McpServerConfig;
+use crewon_config::McpServerOAuthConfig;
+use crewon_config::McpServerToolConfig;
+use crewon_config::types::McpServerTransportConfig;
+use crewon_login::CrewonAuth;
+use crewon_protocol::protocol::HookEventName;
+use crewon_protocol::protocol::Product;
+use crewon_utils_absolute_path::test_support::PathBufExt;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
@@ -70,13 +70,13 @@ fn write_plugin_with_version(
     manifest_version: Option<&str>,
 ) {
     let plugin_root = root.join(dir_name);
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::create_dir_all(plugin_root.join("skills")).unwrap();
     let version = manifest_version
         .map(|manifest_version| format!(r#","version":"{manifest_version}""#))
         .unwrap_or_default();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         format!(r#"{{"name":"{manifest_name}"{version}}}"#),
     )
     .unwrap();
@@ -95,8 +95,8 @@ fn write_plugin(root: &Path, dir_name: &str, manifest_name: &str) {
 
 fn init_git_repo(repo: &Path) {
     run_git(repo, &["init"]);
-    run_git(repo, &["config", "user.email", "codex-test@example.com"]);
-    run_git(repo, &["config", "user.name", "Codex Test"]);
+    run_git(repo, &["config", "user.email", "crewon-test@example.com"]);
+    run_git(repo, &["config", "user.name", "Crewon Test"]);
     run_git(repo, &["add", "."]);
     run_git(repo, &["commit", "-m", "initial"]);
 }
@@ -167,9 +167,9 @@ fn remote_installed_plugin_in_marketplace(
         id: format!("plugins~Plugin_{name}"),
         name: name.to_string(),
         enabled: true,
-        install_policy: codex_app_server_protocol::PluginInstallPolicy::Available,
-        auth_policy: codex_app_server_protocol::PluginAuthPolicy::OnUse,
-        availability: codex_app_server_protocol::PluginAvailability::Available,
+        install_policy: crewon_app_server_protocol::PluginInstallPolicy::Available,
+        auth_policy: crewon_app_server_protocol::PluginAuthPolicy::OnUse,
+        availability: crewon_app_server_protocol::PluginAvailability::Available,
         interface: None,
         keywords: Vec::new(),
     }
@@ -196,7 +196,7 @@ async fn load_plugins_loads_default_skills_and_mcp_servers() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "sample",
   "description": "Plugin that includes the sample MCP server and Skills"
@@ -315,7 +315,7 @@ async fn load_plugins_applies_plugin_mcp_server_policy() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "sample"
 }"#,
@@ -484,9 +484,9 @@ async fn build_remote_installed_plugin_marketplaces_from_cache_uses_remote_metad
     let codex_home = TempDir::new().unwrap();
     let manager = PluginsManager::new(codex_home.path().to_path_buf());
     let mut plugin = remote_installed_linear_plugin();
-    plugin.install_policy = codex_app_server_protocol::PluginInstallPolicy::InstalledByDefault;
-    plugin.auth_policy = codex_app_server_protocol::PluginAuthPolicy::OnInstall;
-    plugin.interface = Some(codex_app_server_protocol::PluginInterface {
+    plugin.install_policy = crewon_app_server_protocol::PluginInstallPolicy::InstalledByDefault;
+    plugin.auth_policy = crewon_app_server_protocol::PluginAuthPolicy::OnInstall;
+    plugin.interface = Some(crewon_app_server_protocol::PluginInterface {
         display_name: Some("Linear".to_string()),
         short_description: Some("Track remote work".to_string()),
         long_description: None,
@@ -523,11 +523,11 @@ async fn build_remote_installed_plugin_marketplaces_from_cache_uses_remote_metad
     assert_eq!(plugin.enabled, true);
     assert_eq!(
         plugin.install_policy,
-        codex_app_server_protocol::PluginInstallPolicy::InstalledByDefault
+        crewon_app_server_protocol::PluginInstallPolicy::InstalledByDefault
     );
     assert_eq!(
         plugin.auth_policy,
-        codex_app_server_protocol::PluginAuthPolicy::OnInstall
+        crewon_app_server_protocol::PluginAuthPolicy::OnInstall
     );
     assert_eq!(plugin.keywords, vec!["issues".to_string()]);
     assert_eq!(
@@ -595,7 +595,7 @@ async fn load_plugins_resolves_disabled_skill_names_against_loaded_plugin_skills
     let skill_path = plugin_root.join("skills/sample-search/SKILL.md");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     );
     write_file(
@@ -635,7 +635,7 @@ async fn load_plugins_ignores_unknown_disabled_skill_names() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     );
     write_file(
@@ -679,7 +679,7 @@ async fn plugin_telemetry_metadata_uses_default_mcp_config_path() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "sample"
 }"#,
@@ -724,7 +724,7 @@ async fn capability_summary_sanitizes_plugin_descriptions_to_one_line() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "sample",
   "description": "Plugin that\n includes   the sample\tserver"
@@ -761,7 +761,7 @@ async fn capability_summary_truncates_overlong_plugin_descriptions() {
     let too_long = "x".repeat(MAX_CAPABILITY_SUMMARY_DESCRIPTION_LEN + 1);
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         &format!(
             r#"{{
   "name": "sample",
@@ -799,7 +799,7 @@ async fn load_plugins_uses_manifest_configured_component_paths() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "sample",
   "skills": "./custom-skills/",
@@ -914,7 +914,7 @@ async fn load_plugins_ignores_manifest_component_paths_without_dot_slash() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "sample",
   "skills": "custom-skills",
@@ -1026,7 +1026,7 @@ async fn load_plugins_ignores_invalid_manifest_skills_shape() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "sample",
   "skills": ["./custom-skills/"]
@@ -1063,7 +1063,7 @@ async fn load_plugins_preserves_disabled_plugins_without_effective_contributions
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     );
     write_file(
@@ -1121,7 +1121,7 @@ async fn effective_apps_dedupes_connector_ids_across_plugins() {
         .join("test/plugin-b/local");
 
     write_file(
-        &plugin_a_root.join(".codex-plugin/plugin.json"),
+        &plugin_a_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"plugin-a"}"#,
     );
     write_file(
@@ -1135,7 +1135,7 @@ async fn effective_apps_dedupes_connector_ids_across_plugins() {
 }"#,
     );
     write_file(
-        &plugin_b_root.join(".codex-plugin/plugin.json"),
+        &plugin_b_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"plugin-b"}"#,
     );
     write_file(
@@ -1191,7 +1191,7 @@ async fn effective_apps_preserves_app_config_order() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     );
     write_file(
@@ -1336,7 +1336,7 @@ async fn load_plugins_returns_empty_when_feature_disabled() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     );
     write_file(
@@ -1458,7 +1458,7 @@ async fn load_plugins_rejects_invalid_plugin_keys() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     );
 
@@ -1686,7 +1686,7 @@ async fn install_plugin_supports_git_subdir_marketplace_sources() {
             auth_policy: MarketplacePluginAuthPolicy::OnInstall,
         }
     );
-    assert!(installed_path.join(".codex-plugin/plugin.json").is_file());
+    assert!(installed_path.join(".crewon-plugin/plugin.json").is_file());
 }
 
 #[tokio::test]
@@ -1737,7 +1737,7 @@ async fn install_plugin_supports_relative_git_subdir_marketplace_sources() {
             auth_policy: MarketplacePluginAuthPolicy::OnInstall,
         }
     );
-    assert!(installed_path.join(".codex-plugin/plugin.json").is_file());
+    assert!(installed_path.join(".crewon-plugin/plugin.json").is_file());
 }
 
 #[tokio::test]
@@ -2102,7 +2102,7 @@ async fn read_plugin_for_config_uses_user_layer_skill_settings_only() {
 }"#,
     );
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"enabled-plugin"}"#,
     );
     write_file(
@@ -2249,7 +2249,7 @@ async fn read_plugin_for_config_installed_git_source_reads_from_cache_without_cl
     );
     let cached_plugin_root = tmp.path().join("plugins/cache/debug/toolkit/local");
     write_file(
-        &cached_plugin_root.join(".codex-plugin/plugin.json"),
+        &cached_plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "toolkit",
   "description": "Cached toolkit plugin",
@@ -2404,7 +2404,7 @@ async fn list_marketplaces_installed_git_source_reads_metadata_from_cache_withou
     );
     let cached_plugin_root = tmp.path().join("plugins/cache/debug/toolkit/local");
     write_file(
-        &cached_plugin_root.join(".codex-plugin/plugin.json"),
+        &cached_plugin_root.join(".crewon-plugin/plugin.json"),
         r##"{
   "name": "toolkit",
   "interface": {
@@ -2503,7 +2503,7 @@ plugins = true
 "#,
     );
     fs::create_dir_all(curated_root.join(".agents/plugins")).unwrap();
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::write(
         curated_root.join(".agents/plugins/marketplace.json"),
         r#"{
@@ -2521,7 +2521,7 @@ plugins = true
     )
     .unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"linear"}"#,
     )
     .unwrap();
@@ -2615,7 +2615,7 @@ source = "/tmp/debug"
 "#,
     );
     fs::create_dir_all(marketplace_root.join(".agents/plugins")).unwrap();
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::write(
         marketplace_root.join(".agents/plugins/marketplace.json"),
         r#"{
@@ -2633,7 +2633,7 @@ source = "/tmp/debug"
     )
     .unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )
     .unwrap();
@@ -2688,7 +2688,7 @@ source = "/tmp/debug"
 "#,
     );
     fs::create_dir_all(marketplace_root.join(".agents/plugins")).unwrap();
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::write(
         marketplace_root.join(".agents/plugins/marketplace.json"),
         r#"{
@@ -2706,7 +2706,7 @@ source = "/tmp/debug"
     )
     .unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )
     .unwrap();
@@ -2746,7 +2746,7 @@ plugins = true
 "#,
     );
     fs::create_dir_all(marketplace_root.join(".agents/plugins")).unwrap();
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::write(
         marketplace_root.join(".agents/plugins/marketplace.json"),
         r#"{
@@ -2764,7 +2764,7 @@ plugins = true
     )
     .unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )
     .unwrap();
@@ -3046,7 +3046,7 @@ plugins = true
     let featured_plugin_ids = manager
         .featured_plugin_ids_for_config(
             &config,
-            Some(&CodexAuth::create_dummy_chatgpt_auth_for_testing()),
+            Some(&CrewonAuth::create_dummy_chatgpt_auth_for_testing()),
         )
         .await
         .unwrap();
@@ -3055,7 +3055,7 @@ plugins = true
 }
 
 #[tokio::test]
-async fn featured_plugin_ids_for_config_defaults_query_param_to_codex() {
+async fn featured_plugin_ids_for_config_defaults_query_param_to_crewon() {
     let tmp = tempfile::tempdir().unwrap();
     write_file(
         &tmp.path().join(CONFIG_TOML_FILE),
@@ -3067,8 +3067,8 @@ plugins = true
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/backend-api/plugins/featured"))
-        .and(query_param("platform", "codex"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(r#"["codex-plugin"]"#))
+        .and(query_param("platform", "crewon"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"["crewon-plugin"]"#))
         .mount(&server)
         .await;
 
@@ -3084,7 +3084,7 @@ plugins = true
         .await
         .unwrap();
 
-    assert_eq!(featured_plugin_ids, vec!["codex-plugin".to_string()]);
+    assert_eq!(featured_plugin_ids, vec!["crewon-plugin".to_string()]);
 }
 
 #[test]
@@ -3177,7 +3177,7 @@ fn refresh_curated_plugin_cache_removes_cache_for_plugin_removed_from_marketplac
 }
 
 #[test]
-fn curated_plugin_ids_from_config_keys_reads_latest_codex_home_user_config() {
+fn curated_plugin_ids_from_config_keys_reads_latest_crewon_home_user_config() {
     let tmp = tempfile::tempdir().unwrap();
     write_file(
         &tmp.path().join(CONFIG_TOML_FILE),
@@ -3608,7 +3608,7 @@ async fn load_plugins_ignores_project_config_files() {
         .join("test/sample/local");
 
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     );
     write_file(
@@ -3635,7 +3635,7 @@ async fn load_plugins_ignores_project_config_files() {
         &stack,
         std::collections::HashMap::new(),
         &PluginStore::new(codex_home.path().to_path_buf()),
-        Some(Product::Codex),
+        Some(Product::Crewon),
         /*prefer_remote_curated_conflicts*/ false,
     )
     .await;

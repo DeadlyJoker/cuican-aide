@@ -1,7 +1,7 @@
 //! Terminal detection utilities.
 //!
-//! This module feeds terminal metadata into OpenTelemetry user-agent logging and into
-//! terminal-specific configuration choices in the TUI.
+//! This module feeds terminal metadata into OpenTelemetry user-agent logging and
+//! terminal-specific runtime configuration.
 
 use std::sync::OnceLock;
 

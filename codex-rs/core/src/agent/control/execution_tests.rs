@@ -1,8 +1,8 @@
 use crate::agent::AgentControl;
-use codex_protocol::error::CodexErr;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
 use pretty_assertions::assert_eq;
 
 fn control_with_limit(max_threads: usize) -> AgentControl {
@@ -46,7 +46,7 @@ fn execution_guards_ignore_root_and_v1_turns() {
 
     assert!(
         control
-            .execution_guard(MultiAgentVersion::V2, &SessionSource::Cli)
+            .execution_guard(MultiAgentVersion::V2, &SessionSource::LegacyCli)
             .is_none()
     );
     assert!(

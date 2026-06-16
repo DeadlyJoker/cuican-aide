@@ -4,15 +4,15 @@ use std::time::Instant;
 use chrono::DateTime;
 use chrono::NaiveDateTime;
 use chrono::Utc;
-use codex_git_utils::collect_git_info;
-use codex_git_utils::get_git_repo_root;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::GitInfo;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::ThreadMemoryMode;
-use codex_protocol::protocol::USER_MESSAGE_BEGIN;
-use codex_protocol::protocol::UserMessageEvent;
+use crewon_git_utils::collect_git_info;
+use crewon_git_utils::get_git_repo_root;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::GitInfo;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::ThreadMemoryMode;
+use crewon_protocol::protocol::USER_MESSAGE_BEGIN;
+use crewon_protocol::protocol::UserMessageEvent;
 
 use crate::CreateThreadParams;
 use crate::GitInfoPatch;
@@ -153,7 +153,7 @@ impl ThreadMetadataSync {
         self.defer_resume_update_until_append = false;
         let affects_metadata = items
             .iter()
-            .any(codex_state::rollout_item_affects_thread_metadata);
+            .any(crewon_state::rollout_item_affects_thread_metadata);
         let update = if affects_metadata {
             self.observe_items(items)?
         } else {
@@ -210,8 +210,8 @@ impl ThreadMetadataSync {
                     {
                         update.model_provider = Some(model_provider);
                     }
-                    if !meta_line.meta.cli_version.is_empty() {
-                        update.cli_version = Some(meta_line.meta.cli_version.clone());
+                    if !meta_line.meta.client_version.is_empty() {
+                        update.cli_version = Some(meta_line.meta.client_version.clone());
                     }
                     if !meta_line.meta.cwd.as_os_str().is_empty() {
                         self.cwd_seen = true;
@@ -371,14 +371,14 @@ fn git_info_patch_from_observation(git_info: GitInfo) -> GitInfoPatch {
 
 #[cfg(test)]
 mod tests {
-    use codex_protocol::protocol::CompactedItem;
-    use codex_protocol::protocol::SessionMeta;
-    use codex_protocol::protocol::SessionMetaLine;
-    use codex_protocol::protocol::SessionSource;
-    use codex_protocol::protocol::ThreadGoal;
-    use codex_protocol::protocol::ThreadGoalStatus;
-    use codex_protocol::protocol::ThreadGoalUpdatedEvent;
-    use codex_protocol::protocol::UserMessageEvent;
+    use crewon_protocol::protocol::CompactedItem;
+    use crewon_protocol::protocol::SessionMeta;
+    use crewon_protocol::protocol::SessionMetaLine;
+    use crewon_protocol::protocol::SessionSource;
+    use crewon_protocol::protocol::ThreadGoal;
+    use crewon_protocol::protocol::ThreadGoalStatus;
+    use crewon_protocol::protocol::ThreadGoalUpdatedEvent;
+    use crewon_protocol::protocol::UserMessageEvent;
     use pretty_assertions::assert_eq;
 
     use super::*;

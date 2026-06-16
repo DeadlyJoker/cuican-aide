@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-json-to-toml"
+name = "crewon-utils-json-to-toml"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,3 +16,4 @@ workspace = true
 
 [lib]
 doctest = false
+name = "crewon_utils_json_to_toml"

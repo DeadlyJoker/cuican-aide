@@ -1,19 +1,8 @@
 #![allow(clippy::unwrap_used)]
 
-use core_test_support::test_codex::local_selections;
+use core_test_support::test_crewon::local_selections;
 use std::collections::HashMap;
 
-use codex_features::Feature;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::Settings;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::request_user_input::RequestUserInputAnswer;
-use codex_protocol::request_user_input::RequestUserInputResponse;
-use codex_protocol::user_input::UserInput;
 use core_test_support::TempDirExt;
 use core_test_support::responses;
 use core_test_support::responses::ResponsesRequest;
@@ -25,11 +14,22 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
+use crewon_features::Feature;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::Settings;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::request_user_input::RequestUserInputAnswer;
+use crewon_protocol::request_user_input::RequestUserInputResponse;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -84,10 +84,10 @@ async fn request_user_input_round_trip_for_mode(mode: ModeKind) -> anyhow::Resul
 
     let server = start_mock_server().await;
 
-    let builder = test_codex();
+    let builder = test_crewon();
     #[allow(clippy::expect_used)]
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         cwd,
         session_configured,
         ..
@@ -146,7 +146,7 @@ async fn request_user_input_round_trip_for_mode(mode: ModeKind) -> anyhow::Resul
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(cwd.abs())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
@@ -224,7 +224,7 @@ async fn request_user_input_round_trip_for_mode(mode: ModeKind) -> anyhow::Resul
 
 fn ev_rate_limits() -> Value {
     json!({
-        "type": "codex.rate_limits",
+        "type": "crewon.rate_limits",
         "plan_type": "plus",
         "rate_limits": {
             "allowed": true,
@@ -247,12 +247,12 @@ async fn request_user_input_interrupt_emits_deferred_token_count() -> anyhow::Re
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         cwd,
         session_configured,
         ..
-    } = test_codex().build(&server).await?;
+    } = test_crewon().build(&server).await?;
 
     let call_id = "user-input-interrupt";
     let request_args = json!({
@@ -289,7 +289,7 @@ async fn request_user_input_interrupt_emits_deferred_token_count() -> anyhow::Re
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(cwd.abs())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
@@ -340,9 +340,9 @@ where
 
     let server = start_mock_server().await;
 
-    let mut builder = test_codex();
-    let TestCodex {
-        codex,
+    let mut builder = test_crewon();
+    let TestCrewon {
+        crewon: codex,
         cwd,
         session_configured,
         ..
@@ -393,7 +393,7 @@ where
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(cwd.abs())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),

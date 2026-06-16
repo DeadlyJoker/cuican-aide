@@ -10,32 +10,32 @@ use super::X_OPENAI_SUBAGENT_HEADER;
 use crate::AttestationContext;
 use crate::AttestationProvider;
 use crate::GenerateAttestationFuture;
-use codex_api::ApiError;
-use codex_api::ResponseEvent;
-use codex_app_server_protocol::AuthMode;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_model_provider::BearerAuthProvider;
-use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::WireApi;
-use codex_model_provider_info::create_oss_provider_with_base_url;
-use codex_otel::SessionTelemetry;
-use codex_protocol::SessionId;
-use codex_protocol::ThreadId;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::protocol::InternalSessionSource;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_rollout_trace::ExecutionStatus;
-use codex_rollout_trace::InferenceTraceAttempt;
-use codex_rollout_trace::InferenceTraceContext;
-use codex_rollout_trace::RawTraceEventPayload;
-use codex_rollout_trace::RolloutTrace;
-use codex_rollout_trace::TraceWriter;
-use codex_rollout_trace::replay_bundle;
+use crewon_api::ApiError;
+use crewon_api::ResponseEvent;
+use crewon_app_server_protocol::AuthMode;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_model_provider::BearerAuthProvider;
+use crewon_model_provider_info::CHATGPT_CODEX_BASE_URL;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::WireApi;
+use crewon_model_provider_info::create_oss_provider_with_base_url;
+use crewon_otel::SessionTelemetry;
+use crewon_protocol::SessionId;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::protocol::InternalSessionSource;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_rollout_trace::ExecutionStatus;
+use crewon_rollout_trace::InferenceTraceAttempt;
+use crewon_rollout_trace::InferenceTraceContext;
+use crewon_rollout_trace::RawTraceEventPayload;
+use crewon_rollout_trace::RolloutTrace;
+use crewon_rollout_trace::TraceWriter;
+use crewon_rollout_trace::replay_bundle;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -127,7 +127,7 @@ fn test_session_telemetry() -> SessionTelemetry {
         "test-originator".to_string(),
         /*log_user_prompts*/ false,
         "test-terminal".to_string(),
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     )
 }
 
@@ -327,7 +327,7 @@ fn build_ws_client_metadata_includes_window_lineage_and_turn_metadata() {
 
 #[tokio::test]
 async fn summarize_memories_returns_empty_for_empty_input() {
-    let client = test_model_client(SessionSource::Cli);
+    let client = test_model_client(SessionSource::LegacyCli);
     let model_info = test_model_info();
     let session_telemetry = test_session_telemetry();
 
@@ -517,7 +517,7 @@ fn model_client_with_counting_attestation(
     let (auth_manager, provider) = if include_attestation {
         (
             Some(AuthManager::from_auth_for_testing(
-                CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+                CrewonAuth::create_dummy_chatgpt_auth_for_testing(),
             )),
             ModelProviderInfo::create_openai_provider(Some(CHATGPT_CODEX_BASE_URL.to_string())),
         )

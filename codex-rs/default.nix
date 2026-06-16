@@ -14,7 +14,7 @@ rustPlatform.buildRustPackage (_: {
   env.PKG_CONFIG_PATH = lib.makeSearchPathOutput "dev" "lib/pkgconfig" (
     [ openssl ] ++ lib.optionals stdenv.isLinux [ libcap ]
   );
-  pname = "codex-rs";
+  pname = "crewon-rs";
   inherit version;
   cargoLock.lockFile = ./Cargo.lock;
   doCheck = false;
@@ -38,8 +38,6 @@ rustPlatform.buildRustPackage (_: {
   ];
 
   cargoLock.outputHashes = {
-    "ratatui-0.29.0" = "sha256-HBvT5c8GsiCxMffNjJGLmHnvG77A6cqEL+1ARurBXho=";
-    "crossterm-0.28.1" = "sha256-6qCtfSMuXACKFb9ATID39XyFDIEMFDmbx6SSmNe+728=";
     "nucleo-0.5.0" = "sha256-Hm4SxtTSBrcWpXrtSqeO0TACbUxq3gizg1zD/6Yw/sI=";
     "nucleo-matcher-0.3.1" = "sha256-Hm4SxtTSBrcWpXrtSqeO0TACbUxq3gizg1zD/6Yw/sI=";
     "runfiles-0.1.0" = "sha256-uJpVLcQh8wWZA3GPv9D8Nt43EOirajfDJ7eq/FB+tek=";
@@ -48,9 +46,8 @@ rustPlatform.buildRustPackage (_: {
   };
 
   meta = with lib; {
-    description = "OpenAI Codex command‑line interface rust implementation";
+    description = "Crewon Rust backend workspace";
     license = licenses.asl20;
-    homepage = "https://github.com/openai/codex";
-    mainProgram = "codex";
+    mainProgram = "crewon-app-server";
   };
 })

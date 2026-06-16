@@ -3,10 +3,10 @@
 //! This crate defines the feature registry plus the logic used to resolve an
 //! effective feature set from config-like inputs.
 
-use codex_otel::SessionTelemetry;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::WarningEvent;
+use crewon_otel::SessionTelemetry;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::WarningEvent;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -80,7 +80,7 @@ pub enum Feature {
     /// Enable the default shell tool.
     ShellTool,
     /// Enable Claude-style lifecycle hooks loaded from hooks.json files.
-    CodexHooks,
+    Hooks,
 
     // Experimental
     /// Enable JavaScript code mode backed by the in-process V8 runtime.
@@ -99,7 +99,7 @@ pub enum Feature {
     UnifiedExecZshFork,
     /// Reflow transcript scrollback when the terminal is resized.
     TerminalResizeReflow,
-    /// Add terminal-specific visualization guidance to TUI developer instructions.
+    /// Add terminal-specific visualization guidance to client developer instructions.
     TerminalVisualizationInstructions,
     /// Stream structured progress while apply_patch input is being generated.
     ApplyPatchStreamingEvents,
@@ -129,7 +129,7 @@ pub enum Feature {
     Chronicle,
     /// Append additional AGENTS.md guidance to user instructions.
     ChildAgentsMd,
-    /// Compress request bodies (zstd) when sending streaming requests to codex-backend.
+    /// Compress request bodies (zstd) when sending streaming requests to the backend.
     EnableRequestCompression,
     /// Start the managed network proxy for sandboxed sessions.
     NetworkProxy,
@@ -169,7 +169,7 @@ pub enum Feature {
     ///
     /// Requirements-only gate: this should be set from requirements, not user config.
     BrowserUseExternal,
-    /// Allow Codex Computer Use.
+    /// Allow Crewon Computer Use.
     ///
     /// Requirements-only gate: this should be set from requirements, not user config.
     ComputerUse,
@@ -201,15 +201,15 @@ pub enum Feature {
     TokenBudget,
     /// Route MCP tool approval prompts through the MCP elicitation request path.
     ToolCallMcpElicitation,
-    /// Prompt Codex Apps connector auth failures through MCP URL elicitations.
+    /// Prompt Crewon Apps connector auth failures through MCP URL elicitations.
     AuthElicitation,
-    /// Enable personality selection in the TUI.
+    /// Enable personality selection in clients.
     Personality,
     /// Enable native artifact tools.
     Artifact,
-    /// Enable Fast mode selection in the TUI and request layer.
+    /// Enable Fast mode selection in clients and the request layer.
     FastMode,
-    /// Enable experimental realtime voice conversation mode in the TUI.
+    /// Enable experimental realtime voice conversation mode in clients.
     RealtimeConversation,
     /// Prevent idle system sleep while a turn is actively running.
     PreventIdleSleep,
@@ -240,7 +240,7 @@ pub enum Feature {
     /// Legacy remote models flag kept for backward compatibility.
     RemoteModels,
     /// Removed legacy git commit attribution guidance flag.
-    CodexGitCommit,
+    GitCommit,
     /// Persist rollout metadata to a local SQLite database.
     Sqlite,
     /// Removed compatibility flag for the deleted apply_patch fallback feature.
@@ -258,8 +258,8 @@ pub enum Feature {
     /// Removed compatibility flag retained as a no-op so old wrappers can
     /// still pass `--enable image_detail_original`.
     ImageDetailOriginal,
-    /// Removed compatibility flag. The TUI now always uses the app-server implementation.
-    TuiAppServer,
+    /// Removed compatibility flag. Interactive clients now always use the app-server implementation.
+    ClientAppServer,
     /// Removed compatibility flag retained as a no-op now that workspace owner
     /// usage nudges are always enabled.
     WorkspaceOwnerUsageNudge,
@@ -402,7 +402,7 @@ impl Features {
             }
             if self.enabled(feature.id) != feature.default_enabled {
                 otel.counter(
-                    "codex.feature.state",
+                    "crewon.feature.state",
                     /*inc*/ 1,
                     &[
                         ("feature", feature.key),
@@ -469,7 +469,7 @@ impl Features {
             }
             match feature_for_key(k) {
                 Some(feat) => {
-                    if matches!(feat, Feature::TuiAppServer) {
+                    if matches!(feat, Feature::ClientAppServer) {
                         continue;
                     }
                     if k != feat.key() {
@@ -568,7 +568,7 @@ fn legacy_usage_notice(alias: &str, feature: Feature) -> (String, Option<String>
                 None
             } else {
                 Some(format!(
-                    "Enable it with `--enable {canonical}` or `[features].{canonical}` in config.toml. See https://developers.openai.com/codex/config-basic#feature-flags for details."
+                    "Enable it with `--enable {canonical}` or `[features].{canonical}` in config.toml."
                 ))
             };
             (summary, details)
@@ -801,7 +801,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         key: "terminal_resize_reflow",
         stage: Stage::Experimental {
             name: "Terminal resize reflow",
-            menu_description: "Rebuild Codex-owned transcript scrollback when the terminal width changes.",
+            menu_description: "Rebuild Crewon-owned transcript scrollback when the terminal width changes.",
             announcement: "",
         },
         default_enabled: true,
@@ -831,8 +831,8 @@ pub const FEATURES: &[FeatureSpec] = &[
         default_enabled: false,
     },
     FeatureSpec {
-        id: Feature::CodexGitCommit,
-        key: "codex_git_commit",
+        id: Feature::GitCommit,
+        key: "git_commit",
         stage: Stage::Removed,
         default_enabled: false,
     },
@@ -853,8 +853,8 @@ pub const FEATURES: &[FeatureSpec] = &[
         key: "memories",
         stage: Stage::Experimental {
             name: "Memories",
-            menu_description: "Allow Codex to create new memories from conversations and bring relevant memories into new conversations.",
-            announcement: "NEW: Codex can now generate and use memories. Try it now with `/memories`",
+            menu_description: "Allow Crewon to create new memories from conversations and bring relevant memories into new conversations.",
+            announcement: "NEW: Crewon can now generate and use memories. Try it now with `/memories`",
         },
         default_enabled: false,
     },
@@ -895,7 +895,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         default_enabled: false,
     },
     FeatureSpec {
-        id: Feature::CodexHooks,
+        id: Feature::Hooks,
         key: "hooks",
         stage: Stage::Stable,
         default_enabled: true,
@@ -954,7 +954,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         stage: Stage::Experimental {
             name: "Network proxy",
             menu_description: "Apply network proxy restrictions to sandboxed sessions that already have network access.",
-            announcement: "NEW: Network proxy can now be enabled from /experimental. Restart Codex after enabling it.",
+            announcement: "NEW: Network proxy can now be enabled from /experimental. Restart Crewon after enabling it.",
         },
         default_enabled: false,
     },
@@ -1205,8 +1205,8 @@ pub const FEATURES: &[FeatureSpec] = &[
         default_enabled: false,
     },
     FeatureSpec {
-        id: Feature::TuiAppServer,
-        key: "tui_app_server",
+        id: Feature::ClientAppServer,
+        key: "client_app_server",
         stage: Stage::Removed,
         default_enabled: true,
     },
@@ -1220,7 +1220,7 @@ pub const FEATURES: &[FeatureSpec] = &[
         )) {
             Stage::Experimental {
                 name: "Prevent sleep while running",
-                menu_description: "Keep your computer awake while Codex is running a thread.",
+                menu_description: "Keep your computer awake while Crewon is running a thread.",
                 announcement: "NEW: Prevent sleep while running is now available in /experimental.",
             }
         } else {

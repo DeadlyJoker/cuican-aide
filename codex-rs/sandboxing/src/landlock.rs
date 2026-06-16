@@ -1,9 +1,9 @@
-use codex_protocol::models::PermissionProfile;
+use crewon_protocol::models::PermissionProfile;
 use std::path::Path;
 
-/// Basename used when the Codex executable self-invokes as the Linux sandbox
+/// Basename used when the Crewon executable self-invokes as the Linux sandbox
 /// helper.
-pub const CODEX_LINUX_SANDBOX_ARG0: &str = "codex-linux-sandbox";
+pub const CREWON_LINUX_SANDBOX_ARG0: &str = "crewon-linux-sandbox";
 
 pub fn allow_network_for_proxy(enforce_managed_network: bool) -> bool {
     // When managed network requirements are active, request proxy-only
@@ -12,12 +12,12 @@ pub fn allow_network_for_proxy(enforce_managed_network: bool) -> bool {
     enforce_managed_network
 }
 
-/// Converts the permission profile into the CLI invocation for
-/// `codex-linux-sandbox`.
+/// Converts the permission profile into the command-line invocation for
+/// `crewon-linux-sandbox`.
 ///
 /// The helper performs the actual sandboxing (bubblewrap by default + seccomp)
 /// after parsing these arguments. The profile JSON flag is emitted before
-/// helper feature flags so the argv order matches the helper's CLI shape. See
+/// helper feature flags so the argv order matches the helper's argument shape. See
 /// `docs/linux_sandbox.md` for the Linux semantics.
 #[allow(clippy::too_many_arguments)]
 pub fn create_linux_sandbox_command_args_for_permission_profile(
@@ -59,8 +59,8 @@ pub fn create_linux_sandbox_command_args_for_permission_profile(
     linux_cmd
 }
 
-/// Converts the sandbox cwd and execution options into the CLI invocation for
-/// `codex-linux-sandbox`.
+/// Converts the sandbox cwd and execution options into the command-line invocation for
+/// `crewon-linux-sandbox`.
 #[cfg_attr(not(test), allow(dead_code))]
 fn create_linux_sandbox_command_args(
     command: Vec<String>,

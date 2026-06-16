@@ -1,4 +1,4 @@
-//! Persist Codex session rollouts (.jsonl) so sessions can be replayed or inspected later.
+//! Persist Crewon session rollouts (.jsonl) so sessions can be replayed or inspected later.
 
 use std::collections::HashSet;
 use std::fs;
@@ -10,9 +10,9 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use chrono::SecondsFormat;
-use codex_protocol::ThreadId;
-use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::models::BaseInstructions;
+use crewon_protocol::ThreadId;
+use crewon_protocol::dynamic_tools::DynamicToolSpec;
+use crewon_protocol::models::BaseInstructions;
 use serde_json::Value;
 use time::OffsetDateTime;
 use time::format_description::FormatItem;
@@ -48,28 +48,28 @@ use crate::config::RolloutConfigView;
 use crate::default_client::originator;
 use crate::state_db;
 use crate::state_db::StateDbHandle;
-use codex_git_utils::collect_git_info;
-use codex_git_utils::get_git_repo_root;
-use codex_protocol::protocol::GitInfo as ProtocolGitInfo;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::ResumedHistory;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::ThreadSource;
-use codex_state::StateRuntime;
-use codex_utils_path as path_utils;
+use crewon_git_utils::collect_git_info;
+use crewon_git_utils::get_git_repo_root;
+use crewon_protocol::protocol::GitInfo as ProtocolGitInfo;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::ResumedHistory;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_state::StateRuntime;
+use crewon_utils_path as path_utils;
 
 /// Writes canonical session rollout items to JSONL.
 ///
 /// Rollouts are recorded as JSONL and can be inspected with tools such as:
 ///
 /// ```ignore
-/// $ jq -C . ~/.codex/sessions/rollout-2025-05-07T17-24-21-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl
-/// $ fx ~/.codex/sessions/rollout-2025-05-07T17-24-21-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl
+/// $ jq -C . ~/.crewon/sessions/rollout-2025-05-07T17-24-21-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl
+/// $ fx ~/.crewon/sessions/rollout-2025-05-07T17-24-21-5973b6c0-94b8-487b-a530-2aeb6098ae0e.jsonl
 /// ```
 #[derive(Clone)]
 pub struct RolloutRecorder {
@@ -210,7 +210,7 @@ enum ThreadListRepairMode {
 }
 
 impl RolloutRecorder {
-    /// List threads (rollout files) under the provided Codex home directory.
+    /// List threads (rollout files) under the provided Crewon home directory.
     #[allow(clippy::too_many_arguments)]
     pub async fn list_threads(
         state_db_ctx: Option<StateDbHandle>,
@@ -427,7 +427,7 @@ impl RolloutRecorder {
         if state_db_ctx.is_none() {
             // Keep legacy behavior when SQLite is unavailable: return filesystem results
             // at the requested page size.
-            codex_state::record_fallback(
+            crewon_state::record_fallback(
                 "list_threads",
                 "db_unavailable",
                 /*telemetry_override*/ None,
@@ -540,7 +540,7 @@ impl RolloutRecorder {
                     )
                     .await;
                 }
-                codex_state::record_fallback(
+                crewon_state::record_fallback(
                     "list_threads",
                     "metadata_filter",
                     /*telemetry_override*/ None,
@@ -556,7 +556,7 @@ impl RolloutRecorder {
         }
         if listing_has_metadata_filters {
             let page = page_from_filesystem_scan(fs_page, sort_direction, page_size, sort_key);
-            codex_state::record_fallback(
+            crewon_state::record_fallback(
                 "list_threads",
                 "db_error",
                 /*telemetry_override*/ None,
@@ -570,7 +570,7 @@ impl RolloutRecorder {
         // If SQLite listing still fails, return the filesystem page rather than failing the list.
         tracing::error!("Falling back on rollout system");
         tracing::warn!("state db discrepancy during list_threads_with_db_fallback: falling_back");
-        codex_state::record_fallback("list_threads", "db_error", /*telemetry_override*/ None);
+        crewon_state::record_fallback("list_threads", "db_error", /*telemetry_override*/ None);
         Ok(page_from_filesystem_scan(
             fs_page,
             sort_direction,
@@ -629,7 +629,7 @@ impl RolloutRecorder {
             }
         }
         if let Some(reason) = fallback_reason {
-            codex_state::record_fallback(
+            crewon_state::record_fallback(
                 "find_latest_thread_path",
                 reason,
                 /*telemetry_override*/ None,
@@ -700,7 +700,7 @@ impl RolloutRecorder {
                     timestamp,
                     cwd: config.cwd().to_path_buf(),
                     originator: originator().value,
-                    cli_version: env!("CARGO_PKG_VERSION").to_string(),
+                    client_version: env!("CARGO_PKG_VERSION").to_string(),
                     agent_nickname: source.get_nickname(),
                     agent_role: source.get_agent_role(),
                     agent_path: source.get_agent_path().map(Into::into),
@@ -1361,7 +1361,7 @@ fn precompute_log_file_info(
     config: &impl RolloutConfigView,
     conversation_id: ThreadId,
 ) -> std::io::Result<LogFileInfo> {
-    // Resolve ~/.codex/sessions/YYYY/MM/DD path.
+    // Resolve ~/.crewon/sessions/YYYY/MM/DD path.
     let timestamp = OffsetDateTime::now_local()
         .map_err(|e| IoError::other(format!("failed to get local time: {e}")))?;
     let mut dir = config.codex_home().to_path_buf();
@@ -1694,8 +1694,8 @@ impl JsonlWriter {
     }
 }
 
-impl From<codex_state::ThreadsPage> for ThreadsPage {
-    fn from(db_page: codex_state::ThreadsPage) -> Self {
+impl From<crewon_state::ThreadsPage> for ThreadsPage {
+    fn from(db_page: crewon_state::ThreadsPage) -> Self {
         let items = db_page
             .items
             .into_iter()
@@ -1710,7 +1710,7 @@ impl From<codex_state::ThreadsPage> for ThreadsPage {
     }
 }
 
-fn thread_item_from_state_metadata(item: codex_state::ThreadMetadata) -> ThreadItem {
+fn thread_item_from_state_metadata(item: crewon_state::ThreadMetadata) -> ThreadItem {
     ThreadItem {
         path: item.rollout_path,
         thread_id: Some(item.id),
@@ -1788,7 +1788,7 @@ async fn resume_candidate_matches_cwd(
 }
 
 async fn select_resume_path_from_db_page(
-    page: &codex_state::ThreadsPage,
+    page: &crewon_state::ThreadsPage,
     filter_cwd: Option<&Path>,
     default_provider: &str,
 ) -> Option<PathBuf> {

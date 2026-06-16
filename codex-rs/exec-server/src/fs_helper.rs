@@ -1,6 +1,6 @@
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use codex_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::JSONRPCErrorError;
 use serde::Deserialize;
 use serde::Serialize;
 use tokio::io;
@@ -39,7 +39,7 @@ use crate::rpc::internal_error;
 use crate::rpc::invalid_request;
 use crate::rpc::not_found;
 
-pub const CODEX_FS_HELPER_ARG1: &str = "--codex-run-as-fs-helper";
+pub const CREWON_FS_HELPER_ARG1: &str = "--crewon-run-as-fs-helper";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "operation", content = "params")]

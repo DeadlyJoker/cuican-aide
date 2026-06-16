@@ -1,15 +1,15 @@
 [package]
-name = "codex-mcp-server"
+name = "crewon-mcp-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "codex-mcp-server"
+name = "crewon-mcp-server"
 path = "src/main.rs"
 
 [lib]
-name = "codex_mcp_server"
+name = "crewon_mcp_server"
 path = "src/lib.rs"
 doctest = false
 
@@ -18,15 +18,15 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-codex-arg0 = { workspace = true }
-codex-config = { workspace = true }
-codex-core = { workspace = true }
-codex-exec-server = { workspace = true }
-codex-extension-api = { workspace = true }
-codex-login = { workspace = true }
-codex-protocol = { workspace = true }
-codex-utils-cli = { workspace = true }
-codex-utils-json-to-toml = { workspace = true }
+crewon-arg0 = { workspace = true }
+crewon-config = { workspace = true }
+crewon-core = { workspace = true }
+crewon-exec-server = { workspace = true }
+crewon-extension-api = { workspace = true }
+crewon-login = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-utils-options = { workspace = true }
+crewon-utils-json-to-toml = { workspace = true }
 rmcp = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -43,8 +43,8 @@ tracing = { workspace = true, features = ["log"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 
 [dev-dependencies]
-codex-utils-absolute-path = { workspace = true }
-codex-shell-command = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
+crewon-shell-command = { workspace = true }
 core_test_support = { workspace = true }
 mcp_test_support = { workspace = true }
 os_info = { workspace = true }

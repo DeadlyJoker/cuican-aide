@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use codex_app_server_protocol::AppInfo;
+use crewon_app_server_protocol::AppInfo;
 
 pub fn filter_tool_suggest_discoverable_connectors(
     directory_connectors: Vec<AppInfo>,
@@ -52,7 +52,7 @@ pub fn filter_disallowed_connectors(
 }
 
 fn is_first_party_chat_originator(originator_value: &str) -> bool {
-    originator_value == "codex_atlas" || originator_value == "codex_chatgpt_desktop"
+    originator_value == "codex_atlas" || originator_value == "crewon_chatgpt_desktop"
 }
 
 fn is_connector_id_allowed(connector_id: &str, first_party_chat_originator: bool) -> bool {
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn filter_disallowed_connectors_allows_non_disallowed_connectors() {
         let filtered =
-            filter_disallowed_connectors(vec![app("asdk_app_hidden"), app("alpha")], "codex_cli");
+            filter_disallowed_connectors(vec![app("asdk_app_hidden"), app("alpha")], "crewon-web");
         assert_eq!(filtered, vec![app("asdk_app_hidden"), app("alpha")]);
     }
 
@@ -113,7 +113,7 @@ mod tests {
                 app("connector_openai_bar"),
                 app("gamma"),
             ],
-            "codex_cli",
+            "crewon-web",
         );
         assert_eq!(
             filtered,
@@ -133,7 +133,7 @@ mod tests {
                 app("connector_3f8d1a79f27c4c7ba1a897ab13bf37dc"),
                 app("delta"),
             ],
-            "codex_cli",
+            "crewon-web",
         );
         assert_eq!(filtered, vec![app("delta")]);
     }
@@ -146,7 +146,7 @@ mod tests {
                 app("asdk_app_6938a94a61d881918ef32cb999ff937c"),
                 app("connector_0f9c9d4592e54d0a9a12b3f44a1e2010"),
             ],
-            "codex_atlas",
+            "crewon_chatgpt_desktop",
         );
         assert_eq!(
             filtered,
@@ -179,7 +179,7 @@ mod tests {
                 "connector_2128aebfecb84f64a069897515042a44".to_string(),
                 "connector_68df038e0ba48191908c8434991bbac2".to_string(),
             ]),
-            "codex_cli",
+            "crewon-web",
         );
 
         assert_eq!(
@@ -219,7 +219,7 @@ mod tests {
                 "connector_2128aebfecb84f64a069897515042a44".to_string(),
                 "connector_68df038e0ba48191908c8434991bbac2".to_string(),
             ]),
-            "codex_cli",
+            "crewon-web",
         );
 
         assert_eq!(filtered, Vec::<AppInfo>::new());

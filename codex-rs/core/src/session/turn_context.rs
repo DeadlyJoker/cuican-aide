@@ -3,20 +3,20 @@ use crate::SkillLoadOutcome;
 use crate::agents_md::LoadedAgentsMd;
 use crate::config::GhostSnapshotConfig;
 use crate::environment_selection::ResolvedTurnEnvironments;
-use codex_core_skills::HostLoadedSkills;
-use codex_model_provider::SharedModelProvider;
-use codex_model_provider::create_model_provider;
-use codex_protocol::SessionId;
-use codex_protocol::ThreadId;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ToolMode;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::ThreadSource;
-use codex_protocol::protocol::TurnEnvironmentSelection;
-use codex_sandboxing::compatibility_sandbox_policy_for_permission_profile;
-use codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
-use codex_sandboxing::policy_transforms::effective_network_sandbox_policy;
+use crewon_core_skills::HostLoadedSkills;
+use crewon_model_provider::SharedModelProvider;
+use crewon_model_provider::create_model_provider;
+use crewon_protocol::SessionId;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ToolMode;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_protocol::protocol::TurnEnvironmentSelection;
+use crewon_sandboxing::compatibility_sandbox_policy_for_permission_profile;
+use crewon_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
+use crewon_sandboxing::policy_transforms::effective_network_sandbox_policy;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
@@ -96,11 +96,11 @@ pub struct TurnContext {
     pub(crate) ghost_snapshot: GhostSnapshotConfig,
     pub(crate) final_output_json_schema: Option<Value>,
     pub(crate) codex_self_exe: Option<PathBuf>,
-    pub(crate) codex_linux_sandbox_exe: Option<PathBuf>,
+    pub(crate) crewon_linux_sandbox_exe: Option<PathBuf>,
     pub(crate) truncation_policy: TruncationPolicy,
     pub(crate) dynamic_tools: Vec<DynamicToolSpec>,
     pub(crate) turn_metadata_state: Arc<TurnMetadataState>,
-    pub(crate) extension_data: Arc<codex_extension_api::ExtensionData>,
+    pub(crate) extension_data: Arc<crewon_extension_api::ExtensionData>,
     pub(crate) turn_skills: TurnSkillsContext,
     pub(crate) turn_timing_state: Arc<TurnTimingState>,
     pub(crate) server_model_warning_emitted: AtomicBool,
@@ -159,11 +159,11 @@ impl TurnContext {
     }
 
     pub(crate) fn apps_enabled(&self) -> bool {
-        let uses_codex_backend = self
+        let uses_crewon_backend = self
             .auth_manager
             .as_deref()
-            .is_some_and(AuthManager::current_auth_uses_codex_backend);
-        self.features.apps_enabled_for_auth(uses_codex_backend)
+            .is_some_and(AuthManager::current_auth_uses_crewon_backend);
+        self.features.apps_enabled_for_auth(uses_crewon_backend)
     }
 
     pub(crate) fn tool_environment_mode(&self) -> ToolEnvironmentMode {
@@ -265,7 +265,7 @@ impl TurnContext {
             ghost_snapshot: self.ghost_snapshot.clone(),
             final_output_json_schema: self.final_output_json_schema.clone(),
             codex_self_exe: self.codex_self_exe.clone(),
-            codex_linux_sandbox_exe: self.codex_linux_sandbox_exe.clone(),
+            crewon_linux_sandbox_exe: self.crewon_linux_sandbox_exe.clone(),
             truncation_policy,
             dynamic_tools: self.dynamic_tools.clone(),
             turn_metadata_state: self.turn_metadata_state.clone(),
@@ -378,12 +378,12 @@ impl TurnContext {
             allowed_domains: network
                 .domains
                 .as_ref()
-                .and_then(codex_config::NetworkDomainPermissionsToml::allowed_domains)
+                .and_then(crewon_config::NetworkDomainPermissionsToml::allowed_domains)
                 .unwrap_or_default(),
             denied_domains: network
                 .domains
                 .as_ref()
-                .and_then(codex_config::NetworkDomainPermissionsToml::denied_domains)
+                .and_then(crewon_config::NetworkDomainPermissionsToml::denied_domains)
                 .unwrap_or_default(),
         })
     }
@@ -489,7 +489,7 @@ impl Session {
         let session_telemetry_for_context = session_telemetry;
         let available_models = models_manager.try_list_models().unwrap_or_default();
         let unified_exec_shell_mode = UnifiedExecShellMode::for_session(
-            codex_tools::unified_exec_feature_mode_for_features(per_turn_config.features.get()),
+            crewon_tools::unified_exec_feature_mode_for_features(per_turn_config.features.get()),
             crate::tools::tool_user_shell_type(user_shell),
             shell_zsh_path,
             main_execve_wrapper_exe,
@@ -525,7 +525,7 @@ impl Session {
             network.is_some(),
         ));
         let (current_date, timezone) = local_time_context();
-        let extension_data = Arc::new(codex_extension_api::ExtensionData::new(sub_id.clone()));
+        let extension_data = Arc::new(crewon_extension_api::ExtensionData::new(sub_id.clone()));
         extension_data.insert(HostLoadedSkills::new(Arc::clone(&skills_outcome)));
         TurnContext {
             sub_id,
@@ -569,7 +569,7 @@ impl Session {
             ghost_snapshot: per_turn_config.ghost_snapshot.clone(),
             final_output_json_schema: None,
             codex_self_exe: per_turn_config.codex_self_exe.clone(),
-            codex_linux_sandbox_exe: per_turn_config.codex_linux_sandbox_exe.clone(),
+            crewon_linux_sandbox_exe: per_turn_config.crewon_linux_sandbox_exe.clone(),
             truncation_policy: model_info.truncation_policy.into(),
             dynamic_tools: session_configuration.dynamic_tools.clone(),
             turn_metadata_state,
@@ -585,9 +585,9 @@ impl Session {
         &self,
         sub_id: String,
         updates: SessionSettingsUpdate,
-    ) -> CodexResult<Arc<TurnContext>> {
+    ) -> CrewonResult<Arc<TurnContext>> {
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
-        let update_result: CodexResult<_> = {
+        let update_result: CrewonResult<_> = {
             let mut state = self.state.lock().await;
             match state.session_configuration.clone().apply(&updates) {
                 Ok(next) => {
@@ -673,7 +673,7 @@ impl Session {
     fn resolve_turn_environments(
         &self,
         environments: &[TurnEnvironmentSelection],
-    ) -> CodexResult<ResolvedTurnEnvironments> {
+    ) -> CrewonResult<ResolvedTurnEnvironments> {
         crate::environment_selection::resolve_environment_selections(
             self.services.environment_manager.as_ref(),
             environments,

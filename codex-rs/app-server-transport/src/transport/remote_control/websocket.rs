@@ -27,13 +27,13 @@ use crate::transport::remote_control::enroll::refresh_remote_control_server;
 use crate::transport::remote_control::enroll::update_persisted_remote_control_enrollment;
 use axum::http::HeaderValue;
 use base64::Engine;
-use codex_app_server_protocol::RemoteControlConnectionStatus;
-use codex_app_server_protocol::RemoteControlStatusChangedNotification;
-use codex_core::util::backoff;
-use codex_login::AuthManager;
-use codex_login::UnauthorizedRecovery;
-use codex_state::StateRuntime;
-use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
+use crewon_app_server_protocol::RemoteControlConnectionStatus;
+use crewon_app_server_protocol::RemoteControlStatusChangedNotification;
+use crewon_core::util::backoff;
+use crewon_login::AuthManager;
+use crewon_login::UnauthorizedRecovery;
+use crewon_state::StateRuntime;
+use crewon_utils_rustls_provider::ensure_rustls_crypto_provider;
 use futures::SinkExt;
 use futures::StreamExt;
 use futures::stream::SplitSink;
@@ -1154,7 +1154,7 @@ fn build_remote_control_websocket_request(
     )?;
     set_remote_control_header(
         headers,
-        "x-codex-protocol-version",
+        "x-crewon-protocol-version",
         REMOTE_CONTROL_PROTOCOL_VERSION,
     )?;
     set_remote_control_header(
@@ -1629,19 +1629,19 @@ mod tests {
     use crate::transport::remote_control::protocol::StreamId;
     use crate::transport::remote_control::protocol::normalize_remote_control_url;
     use chrono::Utc;
-    use codex_app_server_protocol::AuthMode;
-    use codex_app_server_protocol::ConfigWarningNotification;
-    use codex_app_server_protocol::JSONRPCMessage;
-    use codex_app_server_protocol::JSONRPCNotification;
-    use codex_app_server_protocol::ServerNotification;
-    use codex_config::types::AuthCredentialsStoreMode;
-    use codex_core::test_support::auth_manager_from_auth;
-    use codex_login::AuthDotJson;
-    use codex_login::CodexAuth;
-    use codex_login::save_auth;
-    use codex_login::token_data::TokenData;
-    use codex_login::token_data::parse_chatgpt_jwt_claims;
-    use codex_state::StateRuntime;
+    use crewon_app_server_protocol::AuthMode;
+    use crewon_app_server_protocol::ConfigWarningNotification;
+    use crewon_app_server_protocol::JSONRPCMessage;
+    use crewon_app_server_protocol::JSONRPCNotification;
+    use crewon_app_server_protocol::ServerNotification;
+    use crewon_config::types::AuthCredentialsStoreMode;
+    use crewon_core::test_support::auth_manager_from_auth;
+    use crewon_login::AuthDotJson;
+    use crewon_login::CrewonAuth;
+    use crewon_login::save_auth;
+    use crewon_login::token_data::TokenData;
+    use crewon_login::token_data::parse_chatgpt_jwt_claims;
+    use crewon_state::StateRuntime;
     use futures::StreamExt;
     use pretty_assertions::assert_eq;
     use std::sync::Arc;
@@ -1796,7 +1796,7 @@ mod tests {
     }
 
     fn remote_control_auth_manager() -> Arc<AuthManager> {
-        auth_manager_from_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        auth_manager_from_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
     }
 
     fn remote_control_url_for_listener(listener: &TcpListener) -> String {

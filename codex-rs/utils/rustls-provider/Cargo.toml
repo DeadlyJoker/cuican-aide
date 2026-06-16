@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-rustls-provider"
+name = "crewon-utils-rustls-provider"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,5 +11,6 @@ workspace = true
 rustls = { workspace = true }
 
 [lib]
+name = "crewon_utils_rustls_provider"
 test = false
 doctest = false

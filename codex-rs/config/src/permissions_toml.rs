@@ -1,17 +1,17 @@
 use std::collections::BTreeMap;
 
 use crate::merge::merge_toml_values;
-use codex_network_proxy::InjectedHeaderConfig;
-use codex_network_proxy::MitmHookActionsConfig;
-use codex_network_proxy::MitmHookBodyConfig;
-use codex_network_proxy::MitmHookConfig;
-use codex_network_proxy::MitmHookMatchConfig;
-use codex_network_proxy::NetworkDomainPermission as ProxyNetworkDomainPermission;
-use codex_network_proxy::NetworkMode;
-use codex_network_proxy::NetworkProxyConfig;
-use codex_network_proxy::NetworkUnixSocketPermission as ProxyNetworkUnixSocketPermission;
-use codex_network_proxy::normalize_host;
-use codex_protocol::permissions::FileSystemAccessMode;
+use crewon_network_proxy::InjectedHeaderConfig;
+use crewon_network_proxy::MitmHookActionsConfig;
+use crewon_network_proxy::MitmHookBodyConfig;
+use crewon_network_proxy::MitmHookConfig;
+use crewon_network_proxy::MitmHookMatchConfig;
+use crewon_network_proxy::NetworkDomainPermission as ProxyNetworkDomainPermission;
+use crewon_network_proxy::NetworkMode;
+use crewon_network_proxy::NetworkProxyConfig;
+use crewon_network_proxy::NetworkUnixSocketPermission as ProxyNetworkUnixSocketPermission;
+use crewon_network_proxy::normalize_host;
+use crewon_protocol::permissions::FileSystemAccessMode;
 use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::Deserialize;

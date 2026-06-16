@@ -7,29 +7,29 @@ use app_test_support::ChatGptAuthFixture;
 use app_test_support::TestAppServer;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::PluginAuthPolicy;
-use codex_app_server_protocol::PluginInstallPolicy;
-use codex_app_server_protocol::PluginInterface;
-use codex_app_server_protocol::PluginListParams;
-use codex_app_server_protocol::PluginListResponse;
-use codex_app_server_protocol::PluginShareCheckoutResponse;
-use codex_app_server_protocol::PluginShareContext;
-use codex_app_server_protocol::PluginShareDeleteResponse;
-use codex_app_server_protocol::PluginShareDiscoverability;
-use codex_app_server_protocol::PluginShareListItem;
-use codex_app_server_protocol::PluginShareListResponse;
-use codex_app_server_protocol::PluginSharePrincipal;
-use codex_app_server_protocol::PluginSharePrincipalRole;
-use codex_app_server_protocol::PluginSharePrincipalType;
-use codex_app_server_protocol::PluginShareSaveResponse;
-use codex_app_server_protocol::PluginShareUpdateTargetsResponse;
-use codex_app_server_protocol::PluginSource;
-use codex_app_server_protocol::PluginSummary;
-use codex_app_server_protocol::RequestId;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::PluginAuthPolicy;
+use crewon_app_server_protocol::PluginInstallPolicy;
+use crewon_app_server_protocol::PluginInterface;
+use crewon_app_server_protocol::PluginListParams;
+use crewon_app_server_protocol::PluginListResponse;
+use crewon_app_server_protocol::PluginShareCheckoutResponse;
+use crewon_app_server_protocol::PluginShareContext;
+use crewon_app_server_protocol::PluginShareDeleteResponse;
+use crewon_app_server_protocol::PluginShareDiscoverability;
+use crewon_app_server_protocol::PluginShareListItem;
+use crewon_app_server_protocol::PluginShareListResponse;
+use crewon_app_server_protocol::PluginSharePrincipal;
+use crewon_app_server_protocol::PluginSharePrincipalRole;
+use crewon_app_server_protocol::PluginSharePrincipalType;
+use crewon_app_server_protocol::PluginShareSaveResponse;
+use crewon_app_server_protocol::PluginShareUpdateTargetsResponse;
+use crewon_app_server_protocol::PluginSource;
+use crewon_app_server_protocol::PluginSummary;
+use crewon_app_server_protocol::RequestId;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use pretty_assertions::assert_eq;
@@ -179,7 +179,7 @@ async fn plugin_share_save_uploads_local_plugin() -> Result<()> {
                     enabled: true,
                     install_policy: PluginInstallPolicy::Available,
                     auth_policy: PluginAuthPolicy::OnUse,
-                    availability: codex_app_server_protocol::PluginAvailability::Available,
+                    availability: crewon_app_server_protocol::PluginAvailability::Available,
                     interface: Some(expected_plugin_interface()),
                     keywords: Vec::new(),
                 },
@@ -583,7 +583,7 @@ async fn plugin_share_list_returns_created_workspace_plugins() -> Result<()> {
                     enabled: true,
                     install_policy: PluginInstallPolicy::Available,
                     auth_policy: PluginAuthPolicy::OnUse,
-                    availability: codex_app_server_protocol::PluginAvailability::Available,
+                    availability: crewon_app_server_protocol::PluginAvailability::Available,
                     interface: Some(expected_plugin_interface()),
                     keywords: Vec::new(),
                 },
@@ -659,10 +659,10 @@ async fn plugin_share_checkout_adds_personal_marketplace_entry() -> Result<()> {
         response,
         PluginShareCheckoutResponse {
             remote_plugin_id: "plugins_123".to_string(),
-            plugin_id: "demo-plugin@codex-curated".to_string(),
+            plugin_id: "demo-plugin@crewon-curated".to_string(),
             plugin_name: "demo-plugin".to_string(),
             plugin_path: plugin_path.clone(),
-            marketplace_name: "codex-curated".to_string(),
+            marketplace_name: "crewon-curated".to_string(),
             marketplace_path: marketplace_path.clone(),
             remote_version: Some("1.2.3".to_string()),
         }
@@ -670,7 +670,7 @@ async fn plugin_share_checkout_adds_personal_marketplace_entry() -> Result<()> {
     assert!(
         plugin_path
             .as_path()
-            .join(".codex-plugin/plugin.json")
+            .join(".crewon-plugin/plugin.json")
             .is_file()
     );
 
@@ -679,7 +679,7 @@ async fn plugin_share_checkout_adds_personal_marketplace_entry() -> Result<()> {
     assert_eq!(
         marketplace,
         json!({
-            "name": "codex-curated",
+            "name": "crewon-curated",
             "interface": {
                 "displayName": "Personal",
             },
@@ -717,7 +717,7 @@ async fn plugin_share_checkout_adds_personal_marketplace_entry() -> Result<()> {
         .send_plugin_list_request(PluginListParams {
             cwds: None,
             marketplace_kinds: Some(vec![
-                codex_app_server_protocol::PluginListMarketplaceKind::Local,
+                crewon_app_server_protocol::PluginListMarketplaceKind::Local,
             ]),
         })
         .await?;
@@ -728,7 +728,7 @@ async fn plugin_share_checkout_adds_personal_marketplace_entry() -> Result<()> {
     .await??;
     let response: PluginListResponse = to_response(response)?;
     assert_eq!(response.marketplaces.len(), 1);
-    assert_eq!(response.marketplaces[0].name, "codex-curated");
+    assert_eq!(response.marketplaces[0].name, "crewon-curated");
     assert_eq!(response.marketplaces[0].plugins[0].name, "demo-plugin");
     assert_eq!(
         response.marketplaces[0].plugins[0]
@@ -850,7 +850,7 @@ async fn plugin_share_checkout_cleans_up_path_when_marketplace_update_fails() ->
     std::fs::write(
         &marketplace_path,
         serde_json::to_string_pretty(&json!({
-            "name": "codex-curated",
+            "name": "crewon-curated",
             "plugins": [
                 {
                     "name": "demo-plugin",
@@ -1032,7 +1032,7 @@ async fn plugin_share_update_targets_updates_share_targets() -> Result<()> {
                     name: "Workspace".to_string(),
                 },
             ],
-            discoverability: codex_app_server_protocol::PluginShareDiscoverability::Unlisted,
+            discoverability: crewon_app_server_protocol::PluginShareDiscoverability::Unlisted,
         }
     );
     Ok(())
@@ -1184,7 +1184,7 @@ async fn plugin_share_delete_removes_created_workspace_plugin() -> Result<()> {
                     enabled: true,
                     install_policy: PluginInstallPolicy::Available,
                     auth_policy: PluginAuthPolicy::OnUse,
-                    availability: codex_app_server_protocol::PluginAvailability::Available,
+                    availability: crewon_app_server_protocol::PluginAvailability::Available,
                     interface: Some(expected_plugin_interface()),
                     keywords: Vec::new(),
                 },
@@ -1391,7 +1391,7 @@ fn expected_share_context(plugin_id: &str) -> PluginShareContext {
 fn write_test_plugin(root: &Path, plugin_name: &str) -> std::io::Result<PathBuf> {
     let plugin_path = root.join(plugin_name);
     write_file(
-        &plugin_path.join(".codex-plugin/plugin.json"),
+        &plugin_path.join(".crewon-plugin/plugin.json"),
         &format!(r#"{{"name":"{plugin_name}"}}"#),
     )?;
     write_file(
@@ -1408,7 +1408,7 @@ fn remote_plugin_bundle_tar_gz_bytes(plugin_name: &str) -> Result<Vec<u8>> {
     let mut tar = tar::Builder::new(encoder);
     for (path, contents, mode) in [
         (
-            ".codex-plugin/plugin.json",
+            ".crewon-plugin/plugin.json",
             manifest.as_bytes(),
             /*mode*/ 0o644,
         ),

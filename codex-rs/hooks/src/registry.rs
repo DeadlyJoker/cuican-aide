@@ -1,10 +1,10 @@
-use codex_config::ConfigLayerStack;
-use codex_plugin::PluginHookSource;
+use crewon_config::ConfigLayerStack;
+use crewon_plugin::PluginHookSource;
 use tokio::process::Command;
 
-use crate::engine::ClaudeHooksEngine;
 use crate::engine::CommandShell;
 use crate::engine::HookListEntry;
+use crate::engine::HooksEngine;
 use crate::events::compact::PostCompactRequest;
 use crate::events::compact::PreCompactOutcome;
 use crate::events::compact::PreCompactRequest;
@@ -47,7 +47,7 @@ pub struct HookListOutcome {
 #[derive(Clone)]
 pub struct Hooks {
     after_agent: Vec<Hook>,
-    engine: ClaudeHooksEngine,
+    engine: HooksEngine,
 }
 
 impl Default for Hooks {
@@ -64,7 +64,7 @@ impl Hooks {
             .map(crate::notify_hook)
             .into_iter()
             .collect();
-        let engine = ClaudeHooksEngine::new(
+        let engine = HooksEngine::new(
             config.feature_enabled,
             config.bypass_hook_trust,
             config.config_layer_stack.as_ref(),
@@ -109,28 +109,28 @@ impl Hooks {
     pub fn preview_session_start(
         &self,
         request: &SessionStartRequest,
-    ) -> Vec<codex_protocol::protocol::HookRunSummary> {
+    ) -> Vec<crewon_protocol::protocol::HookRunSummary> {
         self.engine.preview_session_start(request)
     }
 
     pub fn preview_pre_tool_use(
         &self,
         request: &PreToolUseRequest,
-    ) -> Vec<codex_protocol::protocol::HookRunSummary> {
+    ) -> Vec<crewon_protocol::protocol::HookRunSummary> {
         self.engine.preview_pre_tool_use(request)
     }
 
     pub fn preview_permission_request(
         &self,
         request: &PermissionRequestRequest,
-    ) -> Vec<codex_protocol::protocol::HookRunSummary> {
+    ) -> Vec<crewon_protocol::protocol::HookRunSummary> {
         self.engine.preview_permission_request(request)
     }
 
     pub fn preview_post_tool_use(
         &self,
         request: &PostToolUseRequest,
-    ) -> Vec<codex_protocol::protocol::HookRunSummary> {
+    ) -> Vec<crewon_protocol::protocol::HookRunSummary> {
         self.engine.preview_post_tool_use(request)
     }
 
@@ -160,7 +160,7 @@ impl Hooks {
     pub fn preview_pre_compact(
         &self,
         request: &PreCompactRequest,
-    ) -> Vec<codex_protocol::protocol::HookRunSummary> {
+    ) -> Vec<crewon_protocol::protocol::HookRunSummary> {
         self.engine.preview_pre_compact(request)
     }
 
@@ -171,7 +171,7 @@ impl Hooks {
     pub fn preview_post_compact(
         &self,
         request: &PostCompactRequest,
-    ) -> Vec<codex_protocol::protocol::HookRunSummary> {
+    ) -> Vec<crewon_protocol::protocol::HookRunSummary> {
         self.engine.preview_post_compact(request)
     }
 
@@ -182,7 +182,7 @@ impl Hooks {
     pub fn preview_user_prompt_submit(
         &self,
         request: &UserPromptSubmitRequest,
-    ) -> Vec<codex_protocol::protocol::HookRunSummary> {
+    ) -> Vec<crewon_protocol::protocol::HookRunSummary> {
         self.engine.preview_user_prompt_submit(request)
     }
 
@@ -196,7 +196,7 @@ impl Hooks {
     pub fn preview_stop(
         &self,
         request: &StopRequest,
-    ) -> Vec<codex_protocol::protocol::HookRunSummary> {
+    ) -> Vec<crewon_protocol::protocol::HookRunSummary> {
         self.engine.preview_stop(request)
     }
 

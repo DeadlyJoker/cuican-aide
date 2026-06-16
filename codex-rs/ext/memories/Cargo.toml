@@ -1,11 +1,11 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-memories-extension"
+name = "crewon-memories-extension"
 version.workspace = true
 
 [lib]
-name = "codex_memories_extension"
+name = "crewon_memories_extension"
 path = "src/lib.rs"
 doctest = false
 
@@ -13,14 +13,14 @@ doctest = false
 workspace = true
 
 [dependencies]
-codex-core = { workspace = true }
-codex-extension-api = { workspace = true }
-codex-features = { workspace = true }
-codex-otel = { workspace = true }
-codex-tools = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
-codex-utils-output-truncation = { workspace = true }
-codex-utils-template = { workspace = true }
+crewon-core = { workspace = true }
+crewon-extension-api = { workspace = true }
+crewon-features = { workspace = true }
+crewon-otel = { workspace = true }
+crewon-tools = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
+crewon-utils-output-truncation = { workspace = true }
+crewon-utils-template = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

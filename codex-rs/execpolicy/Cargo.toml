@@ -1,26 +1,21 @@
 [package]
-name = "codex-execpolicy"
+name = "crewon-execpolicy"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Codex exec policy: prefix-based Starlark rules for command decisions."
+description = "Crewon exec policy: prefix-based Starlark rules for command decisions."
 
 [lib]
-name = "codex_execpolicy"
+name = "crewon_execpolicy"
 path = "src/lib.rs"
 doctest = false
-
-[[bin]]
-name = "codex-execpolicy"
-path = "src/main.rs"
 
 [lints]
 workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
-codex-utils-absolute-path = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
 multimap = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

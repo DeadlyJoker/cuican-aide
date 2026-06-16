@@ -1,6 +1,6 @@
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::protocol::TokenUsage;
-use codex_state::ThreadGoalStatus;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_state::ThreadGoalStatus;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::PoisonError;

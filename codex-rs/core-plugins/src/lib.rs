@@ -20,8 +20,8 @@ pub mod toggles;
 pub const OPENAI_CURATED_MARKETPLACE_NAME: &str = "openai-curated";
 pub const OPENAI_BUNDLED_MARKETPLACE_NAME: &str = "openai-bundled";
 
-pub type LoadedPlugin = codex_plugin::LoadedPlugin<codex_config::McpServerConfig>;
-pub type PluginLoadOutcome = codex_plugin::PluginLoadOutcome<codex_config::McpServerConfig>;
+pub type LoadedPlugin = crewon_plugin::LoadedPlugin<crewon_config::McpServerConfig>;
+pub type PluginLoadOutcome = crewon_plugin::PluginLoadOutcome<crewon_config::McpServerConfig>;
 
 pub use discoverable::ToolSuggestDiscoverablePlugin;
 pub use discoverable::ToolSuggestPluginDiscoveryInput;

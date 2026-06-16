@@ -1,18 +1,18 @@
-use codex_arg0::Arg0DispatchPaths;
-use codex_cloud_config::cloud_config_bundle_loader;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::ConfigLayerStack;
-use codex_config::LoaderOverrides;
-use codex_config::ThreadConfigLoader;
-use codex_config::loader::load_config_layers_state;
-use codex_core::config::Config;
-use codex_core::config::ConfigOverrides;
-use codex_exec_server::LOCAL_FS;
-use codex_features::feature_for_key;
-use codex_login::AuthManager;
-use codex_login::default_client::set_default_client_residency_requirement;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_json_to_toml::json_to_toml;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_cloud_config::cloud_config_bundle_loader;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::ConfigLayerStack;
+use crewon_config::LoaderOverrides;
+use crewon_config::ThreadConfigLoader;
+use crewon_config::loader::load_config_layers_state;
+use crewon_core::config::Config;
+use crewon_core::config::ConfigOverrides;
+use crewon_exec_server::LOCAL_FS;
+use crewon_features::feature_for_key;
+use crewon_login::AuthManager;
+use crewon_login::default_client::set_default_client_residency_requirement;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_json_to_toml::json_to_toml;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -23,11 +23,11 @@ use std::sync::RwLock;
 use toml::Value as TomlValue;
 use tracing::warn;
 
-/// Shared app-server entry point for loading effective Codex configuration.
+/// Shared app-server entry point for loading effective Crewon configuration.
 #[derive(Clone)]
 pub(crate) struct ConfigManager {
     codex_home: PathBuf,
-    cli_overrides: Arc<RwLock<Vec<(String, TomlValue)>>>,
+    config_overrides: Arc<RwLock<Vec<(String, TomlValue)>>>,
     runtime_feature_enablement: Arc<RwLock<BTreeMap<String, bool>>>,
     loader_overrides: LoaderOverrides,
     strict_config: bool,
@@ -39,7 +39,7 @@ pub(crate) struct ConfigManager {
 impl ConfigManager {
     pub(crate) fn new(
         codex_home: PathBuf,
-        cli_overrides: Vec<(String, TomlValue)>,
+        config_overrides: Vec<(String, TomlValue)>,
         loader_overrides: LoaderOverrides,
         strict_config: bool,
         cloud_config_bundle: CloudConfigBundleLoader,
@@ -48,7 +48,7 @@ impl ConfigManager {
     ) -> Self {
         Self {
             codex_home,
-            cli_overrides: Arc::new(RwLock::new(cli_overrides)),
+            config_overrides: Arc::new(RwLock::new(config_overrides)),
             runtime_feature_enablement: Arc::new(RwLock::new(BTreeMap::new())),
             loader_overrides,
             strict_config,
@@ -66,8 +66,8 @@ impl ConfigManager {
         self.loader_overrides.user_config_path(self.codex_home())
     }
 
-    pub(crate) fn current_cli_overrides(&self) -> Vec<(String, TomlValue)> {
-        self.cli_overrides
+    pub(crate) fn current_config_overrides(&self) -> Vec<(String, TomlValue)> {
+        self.config_overrides
             .read()
             .map(|guard| guard.clone())
             .unwrap_or_default()
@@ -119,7 +119,7 @@ impl ConfigManager {
         self.thread_config_loader
             .read()
             .map(|guard| Arc::clone(&*guard))
-            .unwrap_or_else(|_| Arc::new(codex_config::NoopThreadConfigLoader))
+            .unwrap_or_else(|_| Arc::new(crewon_config::NoopThreadConfigLoader))
     }
 
     pub(crate) async fn sync_default_client_residency_requirement(&self) {
@@ -138,8 +138,8 @@ impl ConfigManager {
         &self,
         fallback_cwd: Option<PathBuf>,
     ) -> std::io::Result<Config> {
-        self.load_with_cli_overrides(
-            &self.current_cli_overrides(),
+        self.load_with_config_overrides(
+            &self.current_config_overrides(),
             /*request_overrides*/ None,
             ConfigOverrides::default(),
             fallback_cwd,
@@ -163,9 +163,9 @@ impl ConfigManager {
     }
 
     pub(crate) async fn load_default_config(&self) -> std::io::Result<Config> {
-        let mut config = Config::load_default_with_cli_overrides_for_codex_home(
+        let mut config = Config::load_default_with_config_overrides_for_codex_home(
             self.codex_home.clone(),
-            self.current_cli_overrides(),
+            self.current_config_overrides(),
         )
         .await?;
         if self.loader_overrides.user_config_path.is_some()
@@ -188,8 +188,8 @@ impl ConfigManager {
         request_overrides: Option<HashMap<String, serde_json::Value>>,
         typesafe_overrides: ConfigOverrides,
     ) -> std::io::Result<Config> {
-        self.load_with_cli_overrides(
-            &self.current_cli_overrides(),
+        self.load_with_config_overrides(
+            &self.current_config_overrides(),
             request_overrides,
             typesafe_overrides,
             /*fallback_cwd*/ None,
@@ -203,8 +203,8 @@ impl ConfigManager {
         typesafe_overrides: ConfigOverrides,
         cwd: Option<PathBuf>,
     ) -> std::io::Result<Config> {
-        self.load_with_cli_overrides(
-            &self.current_cli_overrides(),
+        self.load_with_config_overrides(
+            &self.current_config_overrides(),
             request_overrides,
             typesafe_overrides,
             cwd,
@@ -212,9 +212,9 @@ impl ConfigManager {
         .await
     }
 
-    pub(crate) async fn load_with_cli_overrides(
+    pub(crate) async fn load_with_config_overrides(
         &self,
-        cli_overrides: &[(String, TomlValue)],
+        config_overrides: &[(String, TomlValue)],
         request_overrides: Option<HashMap<String, serde_json::Value>>,
         mut typesafe_overrides: ConfigOverrides,
         fallback_cwd: Option<PathBuf>,
@@ -228,7 +228,7 @@ impl ConfigManager {
                 )
             })?);
         }
-        let merged_cli_overrides = cli_overrides
+        let merged_config_overrides = config_overrides
             .iter()
             .cloned()
             .chain(
@@ -238,9 +238,9 @@ impl ConfigManager {
             )
             .collect::<Vec<_>>();
 
-        let mut config = codex_core::config::ConfigBuilder::default()
+        let mut config = crewon_core::config::ConfigBuilder::default()
             .codex_home(self.codex_home.clone())
-            .cli_overrides(merged_cli_overrides)
+            .config_overrides(merged_config_overrides)
             .loader_overrides(self.loader_overrides.clone())
             .strict_config(self.strict_config)
             .harness_overrides(typesafe_overrides)
@@ -270,8 +270,8 @@ impl ConfigManager {
             LOCAL_FS.as_ref(),
             &self.codex_home,
             cwd,
-            &self.current_cli_overrides(),
-            codex_config::ConfigLoadOptions {
+            &self.current_config_overrides(),
+            crewon_config::ConfigLoadOptions {
                 loader_overrides: self.loader_overrides.clone(),
                 strict_config: self.strict_config,
                 cloud_config_bundle: self.current_cloud_config_bundle(),
@@ -294,25 +294,25 @@ impl ConfigManager {
 
     fn apply_arg0_paths(&self, config: &mut Config) {
         config.codex_self_exe = self.arg0_paths.codex_self_exe.clone();
-        config.codex_linux_sandbox_exe = self.arg0_paths.codex_linux_sandbox_exe.clone();
+        config.crewon_linux_sandbox_exe = self.arg0_paths.crewon_linux_sandbox_exe.clone();
         config.main_execve_wrapper_exe = self.arg0_paths.main_execve_wrapper_exe.clone();
     }
 
     #[cfg(test)]
     pub(crate) fn new_for_tests(
         codex_home: PathBuf,
-        cli_overrides: Vec<(String, TomlValue)>,
+        config_overrides: Vec<(String, TomlValue)>,
         loader_overrides: LoaderOverrides,
         cloud_config_bundle: CloudConfigBundleLoader,
     ) -> Self {
         Self::new(
             codex_home,
-            cli_overrides,
+            config_overrides,
             loader_overrides,
             /*strict_config*/ false,
             cloud_config_bundle,
             Arg0DispatchPaths::default(),
-            Arc::new(codex_config::NoopThreadConfigLoader),
+            Arc::new(crewon_config::NoopThreadConfigLoader),
         )
     }
 

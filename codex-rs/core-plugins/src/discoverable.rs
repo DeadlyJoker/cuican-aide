@@ -1,8 +1,8 @@
 use anyhow::Context;
-use codex_app_server_protocol::PluginAvailability;
-use codex_app_server_protocol::PluginInstallPolicy;
-use codex_login::CodexAuth;
-use codex_plugin::PluginCapabilitySummary;
+use crewon_app_server_protocol::PluginAvailability;
+use crewon_app_server_protocol::PluginInstallPolicy;
+use crewon_login::CrewonAuth;
+use crewon_plugin::PluginCapabilitySummary;
 use std::collections::HashSet;
 use std::path::Component;
 use std::path::Path;
@@ -80,7 +80,7 @@ impl PluginsManager {
     pub async fn list_tool_suggest_discoverable_plugins(
         &self,
         input: &ToolSuggestPluginDiscoveryInput,
-        auth: Option<&CodexAuth>,
+        auth: Option<&CrewonAuth>,
     ) -> anyhow::Result<Vec<ToolSuggestDiscoverablePlugin>> {
         if !input.plugins.plugins_enabled {
             return Ok(Vec::new());

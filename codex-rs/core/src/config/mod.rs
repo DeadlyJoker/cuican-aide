@@ -8,103 +8,99 @@ use crate::unified_exec::MIN_EMPTY_YIELD_TIME_MS;
 use crate::windows_sandbox::WindowsSandboxLevelExt;
 use crate::windows_sandbox::resolve_windows_sandbox_mode;
 use crate::windows_sandbox::resolve_windows_sandbox_private_desktop;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::ConfigLayerSource;
-use codex_config::ConfigLayerStack;
-use codex_config::ConfigLayerStackOrdering;
-use codex_config::ConfigRequirements;
-use codex_config::ConfigRequirementsToml;
-use codex_config::ConstrainedWithSource;
-use codex_config::FeatureRequirementsToml;
-use codex_config::McpServerIdentity;
-use codex_config::McpServerRequirement;
-use codex_config::PluginRequirementsToml;
-use codex_config::ProfileV2Name;
-use codex_config::ResidencyRequirement;
-use codex_config::SandboxModeRequirement;
-use codex_config::Sourced;
-use codex_config::ThreadConfigLoader;
-use codex_config::config_toml::ConfigLockfileToml;
-use codex_config::config_toml::ConfigToml;
-use codex_config::config_toml::DEFAULT_PROJECT_DOC_MAX_BYTES;
-use codex_config::config_toml::ProjectConfig;
-use codex_config::config_toml::RealtimeAudioConfig;
-use codex_config::config_toml::RealtimeConfig;
-use codex_config::config_toml::ThreadStoreToml;
-use codex_config::config_toml::validate_model_providers;
-use codex_config::loader::load_config_layers_state;
-use codex_config::loader::project_trust_key;
-use codex_config::permissions_toml::PermissionsToml;
-use codex_config::sandbox_mode_requirement_for_permission_profile;
-use codex_config::types::ApprovalsReviewer;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_config::types::History;
-use codex_config::types::McpServerConfig;
-use codex_config::types::McpServerDisabledReason;
-use codex_config::types::McpServerTransportConfig;
-use codex_config::types::MemoriesConfig;
-use codex_config::types::ModelAvailabilityNuxConfig;
-use codex_config::types::Notice;
-use codex_config::types::OAuthCredentialsStoreMode;
-use codex_config::types::SessionPickerViewMode;
-use codex_config::types::ToolSuggestConfig;
-use codex_config::types::ToolSuggestDisabledTool;
-use codex_config::types::ToolSuggestDiscoverable;
-use codex_config::types::TuiKeymap;
-use codex_config::types::TuiNotificationSettings;
-use codex_config::types::TuiPetAnchor;
-use codex_config::types::UriBasedFileOpener;
-use codex_config::types::WindowsSandboxModeToml;
-use codex_core_plugins::PluginsConfigInput;
-use codex_exec_server::ExecutorFileSystem;
-use codex_exec_server::LOCAL_FS;
-use codex_features::CodeModeConfigToml;
-use codex_features::Feature;
-use codex_features::FeatureConfigSource;
-use codex_features::FeatureOverrides;
-use codex_features::FeatureToml;
-use codex_features::Features;
-use codex_features::FeaturesToml;
-use codex_features::MultiAgentV2ConfigToml;
-use codex_features::NetworkProxyConfigToml;
-use codex_git_utils::resolve_root_git_project_for_trust;
-use codex_install_context::InstallContext;
-use codex_login::AuthManagerConfig;
-use codex_mcp::McpConfig;
-use codex_memories_read::memory_root;
-use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
-use codex_model_provider_info::built_in_model_providers;
-use codex_model_provider_info::merge_configured_model_providers;
-use codex_models_manager::ModelsManagerConfig;
-use codex_protocol::config_types::AltScreenMode;
-use codex_protocol::config_types::AutoCompactTokenLimitScope;
-use codex_protocol::config_types::ForcedLoginMethod;
-use codex_protocol::config_types::Personality;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
-use codex_protocol::config_types::SandboxMode;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::config_types::ShellEnvironmentPolicy;
-use codex_protocol::config_types::TrustLevel;
-use codex_protocol::config_types::Verbosity;
-use codex_protocol::config_types::WebSearchConfig;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::ActivePermissionProfile;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::models::SandboxEnforcement;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::SandboxPolicy;
-pub use codex_thread_store::ExtraConfig;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_absolute_path::AbsolutePathBufGuard;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::ConfigLayerSource;
+use crewon_config::ConfigLayerStack;
+use crewon_config::ConfigLayerStackOrdering;
+use crewon_config::ConfigRequirements;
+use crewon_config::ConfigRequirementsToml;
+use crewon_config::ConstrainedWithSource;
+use crewon_config::FeatureRequirementsToml;
+use crewon_config::McpServerIdentity;
+use crewon_config::McpServerRequirement;
+use crewon_config::PluginRequirementsToml;
+use crewon_config::ProfileV2Name;
+use crewon_config::ResidencyRequirement;
+use crewon_config::SandboxModeRequirement;
+use crewon_config::Sourced;
+use crewon_config::ThreadConfigLoader;
+use crewon_config::config_toml::ConfigLockfileToml;
+use crewon_config::config_toml::ConfigToml;
+use crewon_config::config_toml::DEFAULT_PROJECT_DOC_MAX_BYTES;
+use crewon_config::config_toml::ProjectConfig;
+use crewon_config::config_toml::RealtimeAudioConfig;
+use crewon_config::config_toml::RealtimeConfig;
+use crewon_config::config_toml::ThreadStoreToml;
+use crewon_config::config_toml::validate_model_providers;
+use crewon_config::loader::load_config_layers_state;
+use crewon_config::loader::project_trust_key;
+use crewon_config::permissions_toml::PermissionsToml;
+use crewon_config::sandbox_mode_requirement_for_permission_profile;
+use crewon_config::types::ApprovalsReviewer;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_config::types::ClientNotificationSettings;
+use crewon_config::types::History;
+use crewon_config::types::McpServerConfig;
+use crewon_config::types::McpServerDisabledReason;
+use crewon_config::types::McpServerTransportConfig;
+use crewon_config::types::MemoriesConfig;
+use crewon_config::types::ModelAvailabilityNuxConfig;
+use crewon_config::types::Notice;
+use crewon_config::types::OAuthCredentialsStoreMode;
+use crewon_config::types::ToolSuggestConfig;
+use crewon_config::types::ToolSuggestDisabledTool;
+use crewon_config::types::ToolSuggestDiscoverable;
+use crewon_config::types::UriBasedFileOpener;
+use crewon_config::types::WindowsSandboxModeToml;
+use crewon_core_plugins::PluginsConfigInput;
+use crewon_exec_server::ExecutorFileSystem;
+use crewon_exec_server::LOCAL_FS;
+use crewon_features::CodeModeConfigToml;
+use crewon_features::Feature;
+use crewon_features::FeatureConfigSource;
+use crewon_features::FeatureOverrides;
+use crewon_features::FeatureToml;
+use crewon_features::Features;
+use crewon_features::FeaturesToml;
+use crewon_features::MultiAgentV2ConfigToml;
+use crewon_features::NetworkProxyConfigToml;
+use crewon_git_utils::resolve_root_git_project_for_trust;
+use crewon_install_context::InstallContext;
+use crewon_login::AuthManagerConfig;
+use crewon_mcp::McpConfig;
+use crewon_memories_read::memory_root;
+use crewon_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
+use crewon_model_provider_info::built_in_model_providers;
+use crewon_model_provider_info::merge_configured_model_providers;
+use crewon_models_manager::ModelsManagerConfig;
+use crewon_protocol::config_types::AutoCompactTokenLimitScope;
+use crewon_protocol::config_types::ForcedLoginMethod;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
+use crewon_protocol::config_types::SandboxMode;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::config_types::ShellEnvironmentPolicy;
+use crewon_protocol::config_types::TrustLevel;
+use crewon_protocol::config_types::Verbosity;
+use crewon_protocol::config_types::WebSearchConfig;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::ActivePermissionProfile;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::models::SandboxEnforcement;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::SandboxPolicy;
+pub use crewon_thread_store::ExtraConfig;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBufGuard;
 use rmcp::model::ElicitationCapability;
 use rmcp::model::FormElicitationCapability;
 use rmcp::model::UrlElicitationCapability;
@@ -132,7 +128,7 @@ use crate::config::permissions::validate_user_permission_profile_names;
 use crate::config_lock::config_without_lock_controls;
 use crate::config_lock::lock_layer_from_config;
 use crate::config_lock::read_config_lock_from_path;
-use codex_network_proxy::NetworkProxyConfig;
+use crewon_network_proxy::NetworkProxyConfig;
 use toml::Value as TomlValue;
 use toml_edit::DocumentMut;
 
@@ -145,14 +141,14 @@ mod permissions;
 mod resolved_permission_profile;
 #[cfg(test)]
 mod schema;
-pub use codex_config::ConfigLoadOptions;
-pub use codex_config::Constrained;
-pub use codex_config::ConstraintError;
-pub use codex_config::ConstraintResult;
-pub use codex_config::LoaderOverrides;
-pub use codex_network_proxy::NetworkProxyAuditMetadata;
-use codex_sandboxing::compatibility_sandbox_policy_for_permission_profile;
-pub use codex_sandboxing::system_bwrap_warning;
+pub use crewon_config::ConfigLoadOptions;
+pub use crewon_config::Constrained;
+pub use crewon_config::ConstraintError;
+pub use crewon_config::ConstraintResult;
+pub use crewon_config::LoaderOverrides;
+pub use crewon_network_proxy::NetworkProxyAuditMetadata;
+use crewon_sandboxing::compatibility_sandbox_policy_for_permission_profile;
+pub use crewon_sandboxing::system_bwrap_warning;
 pub use managed_features::ManagedFeatures;
 pub use network_proxy_spec::NetworkProxySpec;
 pub use network_proxy_spec::StartedNetworkProxy;
@@ -251,7 +247,7 @@ pub const CONFIG_TOML_FILE: &str = "config.toml";
 const CONFIG_PROFILE_V2_SUFFIX: &str = ".config.toml";
 
 fn resolve_sqlite_home_env(resolved_cwd: &Path) -> Option<PathBuf> {
-    let raw = std::env::var(codex_state::SQLITE_HOME_ENV).ok()?;
+    let raw = std::env::var(crewon_state::SQLITE_HOME_ENV).ok()?;
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return None;
@@ -264,7 +260,7 @@ fn resolve_sqlite_home_env(resolved_cwd: &Path) -> Option<PathBuf> {
     }
 }
 
-fn resolve_cli_auth_credentials_store_mode(
+fn resolve_auth_credentials_store_mode(
     configured: AuthCredentialsStoreMode,
     package_version: &str,
 ) -> AuthCredentialsStoreMode {
@@ -416,7 +412,7 @@ impl Permissions {
     }
 
     /// Workspace roots that came from user-visible configuration or runtime
-    /// selection. Internal Codex-only writable roots are intentionally excluded.
+    /// selection. Internal Crewon-only writable roots are intentionally excluded.
     pub fn user_visible_workspace_roots(&self) -> &[AbsolutePathBuf] {
         &self.workspace_roots
     }
@@ -531,7 +527,7 @@ impl Permissions {
 }
 
 // A profile override only inherits the selected profile's proxy/allowlist config
-// when Codex is still responsible for the network policy. `Disabled` means no
+// when Crewon is still responsible for the network policy. `Disabled` means no
 // outer sandbox, so starting the managed proxy would narrow the override.
 fn profile_allows_configured_network_proxy(permission_profile: &PermissionProfile) -> bool {
     match permission_profile {
@@ -544,7 +540,7 @@ fn profile_allows_configured_network_proxy(permission_profile: &PermissionProfil
 
 fn build_network_proxy_spec(
     configured_network_proxy_config: NetworkProxyConfig,
-    network_requirements: Option<Sourced<codex_config::NetworkConstraints>>,
+    network_requirements: Option<Sourced<crewon_config::NetworkConstraints>>,
     permission_profile: &PermissionProfile,
 ) -> std::io::Result<Option<NetworkProxySpec>> {
     let (network_requirements, network_requirements_source) = match network_requirements {
@@ -686,93 +682,36 @@ pub struct Config {
     /// Compact prompt override.
     pub compact_prompt: Option<String>,
 
-    /// Optional external notifier command. When set, Codex will spawn this
+    /// Optional external notifier command. When set, Crewon will spawn this
     /// program after each completed *turn* (i.e. when the agent finishes
     /// processing a user submission). The value must be the full command
-    /// broken into argv tokens **without** the trailing JSON argument - Codex
+    /// broken into argv tokens **without** the trailing JSON argument - Crewon
     /// appends one extra argument containing a JSON payload describing the
     /// event.
     ///
-    /// Example `~/.codex/config.toml` snippet:
+    /// Example `~/.crewon/config.toml` snippet:
     ///
     /// ```toml
-    /// notify = ["notify-send", "Codex"]
+    /// notify = ["notify-send", "Crewon"]
     /// ```
     ///
     /// which will be invoked as:
     ///
     /// ```shell
-    /// notify-send Codex '{"type":"agent-turn-complete","turn-id":"12345"}'
+    /// notify-send Crewon '{"type":"agent-turn-complete","turn-id":"12345"}'
     /// ```
     ///
     /// If unset the feature is disabled.
     pub notify: Option<Vec<String>>,
 
-    /// TUI notification settings, including enabled events, delivery method, and focus condition.
-    pub tui_notifications: TuiNotificationSettings,
-
-    /// Enable ASCII animations and shimmer effects in the TUI.
-    pub animations: bool,
-
-    /// Show startup tooltips in the TUI welcome screen.
-    pub show_tooltips: bool,
+    /// Client notification settings, including enabled events, delivery method, and focus condition.
+    pub client_notifications: ClientNotificationSettings,
 
     /// Persisted startup availability NUX state for model tooltips.
     pub model_availability_nux: ModelAvailabilityNuxConfig,
 
-    /// Start the composer in Vim mode (`Normal`) by default.
-    pub tui_vim_mode_default: bool,
-
-    /// Start the TUI in raw scrollback mode for copy-friendly transcript output.
-    pub tui_raw_output_mode: bool,
-
-    /// Start the TUI in the specified collaboration mode (plan/default).
-
-    /// Controls whether the TUI uses the terminal's alternate screen buffer.
-    ///
-    /// This is the same `tui.alternate_screen` value from `config.toml`.
-    /// - `auto` (default): Use alternate screen.
-    /// - `always`: Always use alternate screen.
-    /// - `never`: Never use alternate screen (inline mode, preserves scrollback).
-    pub tui_alternate_screen: AltScreenMode,
-    /// Ordered list of status line item identifiers for the TUI.
-    ///
-    /// When unset, the TUI defaults to: `model-with-reasoning` and `current-dir`.
-    pub tui_status_line: Option<Vec<String>>,
-
-    /// Whether to color status line items with colors from the active syntax theme.
-    pub tui_status_line_use_colors: bool,
-
-    /// Ordered list of terminal title item identifiers for the TUI.
-    ///
-    /// When unset, the TUI defaults to: `activity` and `project`.
-    /// The `activity` item spins while working and shows an action-required
-    /// message when blocked on the user.
-    pub tui_terminal_title: Option<Vec<String>>,
-
-    /// Syntax highlighting theme override (kebab-case name).
-    pub tui_theme: Option<String>,
-
-    /// Pet id preselected by the terminal pet picker.
-    pub tui_pet: Option<String>,
-
-    /// Vertical anchor used by terminal pet rendering.
-    pub tui_pet_anchor: TuiPetAnchor,
-
-    /// Preferred layout for resume/fork session picker results.
-    pub tui_session_picker_view: SessionPickerViewMode,
-
     /// Terminal resize-reflow tuning knobs.
     pub terminal_resize_reflow: TerminalResizeReflowConfig,
-
-    /// Keybinding overrides for the TUI.
-    ///
-    /// Precedence is:
-    ///
-    /// 1. context table (`tui.keymap.chat`, `tui.keymap.composer`, etc.)
-    /// 2. `tui.keymap.global`
-    /// 3. built-in defaults
-    pub tui_keymap: TuiKeymap,
 
     /// The absolute directory that should be treated as the current working
     /// directory for the session. All relative paths inside the business-logic
@@ -788,27 +727,26 @@ pub struct Config {
     /// or legacy config, rather than defaulting to `cwd`.
     pub workspace_roots_explicit: bool,
 
-    /// Preferred store for CLI auth credentials.
-    /// file (default): Use a file in the Codex home directory.
+    /// Preferred store for auth credentials.
+    /// file (default): Use a file in the Crewon home directory.
     /// keyring: Use an OS-specific keyring service.
     /// auto: Use the OS-specific keyring service if available, otherwise use a file.
-    pub cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
+    pub auth_credentials_store_mode: AuthCredentialsStoreMode,
 
-    /// Definition for MCP servers that Codex can reach out to for tool calls.
+    /// Definition for MCP servers that Crewon can reach out to for tool calls.
     pub mcp_servers: Constrained<HashMap<String, McpServerConfig>>,
 
     /// Preferred store for MCP OAuth credentials.
     /// keyring: Use an OS-specific keyring service.
-    ///          Credentials stored in the keyring will only be readable by Codex unless the user explicitly grants access via OS-level keyring access.
-    ///          https://github.com/openai/codex/blob/main/codex-rs/rmcp-client/src/oauth.rs#L2
-    /// file: CODEX_HOME/.credentials.json
-    ///       This file will be readable to Codex and other applications running as the same user.
+    ///          Credentials stored in the keyring will only be readable by Crewon unless the user explicitly grants access via OS-level keyring access.
+    /// file: CREWON_HOME/.credentials.json
+    ///       This file will be readable to Crewon and other applications running as the same user.
     /// auto (default): keyring if available, otherwise file.
     pub mcp_oauth_credentials_store_mode: OAuthCredentialsStoreMode,
 
     /// Optional fixed port to use for the local HTTP callback server used during MCP OAuth login.
     ///
-    /// When unset, Codex will bind to an ephemeral port chosen by the OS.
+    /// When unset, Crewon will bind to an ephemeral port chosen by the OS.
     pub mcp_oauth_callback_port: Option<u16>,
 
     /// Optional redirect URI to use during MCP OAuth login.
@@ -847,20 +785,20 @@ pub struct Config {
     /// Memories subsystem settings.
     pub memories: MemoriesConfig,
 
-    /// Directory containing all Codex state (defaults to `~/.codex` but can be
-    /// overridden by the `CODEX_HOME` environment variable).
+    /// Directory containing all Crewon state (defaults to `~/.crewon`, with
+    /// legacy `~/.codex` and `CODEX_HOME` fallback support).
     pub codex_home: AbsolutePathBuf,
 
-    /// Directory where Codex stores the SQLite state DB.
+    /// Directory where Crewon stores the SQLite state DB.
     pub sqlite_home: PathBuf,
 
-    /// Directory where Codex writes log files (defaults to `$CODEX_HOME/log`).
+    /// Directory where Crewon writes log files (defaults to `$CREWON_HOME/log`).
     pub log_dir: PathBuf,
 
-    /// Directory where Codex writes effective session config lock files.
+    /// Directory where Crewon writes effective session config lock files.
     pub config_lock_export_dir: Option<AbsolutePathBuf>,
 
-    /// Whether config lock replay ignores Codex version drift between the
+    /// Whether config lock replay ignores Crewon version drift between the
     /// lock metadata and the regenerated lock.
     pub config_lock_allow_codex_version_mismatch: bool,
 
@@ -871,7 +809,7 @@ pub struct Config {
     /// Effective config lock used for strict replay validation.
     pub config_lock_toml: Option<Arc<ConfigLockfileToml>>,
 
-    /// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
+    /// Settings that govern if and what will be written to the Crewon home history file.
     pub history: History,
 
     /// When true, session is not persisted on disk. Default to `false`
@@ -889,19 +827,19 @@ pub struct Config {
     /// output will be hyperlinked using the specified URI scheme.
     pub file_opener: UriBasedFileOpener,
 
-    /// Path to the current Codex executable. This cannot be set in the config
+    /// Path to the current Crewon executable. This cannot be set in the config
     /// file: it must be set in code via [`ConfigOverrides`].
     pub codex_self_exe: Option<PathBuf>,
 
-    /// Path to the `codex-linux-sandbox` executable. This must be set if
-    /// [`codex_sandboxing::SandboxType::LinuxSeccomp`] is used. Note that this
+    /// Path to the `crewon-linux-sandbox` executable. This must be set if
+    /// [`crewon_sandboxing::SandboxType::LinuxSeccomp`] is used. Note that this
     /// cannot be set in the config file: it must be set in code via
     /// [`ConfigOverrides`].
     ///
-    /// When this program is invoked, arg0 will be set to `codex-linux-sandbox`.
-    pub codex_linux_sandbox_exe: Option<PathBuf>,
+    /// When this program is invoked, arg0 will be set to `crewon-linux-sandbox`.
+    pub crewon_linux_sandbox_exe: Option<PathBuf>,
 
-    /// Path to the `codex-execve-wrapper` executable used for shell
+    /// Path to the `crewon-execve-wrapper` executable used for shell
     /// escalation. This cannot be set in the config file: it must be set in
     /// code via [`ConfigOverrides`].
     pub main_execve_wrapper_exe: Option<PathBuf>,
@@ -912,7 +850,7 @@ pub struct Config {
     /// Value to use for `reasoning.effort` when making a request using the
     /// Responses API.
     pub model_reasoning_effort: Option<ReasoningEffort>,
-    /// Optional Plan-mode-specific reasoning effort override used by the TUI.
+    /// Optional Plan-mode-specific reasoning effort override used by interactive clients.
     ///
     /// When unset, Plan mode uses the built-in Plan preset default (currently
     /// `medium`). When explicitly set (including `none`), this overrides the
@@ -1017,8 +955,8 @@ pub struct Config {
     /// Collection of various notices we show the user
     pub notices: Notice,
 
-    /// When `true`, checks for Codex updates on startup and surfaces update prompts.
-    /// Set to `false` only if your Codex updates are centrally managed.
+    /// When `true`, checks for Crewon updates on startup and surfaces update prompts.
+    /// Set to `false` only if your Crewon updates are centrally managed.
     /// Defaults to `true`.
     pub check_for_update_on_startup: bool,
 
@@ -1027,11 +965,11 @@ pub struct Config {
     /// or placeholder replacement will occur for fast keypress bursts.
     pub disable_paste_burst: bool,
 
-    /// When `false`, disables analytics across Codex product surfaces in this machine.
+    /// When `false`, disables analytics across Crewon product surfaces in this machine.
     /// Voluntarily left as Optional because the default value might depend on the client.
     pub analytics_enabled: Option<bool>,
 
-    /// When `false`, disables feedback collection across Codex product surfaces.
+    /// When `false`, disables feedback collection across Crewon product surfaces.
     /// Defaults to `true`.
     pub feedback_enabled: bool,
 
@@ -1039,7 +977,7 @@ pub struct Config {
     pub tool_suggest: ToolSuggestConfig,
 
     /// OTEL configuration (exporter type, endpoint, headers, etc.).
-    pub otel: codex_config::types::OtelConfig,
+    pub otel: crewon_config::types::OtelConfig,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -1115,8 +1053,8 @@ impl AuthManagerConfig for Config {
         self.codex_home.to_path_buf()
     }
 
-    fn cli_auth_credentials_store_mode(&self) -> AuthCredentialsStoreMode {
-        self.cli_auth_credentials_store_mode
+    fn auth_credentials_store_mode(&self) -> AuthCredentialsStoreMode {
+        self.auth_credentials_store_mode
     }
 
     fn forced_chatgpt_workspace_id(&self) -> Option<Vec<String>> {
@@ -1131,7 +1069,7 @@ impl AuthManagerConfig for Config {
 #[derive(Clone, Default)]
 pub struct ConfigBuilder {
     codex_home: Option<PathBuf>,
-    cli_overrides: Option<Vec<(String, TomlValue)>>,
+    config_overrides: Option<Vec<(String, TomlValue)>>,
     harness_overrides: Option<ConfigOverrides>,
     loader_overrides: Option<LoaderOverrides>,
     strict_config: bool,
@@ -1146,8 +1084,8 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn cli_overrides(mut self, cli_overrides: Vec<(String, TomlValue)>) -> Self {
-        self.cli_overrides = Some(cli_overrides);
+    pub fn config_overrides(mut self, config_overrides: Vec<(String, TomlValue)>) -> Self {
+        self.config_overrides = Some(config_overrides);
         self
     }
 
@@ -1192,7 +1130,7 @@ impl ConfigBuilder {
     async fn build_inner(self) -> std::io::Result<Config> {
         let Self {
             codex_home,
-            cli_overrides,
+            config_overrides,
             harness_overrides,
             loader_overrides,
             strict_config,
@@ -1202,9 +1140,9 @@ impl ConfigBuilder {
         } = self;
         let codex_home = match codex_home {
             Some(codex_home) => AbsolutePathBuf::from_absolute_path(codex_home)?,
-            None => find_codex_home()?,
+            None => find_crewon_home()?,
         };
-        let cli_overrides = cli_overrides.unwrap_or_default();
+        let config_overrides = config_overrides.unwrap_or_default();
         let mut harness_overrides = harness_overrides.unwrap_or_default();
         let loader_overrides = loader_overrides.unwrap_or_default();
         let cwd_override = harness_overrides.cwd.as_deref().or(fallback_cwd.as_deref());
@@ -1217,7 +1155,7 @@ impl ConfigBuilder {
             LOCAL_FS.as_ref(),
             &codex_home,
             Some(cwd),
-            &cli_overrides,
+            &config_overrides,
             ConfigLoadOptions {
                 loader_overrides,
                 strict_config,
@@ -1225,7 +1163,7 @@ impl ConfigBuilder {
             },
             thread_config_loader
                 .as_deref()
-                .unwrap_or(&codex_config::NoopThreadConfigLoader),
+                .unwrap_or(&crewon_config::NoopThreadConfigLoader),
         )
         .await?;
         let merged_toml = config_layer_stack.effective_config();
@@ -1237,13 +1175,13 @@ impl ConfigBuilder {
         let config_toml: ConfigToml = match merged_toml.try_into() {
             Ok(config_toml) => config_toml,
             Err(err) => {
-                if let Some(config_error) = codex_config::first_layer_config_error::<ConfigToml>(
+                if let Some(config_error) = crewon_config::first_layer_config_error::<ConfigToml>(
                     &config_layer_stack,
-                    codex_config::CONFIG_TOML_FILE,
+                    crewon_config::CONFIG_TOML_FILE,
                 )
                 .await
                 {
-                    return Err(codex_config::io_error_from_config_error(
+                    return Err(crewon_config::io_error_from_config_error(
                         std::io::ErrorKind::InvalidData,
                         config_error,
                         Some(err),
@@ -1391,7 +1329,7 @@ impl Config {
 
     pub async fn to_mcp_config(
         &self,
-        plugins_manager: &codex_core_plugins::PluginsManager,
+        plugins_manager: &crewon_core_plugins::PluginsManager,
     ) -> McpConfig {
         let plugins_input = self.plugins_config_input();
         let loaded_plugins = plugins_manager.plugins_for_config(&plugins_input).await;
@@ -1436,7 +1374,7 @@ impl Config {
                 .features
                 .enabled(Feature::SkillMcpDependencyInstall),
             approval_policy: self.permissions.approval_policy.clone(),
-            codex_linux_sandbox_exe: self.codex_linux_sandbox_exe.clone(),
+            crewon_linux_sandbox_exe: self.crewon_linux_sandbox_exe.clone(),
             use_legacy_landlock: self.features.use_legacy_landlock(),
             apps_enabled: self.features.enabled(Feature::Apps),
             prefix_mcp_tool_names: self.prefix_mcp_tool_names(),
@@ -1524,32 +1462,32 @@ impl Config {
     }
 
     /// This is the preferred way to create an instance of [Config].
-    pub async fn load_with_cli_overrides(
-        cli_overrides: Vec<(String, TomlValue)>,
+    pub async fn load_with_config_overrides(
+        config_overrides: Vec<(String, TomlValue)>,
     ) -> std::io::Result<Self> {
         ConfigBuilder::default()
-            .cli_overrides(cli_overrides)
+            .config_overrides(config_overrides)
             .build()
             .await
     }
 
     /// Load a default configuration when user config files are invalid.
-    pub async fn load_default_with_cli_overrides(
-        cli_overrides: Vec<(String, TomlValue)>,
+    pub async fn load_default_with_config_overrides(
+        config_overrides: Vec<(String, TomlValue)>,
     ) -> std::io::Result<Self> {
-        let codex_home = find_codex_home()?;
-        Self::load_default_with_cli_overrides_for_codex_home(
+        let codex_home = find_crewon_home()?;
+        Self::load_default_with_config_overrides_for_codex_home(
             codex_home.to_path_buf(),
-            cli_overrides,
+            config_overrides,
         )
         .await
     }
 
-    /// Load a default configuration for a specific Codex home without reading
+    /// Load a default configuration for a specific Crewon home without reading
     /// user, project, or system config layers.
-    pub async fn load_default_with_cli_overrides_for_codex_home(
+    pub async fn load_default_with_config_overrides_for_codex_home(
         codex_home: PathBuf,
-        cli_overrides: Vec<(String, TomlValue)>,
+        config_overrides: Vec<(String, TomlValue)>,
     ) -> std::io::Result<Self> {
         let mut merged = toml::Value::try_from(ConfigToml::default()).map_err(|e| {
             std::io::Error::new(
@@ -1557,8 +1495,8 @@ impl Config {
                 format!("failed to serialize default config: {e}"),
             )
         })?;
-        let cli_layer = codex_config::build_cli_overrides_layer(&cli_overrides);
-        codex_config::merge_toml_values(&mut merged, &cli_layer);
+        let config_layer = crewon_config::build_config_overrides_layer(&config_overrides);
+        crewon_config::merge_toml_values(&mut merged, &config_layer);
         let codex_home = AbsolutePathBuf::from_absolute_path_checked(codex_home)?;
         let config_toml = deserialize_config_toml_with_base(merged, &codex_home)?;
         Self::load_config_with_layer_stack(
@@ -1572,18 +1510,18 @@ impl Config {
     }
     /// This is a secondary way of creating [Config], which is appropriate when
     /// the harness is meant to be used with a specific configuration that
-    /// ignores user settings. For example, the `codex exec` subcommand is
-    /// designed to use [AskForApproval::Never] exclusively.
+    /// ignores user settings. For example, automated execution contexts can use
+    /// [AskForApproval::Never] exclusively.
     ///
     /// Further, [ConfigOverrides] contains some options that are not supported
-    /// in [ConfigToml], such as `cwd`, `codex_self_exe`, `codex_linux_sandbox_exe`, and
+    /// in [ConfigToml], such as `cwd`, `codex_self_exe`, `crewon_linux_sandbox_exe`, and
     /// `main_execve_wrapper_exe`.
-    pub async fn load_with_cli_overrides_and_harness_overrides(
-        cli_overrides: Vec<(String, TomlValue)>,
+    pub async fn load_with_config_overrides_and_harness_overrides(
+        config_overrides: Vec<(String, TomlValue)>,
         harness_overrides: ConfigOverrides,
     ) -> std::io::Result<Self> {
         ConfigBuilder::default()
-            .cli_overrides(cli_overrides)
+            .config_overrides(config_overrides)
             .harness_overrides(harness_overrides)
             .build()
             .await
@@ -1600,55 +1538,60 @@ pub fn resolve_profile_v2_config_path(
     )
 }
 
-/// DEPRECATED: Use [Config::load_with_cli_overrides()] instead because working
+/// DEPRECATED: Use [Config::load_with_config_overrides()] instead because working
 /// with [ConfigToml] directly means that [ConfigRequirements] have not been
 /// applied yet, which risks failing to enforce required constraints.
-pub async fn load_config_as_toml_with_cli_overrides(
+pub async fn load_config_as_toml_with_config_overrides(
     codex_home: &Path,
     cwd: Option<&AbsolutePathBuf>,
-    cli_overrides: Vec<(String, TomlValue)>,
+    config_overrides: Vec<(String, TomlValue)>,
     loader_overrides: LoaderOverrides,
 ) -> std::io::Result<ConfigToml> {
-    load_config_as_toml_with_cli_and_loader_overrides(
+    load_config_as_toml_with_config_and_loader_overrides(
         codex_home,
         cwd,
-        cli_overrides,
+        config_overrides,
         loader_overrides,
     )
     .await
 }
 
-/// DEPRECATED for most callers: prefer [Config::load_with_cli_overrides()] or
+/// DEPRECATED for most callers: prefer [Config::load_with_config_overrides()] or
 /// [ConfigBuilder] because working with [ConfigToml] directly means
 /// [ConfigRequirements] have not been applied yet, which risks skipping
 /// required constraints.
-pub async fn load_config_as_toml_with_cli_and_loader_overrides(
+pub async fn load_config_as_toml_with_config_and_loader_overrides(
     codex_home: &Path,
     cwd: Option<&AbsolutePathBuf>,
-    cli_overrides: Vec<(String, TomlValue)>,
+    config_overrides: Vec<(String, TomlValue)>,
     loader_overrides: LoaderOverrides,
 ) -> std::io::Result<ConfigToml> {
-    load_config_as_toml_with_cli_and_load_options(codex_home, cwd, cli_overrides, loader_overrides)
-        .await
+    load_config_as_toml_with_config_and_load_options(
+        codex_home,
+        cwd,
+        config_overrides,
+        loader_overrides,
+    )
+    .await
 }
 
-/// DEPRECATED for most callers: prefer [Config::load_with_cli_overrides()] or
+/// DEPRECATED for most callers: prefer [Config::load_with_config_overrides()] or
 /// [ConfigBuilder] because working with [ConfigToml] directly means
 /// [ConfigRequirements] have not been applied yet, which risks skipping
 /// required constraints.
-pub async fn load_config_as_toml_with_cli_and_load_options(
+pub async fn load_config_as_toml_with_config_and_load_options(
     codex_home: &Path,
     cwd: Option<&AbsolutePathBuf>,
-    cli_overrides: Vec<(String, TomlValue)>,
+    config_overrides: Vec<(String, TomlValue)>,
     options: impl Into<ConfigLoadOptions>,
 ) -> std::io::Result<ConfigToml> {
     let config_layer_stack = load_config_layers_state(
         LOCAL_FS.as_ref(),
         codex_home,
         cwd.cloned(),
-        &cli_overrides,
+        &config_overrides,
         options,
-        &codex_config::NoopThreadConfigLoader,
+        &crewon_config::NoopThreadConfigLoader,
     )
     .await?;
 
@@ -1841,14 +1784,14 @@ fn mcp_server_matches_requirement(
 pub async fn load_global_mcp_servers(
     codex_home: &Path,
 ) -> std::io::Result<BTreeMap<String, McpServerConfig>> {
-    // In general, Config::load_with_cli_overrides() should be used to load the
+    // In general, Config::load_with_config_overrides() should be used to load the
     // full config with requirements.toml applied, but in this case, we need
     // access to the raw TOML in order to warn the user about deprecated fields.
     //
     // Note that a more precise way to do this would be to audit the individual
     // config layers for deprecated fields rather than reporting on the merged
     // result.
-    let cli_overrides = Vec::<(String, TomlValue)>::new();
+    let config_overrides = Vec::<(String, TomlValue)>::new();
     // There is no cwd/project context for this query, so this will not include
     // MCP servers defined in in-repo .codex/ folders.
     let cwd: Option<AbsolutePathBuf> = None;
@@ -1856,9 +1799,9 @@ pub async fn load_global_mcp_servers(
         LOCAL_FS.as_ref(),
         codex_home,
         cwd,
-        &cli_overrides,
+        &config_overrides,
         LoaderOverrides::default(),
-        &codex_config::NoopThreadConfigLoader,
+        &crewon_config::NoopThreadConfigLoader,
     )
     .await?;
     let merged_toml = config_layer_stack.effective_config();
@@ -1964,7 +1907,7 @@ pub(crate) fn set_project_trust_level_inner(
     Ok(())
 }
 
-/// Patch `CODEX_HOME/config.toml` project state to set trust level.
+/// Patch `CREWON_HOME/config.toml` project state to set trust level.
 /// Use with caution.
 pub fn set_project_trust_level(
     codex_home: &Path,
@@ -1980,7 +1923,7 @@ pub fn set_project_trust_level(
 
 /// Save the default OSS provider preference to config.toml
 pub fn set_default_oss_provider(codex_home: &Path, provider: &str) -> std::io::Result<()> {
-    codex_config::config_toml::validate_oss_provider(provider)?;
+    crewon_config::config_toml::validate_oss_provider(provider)?;
     use toml_edit::value;
 
     let edits = [ConfigEdit::SetPath {
@@ -2205,23 +2148,23 @@ fn resolve_permission_config_syntax(
 
 fn apply_managed_filesystem_constraints(
     file_system_sandbox_policy: &mut FileSystemSandboxPolicy,
-    filesystem_constraints: &codex_config::FilesystemConstraints,
+    filesystem_constraints: &crewon_config::FilesystemConstraints,
 ) {
     for deny_read in &filesystem_constraints.deny_read {
         let deny_entry = if deny_read.contains_glob() {
-            codex_protocol::permissions::FileSystemSandboxEntry {
-                path: codex_protocol::permissions::FileSystemPath::GlobPattern {
+            crewon_protocol::permissions::FileSystemSandboxEntry {
+                path: crewon_protocol::permissions::FileSystemPath::GlobPattern {
                     pattern: deny_read.as_str().to_string(),
                 },
-                access: codex_protocol::permissions::FileSystemAccessMode::Deny,
+                access: crewon_protocol::permissions::FileSystemAccessMode::Deny,
             }
         } else {
             let Ok(path) = AbsolutePathBuf::try_from(deny_read.as_str()) else {
                 continue;
             };
-            codex_protocol::permissions::FileSystemSandboxEntry {
-                path: codex_protocol::permissions::FileSystemPath::Path { path },
-                access: codex_protocol::permissions::FileSystemAccessMode::Deny,
+            crewon_protocol::permissions::FileSystemSandboxEntry {
+                path: crewon_protocol::permissions::FileSystemPath::Path { path },
+                access: crewon_protocol::permissions::FileSystemAccessMode::Deny,
             }
         };
         if !file_system_sandbox_policy
@@ -2234,7 +2177,7 @@ fn apply_managed_filesystem_constraints(
     }
 }
 
-/// Optional overrides for user configuration (e.g., from CLI flags).
+/// Optional overrides for user configuration (e.g., from process flags or client state).
 #[derive(Default, Debug, Clone)]
 pub struct ConfigOverrides {
     pub model: Option<String>,
@@ -2248,7 +2191,7 @@ pub struct ConfigOverrides {
     pub model_provider: Option<String>,
     pub service_tier: Option<Option<String>>,
     pub codex_self_exe: Option<PathBuf>,
-    pub codex_linux_sandbox_exe: Option<PathBuf>,
+    pub crewon_linux_sandbox_exe: Option<PathBuf>,
     pub main_execve_wrapper_exe: Option<PathBuf>,
     pub default_zsh_path: Option<AbsolutePathBuf>,
     pub base_instructions: Option<String>,
@@ -2271,7 +2214,7 @@ fn dedupe_absolute_paths(paths: &mut Vec<AbsolutePathBuf>) {
     paths.retain(|path| seen.insert(path.clone()));
 }
 
-/// Resolves the OSS provider from CLI override or global config.
+/// Resolves the OSS provider from runtime overrides or global config.
 /// Returns `None` if no provider is configured at any level.
 pub fn resolve_oss_provider(
     explicit_provider: Option<&str>,
@@ -2385,12 +2328,12 @@ fn resolve_multi_agent_v2_config(config_toml: &ConfigToml) -> MultiAgentV2Config
 }
 
 fn resolve_terminal_resize_reflow_config(config_toml: &ConfigToml) -> TerminalResizeReflowConfig {
-    let Some(tui) = config_toml.tui.as_ref() else {
+    let Some(client) = config_toml.client.as_ref() else {
         return TerminalResizeReflowConfig::default();
     };
 
     TerminalResizeReflowConfig {
-        max_rows: match tui.terminal_resize_reflow_max_rows {
+        max_rows: match client.terminal_resize_reflow_max_rows {
             Some(0) => TerminalResizeReflowMaxRows::Disabled,
             Some(rows) => TerminalResizeReflowMaxRows::Limit(rows),
             None => TerminalResizeReflowMaxRows::Auto,
@@ -2628,7 +2571,7 @@ impl Config {
             model_provider,
             service_tier: service_tier_override,
             codex_self_exe,
-            codex_linux_sandbox_exe,
+            crewon_linux_sandbox_exe,
             main_execve_wrapper_exe,
             default_zsh_path,
             base_instructions,
@@ -3193,7 +3136,7 @@ impl Config {
         let forced_chatgpt_workspace_id = cfg
             .forced_chatgpt_workspace_id
             .clone()
-            .map(codex_config::config_toml::ForcedChatgptWorkspaceIds::into_vec)
+            .map(crewon_config::config_toml::ForcedChatgptWorkspaceIds::into_vec)
             .map(|values| {
                 values
                     .into_iter()
@@ -3354,7 +3297,7 @@ impl Config {
         {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "`approval_policy = \"never\"` cannot be used because requirements do not allow `sandbox_mode = \"danger-full-access\"`; Codex would fall back to read-only permissions with approvals disabled. Choose an `approval_policy` based on what you need, such as `on-request`, or choose an allowed sandbox mode.",
+                "`approval_policy = \"never\"` cannot be used because requirements do not allow `sandbox_mode = \"danger-full-access\"`; Crewon would fall back to read-only permissions with approvals disabled. Choose an `approval_policy` based on what you need, such as `on-request`, or choose an allowed sandbox mode.",
             ));
         }
         if permission_profile_was_constrained {
@@ -3464,8 +3407,8 @@ impl Config {
             include_environment_context,
             // The config.toml omits "_mode" because it's a config file. However, "_mode"
             // is important in code to differentiate the mode from the store implementation.
-            cli_auth_credentials_store_mode: resolve_cli_auth_credentials_store_mode(
-                cfg.cli_auth_credentials_store.unwrap_or_default(),
+            auth_credentials_store_mode: resolve_auth_credentials_store_mode(
+                cfg.auth_credentials_store.unwrap_or_default(),
                 env!("CARGO_PKG_VERSION"),
             ),
             mcp_servers,
@@ -3527,7 +3470,7 @@ impl Config {
             bypass_hook_trust,
             file_opener: cfg.file_opener.unwrap_or(UriBasedFileOpener::VsCode),
             codex_self_exe,
-            codex_linux_sandbox_exe,
+            crewon_linux_sandbox_exe,
             main_execve_wrapper_exe,
             zsh_path,
 
@@ -3596,58 +3539,17 @@ impl Config {
                 .and_then(|feedback| feedback.enabled)
                 .unwrap_or(true),
             tool_suggest,
-            tui_notifications: cfg
-                .tui
+            client_notifications: cfg
+                .client
                 .as_ref()
                 .map(|t| t.notification_settings.clone())
                 .unwrap_or_default(),
-            animations: cfg.tui.as_ref().map(|t| t.animations).unwrap_or(true),
-            show_tooltips: cfg.tui.as_ref().map(|t| t.show_tooltips).unwrap_or(true),
             model_availability_nux: cfg
-                .tui
+                .client
                 .as_ref()
                 .map(|t| t.model_availability_nux.clone())
                 .unwrap_or_default(),
-            tui_vim_mode_default: cfg
-                .tui
-                .as_ref()
-                .map(|t| t.vim_mode_default)
-                .unwrap_or(false),
-            tui_raw_output_mode: cfg
-                .tui
-                .as_ref()
-                .map(|t| t.raw_output_mode)
-                .unwrap_or(false),
-            tui_alternate_screen: cfg
-                .tui
-                .as_ref()
-                .map(|t| t.alternate_screen)
-                .unwrap_or_default(),
-            tui_status_line: cfg.tui.as_ref().and_then(|t| t.status_line.clone()),
-            tui_status_line_use_colors: cfg
-                .tui
-                .as_ref()
-                .map(|t| t.status_line_use_colors)
-                .unwrap_or(true),
-            tui_terminal_title: cfg.tui.as_ref().and_then(|t| t.terminal_title.clone()),
-            tui_theme: cfg.tui.as_ref().and_then(|t| t.theme.clone()),
-            tui_pet: cfg.tui.as_ref().and_then(|t| t.pet.clone()),
-            tui_pet_anchor: cfg
-                .tui
-                .as_ref()
-                .map(|t| t.pet_anchor)
-                .unwrap_or_default(),
-            tui_session_picker_view: cfg
-                .tui
-                .as_ref()
-                .and_then(|t| t.session_picker_view)
-                .unwrap_or_default(),
             terminal_resize_reflow,
-            tui_keymap: cfg
-                .tui
-                .as_ref()
-                .map(|t| t.keymap.clone())
-                .unwrap_or_default(),
             otel,
         };
         Ok(config)
@@ -3957,19 +3859,21 @@ fn normalize_guardian_policy_config(value: Option<&str>) -> Option<String> {
     })
 }
 
-/// Returns the path to the Codex configuration directory, which can be
-/// specified by the `CODEX_HOME` environment variable. If not set, defaults to
-/// `~/.codex`.
+/// Returns the path to the Crewon configuration directory.
 ///
-/// - If `CODEX_HOME` is set, the value must exist and be a directory. The
-///   value will be canonicalized and this function will Err otherwise.
-/// - If `CODEX_HOME` is not set, this function does not verify that the
-///   directory exists.
-pub fn find_codex_home() -> std::io::Result<AbsolutePathBuf> {
-    codex_utils_home_dir::find_codex_home()
+/// `CREWON_HOME` takes precedence. If it is not set, the legacy `CODEX_HOME`
+/// value is honored. If neither variable is set, this returns `~/.crewon`, or
+/// an existing `~/.codex` directory as a compatibility fallback.
+pub fn find_crewon_home() -> std::io::Result<AbsolutePathBuf> {
+    crewon_utils_home_dir::find_crewon_home()
 }
 
-/// Returns the path to the folder where Codex logs are stored. Does not verify
+/// Legacy compatibility wrapper. Prefer [`find_crewon_home`] in new code.
+pub fn find_codex_home() -> std::io::Result<AbsolutePathBuf> {
+    find_crewon_home()
+}
+
+/// Returns the path to the folder where Crewon logs are stored. Does not verify
 /// that the directory exists.
 pub fn log_dir(cfg: &Config) -> std::io::Result<PathBuf> {
     Ok(cfg.log_dir.clone())

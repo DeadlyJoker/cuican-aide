@@ -3,19 +3,19 @@
 use super::*;
 use crate::config::RolloutConfig;
 use chrono::TimeZone;
-use codex_protocol::ThreadId;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::AgentMessageEvent;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::TurnContextItem;
-use codex_protocol::protocol::UserMessageEvent;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::AgentMessageEvent;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_protocol::protocol::UserMessageEvent;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::fs::File;
@@ -89,8 +89,8 @@ async fn state_db_init_backfills_before_returning() -> anyhow::Result<()> {
             timestamp: "2026-01-27T12:34:56Z".to_string(),
             cwd: home.path().to_path_buf(),
             originator: "test".to_string(),
-            cli_version: "test".to_string(),
-            source: SessionSource::Cli,
+            client_version: "test".to_string(),
+            source: SessionSource::LegacyCli,
             thread_source: None,
             agent_path: None,
             agent_nickname: None,
@@ -135,10 +135,13 @@ async fn state_db_init_backfills_before_returning() -> anyhow::Result<()> {
         .get_thread(thread_id)
         .await?
         .expect("thread should be backfilled before init returns");
-    assert_eq!(metadata.rollout_path, rollout_path);
+    assert_eq!(
+        metadata.rollout_path,
+        crate::state_db::normalize_cwd_for_state_db(&rollout_path)
+    );
     assert_eq!(
         runtime.get_backfill_state().await?.status,
-        codex_state::BackfillStatus::Complete
+        crewon_state::BackfillStatus::Complete
     );
 
     Ok(())
@@ -584,7 +587,7 @@ async fn list_threads_db_enabled_drops_missing_rollout_paths() -> std::io::Resul
         "sessions/2099/01/01/rollout-2099-01-01T00-00-00-{uuid}.jsonl"
     ));
 
-    let runtime = codex_state::StateRuntime::init(
+    let runtime = crewon_state::StateRuntime::init(
         home.path().to_path_buf(),
         config.model_provider_id.clone(),
     )
@@ -598,11 +601,11 @@ async fn list_threads_db_enabled_drops_missing_rollout_paths() -> std::io::Resul
         .with_ymd_and_hms(2025, 1, 3, 13, 0, 0)
         .single()
         .expect("valid datetime");
-    let mut builder = codex_state::ThreadMetadataBuilder::new(
+    let mut builder = crewon_state::ThreadMetadataBuilder::new(
         thread_id,
         stale_path,
         created_at,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     builder.model_provider = Some(config.model_provider_id.clone());
     builder.cwd = home.path().to_path_buf();
@@ -650,7 +653,7 @@ async fn list_threads_db_enabled_repairs_stale_rollout_paths() -> std::io::Resul
         "sessions/2099/01/01/rollout-2099-01-01T00-00-00-{uuid}.jsonl"
     ));
 
-    let runtime = codex_state::StateRuntime::init(
+    let runtime = crewon_state::StateRuntime::init(
         home.path().to_path_buf(),
         config.model_provider_id.clone(),
     )
@@ -664,11 +667,11 @@ async fn list_threads_db_enabled_repairs_stale_rollout_paths() -> std::io::Resul
         .with_ymd_and_hms(2025, 1, 3, 13, 0, 0)
         .single()
         .expect("valid datetime");
-    let mut builder = codex_state::ThreadMetadataBuilder::new(
+    let mut builder = crewon_state::ThreadMetadataBuilder::new(
         thread_id,
         stale_path,
         created_at,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     builder.model_provider = Some(config.model_provider_id.clone());
     builder.cwd = home.path().to_path_buf();
@@ -711,7 +714,7 @@ async fn list_threads_state_db_only_skips_jsonl_repair_scan() -> std::io::Result
     let home = TempDir::new().expect("temp dir");
     let config = test_config(home.path());
 
-    let runtime = codex_state::StateRuntime::init(
+    let runtime = crewon_state::StateRuntime::init(
         home.path().to_path_buf(),
         config.model_provider_id.clone(),
     )
@@ -814,7 +817,7 @@ async fn list_threads_default_filter_returns_filesystem_scan_results() -> std::i
     let real_path = write_session_file(home.path(), "2025-01-03T13-00-00", uuid)?;
     let stale_cwd = home.path().join("stale-cwd");
 
-    let runtime = codex_state::StateRuntime::init(
+    let runtime = crewon_state::StateRuntime::init(
         home.path().to_path_buf(),
         config.model_provider_id.clone(),
     )
@@ -828,11 +831,11 @@ async fn list_threads_default_filter_returns_filesystem_scan_results() -> std::i
         .with_ymd_and_hms(2025, 1, 3, 13, 0, 0)
         .single()
         .expect("valid datetime");
-    let mut builder = codex_state::ThreadMetadataBuilder::new(
+    let mut builder = crewon_state::ThreadMetadataBuilder::new(
         thread_id,
         real_path,
         created_at,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     builder.model_provider = Some(config.model_provider_id.clone());
     builder.cwd = stale_cwd.clone();
@@ -904,7 +907,7 @@ async fn list_threads_metadata_filter_overlays_state_db_list_metadata() -> std::
     let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
     let rollout_path = write_session_file(home.path(), "2025-01-03T16-00-00", uuid)?;
 
-    let runtime = codex_state::StateRuntime::init(
+    let runtime = crewon_state::StateRuntime::init(
         home.path().to_path_buf(),
         config.model_provider_id.clone(),
     )
@@ -918,11 +921,11 @@ async fn list_threads_metadata_filter_overlays_state_db_list_metadata() -> std::
         .with_ymd_and_hms(2025, 1, 3, 16, 0, 0)
         .single()
         .expect("valid datetime");
-    let mut builder = codex_state::ThreadMetadataBuilder::new(
+    let mut builder = crewon_state::ThreadMetadataBuilder::new(
         thread_id,
         rollout_path,
         created_at,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     builder.model_provider = Some(config.model_provider_id.clone());
     builder.cwd = home.path().to_path_buf();
@@ -944,7 +947,7 @@ async fn list_threads_metadata_filter_overlays_state_db_list_metadata() -> std::
         /*cursor*/ None,
         ThreadSortKey::CreatedAt,
         SortDirection::Desc,
-        &[SessionSource::Cli],
+        &[SessionSource::LegacyCli],
         /*model_providers*/ None,
         /*cwd_filters*/ None,
         config.model_provider_id.as_str(),
@@ -1039,7 +1042,7 @@ async fn list_threads_search_repairs_stale_state_db_hits_before_returning() -> s
     let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
     let real_path = write_session_file(home.path(), "2025-01-03T15-00-00", uuid)?;
 
-    let runtime = codex_state::StateRuntime::init(
+    let runtime = crewon_state::StateRuntime::init(
         home.path().to_path_buf(),
         config.model_provider_id.clone(),
     )
@@ -1053,11 +1056,11 @@ async fn list_threads_search_repairs_stale_state_db_hits_before_returning() -> s
         .with_ymd_and_hms(2025, 1, 3, 15, 0, 0)
         .single()
         .expect("valid datetime");
-    let mut builder = codex_state::ThreadMetadataBuilder::new(
+    let mut builder = crewon_state::ThreadMetadataBuilder::new(
         thread_id,
         real_path,
         created_at,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     builder.model_provider = Some(config.model_provider_id.clone());
     builder.cwd = home.path().to_path_buf();
@@ -1150,7 +1153,7 @@ async fn resume_candidate_matches_cwd_reads_latest_turn_context() -> std::io::Re
             multi_agent_version: None,
             realtime_active: None,
             effort: None,
-            summary: codex_protocol::config_types::ReasoningSummary::Auto,
+            summary: crewon_protocol::config_types::ReasoningSummary::Auto,
         }),
     };
     writeln!(file, "{}", serde_json::to_string(&turn_context)?)?;

@@ -8,14 +8,14 @@ use crate::cache::CloudConfigBundleCache;
 use crate::metrics::bundle_shape_tag;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use codex_backend_client::ConfigBundleResponse;
-use codex_backend_client::DeliveredTomlFragment;
-use codex_config::AbsolutePathBuf;
-use codex_config::CloudConfigFragment;
-use codex_config::CloudConfigTomlBundle;
-use codex_config::CloudRequirementsFragment;
-use codex_config::CloudRequirementsTomlBundle;
-use codex_config::types::AuthCredentialsStoreMode;
+use crewon_backend_client::ConfigBundleResponse;
+use crewon_backend_client::DeliveredTomlFragment;
+use crewon_config::AbsolutePathBuf;
+use crewon_config::CloudConfigFragment;
+use crewon_config::CloudConfigTomlBundle;
+use crewon_config::CloudRequirementsFragment;
+use crewon_config::CloudRequirementsTomlBundle;
+use crewon_config::types::AuthCredentialsStoreMode;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::VecDeque;
@@ -25,13 +25,16 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use tempfile::tempdir;
 
-fn write_auth_json(codex_home: &Path, value: serde_json::Value) -> std::io::Result<()> {
-    std::fs::write(codex_home.join("auth.json"), serde_json::to_string(&value)?)?;
+fn write_auth_json(crewon_home: &Path, value: serde_json::Value) -> std::io::Result<()> {
+    std::fs::write(
+        crewon_home.join("auth.json"),
+        serde_json::to_string(&value)?,
+    )?;
     Ok(())
 }
 
-fn create_test_cache(codex_home: &Path) -> CloudConfigBundleCache {
-    CloudConfigBundleCache::new(AbsolutePathBuf::resolve_path_against_base(codex_home, "/"))
+fn create_test_cache(crewon_home: &Path) -> CloudConfigBundleCache {
+    CloudConfigBundleCache::new(AbsolutePathBuf::resolve_path_against_base(crewon_home, "/"))
 }
 
 async fn auth_manager_with_api_key() -> Arc<AuthManager> {
@@ -220,7 +223,10 @@ impl StaticBundleClient {
 }
 
 impl BundleClient for StaticBundleClient {
-    async fn get_bundle(&self, _auth: &CodexAuth) -> Result<CloudConfigBundle, BundleRequestError> {
+    async fn get_bundle(
+        &self,
+        _auth: &CrewonAuth,
+    ) -> Result<CloudConfigBundle, BundleRequestError> {
         self.request_count.fetch_add(1, Ordering::SeqCst);
         Ok(self.bundle.clone())
     }
@@ -229,7 +235,10 @@ impl BundleClient for StaticBundleClient {
 struct PendingBundleClient;
 
 impl BundleClient for PendingBundleClient {
-    async fn get_bundle(&self, _auth: &CodexAuth) -> Result<CloudConfigBundle, BundleRequestError> {
+    async fn get_bundle(
+        &self,
+        _auth: &CrewonAuth,
+    ) -> Result<CloudConfigBundle, BundleRequestError> {
         pending::<()>().await;
         Ok(CloudConfigBundle::default())
     }
@@ -250,7 +259,10 @@ impl SequenceBundleClient {
 }
 
 impl BundleClient for SequenceBundleClient {
-    async fn get_bundle(&self, _auth: &CodexAuth) -> Result<CloudConfigBundle, BundleRequestError> {
+    async fn get_bundle(
+        &self,
+        _auth: &CrewonAuth,
+    ) -> Result<CloudConfigBundle, BundleRequestError> {
         self.request_count.fetch_add(1, Ordering::SeqCst);
         let mut responses = self.responses.lock().await;
         responses
@@ -266,7 +278,7 @@ struct TokenBundleClient {
 }
 
 impl BundleClient for TokenBundleClient {
-    async fn get_bundle(&self, auth: &CodexAuth) -> Result<CloudConfigBundle, BundleRequestError> {
+    async fn get_bundle(&self, auth: &CrewonAuth) -> Result<CloudConfigBundle, BundleRequestError> {
         self.request_count.fetch_add(1, Ordering::SeqCst);
         if matches!(
             auth.get_token().as_deref(),
@@ -288,7 +300,10 @@ struct UnauthorizedBundleClient {
 }
 
 impl BundleClient for UnauthorizedBundleClient {
-    async fn get_bundle(&self, _auth: &CodexAuth) -> Result<CloudConfigBundle, BundleRequestError> {
+    async fn get_bundle(
+        &self,
+        _auth: &CrewonAuth,
+    ) -> Result<CloudConfigBundle, BundleRequestError> {
         self.request_count.fetch_add(1, Ordering::SeqCst);
         Err(BundleRequestError::Unauthorized {
             status_code: Some(401),
@@ -338,11 +353,11 @@ fn bundle_shape_tag_describes_sorted_enterprise_sources() {
 #[tokio::test]
 async fn get_bundle_skips_non_chatgpt_auth() {
     let fetcher = Arc::new(StaticBundleClient::new(test_bundle()));
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager_with_api_key().await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -353,11 +368,11 @@ async fn get_bundle_skips_non_chatgpt_auth() {
 #[tokio::test]
 async fn get_bundle_skips_individual_plan() {
     let fetcher = Arc::new(StaticBundleClient::new(test_bundle()));
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("pro").await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -377,11 +392,11 @@ async fn get_bundle_allows_eligible_workspace_plans_and_writes_cache() {
     ] {
         let bundle = test_bundle();
         let fetcher = Arc::new(StaticBundleClient::new(bundle.clone()));
-        let codex_home = tempdir().expect("tempdir");
+        let crewon_home = tempdir().expect("tempdir");
         let service = CloudConfigBundleService::new(
             auth_manager_with_plan(plan_type).await,
             fetcher.clone(),
-            codex_home.path().to_path_buf(),
+            crewon_home.path().to_path_buf(),
             CLOUD_CONFIG_BUNDLE_TIMEOUT,
         );
 
@@ -396,7 +411,7 @@ async fn get_bundle_allows_eligible_workspace_plans_and_writes_cache() {
             "plan_type: {plan_type}"
         );
         assert!(
-            codex_home
+            crewon_home
                 .path()
                 .join(CLOUD_CONFIG_BUNDLE_CACHE_FILENAME)
                 .exists(),
@@ -408,11 +423,11 @@ async fn get_bundle_allows_eligible_workspace_plans_and_writes_cache() {
 #[tokio::test]
 async fn get_bundle_skips_team_like_usage_based_plan() {
     let fetcher = Arc::new(StaticBundleClient::new(test_bundle()));
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("self_serve_business_usage_based").await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -422,12 +437,12 @@ async fn get_bundle_skips_team_like_usage_based_plan() {
 
 #[tokio::test]
 async fn get_bundle_rejects_invalid_remote_bundle_before_cache_write() {
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let fetcher = Arc::new(StaticBundleClient::new(invalid_config_bundle()));
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("business").await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -440,7 +455,7 @@ async fn get_bundle_rejects_invalid_remote_bundle_before_cache_write() {
     assert!(err.to_string().contains("invalid cloud config bundle"));
     assert_eq!(fetcher.request_count.load(Ordering::SeqCst), 1);
     assert!(
-        !codex_home
+        !crewon_home
             .path()
             .join(CLOUD_CONFIG_BUNDLE_CACHE_FILENAME)
             .exists()
@@ -449,8 +464,8 @@ async fn get_bundle_rejects_invalid_remote_bundle_before_cache_write() {
 
 #[tokio::test]
 async fn get_bundle_ignores_invalid_cache_and_refetches() {
-    let codex_home = tempdir().expect("tempdir");
-    let cache = create_test_cache(codex_home.path());
+    let crewon_home = tempdir().expect("tempdir");
+    let cache = create_test_cache(crewon_home.path());
     cache
         .save(
             Some("user-12345".to_string()),
@@ -464,7 +479,7 @@ async fn get_bundle_ignores_invalid_cache_and_refetches() {
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("business").await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -485,19 +500,19 @@ async fn get_bundle_ignores_invalid_cache_and_refetches() {
 
 #[tokio::test]
 async fn get_bundle_empty_response_is_success_and_cached() {
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let fetcher = Arc::new(StaticBundleClient::new(CloudConfigBundle::default()));
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("enterprise").await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
     assert_eq!(service.load_startup_bundle().await, Ok(None));
     assert_eq!(fetcher.request_count.load(Ordering::SeqCst), 1);
     assert!(
-        codex_home
+        crewon_home
             .path()
             .join(CLOUD_CONFIG_BUNDLE_CACHE_FILENAME)
             .exists()
@@ -507,11 +522,11 @@ async fn get_bundle_empty_response_is_success_and_cached() {
 #[tokio::test]
 async fn get_bundle_uses_cache_when_valid() {
     let bundle = test_bundle();
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let prime_service = CloudConfigBundleService::new(
         auth_manager_with_plan("business").await,
         Arc::new(StaticBundleClient::new(bundle.clone())),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
     let _ = prime_service.load_startup_bundle().await;
@@ -520,7 +535,7 @@ async fn get_bundle_uses_cache_when_valid() {
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("business").await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -530,12 +545,12 @@ async fn get_bundle_uses_cache_when_valid() {
 
 #[tokio::test]
 async fn get_bundle_ignores_cache_for_different_auth_identity() {
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let prime_service = CloudConfigBundleService::new(
         auth_manager_with_plan_and_identity("business", Some("user-12345"), Some("account-12345"))
             .await,
         Arc::new(StaticBundleClient::new(test_bundle())),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
     let _ = prime_service.load_startup_bundle().await;
@@ -557,7 +572,7 @@ async fn get_bundle_ignores_cache_for_different_auth_identity() {
         auth_manager_with_plan_and_identity("business", Some("user-99999"), Some("account-12345"))
             .await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -570,11 +585,11 @@ async fn get_bundle_ignores_cache_for_different_auth_identity() {
 
 #[tokio::test(start_paused = true)]
 async fn get_bundle_times_out() {
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("enterprise").await,
         Arc::new(PendingBundleClient),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
     let handle = tokio::spawn(async move { service.load_startup_bundle_with_timeout().await });
@@ -594,11 +609,11 @@ async fn get_bundle_retries_until_success() {
         Err(request_error()),
         Ok(test_bundle()),
     ]));
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("business").await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -654,11 +669,11 @@ async fn get_bundle_recovers_after_unauthorized_reload() {
         bundle: test_bundle(),
         request_count: AtomicUsize::new(0),
     });
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -708,16 +723,16 @@ async fn get_bundle_recovers_after_unauthorized_reload_updates_cache_identity() 
         bundle: test_bundle(),
         request_count: AtomicUsize::new(0),
     });
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
     assert_eq!(service.load_startup_bundle().await, Ok(Some(test_bundle())));
-    let cache = create_test_cache(codex_home.path());
+    let cache = create_test_cache(crewon_home.path());
     assert_eq!(
         cache
             .load(Some("user-99999"), Some("account-12345"))
@@ -768,11 +783,11 @@ async fn get_bundle_surfaces_auth_recovery_message() {
         message: "GET /config/bundle failed: 401".to_string(),
         request_count: AtomicUsize::new(0),
     });
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -823,11 +838,11 @@ async fn get_bundle_unauthorized_without_recovery_uses_generic_message() {
                 .to_string(),
         request_count: AtomicUsize::new(0),
     });
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -848,11 +863,11 @@ async fn get_bundle_unauthorized_without_recovery_uses_generic_message() {
 
 #[tokio::test]
 async fn get_bundle_does_not_use_cache_when_auth_identity_is_incomplete() {
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let prime_service = CloudConfigBundleService::new(
         auth_manager_with_plan("business").await,
         Arc::new(StaticBundleClient::new(test_bundle())),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
     let _ = prime_service.load_startup_bundle().await;
@@ -878,7 +893,7 @@ async fn get_bundle_does_not_use_cache_when_auth_identity_is_incomplete() {
         )
         .await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -895,11 +910,11 @@ async fn get_bundle_stops_after_max_retries() {
         Err(request_error());
         CLOUD_CONFIG_BUNDLE_MAX_ATTEMPTS
     ]));
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("enterprise").await,
         fetcher.clone(),
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
@@ -932,7 +947,7 @@ async fn refresh_from_remote_updates_cached_bundle() {
             }],
         },
     };
-    let codex_home = tempdir().expect("tempdir");
+    let crewon_home = tempdir().expect("tempdir");
     let fetcher = Arc::new(SequenceBundleClient::new(vec![
         Ok(test_bundle()),
         Ok(replacement_bundle.clone()),
@@ -940,14 +955,14 @@ async fn refresh_from_remote_updates_cached_bundle() {
     let service = CloudConfigBundleService::new(
         auth_manager_with_plan("business").await,
         fetcher,
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
 
     assert_eq!(service.load_startup_bundle().await, Ok(Some(test_bundle())));
     assert!(service.refresh_cache_once().await);
 
-    let cache = create_test_cache(codex_home.path());
+    let cache = create_test_cache(crewon_home.path());
     let signed_payload = cache
         .load(Some("user-12345"), Some("account-12345"))
         .await
@@ -958,7 +973,7 @@ async fn refresh_from_remote_updates_cached_bundle() {
 #[test]
 fn bundle_response_conversion_preserves_fragment_order() {
     let response = ConfigBundleResponse {
-        config_toml: Some(Some(Box::new(codex_backend_client::DeliveredConfigToml {
+        config_toml: Some(Some(Box::new(crewon_backend_client::DeliveredConfigToml {
             enterprise_managed: Some(Some(vec![
                 DeliveredTomlFragment::new(
                     "cfg_high".to_string(),
@@ -973,7 +988,7 @@ fn bundle_response_conversion_preserves_fragment_order() {
             ])),
         }))),
         requirements_toml: Some(Some(Box::new(
-            codex_backend_client::DeliveredRequirementsToml {
+            crewon_backend_client::DeliveredRequirementsToml {
                 enterprise_managed: Some(Some(vec![DeliveredTomlFragment::new(
                     "req_high".to_string(),
                     "High requirements".to_string(),

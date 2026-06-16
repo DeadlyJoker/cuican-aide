@@ -5,9 +5,9 @@ use similar::TextDiff;
 use std::sync::OnceLock;
 
 use crate::responses::ResponsesRequest;
-use codex_protocol::protocol::APPS_INSTRUCTIONS_OPEN_TAG;
-use codex_protocol::protocol::PLUGINS_INSTRUCTIONS_OPEN_TAG;
-use codex_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
+use crewon_protocol::protocol::APPS_INSTRUCTIONS_OPEN_TAG;
+use crewon_protocol::protocol::PLUGINS_INSTRUCTIONS_OPEN_TAG;
+use crewon_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ContextSnapshotRenderMode {
@@ -697,7 +697,7 @@ mod tests {
             "role": "developer",
             "content": [{
                 "type": "input_text",
-                "text": "## Skills\n- openai-docs: helper (file: /private/var/folders/yk/p4jp9nzs79s5q84csslkgqtm0000gn/T/.tmpAnGVww/skills/.system/openai-docs/SKILL.md)"
+                "text": "## Skills\n- sample-skill: helper (file: /private/var/folders/yk/p4jp9nzs79s5q84csslkgqtm0000gn/T/.tmpAnGVww/skills/.system/sample-skill/SKILL.md)"
             }]
         })];
 
@@ -705,7 +705,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            "00:message/developer:## Skills\\n- openai-docs: helper (file: <SYSTEM_SKILLS_ROOT>/openai-docs/SKILL.md)"
+            "00:message/developer:## Skills\\n- sample-skill: helper (file: <SYSTEM_SKILLS_ROOT>/sample-skill/SKILL.md)"
         );
     }
 }

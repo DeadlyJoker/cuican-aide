@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-"""Verify that codex-rs Cargo manifests follow workspace manifest policy.
+"""Verify that Crewon Rust Cargo manifests follow workspace manifest policy.
 
 Checks:
 - Crates inherit `[workspace.package]` metadata.
 - Crates opt into `[lints] workspace = true`.
-- Crate names follow the codex-rs directory naming conventions.
+- Crate names follow the Crewon Rust directory naming conventions.
 - Workspace manifests do not introduce workspace crate feature toggles.
 """
 
@@ -17,17 +17,16 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CARGO_RS_ROOT = ROOT / "codex-rs"
+RUST_WORKSPACE_ROOT = ROOT / "codex-rs"
 WORKSPACE_PACKAGE_FIELDS = ("version", "edition", "license")
 TOP_LEVEL_NAME_EXCEPTIONS = {
-    "windows-sandbox-rs": "codex-windows-sandbox",
+    "windows-sandbox-rs": "crewon-windows-sandbox",
 }
 UTILITY_NAME_EXCEPTIONS = {
-    "path-utils": "codex-utils-path",
+    "path-utils": "crewon-utils-path",
 }
 MANIFEST_FEATURE_EXCEPTIONS = {
     "codex-rs/code-mode/Cargo.toml": {"sandbox": ("v8/v8_enable_sandbox",)},
-    "codex-rs/v8-poc/Cargo.toml": {"sandbox": ("v8/v8_enable_sandbox",)},
 }
 OPTIONAL_DEPENDENCY_EXCEPTIONS = set()
 INTERNAL_DEPENDENCY_FEATURE_EXCEPTIONS = {}
@@ -61,7 +60,7 @@ def main() -> int:
         return 0
 
     print(
-        "Cargo manifests under codex-rs must inherit workspace package metadata, "
+        "Crewon Rust Cargo manifests must inherit workspace package metadata, "
         "opt into workspace lints, and avoid introducing new workspace crate "
         "features."
     )
@@ -72,7 +71,7 @@ def main() -> int:
         "permutations we want to avoid."
     )
     print(
-        "Cargo only applies `codex-rs/Cargo.toml` `[workspace.lints.clippy]` "
+        "Cargo only applies the root `[workspace.lints.clippy]` "
         "entries to a crate when that crate declares:"
     )
     print()
@@ -85,8 +84,7 @@ def main() -> int:
     )
     print()
     print(
-        "Package-name checks apply to `codex-rs/<crate>/Cargo.toml` and "
-        "`codex-rs/utils/<crate>/Cargo.toml`."
+        "Package-name checks apply to the Rust workspace crate manifests."
     )
     print(
         "Workspace crate features are forbidden; add a targeted exception here "
@@ -111,7 +109,7 @@ def manifest_errors(
 ) -> list[str]:
     manifest = load_manifest(path)
     package = manifest.get("package")
-    if not isinstance(package, dict) and path != CARGO_RS_ROOT / "Cargo.toml":
+    if not isinstance(package, dict) and path != RUST_WORKSPACE_ROOT / "Cargo.toml":
         return []
 
     errors = []
@@ -207,16 +205,16 @@ def manifest_errors(
 
 
 def expected_package_name(path: Path) -> str | None:
-    parts = path.relative_to(CARGO_RS_ROOT).parts
+    parts = path.relative_to(RUST_WORKSPACE_ROOT).parts
     if len(parts) == 2 and parts[1] == "Cargo.toml":
         directory = parts[0]
         return TOP_LEVEL_NAME_EXCEPTIONS.get(
             directory,
-            directory if directory.startswith("codex-") else f"codex-{directory}",
+            directory if directory.startswith("crewon-") else f"crewon-{directory}",
         )
     if len(parts) == 3 and parts[0] == "utils" and parts[2] == "Cargo.toml":
         directory = parts[1]
-        return UTILITY_NAME_EXCEPTIONS.get(directory, f"codex-utils-{directory}")
+        return UTILITY_NAME_EXCEPTIONS.get(directory, f"crewon-utils-{directory}")
     return None
 
 
@@ -308,7 +306,7 @@ def is_internal_dependency(
 
     resolved_dependency_path = (manifest_path.parent / dependency_path).resolve()
     try:
-        resolved_dependency_path.relative_to(CARGO_RS_ROOT)
+        resolved_dependency_path.relative_to(RUST_WORKSPACE_ROOT)
     except ValueError:
         return False
     return True
@@ -378,13 +376,13 @@ def load_manifest(path: Path) -> dict:
 def cargo_manifests() -> list[Path]:
     return sorted(
         path
-        for path in CARGO_RS_ROOT.rglob("Cargo.toml")
-        if path != CARGO_RS_ROOT / "Cargo.toml"
+        for path in RUST_WORKSPACE_ROOT.rglob("Cargo.toml")
+        if path != RUST_WORKSPACE_ROOT / "Cargo.toml"
     )
 
 
 def manifests_to_verify() -> list[Path]:
-    return [CARGO_RS_ROOT / "Cargo.toml", *cargo_manifests()]
+    return [RUST_WORKSPACE_ROOT / "Cargo.toml", *cargo_manifests()]
 
 
 if __name__ == "__main__":

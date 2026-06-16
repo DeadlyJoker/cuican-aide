@@ -1,4 +1,4 @@
-use codex_config::McpServerConfig;
+use crewon_config::McpServerConfig;
 
 /// One extension-owned overlay for the runtime MCP server configuration.
 #[derive(Clone, Debug)]

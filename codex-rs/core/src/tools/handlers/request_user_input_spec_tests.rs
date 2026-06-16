@@ -1,9 +1,9 @@
 use super::*;
-use codex_features::Feature;
-use codex_features::Features;
-use codex_protocol::config_types::ModeKind;
-use codex_tools::JsonSchema;
-use codex_tools::request_user_input_available_modes;
+use crewon_features::Feature;
+use crewon_features::Features;
+use crewon_protocol::config_types::ModeKind;
+use crewon_tools::JsonSchema;
+use crewon_tools::request_user_input_available_modes;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 

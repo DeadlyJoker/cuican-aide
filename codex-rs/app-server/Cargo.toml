@@ -1,19 +1,19 @@
 [package]
-name = "codex-app-server"
+name = "crewon-app-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "codex-app-server"
+name = "crewon-app-server"
 path = "src/main.rs"
 
 [[bin]]
-name = "codex-app-server-test-notify-capture"
+name = "crewon-app-server-test-notify-capture"
 path = "src/bin/notify_capture.rs"
 
 [lib]
-name = "codex_app_server"
+name = "crewon_app_server"
 path = "src/lib.rs"
 doctest = false
 
@@ -30,52 +30,52 @@ axum = { workspace = true, default-features = false, features = [
     "tokio",
     "ws",
 ] }
-codex-analytics = { workspace = true }
-codex-arg0 = { workspace = true }
-codex-cloud-config = { workspace = true }
-codex-config = { workspace = true }
-codex-core = { workspace = true }
-codex-core-plugins = { workspace = true }
-codex-exec-server = { workspace = true }
-codex-extension-api = { workspace = true }
-codex-external-agent-migration = { workspace = true }
-codex-external-agent-sessions = { workspace = true }
-codex-features = { workspace = true }
-codex-goal-extension = { workspace = true }
-codex-guardian = { workspace = true }
-codex-git-utils = { workspace = true }
-codex-file-watcher = { workspace = true }
-codex-hooks = { workspace = true }
-codex-otel = { workspace = true }
-codex-plugin = { workspace = true }
-codex-shell-command = { workspace = true }
-codex-skills-extension = { workspace = true }
-codex-utils-cli = { workspace = true }
-codex-utils-pty = { workspace = true }
-codex-backend-client = { workspace = true }
-codex-file-search = { workspace = true }
-codex-chatgpt = { workspace = true }
-codex-login = { workspace = true }
-codex-image-generation-extension = { workspace = true }
-codex-memories-extension = { workspace = true }
-codex-web-search-extension = { workspace = true }
-codex-memories-write = { workspace = true }
-codex-mcp = { workspace = true }
-codex-mcp-extension = { workspace = true }
-codex-model-provider = { workspace = true }
-codex-models-manager = { workspace = true }
-codex-protocol = { workspace = true }
-codex-app-server-protocol = { workspace = true }
-codex-app-server-transport = { workspace = true }
-codex-feedback = { workspace = true }
-codex-rmcp-client = { workspace = true }
-codex-rollout = { workspace = true }
-codex-sandboxing = { workspace = true }
-codex-state = { workspace = true }
-codex-thread-store = { workspace = true }
-codex-tools = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
-codex-utils-json-to-toml = { workspace = true }
+crewon-analytics = { workspace = true }
+crewon-arg0 = { workspace = true }
+crewon-cloud-config = { workspace = true }
+crewon-config = { workspace = true }
+crewon-core = { workspace = true }
+crewon-core-plugins = { workspace = true }
+crewon-exec-server = { workspace = true }
+crewon-extension-api = { workspace = true }
+crewon-external-agent-migration = { workspace = true }
+crewon-external-agent-sessions = { workspace = true }
+crewon-features = { workspace = true }
+crewon-goal-extension = { workspace = true }
+crewon-guardian = { workspace = true }
+crewon-git-utils = { workspace = true }
+crewon-file-watcher = { workspace = true }
+crewon-hooks = { workspace = true }
+crewon-otel = { workspace = true }
+crewon-plugin = { workspace = true }
+crewon-shell-command = { workspace = true }
+crewon-skills-extension = { workspace = true }
+crewon-utils-options = { workspace = true }
+crewon-utils-pty = { workspace = true }
+crewon-backend-client = { workspace = true }
+crewon-file-search = { workspace = true }
+crewon-chatgpt = { workspace = true }
+crewon-login = { workspace = true }
+crewon-image-generation-extension = { workspace = true }
+crewon-memories-extension = { workspace = true }
+crewon-web-search-extension = { workspace = true }
+crewon-memories-write = { workspace = true }
+crewon-mcp = { workspace = true }
+crewon-mcp-extension = { workspace = true }
+crewon-model-provider = { workspace = true }
+crewon-models-manager = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-app-server-protocol = { workspace = true }
+crewon-app-server-transport = { workspace = true }
+crewon-feedback = { workspace = true }
+crewon-rmcp-client = { workspace = true }
+crewon-rollout = { workspace = true }
+crewon-sandboxing = { workspace = true }
+crewon-state = { workspace = true }
+crewon-thread-store = { workspace = true }
+crewon-tools = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
+crewon-utils-json-to-toml = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
@@ -99,7 +99,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"
 uuid = { workspace = true, features = ["serde", "v7"] }
 
 [target.'cfg(windows)'.dependencies]
-codex-windows-sandbox = { workspace = true }
+crewon-windows-sandbox = { workspace = true }
 
 [dev-dependencies]
 app_test_support = { workspace = true }
@@ -109,8 +109,8 @@ axum = { workspace = true, default-features = false, features = [
     "tokio",
 ] }
 base64 = { workspace = true }
-codex-model-provider-info = { workspace = true }
-codex-utils-cargo-bin = { workspace = true }
+crewon-model-provider-info = { workspace = true }
+crewon-utils-cargo-bin = { workspace = true }
 core_test_support = { workspace = true }
 flate2 = { workspace = true }
 hmac = { workspace = true }

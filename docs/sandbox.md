@@ -1,3 +1,4 @@
 ## Sandbox & approvals
 
-For information about Codex sandboxing and approvals, see [this documentation](https://developers.openai.com/codex/security).
+Crewon uses backend sandbox and approval policies to constrain local command
+execution. Platform-specific sandbox implementations live under `codex-rs`.

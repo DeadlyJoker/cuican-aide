@@ -2,20 +2,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use anyhow::Result;
-use codex_config::types::McpServerConfig;
-use codex_config::types::McpServerTransportConfig;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_protocol::dynamic_tools::DynamicToolCallOutputContentItem;
-use codex_protocol::dynamic_tools::DynamicToolResponse;
-use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::McpInvocation;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::apps_test_server::AppsTestToolLoading;
 use core_test_support::apps_test_server::CALENDAR_CREATE_EVENT_MCP_APP_RESOURCE_URI;
@@ -45,9 +31,23 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::stdio_server_bin;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_mcp_server;
+use crewon_config::types::McpServerConfig;
+use crewon_config::types::McpServerTransportConfig;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_protocol::dynamic_tools::DynamicToolCallOutputContentItem;
+use crewon_protocol::dynamic_tools::DynamicToolResponse;
+use crewon_protocol::dynamic_tools::DynamicToolSpec;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::McpInvocation;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -311,8 +311,8 @@ async fn app_search_sources_are_hidden_for_api_key_auth() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::from_api_key("Test API Key"))
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::from_api_key("Test API Key"))
         .with_config(move |config| {
             configure_search_capable_apps(config, apps_server.chatgpt_base_url.as_str())
         });
@@ -522,7 +522,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
 
     let mut builder = configured_builder(apps_server.chatgpt_base_url.clone());
     let test = builder.build(&server).await?;
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "Find the calendar create tool".to_string(),
@@ -535,7 +535,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
         })
         .await?;
 
-    let EventMsg::McpToolCallBegin(begin) = wait_for_event(&test.codex, |event| {
+    let EventMsg::McpToolCallBegin(begin) = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::McpToolCallBegin(_))
     })
     .await
@@ -548,7 +548,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
         Some(CALENDAR_CREATE_EVENT_MCP_APP_RESOURCE_URI)
     );
 
-    let EventMsg::McpToolCallEnd(end) = wait_for_event(&test.codex, |event| {
+    let EventMsg::McpToolCallEnd(end) = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::McpToolCallEnd(_))
     })
     .await
@@ -563,7 +563,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
     assert_eq!(
         end.invocation,
         McpInvocation {
-            server: "codex_apps".to_string(),
+            server: "crewon_apps".to_string(),
             tool: "calendar_create_event".to_string(),
             arguments: Some(json!({
                 "title": "Lunch",
@@ -577,7 +577,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
             .expect("tool call should succeed")
             .structured_content,
         Some(json!({
-            "_codex_apps": {
+            "_crewon_apps": {
                 "call_id": "calendar-call-1",
                 "resource_uri": CALENDAR_CREATE_EVENT_RESOURCE_URI,
                 "contains_mcp_source": true,
@@ -586,7 +586,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
         }))
     );
 
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -598,7 +598,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
     let apps_tool_call = recorded_apps_tool_call_by_call_id(&server, "calendar-call-1").await;
 
     assert_eq!(
-        apps_tool_call.pointer("/params/_meta/_codex_apps"),
+        apps_tool_call.pointer("/params/_meta/_crewon_apps"),
         Some(&json!({
             "call_id": "calendar-call-1",
             "resource_uri": CALENDAR_CREATE_EVENT_RESOURCE_URI,
@@ -784,7 +784,7 @@ async fn tool_search_returns_deferred_v1_multi_agent_tools() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_config(configure_search_capable_model);
+    let mut builder = test_crewon().with_config(configure_search_capable_model);
     let test = builder.build(&server).await?;
     test.submit_turn_with_approval_and_permission_profile(
         "Find the spawn agent tool",
@@ -889,7 +889,7 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
                     "item": {
                         "type": "function_call",
                         "call_id": dynamic_call_id,
-                        "namespace": "codex_app",
+                        "namespace": "crewon_app",
                         "name": tool_name,
                         "arguments": tool_call_arguments,
                     }
@@ -914,24 +914,24 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
         "additionalProperties": false,
     });
     let dynamic_tool = DynamicToolSpec {
-        namespace: Some("codex_app".to_string()),
+        namespace: Some("crewon_app".to_string()),
         name: tool_name.to_string(),
         description: tool_description.to_string(),
         input_schema: input_schema.clone(),
         defer_loading: true,
     };
 
-    let mut builder = test_codex().with_config(configure_search_capable_model);
+    let mut builder = test_crewon().with_config(configure_search_capable_model);
     let base_test = builder.build(&server).await?;
     let new_thread = base_test
         .thread_manager
         .start_thread_with_tools(base_test.config.clone(), vec![dynamic_tool])
         .await?;
     let mut test = base_test;
-    test.codex = new_thread.thread;
+    test.crewon = new_thread.thread;
     test.session_configured = new_thread.session_configured;
 
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "Use the automation tool".to_string(),
@@ -944,7 +944,7 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
         })
         .await?;
 
-    let EventMsg::DynamicToolCallRequest(request) = wait_for_event(&test.codex, |event| {
+    let EventMsg::DynamicToolCallRequest(request) = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::DynamicToolCallRequest(_))
     })
     .await
@@ -952,11 +952,11 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
         unreachable!("event guard guarantees DynamicToolCallRequest");
     };
     assert_eq!(request.call_id, dynamic_call_id);
-    assert_eq!(request.namespace.as_deref(), Some("codex_app"));
+    assert_eq!(request.namespace.as_deref(), Some("crewon_app"));
     assert_eq!(request.tool, tool_name);
     assert_eq!(request.arguments, tool_args);
 
-    test.codex
+    test.crewon
         .submit(Op::DynamicToolResponse {
             id: request.call_id,
             response: DynamicToolResponse {
@@ -968,7 +968,7 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
         })
         .await?;
 
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -994,8 +994,8 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
         tools,
         vec![json!({
             "type": "namespace",
-            "name": "codex_app",
-            "description": "Tools in the codex_app namespace.",
+            "name": "crewon_app",
+            "description": "Tools in the crewon_app namespace.",
             "tools": [{
                 "type": "function",
                 "name": tool_name,
@@ -1109,7 +1109,7 @@ async fn tool_search_indexes_only_enabled_non_app_mcp_tools() -> Result<()> {
                 .expect("test mcp servers should accept any configuration");
         });
     let test = builder.build(&server).await?;
-    wait_for_mcp_server(&test.codex, "rmcp").await?;
+    wait_for_mcp_server(&test.crewon, "rmcp").await?;
 
     test.submit_turn_with_approval_and_permission_profile(
         "Find the rmcp echo and image tools.",
@@ -1239,9 +1239,9 @@ async fn tool_search_surfaced_mcp_tool_errors_are_returned_to_model() -> Result<
                 .expect("test mcp servers should accept any configuration");
         });
     let test = builder.build(&server).await?;
-    wait_for_mcp_server(&test.codex, "rmcp").await?;
+    wait_for_mcp_server(&test.crewon, "rmcp").await?;
 
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "Find the rmcp echo tool and call it.".to_string(),
@@ -1254,7 +1254,7 @@ async fn tool_search_surfaced_mcp_tool_errors_are_returned_to_model() -> Result<
         })
         .await?;
 
-    let EventMsg::McpToolCallEnd(end) = wait_for_event(&test.codex, |event| {
+    let EventMsg::McpToolCallEnd(end) = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::McpToolCallEnd(_))
     })
     .await
@@ -1274,7 +1274,7 @@ async fn tool_search_surfaced_mcp_tool_errors_are_returned_to_model() -> Result<
         "MCP invocation should report the execution failure: {tool_error}"
     );
 
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -1387,7 +1387,7 @@ async fn tool_search_uses_non_app_mcp_server_instructions_as_namespace_descripti
                 .expect("test mcp servers should accept any configuration");
         });
     let test = builder.build(&server).await?;
-    wait_for_mcp_server(&test.codex, "rmcp").await?;
+    wait_for_mcp_server(&test.crewon, "rmcp").await?;
 
     test.submit_turn_with_approval_and_permission_profile(
         "Find the rmcp echo tool.",
@@ -1548,17 +1548,17 @@ async fn tool_search_matches_dynamic_tools_by_name_description_namespace_and_sch
         defer_loading: true,
     };
 
-    let mut builder = test_codex().with_config(configure_search_capable_model);
+    let mut builder = test_crewon().with_config(configure_search_capable_model);
     let base_test = builder.build(&server).await?;
     let new_thread = base_test
         .thread_manager
         .start_thread_with_tools(base_test.config.clone(), vec![dynamic_tool])
         .await?;
     let mut test = base_test;
-    test.codex = new_thread.thread;
+    test.crewon = new_thread.thread;
     test.session_configured = new_thread.session_configured;
 
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "Search for the dynamic tool".to_string(),
@@ -1571,7 +1571,7 @@ async fn tool_search_matches_dynamic_tools_by_name_description_namespace_and_sch
         })
         .await?;
 
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;

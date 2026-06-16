@@ -8,8 +8,8 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::DateTime;
 use chrono::Duration as ChronoDuration;
 use chrono::Utc;
-use codex_config::AbsolutePathBuf;
-use codex_config::CloudConfigBundle;
+use crewon_config::AbsolutePathBuf;
+use crewon_config::CloudConfigBundle;
 use hmac::Hmac;
 use hmac::Mac;
 use serde::Deserialize;
@@ -24,9 +24,13 @@ const CLOUD_CONFIG_BUNDLE_CACHE_VERSION: u32 = 1;
 pub(super) const CLOUD_CONFIG_BUNDLE_CACHE_FILENAME: &str = "cloud-config-bundle-cache.json";
 const CLOUD_CONFIG_BUNDLE_CACHE_TTL: Duration = Duration::from_secs(60 * 60);
 const CLOUD_CONFIG_BUNDLE_CACHE_WRITE_HMAC_KEY: &[u8] =
+    b"crewon-cloud-config-bundle-cache-v1-6160ae70-bcfd-4ca8-a99b-40f73b3b072e";
+const CLOUD_CONFIG_BUNDLE_CACHE_LEGACY_HMAC_KEY: &[u8] =
     b"codex-cloud-config-bundle-cache-v1-6160ae70-bcfd-4ca8-a99b-40f73b3b072e";
-const CLOUD_CONFIG_BUNDLE_CACHE_READ_HMAC_KEYS: &[&[u8]] =
-    &[CLOUD_CONFIG_BUNDLE_CACHE_WRITE_HMAC_KEY];
+const CLOUD_CONFIG_BUNDLE_CACHE_READ_HMAC_KEYS: &[&[u8]] = &[
+    CLOUD_CONFIG_BUNDLE_CACHE_WRITE_HMAC_KEY,
+    CLOUD_CONFIG_BUNDLE_CACHE_LEGACY_HMAC_KEY,
+];
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -36,9 +40,9 @@ pub(super) struct CloudConfigBundleCache {
 }
 
 impl CloudConfigBundleCache {
-    pub(super) fn new(codex_home: AbsolutePathBuf) -> Self {
+    pub(super) fn new(crewon_home: AbsolutePathBuf) -> Self {
         Self {
-            path: codex_home.join(CLOUD_CONFIG_BUNDLE_CACHE_FILENAME),
+            path: crewon_home.join(CLOUD_CONFIG_BUNDLE_CACHE_FILENAME),
         }
     }
 

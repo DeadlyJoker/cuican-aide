@@ -1,20 +1,20 @@
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelInstructionsVariables;
-use codex_protocol::openai_models::ModelMessages;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::TruncationMode;
-use codex_protocol::openai_models::TruncationPolicyConfig;
-use codex_protocol::openai_models::WebSearchToolType;
-use codex_protocol::openai_models::default_input_modalities;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelInstructionsVariables;
+use crewon_protocol::openai_models::ModelMessages;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::TruncationMode;
+use crewon_protocol::openai_models::TruncationPolicyConfig;
+use crewon_protocol::openai_models::WebSearchToolType;
+use crewon_protocol::openai_models::default_input_modalities;
 
 use crate::config::ModelsManagerConfig;
-use codex_utils_output_truncation::approx_bytes_for_tokens;
+use crewon_utils_output_truncation::approx_bytes_for_tokens;
 use tracing::warn;
 
 pub const BASE_INSTRUCTIONS: &str = include_str!("../prompt.md");
-const DEFAULT_PERSONALITY_HEADER: &str = "You are Codex, a coding agent based on GPT-5. You and the user share the same workspace and collaborate to achieve the user's goals.";
+const DEFAULT_PERSONALITY_HEADER: &str = "You are Crewon, a coding agent. You and the user share the same workspace and collaborate to achieve the user's goals.";
 const LOCAL_FRIENDLY_TEMPLATE: &str =
     "You optimize for team morale and being a supportive teammate as much as code quality.";
 const LOCAL_PRAGMATIC_TEMPLATE: &str = "You are a deeply pragmatic, effective software engineer.";

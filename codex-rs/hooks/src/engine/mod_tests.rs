@@ -2,34 +2,34 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use codex_config::AbsolutePathBuf;
-use codex_config::ConfigLayerEntry;
-use codex_config::ConfigLayerSource;
-use codex_config::ConfigLayerStack;
-use codex_config::ConfigRequirements;
-use codex_config::ConfigRequirementsToml;
-use codex_config::Constrained;
-use codex_config::ConstrainedWithSource;
-use codex_config::HookEventsToml;
-use codex_config::HookHandlerConfig;
-use codex_config::ManagedHooksRequirementsToml;
-use codex_config::MatcherGroup;
-use codex_config::RequirementSource;
-use codex_config::Sourced;
-use codex_config::TomlValue;
-use codex_plugin::PluginHookSource;
-use codex_plugin::PluginId;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::HookOutputEntry;
-use codex_protocol::protocol::HookOutputEntryKind;
-use codex_protocol::protocol::HookRunStatus;
-use codex_protocol::protocol::HookSource;
-use codex_protocol::protocol::HookTrustStatus;
+use crewon_config::AbsolutePathBuf;
+use crewon_config::ConfigLayerEntry;
+use crewon_config::ConfigLayerSource;
+use crewon_config::ConfigLayerStack;
+use crewon_config::ConfigRequirements;
+use crewon_config::ConfigRequirementsToml;
+use crewon_config::Constrained;
+use crewon_config::ConstrainedWithSource;
+use crewon_config::HookEventsToml;
+use crewon_config::HookHandlerConfig;
+use crewon_config::ManagedHooksRequirementsToml;
+use crewon_config::MatcherGroup;
+use crewon_config::RequirementSource;
+use crewon_config::Sourced;
+use crewon_config::TomlValue;
+use crewon_plugin::PluginHookSource;
+use crewon_plugin::PluginId;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::HookOutputEntry;
+use crewon_protocol::protocol::HookOutputEntryKind;
+use crewon_protocol::protocol::HookRunStatus;
+use crewon_protocol::protocol::HookSource;
+use crewon_protocol::protocol::HookTrustStatus;
 use pretty_assertions::assert_eq;
 use tempfile::tempdir;
 
-use super::ClaudeHooksEngine;
 use super::CommandShell;
+use super::HooksEngine;
 use crate::events::pre_tool_use::PreToolUseRequest;
 
 fn cwd() -> AbsolutePathBuf {
@@ -194,7 +194,7 @@ with Path(r"{log_path}").open("a", encoding="utf-8") as handle:
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -300,7 +300,7 @@ async fn requirements_managed_hooks_execute_windows_command_override() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -379,7 +379,7 @@ fn unknown_requirement_source_hooks_stay_managed() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -461,7 +461,7 @@ fn user_disablement_filters_non_managed_hooks_but_not_managed_hooks() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -527,7 +527,7 @@ fn user_disablement_does_not_filter_managed_layer_hooks() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -688,7 +688,7 @@ fn requirements_managed_hooks_load_when_managed_dir_is_missing() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -744,7 +744,7 @@ fn allow_managed_hooks_only_false_keeps_unmanaged_hooks() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -798,7 +798,7 @@ fn allow_managed_hooks_only_in_config_toml_does_not_enable_policy() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -868,7 +868,7 @@ fn allow_managed_hooks_only_skips_unmanaged_json_and_toml_hooks() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -907,7 +907,7 @@ fn allow_managed_hooks_only_skips_unmanaged_plugin_hooks() {
     let config_layer_stack = ConfigLayerStack::new(Vec::new(), requirements, requirements_toml)
         .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -952,7 +952,7 @@ fn allow_managed_hooks_only_keeps_managed_requirement_and_config_layer_hooks() {
         vec![
             ConfigLayerEntry::new(
                 ConfigLayerSource::Mdm {
-                    domain: "com.openai.codex".to_string(),
+                    domain: "com.crewon.app".to_string(),
                     key: "config".to_string(),
                 },
                 config_toml_with_pre_tool_use("python3 /tmp/mdm-hook.py"),
@@ -979,7 +979,7 @@ fn allow_managed_hooks_only_keeps_managed_requirement_and_config_layer_hooks() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -1089,7 +1089,7 @@ fn discovers_hooks_from_json_and_toml_in_the_same_layer() {
     )
     .expect("config layer stack");
 
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -1151,7 +1151,8 @@ import os
 print(json.dumps({
     "systemMessage": json.dumps({
         "plugin": os.environ.get("PLUGIN_ROOT"),
-        "claude": os.environ.get("CLAUDE_PLUGIN_ROOT"),
+        "crewon": os.environ.get("CREWON_PLUGIN_ROOT"),
+        "legacy": os.environ.get("CLAUDE_PLUGIN_ROOT"),
     })
 }))
 "#,
@@ -1182,7 +1183,7 @@ print(json.dumps({
         AbsolutePathBuf::try_from(temp.path().join("config.toml")).expect("absolute config path"),
         &plugin_hook_sources,
     );
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -1261,7 +1262,8 @@ print(json.dumps({
         logged,
         serde_json::json!({
             "plugin": plugin_root.display().to_string(),
-            "claude": plugin_root.display().to_string(),
+            "crewon": plugin_root.display().to_string(),
+            "legacy": plugin_root.display().to_string(),
         })
     );
 }
@@ -1286,7 +1288,7 @@ fn plugin_hook_sources_expand_plugin_placeholders() {
                 matcher: Some("Bash".to_string()),
                 hooks: vec![HookHandlerConfig::Command {
                     command:
-                        "run ${PLUGIN_ROOT} ${CLAUDE_PLUGIN_ROOT} ${PLUGIN_DATA} ${CLAUDE_PLUGIN_DATA}"
+                        "run ${PLUGIN_ROOT} ${CREWON_PLUGIN_ROOT} ${PLUGIN_DATA} ${CREWON_PLUGIN_DATA} ${CLAUDE_PLUGIN_ROOT} ${CLAUDE_PLUGIN_DATA}"
                             .to_string(),
                     command_windows: None,
                     timeout_sec: Some(5),
@@ -1301,7 +1303,7 @@ fn plugin_hook_sources_expand_plugin_placeholders() {
         AbsolutePathBuf::try_from(temp.path().join("config.toml")).expect("absolute config path"),
         &plugin_hook_sources,
     );
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         Some(&config_layer_stack),
@@ -1316,10 +1318,12 @@ fn plugin_hook_sources_expand_plugin_placeholders() {
     assert_eq!(
         engine.handlers[0].command,
         format!(
-            "run {} {} {} {}",
+            "run {} {} {} {} {} {}",
             plugin_root.display(),
             plugin_root.display(),
             plugin_data_root.display(),
+            plugin_data_root.display(),
+            plugin_root.display(),
             plugin_data_root.display()
         )
     );
@@ -1328,11 +1332,19 @@ fn plugin_hook_sources_expand_plugin_placeholders() {
         HashMap::from([
             ("PLUGIN_ROOT".to_string(), plugin_root.display().to_string()),
             (
+                "CREWON_PLUGIN_ROOT".to_string(),
+                plugin_root.display().to_string()
+            ),
+            (
                 "CLAUDE_PLUGIN_ROOT".to_string(),
                 plugin_root.display().to_string()
             ),
             (
                 "PLUGIN_DATA".to_string(),
+                plugin_data_root.display().to_string()
+            ),
+            (
+                "CREWON_PLUGIN_DATA".to_string(),
                 plugin_data_root.display().to_string()
             ),
             (
@@ -1345,7 +1357,7 @@ fn plugin_hook_sources_expand_plugin_placeholders() {
 
 #[test]
 fn plugin_hook_load_warnings_are_startup_warnings() {
-    let engine = ClaudeHooksEngine::new(
+    let engine = HooksEngine::new(
         /*enabled*/ true,
         /*bypass_hook_trust*/ false,
         /*config_layer_stack*/ None,

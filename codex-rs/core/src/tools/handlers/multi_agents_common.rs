@@ -8,20 +8,20 @@ use crate::session::turn_context::TurnContext;
 use crate::tools::context::FunctionToolOutput;
 use crate::tools::context::ToolOutput;
 use crate::tools::context::ToolPayload;
-use codex_models_manager::manager::RefreshStrategy;
-use codex_protocol::AgentPath;
-use codex_protocol::ThreadId;
-use codex_protocol::error::CodexErr;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::openai_models::ReasoningEffortPreset;
-use codex_protocol::protocol::CollabAgentRef;
-use codex_protocol::protocol::CollabAgentStatusEntry;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::user_input::UserInput;
+use crewon_models_manager::manager::RefreshStrategy;
+use crewon_protocol::AgentPath;
+use crewon_protocol::ThreadId;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::openai_models::ReasoningEffortPreset;
+use crewon_protocol::protocol::CollabAgentRef;
+use crewon_protocol::protocol::CollabAgentStatusEntry;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::user_input::UserInput;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
@@ -264,7 +264,7 @@ pub(crate) fn apply_spawn_agent_runtime_overrides(
         })?;
     config.approvals_reviewer = turn.config.approvals_reviewer;
     config.permissions.shell_environment_policy = turn.shell_environment_policy.clone();
-    config.codex_linux_sandbox_exe = turn.codex_linux_sandbox_exe.clone();
+    config.crewon_linux_sandbox_exe = turn.crewon_linux_sandbox_exe.clone();
     #[allow(deprecated)]
     let turn_cwd = turn.cwd.clone();
     config.cwd = turn_cwd;
@@ -384,7 +384,7 @@ pub(crate) async fn apply_spawn_agent_service_tier(
 }
 
 fn find_spawn_agent_model_name(
-    available_models: &[codex_protocol::openai_models::ModelPreset],
+    available_models: &[crewon_protocol::openai_models::ModelPreset],
     requested_model: &str,
 ) -> Result<String, FunctionCallError> {
     available_models

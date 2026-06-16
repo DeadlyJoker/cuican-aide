@@ -3,14 +3,14 @@ use crate::collaboration_mode_presets::builtin_collaboration_mode_presets;
 use crate::config::ModelsManagerConfig;
 use crate::model_info;
 use async_trait::async_trait;
-use codex_app_server_protocol::AuthMode;
-use codex_login::AuthManager;
-use codex_protocol::config_types::CollaborationModeMask;
-use codex_protocol::error::Result as CoreResult;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::ModelsResponse;
+use crewon_app_server_protocol::AuthMode;
+use crewon_login::AuthManager;
+use crewon_protocol::config_types::CollaborationModeMask;
+use crewon_protocol::error::Result as CoreResult;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelPreset;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::ModelsResponse;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -34,8 +34,8 @@ pub trait ModelsEndpointClient: fmt::Debug + Send + Sync {
     /// Returns whether this provider can authenticate command-scoped requests.
     fn has_command_auth(&self) -> bool;
 
-    /// Returns whether the currently resolved auth can use Codex backend-only models.
-    async fn uses_codex_backend(&self) -> bool;
+    /// Returns whether the currently resolved auth can use Crewon backend-only models.
+    async fn uses_crewon_backend(&self) -> bool;
 
     /// Fetches the latest remote model catalog and optional ETag.
     async fn list_models(
@@ -110,10 +110,10 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
         remote_models.sort_by_key(|model| model.priority);
 
         let mut presets: Vec<ModelPreset> = remote_models.into_iter().map(Into::into).collect();
-        let uses_codex_backend = self
+        let uses_crewon_backend = self
             .auth_manager()
-            .is_some_and(AuthManager::current_auth_uses_codex_backend);
-        presets = ModelPreset::filter_by_auth(presets, uses_codex_backend);
+            .is_some_and(AuthManager::current_auth_uses_crewon_backend);
+        presets = ModelPreset::filter_by_auth(presets, uses_crewon_backend);
 
         ModelPreset::mark_default_by_picker_visibility(&mut presets);
 
@@ -197,11 +197,11 @@ pub struct StaticModelsManager {
 impl OpenAiModelsManager {
     /// Construct an OpenAI-compatible remote model manager.
     pub fn new(
-        codex_home: PathBuf,
+        crewon_home: PathBuf,
         endpoint_client: Arc<dyn ModelsEndpointClient>,
         auth_manager: Option<Arc<AuthManager>>,
     ) -> Self {
-        let cache_path = codex_home.join(MODEL_CACHE_FILE);
+        let cache_path = crewon_home.join(MODEL_CACHE_FILE);
         let cache_manager = ModelsCacheManager::new(cache_path, DEFAULT_MODEL_CACHE_TTL);
         let remote_models = load_remote_models_from_file().unwrap_or_default();
         Self {
@@ -312,7 +312,7 @@ impl OpenAiModelsManager {
     }
 
     async fn should_refresh_models(&self) -> bool {
-        self.endpoint_client.uses_codex_backend().await || self.endpoint_client.has_command_auth()
+        self.endpoint_client.uses_crewon_backend().await || self.endpoint_client.has_command_auth()
     }
 
     async fn get_etag(&self) -> Option<String> {
@@ -354,7 +354,7 @@ impl OpenAiModelsManager {
     /// Attempt to satisfy the refresh from the cache when it matches the provider and TTL.
     async fn try_load_cache(&self) -> bool {
         let _timer =
-            codex_otel::start_global_timer("codex.remote_models.load_cache.duration_ms", &[]);
+            crewon_otel::start_global_timer("crewon.remote_models.load_cache.duration_ms", &[]);
         let client_version = crate::client_version_to_whole();
         info!(client_version, "models cache: evaluating cache eligibility");
         // TODO(celia-oai): Include provider identity in cache eligibility so switching

@@ -1,15 +1,6 @@
-use core_test_support::test_codex::local_selections;
+use core_test_support::test_crewon::local_selections;
 use std::sync::Arc;
 
-use codex_core::CodexThread;
-use codex_protocol::AgentPath;
-use codex_protocol::items::TurnItem;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
 use core_test_support::responses;
@@ -24,10 +15,19 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::streaming_sse::StreamingSseChunk;
 use core_test_support::streaming_sse::StreamingSseServer;
 use core_test_support::streaming_sse::start_streaming_sse_server;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
+use crewon_core::CrewonThread;
+use crewon_protocol::AgentPath;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::InterAgentCommunication;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::from_slice;
@@ -85,17 +85,17 @@ fn response_completed_chunks(response_id: &str) -> Vec<StreamingSseChunk> {
     ]
 }
 
-async fn build_codex(server: &StreamingSseServer) -> Arc<CodexThread> {
-    test_codex()
+async fn build_crewon(server: &StreamingSseServer) -> Arc<CrewonThread> {
+    test_crewon()
         .with_model("gpt-5.4")
         .build_with_streaming_server(server)
         .await
-        .unwrap_or_else(|err| panic!("build streaming Codex test session: {err}"))
-        .codex
+        .unwrap_or_else(|err| panic!("build streaming Crewon test session: {err}"))
+        .crewon
 }
 
-async fn submit_user_input(codex: &CodexThread, text: &str) {
-    codex
+async fn submit_user_input(crewon: &CrewonThread, text: &str) {
+    crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: text.to_string(),
@@ -110,10 +110,10 @@ async fn submit_user_input(codex: &CodexThread, text: &str) {
         .unwrap_or_else(|err| panic!("submit user input: {err}"));
 }
 
-async fn submit_danger_full_access_user_turn(test: &TestCodex, text: &str) {
+async fn submit_danger_full_access_user_turn(test: &TestCrewon, text: &str) {
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, test.config.cwd.as_path());
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: text.to_string(),
@@ -122,14 +122,14 @@ async fn submit_danger_full_access_user_turn(test: &TestCodex, text: &str) {
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: test.session_configured.model.clone(),
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -142,8 +142,8 @@ async fn submit_danger_full_access_user_turn(test: &TestCodex, text: &str) {
         .unwrap_or_else(|err| panic!("submit user turn: {err}"));
 }
 
-async fn steer_user_input(codex: &CodexThread, text: &str) {
-    codex
+async fn steer_user_input(crewon: &CrewonThread, text: &str) {
+    crewon
         .steer_input(
             vec![UserInput::Text {
                 text: text.to_string(),
@@ -158,8 +158,8 @@ async fn steer_user_input(codex: &CodexThread, text: &str) {
         .unwrap_or_else(|err| panic!("steer user input: {err:?}"));
 }
 
-async fn submit_queue_only_agent_mail(codex: &CodexThread, text: &str) {
-    codex
+async fn submit_queue_only_agent_mail(crewon: &CrewonThread, text: &str) {
+    crewon
         .submit(Op::InterAgentCommunication {
             communication: InterAgentCommunication::new(
                 AgentPath::try_from("/root/worker")
@@ -172,18 +172,18 @@ async fn submit_queue_only_agent_mail(codex: &CodexThread, text: &str) {
         })
         .await
         .unwrap_or_else(|err| panic!("submit queue-only agent mail: {err}"));
-    codex
+    crewon
         .submit(Op::RealtimeConversationListVoices)
         .await
         .unwrap_or_else(|err| panic!("submit list-voices barrier: {err}"));
-    wait_for_event(codex, |event| {
+    wait_for_event(crewon, |event| {
         matches!(event, EventMsg::RealtimeConversationListVoicesResponse(_))
     })
     .await;
 }
 
-async fn wait_for_reasoning_item_started(codex: &CodexThread) {
-    wait_for_event(codex, |event| {
+async fn wait_for_reasoning_item_started(crewon: &CrewonThread) {
+    wait_for_event(crewon, |event| {
         matches!(
             event,
             EventMsg::ItemStarted(item_started)
@@ -193,17 +193,17 @@ async fn wait_for_reasoning_item_started(codex: &CodexThread) {
     .await;
 }
 
-async fn wait_for_agent_message(codex: &CodexThread, text: &str) {
+async fn wait_for_agent_message(crewon: &CrewonThread, text: &str) {
     let final_message = wait_for_event(
-        codex,
+        crewon,
         |event| matches!(event, EventMsg::AgentMessage(message) if message.message == text),
     )
     .await;
     assert!(matches!(final_message, EventMsg::AgentMessage(_)));
 }
 
-async fn wait_for_turn_complete(codex: &CodexThread) {
-    wait_for_event(codex, |event| matches!(event, EventMsg::TurnComplete(_))).await;
+async fn wait_for_turn_complete(crewon: &CrewonThread) {
+    wait_for_event(crewon, |event| matches!(event, EventMsg::TurnComplete(_))).await;
 }
 
 fn assert_two_responses_input_snapshot(snapshot_name: &str, requests: &[Vec<u8>]) {
@@ -278,14 +278,14 @@ async fn injected_user_input_triggers_follow_up_request_with_deltas() {
     let (server, _completions) =
         start_streaming_sse_server(vec![first_chunks, second_chunks]).await;
 
-    let codex = test_codex()
+    let crewon = test_crewon()
         .with_model("gpt-5.4")
         .build_with_streaming_server(&server)
         .await
         .unwrap()
-        .codex;
+        .crewon;
 
-    codex
+    crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "first prompt".into(),
@@ -299,12 +299,12 @@ async fn injected_user_input_triggers_follow_up_request_with_deltas() {
         .await
         .unwrap();
 
-    wait_for_event(&codex, |event| {
+    wait_for_event(&crewon, |event| {
         matches!(event, EventMsg::AgentMessageContentDelta(_))
     })
     .await;
 
-    codex
+    crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "second prompt".into(),
@@ -320,7 +320,7 @@ async fn injected_user_input_triggers_follow_up_request_with_deltas() {
 
     let _ = gate_completed_tx.send(());
 
-    wait_for_event(&codex, |event| matches!(event, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&crewon, |event| matches!(event, EventMsg::TurnComplete(_))).await;
 
     let requests = server.requests().await;
     assert_eq!(requests.len(), 2);
@@ -366,17 +366,17 @@ async fn queued_inter_agent_mail_triggers_follow_up_after_reasoning_item() {
     let (server, _completions) =
         start_streaming_sse_server(vec![first_chunks, response_completed_chunks("resp-2")]).await;
 
-    let codex = build_codex(&server).await;
+    let crewon = build_crewon(&server).await;
 
-    submit_user_input(&codex, "first prompt").await;
+    submit_user_input(&crewon, "first prompt").await;
 
-    wait_for_reasoning_item_started(&codex).await;
+    wait_for_reasoning_item_started(&crewon).await;
 
-    submit_queue_only_agent_mail(&codex, "queued child update").await;
+    submit_queue_only_agent_mail(&crewon, "queued child update").await;
 
     let _ = gate_reasoning_done_tx.send(());
 
-    wait_for_turn_complete(&codex).await;
+    wait_for_turn_complete(&crewon).await;
 
     let requests = server.requests().await;
     assert_two_responses_input_snapshot("pending_input_queued_mail_after_reasoning", &requests);
@@ -421,11 +421,11 @@ async fn queued_inter_agent_mail_triggers_follow_up_after_commentary_message_ite
     let (server, _completions) =
         start_streaming_sse_server(vec![first_chunks, response_completed_chunks("resp-2")]).await;
 
-    let codex = build_codex(&server).await;
+    let crewon = build_crewon(&server).await;
 
-    submit_user_input(&codex, "first prompt").await;
+    submit_user_input(&crewon, "first prompt").await;
 
-    wait_for_event(&codex, |event| {
+    wait_for_event(&crewon, |event| {
         matches!(
             event,
             EventMsg::ItemStarted(item_started)
@@ -434,13 +434,13 @@ async fn queued_inter_agent_mail_triggers_follow_up_after_commentary_message_ite
     })
     .await;
 
-    submit_queue_only_agent_mail(&codex, "queued child update").await;
+    submit_queue_only_agent_mail(&crewon, "queued child update").await;
 
     let _ = gate_message_done_tx.send(());
 
-    wait_for_agent_message(&codex, "first answer").await;
+    wait_for_agent_message(&crewon, "first answer").await;
 
-    wait_for_turn_complete(&codex).await;
+    wait_for_turn_complete(&crewon).await;
 
     let requests = server.requests().await;
     assert_two_responses_input_snapshot("pending_input_queued_mail_after_commentary", &requests);
@@ -475,19 +475,19 @@ async fn user_input_does_not_preempt_after_reasoning_item() {
     let (server, _completions) =
         start_streaming_sse_server(vec![first_chunks, response_completed_chunks("resp-2")]).await;
 
-    let codex = build_codex(&server).await;
+    let crewon = build_crewon(&server).await;
 
-    submit_user_input(&codex, "first prompt").await;
+    submit_user_input(&crewon, "first prompt").await;
 
-    wait_for_reasoning_item_started(&codex).await;
+    wait_for_reasoning_item_started(&crewon).await;
 
-    steer_user_input(&codex, "second prompt").await;
+    steer_user_input(&crewon, "second prompt").await;
 
     let _ = gate_reasoning_done_tx.send(());
 
-    wait_for_agent_message(&codex, "first answer").await;
+    wait_for_agent_message(&crewon, "first answer").await;
 
-    wait_for_turn_complete(&codex).await;
+    wait_for_turn_complete(&crewon).await;
 
     let requests = server.requests().await;
     assert_two_responses_input_snapshot(
@@ -548,7 +548,7 @@ async fn steered_user_input_waits_for_model_continuation_after_mid_turn_compact(
     ])
     .await;
 
-    let codex = test_codex()
+    let crewon = test_crewon()
         .with_model("gpt-5.4")
         .with_config(|config| {
             config.model_provider.name = "OpenAI (test)".to_string();
@@ -557,14 +557,14 @@ async fn steered_user_input_waits_for_model_continuation_after_mid_turn_compact(
         })
         .build_with_streaming_server(&server)
         .await
-        .unwrap_or_else(|err| panic!("build streaming Codex test session: {err}"))
-        .codex;
+        .unwrap_or_else(|err| panic!("build streaming Crewon test session: {err}"))
+        .crewon;
 
-    submit_user_input(&codex, "first prompt").await;
-    submit_user_input(&codex, "second prompt").await;
+    submit_user_input(&crewon, "first prompt").await;
+    submit_user_input(&crewon, "second prompt").await;
 
-    wait_for_agent_message(&codex, "resumed old task").await;
-    wait_for_turn_complete(&codex).await;
+    wait_for_agent_message(&crewon, "resumed old task").await;
+    wait_for_turn_complete(&crewon).await;
 
     let requests = server.requests().await;
     assert_eq!(requests.len(), 4);
@@ -635,7 +635,7 @@ async fn steered_user_input_follows_compact_when_only_the_steer_needs_follow_up(
         start_streaming_sse_server(vec![first_chunks, compact_chunks, steered_follow_up_chunks])
             .await;
 
-    let codex = test_codex()
+    let crewon = test_crewon()
         .with_model("gpt-5.4")
         .with_config(|config| {
             config.model_provider.name = "OpenAI (test)".to_string();
@@ -644,16 +644,16 @@ async fn steered_user_input_follows_compact_when_only_the_steer_needs_follow_up(
         })
         .build_with_streaming_server(&server)
         .await
-        .unwrap_or_else(|err| panic!("build streaming Codex test session: {err}"))
-        .codex;
+        .unwrap_or_else(|err| panic!("build streaming Crewon test session: {err}"))
+        .crewon;
 
-    submit_user_input(&codex, "first prompt").await;
-    wait_for_agent_message(&codex, "first answer").await;
-    steer_user_input(&codex, "second prompt").await;
+    submit_user_input(&crewon, "first prompt").await;
+    wait_for_agent_message(&crewon, "first answer").await;
+    steer_user_input(&crewon, "second prompt").await;
     let _ = gate_first_completed_tx.send(());
 
-    wait_for_agent_message(&codex, "processed steered prompt").await;
-    wait_for_turn_complete(&codex).await;
+    wait_for_agent_message(&crewon, "processed steered prompt").await;
+    wait_for_turn_complete(&crewon).await;
 
     let requests = server.requests().await;
     assert_eq!(requests.len(), 3);
@@ -754,7 +754,7 @@ async fn steered_user_input_waits_when_tool_output_triggers_compact_before_next_
     ])
     .await;
 
-    let test = test_codex()
+    let test = test_crewon()
         .with_model("gpt-5.4")
         .with_config(|config| {
             config.model_provider.name = "OpenAI (test)".to_string();
@@ -763,15 +763,15 @@ async fn steered_user_input_waits_when_tool_output_triggers_compact_before_next_
         })
         .build_with_streaming_server(&server)
         .await
-        .unwrap_or_else(|err| panic!("build streaming Codex test session: {err}"));
-    let codex = test.codex.clone();
+        .unwrap_or_else(|err| panic!("build streaming Crewon test session: {err}"));
+    let crewon = test.crewon.clone();
 
     submit_danger_full_access_user_turn(&test, "first prompt").await;
-    wait_for_event(&codex, |event| matches!(event, EventMsg::TurnStarted(_))).await;
-    steer_user_input(&codex, "second prompt").await;
+    wait_for_event(&crewon, |event| matches!(event, EventMsg::TurnStarted(_))).await;
+    steer_user_input(&crewon, "second prompt").await;
     let _ = gate_first_completed_tx.send(());
 
-    wait_for_turn_complete(&codex).await;
+    wait_for_turn_complete(&crewon).await;
 
     let requests = server.requests().await;
     assert_eq!(requests.len(), 4);

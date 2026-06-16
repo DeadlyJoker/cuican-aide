@@ -8,21 +8,21 @@ use chrono::DateTime;
 use chrono::NaiveDateTime;
 use chrono::Timelike;
 use chrono::Utc;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_state::BackfillState;
-use codex_state::BackfillStats;
-use codex_state::BackfillStatus;
-use codex_state::DB_ERROR_METRIC;
-use codex_state::DB_METRIC_BACKFILL;
-use codex_state::DB_METRIC_BACKFILL_DURATION_MS;
-use codex_state::ExtractionOutcome;
-use codex_state::ThreadMetadataBuilder;
-use codex_state::apply_rollout_item;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_state::BackfillState;
+use crewon_state::BackfillStats;
+use crewon_state::BackfillStatus;
+use crewon_state::DB_ERROR_METRIC;
+use crewon_state::DB_METRIC_BACKFILL;
+use crewon_state::DB_METRIC_BACKFILL_DURATION_MS;
+use crewon_state::ExtractionOutcome;
+use crewon_state::ThreadMetadataBuilder;
+use crewon_state::apply_rollout_item;
 use std::path::Path;
 use std::path::PathBuf;
 use tracing::info;
@@ -50,7 +50,7 @@ pub(crate) fn builder_from_session_meta(
     builder.agent_role = session_meta.meta.agent_role.clone();
     builder.agent_path = session_meta.meta.agent_path.clone();
     builder.cwd = session_meta.meta.cwd.clone();
-    builder.cli_version = Some(session_meta.meta.cli_version.clone());
+    builder.cli_version = Some(session_meta.meta.client_version.clone());
     builder.sandbox_policy = SandboxPolicy::new_read_only_policy();
     builder.approval_mode = AskForApproval::OnRequest;
     if let Some(git) = session_meta.git.as_ref() {
@@ -129,7 +129,7 @@ pub async fn extract_metadata_from_rollout(
 }
 
 pub(crate) async fn backfill_sessions(
-    runtime: &codex_state::StateRuntime,
+    runtime: &crewon_state::StateRuntime,
     codex_home: &Path,
     default_provider: &str,
 ) {
@@ -143,12 +143,12 @@ pub(crate) async fn backfill_sessions(
 }
 
 pub(crate) async fn backfill_sessions_with_lease(
-    runtime: &codex_state::StateRuntime,
+    runtime: &crewon_state::StateRuntime,
     codex_home: &Path,
     default_provider: &str,
     backfill_lease_seconds: i64,
 ) {
-    let metric_client = codex_otel::global();
+    let metric_client = crewon_otel::global();
     let timer = metric_client
         .as_ref()
         .and_then(|otel| otel.start_timer(DB_METRIC_BACKFILL_DURATION_MS, &[]).ok());

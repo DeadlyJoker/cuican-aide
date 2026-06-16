@@ -9,29 +9,29 @@ use crate::transport::AppServerTransport;
 use anyhow::Result;
 use app_test_support::create_mock_responses_server_repeating_assistant;
 use app_test_support::write_mock_responses_config_toml;
-use codex_analytics::AppServerRpcTransport;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::InitializeCapabilities;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::InitializeResponse;
-use codex_app_server_protocol::JSONRPCRequest;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::UserInput;
-use codex_arg0::Arg0DispatchPaths;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::LoaderOverrides;
-use codex_core::config::Config;
-use codex_core::config::ConfigBuilder;
-use codex_exec_server::EnvironmentManager;
-use codex_feedback::CodexFeedback;
-use codex_login::AuthManager;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::W3cTraceContext;
+use crewon_analytics::AppServerRpcTransport;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::InitializeCapabilities;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::InitializeResponse;
+use crewon_app_server_protocol::JSONRPCRequest;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::UserInput;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::LoaderOverrides;
+use crewon_core::config::Config;
+use crewon_core::config::ConfigBuilder;
+use crewon_exec_server::EnvironmentManager;
+use crewon_feedback::CrewonFeedback;
+use crewon_login::AuthManager;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::W3cTraceContext;
 use opentelemetry::global;
 use opentelemetry::trace::SpanId;
 use opentelemetry::trace::SpanKind;
@@ -90,7 +90,7 @@ fn init_test_tracing() -> &'static TestTracing {
         let provider = SdkTracerProvider::builder()
             .with_simple_exporter(exporter.clone())
             .build();
-        let tracer = provider.tracer("codex-app-server-message-processor-tests");
+        let tracer = provider.tracer("crewon-app-server-message-processor-tests");
         global::set_text_map_propagator(TraceContextPropagator::new());
         let subscriber =
             tracing_subscriber::registry().with(tracing_opentelemetry::layer().with_tracer(tracer));
@@ -138,7 +138,7 @@ impl TracingHarness {
                     request_id: RequestId::Integer(1),
                     params: InitializeParams {
                         client_info: ClientInfo {
-                            name: "codex-app-server-tests".to_string(),
+                            name: "crewon-app-server-tests".to_string(),
                             title: None,
                             version: "0.1.0".to_string(),
                         },
@@ -242,7 +242,7 @@ async fn build_test_processor(
         /*strict_config*/ false,
         CloudConfigBundleLoader::default(),
         Arg0DispatchPaths::default(),
-        Arc::new(codex_config::NoopThreadConfigLoader),
+        Arc::new(crewon_config::NoopThreadConfigLoader),
     );
     let analytics_events_client =
         analytics_events_client_from_config(Arc::clone(&auth_manager), config.as_ref());
@@ -257,7 +257,7 @@ async fn build_test_processor(
         config,
         config_manager,
         environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
-        feedback: CodexFeedback::new(),
+        feedback: CrewonFeedback::new(),
         log_db: None,
         state_db: None,
         config_warnings: Vec::new(),
@@ -478,7 +478,7 @@ async fn read_thread_started_notification(
                 };
                 if matches!(
                     notification,
-                    codex_app_server_protocol::ServerNotification::ThreadStarted(_)
+                    crewon_app_server_protocol::ServerNotification::ThreadStarted(_)
                 ) {
                     return;
                 }
@@ -491,7 +491,7 @@ async fn read_thread_started_notification(
                 };
                 if matches!(
                     notification,
-                    codex_app_server_protocol::ServerNotification::ThreadStarted(_)
+                    crewon_app_server_protocol::ServerNotification::ThreadStarted(_)
                 ) {
                     return;
                 }
@@ -684,7 +684,7 @@ async fn turn_start_jsonrpc_span_parents_core_turn_spans() -> Result<()> {
                 && span_attr(span, "rpc.method") == Some("turn/start")
                 && span.span_context.trace_id() == remote_trace_id
         }) && spans.iter().any(|span| {
-            span_attr(span, "codex.op") == Some("user_input")
+            span_attr(span, "crewon.op") == Some("user_input")
                 && span.span_context.trace_id() == remote_trace_id
         })
     })
@@ -693,8 +693,8 @@ async fn turn_start_jsonrpc_span_parents_core_turn_spans() -> Result<()> {
     let server_request_span =
         find_rpc_span_with_trace(&spans, SpanKind::Server, "turn/start", remote_trace_id);
     let core_turn_span =
-        find_span_with_trace(&spans, remote_trace_id, "codex.op=user_input", |span| {
-            span_attr(span, "codex.op") == Some("user_input")
+        find_span_with_trace(&spans, remote_trace_id, "crewon.op=user_input", |span| {
+            span_attr(span, "crewon.op") == Some("user_input")
         });
 
     assert_eq!(server_request_span.parent_span_id, remote_parent_span_id);

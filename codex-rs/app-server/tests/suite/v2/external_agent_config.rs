@@ -5,24 +5,24 @@ use app_test_support::TestAppServer;
 use app_test_support::create_mock_responses_server_repeating_assistant;
 use app_test_support::to_response;
 use app_test_support::write_mock_responses_config_toml;
-use codex_app_server::INVALID_PARAMS_ERROR_CODE;
-use codex_app_server_protocol::ExternalAgentConfigDetectResponse;
-use codex_app_server_protocol::ExternalAgentConfigImportResponse;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::PluginListParams;
-use codex_app_server_protocol::PluginListResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::ThreadListParams;
-use codex_app_server_protocol::ThreadListResponse;
-use codex_app_server_protocol::ThreadReadParams;
-use codex_app_server_protocol::ThreadReadResponse;
-use codex_app_server_protocol::ThreadResumeParams;
-use codex_app_server_protocol::ThreadResumeResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::UserInput;
 use core_test_support::responses;
+use crewon_app_server::INVALID_PARAMS_ERROR_CODE;
+use crewon_app_server_protocol::ExternalAgentConfigDetectResponse;
+use crewon_app_server_protocol::ExternalAgentConfigImportResponse;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::PluginListParams;
+use crewon_app_server_protocol::PluginListResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ThreadItem;
+use crewon_app_server_protocol::ThreadListParams;
+use crewon_app_server_protocol::ThreadListResponse;
+use crewon_app_server_protocol::ThreadReadParams;
+use crewon_app_server_protocol::ThreadReadResponse;
+use crewon_app_server_protocol::ThreadResumeParams;
+use crewon_app_server_protocol::ThreadResumeResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::UserInput;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use tempfile::TempDir;
@@ -79,7 +79,7 @@ async fn external_agent_config_import_sends_completion_notification_for_local_pl
     let marketplace_root = codex_home.path().join("marketplace");
     let plugin_root = marketplace_root.join("plugins").join("sample");
     std::fs::create_dir_all(marketplace_root.join(".agents/plugins"))?;
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
         marketplace_root.join(".agents/plugins/marketplace.json"),
         r#"{
@@ -96,7 +96,7 @@ async fn external_agent_config_import_sends_completion_notification_for_local_pl
 }"#,
     )?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample","version":"0.1.0"}"#,
     )?;
     std::fs::create_dir_all(codex_home.path().join(".claude"))?;

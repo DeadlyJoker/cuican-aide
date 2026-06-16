@@ -5,7 +5,7 @@ use crate::reasons::REASON_METHOD_NOT_ALLOWED;
 use crate::reasons::REASON_MITM_HOOK_DENIED;
 use crate::reasons::REASON_NOT_ALLOWED_LOCAL;
 use crate::runtime::network_proxy_state_for_policy;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use rama_http::Body;
 use rama_http::HeaderMap;
@@ -21,14 +21,14 @@ fn github_write_hook() -> crate::mitm_hook::MitmHookConfig {
         host: "api.github.com".to_string(),
         matcher: crate::mitm_hook::MitmHookMatchConfig {
             methods: vec!["POST".to_string(), "PUT".to_string()],
-            path_prefixes: vec!["/repos/openai/".to_string()],
+            path_prefixes: vec!["/repos/crewon/".to_string()],
             ..crate::mitm_hook::MitmHookMatchConfig::default()
         },
         actions: crate::mitm_hook::MitmHookActionsConfig {
             strip_request_headers: vec!["authorization".to_string()],
             inject_request_headers: vec![crate::mitm_hook::InjectedHeaderConfig {
                 name: "authorization".to_string(),
-                secret_env_var: Some("CODEX_GITHUB_TOKEN".to_string()),
+                secret_env_var: Some("CREWON_GITHUB_TOKEN".to_string()),
                 secret_file: None,
                 prefix: Some("Bearer ".to_string()),
             }],
@@ -55,6 +55,7 @@ async fn mitm_policy_blocks_disallowed_method_and_records_telemetry() {
     let app_state = Arc::new(network_proxy_state_for_policy({
         let mut network = NetworkProxySettings::default();
         network.set_allowed_domains(vec!["example.com".to_string()]);
+        network.allow_local_binding = true;
         network
     }));
     let ctx = policy_ctx(
@@ -165,6 +166,7 @@ async fn mitm_policy_allows_matching_hooked_write_in_full_mode() {
         mitm: true,
         mitm_hooks: vec![hook],
         mode: NetworkMode::Full,
+        allow_local_binding: true,
         ..NetworkProxySettings::default()
     };
     network.set_allowed_domains(vec!["api.github.com".to_string()]);
@@ -177,7 +179,7 @@ async fn mitm_policy_allows_matching_hooked_write_in_full_mode() {
     );
     let req = Request::builder()
         .method(Method::POST)
-        .uri("/repos/openai/codex/issues")
+        .uri("/repos/crewon/example/issues")
         .header(HOST, "api.github.com")
         .body(Body::empty())
         .unwrap();
@@ -199,6 +201,7 @@ async fn mitm_policy_blocks_matching_hooked_write_in_limited_mode() {
         mitm: true,
         mitm_hooks: vec![hook],
         mode: NetworkMode::Limited,
+        allow_local_binding: true,
         ..NetworkProxySettings::default()
     };
     network.set_allowed_domains(vec!["api.github.com".to_string()]);
@@ -211,7 +214,7 @@ async fn mitm_policy_blocks_matching_hooked_write_in_limited_mode() {
     );
     let req = Request::builder()
         .method(Method::POST)
-        .uri("/repos/openai/codex/issues")
+        .uri("/repos/crewon/example/issues")
         .header(HOST, "api.github.com")
         .body(Body::empty())
         .unwrap();
@@ -247,6 +250,7 @@ async fn mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_f
         mitm: true,
         mitm_hooks: vec![hook],
         mode: NetworkMode::Full,
+        allow_local_binding: true,
         ..NetworkProxySettings::default()
     };
     network.set_allowed_domains(vec!["api.github.com".to_string()]);
@@ -259,7 +263,7 @@ async fn mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_f
     );
     let req = Request::builder()
         .method(Method::GET)
-        .uri("/repos/openai/codex/issues?token=secret")
+        .uri("/repos/crewon/example/issues?token=secret")
         .header(HOST, "api.github.com")
         .header("authorization", "Bearer user-supplied")
         .body(Body::empty())
