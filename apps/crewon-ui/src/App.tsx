@@ -3152,20 +3152,16 @@ export function App() {
     if (
       !initialLibraryView ||
       initialLibraryViewOpenedRef.current ||
-      connectionState === "connecting"
+      (connectionState === "connecting" && !isDemoPreview)
     ) {
       return;
     }
 
     initialLibraryViewOpenedRef.current = true;
     void openLibrary(initialLibraryView);
-  }, [connectionState, initialLibraryView]);
+  }, [connectionState, initialLibraryView, isDemoPreview]);
 
   useEffect(() => {
-    if (connectionState === "connecting") {
-      return;
-    }
-
     const syncViewFromUrl = () => {
       const search = window.location.search;
       if (lastSyncedViewSearchRef.current === search) {
@@ -3189,7 +3185,10 @@ export function App() {
       const libraryView = libraryViewFromSearch(search);
       if (libraryView) {
         void openLibrary(libraryView);
+        return;
       }
+
+      setAppView("chat");
     };
 
     syncViewFromUrl();
@@ -9764,6 +9763,11 @@ export function App() {
 
   useEffect(() => {
     let isMounted = true;
+
+    if (isDemoPreview) {
+      switchToDemoThreads(false);
+    }
+
     const client = new AppServerClient(
       serverUrl,
       handleNotification,
