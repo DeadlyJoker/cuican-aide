@@ -7380,17 +7380,18 @@ export function App() {
 
   async function writeKnowledgeMemory(): Promise<string | null> {
     const knowledgeCwd = await resolveBackendCwd();
-    if (!knowledgeCwd) {
+    const client = clientRef.current;
+    if (!knowledgeCwd || !client) {
       return null;
     }
 
     const crewonDir = joinPath(knowledgeCwd, ".crewon");
     const knowledgePath = joinPath(crewonDir, "knowledge.md");
-    await clientRef.current?.createDirectory(crewonDir, true);
+    await client.createDirectory(crewonDir, true);
 
     let existing = "";
     try {
-      const response = await clientRef.current?.readFile(knowledgePath);
+      const response = await client.readFile(knowledgePath);
       existing = response ? decodeBase64Text(response.dataBase64) : "";
     } catch {
       existing = "";
@@ -7419,7 +7420,7 @@ export function App() {
     const next = existing.trim()
       ? `${existing.trimEnd()}\n\n${entry}`
       : `# Crewon Knowledge\n\n${entry}`;
-    await clientRef.current?.writeTextFile(knowledgePath, next);
+    await client.writeTextFile(knowledgePath, next);
     return knowledgePath;
   }
 
