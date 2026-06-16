@@ -20,13 +20,11 @@ import type { GetAccountTokenUsageResponse } from "@crewon-protocol/v2/GetAccoun
 import type { HooksListResponse } from "@crewon-protocol/v2/HooksListResponse";
 import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
 import type { ModelProviderCapabilitiesReadResponse } from "@crewon-protocol/v2/ModelProviderCapabilitiesReadResponse";
-import type { McpServerConfigRecord } from "@crewon-protocol/v2/McpServerConfigRecord";
 import type { McpServerStatus } from "@crewon-protocol/v2/McpServerStatus";
 import type { PermissionProfileListResponse } from "@crewon-protocol/v2/PermissionProfileListResponse";
 import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse";
 import type { PluginReadResponse } from "@crewon-protocol/v2/PluginReadResponse";
 import type { RateLimitSnapshot } from "@crewon-protocol/v2/RateLimitSnapshot";
-import type { SkillMetadata } from "@crewon-protocol/v2/SkillMetadata";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
 import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
@@ -96,8 +94,6 @@ import { getInitialTheme, persistTheme, type Theme } from "./lib/theme";
 import {
   agentConfigToOfficeMember,
   createDefaultAgentConfig,
-  createMcpInventoryAgentOption,
-  createSkillAgentOption,
 } from "./lib/agentConfigDefaults";
 import {
   officeConfigForThread,
@@ -122,6 +118,7 @@ import {
   writeOfficeConfigFile as writeStoredOfficeConfigFile,
 } from "./lib/domainPersistence";
 import {
+  createBackendAgentConfig as createStoredBackendAgentConfig,
   loadAgentLibraryItems as loadBackendAgentLibraryItems,
   writeAgentConfig as writeBackendAgentConfig,
 } from "./lib/domainAgentBackend";
@@ -5457,66 +5454,16 @@ export function App() {
       ? undefined
       : (selectedThreadId ?? undefined);
 
-    const [mcpInventory, skillsResponse, modelsResponse, permissionsResponse] =
-      await Promise.all([
-        loadMcpInventory(clientRef.current, effectiveThreadId, effectiveCwd),
-        clientRef.current?.listSkills(effectiveCwd),
-        clientRef.current?.listModels(),
-        clientRef.current?.listPermissionProfiles(effectiveCwd),
-      ]);
-
-    const mcp = mcpInventory.servers.map(createMcpAgentOptionWithLocale);
-    const skills = (skillsResponse?.data ?? [])
-      .flatMap((entry) => entry.skills)
-      .map(createSkillAgentOptionWithLocale);
-    const models =
-      modelsResponse?.data.map((model) => model.model).filter(Boolean) ?? [];
-    const defaultModel =
-      modelsResponse?.data.find((model) => model.isDefault)?.model ?? models[0];
-    const permissions =
-      permissionsResponse?.data
-        .map((permission) => permission.id)
-        .filter(Boolean) ?? [];
-
-    function createMcpAgentOptionWithLocale(
-      server: {
-        config?: McpServerConfigRecord;
-        name: string;
-        status?: McpServerStatus;
-      },
-      index: number,
-    ) {
-      return createMcpInventoryAgentOption(server, locale, index);
+    const client = clientRef.current;
+    if (!client) {
+      return fallback;
     }
 
-    function createSkillAgentOptionWithLocale(
-      skill: SkillMetadata,
-      index: number,
-    ) {
-      return createSkillAgentOption(skill, locale, index);
-    }
-
-    return {
-      ...fallback,
-      role:
-        locale === "zh"
-          ? "后端能力智能体 · 可招募"
-          : "Backend-capable agent · recruitable",
-      systemPrompt:
-        locale === "zh"
-          ? "你是办公室中的自定义智能体。你的模型、权限、MCP 和 Skill 来自当前 app-server。先理解目标，再列出计划，必要时调用已授权工具，并把结果沉淀为可复用交付物。"
-          : "You are a custom agent in an office. Your model, permission profile, MCP connectors, and skills come from the current app-server. Understand the goal, outline a plan, use authorized tools when needed, and turn results into reusable deliverables.",
-      model:
-        defaultModel && models.includes(defaultModel)
-          ? defaultModel
-          : fallback.model,
-      models: models.length > 0 ? models : fallback.models,
-      permission: permissions[0] ?? fallback.permission,
-      permissions:
-        permissions.length > 0 ? permissions : fallback.permissions,
-      mcp: mcp.length > 0 ? mcp : fallback.mcp,
-      skills: skills.length > 0 ? skills : fallback.skills,
-    };
+    return createStoredBackendAgentConfig(client, {
+      cwd: effectiveCwd,
+      locale,
+      threadId: effectiveThreadId,
+    });
   }
 
   async function createBackendKnowledgeData(): Promise<KnowledgeData> {

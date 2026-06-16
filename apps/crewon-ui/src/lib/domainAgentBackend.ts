@@ -3,6 +3,12 @@ import {
   type AppServerClient,
 } from "./appServer";
 import type { AgentConfig, LibraryItem } from "./crewonDomain";
+import {
+  createDefaultAgentConfig,
+  createMcpInventoryAgentOption,
+  createSkillAgentOption,
+} from "./agentConfigDefaults";
+import { loadMcpInventory } from "./domainCollaborationBackend";
 import { agentConfigRecordsToLibraryItems } from "./domainLibraryItems";
 import {
   type AgentConfigWriteResult,
@@ -42,6 +48,58 @@ export async function loadAgentLibraryItems(
     }
     return { items: [] };
   }
+}
+
+export async function createBackendAgentConfig(
+  client: AppServerClient,
+  params: {
+    cwd: string | null | undefined;
+    locale: Locale;
+    threadId?: string | null;
+  },
+): Promise<AgentConfig> {
+  const fallback = createDefaultAgentConfig(params.locale);
+  const [mcpInventory, skillsResponse, modelsResponse, permissionsResponse] =
+    await Promise.all([
+      loadMcpInventory(client, params.threadId ?? undefined, params.cwd),
+      client.listSkills(params.cwd ?? undefined),
+      client.listModels(),
+      client.listPermissionProfiles(params.cwd ?? undefined),
+    ]);
+
+  const mcp = mcpInventory.servers.map((server, index) =>
+    createMcpInventoryAgentOption(server, params.locale, index),
+  );
+  const skills = (skillsResponse.data ?? [])
+    .flatMap((entry) => entry.skills)
+    .map((skill, index) => createSkillAgentOption(skill, params.locale, index));
+  const models = modelsResponse.data
+    .map((model) => model.model)
+    .filter(Boolean);
+  const defaultModel =
+    modelsResponse.data.find((model) => model.isDefault)?.model ?? models[0];
+  const permissions = permissionsResponse.data
+    .map((permission) => permission.id)
+    .filter(Boolean);
+
+  return {
+    ...fallback,
+    role:
+      params.locale === "zh"
+        ? "后端能力智能体 · 可招募"
+        : "Backend-capable agent · recruitable",
+    systemPrompt:
+      params.locale === "zh"
+        ? "你是办公室中的自定义智能体。你的模型、权限、MCP 和 Skill 来自当前 app-server。先理解目标，再列出计划，必要时调用已授权工具，并把结果沉淀为可复用交付物。"
+        : "You are a custom agent in an office. Your model, permission profile, MCP connectors, and skills come from the current app-server. Understand the goal, outline a plan, use authorized tools when needed, and turn results into reusable deliverables.",
+    model:
+      defaultModel && models.includes(defaultModel) ? defaultModel : fallback.model,
+    models: models.length > 0 ? models : fallback.models,
+    permission: permissions[0] ?? fallback.permission,
+    permissions: permissions.length > 0 ? permissions : fallback.permissions,
+    mcp: mcp.length > 0 ? mcp : fallback.mcp,
+    skills: skills.length > 0 ? skills : fallback.skills,
+  };
 }
 
 function isUnsupportedRpcError(error: unknown): boolean {
