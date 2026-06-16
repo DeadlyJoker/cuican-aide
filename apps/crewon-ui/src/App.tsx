@@ -150,8 +150,11 @@ import {
 import {
   libraryLoadingFallbackPanel,
   libraryTitle,
-  normalizeKnowledgeData,
 } from "./lib/libraryPanelFormatters";
+import {
+  readKnowledgeData,
+  writeKnowledgeMemory as writeBackendKnowledgeMemory,
+} from "./lib/domainKnowledgeBackend";
 import {
   mcpConfigDetailText,
   mcpConfigEnabled,
@@ -5549,19 +5552,7 @@ export function App() {
           : "Local app-server is not connected; unable to read knowledge.",
       );
     }
-    try {
-      const response = await client.listKnowledge(knowledgeCwd);
-      return normalizeKnowledgeData(response.data);
-    } catch (error) {
-      if (isUnsupportedRpcError(error)) {
-        throw new Error(
-          locale === "zh"
-            ? "当前 app-server 不支持 knowledge/list，请更新后端后再使用知识库。"
-            : "The current app-server does not support knowledge/list. Update the backend before using Knowledge.",
-        );
-      }
-      throw error;
-    }
+    return readKnowledgeData(client, knowledgeCwd, locale);
   }
 
   async function writeKnowledgeMemory(): Promise<string | null> {
@@ -5578,25 +5569,12 @@ export function App() {
       selectedBackendThread && threadTitle(selectedBackendThread, "")
         ? threadTitle(selectedBackendThread, "")
         : null;
-    try {
-      const response = await client.writeKnowledgeMemory({
-        cwd: knowledgeCwd,
-        title: selectedBackendThreadTitle,
-        threadId: selectedBackendThread?.id ?? null,
-        note:
-          "Backend-connected knowledge memory can be reused by agents, offices, and automations.",
-      });
-      return response.filePath;
-    } catch (error) {
-      if (isUnsupportedRpcError(error)) {
-        throw new Error(
-          locale === "zh"
-            ? "当前 app-server 不支持 knowledge/memory/write，请更新后端后再写入知识库。"
-            : "The current app-server does not support knowledge/memory/write. Update the backend before writing knowledge.",
-        );
-      }
-      throw error;
-    }
+    return writeBackendKnowledgeMemory(client, {
+      cwd: knowledgeCwd,
+      locale,
+      selectedThreadId: selectedBackendThread?.id ?? null,
+      selectedThreadTitle: selectedBackendThreadTitle,
+    });
   }
 
   async function resolveBackendCwd(): Promise<string> {
