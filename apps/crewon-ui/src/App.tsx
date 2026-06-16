@@ -4857,7 +4857,7 @@ export function App() {
           loadMcpInventory(effectiveThreadId, effectiveCwd),
           clientRef.current?.listSkills(effectiveCwd),
           clientRef.current?.listPlugins(effectiveCwd),
-          readToolConfigFiles(),
+          loadToolLibraryItems(effectiveCwd),
         ]);
         const servers = mcpInventory.servers;
         const pluginEntries = (pluginsResponse?.marketplaces ?? []).flatMap(
@@ -5043,8 +5043,8 @@ export function App() {
                         : `${workspaceToolItems.length} drafts`,
                     description:
                       locale === "zh"
-                        ? "这些 MCP 和 Skill 来自 app-server domain API 或 .crewon/tools，可继续编辑并分配给智能体。"
-                        : "These MCP and Skill entries come from the app-server domain API or .crewon/tools and can be assigned to agents.",
+                        ? "这些 MCP 和 Skill 来自 app-server tool/list，可继续编辑并分配给智能体。"
+                        : "These MCP and Skill entries come from app-server tool/list and can be assigned to agents.",
                     section: true,
                   },
                   ...workspaceToolItems,
@@ -6982,6 +6982,33 @@ export function App() {
     }
 
     const records = await readStoredToolConfigFiles(client, toolCwd);
+    return toolConfigRecordsToLibraryItems(records);
+  }
+
+  async function loadToolLibraryItems(toolCwd: string): Promise<LibraryItem[]> {
+    const client = clientRef.current;
+    if (!client) {
+      return [];
+    }
+    try {
+      const response = await client.listToolConfigs(toolCwd);
+      return toolConfigRecordsToLibraryItems(response.data);
+    } catch (error) {
+      if (!isUnsupportedRpcError(error)) {
+        throw error;
+      }
+      return readToolConfigFiles();
+    }
+  }
+
+  function toolConfigRecordsToLibraryItems(
+    records: Array<
+      Pick<
+        DomainConfigListResponse<ToolConfig>["data"][number],
+        "filePath" | "savedAt" | "config"
+      >
+    >,
+  ): LibraryItem[] {
     return records.map(({ filePath, savedAt, config }) => ({
       title: `${config.kind === "mcp" ? "MCP" : "Skill"} · ${config.title}`,
       meta:
