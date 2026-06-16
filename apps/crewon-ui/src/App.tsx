@@ -4712,6 +4712,7 @@ export function App() {
     message: OfficeMessage,
     text: string,
     threadId: string,
+    fallbackWorkspace: OfficeWorkspace,
   ): Promise<OfficeConfig | null> {
     const officeCwd = await resolveBackendCwd();
     const client = clientRef.current;
@@ -4727,7 +4728,7 @@ export function App() {
       text,
       threadId,
       locale,
-      appendOfficeUserMessage(workspaceBeforeMessage, text, locale),
+      fallbackWorkspace,
     );
   }
 
@@ -5026,22 +5027,37 @@ export function App() {
     );
   }
 
-  function appendOfficeMessage(
-    text: string,
-    backendStatus?: OfficeWorkspace["backendStatus"],
-  ) {
-    setLibraryPanel((currentPanel) =>
-      currentPanel?.workspace
-        ? {
-            ...currentPanel,
-            workspace: {
-              ...appendOfficeUserMessage(currentPanel.workspace, text, locale),
-              backendStatus:
-                backendStatus ?? currentPanel.workspace.backendStatus,
-            },
-          }
-        : currentPanel,
-    );
+  function buildOfficeUserMessage(
+    workspace: OfficeWorkspace,
+    rawText: string,
+  ): OfficeMessage | null {
+    const text = rawText.trim();
+    if (!text) {
+      return null;
+    }
+    const owner = workspace.members.find((member) => member.glyph === "@");
+    return {
+      author: owner?.name ?? (locale === "zh" ? "你" : "You"),
+      glyph: "@",
+      accent: "slate",
+      time: locale === "zh" ? "现在" : "now",
+      text,
+      kind: "message",
+    };
+  }
+
+  function appendOfficeUserOnlyMessage(
+    workspace: OfficeWorkspace,
+    rawText: string,
+  ): OfficeWorkspace {
+    const message = buildOfficeUserMessage(workspace, rawText);
+    if (!message) {
+      return workspace;
+    }
+    return {
+      ...workspace,
+      messages: [...workspace.messages, message],
+    };
   }
 
   async function sendOfficeMessage(text: string) {
@@ -5049,15 +5065,27 @@ export function App() {
     if (!panel?.workspace) {
       return;
     }
-    const nextWorkspace = appendOfficeUserMessage(panel.workspace, text, locale);
+    const nextWorkspace = isConnected
+      ? appendOfficeUserOnlyMessage(panel.workspace, text)
+      : appendOfficeUserMessage(panel.workspace, text, locale);
     const message = nextWorkspace.messages[nextWorkspace.messages.length - 1];
     if (!message) {
       return;
     }
 
-    appendOfficeMessage(
-      text,
-      panel.workspace.threadId ? "connected" : panel.workspace.backendStatus,
+    const optimisticBackendStatus = panel.workspace.threadId
+      ? "connected"
+      : panel.workspace.backendStatus;
+    setLibraryPanel((currentPanel) =>
+      currentPanel?.workspace
+        ? {
+            ...currentPanel,
+            workspace: {
+              ...nextWorkspace,
+              backendStatus: optimisticBackendStatus,
+            },
+          }
+        : currentPanel,
     );
 
     if (!isConnected) {
@@ -5120,6 +5148,7 @@ export function App() {
         message,
         text,
         threadId,
+        nextWorkspace,
       );
       setLibraryPanel((currentPanel) =>
         currentPanel?.workspace
