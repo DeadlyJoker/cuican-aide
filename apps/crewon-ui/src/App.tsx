@@ -117,8 +117,13 @@ import {
 import {
   deleteDomainConfigFile,
   writeAutomationConfigFile as writeStoredAutomationConfigFile,
-  writeOfficeConfigFile as writeStoredOfficeConfigFile,
 } from "./lib/domainPersistence";
+import {
+  persistOfficeMember as persistBackendOfficeMember,
+  persistOfficeMessage as persistBackendOfficeMessage,
+  persistOfficeWorkspace as persistBackendOfficeWorkspace,
+  writeOfficeConfig as writeBackendOfficeConfig,
+} from "./lib/domainOfficeBackend";
 import {
   createBackendAgentConfig as createStoredBackendAgentConfig,
   loadAgentLibraryItems as loadBackendAgentLibraryItems,
@@ -5088,17 +5093,17 @@ export function App() {
     workspace: OfficeWorkspace,
     threadId?: string | null,
   ): Promise<string | null> {
-    const stableThreadId = threadId ?? workspace.threadId;
-    if (!stableThreadId) {
+    const officeCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (!officeCwd || !client) {
       return null;
     }
-    return writeOfficeConfigFile(
-      officeConfigForThread(
-        panel.title,
-        panel.subtitle,
-        workspace,
-        stableThreadId,
-      ),
+    return persistBackendOfficeWorkspace(
+      client,
+      officeCwd,
+      panel,
+      workspace,
+      threadId,
     );
   }
 
@@ -5114,31 +5119,17 @@ export function App() {
     if (!officeCwd || !client) {
       return null;
     }
-    try {
-      const response = await client.sendOfficeMessageConfig(
-        officeCwd,
-        officeConfigForThread(
-          panel.title,
-          panel.subtitle,
-          workspaceBeforeMessage,
-          threadId,
-        ),
-        message,
-        text,
-        locale,
-      );
-      return response.config;
-    } catch (error) {
-      if (!isUnsupportedRpcError(error)) {
-        throw error;
-      }
-      await persistOfficeWorkspace(
-        panel,
-        appendOfficeUserMessage(workspaceBeforeMessage, text, locale),
-        threadId,
-      );
-      return null;
-    }
+    return persistBackendOfficeMessage(
+      client,
+      officeCwd,
+      panel,
+      workspaceBeforeMessage,
+      message,
+      text,
+      threadId,
+      locale,
+      appendOfficeUserMessage(workspaceBeforeMessage, text, locale),
+    );
   }
 
   async function persistOfficeMember(
@@ -5156,25 +5147,15 @@ export function App() {
     if (!officeCwd || !client) {
       return null;
     }
-    try {
-      const response = await client.addOfficeMemberConfig(
-        officeCwd,
-        officeConfigForThread(
-          panel.title,
-          panel.subtitle,
-          workspaceBeforeMember,
-          threadId,
-        ),
-        agentId,
-        member,
-      );
-      return response.config;
-    } catch (error) {
-      if (!isUnsupportedRpcError(error)) {
-        throw error;
-      }
-      return null;
-    }
+    return persistBackendOfficeMember(
+      client,
+      officeCwd,
+      panel,
+      workspaceBeforeMember,
+      agentId,
+      member,
+      threadId,
+    );
   }
 
   async function writeOfficeConfigFile(config: OfficeConfig): Promise<string | null> {
@@ -5183,7 +5164,7 @@ export function App() {
     if (!officeCwd || !client) {
       return null;
     }
-    return writeStoredOfficeConfigFile(client, officeCwd, config);
+    return writeBackendOfficeConfig(client, officeCwd, config);
   }
 
   async function writeAgentConfigFile(
