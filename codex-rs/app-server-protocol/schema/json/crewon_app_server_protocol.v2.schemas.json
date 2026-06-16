@@ -3248,6 +3248,54 @@
             },
             "method": {
               "enum": [
+                "knowledge/list"
+              ],
+              "title": "Knowledge/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/KnowledgeListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Knowledge/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "knowledge/memory/write"
+              ],
+              "title": "Knowledge/memory/writeRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/KnowledgeMemoryWriteParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Knowledge/memory/writeRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
                 "tool/list"
               ],
               "title": "Tool/listRequestMethod",
@@ -8627,6 +8675,183 @@
         "turnId"
       ],
       "title": "ItemStartedNotification",
+      "type": "object"
+    },
+    "KnowledgeData": {
+      "properties": {
+        "memories": {
+          "items": {
+            "$ref": "#/definitions/KnowledgeEntry"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/definitions/KnowledgeSource"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "memories",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "KnowledgeEntry": {
+      "properties": {
+        "accent": {
+          "type": "string"
+        },
+        "glyph": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "meta": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "preview": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accent",
+        "glyph",
+        "kind",
+        "meta",
+        "path",
+        "pinned",
+        "preview",
+        "title"
+      ],
+      "type": "object"
+    },
+    "KnowledgeListParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "KnowledgeListParams",
+      "type": "object"
+    },
+    "KnowledgeListResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/KnowledgeData"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "KnowledgeListResponse",
+      "type": "object"
+    },
+    "KnowledgeMemoryWriteParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "KnowledgeMemoryWriteParams",
+      "type": "object"
+    },
+    "KnowledgeMemoryWriteResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/KnowledgeData"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "data",
+        "filePath"
+      ],
+      "title": "KnowledgeMemoryWriteResponse",
+      "type": "object"
+    },
+    "KnowledgeSource": {
+      "properties": {
+        "accent": {
+          "type": "string"
+        },
+        "glyph": {
+          "type": "string"
+        },
+        "isDirectory": {
+          "type": "boolean"
+        },
+        "meta": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accent",
+        "glyph",
+        "isDirectory",
+        "meta",
+        "name",
+        "path",
+        "status"
+      ],
       "type": "object"
     },
     "ListMcpServerStatusParams": {

@@ -29,6 +29,7 @@ use crate::request_processors::FeedbackRequestProcessor;
 use crate::request_processors::FsRequestProcessor;
 use crate::request_processors::GitRequestProcessor;
 use crate::request_processors::InitializeRequestProcessor;
+use crate::request_processors::KnowledgeRequestProcessor;
 use crate::request_processors::MarketplaceRequestProcessor;
 use crate::request_processors::McpConfigRequestProcessor;
 use crate::request_processors::McpRequestProcessor;
@@ -180,6 +181,7 @@ pub(crate) struct MessageProcessor {
     fs_processor: FsRequestProcessor,
     git_processor: GitRequestProcessor,
     initialize_processor: InitializeRequestProcessor,
+    knowledge_processor: KnowledgeRequestProcessor,
     marketplace_processor: MarketplaceRequestProcessor,
     mcp_config_processor: McpConfigRequestProcessor,
     mcp_processor: McpRequestProcessor,
@@ -417,6 +419,7 @@ impl MessageProcessor {
             config_warnings,
             rpc_transport,
         );
+        let knowledge_processor = KnowledgeRequestProcessor::new();
         let marketplace_processor = MarketplaceRequestProcessor::new(
             Arc::clone(&config),
             config_manager.clone(),
@@ -534,6 +537,7 @@ impl MessageProcessor {
             fs_processor,
             git_processor,
             initialize_processor,
+            knowledge_processor,
             marketplace_processor,
             mcp_config_processor,
             mcp_processor,
@@ -1350,6 +1354,16 @@ impl MessageProcessor {
             ClientRequest::AutomationDelete { params, .. } => self
                 .crewon_domain_processor
                 .automation_delete(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::KnowledgeList { params, .. } => self
+                .knowledge_processor
+                .knowledge_list(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::KnowledgeMemoryWrite { params, .. } => self
+                .knowledge_processor
+                .knowledge_memory_write(params)
                 .await
                 .map(|response| Some(response.into())),
             ClientRequest::ToolList { params, .. } => self

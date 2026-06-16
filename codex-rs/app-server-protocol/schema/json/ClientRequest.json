@@ -1524,6 +1524,54 @@
       ],
       "type": "object"
     },
+    "KnowledgeListParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "KnowledgeMemoryWriteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
     "ListMcpServerStatusParams": {
       "properties": {
         "cursor": {
@@ -6530,6 +6578,54 @@
         "params"
       ],
       "title": "Automation/deleteRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "knowledge/list"
+          ],
+          "title": "Knowledge/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/KnowledgeListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Knowledge/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "knowledge/memory/write"
+          ],
+          "title": "Knowledge/memory/writeRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/KnowledgeMemoryWriteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Knowledge/memory/writeRequest",
       "type": "object"
     },
     {

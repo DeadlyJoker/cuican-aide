@@ -1711,6 +1711,87 @@ function knowledgeTitleFromPath(path: string): string {
   return fileName.replace(/\.(md|mdx|txt)$/i, "") || fileName;
 }
 
+function normalizeKnowledgeData(data: unknown): KnowledgeData {
+  const value = data as
+    | { memories?: unknown; sources?: unknown }
+    | null
+    | undefined;
+  const memories = Array.isArray(value?.memories) ? value.memories : [];
+  const sources = Array.isArray(value?.sources) ? value.sources : [];
+  return {
+    memories: memories
+      .filter((entry) => Boolean(entry))
+      .map((entry, index): KnowledgeEntry => {
+        const memory = entry as Partial<KnowledgeEntry>;
+        return {
+          title:
+            typeof memory.title === "string" && memory.title.trim()
+              ? memory.title
+              : `Memory ${index + 1}`,
+          glyph:
+            typeof memory.glyph === "string" && memory.glyph.trim()
+              ? memory.glyph
+              : "M",
+          accent: normalizeLibraryAccent(memory.accent, index),
+          kind:
+            typeof memory.kind === "string" && memory.kind.trim()
+              ? memory.kind
+              : "Workspace memory",
+          preview: typeof memory.preview === "string" ? memory.preview : "",
+          meta: typeof memory.meta === "string" ? memory.meta : "",
+          path: typeof memory.path === "string" ? memory.path : undefined,
+          threadId:
+            typeof memory.threadId === "string" ? memory.threadId : undefined,
+          pinned: Boolean(memory.pinned),
+        };
+      }),
+    sources: sources
+      .filter((source) => Boolean(source))
+      .map((source, index): KnowledgeSource => {
+        const knowledgeSource = source as Partial<KnowledgeSource>;
+        return {
+          name:
+            typeof knowledgeSource.name === "string" &&
+            knowledgeSource.name.trim()
+              ? knowledgeSource.name
+              : `Source ${index + 1}`,
+          glyph:
+            typeof knowledgeSource.glyph === "string" &&
+            knowledgeSource.glyph.trim()
+              ? knowledgeSource.glyph
+              : "K",
+          accent: normalizeLibraryAccent(knowledgeSource.accent, index + 1),
+          status: normalizeKnowledgeSourceStatus(knowledgeSource.status),
+          meta:
+            typeof knowledgeSource.meta === "string"
+              ? knowledgeSource.meta
+              : "",
+          path:
+            typeof knowledgeSource.path === "string"
+              ? knowledgeSource.path
+              : undefined,
+          isDirectory: Boolean(knowledgeSource.isDirectory),
+        };
+      }),
+  };
+}
+
+function normalizeLibraryAccent(
+  accent: unknown,
+  index: number,
+): LibraryAccent {
+  return typeof accent === "string" &&
+    CAPABILITY_ACCENTS.includes(accent as LibraryAccent)
+    ? (accent as LibraryAccent)
+    : CAPABILITY_ACCENTS[index % CAPABILITY_ACCENTS.length];
+}
+
+function normalizeKnowledgeSourceStatus(
+  status: unknown,
+): KnowledgeSource["status"] {
+  return status === "indexing" || status === "needs-auth" ? status : "indexed";
+}
+
 function accountStatusText(
   accountStatus: AccountStatus | null,
   locale: Locale,
@@ -3597,12 +3678,12 @@ function KnowledgeView({
           onClick={() =>
             onPanelAction({
               id: "reset-memory",
-              label: isZh ? "重置记忆" : "Reset memory",
+              label: isZh ? "重置全局记忆" : "Reset global memory",
               tone: "danger",
             })
           }
         >
-          {isZh ? "重置记忆" : "Reset memory"}
+          {isZh ? "重置全局记忆" : "Reset global memory"}
         </button>
       </div>
 
@@ -7211,6 +7292,17 @@ export function App() {
     if (!knowledgeCwd) {
       return { memories: [], sources: [] };
     }
+    const client = clientRef.current;
+    if (client) {
+      try {
+        const response = await client.listKnowledge(knowledgeCwd);
+        return normalizeKnowledgeData(response.data);
+      } catch (error) {
+        if (!isUnsupportedRpcError(error)) {
+          throw error;
+        }
+      }
+    }
 
     const [rootResponse, backendThreadsResponse] = await Promise.all([
       clientRef.current?.readDirectory(knowledgeCwd),
@@ -7383,6 +7475,28 @@ export function App() {
     const client = clientRef.current;
     if (!knowledgeCwd || !client) {
       return null;
+    }
+    const selectedBackendThread =
+      selectedThreadId && !isDemoThreadId(selectedThreadId)
+        ? threads.find((thread) => thread.id === selectedThreadId)
+        : null;
+    const selectedBackendThreadTitle =
+      selectedBackendThread && threadTitle(selectedBackendThread, "")
+        ? threadTitle(selectedBackendThread, "")
+        : null;
+    try {
+      const response = await client.writeKnowledgeMemory({
+        cwd: knowledgeCwd,
+        title: selectedBackendThreadTitle,
+        threadId: selectedBackendThread?.id ?? null,
+        note:
+          "Backend-connected knowledge memory can be reused by agents, offices, and automations.",
+      });
+      return response.filePath;
+    } catch (error) {
+      if (!isUnsupportedRpcError(error)) {
+        throw error;
+      }
     }
 
     const crewonDir = joinPath(knowledgeCwd, ".crewon");
@@ -8314,8 +8428,8 @@ export function App() {
                 ...currentPanel,
                 body:
                   locale === "zh"
-                    ? "记忆已重置（演示）。连接 app-server 后会调用 memory/reset。"
-                    : "Memory reset (demo). With app-server connected this calls memory/reset.",
+                    ? "全局记忆已重置（演示）。连接 app-server 后会调用 memory/reset，不会清空工作区知识文件。"
+                    : "Global memory reset (demo). With app-server connected this calls memory/reset and does not clear workspace knowledge files.",
                 error: undefined,
               }
             : currentPanel,
@@ -8351,7 +8465,10 @@ export function App() {
         currentPanel
           ? {
               ...currentPanel,
-              body: locale === "zh" ? "正在重置记忆..." : "Resetting memory...",
+              body:
+                locale === "zh"
+                  ? "正在重置全局记忆..."
+                  : "Resetting global memory...",
               error: undefined,
             }
           : currentPanel,
@@ -8360,7 +8477,8 @@ export function App() {
         await clientRef.current?.resetMemory();
         await openLibrary("knowledge");
         setNotice({
-          text: locale === "zh" ? "记忆已重置" : "Memory reset",
+          text:
+            locale === "zh" ? "全局记忆已重置" : "Global memory reset",
           tone: "success",
         });
       } catch (error) {
@@ -8372,8 +8490,8 @@ export function App() {
                   error instanceof Error
                     ? error.message
                     : locale === "zh"
-                      ? "重置记忆失败"
-                      : "Unable to reset memory",
+                      ? "重置全局记忆失败"
+                      : "Unable to reset global memory",
               }
             : currentPanel,
         );

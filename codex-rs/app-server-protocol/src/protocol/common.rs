@@ -837,6 +837,16 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AutomationDeleteResponse,
     },
+    KnowledgeList => "knowledge/list" {
+        params: v2::KnowledgeListParams,
+        serialization: global("knowledge"),
+        response: v2::KnowledgeListResponse,
+    },
+    KnowledgeMemoryWrite => "knowledge/memory/write" {
+        params: v2::KnowledgeMemoryWriteParams,
+        serialization: global("knowledge"),
+        response: v2::KnowledgeMemoryWriteResponse,
+    },
     ToolList => "tool/list" {
         params: v2::ToolListParams,
         serialization: global("crewon-domain"),

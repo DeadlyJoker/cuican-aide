@@ -97,6 +97,7 @@ import type {
   AgentConfig,
   ArtifactItem,
   AutomationConfig,
+  KnowledgeData,
   OfficeConfig,
   OfficeMember,
   OfficeMessage,
@@ -216,6 +217,15 @@ export type OfficeApprovalDecideResponse = {
 export type OfficeArtifactUpsertResponse = {
   filePath: string;
   config: OfficeConfig;
+};
+
+export type KnowledgeListResponse = {
+  data: KnowledgeData;
+};
+
+export type KnowledgeMemoryWriteResponse = {
+  filePath: string;
+  data: KnowledgeData;
 };
 
 export type AutomationRunRecord = {
@@ -1088,6 +1098,27 @@ export class AppServerClient {
     return this.request<DomainConfigDeleteResponse>("automation/delete", {
       cwd,
       filePath,
+    });
+  }
+
+  async listKnowledge(cwd: string): Promise<KnowledgeListResponse> {
+    return this.request<KnowledgeListResponse>("knowledge/list", {
+      cwd,
+      limit: 24,
+    });
+  }
+
+  async writeKnowledgeMemory(params: {
+    cwd: string;
+    title?: string | null;
+    threadId?: string | null;
+    note?: string | null;
+  }): Promise<KnowledgeMemoryWriteResponse> {
+    return this.request<KnowledgeMemoryWriteResponse>("knowledge/memory/write", {
+      cwd: params.cwd,
+      title: params.title ?? null,
+      threadId: params.threadId ?? null,
+      note: params.note ?? null,
     });
   }
 
