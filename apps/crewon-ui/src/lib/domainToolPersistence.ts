@@ -1,5 +1,12 @@
 import { AppServerRpcError, type AppServerClient } from "./appServer";
-import type { LibraryPanelAction, ToolConfig } from "./crewonDomain";
+import type {
+  LibraryItem,
+  LibraryPanelAction,
+  McpDetailAction,
+  SkillFileAction,
+  ToolConfig,
+} from "./crewonDomain";
+import { toolConfigRecordsToLibraryItems } from "./domainLibraryItems";
 import type { Locale } from "./i18n";
 
 export type ToolConfigWriteResult = {
@@ -66,6 +73,99 @@ export async function deleteMcpToolConfigRecord(
       throw error;
     }
     return null;
+  }
+}
+
+export async function loadToolLibraryItems(
+  client: AppServerClient,
+  cwd: string,
+  locale: Locale,
+): Promise<LibraryItem[]> {
+  try {
+    const response = await client.listToolConfigs(cwd);
+    return toolConfigRecordsToLibraryItems(response.data, locale);
+  } catch (error) {
+    if (!isUnsupportedRpcError(error)) {
+      throw error;
+    }
+    return [];
+  }
+}
+
+export async function refreshToolActionFromBackend(
+  client: AppServerClient,
+  cwd: string,
+  action: McpDetailAction | SkillFileAction,
+  locale: Locale,
+): Promise<McpDetailAction | SkillFileAction> {
+  try {
+    const expectedKind = action.type === "mcp-detail" ? "mcp" : "skill";
+    const directRecord = action.configPath
+      ? await client
+          .readToolConfig(cwd, action.configPath)
+          .then((response) => response.record)
+          .catch((error) => {
+            if (isUnsupportedRpcError(error)) {
+              return null;
+            }
+            throw error;
+          })
+      : null;
+    let matchedRecord =
+      directRecord?.kind === expectedKind ? directRecord : undefined;
+
+    if (!matchedRecord) {
+      const response = await client.listToolConfigs(cwd, expectedKind);
+      matchedRecord = response.data.find((record) => {
+        if (record.filePath === action.configPath) {
+          return true;
+        }
+        if (action.type === "mcp-detail") {
+          return (
+            record.config.kind === "mcp" &&
+            (record.config.name === action.configName ||
+              record.config.name === action.subtitle ||
+              record.config.title === action.title)
+          );
+        }
+        return (
+          record.config.kind === "skill" &&
+          (record.config.path === action.path ||
+            record.config.name === action.skillName)
+        );
+      });
+    }
+    if (!matchedRecord) {
+      return action;
+    }
+
+    const refreshedAction = toolConfigRecordsToLibraryItems(
+      [matchedRecord],
+      locale,
+    )[0]?.action;
+    if (refreshedAction?.type !== action.type) {
+      return action;
+    }
+
+    if (action.type === "mcp-detail") {
+      const refreshedMcpAction = refreshedAction as McpDetailAction;
+      return {
+        ...action,
+        ...refreshedMcpAction,
+        authStatus: action.authStatus,
+        configName: action.configName ?? refreshedMcpAction.subtitle,
+        resource: action.resource,
+        tool: action.tool,
+      };
+    }
+
+    const refreshedSkillAction = refreshedAction as SkillFileAction;
+    return {
+      ...action,
+      ...refreshedSkillAction,
+    };
+  } catch {
+    return action;
   }
 }
 

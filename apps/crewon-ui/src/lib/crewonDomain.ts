@@ -380,6 +380,16 @@ export type LibraryItem = {
       };
 };
 
+export type LibraryItemAction = NonNullable<LibraryItem["action"]>;
+export type McpDetailAction = Extract<
+  LibraryItemAction,
+  { type: "mcp-detail" }
+>;
+export type SkillFileAction = Extract<
+  LibraryItemAction,
+  { type: "skill-file" }
+>;
+
 export function officeConfigForThread(
   title: string,
   subtitle: string,

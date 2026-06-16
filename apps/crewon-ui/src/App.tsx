@@ -105,10 +105,12 @@ import {
   type LibraryKind,
   type LibraryPanel,
   type LibraryPanelAction,
+  type McpDetailAction,
   type OfficeConfig,
   type OfficeMember,
   type OfficeMessage,
   type OfficeWorkspace,
+  type SkillFileAction,
   type ToolConfig,
   type KnowledgeData,
 } from "./lib/crewonDomain";
@@ -137,6 +139,8 @@ import {
 } from "./lib/domainAutomationBackend";
 import {
   deleteMcpToolConfigRecord,
+  loadToolLibraryItems as loadBackendToolLibraryItems,
+  refreshToolActionFromBackend as refreshBackendToolAction,
   saveOrUpdateToolConfig,
   syncSkillToolConfig,
 } from "./lib/domainToolPersistence";
@@ -144,7 +148,6 @@ import {
   automationConfigRecordToLibraryItem,
   libraryToolDecor,
   officeConfigRecordsToLibraryItems,
-  toolConfigRecordsToLibraryItems,
 } from "./lib/domainLibraryItems";
 import {
   libraryLoadingFallbackPanel,
@@ -173,6 +176,7 @@ export type {
   LibraryAccent,
   LibraryBadgeTone,
   LibraryItem,
+  LibraryItemAction,
   LibraryKind,
   LibraryPanel,
   LibraryPanelAction,
@@ -181,6 +185,8 @@ export type {
   OfficeMessage,
   OfficeTask,
   OfficeWorkspace,
+  McpDetailAction,
+  SkillFileAction,
   ToolConfig,
   TraceStep,
 } from "./lib/crewonDomain";
@@ -191,9 +197,6 @@ type NoticeState = {
   tone: "warning" | "success";
 };
 
-type LibraryItemAction = NonNullable<LibraryItem["action"]>;
-type McpDetailAction = Extract<LibraryItemAction, { type: "mcp-detail" }>;
-type SkillFileAction = Extract<LibraryItemAction, { type: "skill-file" }>;
 const DESKTOP_LOCALE_KEY_PATH = "desktop.uiLocale";
 const DESKTOP_THEME_KEY_PATH = "desktop.appearanceTheme";
 type PendingApprovalRequest = {
@@ -5314,15 +5317,7 @@ export function App() {
     if (!client) {
       return [];
     }
-    try {
-      const response = await client.listToolConfigs(toolCwd);
-      return toolConfigRecordsToLibraryItems(response.data, locale);
-    } catch (error) {
-      if (!isUnsupportedRpcError(error)) {
-        throw error;
-      }
-      return [];
-    }
+    return loadBackendToolLibraryItems(client, toolCwd, locale);
   }
 
   async function refreshToolActionFromBackend(
@@ -5338,75 +5333,7 @@ export function App() {
       return action;
     }
 
-    try {
-      const expectedKind = action.type === "mcp-detail" ? "mcp" : "skill";
-      const directRecord = action.configPath
-        ? await client
-            .readToolConfig(toolCwd, action.configPath)
-            .then((response) => response.record)
-            .catch((error) => {
-              if (isUnsupportedRpcError(error)) {
-                return null;
-              }
-              throw error;
-            })
-        : null;
-      let matchedRecord =
-        directRecord?.kind === expectedKind ? directRecord : undefined;
-
-      if (!matchedRecord) {
-        const response = await client.listToolConfigs(toolCwd, expectedKind);
-        matchedRecord = response.data.find((record) => {
-          if (record.filePath === action.configPath) {
-            return true;
-          }
-          if (action.type === "mcp-detail") {
-            return (
-              record.config.kind === "mcp" &&
-              (record.config.name === action.configName ||
-                record.config.name === action.subtitle ||
-                record.config.title === action.title)
-            );
-          }
-          return (
-            record.config.kind === "skill" &&
-            (record.config.path === action.path ||
-              record.config.name === action.skillName)
-          );
-        });
-      }
-      if (!matchedRecord) {
-        return action;
-      }
-
-      const refreshedAction = toolConfigRecordsToLibraryItems(
-        [matchedRecord],
-        locale,
-      )[0]?.action;
-      if (refreshedAction?.type !== action.type) {
-        return action;
-      }
-
-      if (action.type === "mcp-detail") {
-        const refreshedMcpAction = refreshedAction as McpDetailAction;
-        return {
-          ...action,
-          ...refreshedMcpAction,
-          authStatus: action.authStatus,
-          configName: action.configName ?? refreshedMcpAction.subtitle,
-          resource: action.resource,
-          tool: action.tool,
-        };
-      }
-
-      const refreshedSkillAction = refreshedAction as SkillFileAction;
-      return {
-        ...action,
-        ...refreshedSkillAction,
-      };
-    } catch {
-      return action;
-    }
+    return refreshBackendToolAction(client, toolCwd, action, locale);
   }
 
   async function readRecruitableAgentConfig(
