@@ -135,6 +135,12 @@ import {
   libraryTitle,
   normalizeKnowledgeData,
 } from "./lib/libraryPanelFormatters";
+import {
+  mcpConfigDetailText,
+  mcpConfigEnabled,
+  mcpConfigEndpoint,
+  mcpConfigSummaryText,
+} from "./lib/mcpConfigFormatters";
 export type {
   ActivityData,
   AgentCapabilityOption,
@@ -2356,115 +2362,6 @@ function mcpSettingsText(
     .join("\n");
 }
 
-function mcpConfigObject(
-  record: McpServerConfigRecord,
-): Record<string, JsonValue> {
-  return record.config && typeof record.config === "object" && !Array.isArray(record.config)
-    ? (record.config as Record<string, JsonValue>)
-    : {};
-}
-
-function mcpConfigEnabled(record: McpServerConfigRecord): boolean {
-  const config = mcpConfigObject(record);
-  return config.enabled !== false;
-}
-
-function mcpConfigEndpoint(record: McpServerConfigRecord): string {
-  const config = mcpConfigObject(record);
-  const command = typeof config.command === "string" ? config.command : "";
-  const url = typeof config.url === "string" ? config.url : "";
-  return command || url;
-}
-
-function mcpConfigEnvSummary(
-  record: McpServerConfigRecord,
-  locale: Locale,
-): string | null {
-  const config = mcpConfigObject(record);
-  const env = config.env;
-  if (!env || typeof env !== "object" || Array.isArray(env)) {
-    return null;
-  }
-  const count = Object.keys(env).length;
-  if (count === 0) {
-    return null;
-  }
-  return locale === "zh"
-    ? `环境变量: ${count} 个 key（值已隐藏）`
-    : `Environment: ${count} keys (values hidden)`;
-}
-
-function mcpConfigDetailText(
-  record: McpServerConfigRecord,
-  locale: Locale,
-): string {
-  const config = mcpConfigObject(record);
-  const endpoint = mcpConfigEndpoint(record);
-  const args = Array.isArray(config.args)
-    ? config.args.filter((arg): arg is string => typeof arg === "string")
-    : [];
-  const environmentId =
-    typeof config.environment_id === "string" ? config.environment_id : "";
-
-  return [
-    locale === "zh"
-      ? "已写入 MCP 配置，等待运行态加载或当前线程使用。"
-      : "Saved in MCP config; waiting for runtime load or thread use.",
-    `Name: ${record.name}`,
-    `${locale === "zh" ? "状态" : "Status"}: ${
-      mcpConfigEnabled(record)
-        ? locale === "zh"
-          ? "启用"
-          : "enabled"
-        : locale === "zh"
-          ? "停用"
-          : "disabled"
-    }`,
-    endpoint ? `${locale === "zh" ? "入口" : "Endpoint"}: ${endpoint}` : null,
-    args.length > 0
-      ? locale === "zh"
-        ? `参数: ${args.length} 项（值已隐藏）`
-        : `Args: ${args.length} items (values hidden)`
-      : null,
-    mcpConfigEnvSummary(record, locale),
-    environmentId ? `Environment: ${environmentId}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function mcpConfigSummaryText(
-  records: McpServerConfigRecord[],
-  locale: Locale,
-): string {
-  if (records.length === 0) {
-    return locale === "zh"
-      ? "暂无持久化 MCP 配置。"
-      : "No persisted MCP configs.";
-  }
-
-  return records
-    .map((record) => {
-      const endpoint = mcpConfigEndpoint(record);
-      return [
-        `- ${record.name}`,
-        `  ${locale === "zh" ? "状态" : "status"}: ${
-          mcpConfigEnabled(record)
-            ? locale === "zh"
-              ? "启用"
-              : "enabled"
-            : locale === "zh"
-              ? "停用"
-              : "disabled"
-        }`,
-        endpoint ? `  ${locale === "zh" ? "入口" : "endpoint"}: ${endpoint}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n");
-    })
-    .join("\n\n");
-}
-
 function pluginDetailText(
   response: PluginReadResponse,
   locale: Locale,
@@ -4267,7 +4164,10 @@ export function App() {
           },
           {
             id: "delete-config-file",
-            label: locale === "zh" ? "删除后端记录" : "Delete backend record",
+            label:
+              locale === "zh"
+                ? "只删除工具库记录"
+                : "Delete tool-library record only",
             pathToOpen: mcpAction.configPath,
             pathKind: "file",
             domainConfigKind: "tool",
@@ -5678,6 +5578,35 @@ export function App() {
 
     const response = await client.saveToolConfig(toolCwd, config);
     return { filePath: response.filePath, operation: "created" };
+  }
+
+  async function deleteMcpToolConfigRecord(
+    mcpServerName: string,
+  ): Promise<string | null> {
+    const client = clientRef.current;
+    const toolCwd = await resolveBackendCwd();
+    if (!client || !toolCwd) {
+      return null;
+    }
+
+    try {
+      const records = await client.listToolConfigs(toolCwd, "mcp");
+      const record = records.data.find(
+        ({ config }) =>
+          config.kind === "mcp" &&
+          (config.name === mcpServerName || config.title === mcpServerName),
+      );
+      if (!record) {
+        return null;
+      }
+      const response = await client.deleteToolConfig(toolCwd, record.filePath);
+      return response.deleted ? record.filePath : null;
+    } catch (error) {
+      if (!isUnsupportedRpcError(error)) {
+        throw error;
+      }
+      return null;
+    }
   }
 
   async function syncSkillToolConfig(
@@ -8054,11 +7983,20 @@ export function App() {
           name: action.mcpServerName,
           reload: true,
         });
+        const deletedToolRecord = await deleteMcpToolConfigRecord(
+          action.mcpServerName,
+        );
         setNotice({
           text:
             locale === "zh"
-              ? `已删除 MCP 配置：${action.mcpServerName}`
-              : `Deleted MCP config: ${action.mcpServerName}`,
+              ? `已删除 MCP 配置：${action.mcpServerName}${
+                  deletedToolRecord ? `（工具库记录：${deletedToolRecord}）` : ""
+                }`
+              : `Deleted MCP config: ${action.mcpServerName}${
+                  deletedToolRecord
+                    ? ` (tool-library record: ${deletedToolRecord})`
+                    : ""
+                }`,
           tone: "success",
         });
         await openLibrary("tools");
