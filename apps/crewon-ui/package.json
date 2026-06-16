@@ -9,7 +9,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
-    "lint": "tsc -b --noEmit"
+    "lint": "tsc -b --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@tauri-apps/api": "2.9.1",
@@ -24,6 +25,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "typescript": "^5.9.3",
-    "vite": "^7.2.7"
+    "vite": "^7.2.7",
+    "vitest": "^4.1.8"
   }
 }
