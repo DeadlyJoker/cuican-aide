@@ -6,7 +6,7 @@
     "ui:dev": "pnpm --filter @crewon/ui dev",
     "ui:build": "pnpm --filter @crewon/ui build",
     "ui:desktop": "pnpm --filter @crewon/ui desktop",
-    "crewon:app-server": "cargo run --manifest-path ./codex-rs/Cargo.toml -p crewon-app-server -- --listen ws://127.0.0.1:5176",
+    "crewon:app-server": "cargo run --manifest-path ./codex-rs/Cargo.toml -p crewon-app-server --bin crewon-app-server -- --listen ws://127.0.0.1:6176",
     "format": "prettier --check *.json *.md docs/*.md .github/workflows/*.yml **/*.js",
     "format:fix": "prettier --write *.json *.md docs/*.md .github/workflows/*.yml **/*.js",
     "write-hooks-schema": "cargo run --manifest-path ./codex-rs/Cargo.toml -p crewon-hooks --bin write_hooks_schema_fixtures"
