@@ -97,6 +97,8 @@ export function AgentConfigView({
           </div>
         </div>
       </header>
+      {panel.error ? <p className="library-error">{panel.error}</p> : null}
+      {panel.body ? <pre className="agent-config-note">{panel.body}</pre> : null}
 
       <div className="agent-config-body">
         <section className="agent-config-card">

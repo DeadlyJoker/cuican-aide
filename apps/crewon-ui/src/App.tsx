@@ -7630,6 +7630,7 @@ export function App() {
 
       let config: AgentConfig;
       let configError: string | undefined;
+      let configPath: string | null = null;
       try {
         config = await createBackendAgentConfig();
       } catch (error) {
@@ -7641,13 +7642,34 @@ export function App() {
               ? "读取后端智能体能力失败"
               : "Unable to read backend agent capabilities";
       }
+      try {
+        const writeResult = await writeAgentConfigFile(config);
+        if (writeResult) {
+          config = {
+            ...config,
+            agentId: writeResult.agentId ?? config.agentId,
+          };
+          configPath = writeResult.filePath;
+        }
+      } catch (error) {
+        configError =
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "创建后端智能体记录失败"
+              : "Unable to create backend agent record";
+      }
       setLibraryPanel((currentPanel) =>
         currentPanel
           ? {
               ...currentPanel,
               title: config.name,
               subtitle: locale === "zh" ? "智能体配置" : "Agent configuration",
-              body: undefined,
+              body: configPath
+                ? locale === "zh"
+                  ? `已创建后端智能体记录：${configPath}`
+                  : `Created backend agent record: ${configPath}`
+                : undefined,
               actions: undefined,
               items: [],
               agentConfig: config,
