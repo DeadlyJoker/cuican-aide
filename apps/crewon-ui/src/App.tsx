@@ -118,10 +118,13 @@ import {
 } from "./lib/crewonDomain";
 import {
   deleteDomainConfigFile,
-  writeAgentConfigFile as writeStoredAgentConfigFile,
   writeAutomationConfigFile as writeStoredAutomationConfigFile,
   writeOfficeConfigFile as writeStoredOfficeConfigFile,
 } from "./lib/domainPersistence";
+import {
+  loadAgentLibraryItems as loadBackendAgentLibraryItems,
+  writeAgentConfig as writeBackendAgentConfig,
+} from "./lib/domainAgentBackend";
 import {
   loadMcpInventory,
   readLatestOfficeConfig as readLatestBackendOfficeConfig,
@@ -141,7 +144,6 @@ import {
   syncSkillToolConfig,
 } from "./lib/domainToolPersistence";
 import {
-  agentConfigRecordsToLibraryItems,
   automationConfigRecordToLibraryItem,
   libraryToolDecor,
   officeConfigRecordsToLibraryItems,
@@ -5192,19 +5194,7 @@ export function App() {
     if (!agentCwd || !client) {
       return null;
     }
-    const existing = await client.readAgentConfig(agentCwd, {
-      agentId: config.agentId ?? null,
-      threadId: config.threadId ?? null,
-      name: config.name,
-    });
-    if (existing.record) {
-      return client.updateAgentConfig(
-        agentCwd,
-        existing.record.filePath,
-        config,
-      );
-    }
-    return writeStoredAgentConfigFile(client, agentCwd, config);
+    return writeBackendAgentConfig(client, agentCwd, config);
   }
 
   async function loadAgentLibraryItems(
@@ -5214,17 +5204,7 @@ export function App() {
     if (!client) {
       return { items: [] };
     }
-    try {
-      const response = await client.listAgentConfigs(agentCwd);
-      return {
-        items: agentConfigRecordsToLibraryItems(response.data, locale),
-      };
-    } catch (error) {
-      if (!isUnsupportedRpcError(error)) {
-        throw error;
-      }
-      return { items: [] };
-    }
+    return loadBackendAgentLibraryItems(client, agentCwd, locale);
   }
 
   async function writeAutomationConfigFile(
