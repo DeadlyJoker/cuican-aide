@@ -85,7 +85,6 @@ import {
   AUTOMATION_CONFIG_MARKER,
   OFFICE_CONFIG_MARKER,
   agentConfigPayload,
-  automationConfigPayload,
   officeConfigForThread,
   officeConfigPayload,
   type ActivityData,
@@ -7224,24 +7223,30 @@ export function App() {
       return null;
     }
 
-    const [backendThreads, workspaceOfficeItems] = await Promise.all([
-      clientRef.current?.listThreads(false),
-      readOfficeConfigFiles(),
-    ]);
-    const workspaceConfigs = workspaceOfficeItems.flatMap((item) =>
-      item.action?.type === "office-detail" && item.action.workspace
-        ? [
-            {
-              updatedAt: Date.now(),
-              config: {
-                title: item.action.title,
-                subtitle: item.action.subtitle,
-                workspace: item.action.workspace,
-              },
-            },
-          ]
-        : [],
-    );
+    const officeCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (officeCwd && client) {
+      try {
+        const response = await client.listOfficeConfigs(officeCwd);
+        return (
+          response.data
+            .map((record) => ({
+              updatedAt: record.savedAt
+                ? new Date(record.savedAt).getTime()
+                : 0,
+              config: record.config,
+            }))
+            .sort((left, right) => right.updatedAt - left.updatedAt)[0]
+            ?.config ?? null
+        );
+      } catch (error) {
+        if (!isUnsupportedRpcError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    const backendThreads = await clientRef.current?.listThreads(false);
     const officeDetails = await Promise.allSettled(
       (backendThreads ?? []).map(async (thread) => {
         const detailedThread =
@@ -7262,10 +7267,9 @@ export function App() {
                   updatedAt: result.value.thread.updatedAt,
                   config: result.value.config,
                 },
-              ]
-            : [],
+            ]
+          : [],
         )
-        .concat(workspaceConfigs)
         .sort((left, right) => right.updatedAt - left.updatedAt)[0]?.config ??
       null
     );
@@ -8838,7 +8842,7 @@ export function App() {
                   `模型：${executionAgent?.model ?? "未配置"}`,
                   `MCP：${enabledMcp}`,
                   `Skill：${enabledSkills}`,
-                  `动作：运行自动化「${title}」，并把执行记录写入当前后端线程。`,
+                  `动作：运行自动化「${title}」，并把执行记录写入 automation/run。`,
                 ].join("\n")
               : [
                   "Trigger: manual",
@@ -8847,7 +8851,7 @@ export function App() {
                   `Model: ${executionAgent?.model ?? "not configured"}`,
                   `MCP: ${enabledMcp}`,
                   `Skills: ${enabledSkills}`,
-                  `Action: run automation "${title}" and write the execution record to the backend thread.`,
+                  `Action: run automation "${title}" and write the execution record through automation/run.`,
                 ].join("\n"),
           prompt:
             locale === "zh"
@@ -8907,8 +8911,21 @@ export function App() {
             locale === "zh"
               ? `创建自动化：${title}`
               : `Create automation: ${title}`,
+            automationConfigPath
+              ? locale === "zh"
+                ? `后端配置：${automationConfigPath}`
+                : `Backend config: ${automationConfigPath}`
+              : locale === "zh"
+                ? "后端配置：已提交到 automation/create"
+                : "Backend config: submitted to automation/create",
+            locale === "zh"
+              ? `目标办公室：${targetOffice?.title ?? "未绑定办公室"}`
+              : `Target office: ${targetOffice?.title ?? "No office"}`,
+            locale === "zh"
+              ? `执行智能体：${executionAgent?.name ?? "未绑定智能体"}`
+              : `Execution agent: ${executionAgent?.name ?? "No agent"}`,
             "",
-            automationConfigPayload(savedAutomationConfig),
+            savedAutomationConfig.prompt,
           ].join("\n"),
         );
         setThreads((current) => upsertThread(current, { ...thread, name: title }));
@@ -8927,15 +8944,15 @@ export function App() {
                 ...currentPanel,
                 body:
                   locale === "zh"
-                    ? `已创建自动化执行线程：${title}\n已绑定：${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}${automationConfigPath ? `\n配置文件：${automationConfigPath}` : ""}`
-                    : `Created automation execution thread: ${title}\nBound to: ${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}${automationConfigPath ? `\nConfig file: ${automationConfigPath}` : ""}`,
+                    ? `已创建后端自动化：${title}\n已绑定：${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}${automationConfigPath ? `\n配置文件：${automationConfigPath}` : ""}`
+                    : `Created backend automation: ${title}\nBound to: ${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}${automationConfigPath ? `\nConfig file: ${automationConfigPath}` : ""}`,
                 items: [
                   {
                     title,
                     meta:
                       locale === "zh"
-                        ? "后端线程 · 可立即运行"
-                        : "Backend thread · ready to run",
+                        ? "automation/create · 可立即运行"
+                        : "automation/create · ready to run",
                     description:
                       locale === "zh"
                         ? "已写入目标办公室、执行智能体和运行提示，可立即运行并沉淀记录。"
@@ -9609,7 +9626,7 @@ export function App() {
                 `模型：${executionAgent?.model ?? "未配置"}`,
                 `MCP：${enabledMcp}`,
                 `Skill：${enabledSkills}`,
-                `动作：运行自动化「${title}」，并把执行记录写入当前后端线程。`,
+                `动作：运行自动化「${title}」，并把执行记录写入 automation/run。`,
               ].join("\n")
             : [
                 `Trigger: ${triggerType}`,
@@ -9618,7 +9635,7 @@ export function App() {
                 `Model: ${executionAgent?.model ?? "not configured"}`,
                 `MCP: ${enabledMcp}`,
                 `Skills: ${enabledSkills}`,
-                `Action: run automation "${title}" and write the execution record to the backend thread.`,
+                `Action: run automation "${title}" and write the execution record through automation/run.`,
               ].join("\n");
         const automationPrompt =
           locale === "zh"
@@ -9693,12 +9710,25 @@ export function App() {
             targetThreadId,
             [
               automationConfig.prompt,
+              automationConfigPath
+                ? locale === "zh"
+                  ? `后端配置：${automationConfigPath}`
+                  : `Backend config: ${automationConfigPath}`
+                : locale === "zh"
+                  ? "后端配置：已提交到 automation/save"
+                  : "Backend config: submitted to automation/save",
+              runNote
+                ? locale === "zh"
+                  ? `本次运行补充说明：${runNote}`
+                  : `Run note: ${runNote}`
+                : null,
               "",
-              automationConfigPayload({
-                ...automationConfig,
-                threadId: targetThreadId,
-              }),
-            ].join("\n"),
+              locale === "zh"
+                ? `执行线程：${targetThreadId}`
+                : `Execution thread: ${targetThreadId}`,
+            ]
+              .filter(Boolean)
+              .join("\n"),
           );
         let response;
         try {
