@@ -1690,27 +1690,6 @@ function decodeBase64Text(dataBase64: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-function knowledgePreviewFromText(text: string, fallback: string): string {
-  const line =
-    text
-      .split(/\r?\n/)
-      .map((item) => item.trim())
-      .find(
-        (item) =>
-          item &&
-          !item.startsWith("---") &&
-          !item.startsWith("#") &&
-          !item.startsWith("<") &&
-          !item.startsWith(">"),
-      ) ?? fallback;
-  return line.length > 160 ? `${line.slice(0, 157)}...` : line;
-}
-
-function knowledgeTitleFromPath(path: string): string {
-  const fileName = pathBaseName(path);
-  return fileName.replace(/\.(md|mdx|txt)$/i, "") || fileName;
-}
-
 function normalizeKnowledgeData(data: unknown): KnowledgeData {
   const value = data as
     | { memories?: unknown; sources?: unknown }
@@ -7293,181 +7272,26 @@ export function App() {
       return { memories: [], sources: [] };
     }
     const client = clientRef.current;
-    if (client) {
-      try {
-        const response = await client.listKnowledge(knowledgeCwd);
-        return normalizeKnowledgeData(response.data);
-      } catch (error) {
-        if (!isUnsupportedRpcError(error)) {
-          throw error;
-        }
-      }
+    if (!client) {
+      throw new Error(
+        locale === "zh"
+          ? "未连接本地 app-server，无法读取知识库。"
+          : "Local app-server is not connected; unable to read knowledge.",
+      );
     }
-
-    const [rootResponse, backendThreadsResponse] = await Promise.all([
-      clientRef.current?.readDirectory(knowledgeCwd),
-      clientRef.current?.listThreads(false),
-    ]);
-    const rootEntries = rootResponse?.entries ?? [];
-    const importantNames = new Set([
-      ".crewon",
-      "AGENTS.md",
-      "ARCHITECTURE.md",
-      "README.md",
-      "README",
-      "apps",
-      "codex-rs",
-      "docs",
-      "packages",
-      "pnpm-workspace.yaml",
-    ]);
-    const visibleEntries = rootEntries
-      .filter((entry) => importantNames.has(entry.fileName))
-      .sort((left, right) => left.fileName.localeCompare(right.fileName));
-    const sources: KnowledgeSource[] = [
-      {
-        name: pathBaseName(knowledgeCwd),
-        glyph: "▦",
-        accent: "blue",
-        status: "indexed",
-        path: knowledgeCwd,
-        isDirectory: true,
-        meta:
+    try {
+      const response = await client.listKnowledge(knowledgeCwd);
+      return normalizeKnowledgeData(response.data);
+    } catch (error) {
+      if (isUnsupportedRpcError(error)) {
+        throw new Error(
           locale === "zh"
-            ? `${rootEntries.length} 个根目录条目 · app-server 文件系统`
-            : `${rootEntries.length} root entries · app-server filesystem`,
-      },
-      ...visibleEntries.map((entry, index): KnowledgeSource => ({
-        name: entry.fileName,
-        glyph: entry.isDirectory ? "▤" : "◇",
-        accent: CAPABILITY_ACCENTS[(index + 1) % CAPABILITY_ACCENTS.length],
-        status: "indexed",
-        path: joinPath(knowledgeCwd, entry.fileName),
-        isDirectory: entry.isDirectory,
-        meta: entry.isDirectory
-          ? locale === "zh"
-            ? "目录 · 可作为知识源"
-            : "Directory · available as a knowledge source"
-          : locale === "zh"
-            ? "文件 · 已读取元数据"
-            : "File · metadata available",
-      })),
-    ];
-    const memoryPaths = [
-      joinPath(knowledgeCwd, "AGENTS.md"),
-      joinPath(knowledgeCwd, "README.md"),
-      joinPath(joinPath(knowledgeCwd, ".crewon"), "memory.md"),
-      joinPath(joinPath(knowledgeCwd, ".crewon"), "knowledge.md"),
-    ];
-    const memoryResults = await Promise.allSettled(
-      memoryPaths.map(async (path) => {
-        const response = await clientRef.current?.readFile(path);
-        return {
-          path,
-          text: response ? decodeBase64Text(response.dataBase64) : "",
-        };
-      }),
-    );
-    const fileMemories = memoryResults.flatMap(
-      (result, index): KnowledgeEntry[] => {
-        if (result.status !== "fulfilled" || !result.value.text.trim()) {
-          return [];
-        }
-
-        const title = knowledgeTitleFromPath(result.value.path);
-        const isAgentsFile = pathBaseName(result.value.path) === "AGENTS.md";
-        return [
-          {
-            title,
-            glyph: isAgentsFile ? "★" : index % 2 === 0 ? "◆" : "✓",
-            accent: isAgentsFile
-              ? "amber"
-              : CAPABILITY_ACCENTS[(index + 2) % CAPABILITY_ACCENTS.length],
-            kind: isAgentsFile
-              ? locale === "zh"
-                ? "工程规则"
-                : "Agent rules"
-              : locale === "zh"
-                ? "工作区记忆"
-                : "Workspace memory",
-            preview: knowledgePreviewFromText(
-              result.value.text,
-              locale === "zh"
-                ? "已从工作区文件读取。"
-                : "Loaded from workspace file.",
-            ),
-            path: result.value.path,
-            meta:
-              locale === "zh"
-                ? `${result.value.path} · ${result.value.text.length} 字符`
-                : `${result.value.path} · ${result.value.text.length} chars`,
-            pinned: isAgentsFile,
-          },
-        ];
-      },
-    );
-    const backendThreads = backendThreadsResponse ?? [];
-    const reusableSources = new Set(["agent", "office", "automation", "tool"]);
-    const backendMemories = backendThreads
-      .filter(
-        (thread) =>
-          reusableSources.has(thread.threadSource ?? "") ||
-          threadTitle(thread, "").includes("工具验证") ||
-          threadTitle(thread, "").includes("Tool check") ||
-          thread.preview.includes("CREWON_"),
-      )
-      .slice(0, 8)
-      .map((thread, index): KnowledgeEntry => {
-        const source = thread.threadSource ?? "thread";
-        const kind =
-          locale === "zh"
-            ? source === "agent"
-              ? "后端智能体"
-              : source === "office"
-                ? "后端办公室"
-                : source === "automation"
-                  ? "自动化记录"
-                  : source === "tool"
-                    ? "工具调用"
-                    : "后端会话"
-            : source === "agent"
-              ? "Backend agent"
-              : source === "office"
-                ? "Backend office"
-                : source === "automation"
-                  ? "Automation record"
-                  : source === "tool"
-                    ? "Tool call"
-                    : "Backend thread";
-        return {
-          title: threadTitle(
-            thread,
-            locale === "zh" ? "后端知识记录" : "Backend knowledge record",
-          ),
-          glyph: source === "office" ? "◎" : source === "agent" ? "✦" : "◇",
-          accent: CAPABILITY_ACCENTS[(index + 4) % CAPABILITY_ACCENTS.length],
-          kind,
-          preview:
-            knowledgePreviewFromText(
-              thread.preview,
-              locale === "zh"
-                ? "点击打开后端线程查看完整上下文。"
-                : "Open the backend thread for full context.",
-            ) ||
-            (locale === "zh"
-              ? "点击打开后端线程查看完整上下文。"
-              : "Open the backend thread for full context."),
-          threadId: thread.id,
-          meta:
-            locale === "zh"
-              ? `${kind} · ${formatUnixSeconds(thread.updatedAt, locale)}`
-              : `${kind} · ${formatUnixSeconds(thread.updatedAt, locale)}`,
-          pinned: source === "office",
-        };
-      });
-    const memories = [...fileMemories, ...backendMemories];
-
-    return { memories, sources };
+            ? "当前 app-server 不支持 knowledge/list，请更新后端后再使用知识库。"
+            : "The current app-server does not support knowledge/list. Update the backend before using Knowledge.",
+        );
+      }
+      throw error;
+    }
   }
 
   async function writeKnowledgeMemory(): Promise<string | null> {
@@ -7494,48 +7318,15 @@ export function App() {
       });
       return response.filePath;
     } catch (error) {
-      if (!isUnsupportedRpcError(error)) {
-        throw error;
+      if (isUnsupportedRpcError(error)) {
+        throw new Error(
+          locale === "zh"
+            ? "当前 app-server 不支持 knowledge/memory/write，请更新后端后再写入知识库。"
+            : "The current app-server does not support knowledge/memory/write. Update the backend before writing knowledge.",
+        );
       }
+      throw error;
     }
-
-    const crewonDir = joinPath(knowledgeCwd, ".crewon");
-    const knowledgePath = joinPath(crewonDir, "knowledge.md");
-    await client.createDirectory(crewonDir, true);
-
-    let existing = "";
-    try {
-      const response = await client.readFile(knowledgePath);
-      existing = response ? decodeBase64Text(response.dataBase64) : "";
-    } catch {
-      existing = "";
-    }
-
-    const now = new Date().toISOString();
-    const selectedThread =
-      selectedThreadId && !isDemoThreadId(selectedThreadId)
-        ? threads.find((thread) => thread.id === selectedThreadId)
-        : null;
-    const title =
-      selectedThread && threadTitle(selectedThread, "")
-        ? threadTitle(selectedThread, "")
-        : "Crewon workspace memory";
-    const entry = [
-      `## ${now}`,
-      "",
-      `- Source: Crewon UI knowledge page`,
-      `- Workspace: ${knowledgeCwd}`,
-      selectedThread ? `- Session: ${title}` : null,
-      "- Note: Backend-connected knowledge memory was written from the UI and can be reused by agents, offices, and automations.",
-      "",
-    ]
-      .filter((line): line is string => Boolean(line))
-      .join("\n");
-    const next = existing.trim()
-      ? `${existing.trimEnd()}\n\n${entry}`
-      : `# Crewon Knowledge\n\n${entry}`;
-    await client.writeTextFile(knowledgePath, next);
-    return knowledgePath;
   }
 
   async function resolveBackendCwd(): Promise<string> {
