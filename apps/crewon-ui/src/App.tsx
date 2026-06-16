@@ -7688,10 +7688,11 @@ export function App() {
                     .filter((option) => option.enabled)
                     .map((option) => option.name)
                     .join(", ")}`,
+                  agentConfigPath
+                    ? `后端配置：${agentConfigPath}`
+                    : "后端配置：已提交到 agent/save",
                   "",
                   config.systemPrompt,
-                  "",
-                  agentConfigPayload(savedConfig),
                 ].join("\n")
               : [
                   `Agent: ${config.name}`,
@@ -7706,10 +7707,11 @@ export function App() {
                     .filter((option) => option.enabled)
                     .map((option) => option.name)
                     .join(", ")}`,
+                  agentConfigPath
+                    ? `Backend config: ${agentConfigPath}`
+                    : "Backend config: submitted to agent/save",
                   "",
                   config.systemPrompt,
-                  "",
-                  agentConfigPayload(savedConfig),
                 ].join("\n");
           const response = await clientRef.current?.startTurn(
             thread.id,

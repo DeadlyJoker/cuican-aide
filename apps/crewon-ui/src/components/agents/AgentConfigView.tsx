@@ -193,8 +193,8 @@ export function AgentConfigView({
             <span>
               {config.threadId
                 ? locale === "zh"
-                  ? "来自智能体线程"
-                  : "Loaded from the agent thread"
+                  ? "来自 agent/list"
+                  : "Loaded from agent/list"
                 : locale === "zh"
                   ? "保存后创建"
                   : "Created after save"}
@@ -239,8 +239,8 @@ export function AgentConfigView({
                   </em>
                   <p>
                     {locale === "zh"
-                      ? "保存配置后会写入 app-server 智能体线程。"
-                      : "Saving writes this configuration to an app-server agent thread."}
+                      ? "保存配置后会写入 app-server agent/save。"
+                      : "Saving writes this configuration through app-server agent/save."}
                   </p>
                 </div>
               </article>
