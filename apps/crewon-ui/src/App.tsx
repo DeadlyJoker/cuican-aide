@@ -55,6 +55,7 @@ import {
   type BackgroundTerminal,
   type AppServerNotification,
   type AppServerRequest,
+  type DomainConfigListResponse,
   type RemoteControlClient,
   type RemoteControlStatusResponse,
 } from "./lib/appServer";
@@ -5082,59 +5083,53 @@ export function App() {
 
       if (kind === "office") {
         const basePanel = demoLibraryPanel("office", locale);
-        const [backendThreads, workspaceOfficeItems] = await Promise.all([
-          clientRef.current?.listThreads(false),
-          readOfficeConfigFiles(),
-        ]);
-        const threads = backendThreads ?? [];
-        const officeThreads = threads.filter(
-          (thread) => thread.threadSource === "office",
-        );
-        const officeThreadCandidates =
-          officeThreads.length > 0 ? officeThreads : threads;
-        const backendOfficeDetails = await Promise.allSettled(
-          officeThreadCandidates.map(async (thread) => {
-            const detailedThread =
-              (await clientRef.current?.readThread(thread.id)) ?? thread;
-            return {
-              thread: detailedThread,
-              config: parseOfficeConfigFromThread(detailedThread, locale),
-            };
-          }),
-        );
-        const backendOfficeItems = backendOfficeDetails.flatMap((result) => {
-          if (result.status !== "fulfilled" || !result.value.config) {
-            return [];
+        let storedOfficeItems: LibraryItem[] = [];
+        let usedLegacyOfficeThreads = false;
+        try {
+          const response = await clientRef.current?.listOfficeConfigs(
+            effectiveCwd,
+          );
+          storedOfficeItems = officeConfigRecordsToLibraryItems(
+            response?.data ?? [],
+          );
+        } catch (error) {
+          if (!isUnsupportedRpcError(error)) {
+            throw error;
           }
-          return [
-            backendThreadLibraryItem(
-              result.value.thread,
-              "office",
-              locale,
-              null,
-              null,
-              result.value.config,
-            ),
-          ];
-        });
-        const backendOfficeThreadIds = new Set(
-          backendOfficeDetails.flatMap((result) =>
-            result.status === "fulfilled" &&
-            result.value.config?.workspace.threadId
-              ? [result.value.config.workspace.threadId]
-              : [],
-          ),
-        );
-        const uniqueWorkspaceOfficeItems = workspaceOfficeItems.filter(
-          (item) =>
-            item.action?.type !== "office-detail" ||
-            !item.action.workspace?.threadId ||
-            !backendOfficeThreadIds.has(item.action.workspace.threadId),
-        );
-        const storedOfficeItems = [
-          ...backendOfficeItems,
-          ...uniqueWorkspaceOfficeItems,
-        ];
+          usedLegacyOfficeThreads = true;
+          const backendThreads =
+            (await clientRef.current?.listThreads(false)) ?? [];
+          const officeThreads = backendThreads.filter(
+            (thread) => thread.threadSource === "office",
+          );
+          const officeThreadCandidates =
+            officeThreads.length > 0 ? officeThreads : backendThreads;
+          const backendOfficeDetails = await Promise.allSettled(
+            officeThreadCandidates.map(async (thread) => {
+              const detailedThread =
+                (await clientRef.current?.readThread(thread.id)) ?? thread;
+              return {
+                thread: detailedThread,
+                config: parseOfficeConfigFromThread(detailedThread, locale),
+              };
+            }),
+          );
+          storedOfficeItems = backendOfficeDetails.flatMap((result) => {
+            if (result.status !== "fulfilled" || !result.value.config) {
+              return [];
+            }
+            return [
+              backendThreadLibraryItem(
+                result.value.thread,
+                "office",
+                locale,
+                null,
+                null,
+                result.value.config,
+              ),
+            ];
+          });
+        }
         if (!isCurrentLibraryLoad()) {
           return;
         }
@@ -5142,24 +5137,32 @@ export function App() {
           ...basePanel,
           subtitle:
             locale === "zh"
-              ? `${basePanel.items.filter((item) => !item.section).length} 个模板 · ${backendOfficeItems.length} 个后端办公室 · ${workspaceOfficeItems.length} 个工作区配置`
-              : `${basePanel.items.filter((item) => !item.section).length} templates · ${backendOfficeItems.length} backend offices · ${workspaceOfficeItems.length} workspace configs`,
+              ? `${basePanel.items.filter((item) => !item.section).length} 个模板 · ${storedOfficeItems.length} 个后端办公室`
+              : `${basePanel.items.filter((item) => !item.section).length} templates · ${storedOfficeItems.length} backend offices`,
           items:
             storedOfficeItems.length > 0
               ? [
                   {
                     title:
                       locale === "zh"
-                        ? "后端与工作区办公室"
-                        : "Backend and workspace offices",
+                        ? usedLegacyOfficeThreads
+                          ? "旧线程办公室"
+                          : "后端办公室"
+                        : usedLegacyOfficeThreads
+                          ? "Legacy thread offices"
+                          : "Backend offices",
                     meta:
                       locale === "zh"
                         ? `${storedOfficeItems.length} 个已创建`
                         : `${storedOfficeItems.length} created`,
                     description:
                       locale === "zh"
-                        ? "这些办公室来自 app-server 线程或 .crewon/offices 配置，可继续群聊协作。"
-                        : "These offices come from app-server threads or .crewon/offices configs and can continue group-chat work.",
+                        ? usedLegacyOfficeThreads
+                          ? "当前 app-server 不支持 office/list，暂时从旧线程记录恢复。"
+                          : "这些办公室来自 app-server office/list，可继续群聊协作。"
+                        : usedLegacyOfficeThreads
+                          ? "The current app-server does not support office/list; restored from legacy thread records."
+                          : "These offices come from app-server office/list and can continue group-chat work.",
                     section: true,
                   },
                   ...storedOfficeItems,
@@ -6713,30 +6716,41 @@ export function App() {
     }
 
     const records = await readStoredOfficeConfigFiles(client, officeCwd);
+    return officeConfigRecordsToLibraryItems(records);
+  }
+
+  function officeConfigRecordsToLibraryItems(
+    records: Array<
+      Pick<
+        DomainConfigListResponse<OfficeConfig>["data"][number],
+        "filePath" | "savedAt" | "config"
+      >
+    >,
+  ): LibraryItem[] {
     return records.map(({ filePath, savedAt, config }) => ({
+      title: config.title,
+      meta:
+        locale === "zh"
+          ? `工作区配置 · ${savedAt ? new Date(savedAt).toLocaleString("zh-CN") : pathBaseName(filePath)}`
+          : `Workspace config · ${savedAt ? new Date(savedAt).toLocaleString("en-US") : pathBaseName(filePath)}`,
+      description:
+        config.workspace.goal ||
+        (locale === "zh"
+          ? "从工作区配置恢复的办公室。"
+          : "Office restored from a workspace config."),
+      glyph: "⌘",
+      accent: "green",
+      badge: { label: locale === "zh" ? "配置" : "config", tone: "planning" },
+      action: {
+        type: "office-detail",
         title: config.title,
-        meta:
-          locale === "zh"
-            ? `工作区配置 · ${savedAt ? new Date(savedAt).toLocaleString("zh-CN") : pathBaseName(filePath)}`
-            : `Workspace config · ${savedAt ? new Date(savedAt).toLocaleString("en-US") : pathBaseName(filePath)}`,
-        description:
-          config.workspace.goal ||
-          (locale === "zh"
-            ? "从工作区配置恢复的办公室。"
-            : "Office restored from a workspace config."),
-        glyph: "⌘",
-        accent: "green",
-        badge: { label: locale === "zh" ? "配置" : "config", tone: "planning" },
-        action: {
-          type: "office-detail",
-          title: config.title,
-          subtitle: config.subtitle,
-          body: config.workspace.goal,
-          items: [],
-          workspace: config.workspace,
-          configPath: filePath,
-        },
-      }));
+        subtitle: config.subtitle,
+        body: config.workspace.goal,
+        items: [],
+        workspace: config.workspace,
+        configPath: filePath,
+      },
+    }));
   }
 
   async function writeAgentConfigFile(
