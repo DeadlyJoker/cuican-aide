@@ -328,6 +328,66 @@ function createMcpAgentOption(
   };
 }
 
+function createMcpConfigAgentOption(
+  record: McpServerConfigRecord,
+  locale: Locale,
+  index: number,
+): AgentCapabilityOption {
+  const endpoint = mcpConfigEndpoint(record);
+  return {
+    id: record.name,
+    name: record.name,
+    glyph: MCP_GLYPHS[index % MCP_GLYPHS.length],
+    accent: CAPABILITY_ACCENTS[index % CAPABILITY_ACCENTS.length],
+    description:
+      locale === "zh"
+        ? `${mcpConfigEnabled(record) ? "已配置" : "配置停用"} · 等待运行态加载${endpoint ? ` · ${endpoint}` : ""}`
+        : `${mcpConfigEnabled(record) ? "configured" : "config disabled"} · waiting to load${endpoint ? ` · ${endpoint}` : ""}`,
+    enabled: mcpConfigEnabled(record),
+  };
+}
+
+function createMcpInventoryAgentOption(
+  server: {
+    config?: McpServerConfigRecord;
+    name: string;
+    status?: McpServerStatus;
+  },
+  locale: Locale,
+  index: number,
+): AgentCapabilityOption {
+  if (server.status) {
+    const option = createMcpAgentOption(server.status, locale, index);
+    if (!server.config) {
+      return option;
+    }
+    return {
+      ...option,
+      description: `${option.description} · ${
+        mcpConfigEnabled(server.config)
+          ? locale === "zh"
+            ? "已配置"
+            : "configured"
+          : locale === "zh"
+            ? "配置停用"
+            : "config disabled"
+      }`,
+      enabled: option.enabled && mcpConfigEnabled(server.config),
+    };
+  }
+
+  return server.config
+    ? createMcpConfigAgentOption(server.config, locale, index)
+    : {
+        id: server.name,
+        name: server.name,
+        glyph: MCP_GLYPHS[index % MCP_GLYPHS.length],
+        accent: CAPABILITY_ACCENTS[index % CAPABILITY_ACCENTS.length],
+        description: locale === "zh" ? "等待加载" : "waiting to load",
+        enabled: false,
+      };
+}
+
 function createSkillAgentOption(
   skill: SkillMetadata,
   locale: Locale,
@@ -2788,13 +2848,7 @@ function mcpConfigEndpoint(record: McpServerConfigRecord): string {
   const config = mcpConfigObject(record);
   const command = typeof config.command === "string" ? config.command : "";
   const url = typeof config.url === "string" ? config.url : "";
-  const args = Array.isArray(config.args)
-    ? config.args.filter((arg): arg is string => typeof arg === "string")
-    : [];
-  if (command) {
-    return [command, ...args].join(" ");
-  }
-  return url;
+  return command || url;
 }
 
 function mcpConfigEnvSummary(
@@ -2842,7 +2896,11 @@ function mcpConfigDetailText(
           : "disabled"
     }`,
     endpoint ? `${locale === "zh" ? "入口" : "Endpoint"}: ${endpoint}` : null,
-    args.length > 0 ? `${locale === "zh" ? "参数" : "Args"}: ${args.join(" ")}` : null,
+    args.length > 0
+      ? locale === "zh"
+        ? `参数: ${args.length} 项（值已隐藏）`
+        : `Args: ${args.length} items (values hidden)`
+      : null,
     mcpConfigEnvSummary(record, locale),
     environmentId ? `Environment: ${environmentId}` : null,
   ]
@@ -7048,33 +7106,15 @@ export function App() {
       ? undefined
       : (selectedThreadId ?? undefined);
 
-    let mcpResponse;
-    try {
-      mcpResponse = await clientRef.current?.listMcpServerStatus(
-        effectiveThreadId,
-        "full",
-      );
-    } catch (threadScopedError) {
-      if (
-        !(threadScopedError instanceof Error) ||
-        !threadScopedError.message.includes("thread not found")
-      ) {
-        throw threadScopedError;
-      }
-      mcpResponse = await clientRef.current?.listMcpServerStatus(
-        undefined,
-        "full",
-      );
-    }
-
-    const [skillsResponse, modelsResponse, permissionsResponse] =
+    const [mcpInventory, skillsResponse, modelsResponse, permissionsResponse] =
       await Promise.all([
+        loadMcpInventory(effectiveThreadId, effectiveCwd),
         clientRef.current?.listSkills(effectiveCwd),
         clientRef.current?.listModels(),
         clientRef.current?.listPermissionProfiles(effectiveCwd),
       ]);
 
-    const mcp = (mcpResponse?.data ?? []).map(createMcpAgentOptionWithLocale);
+    const mcp = mcpInventory.servers.map(createMcpAgentOptionWithLocale);
     const skills = (skillsResponse?.data ?? [])
       .flatMap((entry) => entry.skills)
       .map(createSkillAgentOptionWithLocale);
@@ -7088,10 +7128,14 @@ export function App() {
         .filter(Boolean) ?? [];
 
     function createMcpAgentOptionWithLocale(
-      server: McpServerStatus,
+      server: {
+        config?: McpServerConfigRecord;
+        name: string;
+        status?: McpServerStatus;
+      },
       index: number,
     ) {
-      return createMcpAgentOption(server, locale, index);
+      return createMcpInventoryAgentOption(server, locale, index);
     }
 
     function createSkillAgentOptionWithLocale(
