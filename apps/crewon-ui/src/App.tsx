@@ -5289,59 +5289,12 @@ export function App() {
       }
 
       if (kind === "agents") {
-        const [response, backendThreadsResponse, workspaceAgentItems] =
-          await Promise.all([
-            clientRef.current?.detectExternalAgentConfig(effectiveCwd),
-            clientRef.current?.listThreads(false),
-            readAgentConfigFiles(),
-          ]);
+        const [response, agentLibrary] = await Promise.all([
+          clientRef.current?.detectExternalAgentConfig(effectiveCwd),
+          loadAgentLibraryItems(effectiveCwd),
+        ]);
+        const storedAgentItems = agentLibrary.items;
         const items = response?.items ?? [];
-        const backendThreads = backendThreadsResponse ?? [];
-        const agentThreads = backendThreads.filter(
-          (thread) => thread.threadSource === "agent",
-        );
-        const agentThreadCandidates =
-          agentThreads.length > 0 ? agentThreads : backendThreads;
-        const backendAgentDetails = await Promise.allSettled(
-          agentThreadCandidates.map(async (thread) => {
-            const detailedThread =
-              (await clientRef.current?.readThread(thread.id)) ?? thread;
-            return {
-              thread: detailedThread,
-              config: parseAgentConfigFromThread(detailedThread, locale),
-            };
-          }),
-        );
-        const backendAgentItems = backendAgentDetails.flatMap((result) => {
-          if (result.status !== "fulfilled" || !result.value.config) {
-            return [];
-          }
-          return [
-            backendThreadLibraryItem(
-              result.value.thread,
-              "agent",
-              locale,
-              result.value.config,
-            ),
-          ];
-        });
-        const backendAgentThreadIds = new Set(
-          backendAgentDetails.flatMap((result) =>
-            result.status === "fulfilled" && result.value.config?.threadId
-              ? [result.value.config.threadId]
-              : [],
-          ),
-        );
-        const uniqueWorkspaceAgentItems = workspaceAgentItems.filter(
-          (item) =>
-            item.action?.type !== "agent-config" ||
-            !item.action.config.threadId ||
-            !backendAgentThreadIds.has(item.action.config.threadId),
-        );
-        const storedAgentItems = [
-          ...backendAgentItems,
-          ...uniqueWorkspaceAgentItems,
-        ];
         const detectedItems = items.map((item) => ({
           title: item.description,
           meta: item.itemType,
@@ -5359,8 +5312,8 @@ export function App() {
           ...basePanel,
           subtitle:
             locale === "zh"
-              ? `${basePanel.items.filter((entry) => !entry.section).length} 个设计角色 · ${backendAgentItems.length} 个后端智能体 · ${workspaceAgentItems.length} 个工作区配置 · ${items.length} 个可导入项`
-              : `designed roles · ${backendAgentItems.length} backend agents · ${workspaceAgentItems.length} workspace configs · ${items.length} importable items`,
+              ? `${basePanel.items.filter((entry) => !entry.section).length} 个设计角色 · ${storedAgentItems.length} 个后端智能体 · ${items.length} 个可导入项`
+              : `designed roles · ${storedAgentItems.length} backend agents · ${items.length} importable items`,
           items:
             storedAgentItems.length > 0 || detectedItems.length > 0
               ? [
@@ -5369,16 +5322,24 @@ export function App() {
                         {
                           title:
                             locale === "zh"
-                              ? "后端与工作区智能体"
-                              : "Backend and workspace agents",
+                              ? agentLibrary.usedLegacyThreads
+                                ? "旧线程智能体"
+                                : "后端智能体"
+                              : agentLibrary.usedLegacyThreads
+                                ? "Legacy thread agents"
+                                : "Backend agents",
                           meta:
                             locale === "zh"
                               ? `${storedAgentItems.length} 个已保存`
                               : `${storedAgentItems.length} saved`,
                           description:
                             locale === "zh"
-                              ? "这些智能体来自 app-server 线程或 .crewon/agents 配置，可继续调整配置。"
-                              : "These agents come from app-server threads or .crewon/agents configs and can be adjusted.",
+                              ? agentLibrary.usedLegacyThreads
+                                ? "当前 app-server 不支持 agent/list，暂时从旧线程记录恢复。"
+                                : "这些智能体来自 app-server agent/list，可继续调整配置。"
+                              : agentLibrary.usedLegacyThreads
+                                ? "The current app-server does not support agent/list; restored from legacy thread records."
+                                : "These agents come from app-server agent/list and can be adjusted.",
                           section: true,
                         } satisfies LibraryItem,
                         ...storedAgentItems,
@@ -6775,6 +6736,68 @@ export function App() {
     }
 
     const records = await readStoredAgentConfigFiles(client, agentCwd);
+    return agentConfigRecordsToLibraryItems(records);
+  }
+
+  async function loadAgentLibraryItems(
+    agentCwd: string,
+  ): Promise<{ items: LibraryItem[]; usedLegacyThreads: boolean }> {
+    const client = clientRef.current;
+    if (!client) {
+      return { items: [], usedLegacyThreads: false };
+    }
+    try {
+      const response = await client.listAgentConfigs(agentCwd);
+      return {
+        items: agentConfigRecordsToLibraryItems(response.data),
+        usedLegacyThreads: false,
+      };
+    } catch (error) {
+      if (!isUnsupportedRpcError(error)) {
+        throw error;
+      }
+      const backendThreads = await client.listThreads(false);
+      const agentThreads = backendThreads.filter(
+        (thread) => thread.threadSource === "agent",
+      );
+      const agentThreadCandidates =
+        agentThreads.length > 0 ? agentThreads : backendThreads;
+      const backendAgentDetails = await Promise.allSettled(
+        agentThreadCandidates.map(async (thread) => {
+          const detailedThread = await client.readThread(thread.id);
+          return {
+            thread: detailedThread,
+            config: parseAgentConfigFromThread(detailedThread, locale),
+          };
+        }),
+      );
+      return {
+        items: backendAgentDetails.flatMap((result) => {
+          if (result.status !== "fulfilled" || !result.value.config) {
+            return [];
+          }
+          return [
+            backendThreadLibraryItem(
+              result.value.thread,
+              "agent",
+              locale,
+              result.value.config,
+            ),
+          ];
+        }),
+        usedLegacyThreads: true,
+      };
+    }
+  }
+
+  function agentConfigRecordsToLibraryItems(
+    records: Array<
+      Pick<
+        DomainConfigListResponse<AgentConfig>["data"][number],
+        "filePath" | "savedAt" | "config"
+      >
+    >,
+  ): LibraryItem[] {
     return records.map(({ filePath, savedAt, config }) => ({
         title: config.name,
         meta:
