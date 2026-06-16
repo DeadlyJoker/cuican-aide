@@ -232,7 +232,9 @@ function renderMarkdown(text: string) {
     const unordered = /^[-*]\s+(.+)$/.exec(trimmed);
     if (unordered) {
       flushParagraph(blocks, paragraphLines, `p-${index}`);
-      orderedItems.length = 0;
+      if (orderedItems.length > 0) {
+        flushLists(index);
+      }
       listItems.push(unordered[1]);
       return;
     }
@@ -240,7 +242,9 @@ function renderMarkdown(text: string) {
     const ordered = /^\d+\.\s+(.+)$/.exec(trimmed);
     if (ordered) {
       flushParagraph(blocks, paragraphLines, `p-${index}`);
-      listItems.length = 0;
+      if (listItems.length > 0) {
+        flushLists(index);
+      }
       orderedItems.push(ordered[1]);
       return;
     }

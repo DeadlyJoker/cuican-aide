@@ -386,6 +386,35 @@
       ],
       "type": "object"
     },
+    "AutomationReadParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
     "AutomationRunParams": {
       "properties": {
         "config": true,
@@ -478,6 +507,23 @@
       "required": [
         "config",
         "cwd"
+      ],
+      "type": "object"
+    },
+    "AutomationUpdateParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "filePath"
       ],
       "type": "object"
     },
@@ -2147,6 +2193,39 @@
         "artifact",
         "config",
         "cwd"
+      ],
+      "type": "object"
+    },
+    "OfficeCreateParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "goal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "title"
       ],
       "type": "object"
     },
@@ -4754,6 +4833,21 @@
       ],
       "type": "object"
     },
+    "ToolReadParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
     "ToolSaveParams": {
       "properties": {
         "config": true,
@@ -4764,6 +4858,23 @@
       "required": [
         "config",
         "cwd"
+      ],
+      "type": "object"
+    },
+    "ToolUpdateParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "filePath"
       ],
       "type": "object"
     },
@@ -6275,6 +6386,30 @@
         },
         "method": {
           "enum": [
+            "office/create"
+          ],
+          "title": "Office/createRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeCreateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/createRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
             "office/read"
           ],
           "title": "Office/readRequestMethod",
@@ -6491,6 +6626,54 @@
         },
         "method": {
           "enum": [
+            "automation/read"
+          ],
+          "title": "Automation/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/update"
+          ],
+          "title": "Automation/updateRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationUpdateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/updateRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
             "automation/run"
           ],
           "title": "Automation/runRequestMethod",
@@ -6659,6 +6842,30 @@
         },
         "method": {
           "enum": [
+            "tool/read"
+          ],
+          "title": "Tool/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ToolReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Tool/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
             "tool/save"
           ],
           "title": "Tool/saveRequestMethod",
@@ -6674,6 +6881,30 @@
         "params"
       ],
       "title": "Tool/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "tool/update"
+          ],
+          "title": "Tool/updateRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ToolUpdateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Tool/updateRequest",
       "type": "object"
     },
     {

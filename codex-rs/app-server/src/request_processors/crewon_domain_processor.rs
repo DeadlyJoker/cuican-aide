@@ -24,6 +24,8 @@ use crewon_app_server_protocol::AutomationDeleteParams;
 use crewon_app_server_protocol::AutomationDeleteResponse;
 use crewon_app_server_protocol::AutomationListParams;
 use crewon_app_server_protocol::AutomationListResponse;
+use crewon_app_server_protocol::AutomationReadParams;
+use crewon_app_server_protocol::AutomationReadResponse;
 use crewon_app_server_protocol::AutomationRunParams;
 use crewon_app_server_protocol::AutomationRunRecord;
 use crewon_app_server_protocol::AutomationRunResponse;
@@ -33,6 +35,8 @@ use crewon_app_server_protocol::AutomationRunsListParams;
 use crewon_app_server_protocol::AutomationRunsListResponse;
 use crewon_app_server_protocol::AutomationSaveParams;
 use crewon_app_server_protocol::AutomationSaveResponse;
+use crewon_app_server_protocol::AutomationUpdateParams;
+use crewon_app_server_protocol::AutomationUpdateResponse;
 use crewon_app_server_protocol::CrewonAutomationRunConfigRecord;
 use crewon_app_server_protocol::CrewonDomainConfigRecord;
 use crewon_app_server_protocol::CrewonToolConfigRecord;
@@ -42,6 +46,8 @@ use crewon_app_server_protocol::OfficeApprovalDecideResponse;
 use crewon_app_server_protocol::OfficeApprovalDecision;
 use crewon_app_server_protocol::OfficeArtifactUpsertParams;
 use crewon_app_server_protocol::OfficeArtifactUpsertResponse;
+use crewon_app_server_protocol::OfficeCreateParams;
+use crewon_app_server_protocol::OfficeCreateResponse;
 use crewon_app_server_protocol::OfficeDeleteParams;
 use crewon_app_server_protocol::OfficeDeleteResponse;
 use crewon_app_server_protocol::OfficeListParams;
@@ -59,8 +65,12 @@ use crewon_app_server_protocol::ToolDeleteParams;
 use crewon_app_server_protocol::ToolDeleteResponse;
 use crewon_app_server_protocol::ToolListParams;
 use crewon_app_server_protocol::ToolListResponse;
+use crewon_app_server_protocol::ToolReadParams;
+use crewon_app_server_protocol::ToolReadResponse;
 use crewon_app_server_protocol::ToolSaveParams;
 use crewon_app_server_protocol::ToolSaveResponse;
+use crewon_app_server_protocol::ToolUpdateParams;
+use crewon_app_server_protocol::ToolUpdateResponse;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -257,6 +267,17 @@ impl CrewonDomainRequestProcessor {
             .map(|file_path| OfficeSaveResponse { file_path })
     }
 
+    pub(crate) async fn office_create(
+        &self,
+        params: OfficeCreateParams,
+    ) -> Result<OfficeCreateResponse, JSONRPCErrorError> {
+        let cwd = params.cwd.clone();
+        let config = create_office_config(params)?;
+        save_record(DomainKind::Office, &cwd, config.clone())
+            .await
+            .map(|file_path| OfficeCreateResponse { file_path, config })
+    }
+
     pub(crate) async fn office_read(
         &self,
         params: OfficeReadParams,
@@ -364,6 +385,35 @@ impl CrewonDomainRequestProcessor {
             .map(|file_path| AutomationCreateResponse { file_path, config })
     }
 
+    pub(crate) async fn automation_read(
+        &self,
+        params: AutomationReadParams,
+    ) -> Result<AutomationReadResponse, JSONRPCErrorError> {
+        read_automation_record(
+            &params.cwd,
+            params.file_path.as_deref(),
+            params.thread_id.as_deref(),
+            params.title.as_deref(),
+        )
+        .await
+        .map(|record| AutomationReadResponse { record })
+    }
+
+    pub(crate) async fn automation_update(
+        &self,
+        params: AutomationUpdateParams,
+    ) -> Result<AutomationUpdateResponse, JSONRPCErrorError> {
+        let config = params.config;
+        update_record(
+            DomainKind::Automation,
+            &params.cwd,
+            &params.file_path,
+            config.clone(),
+        )
+        .await
+        .map(|file_path| AutomationUpdateResponse { file_path, config })
+    }
+
     pub(crate) async fn automation_run(
         &self,
         params: AutomationRunParams,
@@ -426,6 +476,29 @@ impl CrewonDomainRequestProcessor {
         save_record(DomainKind::Tool, &params.cwd, params.config)
             .await
             .map(|file_path| ToolSaveResponse { file_path })
+    }
+
+    pub(crate) async fn tool_read(
+        &self,
+        params: ToolReadParams,
+    ) -> Result<ToolReadResponse, JSONRPCErrorError> {
+        let record = read_tool_record(&params.cwd, &params.file_path).await?;
+        Ok(ToolReadResponse { record })
+    }
+
+    pub(crate) async fn tool_update(
+        &self,
+        params: ToolUpdateParams,
+    ) -> Result<ToolUpdateResponse, JSONRPCErrorError> {
+        let config = params.config;
+        update_record(
+            DomainKind::Tool,
+            &params.cwd,
+            &params.file_path,
+            config.clone(),
+        )
+        .await
+        .map(|file_path| ToolUpdateResponse { file_path, config })
     }
 
     pub(crate) async fn tool_delete(
@@ -564,20 +637,30 @@ async fn list_tool_records(
         .await?;
     let records = records
         .into_iter()
-        .filter_map(|record| {
-            let kind = tool_kind(&record.config)?;
-            if kind_filter.is_some_and(|kind_filter| kind_filter != kind) {
-                return None;
-            }
-            Some(CrewonToolConfigRecord {
-                file_path: record.file_path,
-                saved_at: record.saved_at,
-                kind,
-                config: record.config,
-            })
-        })
+        .filter_map(tool_record_from_domain)
         .collect();
     Ok((records, next_cursor))
+}
+
+async fn read_tool_record(
+    cwd: &str,
+    file_path: &str,
+) -> Result<Option<CrewonToolConfigRecord>, JSONRPCErrorError> {
+    let file_path = validate_record_file_path(cwd, DomainKind::Tool, file_path)?;
+    let Some(record) = read_record(DomainKind::Tool, &file_path).await? else {
+        return Ok(None);
+    };
+    Ok(tool_record_from_domain(record))
+}
+
+fn tool_record_from_domain(record: CrewonDomainConfigRecord) -> Option<CrewonToolConfigRecord> {
+    let kind = tool_kind(&record.config)?;
+    Some(CrewonToolConfigRecord {
+        file_path: record.file_path,
+        saved_at: record.saved_at,
+        kind,
+        config: record.config,
+    })
 }
 
 async fn save_record(
@@ -819,6 +902,56 @@ fn display_name(config: &JsonValue) -> Option<&str> {
         .and_then(JsonValue::as_str)
 }
 
+fn create_office_config(params: OfficeCreateParams) -> Result<JsonValue, JSONRPCErrorError> {
+    let title = params.title.trim();
+    if title.is_empty() {
+        return Err(invalid_params("title must not be empty"));
+    }
+    let subtitle = params
+        .subtitle
+        .as_deref()
+        .map(str::trim)
+        .filter(|subtitle| !subtitle.is_empty())
+        .unwrap_or("Office workspace");
+    let goal = params
+        .goal
+        .as_deref()
+        .map(str::trim)
+        .filter(|goal| !goal.is_empty())
+        .unwrap_or(title);
+    if let Some(thread_id) = params.thread_id.as_deref()
+        && thread_id.trim().is_empty()
+    {
+        return Err(invalid_params("threadId must not be empty"));
+    }
+
+    let mut workspace = serde_json::json!({
+        "goal": goal,
+        "members": [],
+        "messages": [],
+        "tasks": [],
+        "activity": {
+            "approvals": [],
+            "artifacts": []
+        }
+    });
+    if let Some(thread_id) = params.thread_id {
+        let Some(workspace_object) = workspace.as_object_mut() else {
+            return Err(invalid_params("office workspace must be an object"));
+        };
+        workspace_object.insert(
+            "threadId".to_string(),
+            JsonValue::String(thread_id.trim().to_string()),
+        );
+    }
+
+    Ok(serde_json::json!({
+        "title": title,
+        "subtitle": subtitle,
+        "workspace": workspace
+    }))
+}
+
 async fn update_automation_run(
     cwd: &str,
     file_path: &str,
@@ -984,6 +1117,35 @@ async fn read_agent_record(
             record.config.get("threadId").and_then(JsonValue::as_str) == Some(thread_id)
         }) || name
             .is_some_and(|name| record.config.get("name").and_then(JsonValue::as_str) == Some(name))
+    }))
+}
+
+async fn read_automation_record(
+    cwd: &str,
+    file_path: Option<&str>,
+    thread_id: Option<&str>,
+    title: Option<&str>,
+) -> Result<Option<CrewonDomainConfigRecord>, JSONRPCErrorError> {
+    if let Some(file_path) = file_path {
+        let file_path = validate_record_file_path(cwd, DomainKind::Automation, file_path)?;
+        return read_record(DomainKind::Automation, &file_path).await;
+    }
+    if thread_id.is_none() && title.is_none() {
+        return Err(invalid_params("filePath, threadId, or title is required"));
+    }
+    let (records, _) = list_records(
+        DomainKind::Automation,
+        cwd,
+        None,
+        Some(MAX_LIST_LIMIT as u32),
+    )
+    .await?;
+    Ok(records.into_iter().find(|record| {
+        thread_id.is_some_and(|thread_id| {
+            record.config.get("threadId").and_then(JsonValue::as_str) == Some(thread_id)
+        }) || title.is_some_and(|title| {
+            record.config.get("title").and_then(JsonValue::as_str) == Some(title)
+        })
     }))
 }
 

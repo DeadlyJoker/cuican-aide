@@ -8,6 +8,8 @@ export type LibraryKind =
   | "automation"
   | "knowledge";
 
+export type DomainConfigKind = "agent" | "automation" | "office" | "tool";
+
 export type LibraryPanel = {
   kind: LibraryKind;
   title: string;
@@ -41,6 +43,7 @@ export type LibraryPanelAction = {
     | "delete-config-file"
     | "delete-mcp-config"
     | "install-plugin"
+    | "open-knowledge-file"
     | "login-mcp-oauth"
     | "open-path"
     | "open-thread"
@@ -66,7 +69,9 @@ export type LibraryPanelAction = {
   mcpToolName?: string;
   pathToOpen?: string;
   pathKind?: "directory" | "file";
+  domainConfigKind?: DomainConfigKind;
   automationConfig?: AutomationConfig;
+  automationConfigPath?: string;
   automationTitle?: string;
   automationThreadId?: string;
   automationPrompt?: string;
@@ -74,6 +79,9 @@ export type LibraryPanelAction = {
   skillEnabled?: boolean;
   skillName?: string;
   skillPath?: string;
+  knowledgePath?: string;
+  knowledgeTitle?: string;
+  knowledgeKind?: "file" | "directory";
   tone?: "danger" | "primary";
 };
 
@@ -370,22 +378,6 @@ export type LibraryItem = {
         item: ExternalAgentConfigMigrationItem;
       };
 };
-
-export const AGENT_CONFIG_MARKER = "CREWON_AGENT_CONFIG";
-export const AUTOMATION_CONFIG_MARKER = "CREWON_AUTOMATION_CONFIG";
-export const OFFICE_CONFIG_MARKER = "CREWON_OFFICE_CONFIG";
-
-export function agentConfigPayload(config: AgentConfig): string {
-  return `${AGENT_CONFIG_MARKER}:${JSON.stringify(config)}`;
-}
-
-export function automationConfigPayload(config: AutomationConfig): string {
-  return `${AUTOMATION_CONFIG_MARKER}:${JSON.stringify(config)}`;
-}
-
-export function officeConfigPayload(config: OfficeConfig): string {
-  return `${OFFICE_CONFIG_MARKER}:${JSON.stringify(config)}`;
-}
 
 export function officeConfigForThread(
   title: string,

@@ -152,6 +152,20 @@ pub struct OfficeSaveParams {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct OfficeCreateParams {
+    pub cwd: String,
+    pub title: String,
+    #[ts(optional = nullable)]
+    pub subtitle: Option<String>,
+    #[ts(optional = nullable)]
+    pub thread_id: Option<String>,
+    #[ts(optional = nullable)]
+    pub goal: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct OfficeListResponse {
     pub data: Vec<CrewonDomainConfigRecord>,
     pub next_cursor: Option<String>,
@@ -162,6 +176,14 @@ pub struct OfficeListResponse {
 #[ts(export_to = "v2/")]
 pub struct OfficeSaveResponse {
     pub file_path: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct OfficeCreateResponse {
+    pub file_path: String,
+    pub config: JsonValue,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -327,6 +349,28 @@ pub struct AutomationCreateParams {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct AutomationReadParams {
+    pub cwd: String,
+    #[ts(optional = nullable)]
+    pub file_path: Option<String>,
+    #[ts(optional = nullable)]
+    pub thread_id: Option<String>,
+    #[ts(optional = nullable)]
+    pub title: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationUpdateParams {
+    pub cwd: String,
+    pub file_path: String,
+    pub config: JsonValue,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct AutomationListResponse {
     pub data: Vec<CrewonDomainConfigRecord>,
     pub next_cursor: Option<String>,
@@ -343,6 +387,21 @@ pub struct AutomationSaveResponse {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct AutomationCreateResponse {
+    pub file_path: String,
+    pub config: JsonValue,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationReadResponse {
+    pub record: Option<CrewonDomainConfigRecord>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct AutomationUpdateResponse {
     pub file_path: String,
     pub config: JsonValue,
 }
@@ -469,6 +528,23 @@ pub struct ToolSaveParams {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub struct ToolReadParams {
+    pub cwd: String,
+    pub file_path: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ToolUpdateParams {
+    pub cwd: String,
+    pub file_path: String,
+    pub config: JsonValue,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub struct ToolListResponse {
     pub data: Vec<CrewonToolConfigRecord>,
     pub next_cursor: Option<String>,
@@ -479,6 +555,21 @@ pub struct ToolListResponse {
 #[ts(export_to = "v2/")]
 pub struct ToolSaveResponse {
     pub file_path: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ToolReadResponse {
+    pub record: Option<CrewonToolConfigRecord>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ToolUpdateResponse {
+    pub file_path: String,
+    pub config: JsonValue,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

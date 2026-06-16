@@ -239,8 +239,8 @@ export function AgentConfigView({
                   </em>
                   <p>
                     {locale === "zh"
-                      ? "保存配置后会写入 app-server agent/save。"
-                      : "Saving writes this configuration through app-server agent/save."}
+                      ? "保存配置后会写入 app-server agent/create 或 agent/update。"
+                      : "Saving writes this configuration through app-server agent/create or agent/update."}
                   </p>
                 </div>
               </article>

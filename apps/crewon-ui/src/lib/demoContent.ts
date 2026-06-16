@@ -18,7 +18,7 @@ import type {
   OfficeTask,
   OfficeWorkspace,
 } from "../App";
-import type { SettingsSection } from "../components/SettingsView";
+import type { SettingsSection } from "./settingsCatalog";
 import type { Locale } from "./i18n";
 
 const zh = (locale: Locale) => locale === "zh";

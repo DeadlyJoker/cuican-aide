@@ -19,8 +19,35 @@
   --office: #52525b;
   --warning: #b45309;
   --success: #16845f;
+  --danger: #dc2626;
   --focus: rgba(37, 99, 235, 0.34);
   --shadow: 0 18px 42px rgba(24, 24, 27, 0.1);
+  --surface-strong: #f4f4f5;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  /* radius scale */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  /* spacing scale (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  /* motion */
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 240ms;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  /* right space to reserve when the fixed Inspector is open:
+     inspector width 232 + its 12px right offset + 24px to mirror the left padding.
+     Constant (not vw-based) so the centered content keeps equal L/R margins and
+     never slides under the Inspector as the window narrows. */
+  --inspector-reserve: 268px;
   background: var(--bg);
   color: var(--text);
   text-rendering: geometricPrecision;
@@ -45,8 +72,10 @@
   --office: #d4d4d8;
   --warning: #fbbf24;
   --success: #34d399;
+  --danger: #f87171;
   --focus: rgba(96, 165, 250, 0.38);
   --shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
+  --surface-strong: #1c1c1c;
 }
 
 * {
@@ -93,7 +122,7 @@ textarea:focus-visible {
 
 *::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(113, 122, 138, 0.38);
   background-clip: content-box;
 }
@@ -146,7 +175,7 @@ textarea:focus-visible {
 .traffic-light {
   width: 12px;
   height: 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 
@@ -171,8 +200,8 @@ textarea:focus-visible {
   background: transparent;
   color: var(--text-muted);
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 .window-button:hover {
@@ -233,7 +262,7 @@ textarea:focus-visible {
   gap: 2px;
   padding: 5px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
   box-shadow: var(--shadow);
 }
@@ -247,7 +276,7 @@ textarea:focus-visible {
   height: 26px;
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -265,21 +294,29 @@ textarea:focus-visible {
 }
 
 .icon-button {
+  position: relative;
   display: inline-grid;
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    transform 120ms ease;
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+/* expand click/touch target to ~40px without changing visual size */
+.icon-button::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
 }
 
 .icon-button:hover {
@@ -339,7 +376,7 @@ textarea:focus-visible {
   gap: 10px;
   padding: 8px 10px 8px 12px;
   border: 1px solid rgba(37, 99, 235, 0.18);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(239, 246, 255, 0.94);
   color: var(--accent-strong);
   font-size: 12px;
@@ -379,7 +416,7 @@ textarea:focus-visible {
   flex: 0 0 auto;
   place-items: center;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(183, 110, 0, 0.1);
   color: inherit;
   cursor: pointer;
@@ -440,13 +477,13 @@ textarea:focus-visible {
   height: 36px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.9);
   color: var(--text-faint);
   transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    background 160ms ease;
+    border-color var(--dur-base) var(--ease),
+    box-shadow var(--dur-base) var(--ease),
+    background var(--dur-base) var(--ease);
 }
 
 .search-box:focus-within {
@@ -476,7 +513,7 @@ textarea:focus-visible {
   padding: 0 6px;
   place-items: center;
   border: 1px solid rgba(16, 24, 40, 0.1);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #f8fafc;
   color: var(--text-faint);
   font-size: 11px;
@@ -494,7 +531,7 @@ textarea:focus-visible {
   flex: 0 0 auto;
   place-items: center;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
@@ -533,16 +570,16 @@ textarea:focus-visible {
   min-width: 0;
   padding: 9px 9px 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text);
   cursor: pointer;
   text-align: left;
   transition:
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    border-color var(--dur-base) var(--ease),
+    background var(--dur-base) var(--ease),
+    box-shadow var(--dur-base) var(--ease),
+    transform var(--dur-base) var(--ease);
 }
 
 .thread-row:hover,
@@ -580,7 +617,7 @@ textarea:focus-visible {
   bottom: 10px;
   left: -1px;
   width: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   content: "";
 }
@@ -591,7 +628,7 @@ textarea:focus-visible {
   place-items: center;
   padding: 14px;
   border: 1px dashed rgba(16, 24, 40, 0.16);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--text-faint);
   font-size: 12px;
   font-weight: 700;
@@ -604,7 +641,7 @@ textarea:focus-visible {
   min-height: 116px;
   padding: 14px;
   border: 1px solid rgba(24, 24, 27, 0.1);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.56);
   color: var(--text-faint);
   font-size: 12px;
@@ -632,7 +669,7 @@ textarea:focus-visible {
   display: block;
   height: 12px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(138, 152, 168, 0.18);
 }
 
@@ -698,7 +735,7 @@ textarea:focus-visible {
   gap: 8px;
   padding: 8px 9px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -792,7 +829,7 @@ textarea:focus-visible {
   gap: 4px;
   padding: 4px;
   border: 1px solid rgba(22, 28, 36, 0.1);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(14px);
 }
@@ -815,15 +852,15 @@ textarea:focus-visible {
   height: 34px;
   padding: 0 14px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   font-size: 13px;
   font-weight: 720;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 .mode-switch button[data-active="true"] {
@@ -932,7 +969,7 @@ textarea:focus-visible {
   margin-top: clamp(28px, 8vh, 92px);
   padding: 16px 18px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-muted);
   text-align: center;
@@ -956,7 +993,7 @@ textarea:focus-visible {
   height: 34px;
   place-items: center;
   border: 1px solid rgba(37, 99, 235, 0.16);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(234, 248, 251, 0.76);
   color: var(--accent);
 }
@@ -981,7 +1018,7 @@ textarea:focus-visible {
   height: 28px;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -1034,7 +1071,7 @@ textarea:focus-visible {
   max-width: 120px;
   padding: 2px 6px;
   border: 1px solid rgba(16, 24, 40, 0.08);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.62);
   color: var(--text-faint);
   font-size: 10px;
@@ -1064,7 +1101,7 @@ textarea:focus-visible {
   max-width: none;
   padding: 10px 11px;
   border: 1px solid rgba(24, 24, 27, 0.1);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: #18181b;
   color: #f4f4f5;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -1171,14 +1208,14 @@ textarea:focus-visible {
   min-height: 96px;
   padding: 12px;
   border: 1px solid rgba(22, 28, 36, 0.13);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--surface-raised);
   box-shadow:
     0 12px 34px rgba(16, 22, 31, 0.08),
     0 1px 0 rgba(255, 255, 255, 0.82) inset;
   transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease;
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
 }
 
 :root[data-theme="dark"] .composer-input-row {
@@ -1190,7 +1227,7 @@ textarea:focus-visible {
 
 .conversation-surface[data-state="start"] .composer-input-row {
   min-height: 112px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow:
     0 14px 42px rgba(16, 22, 31, 0.1),
     0 0 0 1px rgba(255, 255, 255, 0.8) inset;
@@ -1274,16 +1311,16 @@ textarea:focus-visible {
   height: 40px;
   place-items: center;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--accent-strong);
   color: #fff;
   cursor: pointer;
   box-shadow: 0 10px 24px var(--accent-glow);
   transition:
-    background 120ms ease,
-    box-shadow 120ms ease,
-    transform 120ms ease,
-    opacity 120ms ease;
+    background var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
 }
 
 .send-button:disabled {
@@ -1325,7 +1362,7 @@ textarea:focus-visible {
   width: 7px;
   height: 7px;
   flex: 0 0 auto;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: #98a2b3;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.74);
 }
@@ -1378,7 +1415,7 @@ textarea:focus-visible {
   padding: 0 8px;
   border: 1px solid rgba(16, 24, 40, 0.1);
   border-bottom-color: rgba(16, 24, 40, 0.18);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: linear-gradient(180deg, #ffffff, #f4f6f8);
   color: var(--text-faint);
   font-family: inherit;
@@ -1401,7 +1438,7 @@ textarea:focus-visible {
   min-width: 0;
   padding: 2px;
   border: 1px solid rgba(16, 24, 40, 0.08);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(16, 24, 40, 0.035);
 }
 
@@ -1418,16 +1455,16 @@ textarea:focus-visible {
   min-width: 0;
   padding: 0 7px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: #667085;
   cursor: pointer;
   font-size: 12px;
   font-weight: 650;
   transition:
-    background 120ms ease,
-    color 120ms ease,
-    transform 120ms ease;
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .composer-tools button span {
@@ -1496,7 +1533,7 @@ textarea:focus-visible {
 .workspace {
   grid-template-columns: 240px minmax(0, 1fr);
   background: var(--surface);
-  transition: grid-template-columns 240ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: grid-template-columns var(--dur-slow) var(--ease);
 }
 
 .app-shell[data-sidebar-open="false"] .workspace {
@@ -1550,7 +1587,7 @@ textarea:focus-visible {
 .titlebar .icon-button {
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: rgba(255, 255, 255, 0.42);
 }
 
@@ -1677,7 +1714,7 @@ textarea:focus-visible {
 .project-row,
 .thread-row {
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   box-shadow: none;
 }
@@ -1696,8 +1733,8 @@ textarea:focus-visible {
   font-weight: 620;
   text-align: left;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 :root:not([data-theme="dark"]) .sidebar-primary-nav button,
@@ -1724,7 +1761,7 @@ textarea:focus-visible {
   height: 28px;
   margin: 1px 0 5px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.075);
   color: rgba(255, 255, 255, 0.56);
   box-shadow: none;
@@ -1834,7 +1871,7 @@ textarea:focus-visible {
 
 .conversation-surface {
   padding-top: 38px;
-  border-radius: 8px 0 0 8px;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
   background: #111111;
   overflow: hidden;
 }
@@ -1874,7 +1911,7 @@ textarea:focus-visible {
   min-height: 30px;
   padding: 0 9px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   font: inherit;
@@ -1897,7 +1934,7 @@ textarea:focus-visible {
   height: 25px;
   padding: 0 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(244, 244, 245, 0.07);
   color: var(--text-faint);
 }
@@ -1976,7 +2013,7 @@ textarea:focus-visible {
   overflow: hidden;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #202020;
 }
 
@@ -2023,7 +2060,7 @@ textarea:focus-visible {
   min-height: 30px;
   padding: 0 9px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(0, 0, 0, 0.18);
   color: var(--text);
   font: inherit;
@@ -2041,7 +2078,7 @@ textarea:focus-visible {
   min-height: 28px;
   padding: 0 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
   font: inherit;
@@ -2057,6 +2094,7 @@ textarea:focus-visible {
 
 .settings-error {
   margin: 0;
+  padding: 11px 12px;
   color: #ffb4a8;
   font-size: 12px;
 }
@@ -2135,7 +2173,7 @@ textarea:focus-visible {
   gap: 7px;
   padding: 6px 7px 6px 9px;
   border-color: rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(38, 38, 38, 0.94);
   color: rgba(255, 255, 255, 0.68);
   font-size: 11px;
@@ -2164,7 +2202,7 @@ textarea:focus-visible {
   width: 20px;
   min-width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
 }
 
@@ -2186,11 +2224,11 @@ textarea:focus-visible {
 }
 
 .app-shell[data-inspector-open="true"]:not([data-right-sidebar-open="true"]) .message-list {
-  padding-right: min(286px, 26vw);
+  padding-right: var(--inspector-reserve);
 }
 
 .app-shell[data-inspector-open="true"]:not([data-right-sidebar-open="true"]) .composer {
-  padding-right: min(286px, 26vw);
+  padding-right: var(--inspector-reserve);
 }
 
 .turn-group,
@@ -2254,7 +2292,7 @@ textarea:focus-visible {
   width: 20px;
   height: 20px;
   border-color: rgba(255, 255, 255, 0.1);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: #202020;
   color: var(--text-faint);
 }
@@ -2320,7 +2358,7 @@ textarea:focus-visible {
   overflow: auto;
   padding: 9px 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: #181818;
   color: #d6d6da;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -2331,7 +2369,7 @@ textarea:focus-visible {
 
 .markdown-content code {
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: rgba(255, 255, 255, 0.075);
   color: var(--text);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -2389,7 +2427,7 @@ textarea:focus-visible {
   max-width: min(430px, 100%);
   min-width: 0;
   padding: 6px 9px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #2b2b2b;
   color: #eeeeee;
   text-align: left;
@@ -2407,7 +2445,7 @@ textarea:focus-visible {
 .message[data-kind="dynamicToolCall"] .message-body p {
   padding: 8px 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: #181818;
   color: #cfcfd4;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -2436,7 +2474,7 @@ textarea:focus-visible {
   display: grid;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: #181818;
   color: #cfcfd4;
 }
@@ -2688,7 +2726,7 @@ textarea:focus-visible {
   padding: 0 8px 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-bottom: 0;
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   background: #2b2b2b;
   color: rgba(255, 255, 255, 0.46);
   font-size: 11px;
@@ -2701,7 +2739,7 @@ textarea:focus-visible {
   min-height: 76px;
   padding: 8px 8px 8px 10px;
   border-color: rgba(255, 255, 255, 0.1);
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background: #2f2f2f;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
 }
@@ -2709,7 +2747,7 @@ textarea:focus-visible {
 .conversation-surface[data-state="start"] .composer-input-row,
 .conversation-surface[data-state="thread"] .composer-input-row {
   min-height: 76px;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 :root:not([data-theme="dark"]) .composer-context {
@@ -2761,7 +2799,7 @@ textarea:focus-visible {
 .send-button {
   width: 28px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: #f4f4f5;
   color: #18181b;
   box-shadow: none;
@@ -2839,7 +2877,7 @@ textarea:focus-visible {
   gap: 12px;
   padding: 0 8px 0 13px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.055);
   color: rgba(238, 238, 238, 0.76);
   cursor: pointer;
@@ -2847,8 +2885,8 @@ textarea:focus-visible {
   font-size: 13px;
   text-align: left;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 .capability-dock button:hover,
@@ -2875,7 +2913,7 @@ textarea:focus-visible {
   align-items: center;
   padding: 0 7px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.075);
   color: rgba(238, 238, 238, 0.54);
   font: inherit;
@@ -2890,7 +2928,7 @@ textarea:focus-visible {
   overflow: auto;
   padding: 12px 13px;
   border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.045);
   color: rgba(238, 238, 238, 0.76);
   font-size: 12px;
@@ -2927,7 +2965,7 @@ textarea:focus-visible {
 .capability-command-form button {
   height: 30px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font: inherit;
   font-size: 12px;
 }
@@ -2987,7 +3025,7 @@ textarea:focus-visible {
   min-width: 0;
   padding: 0 9px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   color: inherit;
   font: inherit;
@@ -3010,7 +3048,7 @@ textarea:focus-visible {
   height: 30px;
   padding: 0 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.09);
   color: inherit;
   cursor: pointer;
@@ -3083,7 +3121,7 @@ textarea:focus-visible {
 .inspector .capability-dock button {
   height: 30px;
   padding: 0 8px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.055);
   font-size: 12px;
 }
@@ -3188,7 +3226,7 @@ textarea:focus-visible {
   gap: 0;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: rgba(40, 40, 40, 0.9);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16);
   backdrop-filter: blur(16px);
@@ -3323,7 +3361,7 @@ textarea:focus-visible {
 .sidebar-command,
 .project-row,
 .thread-row {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .sidebar-primary-nav button,
@@ -3394,8 +3432,8 @@ textarea:focus-visible {
   padding: 0 7px;
   color: rgba(255, 255, 255, 0.68);
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 .thread-row-actions {
@@ -3424,13 +3462,13 @@ textarea:focus-visible {
   width: 22px;
   height: 22px;
   place-items: center;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   color: rgba(255, 255, 255, 0.5);
   opacity: 0;
   transition:
-    opacity 120ms ease,
-    background 120ms ease,
-    color 120ms ease;
+    opacity var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 .thread-row:hover .thread-row-action,
@@ -3485,7 +3523,7 @@ textarea:focus-visible {
   height: 19px;
   padding: 0 6px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -3537,7 +3575,7 @@ textarea:focus-visible {
   height: 28px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--text-muted);
   cursor: pointer;
@@ -3562,7 +3600,7 @@ textarea:focus-visible {
 .library-item {
   max-width: 980px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
 }
 
@@ -3592,7 +3630,7 @@ textarea:focus-visible {
   min-height: 104px;
   resize: vertical;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
   color: var(--text);
   padding: 10px 11px;
@@ -3616,7 +3654,7 @@ textarea:focus-visible {
 .library-actions button {
   height: 30px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--text);
   padding: 0 10px;
@@ -3668,7 +3706,7 @@ textarea:focus-visible {
   place-items: center;
   width: 38px;
   height: 38px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 16px;
   font-weight: 700;
   color: var(--accent-color, var(--text));
@@ -3704,7 +3742,7 @@ textarea:focus-visible {
 
 .library-tag {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-faint) 14%, transparent);
   color: var(--text-muted);
   font-size: 11px;
@@ -3714,7 +3752,7 @@ textarea:focus-visible {
 .library-badge {
   flex-shrink: 0;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 600;
   border: 1px solid transparent;
@@ -3750,7 +3788,7 @@ textarea:focus-visible {
   color: var(--text-faint);
   font-size: 20px;
   line-height: 1;
-  transition: transform 120ms ease, color 120ms ease;
+  transition: transform var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 
 .library-item[data-accent="blue"] {
@@ -3824,10 +3862,10 @@ textarea:focus-visible {
 button.library-item {
   cursor: pointer;
   transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    box-shadow 120ms ease,
-    transform 120ms ease;
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 button.library-item:hover {
@@ -3887,7 +3925,7 @@ button.library-item:hover .library-card-chevron {
   height: 28px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--text-muted);
   cursor: pointer;
@@ -3913,7 +3951,7 @@ button.library-item:hover .library-card-chevron {
   place-items: center;
   width: 42px;
   height: 42px;
-  border-radius: 11px;
+  border-radius: var(--radius-lg);
   font-size: 20px;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, var(--surface-raised));
@@ -3951,14 +3989,14 @@ button.library-item:hover .library-card-chevron {
   gap: 10px;
   padding: 11px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised));
 }
 
 .office-goal span {
   flex-shrink: 0;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
   font-size: 11px;
@@ -3975,7 +4013,7 @@ button.library-item:hover .library-card-chevron {
 .office-goal em {
   flex-shrink: 0;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(113, 122, 138, 0.14);
   color: var(--text-faint);
   font-size: 11px;
@@ -4011,7 +4049,7 @@ button.library-item:hover .library-card-chevron {
   display: flex;
   gap: 4px;
   padding: 4px;
-  border-radius: 11px;
+  border-radius: var(--radius-lg);
   background: var(--surface-strong);
   border: 1px solid var(--border);
   width: fit-content;
@@ -4019,14 +4057,14 @@ button.library-item:hover .library-card-chevron {
 
 .office-tabs button {
   padding: 6px 18px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 620;
   color: var(--text-muted);
   background: transparent;
   border: 0;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 
 .office-tabs button:hover {
@@ -4055,7 +4093,7 @@ button.library-item:hover .library-card-chevron {
   min-height: 0;
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface-raised);
   overflow: auto;
 }
@@ -4080,7 +4118,7 @@ button.library-item:hover .library-card-chevron {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-faint) 16%, transparent);
   color: var(--text-muted);
   font-size: 11px;
@@ -4091,7 +4129,7 @@ button.library-item:hover .library-card-chevron {
   align-items: center;
   gap: 10px;
   padding: 7px 6px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
 }
 
 .office-member:hover {
@@ -4105,7 +4143,7 @@ button.library-item:hover .library-card-chevron {
   width: 34px;
   height: 34px;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 14px;
   font-weight: 700;
   color: var(--accent-color, var(--text));
@@ -4116,7 +4154,7 @@ button.library-item:hover .library-card-chevron {
 .office-avatar-sm {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 12px;
 }
 
@@ -4184,7 +4222,7 @@ button.library-item:hover .library-card-chevron {
 .office-rail-actions button {
   width: 100%;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
   background: color-mix(in srgb, var(--accent) 16%, var(--surface-raised));
   color: var(--text);
@@ -4197,7 +4235,7 @@ button.library-item:hover .library-card-chevron {
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface-raised);
   overflow: hidden;
 }
@@ -4231,7 +4269,7 @@ button.library-item:hover .library-card-chevron {
 .office-system {
   align-self: center;
   padding: 4px 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-faint) 12%, transparent);
   color: var(--text-faint);
   font-size: 11px;
@@ -4269,7 +4307,7 @@ button.library-item:hover .library-card-chevron {
   margin: 0;
   padding: 9px 12px;
   border: 1px solid var(--border);
-  border-radius: 4px 12px 12px 12px;
+  border-radius: var(--radius-xs) var(--radius-lg) var(--radius-lg) var(--radius-lg);
   background: color-mix(in srgb, var(--text-faint) 7%, var(--surface));
   color: var(--text-muted);
   font-size: 13px;
@@ -4280,7 +4318,7 @@ button.library-item:hover .library-card-chevron {
   color: var(--accent);
   font-weight: 650;
   padding: 0 3px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
@@ -4304,7 +4342,7 @@ button.library-item:hover .library-card-chevron {
   height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text);
   font-size: 12.5px;
@@ -4322,13 +4360,13 @@ button.library-item:hover .library-card-chevron {
 .office-composer button {
   height: 36px;
   padding: 0 16px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
   background: color-mix(in srgb, var(--accent) 20%, var(--surface-raised));
   color: var(--text);
   font-size: 12.5px;
   cursor: pointer;
-  transition: opacity 120ms ease;
+  transition: opacity var(--dur-fast) var(--ease);
 }
 
 .office-composer button:disabled {
@@ -4346,7 +4384,7 @@ button.library-item:hover .library-card-chevron {
 }
 
 .office-bubble[data-self="true"] .office-bubble-body p {
-  border-radius: 12px 4px 12px 12px;
+  border-radius: var(--radius-lg) var(--radius-xs) var(--radius-lg) var(--radius-lg);
   border-color: color-mix(in srgb, var(--accent) 32%, transparent);
   background: color-mix(in srgb, var(--accent) 14%, var(--surface));
   color: var(--text);
@@ -4361,7 +4399,7 @@ button.library-item:hover .library-card-chevron {
   align-items: center;
   gap: 9px;
   padding: 8px 7px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
 }
 
 .office-task:hover {
@@ -4412,7 +4450,7 @@ button.library-item:hover .library-card-chevron {
 .office-task-status {
   flex-shrink: 0;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 10.5px;
   font-weight: 600;
   background: color-mix(in srgb, var(--text-faint) 14%, transparent);
@@ -4472,7 +4510,7 @@ button.library-item:hover .library-card-chevron {
   place-items: center;
   width: 46px;
   height: 46px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 20px;
   font-weight: 700;
   color: var(--accent-color, var(--text));
@@ -4522,7 +4560,7 @@ button.library-item:hover .library-card-chevron {
   align-content: start;
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface-raised);
 }
 
@@ -4564,7 +4602,7 @@ button.library-item:hover .library-card-chevron {
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text);
   font-size: 12.5px;
@@ -4574,7 +4612,7 @@ button.library-item:hover .library-card-chevron {
   min-height: 110px;
   padding: 11px 13px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text);
   font-size: 13px;
@@ -4598,11 +4636,11 @@ button.library-item:hover .library-card-chevron {
   gap: 11px;
   padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg);
   cursor: pointer;
   text-align: left;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 
 .agent-cap[data-enabled="true"] {
@@ -4620,7 +4658,7 @@ button.library-item:hover .library-card-chevron {
   width: 30px;
   height: 30px;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 700;
   color: var(--accent-color, var(--text));
@@ -4669,9 +4707,9 @@ button.library-item:hover .library-card-chevron {
   width: 34px;
   height: 19px;
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-faint) 30%, transparent);
-  transition: background 140ms ease;
+  transition: background var(--dur-fast) var(--ease);
 }
 
 .agent-cap-toggle[data-on="true"] {
@@ -4686,7 +4724,7 @@ button.library-item:hover .library-card-chevron {
   height: 15px;
   border-radius: 50%;
   background: #fff;
-  transition: transform 140ms ease;
+  transition: transform var(--dur-fast) var(--ease);
 }
 
 .agent-cap-toggle[data-on="true"] i {
@@ -4704,7 +4742,7 @@ button.library-item:hover .library-card-chevron {
   gap: 10px;
   padding: 10px 11px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg);
 }
 
@@ -4713,7 +4751,7 @@ button.library-item:hover .library-card-chevron {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--accent-color, var(--text));
   background: color-mix(in srgb, var(--accent-color, var(--text-faint)) 14%, transparent);
   font-size: 12px;
@@ -4770,7 +4808,7 @@ button.library-item:hover .library-card-chevron {
 .agent-config-save {
   height: 36px;
   padding: 0 20px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
   background: color-mix(in srgb, var(--accent) 22%, var(--surface-raised));
   color: var(--text);
@@ -4828,7 +4866,7 @@ button.library-item:hover .library-card-chevron {
 .inspector-panel {
   padding: 10px 10px 11px;
   border-color: rgba(255, 255, 255, 0.075);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: rgba(42, 42, 42, 0.92);
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.2);
 }
@@ -5085,7 +5123,7 @@ button.library-item:hover .library-card-chevron {
 
   .composer-input-row {
     min-height: 96px;
-    border-radius: 11px;
+    border-radius: var(--radius-lg);
   }
 
   .composer-tool-row {
@@ -5179,7 +5217,7 @@ button.library-item:hover .library-card-chevron {
     grid-template-columns: 30px minmax(0, 1fr) 34px;
     grid-template-rows: minmax(32px, auto) auto;
     min-height: 84px;
-    border-radius: 11px;
+    border-radius: var(--radius-lg);
   }
 
   .composer-tool-row {
@@ -5298,7 +5336,7 @@ button.library-item:hover .library-card-chevron {
 .activity-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 18px;
 }
 
@@ -5361,7 +5399,7 @@ button.library-item:hover .library-card-chevron {
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 14px;
   color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 14%, transparent);
@@ -5418,7 +5456,7 @@ button.library-item:hover .library-card-chevron {
   font-size: 11px;
   font-weight: 640;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -5450,7 +5488,7 @@ button.library-item:hover .library-card-chevron {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 720;
   color: #fff;
@@ -5475,7 +5513,7 @@ button.library-item:hover .library-card-chevron {
   grid-template-columns: 30px minmax(0, 1fr);
   gap: 11px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--surface-strong);
 }
@@ -5494,7 +5532,7 @@ button.library-item:hover .library-card-chevron {
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 14%, transparent);
@@ -5515,7 +5553,7 @@ button.library-item:hover .library-card-chevron {
   font-size: 10.5px;
   font-weight: 680;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -5556,12 +5594,12 @@ button.library-item:hover .library-card-chevron {
 .approval-actions button {
   flex: 1;
   padding: 6px 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 640;
   cursor: pointer;
   border: 1px solid var(--border);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 
 .approval-approve {
@@ -5604,7 +5642,7 @@ button.library-item:hover .library-card-chevron {
 .budget-cap-bar,
 .budget-bar {
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-strong);
   overflow: hidden;
 }
@@ -5613,7 +5651,7 @@ button.library-item:hover .library-card-chevron {
 .budget-bar span {
   display: block;
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   transition: width 0.4s ease;
 }
@@ -5642,7 +5680,7 @@ button.library-item:hover .library-card-chevron {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 12px;
   color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 14%, transparent);
@@ -5679,16 +5717,16 @@ button.library-item:hover .library-card-chevron {
   gap: 11px;
   width: 100%;
   padding: 10px 12px;
-  border-radius: 11px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--surface-strong);
   color: inherit;
   text-align: left;
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    transform 0.15s ease;
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .artifact-row:hover {
@@ -5702,7 +5740,7 @@ button.library-item:hover .library-card-chevron {
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 14%, transparent);
@@ -5723,7 +5761,7 @@ button.library-item:hover .library-card-chevron {
   font-size: 10.5px;
   color: var(--text-faint);
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   border: 1px solid var(--border);
 }
@@ -5745,7 +5783,7 @@ button.library-item:hover .library-card-chevron {
 .knowledge-col {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 18px;
 }
 
@@ -5762,13 +5800,13 @@ button.library-item:hover .library-card-chevron {
   gap: 12px;
   width: 100%;
   padding: 13px;
-  border-radius: 13px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--surface-strong);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 
 .memory-card[data-pinned="true"] {
@@ -5786,7 +5824,7 @@ button.library-item:hover .library-card-chevron {
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 14px;
   color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 14%, transparent);
@@ -5807,7 +5845,7 @@ button.library-item:hover .library-card-chevron {
   font-size: 10.5px;
   color: var(--text-faint);
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface);
   border: 1px solid var(--border);
 }
@@ -5837,13 +5875,13 @@ button.library-item:hover .library-card-chevron {
   gap: 11px;
   width: 100%;
   padding: 11px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--surface-strong);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 
 .source-row:hover {
@@ -5856,7 +5894,7 @@ button.library-item:hover .library-card-chevron {
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 14%, transparent);
@@ -5878,7 +5916,7 @@ button.library-item:hover .library-card-chevron {
   font-size: 10.5px;
   font-weight: 640;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .source-status[data-status="indexed"] {

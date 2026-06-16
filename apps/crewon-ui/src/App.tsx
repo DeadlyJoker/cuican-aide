@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import { AlertTriangle } from "lucide-react";
 import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
@@ -43,9 +42,13 @@ import {
   type AccountStatus,
   type GitRemoteDiffSummary,
 } from "./components/Inspector";
-import { AgentConfigView } from "./components/agents/AgentConfigView";
+import { LibraryView } from "./components/library/LibraryView";
 import { Sidebar } from "./components/Sidebar";
-import { SettingsSidebar, SettingsView, type SettingsSection } from "./components/SettingsView";
+import {
+  SettingsContent,
+  SettingsNavigation,
+  type SettingsSection,
+} from "./components/settings";
 import { TitleBar } from "./components/TitleBar";
 import { Transcript, type WorkMode } from "./components/Transcript";
 import {
@@ -59,6 +62,12 @@ import {
   type RemoteControlClient,
   type RemoteControlStatusResponse,
 } from "./lib/appServer";
+import {
+  appViewFromSearch,
+  libraryViewFromSearch,
+  settingsSectionFromSearch,
+  type AppView,
+} from "./lib/appRouting";
 import { getDemoThreads } from "./lib/demoData";
 import {
   appendOfficeUserMessage,
@@ -78,17 +87,24 @@ import {
   type ToolId,
 } from "./lib/i18n";
 import { defaultServerUrl, detectPlatform } from "./lib/platform";
+import {
+  demoSettingsSectionForAction,
+  isAuthDemoAction,
+  worktreeDemoAction,
+} from "./lib/settingsActions";
 import { itemPreview } from "./lib/text";
 import { getInitialTheme, persistTheme, type Theme } from "./lib/theme";
 import {
-  AGENT_CONFIG_MARKER,
-  AUTOMATION_CONFIG_MARKER,
-  OFFICE_CONFIG_MARKER,
+  agentConfigToOfficeMember,
+  capabilityAccents,
+  createDefaultAgentConfig,
+  createMcpInventoryAgentOption,
+  createSkillAgentOption,
+} from "./lib/agentConfigDefaults";
+import {
   officeConfigForThread,
-  type ActivityData,
   type AgentCapabilityOption,
   type AgentConfig,
-  type ApprovalRequest,
   type ArtifactItem,
   type AutomationConfig,
   type LibraryAccent,
@@ -99,24 +115,25 @@ import {
   type OfficeConfig,
   type OfficeMember,
   type OfficeMessage,
-  type OfficeTask,
   type OfficeWorkspace,
   type ToolConfig,
-  type TraceStep,
   type KnowledgeData,
   type KnowledgeEntry,
   type KnowledgeSource,
 } from "./lib/crewonDomain";
 import {
   deleteDomainConfigFile,
-  readAgentConfigFiles as readStoredAgentConfigFiles,
-  readAutomationConfigFiles as readStoredAutomationConfigFiles,
-  readOfficeConfigFiles as readStoredOfficeConfigFiles,
-  readToolConfigFiles as readStoredToolConfigFiles,
   writeAgentConfigFile as writeStoredAgentConfigFile,
   writeAutomationConfigFile as writeStoredAutomationConfigFile,
   writeOfficeConfigFile as writeStoredOfficeConfigFile,
 } from "./lib/domainPersistence";
+import {
+  LIBRARY_DECOR,
+  agentConfigRecordsToLibraryItems,
+  automationConfigRecordToLibraryItem,
+  officeConfigRecordsToLibraryItems,
+  toolConfigRecordsToLibraryItems,
+} from "./lib/domainLibraryItems";
 export type {
   ActivityData,
   AgentCapabilityOption,
@@ -143,11 +160,14 @@ export type {
 } from "./lib/crewonDomain";
 
 type ConnectionState = "connecting" | "connected" | "demo";
-type AppView = "chat" | "settings" | "library";
 type NoticeState = {
   text: string;
   tone: "warning" | "success";
 };
+
+type LibraryItemAction = NonNullable<LibraryItem["action"]>;
+type McpDetailAction = Extract<LibraryItemAction, { type: "mcp-detail" }>;
+type SkillFileAction = Extract<LibraryItemAction, { type: "skill-file" }>;
 const DESKTOP_LOCALE_KEY_PATH = "desktop.uiLocale";
 const DESKTOP_THEME_KEY_PATH = "desktop.appearanceTheme";
 type PendingApprovalRequest = {
@@ -192,7 +212,7 @@ function slugifySkillName(name: string): string {
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "client-demo-skill"
+      .replace(/^-+|-+$/g, "") || "workspace-skill"
   );
 }
 
@@ -204,218 +224,6 @@ function appMentionSlug(name: string): string {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "app"
   );
-}
-
-function createDefaultAgentConfig(locale: Locale): AgentConfig {
-  const permissions =
-    locale === "zh"
-      ? ["只读", "工作区写入", "完全访问"]
-      : ["read-only", "workspace-write", "full-access"];
-  return {
-    name: locale === "zh" ? "新智能体" : "New Agent",
-    glyph: "✦",
-    accent: "cyan",
-    role:
-      locale === "zh"
-        ? "自定义执行角色 · 可招募"
-        : "Custom execution role · recruitable",
-    model: "gpt-5-codex",
-    models: ["gpt-5-codex", "gpt-5", "o4-mini", "claude-opus-4.8"],
-    permission: permissions[1],
-    permissions,
-    systemPrompt:
-      locale === "zh"
-        ? "你是办公室中的自定义智能体。先理解目标，再列出计划，必要时调用已授权工具，并把结果沉淀为可复用交付物。"
-        : "You are a custom agent in an office. Understand the goal, outline a plan, use authorized tools when needed, and turn results into reusable deliverables.",
-    mcp: [
-      {
-        id: "filesystem",
-        name: locale === "zh" ? "文件系统" : "Filesystem",
-        glyph: "⌁",
-        accent: "blue",
-        description:
-          locale === "zh"
-            ? "读取和整理工作区文件"
-            : "Read and organize workspace files",
-        enabled: true,
-      },
-      {
-        id: "browser",
-        name: locale === "zh" ? "浏览器" : "Browser",
-        glyph: "◎",
-        accent: "amber",
-        description:
-          locale === "zh"
-            ? "打开网页、抓取页面和截图"
-            : "Open pages, inspect content, and capture screenshots",
-        enabled: false,
-      },
-    ],
-    skills: [
-      {
-        id: "review",
-        name: locale === "zh" ? "代码审查" : "Code review",
-        glyph: "✓",
-        accent: "green",
-        description:
-          locale === "zh"
-            ? "检查风险、缺陷和测试缺口"
-            : "Check risks, defects, and test gaps",
-        enabled: true,
-      },
-      {
-        id: "client-demo",
-        name: locale === "zh" ? "甲方 Demo" : "Client demo",
-        glyph: "◈",
-        accent: "rose",
-        description:
-          locale === "zh"
-            ? "整理演示材料和截图"
-            : "Prepare demo material and screenshots",
-        enabled: false,
-      },
-    ],
-  };
-}
-
-const CAPABILITY_ACCENTS: LibraryAccent[] = [
-  "blue",
-  "cyan",
-  "green",
-  "amber",
-  "violet",
-  "rose",
-  "slate",
-];
-const MCP_GLYPHS = ["⌁", "◎", "⌘", "◈", "◇"];
-const SKILL_GLYPHS = ["✓", "✦", "⌗", "◌", "◇"];
-
-function createMcpAgentOption(
-  server: McpServerStatus,
-  locale: Locale,
-  index: number,
-): AgentCapabilityOption {
-  const toolCount = Object.keys(server.tools).length;
-  const resourceCount = server.resources.length + server.resourceTemplates.length;
-  const serverTitle =
-    server.serverInfo?.title || server.serverInfo?.name || server.name;
-  const authLabel =
-    server.authStatus === "notLoggedIn"
-      ? locale === "zh"
-        ? "未登录"
-        : "not logged in"
-      : server.authStatus === "unsupported"
-        ? locale === "zh"
-          ? "无需授权"
-          : "no auth"
-        : locale === "zh"
-          ? "已授权"
-          : "authorized";
-
-  return {
-    id: server.name,
-    name: serverTitle,
-    glyph: MCP_GLYPHS[index % MCP_GLYPHS.length],
-    accent: CAPABILITY_ACCENTS[index % CAPABILITY_ACCENTS.length],
-    description:
-      locale === "zh"
-        ? `${authLabel} · ${toolCount} 个工具 · ${resourceCount} 个资源`
-        : `${authLabel} · ${toolCount} tools · ${resourceCount} resources`,
-    enabled: server.authStatus !== "notLoggedIn" && toolCount > 0,
-  };
-}
-
-function createMcpConfigAgentOption(
-  record: McpServerConfigRecord,
-  locale: Locale,
-  index: number,
-): AgentCapabilityOption {
-  const endpoint = mcpConfigEndpoint(record);
-  return {
-    id: record.name,
-    name: record.name,
-    glyph: MCP_GLYPHS[index % MCP_GLYPHS.length],
-    accent: CAPABILITY_ACCENTS[index % CAPABILITY_ACCENTS.length],
-    description:
-      locale === "zh"
-        ? `${mcpConfigEnabled(record) ? "已配置" : "配置停用"} · 等待运行态加载${endpoint ? ` · ${endpoint}` : ""}`
-        : `${mcpConfigEnabled(record) ? "configured" : "config disabled"} · waiting to load${endpoint ? ` · ${endpoint}` : ""}`,
-    enabled: mcpConfigEnabled(record),
-  };
-}
-
-function createMcpInventoryAgentOption(
-  server: {
-    config?: McpServerConfigRecord;
-    name: string;
-    status?: McpServerStatus;
-  },
-  locale: Locale,
-  index: number,
-): AgentCapabilityOption {
-  if (server.status) {
-    const option = createMcpAgentOption(server.status, locale, index);
-    if (!server.config) {
-      return option;
-    }
-    return {
-      ...option,
-      description: `${option.description} · ${
-        mcpConfigEnabled(server.config)
-          ? locale === "zh"
-            ? "已配置"
-            : "configured"
-          : locale === "zh"
-            ? "配置停用"
-            : "config disabled"
-      }`,
-      enabled: option.enabled && mcpConfigEnabled(server.config),
-    };
-  }
-
-  return server.config
-    ? createMcpConfigAgentOption(server.config, locale, index)
-    : {
-        id: server.name,
-        name: server.name,
-        glyph: MCP_GLYPHS[index % MCP_GLYPHS.length],
-        accent: CAPABILITY_ACCENTS[index % CAPABILITY_ACCENTS.length],
-        description: locale === "zh" ? "等待加载" : "waiting to load",
-        enabled: false,
-      };
-}
-
-function createSkillAgentOption(
-  skill: SkillMetadata,
-  locale: Locale,
-  index: number,
-): AgentCapabilityOption {
-  let scopeLabel: string;
-  switch (skill.scope) {
-    case "repo":
-      scopeLabel = locale === "zh" ? "项目" : "repo";
-      break;
-    case "user":
-      scopeLabel = locale === "zh" ? "个人" : "user";
-      break;
-    case "system":
-      scopeLabel = locale === "zh" ? "系统" : "system";
-      break;
-    case "admin":
-      scopeLabel = locale === "zh" ? "管理" : "admin";
-      break;
-  }
-  return {
-    id: skill.path,
-    name: skill.name,
-    glyph: SKILL_GLYPHS[index % SKILL_GLYPHS.length],
-    accent: CAPABILITY_ACCENTS[(index + 2) % CAPABILITY_ACCENTS.length],
-    description:
-      skill.shortDescription ||
-      skill.description ||
-      (locale === "zh" ? `${scopeLabel} Skill` : `${scopeLabel} skill`),
-    enabled: skill.enabled && index < 8,
-  };
 }
 
 function userMessageText(item: ThreadItem): string {
@@ -449,7 +257,7 @@ function compactOfficeMessageText(text: string): string {
 }
 
 function userOfficeMessageText(text: string, locale: Locale): string {
-  const withoutConfig = text.split(`${OFFICE_CONFIG_MARKER}:`)[0].trim();
+  const withoutConfig = text.trim();
   const zhPrefixMatch = withoutConfig.match(/^办公室「.*」群聊消息：([\s\S]*)$/);
   if (zhPrefixMatch?.[1]) {
     return compactOfficeMessageText(zhPrefixMatch[1]);
@@ -568,134 +376,6 @@ function mergeOfficeMessages(
   return merged;
 }
 
-function parseAgentConfigFromThread(thread: Thread, locale: Locale): AgentConfig | null {
-  for (const turn of [...thread.turns].reverse()) {
-    for (const item of [...turn.items].reverse()) {
-      const text = userMessageText(item);
-      const markerIndex = text.indexOf(`${AGENT_CONFIG_MARKER}:`);
-      if (markerIndex === -1) {
-        continue;
-      }
-      const payload = text.slice(markerIndex + AGENT_CONFIG_MARKER.length + 1).trim();
-      try {
-        const parsed = JSON.parse(payload) as Partial<AgentConfig>;
-        const fallback = createDefaultAgentConfig(locale);
-        return {
-          ...fallback,
-          ...parsed,
-          threadId: thread.id,
-          mcp: Array.isArray(parsed.mcp) ? parsed.mcp : fallback.mcp,
-          skills: Array.isArray(parsed.skills) ? parsed.skills : fallback.skills,
-          models: Array.isArray(parsed.models) ? parsed.models : fallback.models,
-          permissions: Array.isArray(parsed.permissions) ? parsed.permissions : fallback.permissions,
-        };
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
-
-function parseAutomationConfigFromThread(thread: Thread, locale: Locale): AutomationConfig | null {
-  for (const turn of [...thread.turns].reverse()) {
-    for (const item of [...turn.items].reverse()) {
-      const text = userMessageText(item);
-      const markerIndex = text.indexOf(`${AUTOMATION_CONFIG_MARKER}:`);
-      if (markerIndex === -1) {
-        continue;
-      }
-      const payload = text
-        .slice(markerIndex + AUTOMATION_CONFIG_MARKER.length + 1)
-        .trim();
-      try {
-        const parsed = JSON.parse(payload) as Partial<AutomationConfig>;
-        const title = parsed.title || threadTitle(thread, locale === "zh" ? "自动化" : "Automation");
-        return {
-          threadId: thread.id,
-          title,
-          subtitle:
-            parsed.subtitle ||
-            (locale === "zh" ? "后端执行线程" : "Backend execution thread"),
-          body:
-            parsed.body ||
-            (locale === "zh"
-              ? `线程：${thread.id}\n状态：${thread.status}`
-              : `Thread: ${thread.id}\nStatus: ${thread.status}`),
-          prompt:
-            parsed.prompt ||
-            (locale === "zh"
-              ? `继续运行自动化「${title}」。`
-              : `Run automation "${title}" again.`),
-        };
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
-
-function parseOfficeConfigFromThread(thread: Thread, locale: Locale): OfficeConfig | null {
-  for (const turn of [...thread.turns].reverse()) {
-    for (const item of [...turn.items].reverse()) {
-      const text = userMessageText(item);
-      const markerIndex = text.indexOf(`${OFFICE_CONFIG_MARKER}:`);
-      if (markerIndex === -1) {
-        continue;
-      }
-      const payload = text.slice(markerIndex + OFFICE_CONFIG_MARKER.length + 1).trim();
-      try {
-        const parsed = JSON.parse(payload) as Partial<OfficeConfig>;
-        if (!parsed.workspace) {
-          return null;
-        }
-        const title = parsed.title || threadTitle(thread, locale === "zh" ? "办公室" : "Office");
-        return {
-          title,
-          subtitle:
-            parsed.subtitle ||
-            (locale === "zh" ? "后端办公室" : "Backend office"),
-          workspace: {
-            ...workspaceFromBackendThread(thread, locale),
-            ...parsed.workspace,
-            threadId: thread.id,
-            backendStatus: "connected",
-            members: Array.isArray(parsed.workspace.members)
-              ? parsed.workspace.members
-              : workspaceFromBackendThread(thread, locale).members,
-            messages: mergeOfficeMessages(
-              Array.isArray(parsed.workspace.messages)
-                ? parsed.workspace.messages
-                : workspaceFromBackendThread(thread, locale).messages,
-              officeMessagesFromThread(thread, locale),
-            ),
-            tasks: Array.isArray(parsed.workspace.tasks)
-              ? parsed.workspace.tasks
-              : workspaceFromBackendThread(thread, locale).tasks,
-          },
-        };
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
-
-function backendThreadMeta(thread: Thread, locale: Locale): string {
-  const updated = new Date(thread.updatedAt * 1000).toLocaleString(
-    locale === "zh" ? "zh-CN" : "en-US",
-    {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    },
-  );
-  return `${locale === "zh" ? "后端线程" : "Backend thread"} · ${updated}`;
-}
-
 function workspaceFromBackendThread(thread: Thread, locale: Locale): OfficeWorkspace {
   const title = threadTitle(thread, locale === "zh" ? "办公室" : "Office");
   return {
@@ -725,8 +405,8 @@ function workspaceFromBackendThread(thread: Thread, locale: Locale): OfficeWorks
         kind: "system",
         text:
           locale === "zh"
-            ? `已从后端线程恢复办公室：${title}`
-            : `Restored office from backend thread: ${title}`,
+            ? `已连接办公室后端会话：${title}`
+            : `Connected office backend session: ${title}`,
       },
       ...officeMessagesFromThread(thread, locale),
     ],
@@ -734,134 +414,49 @@ function workspaceFromBackendThread(thread: Thread, locale: Locale): OfficeWorks
   };
 }
 
-function agentConfigToOfficeMember(
-  config: AgentConfig,
+function newBackendOfficeWorkspace(
+  title: string,
+  threadId: string,
   locale: Locale,
-): OfficeMember {
+): OfficeWorkspace {
+  const goal =
+    locale === "zh"
+      ? `围绕「${title}」进行多智能体协作，沉淀任务、审批和交付物。`
+      : `Coordinate multi-agent work for "${title}", keeping tasks, approvals, and artifacts.`;
   return {
-    agentId: config.agentId,
-    name: config.name,
-    role: config.role,
-    glyph: config.glyph,
-    accent: config.accent,
-    status: locale === "zh" ? "已从智能体库招募" : "Recruited from agents",
-    online: true,
-  };
-}
-
-function backendThreadLibraryItem(
-  thread: Thread,
-  kind: "agent" | "automation" | "office",
-  locale: Locale,
-  agentConfig?: AgentConfig | null,
-  automationConfig?: AutomationConfig | null,
-  officeConfig?: OfficeConfig | null,
-): LibraryItem {
-  const title = threadTitle(
-    thread,
-    kind === "agent"
-      ? locale === "zh"
-        ? "智能体"
-        : "Agent"
-      : kind === "automation"
-        ? locale === "zh"
-          ? "自动化"
-          : "Automation"
-        : locale === "zh"
-          ? "办公室"
-          : "Office",
-  );
-
-  if (kind === "office") {
-    const config =
-      officeConfig ?? {
-        title,
-        subtitle: locale === "zh" ? "后端办公室" : "Backend office",
-        workspace: workspaceFromBackendThread(thread, locale),
-      };
-    return {
-      title: config.title,
-      meta: backendThreadMeta(thread, locale),
-      description:
-        locale === "zh"
-          ? "已绑定真实 app-server 线程，可进入群聊继续协作。"
-          : "Bound to a real app-server thread; open the group chat to continue.",
-      glyph: "⌗",
-      accent: "blue",
-      badge: { label: locale === "zh" ? "已连接" : "connected", tone: "running" },
-      action: {
-        type: "office-detail",
-        title: config.title,
-        subtitle: config.subtitle,
-        body: "",
-        items: [],
-        workspace: config.workspace,
+    goal,
+    threadId,
+    backendStatus: "connected",
+    members: [
+      {
+        name: locale === "zh" ? "协调者" : "Coordinator",
+        role: locale === "zh" ? "办公室调度" : "Office coordination",
+        glyph: "@",
+        accent: "blue",
+        status: locale === "zh" ? "已绑定后端线程" : "Backend thread bound",
+        online: true,
       },
-    };
-  }
-
-  if (kind === "automation") {
-    const config =
-      automationConfig ?? {
-        title,
-        subtitle: locale === "zh" ? "后端执行线程" : "Backend execution thread",
-        body:
+    ],
+    messages: [
+      {
+        author: locale === "zh" ? "系统" : "System",
+        glyph: "⌗",
+        accent: "blue",
+        time: locale === "zh" ? "现在" : "now",
+        kind: "system",
+        text:
           locale === "zh"
-            ? `线程：${thread.id}\n状态：${thread.status}\n预览：${thread.preview || "暂无"}`
-            : `Thread: ${thread.id}\nStatus: ${thread.status}\nPreview: ${thread.preview || "None"}`,
-        prompt:
-          locale === "zh"
-            ? `继续运行自动化「${title}」，并把执行结果记录到当前线程。`
-            : `Run automation "${title}" again and record the result in this thread.`,
-      };
-    return {
-      title: config.title,
-      meta: backendThreadMeta(thread, locale),
-      description:
-        locale === "zh"
-          ? "已创建后端执行线程，打开后可再次运行并写入运行记录。"
-          : "Backend execution thread exists; open it to run again and append records.",
-      glyph: "⏱",
-      accent: "green",
-      badge: { label: locale === "zh" ? "后端" : "backend", tone: "running" },
-      action: {
-        type: "automation-detail",
-        title: config.title,
-        subtitle: config.subtitle,
-        body: config.body,
-        prompt: config.prompt,
-        threadId: config.threadId ?? thread.id,
+            ? "办公室已创建，并绑定到真实 app-server 线程。"
+            : "Office created and bound to a real app-server thread.",
       },
-    };
-  }
-
-  return {
-    title,
-    meta: backendThreadMeta(thread, locale),
-    description:
-      locale === "zh"
-        ? "已保存到后端 agent 线程，可继续调整配置并重新保存。"
-        : "Saved as a backend agent thread; open to adjust and save again.",
-    glyph: "✦",
-    accent: "cyan",
-    badge: { label: locale === "zh" ? "后端" : "backend", tone: "idle" },
-    action: {
-      type: "agent-config",
-      config: agentConfig ?? {
-        ...createDefaultAgentConfig(locale),
-        threadId: thread.id,
-        name: title,
-        role:
-          locale === "zh"
-            ? "后端智能体 · 可招募"
-            : "Backend agent · recruitable",
-        systemPrompt:
-          thread.preview ||
-          (locale === "zh"
-            ? "这个智能体配置来自后端线程。"
-            : "This agent configuration is restored from a backend thread."),
+    ],
+    tasks: [
+      {
+        title: locale === "zh" ? "招募智能体" : "Recruit agents",
+        owner: locale === "zh" ? "协调者" : "Coordinator",
+        status: "todo",
       },
-    },
+    ],
   };
 }
 
@@ -930,9 +525,7 @@ function upsertTurn(thread: Thread, nextTurn: Turn): Thread {
 
 function automationItemSummary(item: ThreadItem, locale: Locale): string | null {
   if (item.type === "userMessage") {
-    const text = userMessageText(item)
-      .split(`${AUTOMATION_CONFIG_MARKER}:`)[0]
-      .trim();
+    const text = userMessageText(item).trim();
     return text
       ? `${locale === "zh" ? "请求" : "Request"}: ${compactOfficeMessageText(text)}`
       : null;
@@ -1000,8 +593,7 @@ function automationTurnMetrics(turn: Turn, locale: Locale): string {
 function automationTurnDescription(turn: Turn, thread: Thread, locale: Locale): string {
   const summaries = turn.items
     .map((item) => automationItemSummary(item, locale))
-    .filter((summary): summary is string => Boolean(summary))
-    .filter((summary) => !summary.includes(`${AUTOMATION_CONFIG_MARKER}:`));
+    .filter((summary): summary is string => Boolean(summary));
   const summary = summaries.slice(0, 3).join("\n\n") || thread.preview || "";
   return summary.length > 420 ? `${summary.slice(0, 417)}...` : summary;
 }
@@ -1183,8 +775,7 @@ function automationRunRecordItems(
 
 function agentItemSummary(item: ThreadItem, locale: Locale): string | null {
   if (item.type === "userMessage") {
-    const text = userMessageText(item);
-    const withoutConfig = text.split(`${AGENT_CONFIG_MARKER}:`)[0].trim();
+    const withoutConfig = userMessageText(item).trim();
     if (!withoutConfig) {
       return null;
     }
@@ -1223,8 +814,7 @@ function agentItemSummary(item: ThreadItem, locale: Locale): string | null {
 function agentTurnDescription(turn: Turn, thread: Thread, locale: Locale): string {
   const summaries = turn.items
     .map((item) => agentItemSummary(item, locale))
-    .filter((summary): summary is string => Boolean(summary))
-    .filter((summary) => !summary.includes(`${AGENT_CONFIG_MARKER}:`));
+    .filter((summary): summary is string => Boolean(summary));
   const summary = summaries.slice(0, 3).join("\n\n") || thread.preview || "";
   return summary.length > 420 ? `${summary.slice(0, 417)}...` : summary;
 }
@@ -1288,8 +878,8 @@ function agentThreadHistoryItems(thread: Thread, locale: Locale): LibraryItem[] 
         meta: locale === "zh" ? "等待首次保存" : "Waiting for first save",
         description:
           locale === "zh"
-            ? "保存配置后，会把智能体的模型、权限、MCP、Skill 和系统提示词写入后端线程。"
-            : "Save the config to write model, permissions, MCP, skills, and system prompt into the backend thread.",
+            ? "保存后，会把智能体的模型、权限、MCP、Skill 和系统提示词写入后端记录。"
+            : "Save to write model, permissions, MCP, skills, and system prompt into the backend record.",
         glyph: "◷",
         accent: "slate",
       },
@@ -1298,15 +888,15 @@ function agentThreadHistoryItems(thread: Thread, locale: Locale): LibraryItem[] 
 
   return [
     {
-      title: locale === "zh" ? "后端配置记录" : "Backend config records",
+      title: locale === "zh" ? "后端记录" : "Backend records",
       meta:
         locale === "zh"
           ? `${thread.turns.length} 次保存`
           : `${thread.turns.length} saves`,
       description:
         locale === "zh"
-          ? "来自 app-server 智能体线程的最近配置记录。"
-          : "Recent configuration records loaded from the app-server agent thread.",
+          ? "来自 app-server 智能体线程的最近后端记录。"
+          : "Recent backend records loaded from the app-server agent thread.",
       section: true,
     },
     ...entries,
@@ -1403,58 +993,12 @@ function isUnsupportedRpcError(error: unknown): boolean {
   return error instanceof AppServerRpcError && error.code === -32601;
 }
 
-function getInitialLibraryView(): LibraryKind | null {
-  const view = new URLSearchParams(window.location.search).get("view");
-
-  switch (view) {
-    case "plugins":
-      return "plugins";
-    case "tools":
-      return "tools";
-    case "agents":
-      return "agents";
-    case "office":
-      return "office";
-    case "automation":
-      return "automation";
-    case "knowledge":
-      return "knowledge";
-    default:
-      return null;
-  }
-}
-
 function getInitialAppView(): AppView {
-  const view = new URLSearchParams(window.location.search).get("view");
-  if (view === "settings") {
-    return "settings";
-  }
-  if (getInitialLibraryView()) {
-    return "library";
-  }
-  return "chat";
+  return appViewFromSearch(window.location.search);
 }
 
 function getInitialSettingsSection(): SettingsSection {
-  const section = new URLSearchParams(window.location.search).get("section");
-  switch (section) {
-    case "appearance":
-    case "app-snapshots":
-    case "browser":
-    case "computer-control":
-    case "config":
-    case "connections":
-    case "environment":
-    case "git":
-    case "hooks":
-    case "keyboard":
-    case "mcp-servers":
-    case "personalization":
-    case "worktrees":
-      return section;
-    default:
-      return "account";
-  }
+  return settingsSectionFromSearch(window.location.search);
 }
 
 function localizeSeedDemoThreads(
@@ -1687,6 +1231,11 @@ function decodeBase64Text(dataBase64: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+// Demo-style glyph vocabularies so backend knowledge cards stay visually rich
+// (and varied) even when the backend omits a glyph, matching the demo look.
+const MEMORY_GLYPHS = ["◆", "★", "✓", "▣", "◐"];
+const SOURCE_GLYPHS = ["▦", "▤", "◍", "◎", "▥"];
+
 function normalizeKnowledgeData(data: unknown): KnowledgeData {
   const value = data as
     | { memories?: unknown; sources?: unknown }
@@ -1707,7 +1256,7 @@ function normalizeKnowledgeData(data: unknown): KnowledgeData {
           glyph:
             typeof memory.glyph === "string" && memory.glyph.trim()
               ? memory.glyph
-              : "M",
+              : MEMORY_GLYPHS[index % MEMORY_GLYPHS.length],
           accent: normalizeLibraryAccent(memory.accent, index),
           kind:
             typeof memory.kind === "string" && memory.kind.trim()
@@ -1735,7 +1284,7 @@ function normalizeKnowledgeData(data: unknown): KnowledgeData {
             typeof knowledgeSource.glyph === "string" &&
             knowledgeSource.glyph.trim()
               ? knowledgeSource.glyph
-              : "K",
+              : SOURCE_GLYPHS[index % SOURCE_GLYPHS.length],
           accent: normalizeLibraryAccent(knowledgeSource.accent, index + 1),
           status: normalizeKnowledgeSourceStatus(knowledgeSource.status),
           meta:
@@ -1756,10 +1305,11 @@ function normalizeLibraryAccent(
   accent: unknown,
   index: number,
 ): LibraryAccent {
+  const accents = capabilityAccents();
   return typeof accent === "string" &&
-    CAPABILITY_ACCENTS.includes(accent as LibraryAccent)
+    accents.includes(accent as LibraryAccent)
     ? (accent as LibraryAccent)
-    : CAPABILITY_ACCENTS[index % CAPABILITY_ACCENTS.length];
+    : accents[index % accents.length];
 }
 
 function normalizeKnowledgeSourceStatus(
@@ -3255,977 +2805,31 @@ function libraryLoadingFallbackPanel(
   kind: LibraryKind,
   locale: Locale,
 ): LibraryPanel {
-  const fallback = demoLibraryPanel(kind, locale);
+  const title = libraryTitle(kind, locale);
   return {
-    ...fallback,
+    kind,
+    title,
     subtitle:
       locale === "zh"
-        ? `${fallback.subtitle} · 后端读取中`
-        : `${fallback.subtitle} · backend loading`,
-    body: [
+        ? "正在读取本地 app-server..."
+        : "Reading from local app-server...",
+    body:
       locale === "zh"
-        ? "本地 app-server 响应较慢，先显示可用入口和示例结构；后端返回后会自动替换为真实数据。"
-        : "The local app-server is responding slowly, so entry points and example structure are shown first. Real backend data will replace this once it returns.",
-      fallback.body,
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
+        ? "后端响应较慢，正在等待真实数据。这里不会显示示例项目，避免把 demo 内容误当成后端记录。"
+        : "The backend is responding slowly. Waiting for real data; demo items are not shown in connected mode.",
+    items: [
+      {
+        title: locale === "zh" ? "读取中" : "Loading",
+        meta: "app-server",
+        description:
+          locale === "zh"
+            ? "正在从本地后端读取当前页面数据。"
+            : "Reading this page from the local backend.",
+        glyph: "◷",
+        accent: "blue",
+      },
+    ],
   };
-}
-
-function renderLibraryCard(
-  item: LibraryItem,
-  onItemAction: (item: LibraryItem) => void,
-) {
-  const key = `${item.title}:${item.meta}`;
-  const content = (
-    <>
-      {item.glyph ? (
-        <span
-          className="library-card-glyph"
-          data-accent={item.accent ?? "slate"}
-          aria-hidden="true"
-        >
-          {item.glyph}
-        </span>
-      ) : null}
-      <span className="library-card-main">
-        <span className="library-card-title-row">
-          <strong>{item.title}</strong>
-          {item.badge ? (
-            <span
-              className="library-badge"
-              data-tone={item.badge.tone ?? "idle"}
-            >
-              {item.badge.label}
-            </span>
-          ) : null}
-        </span>
-        <span className="library-card-meta">{item.meta}</span>
-        {item.description ? <p>{item.description}</p> : null}
-        {item.tags && item.tags.length > 0 ? (
-          <span className="library-card-tags">
-            {item.tags.map((tag) => (
-              <span className="library-tag" key={tag}>
-                {tag}
-              </span>
-            ))}
-          </span>
-        ) : null}
-      </span>
-      {item.action ? (
-        <span className="library-card-chevron" aria-hidden="true">
-          ›
-        </span>
-      ) : null}
-    </>
-  );
-
-  if (item.action) {
-    return (
-      <button
-        className="library-item"
-        data-accent={item.accent ?? "slate"}
-        type="button"
-        key={key}
-        onClick={() => onItemAction(item)}
-      >
-        {content}
-      </button>
-    );
-  }
-
-  return (
-    <article
-      className="library-item"
-      data-accent={item.accent ?? "slate"}
-      key={key}
-    >
-      {content}
-    </article>
-  );
-}
-
-function tokensLabel(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k tok`;
-  return `${n} tok`;
-}
-
-function ActivityBoard({
-  data,
-  locale,
-  onDecision,
-  onArtifact,
-}: {
-  data: ActivityData;
-  locale: Locale;
-  onDecision: (id: string, decision: "approved" | "denied") => void;
-  onArtifact: (artifact: ArtifactItem) => void;
-}) {
-  const isZh = locale === "zh";
-  const totalCost = data.budget.reduce((sum, row) => sum + row.costUsd, 0);
-  const capPct = Math.min(
-    100,
-    Math.round((totalCost / data.budgetCapUsd) * 100),
-  );
-  const pendingApprovals = data.approvals.filter((a) => !a.decision);
-  const riskLabel = (risk: ApprovalRequest["risk"]) =>
-    isZh
-      ? { low: "低风险", medium: "中风险", high: "高风险" }[risk]
-      : { low: "Low", medium: "Medium", high: "High" }[risk];
-  const statusLabel = (status: TraceStep["status"]) =>
-    isZh
-      ? { done: "完成", running: "进行中", waiting: "等待" }[status]
-      : { done: "Done", running: "Running", waiting: "Waiting" }[status];
-
-  return (
-    <div className="activity-board">
-      <section className="activity-card activity-trace">
-        <div className="activity-card-head">
-          <h2>{isZh ? "执行轨迹" : "Execution trace"}</h2>
-          <span>{isZh ? "实时" : "Live"}</span>
-        </div>
-        <ol className="trace-timeline">
-          {data.trace.map((step, idx) => (
-            <li
-              className="trace-step"
-              data-status={step.status}
-              key={`${step.time}:${idx}`}
-            >
-              <span
-                className="trace-glyph"
-                data-accent={step.accent}
-                aria-hidden="true"
-              >
-                {step.glyph}
-              </span>
-              <div className="trace-body">
-                <div className="trace-top">
-                  <strong>{step.actor}</strong>
-                  <span className="trace-action">{step.action}</span>
-                  <span className="trace-time">{step.time}</span>
-                </div>
-                <p className="trace-detail">{step.detail}</p>
-                <div className="trace-meta">
-                  <span className="trace-status" data-status={step.status}>
-                    {statusLabel(step.status)}
-                  </span>
-                  {step.tokens ? (
-                    <span className="trace-tokens">
-                      {tokensLabel(step.tokens)}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <div className="activity-rail">
-        <section className="activity-card activity-approvals">
-          <div className="activity-card-head">
-            <h2>{isZh ? "审批收件箱" : "Approvals inbox"}</h2>
-            <span
-              className="approvals-count"
-              data-empty={pendingApprovals.length === 0}
-            >
-              {pendingApprovals.length}
-            </span>
-          </div>
-          {pendingApprovals.length === 0 ? (
-            <p className="activity-empty">
-              {isZh ? "没有待处理的审批。" : "No pending approvals."}
-            </p>
-          ) : null}
-          <div className="approval-list">
-            {data.approvals.map((req) => (
-              <article
-                className="approval-row"
-                data-risk={req.risk}
-                data-decision={req.decision ?? "pending"}
-                key={req.id}
-              >
-                <span
-                  className="approval-glyph"
-                  data-accent={req.accent}
-                  aria-hidden="true"
-                >
-                  {req.glyph}
-                </span>
-                <div className="approval-body">
-                  <div className="approval-top">
-                    <strong>{req.actor}</strong>
-                    <span className="approval-risk" data-risk={req.risk}>
-                      {riskLabel(req.risk)}
-                    </span>
-                  </div>
-                  <p className="approval-action">{req.action}</p>
-                  <p className="approval-detail">{req.detail}</p>
-                  {req.decision ? (
-                    <span
-                      className="approval-decided"
-                      data-decision={req.decision}
-                    >
-                      {req.decision === "approved"
-                        ? isZh
-                          ? "已批准"
-                          : "Approved"
-                        : isZh
-                          ? "已拒绝"
-                          : "Denied"}
-                    </span>
-                  ) : (
-                    <div className="approval-actions">
-                      <button
-                        type="button"
-                        className="approval-approve"
-                        onClick={() => onDecision(req.id, "approved")}
-                      >
-                        {isZh ? "批准" : "Approve"}
-                      </button>
-                      <button
-                        type="button"
-                        className="approval-deny"
-                        onClick={() => onDecision(req.id, "denied")}
-                      >
-                        {isZh ? "拒绝" : "Deny"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="activity-card activity-budget">
-          <div className="activity-card-head">
-            <h2>{isZh ? "用量与预算" : "Usage & budget"}</h2>
-            <span>{`$${totalCost.toFixed(2)} / $${data.budgetCapUsd.toFixed(0)}`}</span>
-          </div>
-          <div className="budget-cap">
-            <div className="budget-cap-bar">
-              <span style={{ width: `${capPct}%` }} data-warn={capPct >= 80} />
-            </div>
-            <span className="budget-cap-label">
-              {isZh
-                ? `本日预算已用 ${capPct}%`
-                : `${capPct}% of daily budget used`}
-            </span>
-          </div>
-          <div className="budget-list">
-            {data.budget.map((row) => {
-              const pct = Math.min(
-                100,
-                Math.round((row.usedTokens / row.budgetTokens) * 100),
-              );
-              return (
-                <div className="budget-row" key={row.name}>
-                  <span
-                    className="budget-glyph"
-                    data-accent={row.accent}
-                    aria-hidden="true"
-                  >
-                    {row.glyph}
-                  </span>
-                  <div className="budget-row-main">
-                    <div className="budget-row-top">
-                      <span className="budget-name">{row.name}</span>
-                      <span className="budget-cost">{`$${row.costUsd.toFixed(2)}`}</span>
-                    </div>
-                    <div className="budget-bar">
-                      <span
-                        style={{ width: `${pct}%` }}
-                        data-warn={pct >= 80}
-                      />
-                    </div>
-                    <span className="budget-tokens">{`${tokensLabel(row.usedTokens)} / ${tokensLabel(row.budgetTokens)}`}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="activity-card activity-artifacts">
-          <div className="activity-card-head">
-            <h2>{isZh ? "产物" : "Artifacts"}</h2>
-            <span>{data.artifacts.length}</span>
-          </div>
-          <div className="artifact-list">
-            {data.artifacts.map((art) => (
-              <button
-                type="button"
-                className="artifact-row"
-                key={art.title}
-                onClick={() => onArtifact(art)}
-              >
-                <span
-                  className="artifact-glyph"
-                  data-accent={art.accent}
-                  aria-hidden="true"
-                >
-                  {art.glyph}
-                </span>
-                <div className="artifact-body">
-                  <div className="artifact-top">
-                    <strong>{art.title}</strong>
-                    <span className="artifact-kind">{art.kind}</span>
-                  </div>
-                  <p className="artifact-meta">{art.meta}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function KnowledgeView({
-  panel,
-  locale,
-  onBack,
-  onPanelAction,
-  onOpenPath,
-}: {
-  panel: LibraryPanel;
-  locale: Locale;
-  onBack: () => void;
-  onPanelAction: (action: LibraryPanelAction) => void;
-  onOpenPath: (item: CapabilityPanelItem) => void;
-}) {
-  const data = panel.knowledge;
-  if (!data) return null;
-  const isZh = locale === "zh";
-  const sourceStatus = (status: KnowledgeSource["status"]) =>
-    isZh
-      ? { "indexed": "已索引", "indexing": "索引中", "needs-auth": "待授权" }[
-          status
-        ]
-      : {
-          "indexed": "Indexed",
-          "indexing": "Indexing",
-          "needs-auth": "Needs auth",
-        }[status];
-
-  return (
-    <main className="library-page knowledge-page" aria-label={panel.title}>
-      <header className="library-heading">
-        <button type="button" onClick={onBack}>
-          {isZh ? "返回对话" : "Back to chat"}
-        </button>
-        <div>
-          <h1>{panel.title}</h1>
-          <p>{panel.subtitle}</p>
-        </div>
-      </header>
-      {panel.error ? <p className="library-error">{panel.error}</p> : null}
-      <div className="library-actions knowledge-actions">
-        <button
-          type="button"
-          data-tone="primary"
-          onClick={() =>
-            onPanelAction({
-              id: "create-knowledge-memory",
-              label: isZh ? "写入记忆" : "Write memory",
-              tone: "primary",
-            })
-          }
-        >
-          {isZh ? "写入记忆" : "Write memory"}
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            onPanelAction({
-              id: "refresh-knowledge",
-              label: isZh ? "刷新知识库" : "Refresh knowledge",
-            })
-          }
-        >
-          {isZh ? "刷新知识库" : "Refresh knowledge"}
-        </button>
-        <button
-          type="button"
-          data-tone="danger"
-          onClick={() =>
-            onPanelAction({
-              id: "reset-memory",
-              label: isZh ? "重置全局记忆" : "Reset global memory",
-              tone: "danger",
-            })
-          }
-        >
-          {isZh ? "重置全局记忆" : "Reset global memory"}
-        </button>
-      </div>
-
-      <div className="knowledge-grid">
-        <section className="knowledge-col knowledge-memory">
-          <div className="activity-card-head">
-            <h2>{isZh ? "智能体记忆" : "Agent memory"}</h2>
-            <span>{data.memories.length}</span>
-          </div>
-          <div className="memory-list">
-            {data.memories.map((mem) => (
-              <button
-                type="button"
-                className="memory-card"
-                data-pinned={mem.pinned ? "true" : "false"}
-                key={mem.title}
-                onClick={() =>
-                  mem.threadId
-                    ? onPanelAction({
-                        id: "open-thread",
-                        label: isZh ? "打开后端线程" : "Open backend thread",
-                        threadId: mem.threadId,
-                      })
-                    : mem.path
-                      ? onOpenPath({
-                          label: mem.title,
-                          path: mem.path,
-                          kind: "file",
-                          intent: "attach-context",
-                        })
-                      : undefined
-                }
-              >
-                <span
-                  className="memory-glyph"
-                  data-accent={mem.accent}
-                  aria-hidden="true"
-                >
-                  {mem.glyph}
-                </span>
-                <div className="memory-body">
-                  <div className="memory-top">
-                    <strong>{mem.title}</strong>
-                    <span className="memory-kind">{mem.kind}</span>
-                    {mem.pinned ? (
-                      <span className="memory-pin">
-                        {isZh ? "置顶" : "Pinned"}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="memory-preview">{mem.preview}</p>
-                  <span className="memory-meta">{mem.meta}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="knowledge-col knowledge-sources">
-          <div className="activity-card-head">
-            <h2>{isZh ? "知识源" : "Knowledge sources"}</h2>
-            <span>{data.sources.length}</span>
-          </div>
-          <div className="source-list">
-            {data.sources.map((src) => (
-              <button
-                type="button"
-                className="source-row"
-                data-status={src.status}
-                key={src.name}
-                onClick={() =>
-                  src.path
-                    ? onOpenPath({
-                        label: src.name,
-                        path: src.path,
-                        kind: src.isDirectory ? "directory" : "file",
-                        intent: src.isDirectory ? undefined : "attach-context",
-                      })
-                    : undefined
-                }
-              >
-                <span
-                  className="source-glyph"
-                  data-accent={src.accent}
-                  aria-hidden="true"
-                >
-                  {src.glyph}
-                </span>
-                <div className="source-body">
-                  <div className="source-top">
-                    <strong>{src.name}</strong>
-                    <span className="source-status" data-status={src.status}>
-                      {sourceStatus(src.status)}
-                    </span>
-                  </div>
-                  <p className="source-meta">{src.meta}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      </div>
-    </main>
-  );
-}
-
-function renderLibraryView(
-  panel: LibraryPanel,
-  locale: Locale,
-  onBack: () => void,
-  onItemAction: (item: LibraryItem) => void,
-  onPanelAction: (action: LibraryPanelAction) => void,
-  onPanelFieldChange: (fieldId: string, value: string) => void,
-  onSendOfficeMessage: (text: string) => void,
-  onUpdateAgentConfig: (patch: Partial<AgentConfig>) => void,
-  onToggleAgentCapability: (group: "mcp" | "skills", id: string) => void,
-  onSaveAgentConfig: () => void,
-  onApprovalDecision: (id: string, decision: "approved" | "denied") => void,
-  onArtifact: (artifact: ArtifactItem) => void,
-  onKnowledgePath: (item: CapabilityPanelItem) => void,
-) {
-  if (panel.knowledge) {
-    return (
-      <KnowledgeView
-        panel={panel}
-        locale={locale}
-        onBack={onBack}
-        onPanelAction={onPanelAction}
-        onOpenPath={onKnowledgePath}
-      />
-    );
-  }
-
-  if (panel.agentConfig) {
-    return (
-      <AgentConfigView
-        panel={panel}
-        locale={locale}
-        onBack={onBack}
-        onUpdate={onUpdateAgentConfig}
-        onToggleCapability={onToggleAgentCapability}
-        onSave={onSaveAgentConfig}
-        onOpenThread={(threadId) =>
-          onPanelAction({
-            id: "open-thread",
-            label: locale === "zh" ? "打开后端线程" : "Open backend thread",
-            threadId,
-          })
-        }
-      />
-    );
-  }
-
-  if (panel.workspace) {
-    return (
-      <OfficeWorkspaceView
-        panel={panel}
-        locale={locale}
-        onBack={onBack}
-        onPanelAction={onPanelAction}
-        onSendMessage={onSendOfficeMessage}
-        onDecision={onApprovalDecision}
-        onArtifact={onArtifact}
-      />
-    );
-  }
-
-  return (
-    <main className="library-page" aria-label={panel.title}>
-      <header className="library-heading">
-        <button type="button" onClick={onBack}>
-          {locale === "zh" ? "返回对话" : "Back to chat"}
-        </button>
-        <div>
-          <h1>{panel.title}</h1>
-          <p>{panel.subtitle}</p>
-        </div>
-      </header>
-      {panel.error ? <p className="library-error">{panel.error}</p> : null}
-      {panel.body ? <pre>{panel.body}</pre> : null}
-      {panel.fields ? (
-        <div className="library-fields">
-          {panel.fields.map((field) => (
-            <label key={field.id}>
-              <span>{field.label}</span>
-              <textarea
-                spellCheck={false}
-                value={field.value}
-                placeholder={field.placeholder}
-                onChange={(event) =>
-                  onPanelFieldChange(field.id, event.target.value)
-                }
-              />
-            </label>
-          ))}
-        </div>
-      ) : null}
-      {panel.actions ? (
-        <div className="library-actions">
-          {panel.actions.map((action) => (
-            <button
-              type="button"
-              data-tone={action.tone}
-              key={`${action.id}:${action.pluginId ?? action.pluginName ?? action.label}`}
-              onClick={() => onPanelAction(action)}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      <section className="library-list">
-        {panel.items.length > 0 ? (
-          panel.items.map((item) =>
-            item.section ? (
-              <div
-                className="library-section"
-                key={`${item.title}:${item.meta}`}
-              >
-                <strong>{item.title}</strong>
-                <span>{item.meta}</span>
-                {item.description ? <p>{item.description}</p> : null}
-              </div>
-            ) : (
-              renderLibraryCard(item, onItemAction)
-            ),
-          )
-        ) : (
-          <div className="library-empty">
-            {locale === "zh" ? "暂无数据" : "No data"}
-          </div>
-        )}
-      </section>
-    </main>
-  );
-}
-
-function renderOfficeMessageText(
-  text: string,
-  memberNames: string[],
-): ReactNode {
-  const sorted = [...memberNames]
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length);
-  const escaped = sorted.map((name) =>
-    name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-  );
-  const namePattern = escaped.length > 0 ? `(?:${escaped.join("|")})` : "";
-  const fallback = "[\\w\\u4e00-\\u9fa5]+";
-  const mentionRegex = new RegExp(
-    `@(${namePattern ? `${namePattern}|` : ""}${fallback})`,
-    "g",
-  );
-  const nodes: ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-  while ((match = mentionRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
-    }
-    nodes.push(
-      <span className="office-mention" key={`m${key}`}>
-        @{match[1]}
-      </span>,
-    );
-    key += 1;
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-  return nodes.length > 0 ? nodes : text;
-}
-
-function OfficeWorkspaceView({
-  panel,
-  locale,
-  onBack,
-  onPanelAction,
-  onSendMessage,
-  onDecision,
-  onArtifact,
-}: {
-  panel: LibraryPanel;
-  locale: Locale;
-  onBack: () => void;
-  onPanelAction: (action: LibraryPanelAction) => void;
-  onSendMessage: (text: string) => void;
-  onDecision: (id: string, decision: "approved" | "denied") => void;
-  onArtifact: (artifact: ArtifactItem) => void;
-}) {
-  const workspace = panel.workspace;
-  const [draft, setDraft] = useState("");
-  const [tab, setTab] = useState<"chat" | "activity">("chat");
-  const streamRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const stream = streamRef.current;
-    if (stream) {
-      stream.scrollTop = stream.scrollHeight;
-    }
-  }, [workspace?.messages.length, tab]);
-
-  if (!workspace) {
-    return null;
-  }
-
-  const memberNames = workspace.members.map((member) => member.name);
-
-  function submit() {
-    const text = draft.trim();
-    if (!text) {
-      return;
-    }
-    onSendMessage(text);
-    setDraft("");
-  }
-
-  const statusLabel = (status: OfficeTask["status"]) =>
-    locale === "zh"
-      ? status === "done"
-        ? "完成"
-        : status === "doing"
-          ? "进行中"
-          : "待办"
-      : status === "done"
-        ? "Done"
-        : status === "doing"
-          ? "In progress"
-          : "To do";
-
-  return (
-    <main className="office-workspace" aria-label={panel.title}>
-      <header className="office-top">
-        <button type="button" className="office-back" onClick={onBack}>
-          {locale === "zh" ? "返回办公室" : "Back to offices"}
-        </button>
-        <div className="office-top-main">
-          <div className="office-top-title">
-            <span className="office-top-glyph" aria-hidden="true">
-              ⌗
-            </span>
-            <div>
-              <h1>{panel.title}</h1>
-              <p>{panel.subtitle}</p>
-            </div>
-          </div>
-          <div className="office-avatars" aria-hidden="true">
-            {workspace.members.map((member) => (
-              <span
-                className="office-avatar"
-                data-accent={member.accent}
-                key={member.name}
-                title={member.name}
-              >
-                {member.glyph}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="office-goal">
-          <span>{locale === "zh" ? "办公室目标" : "Office goal"}</span>
-          <strong>{workspace.goal}</strong>
-          <em data-status={workspace.backendStatus ?? "local"}>
-            {locale === "zh"
-              ? workspace.backendStatus === "connected"
-                ? "后端线程已连接"
-                : workspace.backendStatus === "binding"
-                  ? "正在绑定后端线程"
-                  : workspace.backendStatus === "error"
-                    ? "后端连接异常"
-                    : "本地演示"
-              : workspace.backendStatus === "connected"
-                ? "Backend thread connected"
-                : workspace.backendStatus === "binding"
-                  ? "Binding backend thread"
-                  : workspace.backendStatus === "error"
-                    ? "Backend connection error"
-                    : "Local demo"}
-          </em>
-        </div>
-      </header>
-
-      <div
-        className="office-tabs"
-        role="tablist"
-        aria-label={locale === "zh" ? "办公室视图" : "Office views"}
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "chat"}
-          data-active={tab === "chat"}
-          onClick={() => setTab("chat")}
-        >
-          {locale === "zh" ? "群聊" : "Group chat"}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "activity"}
-          data-active={tab === "activity"}
-          onClick={() => setTab("activity")}
-        >
-          {locale === "zh" ? "运行台" : "Activity"}
-        </button>
-      </div>
-
-      {tab === "activity" ? (
-        workspace.activity ? (
-          <ActivityBoard
-            data={workspace.activity}
-            locale={locale}
-            onDecision={onDecision}
-            onArtifact={onArtifact}
-          />
-        ) : (
-          <p className="activity-empty">
-            {locale === "zh" ? "暂无运行记录。" : "No activity yet."}
-          </p>
-        )
-      ) : (
-        <div className="office-grid">
-          <aside
-            className="office-members"
-            aria-label={locale === "zh" ? "成员" : "Members"}
-          >
-            <div className="office-rail-head">
-              <strong>{locale === "zh" ? "成员" : "Members"}</strong>
-              <span>{workspace.members.length}</span>
-            </div>
-            {workspace.members.map((member) => (
-              <div className="office-member" key={member.name}>
-                <span
-                  className="office-avatar"
-                  data-accent={member.accent}
-                  aria-hidden="true"
-                >
-                  {member.glyph}
-                  <i
-                    className="office-presence"
-                    data-online={member.online ?? true}
-                  />
-                </span>
-                <span className="office-member-text">
-                  <strong>{member.name}</strong>
-                  <span>{member.role}</span>
-                  <em>{member.status}</em>
-                </span>
-              </div>
-            ))}
-            {panel.actions ? (
-              <div className="office-rail-actions">
-                {panel.actions.map((action) => (
-                  <button
-                    type="button"
-                    data-tone={action.tone}
-                    key={action.id}
-                    onClick={() => onPanelAction(action)}
-                  >
-                    {action.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </aside>
-
-          <section
-            className="office-chat"
-            aria-label={locale === "zh" ? "群聊" : "Group chat"}
-          >
-            <div className="office-chat-head">
-              <strong>{locale === "zh" ? "群聊协作" : "Group chat"}</strong>
-              <span>
-                {locale === "zh"
-                  ? `${workspace.messages.length} 条消息`
-                  : `${workspace.messages.length} messages`}
-              </span>
-            </div>
-            <div className="office-chat-stream" ref={streamRef}>
-              {workspace.messages.map((message, index) =>
-                message.kind === "system" ? (
-                  <div className="office-system" key={index}>
-                    {message.text}
-                  </div>
-                ) : (
-                  <div
-                    className="office-bubble"
-                    data-kind={message.kind ?? "message"}
-                    data-self={message.glyph === "@"}
-                    key={index}
-                  >
-                    <span
-                      className="office-avatar office-avatar-sm"
-                      data-accent={message.accent}
-                      aria-hidden="true"
-                    >
-                      {message.glyph}
-                    </span>
-                    <div className="office-bubble-body">
-                      <div className="office-bubble-head">
-                        <strong>{message.author}</strong>
-                        <span>{message.time}</span>
-                      </div>
-                      <p>
-                        {renderOfficeMessageText(message.text, memberNames)}
-                      </p>
-                    </div>
-                  </div>
-                ),
-              )}
-            </div>
-            <form
-              className="office-composer"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submit();
-              }}
-            >
-              <input
-                value={draft}
-                spellCheck={false}
-                placeholder={
-                  locale === "zh"
-                    ? "在群聊里 @ 成员派发任务…"
-                    : "@mention a member to dispatch a task…"
-                }
-                aria-label={locale === "zh" ? "群聊输入" : "Group chat input"}
-                onChange={(event) => setDraft(event.target.value)}
-              />
-              <button type="submit" disabled={!draft.trim()}>
-                {locale === "zh" ? "发送" : "Send"}
-              </button>
-            </form>
-          </section>
-
-          <aside
-            className="office-tasks"
-            aria-label={locale === "zh" ? "任务" : "Tasks"}
-          >
-            <div className="office-rail-head">
-              <strong>{locale === "zh" ? "任务看板" : "Task board"}</strong>
-              <span>{workspace.tasks.length}</span>
-            </div>
-            {workspace.tasks.map((task, index) => (
-              <div
-                className="office-task"
-                data-status={task.status}
-                key={`${task.title}:${index}`}
-              >
-                <span className="office-task-dot" aria-hidden="true" />
-                <span className="office-task-text">
-                  <strong>{task.title}</strong>
-                  <span>{task.owner}</span>
-                </span>
-                <span className="office-task-status" data-status={task.status}>
-                  {statusLabel(task.status)}
-                </span>
-              </div>
-            ))}
-          </aside>
-        </div>
-      )}
-    </main>
-  );
 }
 
 function summarizeRemoteDiff(diff: string, sha: string): GitRemoteDiffSummary {
@@ -4242,7 +2846,10 @@ export function App() {
   const platform = useMemo(detectPlatform, []);
   const serverUrl = useMemo(defaultServerUrl, []);
   const isDemoPreview = useMemo(shouldUseDemoPreview, []);
-  const initialLibraryView = useMemo(getInitialLibraryView, []);
+  const initialLibraryView = useMemo(
+    () => libraryViewFromSearch(window.location.search),
+    [],
+  );
   const clientRef = useRef<AppServerClient | null>(null);
   const [locale, setLocale] = useState<Locale>(getInitialLocale);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
@@ -4278,9 +2885,11 @@ export function App() {
     path: string;
   } | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
+  const threadsRef = useRef<Thread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const selectedThreadIdRef = useRef<string | null>(null);
   const initialLibraryViewOpenedRef = useRef(false);
+  const lastSyncedViewSearchRef = useRef("");
   const [activeTurnByThread, setActiveTurnByThread] = useState<
     Record<string, string>
   >({});
@@ -4357,6 +2966,10 @@ export function App() {
     localeRef.current = locale;
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
   }, [locale]);
+
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
 
   useEffect(() => {
     selectedThreadIdRef.current = selectedThreadId;
@@ -4547,6 +3160,46 @@ export function App() {
     initialLibraryViewOpenedRef.current = true;
     void openLibrary(initialLibraryView);
   }, [connectionState, initialLibraryView]);
+
+  useEffect(() => {
+    if (connectionState === "connecting") {
+      return;
+    }
+
+    const syncViewFromUrl = () => {
+      const search = window.location.search;
+      if (lastSyncedViewSearchRef.current === search) {
+        return;
+      }
+
+      lastSyncedViewSearchRef.current = search;
+      const view = new URLSearchParams(search).get("view");
+      if (view === "settings") {
+        const settingsViewSection = getInitialSettingsSection();
+        setAppView("settings");
+        setSettingsSection(settingsViewSection);
+        if (isConnected) {
+          void refreshSettingsSection(settingsViewSection);
+        } else if (isDemo) {
+          setCapabilityPanel(demoSettingsPanel(settingsViewSection, locale));
+        }
+        return;
+      }
+
+      const libraryView = libraryViewFromSearch(search);
+      if (libraryView) {
+        void openLibrary(libraryView);
+      }
+    };
+
+    syncViewFromUrl();
+    const intervalId = window.setInterval(syncViewFromUrl, 500);
+    window.addEventListener("popstate", syncViewFromUrl);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("popstate", syncViewFromUrl);
+    };
+  }, [connectionState, isConnected, isDemo, locale]);
 
   useEffect(() => {
     const title = selectedThread
@@ -4876,24 +3529,42 @@ export function App() {
               };
             }
             const endpoint = config ? mcpConfigEndpoint(config) : "";
+            const source =
+              locale === "zh"
+                ? "真实来源：MCP 配置记录"
+                : "Source of truth: MCP config record";
             return {
               title: `MCP · ${config?.name ?? ""}`,
               meta: mcpConfigEnabled(config)
                 ? locale === "zh"
-                  ? "已配置 · 等待加载"
-                  : "configured · waiting to load"
+                  ? `${source} · 已配置 · 等待加载`
+                  : `${source} · configured · waiting to load`
                 : locale === "zh"
-                  ? "已配置 · 停用"
-                  : "configured · disabled",
+                  ? `${source} · 已配置 · 停用`
+                  : `${source} · configured · disabled`,
               description:
-                endpoint ||
-                (locale === "zh"
-                  ? "已保存到 MCP 配置，但当前运行态未返回该服务器。"
-                  : "Saved in MCP config, but not present in the current runtime status."),
+                `${source} · ${
+                  endpoint ||
+                  (locale === "zh"
+                    ? "已保存到 MCP 配置，但当前运行态未返回该服务器。"
+                    : "Saved in MCP config, but not present in the current runtime status.")
+                }`,
+              glyph: LIBRARY_DECOR.mcp.glyph,
+              accent: LIBRARY_DECOR.mcp.accent,
               badge: {
                 label: locale === "zh" ? "配置" : "config",
                 tone: mcpConfigEnabled(config) ? "planning" : "warning",
               },
+              tags: [
+                "MCP",
+                mcpConfigEnabled(config)
+                  ? locale === "zh"
+                    ? "已配置"
+                    : "configured"
+                  : locale === "zh"
+                    ? "停用"
+                    : "disabled",
+              ],
               action: config
                 ? {
                     type: "mcp-detail",
@@ -4915,6 +3586,10 @@ export function App() {
             status.resources.length + status.resourceTemplates.length;
           const serverTitle =
             status.serverInfo?.title || status.serverInfo?.name || status.name;
+          const runtimeSource =
+            locale === "zh"
+              ? "真实来源：运行态 MCP"
+              : "Source of truth: runtime MCP";
           const configState = config
             ? mcpConfigEnabled(config)
               ? locale === "zh"
@@ -4926,19 +3601,43 @@ export function App() {
             : null;
           return {
             title: `MCP · ${serverTitle}`,
-            meta: `${status.authStatus} · ${toolCount} ${locale === "zh" ? "工具" : "tools"} · ${resourceCount} ${
+            meta: `${runtimeSource} · ${status.authStatus} · ${toolCount} ${locale === "zh" ? "工具" : "tools"} · ${resourceCount} ${
               locale === "zh" ? "资源" : "resources"
             }${configState ? ` · ${configState}` : ""}`,
+            glyph: LIBRARY_DECOR.mcp.glyph,
+            accent: LIBRARY_DECOR.mcp.accent,
+            badge:
+              status.authStatus === "notLoggedIn"
+                ? {
+                    label: locale === "zh" ? "待授权" : "needs auth",
+                    tone: "warning",
+                  }
+                : {
+                    label: locale === "zh" ? "已连接" : "connected",
+                    tone: "running",
+                  },
+            tags: [
+              `${toolCount} ${locale === "zh" ? "工具" : "tools"}`,
+              `${resourceCount} ${locale === "zh" ? "资源" : "resources"}`,
+              configState,
+            ].filter((tag): tag is string => Boolean(tag)),
             description:
-              status.serverInfo?.description ||
-              (locale === "zh"
-                ? `已分配给工程师和自动化使用：${Object.keys(status.tools).slice(0, 5).join(", ")}`
-                : `Assigned to engineers and automations: ${Object.keys(status.tools).slice(0, 5).join(", ")}`),
+              `${runtimeSource} · ${
+                status.serverInfo?.description ||
+                (Object.keys(status.tools).length > 0
+                  ? locale === "zh"
+                    ? `已分配给工程师和自动化使用：${Object.keys(status.tools).slice(0, 5).join(", ")}`
+                    : `Assigned to engineers and automations: ${Object.keys(status.tools).slice(0, 5).join(", ")}`
+                  : locale === "zh"
+                    ? "当前运行态未返回可调用工具。"
+                    : "No callable tools are currently reported by the runtime.")
+              }`,
             action: {
               type: "mcp-detail",
               title: serverTitle,
               subtitle: status.name,
               body: [
+                runtimeSource,
                 mcpServerDetailText(status, locale),
                 config
                   ? `\n${locale === "zh" ? "持久化配置" : "Persisted config"}\n${mcpConfigDetailText(config, locale)}`
@@ -4976,16 +3675,36 @@ export function App() {
         });
         const skillItems: LibraryItem[] = skills.map((skill) => {
           const source = skillSourceLabel(skill.path, locale);
+          const truthSource =
+            locale === "zh"
+              ? "真实来源：Skill 文件"
+              : "Source of truth: skill file";
           return {
             title: `Skill · ${skill.name}`,
-            meta: `${source} · ${skill.enabled ? (locale === "zh" ? "可招募" : "recruitable") : locale === "zh" ? "停用" : "disabled"}`,
+            meta: `${truthSource} · ${source} · ${skill.enabled ? (locale === "zh" ? "可招募" : "recruitable") : locale === "zh" ? "停用" : "disabled"}`,
+            glyph: LIBRARY_DECOR.skill.glyph,
+            accent: LIBRARY_DECOR.skill.accent,
+            badge: {
+              label: skill.enabled
+                ? locale === "zh"
+                  ? "可招募"
+                  : "recruitable"
+                : locale === "zh"
+                  ? "停用"
+                  : "disabled",
+              tone: skill.enabled ? "running" : "warning",
+            },
+            tags: ["Skill", source],
             description:
-              skill.description ||
-              skill.shortDescription ||
-              (locale === "zh"
-                ? `可绑定到智能体或办公室：${skill.path}`
-                : `Assignable to agents or offices: ${skill.path}`) ||
-              undefined,
+              `${truthSource} · ${
+                promptPreview(
+                  skill.description ||
+                    skill.shortDescription ||
+                    (locale === "zh"
+                      ? `可绑定到智能体或办公室：${skill.path}`
+                      : `Assignable to agents or offices: ${skill.path}`),
+                ) || (locale === "zh" ? "可绑定到智能体或办公室。" : "Assignable to agents or offices.")
+              }`,
             action: skill.path
                 ? {
                     type: "skill-file",
@@ -5031,8 +3750,8 @@ export function App() {
                   {
                     title:
                       locale === "zh"
-                        ? "工作区工具配置"
-                        : "Workspace tool configs",
+                        ? "后端工具记录"
+                        : "Backend tool records",
                     meta:
                       locale === "zh"
                         ? `${workspaceToolItems.length} 个草稿`
@@ -5078,101 +3797,88 @@ export function App() {
       }
 
       if (kind === "office") {
-        const basePanel = demoLibraryPanel("office", locale);
         let storedOfficeItems: LibraryItem[] = [];
-        let usedLegacyOfficeThreads = false;
+        let officeListUnsupported = false;
         try {
           const response = await clientRef.current?.listOfficeConfigs(
             effectiveCwd,
           );
           storedOfficeItems = officeConfigRecordsToLibraryItems(
             response?.data ?? [],
+            locale,
           );
         } catch (error) {
           if (!isUnsupportedRpcError(error)) {
             throw error;
           }
-          usedLegacyOfficeThreads = true;
-          const backendThreads =
-            (await clientRef.current?.listThreads(false)) ?? [];
-          const officeThreads = backendThreads.filter(
-            (thread) => thread.threadSource === "office",
-          );
-          const officeThreadCandidates =
-            officeThreads.length > 0 ? officeThreads : backendThreads;
-          const backendOfficeDetails = await Promise.allSettled(
-            officeThreadCandidates.map(async (thread) => {
-              const detailedThread =
-                (await clientRef.current?.readThread(thread.id)) ?? thread;
-              return {
-                thread: detailedThread,
-                config: parseOfficeConfigFromThread(detailedThread, locale),
-              };
-            }),
-          );
-          storedOfficeItems = backendOfficeDetails.flatMap((result) => {
-            if (result.status !== "fulfilled" || !result.value.config) {
-              return [];
-            }
-            return [
-              backendThreadLibraryItem(
-                result.value.thread,
-                "office",
-                locale,
-                null,
-                null,
-                result.value.config,
-              ),
-            ];
-          });
+          officeListUnsupported = true;
         }
         if (!isCurrentLibraryLoad()) {
           return;
         }
         setLibraryPanel({
-          ...basePanel,
+          kind,
+          title,
           subtitle:
             locale === "zh"
-              ? `${basePanel.items.filter((item) => !item.section).length} 个模板 · ${storedOfficeItems.length} 个后端办公室`
-              : `${basePanel.items.filter((item) => !item.section).length} templates · ${storedOfficeItems.length} backend offices`,
+              ? `${storedOfficeItems.length} 个后端办公室`
+              : `${storedOfficeItems.length} backend offices`,
+          body:
+            locale === "zh"
+              ? "办公室来自 app-server office/list。新建后会创建真实后端线程和 office/create 记录。"
+              : "Offices are loaded from app-server office/list. Creating one creates a real backend thread and office/create record.",
+          actions: [
+            {
+              id: "create-office",
+              label: locale === "zh" ? "新建办公室" : "New office",
+              tone: "primary",
+            },
+          ],
           items:
             storedOfficeItems.length > 0
               ? [
                   {
                     title:
                       locale === "zh"
-                        ? usedLegacyOfficeThreads
-                          ? "旧线程办公室"
-                          : "后端办公室"
-                        : usedLegacyOfficeThreads
-                          ? "Legacy thread offices"
-                          : "Backend offices",
+                        ? "后端办公室"
+                        : "Backend offices",
                     meta:
                       locale === "zh"
                         ? `${storedOfficeItems.length} 个已创建`
                         : `${storedOfficeItems.length} created`,
                     description:
                       locale === "zh"
-                        ? usedLegacyOfficeThreads
-                          ? "当前 app-server 不支持 office/list，暂时从旧线程记录恢复。"
-                          : "这些办公室来自 app-server office/list，可继续群聊协作。"
-                        : usedLegacyOfficeThreads
-                          ? "The current app-server does not support office/list; restored from legacy thread records."
-                          : "These offices come from app-server office/list and can continue group-chat work.",
+                        ? "这些办公室来自 app-server office/list，可继续群聊协作。"
+                        : "These offices come from app-server office/list and can continue group-chat work.",
                     section: true,
                   },
                   ...storedOfficeItems,
-                  ...basePanel.items,
                 ]
-              : basePanel.items,
+              : [
+                  {
+                    title:
+                      locale === "zh" ? "暂无后端办公室" : "No backend offices",
+                    meta: "office/list",
+                    description:
+                      locale === "zh"
+                        ? "点击新建办公室创建真实后端线程和办公室记录。"
+                        : "Create an office to write a real backend thread and office record.",
+                    glyph: "◷",
+                    accent: "slate",
+                  },
+                ],
+          error: officeListUnsupported
+            ? locale === "zh"
+              ? "当前 app-server 不支持 office/list，无法读取后端办公室。"
+              : "The current app-server does not support office/list."
+            : undefined,
         });
         return;
       }
 
       if (kind === "automation") {
-        const basePanel = demoLibraryPanel("automation", locale);
         let storedAutomationItems: LibraryItem[] = [];
-        let usedLegacyAutomationThreads = false;
+        let automationListUnsupported = false;
         try {
           const response = await clientRef.current?.listAutomationConfigs(
             effectiveCwd,
@@ -5184,78 +3890,69 @@ export function App() {
           if (!isUnsupportedRpcError(error)) {
             throw error;
           }
-          usedLegacyAutomationThreads = true;
-          const backendThreads =
-            (await clientRef.current?.listThreads(false)) ?? [];
-          const automationThreads = backendThreads.filter(
-            (thread) => thread.threadSource === "automation",
-          );
-          const automationThreadCandidates =
-            automationThreads.length > 0 ? automationThreads : backendThreads;
-          const backendAutomationDetails = await Promise.allSettled(
-            automationThreadCandidates.map(async (thread) => {
-              const detailedThread =
-                (await clientRef.current?.readThread(thread.id)) ?? thread;
-              return {
-                thread: detailedThread,
-                config: parseAutomationConfigFromThread(detailedThread, locale),
-              };
-            }),
-          );
-          storedAutomationItems = backendAutomationDetails.flatMap((result) => {
-            if (result.status !== "fulfilled" || !result.value.config) {
-              return [];
-            }
-            return [
-              backendThreadLibraryItem(
-                result.value.thread,
-                "automation",
-                locale,
-                null,
-                result.value.config,
-              ),
-            ];
-          });
+          automationListUnsupported = true;
         }
         if (!isCurrentLibraryLoad()) {
           return;
         }
         setLibraryPanel({
-          ...basePanel,
+          kind,
+          title,
           subtitle:
             locale === "zh"
-              ? `4 条模板自动化 · ${storedAutomationItems.length} 条后端自动化`
-              : `4 automation templates · ${storedAutomationItems.length} backend automations`,
+              ? `${storedAutomationItems.length} 条后端自动化`
+              : `${storedAutomationItems.length} backend automations`,
+          body:
+            locale === "zh"
+              ? "自动化来自 app-server automation/list，运行历史来自 automation/runs/list。"
+              : "Automations are loaded from app-server automation/list, with run history from automation/runs/list.",
+          actions: [
+            {
+              id: "create-automation",
+              label: locale === "zh" ? "新建自动化" : "New automation",
+              tone: "primary",
+            },
+          ],
           items:
             storedAutomationItems.length > 0
               ? [
                   {
                     title:
                       locale === "zh"
-                        ? usedLegacyAutomationThreads
-                          ? "旧线程自动化"
-                          : "后端自动化"
-                        : usedLegacyAutomationThreads
-                          ? "Legacy thread automations"
-                          : "Backend automations",
+                        ? "后端自动化"
+                        : "Backend automations",
                     meta:
                       locale === "zh"
                         ? `${storedAutomationItems.length} 条记录`
                         : `${storedAutomationItems.length} records`,
                     description:
                       locale === "zh"
-                        ? usedLegacyAutomationThreads
-                          ? "当前 app-server 不支持 automation/list，暂时从旧线程记录恢复。"
-                          : "这些自动化来自 app-server automation/list，可打开后再次运行。"
-                        : usedLegacyAutomationThreads
-                          ? "The current app-server does not support automation/list; restored from legacy thread records."
-                          : "These automations come from app-server automation/list and can be run again.",
+                        ? "这些自动化来自 app-server automation/list，可打开后再次运行。"
+                        : "These automations come from app-server automation/list and can be run again.",
                     section: true,
                   },
                   ...storedAutomationItems,
-                  ...basePanel.items,
                 ]
-              : basePanel.items,
+              : [
+                  {
+                    title:
+                      locale === "zh"
+                        ? "暂无后端自动化"
+                        : "No backend automations",
+                    meta: "automation/list",
+                    description:
+                      locale === "zh"
+                        ? "点击新建自动化写入后端记录，运行后会生成 automation/run 记录。"
+                        : "Create an automation to write a backend record; running it creates automation/run history.",
+                    glyph: "◷",
+                    accent: "slate",
+                  },
+                ],
+          error: automationListUnsupported
+            ? locale === "zh"
+              ? "当前 app-server 不支持 automation/list，无法读取后端自动化。"
+              : "The current app-server does not support automation/list."
+            : undefined,
         });
         return;
       }
@@ -5300,16 +3997,27 @@ export function App() {
             item,
           },
         }));
-        const basePanel = demoLibraryPanel("agents", locale);
         if (!isCurrentLibraryLoad()) {
           return;
         }
         setLibraryPanel({
-          ...basePanel,
+          kind,
+          title,
           subtitle:
             locale === "zh"
-              ? `${basePanel.items.filter((entry) => !entry.section).length} 个设计角色 · ${storedAgentItems.length} 个后端智能体 · ${items.length} 个可导入项`
-              : `designed roles · ${storedAgentItems.length} backend agents · ${items.length} importable items`,
+              ? `${storedAgentItems.length} 个后端智能体 · ${items.length} 个可导入项`
+              : `${storedAgentItems.length} backend agents · ${items.length} importable items`,
+          body:
+            locale === "zh"
+              ? "智能体来自 app-server agent/list。新建会读取模型、权限、MCP 和 Skill 后写入 agent/create 或 agent/update。"
+              : "Agents are loaded from app-server agent/list. Creating one reads models, permissions, MCP, and Skills before writing agent/create or agent/update.",
+          actions: [
+            {
+              id: "create-agent",
+              label: locale === "zh" ? "新建智能体" : "New agent",
+              tone: "primary",
+            },
+          ],
           items:
             storedAgentItems.length > 0 || detectedItems.length > 0
               ? [
@@ -5318,30 +4026,21 @@ export function App() {
                         {
                           title:
                             locale === "zh"
-                              ? agentLibrary.usedLegacyThreads
-                                ? "旧线程智能体"
-                                : "后端智能体"
-                              : agentLibrary.usedLegacyThreads
-                                ? "Legacy thread agents"
-                                : "Backend agents",
+                              ? "后端智能体"
+                              : "Backend agents",
                           meta:
                             locale === "zh"
                               ? `${storedAgentItems.length} 个已保存`
                               : `${storedAgentItems.length} saved`,
                           description:
                             locale === "zh"
-                              ? agentLibrary.usedLegacyThreads
-                                ? "当前 app-server 不支持 agent/list，暂时从旧线程记录恢复。"
-                                : "这些智能体来自 app-server agent/list，可继续调整配置。"
-                              : agentLibrary.usedLegacyThreads
-                                ? "The current app-server does not support agent/list; restored from legacy thread records."
-                                : "These agents come from app-server agent/list and can be adjusted.",
+                              ? "这些智能体来自 app-server agent/list，可继续调整配置。"
+                              : "These agents come from app-server agent/list and can be adjusted.",
                           section: true,
                         } satisfies LibraryItem,
                         ...storedAgentItems,
                       ]
                     : []),
-                  ...basePanel.items,
                   ...(detectedItems.length > 0
                     ? [
                         {
@@ -5361,7 +4060,19 @@ export function App() {
                       ]
                     : []),
                 ]
-              : basePanel.items,
+              : [
+                  {
+                    title:
+                      locale === "zh" ? "暂无后端智能体" : "No backend agents",
+                    meta: "agent/list",
+                    description:
+                      locale === "zh"
+                        ? "点击新建智能体，从当前 app-server 读取模型、权限、MCP 和 Skill 后保存。"
+                        : "Create an agent to load models, permissions, MCP, and Skills from the current app-server.",
+                    glyph: "◷",
+                    accent: "slate",
+                  },
+                ],
         });
         return;
       }
@@ -5417,6 +4128,18 @@ export function App() {
                 : plugin.shareContext?.creatorName
                   ? `${locale === "zh" ? "创建者" : "Creator"}: ${plugin.shareContext.creatorName}`
                   : undefined,
+            glyph: LIBRARY_DECOR.plugin.glyph,
+            accent: LIBRARY_DECOR.plugin.accent,
+            badge: plugin.installed
+              ? {
+                  label: locale === "zh" ? "已安装" : "installed",
+                  tone: "running" as const,
+                }
+              : {
+                  label: locale === "zh" ? "未安装" : "not installed",
+                  tone: "idle" as const,
+                },
+            tags: plugin.keywords.slice(0, 3),
             action: {
               type: "plugin" as const,
               pluginName: plugin.name,
@@ -5629,26 +4352,29 @@ export function App() {
     }
 
     if (action.type === "mcp-detail") {
-      const tool = action.tool;
+      const mcpAction = (await refreshToolActionFromBackend(
+        action,
+      )) as McpDetailAction;
+      const tool = mcpAction.tool;
       const actions: LibraryPanelAction[] = [];
-      if (action.authStatus === "notLoggedIn") {
+      if (mcpAction.authStatus === "notLoggedIn") {
         actions.push({
           id: "login-mcp-oauth",
           label: locale === "zh" ? "登录 MCP" : "Log in to MCP",
-          mcpServerName: action.subtitle,
+          mcpServerName: mcpAction.subtitle,
           tone: "primary",
         });
       }
-      if (action.resource) {
+      if (mcpAction.resource) {
         actions.push({
           id: "read-mcp-resource",
           label:
             locale === "zh"
-              ? `读取资源：${action.resource.label}`
-              : `Read resource: ${action.resource.label}`,
-          mcpResourceServer: action.resource.server,
-          mcpResourceUri: action.resource.uri,
-          tone: action.authStatus === "notLoggedIn" ? undefined : "primary",
+              ? `读取资源：${mcpAction.resource.label}`
+              : `Read resource: ${mcpAction.resource.label}`,
+          mcpResourceServer: mcpAction.resource.server,
+          mcpResourceUri: mcpAction.resource.uri,
+          tone: mcpAction.authStatus === "notLoggedIn" ? undefined : "primary",
         });
       }
       if (tool) {
@@ -5660,30 +4386,31 @@ export function App() {
               : `Call tool: ${tool.label}`,
           mcpServerName: tool.server,
           mcpToolName: tool.name,
-          tone: action.authStatus === "notLoggedIn" ? undefined : "primary",
+          tone: mcpAction.authStatus === "notLoggedIn" ? undefined : "primary",
         });
       }
-      if (action.configName) {
+      if (mcpAction.configName) {
         actions.push({
           id: "delete-mcp-config",
           label: locale === "zh" ? "删除 MCP 配置" : "Delete MCP config",
-          mcpServerName: action.configName,
+          mcpServerName: mcpAction.configName,
           tone: "danger",
         });
       }
-      if (action.configPath) {
+      if (mcpAction.configPath) {
         actions.push(
           {
             id: "open-path",
-            label: locale === "zh" ? "打开配置文件" : "Open config file",
-            pathToOpen: action.configPath,
+            label: locale === "zh" ? "打开后端记录" : "Open backend record",
+            pathToOpen: mcpAction.configPath,
             pathKind: "file",
           },
           {
             id: "delete-config-file",
-            label: locale === "zh" ? "删除配置文件" : "Delete config file",
-            pathToOpen: action.configPath,
+            label: locale === "zh" ? "删除后端记录" : "Delete backend record",
+            pathToOpen: mcpAction.configPath,
             pathKind: "file",
+            domainConfigKind: "tool",
             tone: "danger",
           },
         );
@@ -5692,10 +4419,10 @@ export function App() {
         currentPanel
           ? {
               ...currentPanel,
-              title: action.title,
-              subtitle: action.subtitle,
+              title: mcpAction.title,
+              subtitle: mcpAction.subtitle,
               body: [
-                action.body,
+                mcpAction.body,
                 tool
                   ? [
                       "",
@@ -5745,6 +4472,8 @@ export function App() {
           locale === "zh"
             ? `工具验证 · ${tool.server}.${tool.name}`
             : `Tool check · ${tool.server}.${tool.name}`;
+        const panelTitle = mcpAction.title;
+        const panelSubtitle = mcpAction.subtitle;
         void (async () => {
           const backendThreads =
             (await clientRef.current?.listThreads(false)) ?? [];
@@ -5755,8 +4484,8 @@ export function App() {
           );
           if (!matchingThread) {
             setLibraryPanel((currentPanel) =>
-              currentPanel?.title === action.title &&
-              currentPanel.subtitle === action.subtitle
+              currentPanel?.title === panelTitle &&
+              currentPanel.subtitle === panelSubtitle
                 ? { ...currentPanel, items: toolEmptyHistoryItems(locale) }
                 : currentPanel,
             );
@@ -5767,8 +4496,8 @@ export function App() {
             (await clientRef.current?.readThread(matchingThread.id)) ??
             matchingThread;
           setLibraryPanel((currentPanel) =>
-            currentPanel?.title === action.title &&
-            currentPanel.subtitle === action.subtitle
+            currentPanel?.title === panelTitle &&
+            currentPanel.subtitle === panelSubtitle
               ? {
                   ...currentPanel,
                   actions: [
@@ -5791,8 +4520,8 @@ export function App() {
           );
         })().catch((error) => {
           setLibraryPanel((currentPanel) =>
-            currentPanel?.title === action.title &&
-            currentPanel.subtitle === action.subtitle
+            currentPanel?.title === panelTitle &&
+            currentPanel.subtitle === panelSubtitle
               ? {
                   ...currentPanel,
                   error:
@@ -5810,49 +4539,57 @@ export function App() {
     }
 
     if (action.type === "office-detail") {
-      const officePanel: LibraryPanel = {
-        kind: "office",
-        title: action.title,
-        subtitle: action.subtitle,
-        body: action.workspace ? undefined : action.body,
-        actions: [
-          ...(action.workspace?.threadId
-            ? [
-                {
-                  id: "open-thread" as const,
-                  label:
-                    locale === "zh" ? "打开后端线程" : "Open backend thread",
-                  threadId: action.workspace.threadId,
-                },
-              ]
-            : []),
-          {
-            id: "recruit-agent",
-            label: locale === "zh" ? "招募智能体" : "Recruit agent",
-            tone: "primary",
-          },
-          ...(action.configPath
-            ? [
-                {
-                  id: "open-path" as const,
-                  label: locale === "zh" ? "打开配置文件" : "Open config file",
-                  pathToOpen: action.configPath,
-                  pathKind: "file" as const,
-                },
-                {
-                  id: "delete-config-file" as const,
-                  label:
-                    locale === "zh" ? "删除配置文件" : "Delete config file",
-                  pathToOpen: action.configPath,
-                  pathKind: "file" as const,
-                  tone: "danger" as const,
-                },
-              ]
-            : []),
-        ],
-        items: action.items,
-        workspace: action.workspace,
+      const createOfficePanel = (config: OfficeConfig | null): LibraryPanel => {
+        const workspace = config?.workspace ?? action.workspace;
+        const title = config?.title ?? action.title;
+        const subtitle = config?.subtitle ?? action.subtitle;
+        return {
+          kind: "office",
+          title,
+          subtitle,
+          body: workspace ? undefined : action.body,
+          actions: [
+            ...(workspace?.threadId
+              ? [
+                  {
+                    id: "open-thread" as const,
+                    label:
+                      locale === "zh" ? "打开后端线程" : "Open backend thread",
+                    threadId: workspace.threadId,
+                  },
+                ]
+              : []),
+            {
+              id: "recruit-agent",
+              label: locale === "zh" ? "招募智能体" : "Recruit agent",
+              tone: "primary",
+            },
+            ...(action.configPath
+              ? [
+                  {
+                    id: "open-path" as const,
+                    label:
+                      locale === "zh" ? "打开后端记录" : "Open backend record",
+                    pathToOpen: action.configPath,
+                    pathKind: "file" as const,
+                  },
+                  {
+                    id: "delete-config-file" as const,
+                    label:
+                      locale === "zh" ? "删除后端记录" : "Delete backend record",
+                    pathToOpen: action.configPath,
+                    pathKind: "file" as const,
+                    domainConfigKind: "office" as const,
+                    tone: "danger" as const,
+                  },
+                ]
+              : []),
+          ],
+          items: action.items,
+          workspace,
+        };
       };
+      const officePanel = createOfficePanel(null);
       setLibraryPanel((currentPanel) =>
         currentPanel
           ? {
@@ -5864,21 +4601,63 @@ export function App() {
       );
       if (action.workspace && isConnected) {
         void (async () => {
-          const threadId = await ensureOfficeThread(officePanel);
+          const officeCwd = await resolveBackendCwd();
+          const client = clientRef.current;
+          let latestPanel = officePanel;
+          if (officeCwd && client) {
+            try {
+              const readResponse = await client.readOfficeConfig(officeCwd, {
+                threadId: action.workspace?.threadId ?? null,
+                title: action.title,
+              });
+              if (readResponse.record) {
+                latestPanel = createOfficePanel(readResponse.record.config);
+                setLibraryPanel((currentPanel) =>
+                  currentPanel?.kind === "office" &&
+                  currentPanel.title === officePanel.title
+                    ? {
+                        ...currentPanel,
+                        ...latestPanel,
+                        error: undefined,
+                      }
+                    : currentPanel,
+                );
+              }
+            } catch (error) {
+              if (!isUnsupportedRpcError(error)) {
+                throw error;
+              }
+            }
+          }
+          const threadId = await ensureOfficeThread(
+            latestPanel,
+            latestPanel.workspace,
+          );
           if (!threadId) {
             return;
           }
-          const thread = await clientRef.current?.readThread(threadId);
+          const thread = await client?.readThread(threadId);
           if (!thread) {
             return;
           }
-          const parsed = parseOfficeConfigFromThread(thread, locale);
-          const hydratedConfig =
-            parsed ?? {
-              title: action.title,
-              subtitle: action.subtitle,
-              workspace: workspaceFromBackendThread(thread, locale),
-            };
+          const latestWorkspace = latestPanel.workspace ?? action.workspace;
+          const hydratedConfig = {
+            title: latestPanel.title,
+            subtitle: latestPanel.subtitle,
+            workspace: latestWorkspace
+              ? {
+                  ...latestWorkspace,
+                  messages: mergeOfficeMessages(
+                    latestWorkspace.messages,
+                    officeMessagesFromThread(thread, locale),
+                  ),
+                  tasks:
+                    latestWorkspace.tasks.length > 0
+                      ? latestWorkspace.tasks
+                      : workspaceFromBackendThread(thread, locale).tasks,
+                }
+              : workspaceFromBackendThread(thread, locale),
+          };
           setLibraryPanel((currentPanel) =>
             currentPanel?.workspace?.threadId === threadId
               ? {
@@ -5945,16 +4724,17 @@ export function App() {
                     {
                       id: "open-path" as const,
                       label:
-                        locale === "zh" ? "打开配置文件" : "Open config file",
+                        locale === "zh" ? "打开后端记录" : "Open backend record",
                       pathToOpen: action.configPath,
                       pathKind: "file" as const,
                     },
                     {
                       id: "delete-config-file" as const,
                       label:
-                        locale === "zh" ? "删除配置文件" : "Delete config file",
+                        locale === "zh" ? "删除后端记录" : "Delete backend record",
                       pathToOpen: action.configPath,
                       pathKind: "file" as const,
+                      domainConfigKind: "agent" as const,
                       tone: "danger" as const,
                     },
                   ]
@@ -6042,8 +4822,8 @@ export function App() {
               meta: locale === "zh" ? "app-server" : "app-server",
               description:
                 locale === "zh"
-                  ? "正在从后端执行线程读取最近运行记录。"
-                  : "Loading recent runs from the backend execution thread.",
+                  ? "正在从 app-server automation/runs/list 读取最近运行记录。"
+                  : "Loading recent runs from app-server automation/runs/list.",
               glyph: "◷",
               accent: "blue",
             },
@@ -6063,86 +4843,125 @@ export function App() {
               accent: "slate",
             },
           ]);
+      const createAutomationPanel = (
+        detail: typeof action,
+        items: LibraryItem[],
+      ): Partial<LibraryPanel> => ({
+        title: detail.title,
+        subtitle: detail.subtitle,
+        body: detail.body,
+        actions: [
+          ...(detail.threadId
+            ? [
+                {
+                  id: "open-thread" as const,
+                  label:
+                    locale === "zh" ? "打开后端线程" : "Open backend thread",
+                  threadId: detail.threadId,
+                },
+              ]
+            : []),
+          {
+            id: "run-automation",
+            label: locale === "zh" ? "立即运行" : "Run now",
+            ...(detail.config ? { automationConfig: detail.config } : {}),
+            automationConfigPath: detail.configPath,
+            automationTitle: detail.title,
+            automationThreadId: detail.threadId,
+            automationPrompt: detail.prompt,
+            tone: "primary",
+          },
+          ...(detail.configPath
+            ? [
+                {
+                  id: "open-path" as const,
+                  label: locale === "zh" ? "打开后端记录" : "Open backend record",
+                  pathToOpen: detail.configPath,
+                  pathKind: "file" as const,
+                },
+                {
+                  id: "delete-config-file" as const,
+                  label:
+                    locale === "zh" ? "删除后端记录" : "Delete backend record",
+                  pathToOpen: detail.configPath,
+                  pathKind: "file" as const,
+                  domainConfigKind: "automation" as const,
+                  tone: "danger" as const,
+                },
+              ]
+            : []),
+        ],
+        fields: [
+          {
+            id: "automation-run-note",
+            label: locale === "zh" ? "运行补充说明" : "Run note",
+            placeholder:
+              locale === "zh"
+                ? "可选：本次运行要重点检查什么"
+                : "Optional: what should this run focus on",
+            value: "",
+          },
+        ],
+        items,
+      });
       setLibraryPanel((currentPanel) =>
         currentPanel
           ? {
               ...currentPanel,
-              title: action.title,
-              subtitle: action.subtitle,
-              body: action.body,
-              actions: [
-                ...(action.threadId
-                  ? [
-                      {
-                        id: "open-thread" as const,
-                        label:
-                          locale === "zh"
-                            ? "打开后端线程"
-                            : "Open backend thread",
-                        threadId: action.threadId,
-                      },
-                    ]
-                  : []),
-                {
-                  id: "run-automation",
-                  label: locale === "zh" ? "立即运行" : "Run now",
-                  ...(action.config
-                    ? { automationConfig: action.config }
-                    : {}),
-                  automationTitle: action.title,
-                  automationThreadId: action.threadId,
-                  automationPrompt: action.prompt,
-                  tone: "primary",
-                },
-                ...(action.configPath
-                  ? [
-                      {
-                        id: "open-path" as const,
-                        label:
-                          locale === "zh" ? "打开配置文件" : "Open config file",
-                        pathToOpen: action.configPath,
-                        pathKind: "file" as const,
-                      },
-                      {
-                        id: "delete-config-file" as const,
-                        label:
-                          locale === "zh" ? "删除配置文件" : "Delete config file",
-                        pathToOpen: action.configPath,
-                        pathKind: "file" as const,
-                        tone: "danger" as const,
-                      },
-                    ]
-                  : []),
-              ],
-              fields: [
-                {
-                  id: "automation-run-note",
-                  label: locale === "zh" ? "运行补充说明" : "Run note",
-                  placeholder:
-                    locale === "zh"
-                      ? "可选：本次运行要重点检查什么"
-                      : "Optional: what should this run focus on",
-                  value: "",
-                },
-              ],
-              items: initialHistory,
+              ...createAutomationPanel(action, initialHistory),
               error: undefined,
             }
           : currentPanel,
       );
-      if (action.threadId && isConnected) {
-        const automationThreadId = action.threadId;
+      if (isConnected) {
         void (async () => {
           try {
             const automationCwd = await resolveBackendCwd();
+            let latestAction = action;
+            let latestItems = initialHistory;
             if (automationCwd && clientRef.current) {
+              const readResponse = await clientRef.current.readAutomationConfig(
+                automationCwd,
+                {
+                  filePath: action.configPath ?? null,
+                  threadId: action.threadId ?? null,
+                  title: action.title,
+                },
+              );
+              const latestRecord = readResponse.record;
+              if (latestRecord) {
+                latestItems = latestRecord.config.threadId
+                  ? await readAutomationRunItems(latestRecord.config.threadId)
+                  : emptyAutomationRunItems(locale);
+                const latestItem = automationConfigRecordToLibraryItem(
+                  latestRecord,
+                  locale,
+                  latestItems,
+                );
+                if (latestItem.action?.type === "automation-detail") {
+                  latestAction = latestItem.action;
+                  setLibraryPanel((currentPanel) =>
+                    currentPanel?.title === action.title ||
+                    currentPanel?.title === latestAction.title
+                      ? {
+                          ...currentPanel,
+                          ...createAutomationPanel(latestAction, latestItems),
+                          error: undefined,
+                        }
+                      : currentPanel,
+                  );
+                }
+              }
+            }
+            if (latestAction.threadId && clientRef.current && automationCwd) {
               const runsResponse = await clientRef.current.listAutomationRuns(
                 automationCwd,
-                automationThreadId,
+                latestAction.threadId,
               );
               if (runsResponse.data.length > 0) {
                 setLibraryPanel((currentPanel) =>
-                  currentPanel?.title === action.title
+                  currentPanel?.title === action.title ||
+                  currentPanel?.title === latestAction.title
                     ? {
                         ...currentPanel,
                         items: automationRunRecordItems(
@@ -6156,15 +4975,12 @@ export function App() {
                 return;
               }
             }
-            const thread = await clientRef.current?.readThread(automationThreadId);
-            if (!thread) {
-              return;
-            }
             setLibraryPanel((currentPanel) =>
-              currentPanel?.title === action.title
+              currentPanel?.title === action.title ||
+              currentPanel?.title === latestAction.title
                 ? {
                     ...currentPanel,
-                    items: automationRunHistoryItems(thread, locale),
+                    items: emptyAutomationRunItems(locale),
                     error: undefined,
                   }
                 : currentPanel,
@@ -6258,11 +5074,11 @@ export function App() {
               externalAgentMigrationSummary(action.item, locale),
               agentConfigPath
                 ? locale === "zh"
-                  ? `后端配置：${agentConfigPath}`
-                  : `Backend config: ${agentConfigPath}`
+                  ? `后端记录：${agentConfigPath}`
+                  : `Backend record: ${agentConfigPath}`
                 : locale === "zh"
-                  ? "后端配置：已提交到 agent/save"
-                  : "Backend config: submitted to agent/save",
+                  ? "后端记录：已提交到 agent/create"
+                  : "Backend record: submitted to agent/create",
               locale === "zh"
                 ? `后端智能体：${savedPayloadConfig.agentId ?? importedConfig.name}`
                 : `Backend agent: ${savedPayloadConfig.agentId ?? importedConfig.name}`,
@@ -6318,6 +5134,9 @@ export function App() {
     }
 
     if (action.type === "skill-file") {
+      const skillAction = (await refreshToolActionFromBackend(
+        action,
+      )) as SkillFileAction;
       setLibraryPanel((currentPanel) =>
         currentPanel
           ? {
@@ -6329,7 +5148,7 @@ export function App() {
       );
 
       try {
-        const response = await clientRef.current?.readFile(action.path);
+        const response = await clientRef.current?.readFile(skillAction.path);
         if (!response) {
           return;
         }
@@ -6338,8 +5157,8 @@ export function App() {
           currentPanel
             ? {
                 ...currentPanel,
-                title: action.skillName,
-                subtitle: action.path,
+                title: skillAction.skillName,
+                subtitle: skillAction.path,
                 body: decodeBase64Text(response.dataBase64),
                 actions: [
                   {
@@ -6348,43 +5167,44 @@ export function App() {
                       locale === "zh"
                         ? "右栏打开源文件"
                         : "Open source in sidebar",
-                    pathToOpen: action.path,
+                    pathToOpen: skillAction.path,
                     pathKind: "file",
                   },
                   {
                     id: "toggle-skill",
                     label:
-                      action.enabled === false
+                      skillAction.enabled === false
                         ? locale === "zh"
                           ? "启用 Skill"
                           : "Enable skill"
                         : locale === "zh"
                           ? "停用 Skill"
                           : "Disable skill",
-                    skillEnabled: action.enabled !== false,
-                    skillName: action.skillName,
-                    skillPath: action.path,
-                    tone: action.enabled === false ? "primary" : undefined,
+                    skillEnabled: skillAction.enabled !== false,
+                    skillName: skillAction.skillName,
+                    skillPath: skillAction.path,
+                    tone: skillAction.enabled === false ? "primary" : undefined,
                   },
-                  ...(action.configPath
+                  ...(skillAction.configPath
                     ? [
                         {
                           id: "open-path" as const,
                           label:
                             locale === "zh"
-                              ? "打开配置文件"
-                              : "Open config file",
-                          pathToOpen: action.configPath,
+                              ? "打开后端记录"
+                              : "Open backend record",
+                          pathToOpen: skillAction.configPath,
                           pathKind: "file" as const,
                         },
                         {
                           id: "delete-config-file" as const,
                           label:
                             locale === "zh"
-                              ? "删除配置文件"
-                              : "Delete config file",
-                          pathToOpen: action.configPath,
+                              ? "删除后端记录"
+                              : "Delete backend record",
+                          pathToOpen: skillAction.configPath,
                           pathKind: "file" as const,
+                          domainConfigKind: "tool" as const,
                           tone: "danger" as const,
                         },
                       ]
@@ -6536,11 +5356,11 @@ export function App() {
           : `Bind office: ${panel.title}`,
         officeConfigPath
           ? locale === "zh"
-            ? `后端配置：${officeConfigPath}`
-            : `Backend config: ${officeConfigPath}`
+            ? `后端记录：${officeConfigPath}`
+            : `Backend record: ${officeConfigPath}`
           : locale === "zh"
-            ? "后端配置：已提交到 office/save"
-            : "Backend config: submitted to office/save",
+            ? "后端记录：已提交到 office/save"
+            : "Backend record: submitted to office/save",
         locale === "zh"
           ? `目标：${config.workspace.goal}`
           : `Goal: ${config.workspace.goal}`,
@@ -6683,51 +5503,6 @@ export function App() {
     return writeStoredOfficeConfigFile(client, officeCwd, config);
   }
 
-  async function readOfficeConfigFiles(): Promise<LibraryItem[]> {
-    const officeCwd = await resolveBackendCwd();
-    const client = clientRef.current;
-    if (!officeCwd || !client) {
-      return [];
-    }
-
-    const records = await readStoredOfficeConfigFiles(client, officeCwd);
-    return officeConfigRecordsToLibraryItems(records);
-  }
-
-  function officeConfigRecordsToLibraryItems(
-    records: Array<
-      Pick<
-        DomainConfigListResponse<OfficeConfig>["data"][number],
-        "filePath" | "savedAt" | "config"
-      >
-    >,
-  ): LibraryItem[] {
-    return records.map(({ filePath, savedAt, config }) => ({
-      title: config.title,
-      meta:
-        locale === "zh"
-          ? `工作区配置 · ${savedAt ? new Date(savedAt).toLocaleString("zh-CN") : pathBaseName(filePath)}`
-          : `Workspace config · ${savedAt ? new Date(savedAt).toLocaleString("en-US") : pathBaseName(filePath)}`,
-      description:
-        config.workspace.goal ||
-        (locale === "zh"
-          ? "从工作区配置恢复的办公室。"
-          : "Office restored from a workspace config."),
-      glyph: "⌘",
-      accent: "green",
-      badge: { label: locale === "zh" ? "配置" : "config", tone: "planning" },
-      action: {
-        type: "office-detail",
-        title: config.title,
-        subtitle: config.subtitle,
-        body: config.workspace.goal,
-        items: [],
-        workspace: config.workspace,
-        configPath: filePath,
-      },
-    }));
-  }
-
   async function writeAgentConfigFile(
     config: AgentConfig,
   ): Promise<{ filePath: string; agentId?: string } | null> {
@@ -6736,98 +5511,39 @@ export function App() {
     if (!agentCwd || !client) {
       return null;
     }
-    return writeStoredAgentConfigFile(client, agentCwd, config);
-  }
-
-  async function readAgentConfigFiles(): Promise<LibraryItem[]> {
-    const agentCwd = await resolveBackendCwd();
-    const client = clientRef.current;
-    if (!agentCwd || !client) {
-      return [];
+    const existing = await client.readAgentConfig(agentCwd, {
+      agentId: config.agentId ?? null,
+      threadId: config.threadId ?? null,
+      name: config.name,
+    });
+    if (existing.record) {
+      return client.updateAgentConfig(
+        agentCwd,
+        existing.record.filePath,
+        config,
+      );
     }
-
-    const records = await readStoredAgentConfigFiles(client, agentCwd);
-    return agentConfigRecordsToLibraryItems(records);
+    return writeStoredAgentConfigFile(client, agentCwd, config);
   }
 
   async function loadAgentLibraryItems(
     agentCwd: string,
-  ): Promise<{ items: LibraryItem[]; usedLegacyThreads: boolean }> {
+  ): Promise<{ items: LibraryItem[] }> {
     const client = clientRef.current;
     if (!client) {
-      return { items: [], usedLegacyThreads: false };
+      return { items: [] };
     }
     try {
       const response = await client.listAgentConfigs(agentCwd);
       return {
-        items: agentConfigRecordsToLibraryItems(response.data),
-        usedLegacyThreads: false,
+        items: agentConfigRecordsToLibraryItems(response.data, locale),
       };
     } catch (error) {
       if (!isUnsupportedRpcError(error)) {
         throw error;
       }
-      const backendThreads = await client.listThreads(false);
-      const agentThreads = backendThreads.filter(
-        (thread) => thread.threadSource === "agent",
-      );
-      const agentThreadCandidates =
-        agentThreads.length > 0 ? agentThreads : backendThreads;
-      const backendAgentDetails = await Promise.allSettled(
-        agentThreadCandidates.map(async (thread) => {
-          const detailedThread = await client.readThread(thread.id);
-          return {
-            thread: detailedThread,
-            config: parseAgentConfigFromThread(detailedThread, locale),
-          };
-        }),
-      );
-      return {
-        items: backendAgentDetails.flatMap((result) => {
-          if (result.status !== "fulfilled" || !result.value.config) {
-            return [];
-          }
-          return [
-            backendThreadLibraryItem(
-              result.value.thread,
-              "agent",
-              locale,
-              result.value.config,
-            ),
-          ];
-        }),
-        usedLegacyThreads: true,
-      };
+      return { items: [] };
     }
-  }
-
-  function agentConfigRecordsToLibraryItems(
-    records: Array<
-      Pick<
-        DomainConfigListResponse<AgentConfig>["data"][number],
-        "filePath" | "savedAt" | "config"
-      >
-    >,
-  ): LibraryItem[] {
-    return records.map(({ filePath, savedAt, config }) => ({
-        title: config.name,
-        meta:
-          locale === "zh"
-            ? `工作区配置 · ${savedAt ? new Date(savedAt).toLocaleString("zh-CN") : pathBaseName(filePath)}`
-            : `Workspace config · ${savedAt ? new Date(savedAt).toLocaleString("en-US") : pathBaseName(filePath)}`,
-        description:
-          locale === "zh"
-            ? `${config.role} · ${config.model} · ${config.permission}`
-            : `${config.role} · ${config.model} · ${config.permission}`,
-        glyph: config.glyph,
-        accent: config.accent,
-        badge: { label: locale === "zh" ? "配置" : "config", tone: "planning" },
-        action: {
-          type: "agent-config",
-          config,
-          configPath: filePath,
-        },
-      }));
   }
 
   async function writeAutomationConfigFile(
@@ -6845,11 +5561,20 @@ export function App() {
     config: AutomationConfig,
     note: string | null,
     turnId: string | null,
-  ): Promise<{ runId: string; filePath: string } | null> {
+  ): Promise<{
+    record: { runId: string; filePath: string } | null;
+    warning: string | null;
+  }> {
     const automationCwd = await resolveBackendCwd();
     const client = clientRef.current;
     if (!automationCwd || !client) {
-      return null;
+      return {
+        record: null,
+        warning:
+          locale === "zh"
+            ? "自动化运行已继续，但当前没有可用的后端工作区，运行历史不会被记录。"
+            : "The automation run continued, but no backend workspace is available, so run history was not recorded.",
+      };
     }
     try {
       const response = await client.runAutomationConfig(
@@ -6859,14 +5584,23 @@ export function App() {
         turnId,
       );
       return {
-        runId: response.run.runId,
-        filePath: response.filePath,
+        record: {
+          runId: response.run.runId,
+          filePath: response.filePath,
+        },
+        warning: null,
       };
     } catch (error) {
       if (!isUnsupportedRpcError(error)) {
         throw error;
       }
-      return null;
+      return {
+        record: null,
+        warning:
+          locale === "zh"
+            ? "自动化运行已继续，但当前 app-server 不支持 automation/run，运行历史不会被记录。"
+            : "The automation run continued, but this app-server does not support automation/run, so run history was not recorded.",
+      };
     }
   }
 
@@ -6916,17 +5650,6 @@ export function App() {
     }
   }
 
-  async function readAutomationConfigFiles(): Promise<LibraryItem[]> {
-    const automationCwd = await resolveBackendCwd();
-    const client = clientRef.current;
-    if (!automationCwd || !client) {
-      return [];
-    }
-
-    const records = await readStoredAutomationConfigFiles(client, automationCwd);
-    return automationConfigRecordsToLibraryItems(records);
-  }
-
   async function automationConfigRecordsToLibraryItems(
     records: Array<
       Pick<
@@ -6947,44 +5670,16 @@ export function App() {
         );
       }),
     );
-    return records.map(({ filePath, savedAt, config }) => ({
-        title: config.title,
-        meta:
-          locale === "zh"
-            ? `工作区配置 · ${savedAt ? new Date(savedAt).toLocaleString("zh-CN") : pathBaseName(filePath)}`
-            : `Workspace config · ${savedAt ? new Date(savedAt).toLocaleString("en-US") : pathBaseName(filePath)}`,
-        description: config.subtitle || promptPreview(config.prompt),
-        glyph: "⏱",
-        accent: "cyan",
-        badge: { label: locale === "zh" ? "配置" : "config", tone: "planning" },
-        action: {
-          type: "automation-detail",
-          title: config.title,
-          subtitle: config.subtitle,
-          body: [
-            config.body,
-            locale === "zh" ? `配置文件：${filePath}` : `Config file: ${filePath}`,
-          ].join("\n"),
-          prompt: config.prompt,
-          threadId: config.threadId,
-          config,
-          configPath: filePath,
-          items: config.threadId
-            ? runItemsByThreadId.get(config.threadId)
-            : emptyAutomationRunItems(locale),
-        },
-      }));
-  }
-
-  async function readToolConfigFiles(): Promise<LibraryItem[]> {
-    const toolCwd = await resolveBackendCwd();
-    const client = clientRef.current;
-    if (!toolCwd || !client) {
-      return [];
-    }
-
-    const records = await readStoredToolConfigFiles(client, toolCwd);
-    return toolConfigRecordsToLibraryItems(records);
+    return records.map((record) =>
+      automationConfigRecordToLibraryItem(
+        record,
+        locale,
+        record.config.threadId
+          ? (runItemsByThreadId.get(record.config.threadId) ??
+              emptyAutomationRunItems(locale))
+          : emptyAutomationRunItems(locale),
+      ),
+    );
   }
 
   async function loadToolLibraryItems(toolCwd: string): Promise<LibraryItem[]> {
@@ -6994,71 +5689,83 @@ export function App() {
     }
     try {
       const response = await client.listToolConfigs(toolCwd);
-      return toolConfigRecordsToLibraryItems(response.data);
+      return toolConfigRecordsToLibraryItems(response.data, locale);
     } catch (error) {
       if (!isUnsupportedRpcError(error)) {
         throw error;
       }
-      return readToolConfigFiles();
+      return [];
     }
   }
 
-  function toolConfigRecordsToLibraryItems(
-    records: Array<
-      Pick<
-        DomainConfigListResponse<ToolConfig>["data"][number],
-        "filePath" | "savedAt" | "config"
-      >
-    >,
-  ): LibraryItem[] {
-    return records.map(({ filePath, savedAt, config }) => ({
-      title: `${config.kind === "mcp" ? "MCP" : "Skill"} · ${config.title}`,
-      meta:
-        locale === "zh"
-          ? `工作区配置 · ${savedAt ? new Date(savedAt).toLocaleString("zh-CN") : pathBaseName(filePath)}`
-          : `Workspace config · ${savedAt ? new Date(savedAt).toLocaleString("en-US") : pathBaseName(filePath)}`,
-      description:
-        config.description ||
-        (config.kind === "mcp"
-          ? config.command
-          : config.path) ||
-        (locale === "zh"
-          ? "从工作区工具配置恢复。"
-          : "Restored from a workspace tool config."),
-      glyph: config.kind === "mcp" ? "⌁" : "◇",
-      accent: config.kind === "mcp" ? "blue" : "violet",
-      badge: {
-        label: config.kind === "mcp" ? "MCP" : "Skill",
-        tone: config.enabled === false ? "warning" : "planning",
-      },
-      action:
-        config.kind === "mcp"
-          ? {
-              type: "mcp-detail",
-              title: config.title,
-              subtitle: config.name,
-              body: [
-                config.description,
-                config.command
-                  ? `${locale === "zh" ? "命令" : "Command"}: ${config.command}`
-                  : null,
-                config.args?.length
-                  ? `${locale === "zh" ? "参数" : "Args"}: ${config.args.join(" ")}`
-                  : null,
-                locale === "zh" ? `配置文件：${filePath}` : `Config file: ${filePath}`,
-              ]
-                .filter(Boolean)
-                .join("\n"),
-              configPath: filePath,
-            }
-          : {
-              type: "skill-file",
-              skillName: config.name,
-              path: config.path ?? filePath,
-              enabled: config.enabled ?? true,
-              configPath: filePath,
-      },
-    }));
+  async function refreshToolActionFromBackend(
+    action: McpDetailAction | SkillFileAction,
+  ): Promise<McpDetailAction | SkillFileAction> {
+    if (!isConnected) {
+      return action;
+    }
+
+    const client = clientRef.current;
+    const toolCwd = await resolveBackendCwd();
+    if (!client || !toolCwd) {
+      return action;
+    }
+
+    try {
+      const response = await client.listToolConfigs(
+        toolCwd,
+        action.type === "mcp-detail" ? "mcp" : "skill",
+      );
+      const matchedRecord = response.data.find((record) => {
+        if (record.filePath === action.configPath) {
+          return true;
+        }
+        if (action.type === "mcp-detail") {
+          return (
+            record.config.kind === "mcp" &&
+            (record.config.name === action.configName ||
+              record.config.name === action.subtitle ||
+              record.config.title === action.title)
+          );
+        }
+        return (
+          record.config.kind === "skill" &&
+          (record.config.path === action.path ||
+            record.config.name === action.skillName)
+        );
+      });
+      if (!matchedRecord) {
+        return action;
+      }
+
+      const refreshedAction = toolConfigRecordsToLibraryItems(
+        [matchedRecord],
+        locale,
+      )[0]?.action;
+      if (refreshedAction?.type !== action.type) {
+        return action;
+      }
+
+      if (action.type === "mcp-detail") {
+        const refreshedMcpAction = refreshedAction as McpDetailAction;
+        return {
+          ...action,
+          ...refreshedMcpAction,
+          authStatus: action.authStatus,
+          configName: action.configName ?? refreshedMcpAction.subtitle,
+          resource: action.resource,
+          tool: action.tool,
+        };
+      }
+
+      const refreshedSkillAction = refreshedAction as SkillFileAction;
+      return {
+        ...action,
+        ...refreshedSkillAction,
+      };
+    } catch {
+      return action;
+    }
   }
 
   async function loadMcpRuntimeStatus(
@@ -7197,40 +5904,7 @@ export function App() {
       }
     }
 
-    const backendThreads = (await client?.listThreads(false)) ?? [];
-    const agentDetails = await Promise.allSettled(
-      backendThreads.map(async (thread) => {
-        const detailedThread = (await client?.readThread(thread.id)) ?? thread;
-        return {
-          thread: detailedThread,
-          config: parseAgentConfigFromThread(detailedThread, locale),
-        };
-      }),
-    );
-
-    const configs = agentDetails
-      .flatMap((result) =>
-        result.status === "fulfilled" && result.value.config
-          ? [
-              {
-                updatedAt: result.value.thread.updatedAt,
-                config: result.value.config,
-              },
-            ]
-          : [],
-      )
-      .sort((left, right) => right.updatedAt - left.updatedAt)
-      .map((entry) => entry.config);
-
-    return (
-      configs.find(
-        (config) =>
-          !memberNames.has(config.name) &&
-          (!config.agentId || !memberAgentIds.has(config.agentId)),
-      ) ??
-      configs[0] ??
-      null
-    );
+    return null;
   }
 
   async function readLatestOfficeConfig(): Promise<OfficeConfig | null> {
@@ -7261,33 +5935,7 @@ export function App() {
       }
     }
 
-    const backendThreads = await clientRef.current?.listThreads(false);
-    const officeDetails = await Promise.allSettled(
-      (backendThreads ?? []).map(async (thread) => {
-        const detailedThread =
-          (await clientRef.current?.readThread(thread.id)) ?? thread;
-        return {
-          thread: detailedThread,
-          config: parseOfficeConfigFromThread(detailedThread, locale),
-        };
-      }),
-    );
-
-    return (
-      officeDetails
-        .flatMap((result) =>
-          result.status === "fulfilled" && result.value.config
-            ? [
-                {
-                  updatedAt: result.value.thread.updatedAt,
-                  config: result.value.config,
-                },
-            ]
-          : [],
-        )
-        .sort((left, right) => right.updatedAt - left.updatedAt)[0]?.config ??
-      null
-    );
+    return null;
   }
 
   async function createBackendAgentConfig(): Promise<AgentConfig> {
@@ -7491,8 +6139,8 @@ export function App() {
             ? `办公室「${panel.title}」群聊消息：${text}`
             : `Office "${panel.title}" group chat message: ${text}`,
           locale === "zh"
-            ? "后端配置：已提交到 office/message/send"
-            : "Backend config: submitted to office/message/send",
+            ? "后端记录：已提交到 office/message/send"
+            : "Backend record: submitted to office/message/send",
           locale === "zh"
             ? `执行线程：${targetThreadId}`
             : `Execution thread: ${targetThreadId}`,
@@ -7705,8 +6353,8 @@ export function App() {
                     .map((option) => option.name)
                     .join(", ")}`,
                   agentConfigPath
-                    ? `后端配置：${agentConfigPath}`
-                    : "后端配置：已提交到 agent/save",
+                    ? `后端记录：${agentConfigPath}`
+                    : "后端记录：已提交到 agent/create",
                   "",
                   config.systemPrompt,
                 ].join("\n")
@@ -7724,8 +6372,8 @@ export function App() {
                     .map((option) => option.name)
                     .join(", ")}`,
                   agentConfigPath
-                    ? `Backend config: ${agentConfigPath}`
-                    : "Backend config: submitted to agent/save",
+                    ? `Backend record: ${agentConfigPath}`
+                    : "Backend record: submitted to agent/create",
                   "",
                   config.systemPrompt,
                 ].join("\n");
@@ -8084,8 +6732,8 @@ export function App() {
                 ? `办公室「${panel.title}」创建产物：${artifact.title}`
                 : `Office "${panel.title}" created artifact: ${artifact.title}`,
               locale === "zh"
-                ? "后端配置：已提交到 office/artifact/upsert"
-                : "Backend config: submitted to office/artifact/upsert",
+                ? "后端记录：已提交到 office/artifact/upsert"
+                : "Backend record: submitted to office/artifact/upsert",
               "",
               artifactBody,
             ].join("\n");
@@ -8213,11 +6861,6 @@ export function App() {
     } finally {
       setBusyToolId(null);
     }
-  }
-
-  function handleKnowledgePath(item: CapabilityPanelItem) {
-    setCapabilityDockOpen(true);
-    void handleCapabilityPanelItem(item);
   }
 
   async function handleLibraryPanelAction(action: LibraryPanelAction) {
@@ -8572,8 +7215,8 @@ export function App() {
                 ? `办公室「${panel.title}」招募智能体：${newMember.name}，角色：${newMember.role}。模型：${recruitConfig?.model ?? "未配置"}。MCP：${enabledMcp}。Skill：${enabledSkills}。请把它纳入后续协作。`
                 : `Office "${panel.title}" recruited agent: ${newMember.name}, role: ${newMember.role}. Model: ${recruitConfig?.model ?? "not configured"}. MCP: ${enabledMcp}. Skills: ${enabledSkills}. Include it in future collaboration.`,
               locale === "zh"
-                ? "后端配置：已提交到 office/member/add"
-                : "Backend config: submitted to office/member/add",
+                ? "后端记录：已提交到 office/member/add"
+                : "Backend record: submitted to office/member/add",
               locale === "zh"
                 ? `执行线程：${targetThreadId}`
                 : `Execution thread: ${targetThreadId}`,
@@ -8657,11 +7300,6 @@ export function App() {
 
     if (action.id === "create-office" && isConnected) {
       try {
-        const baseOffice = demoLibraryPanel("office", locale).items.find(
-          (item) => item.action?.type === "office-detail",
-        );
-        const baseAction =
-          baseOffice?.action?.type === "office-detail" ? baseOffice.action : null;
         const title =
           locale === "zh"
             ? `新办公室 ${new Date().toLocaleTimeString("zh-CN", {
@@ -8673,7 +7311,7 @@ export function App() {
                 minute: "2-digit",
               })}`;
         const thread = await clientRef.current?.startThread(undefined, "office");
-        if (!thread || !baseAction?.workspace) {
+        if (!thread) {
           throw new Error(
             locale === "zh"
               ? "无法创建办公室后端线程"
@@ -8681,37 +7319,19 @@ export function App() {
           );
         }
         await clientRef.current?.renameThread(thread.id, title);
+        const workspace = newBackendOfficeWorkspace(title, thread.id, locale);
         await clientRef.current?.setThreadGoal(
           thread.id,
-          baseAction.workspace.goal,
+          workspace.goal,
           null,
         );
-        const workspace: OfficeWorkspace = {
-          ...baseAction.workspace,
-          threadId: thread.id,
-          backendStatus: "connected",
-          messages: [
-            ...baseAction.workspace.messages,
-            {
-              author: locale === "zh" ? "系统" : "System",
-              glyph: "⌗",
-              accent: "blue",
-              time: locale === "zh" ? "现在" : "now",
-              kind: "system",
-              text:
-                locale === "zh"
-                  ? "办公室已创建，并绑定到真实 app-server 线程。"
-                  : "Office created and bound to a real app-server thread.",
-            },
-          ],
-        };
         const createResponse = await clientRef.current?.startTurn(
           thread.id,
           [
             locale === "zh" ? `创建办公室：${title}` : `Create office: ${title}`,
             locale === "zh"
-              ? "后端配置：即将提交到 office/save"
-              : "Backend config: pending office/save",
+              ? "后端记录：即将提交到 office/create"
+              : "Backend record: pending office/create",
             locale === "zh"
               ? `目标：${workspace.goal}`
               : `Goal: ${workspace.goal}`,
@@ -8727,27 +7347,49 @@ export function App() {
             ),
           );
         }
-        const officeConfigPath = await writeOfficeConfigFile(
-          officeConfigForThread(
-            title,
-            locale === "zh"
-              ? "新建办公室 · 已绑定后端线程"
-              : "New office · backend thread bound",
-            workspace,
-            thread.id,
-          ),
+        const subtitle =
+          locale === "zh"
+            ? "新建办公室 · 已绑定后端线程"
+            : "New office · backend thread bound";
+        let officeConfigPath: string | null = null;
+        let savedOfficeConfig = officeConfigForThread(
+          title,
+          subtitle,
+          workspace,
+          thread.id,
         );
+        const officeCwd = await resolveBackendCwd();
+        const client = clientRef.current;
+        if (officeCwd && client) {
+          try {
+            const officeCreateResponse = await client.createOfficeConfig(
+              officeCwd,
+              {
+                title,
+                subtitle,
+                threadId: thread.id,
+                goal: workspace.goal,
+              },
+            );
+            officeConfigPath = officeCreateResponse.filePath;
+            savedOfficeConfig = officeCreateResponse.config;
+          } catch (error) {
+            if (!isUnsupportedRpcError(error)) {
+              throw error;
+            }
+            officeConfigPath = await writeOfficeConfigFile(savedOfficeConfig);
+          }
+        } else {
+          officeConfigPath = await writeOfficeConfigFile(savedOfficeConfig);
+        }
         setLibraryPanel({
           kind: "office",
           title,
-          subtitle:
-            locale === "zh"
-              ? "新建办公室 · 已绑定后端线程"
-              : "New office · backend thread bound",
+          subtitle,
           body: officeConfigPath
             ? locale === "zh"
-              ? `配置文件：${officeConfigPath}`
-              : `Config file: ${officeConfigPath}`
+              ? `后端记录：${officeConfigPath}`
+              : `Backend record: ${officeConfigPath}`
             : undefined,
           items: [],
           actions: [
@@ -8757,7 +7399,7 @@ export function App() {
               tone: "primary",
             },
           ],
-          workspace,
+          workspace: savedOfficeConfig.workspace,
         });
       } catch (error) {
         const message =
@@ -8911,11 +7553,11 @@ export function App() {
               : `Create automation: ${title}`,
             automationConfigPath
               ? locale === "zh"
-                ? `后端配置：${automationConfigPath}`
-                : `Backend config: ${automationConfigPath}`
+                ? `后端记录：${automationConfigPath}`
+                : `Backend record: ${automationConfigPath}`
               : locale === "zh"
-                ? "后端配置：已提交到 automation/create"
-                : "Backend config: submitted to automation/create",
+                ? "后端记录：已提交到 automation/create"
+                : "Backend record: submitted to automation/create",
             locale === "zh"
               ? `目标办公室：${targetOffice?.title ?? "未绑定办公室"}`
               : `Target office: ${targetOffice?.title ?? "No office"}`,
@@ -8942,8 +7584,8 @@ export function App() {
                 ...currentPanel,
                 body:
                   locale === "zh"
-                    ? `已创建后端自动化：${title}\n已绑定：${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}${automationConfigPath ? `\n配置文件：${automationConfigPath}` : ""}`
-                    : `Created backend automation: ${title}\nBound to: ${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}${automationConfigPath ? `\nConfig file: ${automationConfigPath}` : ""}`,
+                    ? `已创建后端自动化：${title}\n已绑定：${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}${automationConfigPath ? `\n后端记录：${automationConfigPath}` : ""}`
+                    : `Created backend automation: ${title}\nBound to: ${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}${automationConfigPath ? `\nBackend record: ${automationConfigPath}` : ""}`,
                 items: [
                   {
                     title,
@@ -9046,7 +7688,7 @@ export function App() {
         .toISOString()
         .slice(0, 16)
         .replace(/[-:T]/g, "");
-      const serverName = slugifySkillName(`crewon-demo-mcp-${timestamp}`);
+      const serverName = slugifySkillName(`workspace-mcp-${timestamp}`);
       setLibraryPanel((currentPanel) =>
         currentPanel
           ? {
@@ -9124,7 +7766,7 @@ export function App() {
         .toISOString()
         .slice(0, 16)
         .replace(/[-:T]/g, "");
-      const skillName = slugifySkillName(`client-demo-${timestamp}`);
+      const skillName = slugifySkillName(`workspace-skill-${timestamp}`);
       setLibraryPanel((currentPanel) =>
         currentPanel
           ? {
@@ -9264,33 +7906,37 @@ export function App() {
                     ? locale === "zh"
                       ? "正在打开 MCP 授权..."
                       : "Opening MCP authorization..."
-                    : action.id === "run-automation"
+                  : action.id === "run-automation"
+                    ? locale === "zh"
+                      ? "正在运行自动化..."
+                      : "Running automation..."
+                    : action.id === "open-knowledge-file"
                       ? locale === "zh"
-                        ? "正在运行自动化..."
-                        : "Running automation..."
+                        ? "正在读取知识文件..."
+                        : "Reading knowledge file..."
                     : action.id === "read-mcp-resource"
                       ? locale === "zh"
                         ? "正在读取 MCP 资源..."
                         : "Reading MCP resource..."
-                  : action.id === "call-mcp-tool"
-                    ? locale === "zh"
-                      ? "正在调用 MCP 工具..."
-                      : "Calling MCP tool..."
-                    : action.id === "toggle-skill"
-                      ? locale === "zh"
-                        ? "正在更新 Skill 配置..."
-                        : "Updating skill config..."
-                      : action.id === "delete-config-file"
+                      : action.id === "call-mcp-tool"
                         ? locale === "zh"
-                      ? "正在删除配置文件..."
-                      : "Deleting config file..."
-                    : action.id === "delete-mcp-config"
-                      ? locale === "zh"
-                        ? "正在删除 MCP 配置..."
-                        : "Deleting MCP config..."
-                        : locale === "zh"
-                          ? "正在卸载插件..."
-                          : "Uninstalling plugin...",
+                          ? "正在调用 MCP 工具..."
+                          : "Calling MCP tool..."
+                        : action.id === "toggle-skill"
+                          ? locale === "zh"
+                            ? "正在更新 Skill 配置..."
+                            : "Updating skill config..."
+                          : action.id === "delete-config-file"
+                            ? locale === "zh"
+                              ? "正在删除后端记录..."
+                              : "Deleting backend record..."
+                            : action.id === "delete-mcp-config"
+                              ? locale === "zh"
+                                ? "正在删除 MCP 配置..."
+                                : "Deleting MCP config..."
+                              : locale === "zh"
+                                ? "正在卸载插件..."
+                                : "Uninstalling plugin...",
             error: undefined,
           }
         : currentPanel,
@@ -9321,6 +7967,63 @@ export function App() {
         return;
       }
 
+      if (action.id === "open-knowledge-file") {
+        if (!action.knowledgePath) {
+          return;
+        }
+        const knowledgePath = action.knowledgePath;
+        const title =
+          action.knowledgeTitle ?? pathBaseName(knowledgePath);
+        if (action.knowledgeKind === "directory") {
+          setCapabilityDockOpen(true);
+          void handleCapabilityPanelItem({
+            label: title,
+            path: knowledgePath,
+            kind: "directory",
+          });
+          return;
+        }
+
+        const [file, metadata] = await Promise.all([
+          clientRef.current?.readFile(knowledgePath),
+          clientRef.current?.getMetadata(knowledgePath),
+        ]);
+        const text = file ? decodeBase64Text(file.dataBase64) : "";
+        setLibraryPanel((currentPanel) =>
+          currentPanel?.knowledge
+            ? {
+                ...currentPanel,
+                title,
+                subtitle: knowledgePath,
+                body: [
+                  locale === "zh"
+                    ? "已从 app-server 后端工作区读取知识文件。"
+                    : "Knowledge file loaded from the backend workspace.",
+                  fileMetadataText(metadata ?? null, locale),
+                  text.length > 16000 ? `${text.slice(0, 16000)}\n...` : text,
+                ]
+                  .filter(Boolean)
+                  .join("\n\n"),
+                actions: [
+                  {
+                    id: "open-path",
+                    label:
+                      locale === "zh" ? "右栏打开路径" : "Open path in sidebar",
+                    pathToOpen: knowledgePath,
+                    pathKind: "file",
+                  },
+                  {
+                    id: "refresh-knowledge",
+                    label: locale === "zh" ? "返回知识库" : "Back to knowledge",
+                  },
+                ],
+                error: undefined,
+              }
+            : currentPanel,
+        );
+        return;
+      }
+
       if (action.id === "delete-config-file") {
         if (!action.pathToOpen) {
           return;
@@ -9334,12 +8037,17 @@ export function App() {
               : "Local app-server is not connected",
           );
         }
-        await deleteDomainConfigFile(client, configCwd, action.pathToOpen);
+        await deleteDomainConfigFile(
+          client,
+          configCwd,
+          action.pathToOpen,
+          action.domainConfigKind,
+        );
         setNotice({
           text:
             locale === "zh"
-              ? `已删除配置文件：${action.pathToOpen}`
-              : `Deleted config file: ${action.pathToOpen}`,
+              ? `已删除后端记录：${action.pathToOpen}`
+              : `Deleted backend record: ${action.pathToOpen}`,
           tone: "success",
         });
         await openLibrary(libraryPanel?.kind ?? "agents");
@@ -9478,17 +8186,41 @@ export function App() {
             : currentPanel,
         );
 
-        await clientRef.current?.saveMcpServerConfig({
+        const toolCwd = await resolveBackendCwd();
+        const client = clientRef.current;
+        if (!toolCwd || !client) {
+          throw new Error(
+            locale === "zh"
+              ? "未连接本地 app-server"
+              : "Local app-server is not connected",
+          );
+        }
+
+        await client.saveMcpServerConfig({
           name: serverName,
           config: serverConfig,
           reload: true,
         });
+        const toolRecord: ToolConfig = {
+          kind: "mcp",
+          title: serverName,
+          name: serverName,
+          description:
+            locale === "zh"
+              ? "从 Crewon UI 创建的 MCP 草稿。"
+              : "MCP draft created from the Crewon UI.",
+          command,
+          args: parsedArgs,
+          env: parsedEnv,
+          enabled: false,
+        };
+        const toolRecordResponse = await client.saveToolConfig(toolCwd, toolRecord);
         await openLibrary("tools");
         setNotice({
           text:
             locale === "zh"
-              ? `已保存 MCP 草稿：${serverName}（默认停用）`
-              : `Saved MCP draft: ${serverName} (disabled by default)`,
+              ? `已保存 MCP 草稿：${serverName}（后端记录：${toolRecordResponse.filePath}）`
+              : `Saved MCP draft: ${serverName} (backend record: ${toolRecordResponse.filePath})`,
           tone: "success",
         });
         return;
@@ -9551,12 +8283,24 @@ export function App() {
         if (!createResponse) {
           return;
         }
+        const skillRecord: ToolConfig = {
+          kind: "skill",
+          title: createResponse.skill.name,
+          name: createResponse.skill.name,
+          description: createResponse.skill.description,
+          path: createResponse.skill.path,
+          enabled: createResponse.skill.enabled,
+        };
+        const toolRecordResponse = await clientRef.current?.saveToolConfig(
+          skillCwd,
+          skillRecord,
+        );
         await openLibrary("tools");
         setNotice({
           text:
             locale === "zh"
-              ? `已保存 Skill：${createResponse.skill.name}`
-              : `Saved skill: ${createResponse.skill.name}`,
+              ? `已保存 Skill：${createResponse.skill.name}${toolRecordResponse ? `（后端记录：${toolRecordResponse.filePath}）` : ""}`
+              : `Saved skill: ${createResponse.skill.name}${toolRecordResponse ? ` (backend record: ${toolRecordResponse.filePath})` : ""}`,
           tone: "success",
         });
         return;
@@ -9677,8 +8421,23 @@ export function App() {
           targetOffice,
           executionAgent,
         };
-        let automationConfigPath =
-          await writeAutomationConfigFile(automationConfig);
+        let automationConfigPath = action.automationConfigPath ?? null;
+        if (action.automationConfigPath) {
+          const automationCwd = await resolveBackendCwd();
+          const client = clientRef.current;
+          if (automationCwd && client) {
+            const updateResponse = await client.updateAutomationConfig(
+              automationCwd,
+              action.automationConfigPath,
+              automationConfig,
+            );
+            automationConfigPath = updateResponse.filePath;
+          }
+        } else {
+          automationConfigPath = await writeAutomationConfigFile(
+            automationConfig,
+          );
+        }
         let automationRunRecord: { runId: string; filePath: string } | null =
           null;
         const runAutomationTurn = (targetThreadId: string) =>
@@ -9688,11 +8447,11 @@ export function App() {
               automationConfig.prompt,
               automationConfigPath
                 ? locale === "zh"
-                  ? `后端配置：${automationConfigPath}`
-                  : `Backend config: ${automationConfigPath}`
+                      ? `后端记录：${automationConfigPath}`
+                      : `Backend record: ${automationConfigPath}`
                 : locale === "zh"
-                  ? "后端配置：已提交到 automation/save"
-                  : "Backend config: submitted to automation/save",
+                  ? "后端记录：已提交到 automation/save"
+                  : "Backend record: submitted to automation/save",
               runNote
                 ? locale === "zh"
                   ? `本次运行补充说明：${runNote}`
@@ -9731,13 +8490,29 @@ export function App() {
           setThreads((current) =>
             upsertThread(current, { ...replacementThread, name: title }),
           );
-          automationConfigPath = await writeAutomationConfigFile({
+          const replacementAutomationConfig = {
             ...automationConfig,
             threadId: replacementThread.id,
-          });
+          };
+          if (action.automationConfigPath) {
+            const automationCwd = await resolveBackendCwd();
+            const client = clientRef.current;
+            if (automationCwd && client) {
+              const updateResponse = await client.updateAutomationConfig(
+                automationCwd,
+                action.automationConfigPath,
+                replacementAutomationConfig,
+              );
+              automationConfigPath = updateResponse.filePath;
+            }
+          } else {
+            automationConfigPath = await writeAutomationConfigFile(
+              replacementAutomationConfig,
+            );
+          }
           response = await runAutomationTurn(replacementThread.id);
         }
-        automationRunRecord = await runAutomationConfig(
+        const automationRunResult = await runAutomationConfig(
           {
             ...automationConfig,
             threadId,
@@ -9745,6 +8520,7 @@ export function App() {
           runNote || null,
           response?.turn.id ?? null,
         );
+        automationRunRecord = automationRunResult.record;
         if (automationRunRecord && response?.turn.id) {
           if (response.turn.status === "inProgress") {
             automationRunByTurnRef.current[response.turn.id] = {
@@ -9777,6 +8553,7 @@ export function App() {
             }
           }
         }
+        const latestRunItems = await readAutomationRunItems(threadId);
         setLibraryPanel((currentPanel) =>
           currentPanel
             ? {
@@ -9800,17 +8577,21 @@ export function App() {
                       ? `运行文件：${automationRunRecord.filePath}`
                       : `Run file: ${automationRunRecord.filePath}`
                     : null,
+                  automationRunResult.warning,
                   automationConfigPath
                     ? locale === "zh"
-                      ? `配置文件：${automationConfigPath}`
-                      : `Config file: ${automationConfigPath}`
+                      ? `后端记录：${automationConfigPath}`
+                      : `Backend record: ${automationConfigPath}`
                     : null,
                 ]
                   .filter(Boolean)
                   .join("\n"),
-                items: latestAutomationThread
-                  ? automationRunHistoryItems(latestAutomationThread, locale)
-                  : currentPanel.items,
+                items:
+                  latestRunItems.length > 0
+                    ? latestRunItems
+                    : latestAutomationThread
+                      ? automationRunHistoryItems(latestAutomationThread, locale)
+                      : currentPanel.items,
                 actions: currentPanel.actions?.map((currentAction) =>
                   currentAction.id === "run-automation"
                     ? {
@@ -9819,6 +8600,7 @@ export function App() {
                           ...automationConfig,
                           threadId,
                         },
+                        automationConfigPath: automationConfigPath ?? undefined,
                         automationThreadId: threadId,
                         label: locale === "zh" ? "再次运行" : "Run again",
                       }
@@ -9835,8 +8617,8 @@ export function App() {
                           id: "open-path" as const,
                           label:
                             locale === "zh"
-                              ? "打开配置文件"
-                              : "Open config file",
+                              ? "打开后端记录"
+                              : "Open backend record",
                           pathToOpen: automationConfigPath,
                           pathKind: "file" as const,
                         },
@@ -9844,16 +8626,17 @@ export function App() {
                           id: "delete-config-file" as const,
                           label:
                             locale === "zh"
-                              ? "删除配置文件"
-                              : "Delete config file",
+                              ? "删除后端记录"
+                              : "Delete backend record",
                           pathToOpen: automationConfigPath,
                           pathKind: "file" as const,
+                          domainConfigKind: "automation" as const,
                           tone: "danger" as const,
                         },
                       ]
                     : [],
                 ),
-                error: undefined,
+                error: automationRunResult.warning ?? undefined,
               }
             : currentPanel,
         );
@@ -10229,6 +9012,22 @@ export function App() {
     );
     showDemoThreads();
   }, []);
+
+  const preserveThreadsAfterConnectionLoss = useCallback(
+    (showConnectionNotice = true) => {
+      setConnectionState("demo");
+      setNotice(
+        showConnectionNotice
+          ? { text: translate(localeRef.current).connectionLost, tone: "warning" }
+          : null,
+      );
+      setStreamingTextByThread({});
+      if (threadsRef.current.length === 0) {
+        showDemoThreads();
+      }
+    },
+    [],
+  );
 
   const handleNotification = useCallback(
     (notification: AppServerNotification) => {
@@ -10973,7 +9772,7 @@ export function App() {
           return;
         }
 
-        switchToDemoThreads();
+        preserveThreadsAfterConnectionLoss();
       },
       handleServerRequest,
     );
@@ -11005,7 +9804,11 @@ export function App() {
           return;
         }
 
-        switchToDemoThreads(!isDemoPreview);
+        if (isDemoPreview) {
+          switchToDemoThreads(false);
+        } else {
+          preserveThreadsAfterConnectionLoss(true);
+        }
       });
 
     return () => {
@@ -11017,6 +9820,7 @@ export function App() {
     handleNotification,
     handleServerRequest,
     isDemoPreview,
+    preserveThreadsAfterConnectionLoss,
     serverUrl,
     switchToDemoThreads,
   ]);
@@ -11116,8 +9920,17 @@ export function App() {
       if (thread) {
         setThreads((current) => upsertThread(current, thread));
       }
-    } catch {
-      switchToDemoThreads();
+    } catch (error) {
+      preserveThreadsAfterConnectionLoss();
+      setNotice({
+        text:
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "读取后端会话失败，已保留当前会话列表。"
+              : "Unable to read backend session. Current sessions are preserved.",
+        tone: "warning",
+      });
     }
   }
 
@@ -11398,9 +10211,18 @@ export function App() {
         }
         return thread;
       }
-    } catch {
-      switchToDemoThreads();
-      return createDemoThread(initialPrompt);
+    } catch (error) {
+      preserveThreadsAfterConnectionLoss();
+      setNotice({
+        text:
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "创建后端会话失败，已保留当前会话。"
+              : "Unable to create backend session. Current sessions are preserved.",
+        tone: "warning",
+      });
+      return null;
     }
 
     return null;
@@ -11499,18 +10321,22 @@ export function App() {
           }));
         }
       }
-    } catch {
+    } catch (error) {
       setPendingComposerMentions([]);
-      switchToDemoThreads();
-      const fallbackThread = createDemoThread(text);
-      const turn = createDemoTurn(text);
-      setThreads((current) =>
-        current.map((currentThread) =>
-          currentThread.id === fallbackThread.id
-            ? { ...currentThread, turns: [turn] }
-            : currentThread,
-        ),
-      );
+      if (isConnected) {
+        preserveThreadsAfterConnectionLoss();
+      }
+      setComposerValue(text);
+      setComposerFocusSignal((signal) => signal + 1);
+      setNotice({
+        text:
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "发送到后端失败，消息已保留在输入框。"
+              : "Unable to send to backend. The message was kept in the composer.",
+        tone: "warning",
+      });
     } finally {
       setIsSending(false);
     }
@@ -11587,8 +10413,17 @@ export function App() {
           ),
         );
       }
-    } catch {
-      switchToDemoThreads();
+    } catch (error) {
+      preserveThreadsAfterConnectionLoss();
+      setNotice({
+        text:
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "启动审查失败，已保留当前会话。"
+              : "Unable to start review. Current sessions are preserved.",
+        tone: "warning",
+      });
     } finally {
       setBusyToolId(null);
     }
@@ -13379,7 +12214,7 @@ export function App() {
   async function refreshAccountPanel() {
     if (!isConnected) {
       setCapabilityPanel({
-        title: locale === "zh" ? "常规" : "General",
+        title: locale === "zh" ? "账号" : "Account",
         subtitle:
           locale === "zh"
             ? "认证、模型、权限与用量"
@@ -13395,7 +12230,7 @@ export function App() {
     }
 
     setCapabilityPanel({
-      title: locale === "zh" ? "常规" : "General",
+      title: locale === "zh" ? "账号" : "Account",
       subtitle: locale === "zh" ? "认证状态" : "Auth status",
       body: locale === "zh" ? "正在读取..." : "Loading...",
     });
@@ -13471,7 +12306,7 @@ export function App() {
         locale,
       );
       setCapabilityPanel({
-        title: locale === "zh" ? "常规" : "General",
+        title: locale === "zh" ? "账号" : "Account",
         subtitle:
           locale === "zh"
             ? "认证、模型、权限与用量"
@@ -13510,7 +12345,7 @@ export function App() {
       });
     } catch (error) {
       setCapabilityPanel({
-        title: locale === "zh" ? "常规" : "General",
+        title: locale === "zh" ? "账号" : "Account",
         subtitle: locale === "zh" ? "认证状态" : "Auth status",
         error:
           error instanceof Error
@@ -13758,14 +12593,6 @@ export function App() {
 
   function handleCapabilityPanelAction(actionId: string) {
     if (isDemo) {
-      if (actionId === "refresh-account") {
-        setCapabilityPanel(demoSettingsPanel("account", locale));
-        return;
-      }
-      if (actionId === "refresh-config") {
-        setCapabilityPanel(demoSettingsPanel("config", locale));
-        return;
-      }
       if (actionId === "save-config") {
         setCapabilityPanel({
           ...demoSettingsPanel("config", locale),
@@ -13830,60 +12657,16 @@ export function App() {
         );
         return;
       }
-      if (actionId === "refresh-integrations") {
-        setCapabilityPanel(demoSettingsPanel("mcp-servers", locale));
-        return;
-      }
-      if (actionId === "refresh-mcp-settings" || actionId === "reload-tools") {
-        setCapabilityPanel(demoSettingsPanel("mcp-servers", locale));
-        return;
-      }
-      if (actionId === "refresh-browser-apps") {
-        setCapabilityPanel(demoSettingsPanel("browser", locale));
-        return;
-      }
-      if (
-        actionId === "refresh-environment" ||
-        actionId.startsWith("setup-windows-sandbox-")
-      ) {
-        setCapabilityPanel(demoSettingsPanel("environment", locale));
-        return;
-      }
-      if (
-        actionId === "refresh-computer-control" ||
-        actionId === "enable-remote-control" ||
-        actionId === "disable-remote-control" ||
-        actionId === "start-remote-pairing" ||
-        actionId === "revoke-remote-client"
-      ) {
-        setCapabilityPanel(demoSettingsPanel("computer-control", locale));
-        return;
-      }
-      if (actionId === "refresh-app-snapshots") {
-        setCapabilityPanel(demoSettingsPanel("app-snapshots", locale));
-        return;
-      }
-      if (actionId === "refresh-connections") {
-        setCapabilityPanel(demoSettingsPanel("connections", locale));
-        return;
-      }
-      if (actionId === "refresh-git") {
-        setCapabilityPanel(demoSettingsPanel("git", locale));
-        return;
-      }
-      if (
-        actionId === "refresh-worktrees" ||
-        actionId === "create-worktree-session" ||
-        actionId === "fork-worktree"
-      ) {
+      const worktreeAction = worktreeDemoAction(actionId);
+      if (worktreeAction) {
         setCapabilityPanel({
           ...demoSettingsPanel("worktrees", locale),
           subtitle:
-            actionId === "refresh-worktrees"
+            worktreeAction === "refreshed"
               ? locale === "zh"
                 ? "已刷新（演示）"
                 : "Refreshed (demo)"
-              : actionId === "fork-worktree"
+              : worktreeAction === "forked"
                 ? locale === "zh"
                   ? "已分叉（演示）"
                   : "Forked (demo)"
@@ -13893,21 +12676,18 @@ export function App() {
         });
         return;
       }
-      if (actionId === "refresh-hooks") {
-        setCapabilityPanel(demoSettingsPanel("hooks", locale));
+      const demoSettingsSection = demoSettingsSectionForAction(actionId);
+      if (demoSettingsSection) {
+        setCapabilityPanel(demoSettingsPanel(demoSettingsSection, locale));
         return;
       }
       if (actionId === "refresh-connectors") {
         setCapabilityPanel(demoCapabilityPanel("web", locale));
         return;
       }
-      if (
-        actionId === "login-chatgpt" ||
-        actionId === "login-device-code" ||
-        actionId === "logout-account"
-      ) {
+      if (isAuthDemoAction(actionId)) {
         setCapabilityPanel({
-          title: locale === "zh" ? "常规" : "General",
+          title: locale === "zh" ? "账号" : "Account",
           subtitle: locale === "zh" ? "演示模式" : "Demo mode",
           body:
             locale === "zh"
@@ -13916,7 +12696,7 @@ export function App() {
           actions: [
             {
               id: "refresh-account",
-              label: locale === "zh" ? "返回常规" : "Back to General",
+              label: locale === "zh" ? "返回账号" : "Back to Account",
             },
           ],
         });
@@ -16198,7 +14978,7 @@ export function App() {
             const account = await clientRef.current?.getAccount();
             setAccountStatus(account ?? null);
             setCapabilityPanel({
-              title: locale === "zh" ? "常规" : "General",
+              title: locale === "zh" ? "账号" : "Account",
               subtitle: locale === "zh" ? "已退出" : "Logged out",
               body: accountStatusText(account ?? null, locale),
             });
@@ -16216,7 +14996,7 @@ export function App() {
 
           if (response.type === "chatgpt") {
             setCapabilityPanel({
-              title: locale === "zh" ? "常规" : "General",
+              title: locale === "zh" ? "账号" : "Account",
               subtitle: locale === "zh" ? "模型账号登录" : "Model login",
               body: `${locale === "zh" ? "打开链接完成登录" : "Open this URL to finish login"}\n${response.authUrl}\nloginId: ${response.loginId}`,
               actions: [
@@ -16232,7 +15012,7 @@ export function App() {
 
           if (response.type === "chatgptDeviceCode") {
             setCapabilityPanel({
-              title: locale === "zh" ? "常规" : "General",
+              title: locale === "zh" ? "账号" : "Account",
               subtitle: locale === "zh" ? "设备码登录" : "Device code login",
               body: `${locale === "zh" ? "访问链接并输入代码" : "Open the URL and enter the code"}\n${response.verificationUrl}\n${response.userCode}\nloginId: ${response.loginId}`,
               actions: [
@@ -16249,13 +15029,13 @@ export function App() {
           const account = await clientRef.current?.getAccount();
           setAccountStatus(account ?? null);
           setCapabilityPanel({
-            title: locale === "zh" ? "常规" : "General",
+            title: locale === "zh" ? "账号" : "Account",
             subtitle: locale === "zh" ? "已登录" : "Logged in",
             body: accountStatusText(account ?? null, locale),
           });
         } catch (error) {
           setCapabilityPanel({
-            title: locale === "zh" ? "常规" : "General",
+            title: locale === "zh" ? "账号" : "Account",
             subtitle: locale === "zh" ? "认证操作" : "Auth action",
             error:
               error instanceof Error
@@ -16946,7 +15726,7 @@ export function App() {
           />
         ) : null}
         {appView === "settings" ? (
-          <SettingsSidebar
+          <SettingsNavigation
             activeSection={settingsSection}
             locale={locale}
             onBack={closeSettings}
@@ -17003,7 +15783,7 @@ export function App() {
           />
         ) : null}
         {appView === "settings" ? (
-          <SettingsView
+          <SettingsContent
             disabled={!isConnected && !isDemo}
             locale={locale}
             panel={capabilityPanel}
@@ -17011,21 +15791,20 @@ export function App() {
             onPanelFieldChange={handleCapabilityPanelFieldChange}
           />
         ) : appView === "library" && libraryPanel ? (
-          renderLibraryView(
-            libraryPanel,
-            locale,
-            closeLibrary,
-            openLibraryItem,
-            handleLibraryPanelAction,
-            handleCapabilityPanelFieldChange,
-            sendOfficeMessage,
-            updateAgentConfig,
-            toggleAgentCapability,
-            saveAgentConfig,
-            handleApprovalDecision,
-            handleOfficeArtifact,
-            handleKnowledgePath,
-          )
+          <LibraryView
+            panel={libraryPanel}
+            locale={locale}
+            onBack={closeLibrary}
+            onItemAction={openLibraryItem}
+            onPanelAction={handleLibraryPanelAction}
+            onPanelFieldChange={handleCapabilityPanelFieldChange}
+            onSendOfficeMessage={sendOfficeMessage}
+            onUpdateAgentConfig={updateAgentConfig}
+            onToggleAgentCapability={toggleAgentCapability}
+            onSaveAgentConfig={saveAgentConfig}
+            onApprovalDecision={handleApprovalDecision}
+            onArtifact={handleOfficeArtifact}
+          />
         ) : (
           <section
             className="conversation-surface"

@@ -1291,6 +1291,11 @@ impl MessageProcessor {
                 .office_save(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::OfficeCreate { params, .. } => self
+                .crewon_domain_processor
+                .office_create(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::OfficeRead { params, .. } => self
                 .crewon_domain_processor
                 .office_read(params)
@@ -1336,6 +1341,16 @@ impl MessageProcessor {
                 .automation_create(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::AutomationRead { params, .. } => self
+                .crewon_domain_processor
+                .automation_read(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AutomationUpdate { params, .. } => self
+                .crewon_domain_processor
+                .automation_update(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::AutomationRun { params, .. } => self
                 .crewon_domain_processor
                 .automation_run(params)
@@ -1371,9 +1386,19 @@ impl MessageProcessor {
                 .tool_list(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::ToolRead { params, .. } => self
+                .crewon_domain_processor
+                .tool_read(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::ToolSave { params, .. } => self
                 .crewon_domain_processor
                 .tool_save(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::ToolUpdate { params, .. } => self
+                .crewon_domain_processor
+                .tool_update(params)
                 .await
                 .map(|response| Some(response.into())),
             ClientRequest::ToolDelete { params, .. } => self

@@ -7,6 +7,7 @@ export type ToolOption = {
 };
 
 type Messages = {
+  account: string;
   askPlaceholder: string;
   attachContext: string;
   autoMode: string;
@@ -64,6 +65,7 @@ type Messages = {
 
 const messages: Record<Locale, Messages> = {
   zh: {
+    account: "账号",
     askPlaceholder: "让 Crewon 检查、编辑、运行或解释...",
     attachContext: "添加上下文",
     autoMode: "自动选择工具和上下文",
@@ -74,9 +76,9 @@ const messages: Record<Locale, Messages> = {
     connectionHints: {
       connected: "已连接到本地 app-server",
       connecting: "正在连接本地 app-server",
-      demo: "演示模式，请求不会发送到真实代理",
+      demo: "未连接本地 app-server，请求暂不发送",
     },
-    connectionLost: "无法连接本地 app-server，已切换到演示模式。",
+    connectionLost: "无法连接本地 app-server，已保留当前会话，等待重连。",
     crewon: "Crewon",
     demo: "演示",
     demoResponse: "当前处于演示模式。启动 crewon app-server 的 WebSocket 监听后，这条请求会发送给真实代理。",
@@ -125,6 +127,7 @@ const messages: Record<Locale, Messages> = {
     you: "你",
   },
   en: {
+    account: "Account",
     askPlaceholder: "Ask Crewon to inspect, edit, run, or explain...",
     attachContext: "Attach context",
     autoMode: "Auto-pick tools and context",
@@ -135,9 +138,9 @@ const messages: Record<Locale, Messages> = {
     connectionHints: {
       connected: "Connected to local app-server",
       connecting: "Connecting to local app-server",
-      demo: "Demo mode, requests stay local",
+      demo: "Local app-server disconnected; requests are paused",
     },
-    connectionLost: "Could not connect to local app-server. Switched to demo mode.",
+    connectionLost: "Could not connect to local app-server. Current sessions are preserved for retry.",
     crewon: "Crewon",
     demo: "Demo",
     demoResponse: "Demo mode is active. Start crewon app-server with a WebSocket listener to run this request against the real agent.",

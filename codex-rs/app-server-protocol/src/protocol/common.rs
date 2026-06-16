@@ -772,6 +772,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::OfficeSaveResponse,
     },
+    OfficeCreate => "office/create" {
+        params: v2::OfficeCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeCreateResponse,
+    },
     OfficeRead => "office/read" {
         params: v2::OfficeReadParams,
         serialization: global("crewon-domain"),
@@ -817,6 +822,16 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AutomationCreateResponse,
     },
+    AutomationRead => "automation/read" {
+        params: v2::AutomationReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationReadResponse,
+    },
+    AutomationUpdate => "automation/update" {
+        params: v2::AutomationUpdateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationUpdateResponse,
+    },
     AutomationRun => "automation/run" {
         params: v2::AutomationRunParams,
         serialization: global("crewon-domain"),
@@ -852,10 +867,20 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::ToolListResponse,
     },
+    ToolRead => "tool/read" {
+        params: v2::ToolReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolReadResponse,
+    },
     ToolSave => "tool/save" {
         params: v2::ToolSaveParams,
         serialization: global("crewon-domain"),
         response: v2::ToolSaveResponse,
+    },
+    ToolUpdate => "tool/update" {
+        params: v2::ToolUpdateParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolUpdateResponse,
     },
     ToolDelete => "tool/delete" {
         params: v2::ToolDeleteParams,

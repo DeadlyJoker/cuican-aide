@@ -211,8 +211,13 @@ Example with notification opt-out:
 - `skills/changed` — notification emitted when watched local skill files change.
 - `app/list` — list available apps.
 - `agent/recruitable/list` — list saved Crewon agent configs for a workspace that are not already assigned to an office by `agentId` or display name; supports `cursor` and `limit` pagination.
+- `office/create` — create and save a normalized office config for an absolute `cwd` from `title`, optional `subtitle`, optional `threadId`, and optional `goal`; returns the saved `filePath` and config without starting a thread.
 - `office/approval/decide` — update an office approval decision by `approvalId`, optionally append a system message, and return the saved office config.
 - `office/artifact/upsert` — add or replace an office artifact in workspace activity, optionally append a system message, and return the saved office config.
+- `automation/read` — read one saved automation config by `filePath`, `threadId`, or `title`; returns `record: null` when no matching automation exists.
+- `automation/update` — replace one saved automation config by `filePath`; returns the saved `filePath` and normalized config.
+- `tool/read` — read one saved tool config by `filePath`; returns `record: null` when no matching tool exists.
+- `tool/update` — replace one saved tool config by `filePath`; returns the saved `filePath` and config.
 - `knowledge/list` — list workspace knowledge memories and indexed source files for an absolute `cwd`.
 - `knowledge/memory/write` — append a workspace memory entry to `.crewon/knowledge.md` and return the refreshed knowledge data.
 - `remoteControl/enable` — experimental; enable remote control for the current app-server process and return the current remote-control status snapshot. The caller is responsible for persisting the desired setting outside app-server.

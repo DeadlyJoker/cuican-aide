@@ -199,6 +199,10 @@ export type OfficeReadResponse = {
   record: DomainConfigListResponse<OfficeConfig>["data"][number] | null;
 };
 
+export type OfficeCreateResponse = DomainConfigSaveResponse & {
+  config: OfficeConfig;
+};
+
 export type OfficeMessageSendResponse = {
   filePath: string;
   config: OfficeConfig;
@@ -245,7 +249,18 @@ export type AutomationRunResponse = {
   run: AutomationRunRecord;
 };
 
+export type AutomationRunUpdateResponse = AutomationRunResponse;
+
 export type AutomationCreateResponse = {
+  filePath: string;
+  config: AutomationConfig;
+};
+
+export type AutomationReadResponse = {
+  record: DomainConfigListResponse<AutomationConfig>["data"][number] | null;
+};
+
+export type AutomationUpdateResponse = {
   filePath: string;
   config: AutomationConfig;
 };
@@ -929,6 +944,24 @@ export class AppServerClient {
     return this.request<DomainConfigSaveResponse>("office/save", { cwd, config });
   }
 
+  async createOfficeConfig(
+    cwd: string,
+    params: {
+      title: string;
+      subtitle?: string | null;
+      threadId?: string | null;
+      goal?: string | null;
+    },
+  ): Promise<OfficeCreateResponse> {
+    return this.request<OfficeCreateResponse>("office/create", {
+      cwd,
+      title: params.title,
+      subtitle: params.subtitle ?? null,
+      threadId: params.threadId ?? null,
+      goal: params.goal ?? null,
+    });
+  }
+
   async readOfficeConfig(
     cwd: string,
     params: { threadId?: string | null; title?: string | null },
@@ -1051,6 +1084,34 @@ export class AppServerClient {
     });
   }
 
+  async readAutomationConfig(
+    cwd: string,
+    params: {
+      filePath?: string | null;
+      threadId?: string | null;
+      title?: string | null;
+    },
+  ): Promise<AutomationReadResponse> {
+    return this.request<AutomationReadResponse>("automation/read", {
+      cwd,
+      filePath: params.filePath ?? null,
+      threadId: params.threadId ?? null,
+      title: params.title ?? null,
+    });
+  }
+
+  async updateAutomationConfig(
+    cwd: string,
+    filePath: string,
+    config: AutomationConfig,
+  ): Promise<AutomationUpdateResponse> {
+    return this.request<AutomationUpdateResponse>("automation/update", {
+      cwd,
+      filePath,
+      config,
+    });
+  }
+
   async runAutomationConfig(
     cwd: string,
     config: AutomationConfig,
@@ -1070,8 +1131,8 @@ export class AppServerClient {
     filePath: string,
     status: string,
     completedAt: number | null,
-  ): Promise<AutomationRunResponse> {
-    return this.request<AutomationRunResponse>("automation/run/update", {
+  ): Promise<AutomationRunUpdateResponse> {
+    return this.request<AutomationRunUpdateResponse>("automation/run/update", {
       cwd,
       filePath,
       status,
