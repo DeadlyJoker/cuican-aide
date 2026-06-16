@@ -1402,6 +1402,10 @@ function isMissingThreadError(error: unknown): boolean {
   );
 }
 
+function isUnsupportedRpcError(error: unknown): boolean {
+  return error instanceof AppServerRpcError && error.code === -32601;
+}
+
 function getInitialLibraryView(): LibraryKind | null {
   const view = new URLSearchParams(window.location.search).get("view");
 
@@ -6748,7 +6752,7 @@ export function App() {
         filePath: response.filePath,
       };
     } catch (error) {
-      if (!(error instanceof AppServerRpcError)) {
+      if (!isUnsupportedRpcError(error)) {
         throw error;
       }
       return null;
@@ -6773,7 +6777,7 @@ export function App() {
         completedAt,
       );
     } catch (error) {
-      if (!(error instanceof AppServerRpcError)) {
+      if (!isUnsupportedRpcError(error)) {
         throw error;
       }
     }
@@ -6794,7 +6798,7 @@ export function App() {
       const response = await client.listAutomationRuns(automationCwd, threadId);
       return automationRunRecordItems(response.data, locale);
     } catch (error) {
-      if (!(error instanceof AppServerRpcError)) {
+      if (!isUnsupportedRpcError(error)) {
         throw error;
       }
       return emptyAutomationRunItems(locale);
