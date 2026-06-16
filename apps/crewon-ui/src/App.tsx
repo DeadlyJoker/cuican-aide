@@ -116,7 +116,6 @@ import {
   writeAgentConfigFile as writeStoredAgentConfigFile,
   writeAutomationConfigFile as writeStoredAutomationConfigFile,
   writeOfficeConfigFile as writeStoredOfficeConfigFile,
-  writeToolConfigFile as writeStoredToolConfigFile,
 } from "./lib/domainPersistence";
 export type {
   ActivityData,
@@ -6975,15 +6974,6 @@ export function App() {
             : emptyAutomationRunItems(locale),
         },
       }));
-  }
-
-  async function writeToolConfigFile(config: ToolConfig): Promise<string | null> {
-    const toolCwd = await resolveBackendCwd();
-    const client = clientRef.current;
-    if (!toolCwd || !client) {
-      return null;
-    }
-    return writeStoredToolConfigFile(client, toolCwd, config);
   }
 
   async function readToolConfigFiles(): Promise<LibraryItem[]> {
