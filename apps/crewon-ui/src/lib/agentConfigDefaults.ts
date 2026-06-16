@@ -20,8 +20,9 @@ const CAPABILITY_ACCENTS: LibraryAccent[] = [
   "rose",
   "slate",
 ];
-const MCP_GLYPHS = ["⌁", "◎", "⌘", "◈", "◇"];
-const SKILL_GLYPHS = ["✓", "✦", "⌗", "◌", "◇"];
+export const MCP_GLYPHS = ["⌁", "◎", "⌘", "◈", "◇"];
+export const SKILL_GLYPHS = ["✓", "✦", "⌗", "◌", "◇"];
+export const PLUGIN_GLYPHS = ["◰", "⬡", "❖", "▣", "◆"];
 
 function mcpConfigObject(record: McpServerConfigRecord): Record<string, JsonValue> {
   return record.config && typeof record.config === "object" && !Array.isArray(record.config)

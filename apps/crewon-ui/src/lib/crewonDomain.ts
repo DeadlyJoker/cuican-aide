@@ -79,6 +79,7 @@ export type LibraryPanelAction = {
   skillEnabled?: boolean;
   skillName?: string;
   skillPath?: string;
+  skillConfigPath?: string;
   knowledgePath?: string;
   knowledgeTitle?: string;
   knowledgeKind?: "file" | "directory";

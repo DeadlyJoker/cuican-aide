@@ -1,5 +1,11 @@
 import type { DomainConfigListResponse } from "./appServer";
 import type { Locale } from "./i18n";
+import {
+  MCP_GLYPHS,
+  PLUGIN_GLYPHS,
+  SKILL_GLYPHS,
+  capabilityAccents,
+} from "./agentConfigDefaults";
 import type {
   AgentConfig,
   AutomationConfig,
@@ -15,14 +21,22 @@ type DomainConfigRecord<TConfig> = Pick<
 >;
 
 /**
- * Shared glyph/accent vocabulary so real (backend) cards match the demo styling
- * and the runtime vs. draft tool cards look identical to each other.
+ * Rotating glyph/accent vocabulary so real (backend) tool cards get the same
+ * varied, colorful treatment as the demo data (which curates one per item),
+ * instead of every card sharing a single fixed glyph/accent.
  */
-export const LIBRARY_DECOR = {
-  mcp: { glyph: "⌁", accent: "blue" },
-  skill: { glyph: "◇", accent: "violet" },
-  plugin: { glyph: "◰", accent: "amber" },
-} as const satisfies Record<string, { glyph: string; accent: LibraryAccent }>;
+export function libraryToolDecor(
+  kind: "mcp" | "skill" | "plugin",
+  index: number,
+): { glyph: string; accent: LibraryAccent } {
+  const accents = capabilityAccents();
+  const glyphs =
+    kind === "mcp" ? MCP_GLYPHS : kind === "skill" ? SKILL_GLYPHS : PLUGIN_GLYPHS;
+  return {
+    glyph: glyphs[index % glyphs.length],
+    accent: accents[index % accents.length],
+  };
+}
 
 function pathBaseName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
@@ -177,7 +191,7 @@ export function toolConfigRecordsToLibraryItems(
   records: Array<DomainConfigRecord<ToolConfig>>,
   locale: Locale,
 ): LibraryItem[] {
-  return records.map(({ filePath, savedAt, config }) => {
+  return records.map(({ filePath, savedAt, config }, index) => {
     const source = sourceOfTruthLabel(locale, "workspace-tool-record");
     const restoredDescription =
       config.description ||
@@ -185,6 +199,7 @@ export function toolConfigRecordsToLibraryItems(
       (locale === "zh"
         ? "从后端工具记录恢复。"
         : "Restored from a backend tool record.");
+    const decor = libraryToolDecor(config.kind === "mcp" ? "mcp" : "skill", index);
     return {
       title: `${config.kind === "mcp" ? "MCP" : "Skill"} · ${config.title}`,
       meta: `${backendRecordMeta(locale, filePath, savedAt)} · ${source}`,
@@ -193,8 +208,8 @@ export function toolConfigRecordsToLibraryItems(
         "workspace-tool-record",
         restoredDescription,
       ),
-      glyph: config.kind === "mcp" ? LIBRARY_DECOR.mcp.glyph : LIBRARY_DECOR.skill.glyph,
-      accent: config.kind === "mcp" ? LIBRARY_DECOR.mcp.accent : LIBRARY_DECOR.skill.accent,
+      glyph: decor.glyph,
+      accent: decor.accent,
       badge: {
         label: config.kind === "mcp" ? "MCP" : "Skill",
         tone: config.enabled === false ? "warning" : "planning",

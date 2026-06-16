@@ -128,9 +128,9 @@ import {
   writeOfficeConfigFile as writeStoredOfficeConfigFile,
 } from "./lib/domainPersistence";
 import {
-  LIBRARY_DECOR,
   agentConfigRecordsToLibraryItems,
   automationConfigRecordToLibraryItem,
+  libraryToolDecor,
   officeConfigRecordsToLibraryItems,
   toolConfigRecordsToLibraryItems,
 } from "./lib/domainLibraryItems";
@@ -3519,12 +3519,15 @@ export function App() {
         const skills = (skillsResponse?.data ?? []).flatMap((entry) =>
           entry.skills.map((skill) => skill),
         );
-        const mcpItems: LibraryItem[] = servers.map(({ config, status }) => {
+        const mcpItems: LibraryItem[] = servers.map(({ config, status }, index) => {
+          const decor = libraryToolDecor("mcp", index);
           if (!status) {
             if (!config) {
               return {
                 title: "MCP",
                 meta: locale === "zh" ? "未知配置" : "unknown config",
+                glyph: decor.glyph,
+                accent: decor.accent,
               };
             }
             const endpoint = config ? mcpConfigEndpoint(config) : "";
@@ -3548,8 +3551,8 @@ export function App() {
                     ? "已保存到 MCP 配置，但当前运行态未返回该服务器。"
                     : "Saved in MCP config, but not present in the current runtime status.")
                 }`,
-              glyph: LIBRARY_DECOR.mcp.glyph,
-              accent: LIBRARY_DECOR.mcp.accent,
+              glyph: decor.glyph,
+              accent: decor.accent,
               badge: {
                 label: locale === "zh" ? "配置" : "config",
                 tone: mcpConfigEnabled(config) ? "planning" : "warning",
@@ -3603,8 +3606,8 @@ export function App() {
             meta: `${runtimeSource} · ${status.authStatus} · ${toolCount} ${locale === "zh" ? "工具" : "tools"} · ${resourceCount} ${
               locale === "zh" ? "资源" : "resources"
             }${configState ? ` · ${configState}` : ""}`,
-            glyph: LIBRARY_DECOR.mcp.glyph,
-            accent: LIBRARY_DECOR.mcp.accent,
+            glyph: decor.glyph,
+            accent: decor.accent,
             badge:
               status.authStatus === "notLoggedIn"
                 ? {
@@ -3672,17 +3675,18 @@ export function App() {
             },
           };
         });
-        const skillItems: LibraryItem[] = skills.map((skill) => {
+        const skillItems: LibraryItem[] = skills.map((skill, index) => {
           const source = skillSourceLabel(skill.path, locale);
           const truthSource =
             locale === "zh"
               ? "真实来源：Skill 文件"
               : "Source of truth: skill file";
+          const decor = libraryToolDecor("skill", index);
           return {
             title: `Skill · ${skill.name}`,
             meta: `${truthSource} · ${source} · ${skill.enabled ? (locale === "zh" ? "可招募" : "recruitable") : locale === "zh" ? "停用" : "disabled"}`,
-            glyph: LIBRARY_DECOR.skill.glyph,
-            accent: LIBRARY_DECOR.skill.accent,
+            glyph: decor.glyph,
+            accent: decor.accent,
             badge: {
               label: skill.enabled
                 ? locale === "zh"
@@ -4093,10 +4097,12 @@ export function App() {
       const enabledCount = pluginEntries.filter(
         ({ plugin }) => plugin.enabled,
       ).length;
+      let pluginAccentIndex = 0;
       const pluginItems: LibraryItem[] = marketplaces.flatMap((marketplace) => {
         const marketplaceTitle =
           marketplace.interface?.displayName || marketplace.name;
         const marketplaceItems = marketplace.plugins.map((plugin) => {
+          const decor = libraryToolDecor("plugin", pluginAccentIndex++);
           const source =
             plugin.source.type === "local"
               ? locale === "zh"
@@ -4127,8 +4133,8 @@ export function App() {
                 : plugin.shareContext?.creatorName
                   ? `${locale === "zh" ? "创建者" : "Creator"}: ${plugin.shareContext.creatorName}`
                   : undefined,
-            glyph: LIBRARY_DECOR.plugin.glyph,
-            accent: LIBRARY_DECOR.plugin.accent,
+            glyph: decor.glyph,
+            accent: decor.accent,
             badge: plugin.installed
               ? {
                   label: locale === "zh" ? "已安装" : "installed",
@@ -5182,6 +5188,7 @@ export function App() {
                     skillEnabled: skillAction.enabled !== false,
                     skillName: skillAction.skillName,
                     skillPath: skillAction.path,
+                    skillConfigPath: skillAction.configPath,
                     tone: skillAction.enabled === false ? "primary" : undefined,
                   },
                   ...(skillAction.configPath
@@ -5824,6 +5831,61 @@ export function App() {
 
     const response = await client.saveToolConfig(toolCwd, config);
     return { filePath: response.filePath, operation: "created" };
+  }
+
+  async function syncSkillToolConfig(
+    action: LibraryPanelAction,
+    enabled: boolean,
+  ): Promise<{ filePath: string; operation: "created" | "updated" } | null> {
+    const skillName = action.skillName?.trim();
+    const skillPath = action.skillPath?.trim();
+    if (!skillName && !skillPath) {
+      return null;
+    }
+
+    const client = clientRef.current;
+    const toolCwd = await resolveBackendCwd();
+    if (!client || !toolCwd) {
+      return null;
+    }
+
+    if (action.skillConfigPath) {
+      const record = await client
+        .readToolConfig(toolCwd, action.skillConfigPath)
+        .then((response) => response.record)
+        .catch((error) => {
+          if (isUnsupportedRpcError(error)) {
+            return null;
+          }
+          throw error;
+        });
+      if (record?.config.kind === "skill") {
+        try {
+          const response = await client.updateToolConfig(
+            toolCwd,
+            action.skillConfigPath,
+            { ...record.config, enabled },
+          );
+          return { filePath: response.filePath, operation: "updated" };
+        } catch (error) {
+          if (!isUnsupportedRpcError(error)) {
+            throw error;
+          }
+        }
+      }
+    }
+
+    return saveOrUpdateToolConfig(toolCwd, {
+      kind: "skill",
+      title: skillName || pathBaseName(skillPath ?? "skill"),
+      name: skillName || pathBaseName(skillPath ?? "skill"),
+      description:
+        locale === "zh"
+          ? "从 Crewon UI 同步的 Skill 工具记录。"
+          : "Skill tool record synced from the Crewon UI.",
+      path: skillPath,
+      enabled,
+    });
   }
 
   async function loadMcpRuntimeStatus(
@@ -8968,11 +9030,20 @@ export function App() {
           name: action.skillPath ? null : (action.skillName ?? null),
           enabled: nextEnabled,
         });
+        const syncedToolRecord = await syncSkillToolConfig(action, nextEnabled);
         setNotice({
           text:
             locale === "zh"
-              ? `${action.skillName ?? "Skill"} 已${action.skillEnabled ? "停用" : "启用"}`
-              : `${action.skillName ?? "Skill"} ${action.skillEnabled ? "disabled" : "enabled"}`,
+              ? `${action.skillName ?? "Skill"} 已${action.skillEnabled ? "停用" : "启用"}${
+                  syncedToolRecord
+                    ? `（工具记录：${syncedToolRecord.filePath}）`
+                    : ""
+                }`
+              : `${action.skillName ?? "Skill"} ${action.skillEnabled ? "disabled" : "enabled"}${
+                  syncedToolRecord
+                    ? ` (tool record: ${syncedToolRecord.filePath})`
+                    : ""
+                }`,
           tone: "success",
         });
         await openLibrary("tools");
