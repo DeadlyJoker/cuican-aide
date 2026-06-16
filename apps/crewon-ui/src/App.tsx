@@ -8635,9 +8635,13 @@ export function App() {
           );
           setNotice({
             text:
-              locale === "zh"
-                ? `已招募 ${newMember.name}，并写入后端办公室线程`
-                : `Recruited ${newMember.name} and wrote it to the backend office thread`,
+              savedConfig
+                ? locale === "zh"
+                  ? `已招募 ${newMember.name}，并写入后端办公室配置`
+                  : `Recruited ${newMember.name} and wrote it to the backend office config`
+                : locale === "zh"
+                  ? `已招募 ${newMember.name}，未找到后端智能体配置，已作为临时角色写入办公室线程`
+                  : `Recruited ${newMember.name}; no backend agent config was found, so it was written to the office thread as a temporary role`,
             tone: "success",
           });
         }
