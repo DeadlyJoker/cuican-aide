@@ -86,7 +86,6 @@ import {
   OFFICE_CONFIG_MARKER,
   agentConfigPayload,
   officeConfigForThread,
-  officeConfigPayload,
   type ActivityData,
   type AgentCapabilityOption,
   type AgentConfig,
@@ -6523,17 +6522,29 @@ export function App() {
       workspace,
       thread.id,
     );
+    const officeConfigPath = await persistOfficeWorkspace(
+      panel,
+      workspace,
+      thread.id,
+    );
     await clientRef.current?.startTurn(
       thread.id,
       [
         locale === "zh"
           ? `绑定办公室：${panel.title}`
           : `Bind office: ${panel.title}`,
-        "",
-        officeConfigPayload(config),
+        officeConfigPath
+          ? locale === "zh"
+            ? `后端配置：${officeConfigPath}`
+            : `Backend config: ${officeConfigPath}`
+          : locale === "zh"
+            ? "后端配置：已提交到 office/save"
+            : "Backend config: submitted to office/save",
+        locale === "zh"
+          ? `目标：${config.workspace.goal}`
+          : `Goal: ${config.workspace.goal}`,
       ].join("\n"),
     );
-    await persistOfficeWorkspace(panel, workspace, thread.id);
     const namedThread = { ...thread, name: panel.title };
     setThreads((current) => upsertThread(current, namedThread));
 
@@ -7487,15 +7498,12 @@ export function App() {
           locale === "zh"
             ? `办公室「${panel.title}」群聊消息：${text}`
             : `Office "${panel.title}" group chat message: ${text}`,
-          "",
-          officeConfigPayload(
-            officeConfigForThread(
-              panel.title,
-              panel.subtitle,
-              nextWorkspace,
-              targetThreadId,
-            ),
-          ),
+          locale === "zh"
+            ? "后端配置：已提交到 office/message/send"
+            : "Backend config: submitted to office/message/send",
+          locale === "zh"
+            ? `执行线程：${targetThreadId}`
+            : `Execution thread: ${targetThreadId}`,
         ].join("\n");
       let response;
       try {
@@ -8083,17 +8091,11 @@ export function App() {
               locale === "zh"
                 ? `办公室「${panel.title}」创建产物：${artifact.title}`
                 : `Office "${panel.title}" created artifact: ${artifact.title}`,
+              locale === "zh"
+                ? "后端配置：已提交到 office/artifact/upsert"
+                : "Backend config: submitted to office/artifact/upsert",
               "",
               artifactBody,
-              "",
-              officeConfigPayload(
-                officeConfigForThread(
-                  panel.title,
-                  panel.subtitle,
-                  nextWorkspace,
-                  threadId,
-                ),
-              ),
             ].join("\n");
             const turn = await clientRef.current?.startTurn(threadId, artifactInput);
             if (turn) {
@@ -8577,15 +8579,12 @@ export function App() {
               locale === "zh"
                 ? `办公室「${panel.title}」招募智能体：${newMember.name}，角色：${newMember.role}。模型：${recruitConfig?.model ?? "未配置"}。MCP：${enabledMcp}。Skill：${enabledSkills}。请把它纳入后续协作。`
                 : `Office "${panel.title}" recruited agent: ${newMember.name}, role: ${newMember.role}. Model: ${recruitConfig?.model ?? "not configured"}. MCP: ${enabledMcp}. Skills: ${enabledSkills}. Include it in future collaboration.`,
-              "",
-              officeConfigPayload(
-                officeConfigForThread(
-                  panel.title,
-                  panel.subtitle,
-                  nextWorkspace,
-                  targetThreadId,
-                ),
-              ),
+              locale === "zh"
+                ? "后端配置：已提交到 office/member/add"
+                : "Backend config: submitted to office/member/add",
+              locale === "zh"
+                ? `执行线程：${targetThreadId}`
+                : `Execution thread: ${targetThreadId}`,
             ].join("\n");
           let response;
           try {
@@ -8718,17 +8717,12 @@ export function App() {
           thread.id,
           [
             locale === "zh" ? `创建办公室：${title}` : `Create office: ${title}`,
-            "",
-            officeConfigPayload(
-              officeConfigForThread(
-                title,
-                locale === "zh"
-                  ? "新建办公室 · 已绑定后端线程"
-                  : "New office · backend thread bound",
-                workspace,
-                thread.id,
-              ),
-            ),
+            locale === "zh"
+              ? "后端配置：即将提交到 office/save"
+              : "Backend config: pending office/save",
+            locale === "zh"
+              ? `目标：${workspace.goal}`
+              : `Goal: ${workspace.goal}`,
           ].join("\n"),
         );
         setThreads((current) => upsertThread(current, { ...thread, name: title }));
