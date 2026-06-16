@@ -8656,292 +8656,336 @@ export function App() {
     }
 
     if (action.id === "create-office" && isConnected) {
-      const baseOffice = demoLibraryPanel("office", locale).items.find(
-        (item) => item.action?.type === "office-detail",
-      );
-      const baseAction =
-        baseOffice?.action?.type === "office-detail" ? baseOffice.action : null;
-      const title =
-        locale === "zh"
-          ? `新办公室 ${new Date().toLocaleTimeString("zh-CN", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}`
-          : `New office ${new Date().toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}`;
-      const thread = await clientRef.current?.startThread(undefined, "office");
-      if (!thread || !baseAction?.workspace) {
-        return;
-      }
-      await clientRef.current?.renameThread(thread.id, title);
-      await clientRef.current?.setThreadGoal(
-        thread.id,
-        baseAction.workspace.goal,
-        null,
-      );
-      const workspace: OfficeWorkspace = {
-        ...baseAction.workspace,
-        threadId: thread.id,
-        backendStatus: "connected",
-        messages: [
-          ...baseAction.workspace.messages,
-          {
-            author: locale === "zh" ? "系统" : "System",
-            glyph: "⌗",
-            accent: "blue",
-            time: locale === "zh" ? "现在" : "now",
-            kind: "system",
-            text:
-              locale === "zh"
-                ? "办公室已创建，并绑定到真实 app-server 线程。"
-                : "Office created and bound to a real app-server thread.",
-          },
-        ],
-      };
-      const createResponse = await clientRef.current?.startTurn(
-        thread.id,
-        [
-          locale === "zh" ? `创建办公室：${title}` : `Create office: ${title}`,
-          "",
-          officeConfigPayload(
-            officeConfigForThread(
-              title,
-              locale === "zh"
-                ? "新建办公室 · 已绑定后端线程"
-                : "New office · backend thread bound",
-              workspace,
-              thread.id,
+      try {
+        const baseOffice = demoLibraryPanel("office", locale).items.find(
+          (item) => item.action?.type === "office-detail",
+        );
+        const baseAction =
+          baseOffice?.action?.type === "office-detail" ? baseOffice.action : null;
+        const title =
+          locale === "zh"
+            ? `新办公室 ${new Date().toLocaleTimeString("zh-CN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`
+            : `New office ${new Date().toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`;
+        const thread = await clientRef.current?.startThread(undefined, "office");
+        if (!thread || !baseAction?.workspace) {
+          throw new Error(
+            locale === "zh"
+              ? "无法创建办公室后端线程"
+              : "Unable to create a backend office thread",
+          );
+        }
+        await clientRef.current?.renameThread(thread.id, title);
+        await clientRef.current?.setThreadGoal(
+          thread.id,
+          baseAction.workspace.goal,
+          null,
+        );
+        const workspace: OfficeWorkspace = {
+          ...baseAction.workspace,
+          threadId: thread.id,
+          backendStatus: "connected",
+          messages: [
+            ...baseAction.workspace.messages,
+            {
+              author: locale === "zh" ? "系统" : "System",
+              glyph: "⌗",
+              accent: "blue",
+              time: locale === "zh" ? "现在" : "now",
+              kind: "system",
+              text:
+                locale === "zh"
+                  ? "办公室已创建，并绑定到真实 app-server 线程。"
+                  : "Office created and bound to a real app-server thread.",
+            },
+          ],
+        };
+        const createResponse = await clientRef.current?.startTurn(
+          thread.id,
+          [
+            locale === "zh" ? `创建办公室：${title}` : `Create office: ${title}`,
+            "",
+            officeConfigPayload(
+              officeConfigForThread(
+                title,
+                locale === "zh"
+                  ? "新建办公室 · 已绑定后端线程"
+                  : "New office · backend thread bound",
+                workspace,
+                thread.id,
+              ),
             ),
-          ),
-        ].join("\n"),
-      );
-      setThreads((current) => upsertThread(current, { ...thread, name: title }));
-      if (createResponse) {
-        setThreads((current) =>
-          current.map((currentThread) =>
-            currentThread.id === thread.id
-              ? upsertTurn(currentThread, createResponse.turn)
-              : currentThread,
+          ].join("\n"),
+        );
+        setThreads((current) => upsertThread(current, { ...thread, name: title }));
+        if (createResponse) {
+          setThreads((current) =>
+            current.map((currentThread) =>
+              currentThread.id === thread.id
+                ? upsertTurn(currentThread, createResponse.turn)
+                : currentThread,
+            ),
+          );
+        }
+        const officeConfigPath = await writeOfficeConfigFile(
+          officeConfigForThread(
+            title,
+            locale === "zh"
+              ? "新建办公室 · 已绑定后端线程"
+              : "New office · backend thread bound",
+            workspace,
+            thread.id,
           ),
         );
-      }
-      const officeConfigPath = await writeOfficeConfigFile(
-        officeConfigForThread(
+        setLibraryPanel({
+          kind: "office",
           title,
-          locale === "zh"
-            ? "新建办公室 · 已绑定后端线程"
-            : "New office · backend thread bound",
+          subtitle:
+            locale === "zh"
+              ? "新建办公室 · 已绑定后端线程"
+              : "New office · backend thread bound",
+          body: officeConfigPath
+            ? locale === "zh"
+              ? `配置文件：${officeConfigPath}`
+              : `Config file: ${officeConfigPath}`
+            : undefined,
+          items: [],
+          actions: [
+            {
+              id: "recruit-agent",
+              label: locale === "zh" ? "招募智能体" : "Recruit agent",
+              tone: "primary",
+            },
+          ],
           workspace,
-          thread.id,
-        ),
-      );
-      setLibraryPanel({
-        kind: "office",
-        title,
-        subtitle:
-          locale === "zh"
-            ? "新建办公室 · 已绑定后端线程"
-            : "New office · backend thread bound",
-        body: officeConfigPath
-          ? locale === "zh"
-            ? `配置文件：${officeConfigPath}`
-            : `Config file: ${officeConfigPath}`
-          : undefined,
-        items: [],
-        actions: [
-          {
-            id: "recruit-agent",
-            label: locale === "zh" ? "招募智能体" : "Recruit agent",
-            tone: "primary",
-          },
-        ],
-        workspace,
-      });
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "创建办公室失败"
+              : "Unable to create office";
+        setLibraryPanel((currentPanel) =>
+          currentPanel
+            ? {
+                ...currentPanel,
+                error: message,
+              }
+            : currentPanel,
+        );
+        setNotice({ text: message, tone: "warning" });
+      }
       return;
     }
 
     if (action.id === "create-automation" && isConnected) {
-      const title =
-        locale === "zh"
-          ? `自动化 ${new Date().toLocaleTimeString("zh-CN", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}`
-          : `Automation ${new Date().toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}`;
-      const thread = await clientRef.current?.startThread(
-        undefined,
-        "automation",
-      );
-      if (!thread) {
-        return;
-      }
-      await clientRef.current?.renameThread(thread.id, title);
-      await clientRef.current?.setThreadGoal(
-        thread.id,
-        locale === "zh"
-          ? "运行自动化，绑定目标办公室和执行智能体，并沉淀后续运行记录。"
-          : "Run automation with a target office and execution agent, keeping future run records.",
-        null,
-      );
-      const [targetOffice, executionAgent] = await Promise.all([
-        readLatestOfficeConfig(),
-        readRecruitableAgentConfig([]),
-      ]);
-      const enabledMcp =
-        executionAgent?.mcp
-          .filter((option) => option.enabled)
-          .map((option) => option.name)
-          .join(", ") || (locale === "zh" ? "未配置" : "not configured");
-      const enabledSkills =
-        executionAgent?.skills
-          .filter((option) => option.enabled)
-          .map((option) => option.name)
-          .join(", ") || (locale === "zh" ? "未配置" : "not configured");
-      const automationConfig: AutomationConfig = {
-        threadId: thread.id,
-        title,
-        subtitle:
+      try {
+        const title =
           locale === "zh"
-            ? `手动触发 · ${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}`
-            : `Manual trigger · ${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}`,
-        body:
+            ? `自动化 ${new Date().toLocaleTimeString("zh-CN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`
+            : `Automation ${new Date().toLocaleTimeString("en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`;
+        const thread = await clientRef.current?.startThread(
+          undefined,
+          "automation",
+        );
+        if (!thread) {
+          throw new Error(
+            locale === "zh"
+              ? "无法创建自动化后端线程"
+              : "Unable to create a backend automation thread",
+          );
+        }
+        await clientRef.current?.renameThread(thread.id, title);
+        await clientRef.current?.setThreadGoal(
+          thread.id,
           locale === "zh"
-            ? [
-                "触发器：手动",
-                `目标办公室：${targetOffice?.title ?? "未绑定"}`,
-                `执行智能体：${executionAgent?.name ?? "未绑定"}`,
-                `模型：${executionAgent?.model ?? "未配置"}`,
-                `MCP：${enabledMcp}`,
-                `Skill：${enabledSkills}`,
-                `动作：运行自动化「${title}」，并把执行记录写入当前后端线程。`,
-              ].join("\n")
-            : [
-                "Trigger: manual",
-                `Target office: ${targetOffice?.title ?? "not bound"}`,
-                `Agent: ${executionAgent?.name ?? "not bound"}`,
-                `Model: ${executionAgent?.model ?? "not configured"}`,
-                `MCP: ${enabledMcp}`,
-                `Skills: ${enabledSkills}`,
-                `Action: run automation "${title}" and write the execution record to the backend thread.`,
-              ].join("\n"),
-        prompt:
+            ? "运行自动化，绑定目标办公室和执行智能体，并沉淀后续运行记录。"
+            : "Run automation with a target office and execution agent, keeping future run records.",
+          null,
+        );
+        const [targetOffice, executionAgent] = await Promise.all([
+          readLatestOfficeConfig(),
+          readRecruitableAgentConfig([]),
+        ]);
+        const enabledMcp =
+          executionAgent?.mcp
+            .filter((option) => option.enabled)
+            .map((option) => option.name)
+            .join(", ") || (locale === "zh" ? "未配置" : "not configured");
+        const enabledSkills =
+          executionAgent?.skills
+            .filter((option) => option.enabled)
+            .map((option) => option.name)
+            .join(", ") || (locale === "zh" ? "未配置" : "not configured");
+        const automationConfig: AutomationConfig = {
+          threadId: thread.id,
+          title,
+          subtitle:
+            locale === "zh"
+              ? `手动触发 · ${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}`
+              : `Manual trigger · ${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}`,
+          body:
+            locale === "zh"
+              ? [
+                  "触发器：手动",
+                  `目标办公室：${targetOffice?.title ?? "未绑定"}`,
+                  `执行智能体：${executionAgent?.name ?? "未绑定"}`,
+                  `模型：${executionAgent?.model ?? "未配置"}`,
+                  `MCP：${enabledMcp}`,
+                  `Skill：${enabledSkills}`,
+                  `动作：运行自动化「${title}」，并把执行记录写入当前后端线程。`,
+                ].join("\n")
+              : [
+                  "Trigger: manual",
+                  `Target office: ${targetOffice?.title ?? "not bound"}`,
+                  `Agent: ${executionAgent?.name ?? "not bound"}`,
+                  `Model: ${executionAgent?.model ?? "not configured"}`,
+                  `MCP: ${enabledMcp}`,
+                  `Skills: ${enabledSkills}`,
+                  `Action: run automation "${title}" and write the execution record to the backend thread.`,
+                ].join("\n"),
+          prompt:
+            locale === "zh"
+              ? `运行自动化「${title}」。目标办公室：${targetOffice?.title ?? "未绑定"}。执行智能体：${executionAgent?.name ?? "未绑定"}。请记录运行结果、下一步任务和风险。`
+              : `Run automation "${title}". Target office: ${targetOffice?.title ?? "not bound"}. Agent: ${executionAgent?.name ?? "not bound"}. Record results, next tasks, and risks.`,
+          trigger: { type: "manual" },
+          targetOffice,
+          executionAgent,
+          enabled: true,
+          status: "enabled",
+        };
+        let savedAutomationConfig = automationConfig;
+        let automationConfigPath: string | null = null;
+        const automationCwd = await resolveBackendCwd();
+        const createPrompt =
           locale === "zh"
             ? `运行自动化「${title}」。目标办公室：${targetOffice?.title ?? "未绑定"}。执行智能体：${executionAgent?.name ?? "未绑定"}。请记录运行结果、下一步任务和风险。`
-            : `Run automation "${title}". Target office: ${targetOffice?.title ?? "not bound"}. Agent: ${executionAgent?.name ?? "not bound"}. Record results, next tasks, and risks.`,
-        trigger: { type: "manual" },
-        targetOffice,
-        executionAgent,
-        enabled: true,
-        status: "enabled",
-      };
-      let savedAutomationConfig = automationConfig;
-      let automationConfigPath: string | null = null;
-      const automationCwd = await resolveBackendCwd();
-      const createPrompt =
-        locale === "zh"
-          ? `运行自动化「${title}」。目标办公室：${targetOffice?.title ?? "未绑定"}。执行智能体：${executionAgent?.name ?? "未绑定"}。请记录运行结果、下一步任务和风险。`
-          : `Run automation "${title}". Target office: ${targetOffice?.title ?? "not bound"}. Agent: ${executionAgent?.name ?? "not bound"}. Record results, next tasks, and risks.`;
-      if (automationCwd && clientRef.current) {
-        try {
-          const createResult = await clientRef.current.createAutomationConfig(
-            automationCwd,
-            {
-              title,
-              threadId: thread.id,
-              targetOffice,
-              executionAgent,
-              prompt: createPrompt,
-              enabled: true,
-              status: "enabled",
-            },
-          );
-          savedAutomationConfig = {
-            ...automationConfig,
-            ...createResult.config,
-            subtitle:
-              locale === "zh"
-                ? automationConfig.subtitle
-                : createResult.config.subtitle,
-            body:
-              locale === "zh" ? automationConfig.body : createResult.config.body,
-          };
-          automationConfigPath = createResult.filePath;
-        } catch (error) {
-          if (!isUnsupportedRpcError(error)) {
-            throw error;
-          }
-          automationConfigPath =
-            await writeAutomationConfigFile(automationConfig);
-        }
-      } else {
-        automationConfigPath = await writeAutomationConfigFile(automationConfig);
-      }
-      const createResponse = await clientRef.current?.startTurn(
-        thread.id,
-        [
-          locale === "zh"
-            ? `创建自动化：${title}`
-            : `Create automation: ${title}`,
-          "",
-          automationConfigPayload(savedAutomationConfig),
-        ].join("\n"),
-      );
-      setThreads((current) => upsertThread(current, { ...thread, name: title }));
-      if (createResponse) {
-        setThreads((current) =>
-          current.map((currentThread) =>
-            currentThread.id === thread.id
-              ? upsertTurn(currentThread, createResponse.turn)
-              : currentThread,
-          ),
-        );
-      }
-      setLibraryPanel((currentPanel) =>
-        currentPanel
-          ? {
-              ...currentPanel,
-              body:
+            : `Run automation "${title}". Target office: ${targetOffice?.title ?? "not bound"}. Agent: ${executionAgent?.name ?? "not bound"}. Record results, next tasks, and risks.`;
+        if (automationCwd && clientRef.current) {
+          try {
+            const createResult = await clientRef.current.createAutomationConfig(
+              automationCwd,
+              {
+                title,
+                threadId: thread.id,
+                targetOffice,
+                executionAgent,
+                prompt: createPrompt,
+                enabled: true,
+                status: "enabled",
+              },
+            );
+            savedAutomationConfig = {
+              ...automationConfig,
+              ...createResult.config,
+              subtitle:
                 locale === "zh"
-                  ? `已创建自动化执行线程：${title}\n已绑定：${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}${automationConfigPath ? `\n配置文件：${automationConfigPath}` : ""}`
-                  : `Created automation execution thread: ${title}\nBound to: ${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}${automationConfigPath ? `\nConfig file: ${automationConfigPath}` : ""}`,
-              items: [
-                {
-                  title,
-                  meta:
-                    locale === "zh"
-                      ? "后端线程 · 可立即运行"
-                      : "Backend thread · ready to run",
-                  description:
-                    locale === "zh"
-                      ? "已写入目标办公室、执行智能体和运行提示，可立即运行并沉淀记录。"
-                      : "Target office, execution agent, and run prompt are written; it can run now and keep records.",
-                  glyph: "⏱",
-                  accent: "blue",
-                  badge: {
-                    label: locale === "zh" ? "已创建" : "created",
-                    tone: "running",
-                  },
-                  action: {
-                    type: "automation-detail",
-                    title: savedAutomationConfig.title,
-                    subtitle: savedAutomationConfig.subtitle,
-                    body: savedAutomationConfig.body,
-                    prompt: savedAutomationConfig.prompt,
-                    threadId: thread.id,
-                    configPath: automationConfigPath ?? undefined,
-                  },
-                },
-                ...currentPanel.items,
-              ],
-              error: undefined,
+                  ? automationConfig.subtitle
+                  : createResult.config.subtitle,
+              body:
+                locale === "zh" ? automationConfig.body : createResult.config.body,
+            };
+            automationConfigPath = createResult.filePath;
+          } catch (error) {
+            if (!isUnsupportedRpcError(error)) {
+              throw error;
             }
-          : currentPanel,
-      );
+            automationConfigPath =
+              await writeAutomationConfigFile(automationConfig);
+          }
+        } else {
+          automationConfigPath = await writeAutomationConfigFile(automationConfig);
+        }
+        const createResponse = await clientRef.current?.startTurn(
+          thread.id,
+          [
+            locale === "zh"
+              ? `创建自动化：${title}`
+              : `Create automation: ${title}`,
+            "",
+            automationConfigPayload(savedAutomationConfig),
+          ].join("\n"),
+        );
+        setThreads((current) => upsertThread(current, { ...thread, name: title }));
+        if (createResponse) {
+          setThreads((current) =>
+            current.map((currentThread) =>
+              currentThread.id === thread.id
+                ? upsertTurn(currentThread, createResponse.turn)
+                : currentThread,
+            ),
+          );
+        }
+        setLibraryPanel((currentPanel) =>
+          currentPanel
+            ? {
+                ...currentPanel,
+                body:
+                  locale === "zh"
+                    ? `已创建自动化执行线程：${title}\n已绑定：${targetOffice?.title ?? "未绑定办公室"} · ${executionAgent?.name ?? "未绑定智能体"}${automationConfigPath ? `\n配置文件：${automationConfigPath}` : ""}`
+                    : `Created automation execution thread: ${title}\nBound to: ${targetOffice?.title ?? "No office"} · ${executionAgent?.name ?? "No agent"}${automationConfigPath ? `\nConfig file: ${automationConfigPath}` : ""}`,
+                items: [
+                  {
+                    title,
+                    meta:
+                      locale === "zh"
+                        ? "后端线程 · 可立即运行"
+                        : "Backend thread · ready to run",
+                    description:
+                      locale === "zh"
+                        ? "已写入目标办公室、执行智能体和运行提示，可立即运行并沉淀记录。"
+                        : "Target office, execution agent, and run prompt are written; it can run now and keep records.",
+                    glyph: "⏱",
+                    accent: "blue",
+                    badge: {
+                      label: locale === "zh" ? "已创建" : "created",
+                      tone: "running",
+                    },
+                    action: {
+                      type: "automation-detail",
+                      title: savedAutomationConfig.title,
+                      subtitle: savedAutomationConfig.subtitle,
+                      body: savedAutomationConfig.body,
+                      prompt: savedAutomationConfig.prompt,
+                      threadId: thread.id,
+                      configPath: automationConfigPath ?? undefined,
+                    },
+                  },
+                  ...currentPanel.items,
+                ],
+                error: undefined,
+              }
+            : currentPanel,
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "创建自动化失败"
+              : "Unable to create automation";
+        setLibraryPanel((currentPanel) =>
+          currentPanel
+            ? {
+                ...currentPanel,
+                error: message,
+              }
+            : currentPanel,
+        );
+        setNotice({ text: message, tone: "warning" });
+      }
       return;
     }
 
