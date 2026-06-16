@@ -5175,57 +5175,52 @@ export function App() {
 
       if (kind === "automation") {
         const basePanel = demoLibraryPanel("automation", locale);
-        const [backendThreads, workspaceAutomationItems] = await Promise.all([
-          clientRef.current?.listThreads(false),
-          readAutomationConfigFiles(),
-        ]);
-        const threads = backendThreads ?? [];
-        const automationThreads = threads.filter(
-          (thread) => thread.threadSource === "automation",
-        );
-        const automationThreadCandidates =
-          automationThreads.length > 0 ? automationThreads : threads;
-        const backendAutomationDetails = await Promise.allSettled(
-          automationThreadCandidates.map(async (thread) => {
-            const detailedThread =
-              (await clientRef.current?.readThread(thread.id)) ?? thread;
-            return {
-              thread: detailedThread,
-              config: parseAutomationConfigFromThread(detailedThread, locale),
-            };
-          }),
-        );
-        const backendAutomationItems = backendAutomationDetails.map(
-          (result) => {
+        let storedAutomationItems: LibraryItem[] = [];
+        let usedLegacyAutomationThreads = false;
+        try {
+          const response = await clientRef.current?.listAutomationConfigs(
+            effectiveCwd,
+          );
+          storedAutomationItems = await automationConfigRecordsToLibraryItems(
+            response?.data ?? [],
+          );
+        } catch (error) {
+          if (!isUnsupportedRpcError(error)) {
+            throw error;
+          }
+          usedLegacyAutomationThreads = true;
+          const backendThreads =
+            (await clientRef.current?.listThreads(false)) ?? [];
+          const automationThreads = backendThreads.filter(
+            (thread) => thread.threadSource === "automation",
+          );
+          const automationThreadCandidates =
+            automationThreads.length > 0 ? automationThreads : backendThreads;
+          const backendAutomationDetails = await Promise.allSettled(
+            automationThreadCandidates.map(async (thread) => {
+              const detailedThread =
+                (await clientRef.current?.readThread(thread.id)) ?? thread;
+              return {
+                thread: detailedThread,
+                config: parseAutomationConfigFromThread(detailedThread, locale),
+              };
+            }),
+          );
+          storedAutomationItems = backendAutomationDetails.flatMap((result) => {
             if (result.status !== "fulfilled" || !result.value.config) {
-              return null;
+              return [];
             }
-            return backendThreadLibraryItem(
-              result.value.thread,
-              "automation",
-              locale,
-              null,
-              result.value.config,
-            );
-          },
-        ).filter((item): item is LibraryItem => Boolean(item));
-        const backendThreadIds = new Set(
-          backendAutomationDetails.flatMap((result) =>
-            result.status === "fulfilled" && result.value.config?.threadId
-              ? [result.value.config.threadId]
-              : [],
-          ),
-        );
-        const uniqueWorkspaceAutomationItems = workspaceAutomationItems.filter(
-          (item) =>
-            item.action?.type !== "automation-detail" ||
-            !item.action.threadId ||
-            !backendThreadIds.has(item.action.threadId),
-        );
-        const storedAutomationItems = [
-          ...backendAutomationItems,
-          ...uniqueWorkspaceAutomationItems,
-        ];
+            return [
+              backendThreadLibraryItem(
+                result.value.thread,
+                "automation",
+                locale,
+                null,
+                result.value.config,
+              ),
+            ];
+          });
+        }
         if (!isCurrentLibraryLoad()) {
           return;
         }
@@ -5233,24 +5228,32 @@ export function App() {
           ...basePanel,
           subtitle:
             locale === "zh"
-              ? `4 条模板自动化 · ${backendAutomationItems.length} 条后端记录 · ${workspaceAutomationItems.length} 个工作区配置`
-              : `4 automation templates · ${backendAutomationItems.length} backend records · ${workspaceAutomationItems.length} workspace configs`,
+              ? `4 条模板自动化 · ${storedAutomationItems.length} 条后端自动化`
+              : `4 automation templates · ${storedAutomationItems.length} backend automations`,
           items:
             storedAutomationItems.length > 0
               ? [
                   {
                     title:
                       locale === "zh"
-                        ? "后端与工作区自动化"
-                        : "Backend and workspace automations",
+                        ? usedLegacyAutomationThreads
+                          ? "旧线程自动化"
+                          : "后端自动化"
+                        : usedLegacyAutomationThreads
+                          ? "Legacy thread automations"
+                          : "Backend automations",
                     meta:
                       locale === "zh"
                         ? `${storedAutomationItems.length} 条记录`
                         : `${storedAutomationItems.length} records`,
                     description:
                       locale === "zh"
-                        ? "这些自动化来自 app-server 线程或 .crewon/automations 配置，可打开后再次运行。"
-                        : "These automations come from app-server threads or .crewon/automations configs and can be run again.",
+                        ? usedLegacyAutomationThreads
+                          ? "当前 app-server 不支持 automation/list，暂时从旧线程记录恢复。"
+                          : "这些自动化来自 app-server automation/list，可打开后再次运行。"
+                        : usedLegacyAutomationThreads
+                          ? "The current app-server does not support automation/list; restored from legacy thread records."
+                          : "These automations come from app-server automation/list and can be run again.",
                     section: true,
                   },
                   ...storedAutomationItems,
@@ -6887,6 +6890,17 @@ export function App() {
     }
 
     const records = await readStoredAutomationConfigFiles(client, automationCwd);
+    return automationConfigRecordsToLibraryItems(records);
+  }
+
+  async function automationConfigRecordsToLibraryItems(
+    records: Array<
+      Pick<
+        DomainConfigListResponse<AutomationConfig>["data"][number],
+        "filePath" | "savedAt" | "config"
+      >
+    >,
+  ): Promise<LibraryItem[]> {
     const runItemsByThreadId = new Map<string, LibraryItem[]>();
     await Promise.all(
       records.map(async ({ config }) => {
