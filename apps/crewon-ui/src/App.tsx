@@ -5343,14 +5343,6 @@ export function App() {
       if (!isUnsupportedRpcError(error)) {
         throw error;
       }
-      await persistOfficeWorkspace(
-        panel,
-        {
-          ...workspaceBeforeMember,
-          members: [...workspaceBeforeMember.members, member],
-        },
-        threadId,
-      );
       return null;
     }
   }
@@ -5850,8 +5842,11 @@ export function App() {
           existingNames: [...memberNames],
           limit: 24,
         });
-        if (response.data.length > 0) {
-          return response.data[0].config;
+        const backendConfig = response.data.find((record) =>
+          Boolean(record.config.agentId),
+        )?.config;
+        if (backendConfig) {
+          return backendConfig;
         }
       } catch (error) {
         if (!isUnsupportedRpcError(error)) {
@@ -5862,15 +5857,18 @@ export function App() {
     if (agentCwd && client) {
       try {
         const response = await client.listAgentConfigs(agentCwd);
-        const candidates = response.data.map((record) => record.config);
+        const candidates = response.data
+          .map((record) => record.config)
+          .filter(
+            (config): config is AgentConfig & { agentId: string } =>
+              Boolean(config.agentId),
+          );
         return (
           candidates.find(
             (config) =>
               !memberNames.has(config.name) &&
-              (!config.agentId || !memberAgentIds.has(config.agentId)),
-          ) ??
-          candidates[0] ??
-          null
+              !memberAgentIds.has(config.agentId),
+          ) ?? null
         );
       } catch (error) {
         if (!isUnsupportedRpcError(error)) {
@@ -7114,25 +7112,17 @@ export function App() {
       }
       try {
         const recruitConfig = await readRecruitableAgentConfig(workspace.members);
-        const newMember = recruitConfig
-          ? agentConfigToOfficeMember(recruitConfig, locale)
-          : locale === "zh"
-            ? {
-                name: "新成员",
-                role: "自定义智能体",
-                glyph: "✦",
-                accent: "rose" as const,
-                status: "已写入后端线程",
-                online: true,
-              }
-            : {
-                name: "New",
-                role: "Custom agent",
-                glyph: "✦",
-                accent: "rose" as const,
-                status: "Written to backend thread",
-                online: true,
-              };
+        if (!recruitConfig?.agentId) {
+          setNotice({
+            text:
+              locale === "zh"
+                ? "没有可招募的后端智能体。请先在智能体库中新建并保存智能体，再招募进办公室。"
+                : "No backend agent is available to recruit. Create and save an agent in the agent library first, then recruit it into the office.",
+            tone: "warning",
+          });
+          return;
+        }
+        const newMember = agentConfigToOfficeMember(recruitConfig, locale);
         const enabledMcp =
           recruitConfig?.mcp
             .filter((option) => option.enabled)
@@ -7151,9 +7141,7 @@ export function App() {
                 accent: "slate" as const,
                 time: "现在",
                 kind: "system" as const,
-                text: recruitConfig
-                  ? `已从智能体库招募 ${newMember.name}，模型 ${recruitConfig.model}，MCP：${enabledMcp}，Skill：${enabledSkills}。`
-                  : "新成员已加入办公室群聊，招募动作已写入后端线程。尚未找到已保存的后端智能体配置。",
+                text: `已从智能体库招募 ${newMember.name}，模型 ${recruitConfig.model}，MCP：${enabledMcp}，Skill：${enabledSkills}。`,
               }
             : {
                 author: "System",
@@ -7161,34 +7149,36 @@ export function App() {
                 accent: "slate" as const,
                 time: "now",
                 kind: "system" as const,
-                text: recruitConfig
-                  ? `Recruited ${newMember.name} from agents. Model ${recruitConfig.model}; MCP: ${enabledMcp}; skills: ${enabledSkills}.`
-                  : "New member joined the office chat and recruitment was written to the backend thread. No saved backend agent config was found yet.",
+                text: `Recruited ${newMember.name} from agents. Model ${recruitConfig.model}; MCP: ${enabledMcp}; skills: ${enabledSkills}.`,
               };
         const workspaceWithJoinMessage = {
           ...workspace,
           messages: [...workspace.messages, joinMessage],
         };
-        const nextWorkspace = {
-          ...workspace,
-          members: [...workspace.members, newMember],
-          messages: workspaceWithJoinMessage.messages,
-        };
-        setLibraryPanel((currentPanel) =>
-          currentPanel?.workspace
-            ? {
-                ...currentPanel,
-                workspace: nextWorkspace,
-              }
-            : currentPanel,
-        );
-        let threadId = await ensureOfficeThread(panel, nextWorkspace);
+        let threadId = await ensureOfficeThread(panel, workspace);
         if (threadId) {
+          const savedConfig = await persistOfficeMember(
+            panel,
+            workspaceWithJoinMessage,
+            recruitConfig.agentId,
+            newMember,
+            threadId,
+          );
+          if (!savedConfig) {
+            setNotice({
+              text:
+                locale === "zh"
+                  ? "招募智能体未写入后端办公室配置，请稍后重试。"
+                  : "Agent recruitment was not written to the backend office config. Try again later.",
+              tone: "warning",
+            });
+            return;
+          }
           const recruitTurnInput = (targetThreadId: string) =>
             [
               locale === "zh"
-                ? `办公室「${panel.title}」招募智能体：${newMember.name}，角色：${newMember.role}。模型：${recruitConfig?.model ?? "未配置"}。MCP：${enabledMcp}。Skill：${enabledSkills}。请把它纳入后续协作。`
-                : `Office "${panel.title}" recruited agent: ${newMember.name}, role: ${newMember.role}. Model: ${recruitConfig?.model ?? "not configured"}. MCP: ${enabledMcp}. Skills: ${enabledSkills}. Include it in future collaboration.`,
+                ? `办公室「${panel.title}」招募智能体：${newMember.name}，角色：${newMember.role}。模型：${recruitConfig.model}。MCP：${enabledMcp}。Skill：${enabledSkills}。请把它纳入后续协作。`
+                : `Office "${panel.title}" recruited agent: ${newMember.name}, role: ${newMember.role}. Model: ${recruitConfig.model}. MCP: ${enabledMcp}. Skills: ${enabledSkills}. Include it in future collaboration.`,
               locale === "zh"
                 ? "后端记录：已提交到 office/member/add"
                 : "Backend record: submitted to office/member/add",
@@ -7206,7 +7196,7 @@ export function App() {
             if (!isMissingThreadError(error)) {
               throw error;
             }
-            threadId = await ensureOfficeThread(panel, nextWorkspace, true);
+            threadId = await ensureOfficeThread(panel, savedConfig.workspace, true);
             if (!threadId) {
               return;
             }
@@ -7224,23 +7214,13 @@ export function App() {
               ),
             );
           }
-          const savedConfig = await persistOfficeMember(
-            panel,
-            workspaceWithJoinMessage,
-            newMember.agentId ?? recruitConfig?.agentId,
-            newMember,
-            threadId,
-          );
-          if (!savedConfig) {
-            await persistOfficeWorkspace(panel, nextWorkspace, threadId);
-          }
           const connectedThreadId = threadId;
           setLibraryPanel((currentPanel) =>
             currentPanel?.workspace
               ? {
                   ...currentPanel,
                   workspace: {
-                    ...(savedConfig?.workspace ?? nextWorkspace),
+                    ...savedConfig.workspace,
                     threadId: connectedThreadId,
                     backendStatus: "connected",
                   },
@@ -7249,13 +7229,9 @@ export function App() {
           );
           setNotice({
             text:
-              savedConfig
-                ? locale === "zh"
-                  ? `已招募 ${newMember.name}，并写入后端办公室配置`
-                  : `Recruited ${newMember.name} and wrote it to the backend office config`
-                : locale === "zh"
-                  ? `已招募 ${newMember.name}，未找到后端智能体配置，已作为临时角色写入办公室线程`
-                  : `Recruited ${newMember.name}; no backend agent config was found, so it was written to the office thread as a temporary role`,
+              locale === "zh"
+                ? `已招募 ${newMember.name}，并写入后端办公室配置`
+                : `Recruited ${newMember.name} and wrote it to the backend office config`,
             tone: "success",
           });
         }
@@ -7408,6 +7384,21 @@ export function App() {
                 hour: "2-digit",
                 minute: "2-digit",
               })}`;
+        const [targetOffice, executionAgent] = await Promise.all([
+          readLatestOfficeConfig(),
+          readRecruitableAgentConfig([]),
+        ]);
+        if (!targetOffice || !executionAgent?.agentId) {
+          const message =
+            locale === "zh"
+              ? "创建自动化需要已保存的办公室和后端智能体。请先创建办公室，并在智能体库中新建/保存智能体。"
+              : "Creating an automation requires a saved office and backend agent. Create an office and create/save an agent first.";
+          setLibraryPanel((currentPanel) =>
+            currentPanel ? { ...currentPanel, error: message } : currentPanel,
+          );
+          setNotice({ text: message, tone: "warning" });
+          return;
+        }
         const thread = await clientRef.current?.startThread(
           undefined,
           "automation",
@@ -7427,10 +7418,6 @@ export function App() {
             : "Run automation with a target office and execution agent, keeping future run records.",
           null,
         );
-        const [targetOffice, executionAgent] = await Promise.all([
-          readLatestOfficeConfig(),
-          readRecruitableAgentConfig([]),
-        ]);
         const enabledMcp =
           executionAgent?.mcp
             .filter((option) => option.enabled)
@@ -8324,6 +8311,17 @@ export function App() {
           savedAutomationConfig?.targetOffice ?? latestOffice ?? null;
         const executionAgent =
           savedAutomationConfig?.executionAgent ?? latestAgent ?? null;
+        if (!targetOffice || !executionAgent?.agentId) {
+          const message =
+            locale === "zh"
+              ? "运行自动化需要已保存的目标办公室和后端智能体。请先创建办公室，并在智能体库中新建/保存智能体。"
+              : "Running an automation requires a saved target office and backend agent. Create an office and create/save an agent first.";
+          setLibraryPanel((currentPanel) =>
+            currentPanel ? { ...currentPanel, error: message } : currentPanel,
+          );
+          setNotice({ text: message, tone: "warning" });
+          return;
+        }
         const triggerType =
           savedAutomationConfig?.trigger?.type ??
           (locale === "zh" ? "手动" : "manual");
