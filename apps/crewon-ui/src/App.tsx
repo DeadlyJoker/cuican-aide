@@ -124,6 +124,11 @@ import {
   writeOfficeConfigFile as writeStoredOfficeConfigFile,
 } from "./lib/domainPersistence";
 import {
+  loadMcpInventory,
+  readLatestOfficeConfig as readLatestBackendOfficeConfig,
+  readRecruitableAgentConfig as readRecruitableBackendAgentConfig,
+} from "./lib/domainCollaborationBackend";
+import {
   deleteMcpToolConfigRecord,
   saveOrUpdateToolConfig,
   syncSkillToolConfig,
@@ -3259,7 +3264,7 @@ export function App() {
 
       if (kind === "tools") {
         const [mcpInventory, skillsResponse, pluginsResponse, workspaceToolItems] = await Promise.all([
-          loadMcpInventory(effectiveThreadId, effectiveCwd),
+          loadMcpInventory(clientRef.current, effectiveThreadId, effectiveCwd),
           clientRef.current?.listSkills(effectiveCwd),
           clientRef.current?.listPlugins(effectiveCwd),
           loadToolLibraryItems(effectiveCwd),
@@ -5540,90 +5545,6 @@ export function App() {
     }
   }
 
-  async function loadMcpRuntimeStatus(
-    effectiveThreadId: string | undefined,
-  ): Promise<McpServerStatus[]> {
-    try {
-      return (
-        (
-          await clientRef.current?.listMcpServerStatus(
-            effectiveThreadId,
-            "full",
-          )
-        )?.data ?? []
-      );
-    } catch (threadScopedError) {
-      if (
-        !(threadScopedError instanceof Error) ||
-        !threadScopedError.message.includes("thread not found")
-      ) {
-        throw threadScopedError;
-      }
-      return (
-        (await clientRef.current?.listMcpServerStatus(undefined, "full"))
-          ?.data ?? []
-      );
-    }
-  }
-
-  async function loadMcpConfigRecords(
-    effectiveCwd: string | null | undefined,
-  ): Promise<McpServerConfigRecord[]> {
-    try {
-      return (
-        (
-          await clientRef.current?.listMcpServerConfigs({
-            cwd: effectiveCwd ?? null,
-            limit: 100,
-          })
-        )?.data ?? []
-      );
-    } catch {
-      return [];
-    }
-  }
-
-  async function loadMcpInventory(
-    effectiveThreadId: string | undefined,
-    effectiveCwd: string | null | undefined,
-  ): Promise<{
-    configs: McpServerConfigRecord[];
-    servers: Array<{
-      config?: McpServerConfigRecord;
-      name: string;
-      status?: McpServerStatus;
-    }>;
-    statuses: McpServerStatus[];
-  }> {
-    const [statuses, configs] = await Promise.all([
-      loadMcpRuntimeStatus(effectiveThreadId),
-      loadMcpConfigRecords(effectiveCwd),
-    ]);
-    const byName = new Map<
-      string,
-      { config?: McpServerConfigRecord; name: string; status?: McpServerStatus }
-    >();
-    statuses.forEach((status) => {
-      byName.set(status.name, { name: status.name, status });
-    });
-    configs.forEach((config) => {
-      const existing = byName.get(config.name);
-      byName.set(config.name, {
-        name: config.name,
-        status: existing?.status,
-        config,
-      });
-    });
-
-    return {
-      statuses,
-      configs,
-      servers: [...byName.values()].sort((left, right) =>
-        left.name.localeCompare(right.name),
-      ),
-    };
-  }
-
   async function readRecruitableAgentConfig(
     existingMembers: OfficeMember[],
   ): Promise<AgentConfig | null> {
@@ -5631,55 +5552,14 @@ export function App() {
       return null;
     }
 
-    const memberNames = new Set(existingMembers.map((member) => member.name));
-    const memberAgentIds = new Set(
-      existingMembers
-        .map((member) => member.agentId)
-        .filter((agentId): agentId is string => Boolean(agentId)),
-    );
     const agentCwd = await resolveBackendCwd();
     const client = clientRef.current;
     if (agentCwd && client) {
-      try {
-        const response = await client.listRecruitableAgentConfigs(agentCwd, {
-          cursor: null,
-          existingAgentIds: [...memberAgentIds],
-          existingNames: [...memberNames],
-          limit: 24,
-        });
-        const backendConfig = response.data.find((record) =>
-          Boolean(record.config.agentId),
-        )?.config;
-        if (backendConfig) {
-          return backendConfig;
-        }
-      } catch (error) {
-        if (!isUnsupportedRpcError(error)) {
-          throw error;
-        }
-      }
-    }
-    if (agentCwd && client) {
-      try {
-        const response = await client.listAgentConfigs(agentCwd);
-        const candidates = response.data
-          .map((record) => record.config)
-          .filter(
-            (config): config is AgentConfig & { agentId: string } =>
-              Boolean(config.agentId),
-          );
-        return (
-          candidates.find(
-            (config) =>
-              !memberNames.has(config.name) &&
-              !memberAgentIds.has(config.agentId),
-          ) ?? null
-        );
-      } catch (error) {
-        if (!isUnsupportedRpcError(error)) {
-          throw error;
-        }
-      }
+      return readRecruitableBackendAgentConfig(
+        client,
+        agentCwd,
+        existingMembers,
+      );
     }
 
     return null;
@@ -5693,24 +5573,7 @@ export function App() {
     const officeCwd = await resolveBackendCwd();
     const client = clientRef.current;
     if (officeCwd && client) {
-      try {
-        const response = await client.listOfficeConfigs(officeCwd);
-        return (
-          response.data
-            .map((record) => ({
-              updatedAt: record.savedAt
-                ? new Date(record.savedAt).getTime()
-                : 0,
-              config: record.config,
-            }))
-            .sort((left, right) => right.updatedAt - left.updatedAt)[0]
-            ?.config ?? null
-        );
-      } catch (error) {
-        if (!isUnsupportedRpcError(error)) {
-          throw error;
-        }
-      }
+      return readLatestBackendOfficeConfig(client, officeCwd);
     }
 
     return null;
@@ -5729,7 +5592,7 @@ export function App() {
 
     const [mcpInventory, skillsResponse, modelsResponse, permissionsResponse] =
       await Promise.all([
-        loadMcpInventory(effectiveThreadId, effectiveCwd),
+        loadMcpInventory(clientRef.current, effectiveThreadId, effectiveCwd),
         clientRef.current?.listSkills(effectiveCwd),
         clientRef.current?.listModels(),
         clientRef.current?.listPermissionProfiles(effectiveCwd),
@@ -11254,6 +11117,7 @@ export function App() {
     try {
       const configCwd = await resolveBackendCwd();
       const inventory = await loadMcpInventory(
+        clientRef.current,
         isDemoPreview ? undefined : (selectedThreadId ?? undefined),
         configCwd,
       );
