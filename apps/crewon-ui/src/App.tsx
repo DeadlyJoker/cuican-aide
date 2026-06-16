@@ -5711,28 +5711,42 @@ export function App() {
     }
 
     try {
-      const response = await client.listToolConfigs(
-        toolCwd,
-        action.type === "mcp-detail" ? "mcp" : "skill",
-      );
-      const matchedRecord = response.data.find((record) => {
-        if (record.filePath === action.configPath) {
-          return true;
-        }
-        if (action.type === "mcp-detail") {
+      const expectedKind = action.type === "mcp-detail" ? "mcp" : "skill";
+      const directRecord = action.configPath
+        ? await client
+            .readToolConfig(toolCwd, action.configPath)
+            .then((response) => response.record)
+            .catch((error) => {
+              if (isUnsupportedRpcError(error)) {
+                return null;
+              }
+              throw error;
+            })
+        : null;
+      let matchedRecord =
+        directRecord?.kind === expectedKind ? directRecord : undefined;
+
+      if (!matchedRecord) {
+        const response = await client.listToolConfigs(toolCwd, expectedKind);
+        matchedRecord = response.data.find((record) => {
+          if (record.filePath === action.configPath) {
+            return true;
+          }
+          if (action.type === "mcp-detail") {
+            return (
+              record.config.kind === "mcp" &&
+              (record.config.name === action.configName ||
+                record.config.name === action.subtitle ||
+                record.config.title === action.title)
+            );
+          }
           return (
-            record.config.kind === "mcp" &&
-            (record.config.name === action.configName ||
-              record.config.name === action.subtitle ||
-              record.config.title === action.title)
+            record.config.kind === "skill" &&
+            (record.config.path === action.path ||
+              record.config.name === action.skillName)
           );
-        }
-        return (
-          record.config.kind === "skill" &&
-          (record.config.path === action.path ||
-            record.config.name === action.skillName)
-        );
-      });
+        });
+      }
       if (!matchedRecord) {
         return action;
       }
@@ -5765,6 +5779,51 @@ export function App() {
     } catch {
       return action;
     }
+  }
+
+  async function saveOrUpdateToolConfig(
+    toolCwd: string,
+    config: ToolConfig,
+  ): Promise<{ filePath: string; operation: "created" | "updated" }> {
+    const client = clientRef.current;
+    if (!client) {
+      throw new Error(
+        locale === "zh"
+          ? "未连接本地 app-server"
+          : "Local app-server is not connected",
+      );
+    }
+
+    const existingRecords = await client.listToolConfigs(toolCwd, config.kind);
+    const existingRecord = existingRecords.data.find((record) => {
+      if (record.config.kind !== config.kind) {
+        return false;
+      }
+      if (config.kind === "mcp") {
+        return record.config.name === config.name;
+      }
+      return (
+        record.config.path === config.path || record.config.name === config.name
+      );
+    });
+
+    if (existingRecord) {
+      try {
+        const response = await client.updateToolConfig(
+          toolCwd,
+          existingRecord.filePath,
+          config,
+        );
+        return { filePath: response.filePath, operation: "updated" };
+      } catch (error) {
+        if (!isUnsupportedRpcError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    const response = await client.saveToolConfig(toolCwd, config);
+    return { filePath: response.filePath, operation: "created" };
   }
 
   async function loadMcpRuntimeStatus(
@@ -8213,13 +8272,16 @@ export function App() {
           env: parsedEnv,
           enabled: false,
         };
-        const toolRecordResponse = await client.saveToolConfig(toolCwd, toolRecord);
+        const toolRecordResponse = await saveOrUpdateToolConfig(
+          toolCwd,
+          toolRecord,
+        );
         await openLibrary("tools");
         setNotice({
           text:
             locale === "zh"
-              ? `已保存 MCP 草稿：${serverName}（后端记录：${toolRecordResponse.filePath}）`
-              : `Saved MCP draft: ${serverName} (backend record: ${toolRecordResponse.filePath})`,
+              ? `${toolRecordResponse.operation === "updated" ? "已更新" : "已保存"} MCP 草稿：${serverName}（后端记录：${toolRecordResponse.filePath}）`
+              : `${toolRecordResponse.operation === "updated" ? "Updated" : "Saved"} MCP draft: ${serverName} (backend record: ${toolRecordResponse.filePath})`,
           tone: "success",
         });
         return;
@@ -8290,7 +8352,7 @@ export function App() {
           path: createResponse.skill.path,
           enabled: createResponse.skill.enabled,
         };
-        const toolRecordResponse = await clientRef.current?.saveToolConfig(
+        const toolRecordResponse = await saveOrUpdateToolConfig(
           skillCwd,
           skillRecord,
         );
@@ -8298,8 +8360,8 @@ export function App() {
         setNotice({
           text:
             locale === "zh"
-              ? `已保存 Skill：${createResponse.skill.name}${toolRecordResponse ? `（后端记录：${toolRecordResponse.filePath}）` : ""}`
-              : `Saved skill: ${createResponse.skill.name}${toolRecordResponse ? ` (backend record: ${toolRecordResponse.filePath})` : ""}`,
+              ? `${toolRecordResponse.operation === "updated" ? "已更新" : "已保存"} Skill：${createResponse.skill.name}（后端记录：${toolRecordResponse.filePath}）`
+              : `${toolRecordResponse.operation === "updated" ? "Updated" : "Saved"} skill: ${createResponse.skill.name} (backend record: ${toolRecordResponse.filePath})`,
           tone: "success",
         });
         return;

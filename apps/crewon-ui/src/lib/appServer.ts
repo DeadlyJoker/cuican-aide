@@ -284,6 +284,15 @@ export type ToolConfigListResponse = {
   nextCursor: string | null;
 };
 
+export type ToolConfigReadResponse = {
+  record: ToolConfigListResponse["data"][number] | null;
+};
+
+export type ToolConfigUpdateResponse = {
+  filePath: string;
+  config: ToolConfig;
+};
+
 type ThreadTurnsListResponse = {
   data: Turn[];
   nextCursor: string | null;
@@ -1200,6 +1209,28 @@ export class AppServerClient {
     config: ToolConfig,
   ): Promise<DomainConfigSaveResponse> {
     return this.request<DomainConfigSaveResponse>("tool/save", { cwd, config });
+  }
+
+  async readToolConfig(
+    cwd: string,
+    filePath: string,
+  ): Promise<ToolConfigReadResponse> {
+    return this.request<ToolConfigReadResponse>("tool/read", {
+      cwd,
+      filePath,
+    });
+  }
+
+  async updateToolConfig(
+    cwd: string,
+    filePath: string,
+    config: ToolConfig,
+  ): Promise<ToolConfigUpdateResponse> {
+    return this.request<ToolConfigUpdateResponse>("tool/update", {
+      cwd,
+      filePath,
+      config,
+    });
   }
 
   async deleteToolConfig(
