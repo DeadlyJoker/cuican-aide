@@ -4,6 +4,37 @@ import type {
   LibraryPanelAction,
 } from "../../lib/crewonDomain";
 import type { Locale } from "../../lib/i18n";
+import {
+  LibraryActions,
+  LibraryError,
+  LibraryPageHeader,
+  libraryLabel,
+} from "./LibraryPrimitives";
+
+type KnowledgeSourceStatus = KnowledgeSource["status"];
+
+const knowledgeSourceStatusLabels: Record<
+  Locale,
+  Record<KnowledgeSourceStatus, string>
+> = {
+  zh: {
+    indexed: "已索引",
+    indexing: "索引中",
+    "needs-auth": "待授权",
+  },
+  en: {
+    indexed: "Indexed",
+    indexing: "Indexing",
+    "needs-auth": "Needs auth",
+  },
+};
+
+function knowledgeSourceStatusLabel(
+  locale: Locale,
+  status: KnowledgeSourceStatus,
+) {
+  return knowledgeSourceStatusLabels[locale][status];
+}
 
 export function KnowledgeView({
   panel,
@@ -19,68 +50,37 @@ export function KnowledgeView({
   const data = panel.knowledge;
   if (!data) return null;
   const isZh = locale === "zh";
-  const sourceStatus = (status: KnowledgeSource["status"]) =>
-    isZh
-      ? { "indexed": "已索引", "indexing": "索引中", "needs-auth": "待授权" }[
-          status
-        ]
-      : {
-          "indexed": "Indexed",
-          "indexing": "Indexing",
-          "needs-auth": "Needs auth",
-        }[status];
+  const actions: LibraryPanelAction[] = [
+    {
+      id: "create-knowledge-memory",
+      label: libraryLabel(locale, "写入记忆", "Write memory"),
+      tone: "primary",
+    },
+    {
+      id: "refresh-knowledge",
+      label: libraryLabel(locale, "刷新知识库", "Refresh knowledge"),
+    },
+    {
+      id: "reset-memory",
+      label: libraryLabel(locale, "重置全局记忆", "Reset global memory"),
+      tone: "danger",
+    },
+  ];
 
   return (
     <main className="library-page knowledge-page" aria-label={panel.title}>
-      <header className="library-heading">
-        <button type="button" onClick={onBack}>
-          {isZh ? "返回对话" : "Back to chat"}
-        </button>
-        <div>
-          <h1>{panel.title}</h1>
-          <p>{panel.subtitle}</p>
-        </div>
-      </header>
-      {panel.error ? <p className="library-error">{panel.error}</p> : null}
-      <div className="library-actions knowledge-actions">
-        <button
-          type="button"
-          data-tone="primary"
-          onClick={() =>
-            onPanelAction({
-              id: "create-knowledge-memory",
-              label: isZh ? "写入记忆" : "Write memory",
-              tone: "primary",
-            })
-          }
-        >
-          {isZh ? "写入记忆" : "Write memory"}
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            onPanelAction({
-              id: "refresh-knowledge",
-              label: isZh ? "刷新知识库" : "Refresh knowledge",
-            })
-          }
-        >
-          {isZh ? "刷新知识库" : "Refresh knowledge"}
-        </button>
-        <button
-          type="button"
-          data-tone="danger"
-          onClick={() =>
-            onPanelAction({
-              id: "reset-memory",
-              label: isZh ? "重置全局记忆" : "Reset global memory",
-              tone: "danger",
-            })
-          }
-        >
-          {isZh ? "重置全局记忆" : "Reset global memory"}
-        </button>
-      </div>
+      <LibraryPageHeader
+        title={panel.title}
+        subtitle={panel.subtitle}
+        locale={locale}
+        onBack={onBack}
+      />
+      <LibraryError error={panel.error} />
+      <LibraryActions
+        actions={actions}
+        className="knowledge-actions"
+        onPanelAction={onPanelAction}
+      />
 
       <div className="knowledge-grid">
         <section className="knowledge-col knowledge-memory">
@@ -173,7 +173,7 @@ export function KnowledgeView({
                   <div className="source-top">
                     <strong>{src.name}</strong>
                     <span className="source-status" data-status={src.status}>
-                      {sourceStatus(src.status)}
+                      {knowledgeSourceStatusLabel(locale, src.status)}
                     </span>
                   </div>
                   <p className="source-meta">{src.meta}</p>

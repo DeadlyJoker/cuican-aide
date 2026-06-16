@@ -11,6 +11,21 @@ import type {
 import { GenericLibraryPage } from "./GenericLibraryPage";
 import { KnowledgeView } from "./KnowledgeView";
 
+type LibraryViewProps = {
+  panel: LibraryPanel;
+  locale: Locale;
+  onBack: () => void;
+  onItemAction: (item: LibraryItem) => void;
+  onPanelAction: (action: LibraryPanelAction) => void;
+  onPanelFieldChange: (fieldId: string, value: string) => void;
+  onSendOfficeMessage: (text: string) => void;
+  onUpdateAgentConfig: (patch: Partial<AgentConfig>) => void;
+  onToggleAgentCapability: (group: "mcp" | "skills", id: string) => void;
+  onSaveAgentConfig: () => void;
+  onApprovalDecision: (id: string, decision: "approved" | "denied") => void;
+  onArtifact: (artifact: ArtifactItem) => void;
+};
+
 export function LibraryView({
   panel,
   locale,
@@ -24,20 +39,7 @@ export function LibraryView({
   onSaveAgentConfig,
   onApprovalDecision,
   onArtifact,
-}: {
-  panel: LibraryPanel;
-  locale: Locale;
-  onBack: () => void;
-  onItemAction: (item: LibraryItem) => void;
-  onPanelAction: (action: LibraryPanelAction) => void;
-  onPanelFieldChange: (fieldId: string, value: string) => void;
-  onSendOfficeMessage: (text: string) => void;
-  onUpdateAgentConfig: (patch: Partial<AgentConfig>) => void;
-  onToggleAgentCapability: (group: "mcp" | "skills", id: string) => void;
-  onSaveAgentConfig: () => void;
-  onApprovalDecision: (id: string, decision: "approved" | "denied") => void;
-  onArtifact: (artifact: ArtifactItem) => void;
-}) {
+}: LibraryViewProps) {
   if (panel.knowledge) {
     return (
       <KnowledgeView

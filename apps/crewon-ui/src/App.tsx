@@ -124,6 +124,11 @@ import {
   writeOfficeConfigFile as writeStoredOfficeConfigFile,
 } from "./lib/domainPersistence";
 import {
+  deleteMcpToolConfigRecord,
+  saveOrUpdateToolConfig,
+  syncSkillToolConfig,
+} from "./lib/domainToolPersistence";
+import {
   agentConfigRecordsToLibraryItems,
   automationConfigRecordToLibraryItem,
   libraryToolDecor,
@@ -5535,135 +5540,6 @@ export function App() {
     }
   }
 
-  async function saveOrUpdateToolConfig(
-    toolCwd: string,
-    config: ToolConfig,
-  ): Promise<{ filePath: string; operation: "created" | "updated" }> {
-    const client = clientRef.current;
-    if (!client) {
-      throw new Error(
-        locale === "zh"
-          ? "未连接本地 app-server"
-          : "Local app-server is not connected",
-      );
-    }
-
-    const existingRecords = await client.listToolConfigs(toolCwd, config.kind);
-    const existingRecord = existingRecords.data.find((record) => {
-      if (record.config.kind !== config.kind) {
-        return false;
-      }
-      if (config.kind === "mcp") {
-        return record.config.name === config.name;
-      }
-      return (
-        record.config.path === config.path || record.config.name === config.name
-      );
-    });
-
-    if (existingRecord) {
-      try {
-        const response = await client.updateToolConfig(
-          toolCwd,
-          existingRecord.filePath,
-          config,
-        );
-        return { filePath: response.filePath, operation: "updated" };
-      } catch (error) {
-        if (!isUnsupportedRpcError(error)) {
-          throw error;
-        }
-      }
-    }
-
-    const response = await client.saveToolConfig(toolCwd, config);
-    return { filePath: response.filePath, operation: "created" };
-  }
-
-  async function deleteMcpToolConfigRecord(
-    mcpServerName: string,
-  ): Promise<string | null> {
-    const client = clientRef.current;
-    const toolCwd = await resolveBackendCwd();
-    if (!client || !toolCwd) {
-      return null;
-    }
-
-    try {
-      const records = await client.listToolConfigs(toolCwd, "mcp");
-      const record = records.data.find(
-        ({ config }) =>
-          config.kind === "mcp" &&
-          (config.name === mcpServerName || config.title === mcpServerName),
-      );
-      if (!record) {
-        return null;
-      }
-      const response = await client.deleteToolConfig(toolCwd, record.filePath);
-      return response.deleted ? record.filePath : null;
-    } catch (error) {
-      if (!isUnsupportedRpcError(error)) {
-        throw error;
-      }
-      return null;
-    }
-  }
-
-  async function syncSkillToolConfig(
-    action: LibraryPanelAction,
-    enabled: boolean,
-  ): Promise<{ filePath: string; operation: "created" | "updated" } | null> {
-    const skillName = action.skillName?.trim();
-    const skillPath = action.skillPath?.trim();
-    if (!skillName && !skillPath) {
-      return null;
-    }
-
-    const client = clientRef.current;
-    const toolCwd = await resolveBackendCwd();
-    if (!client || !toolCwd) {
-      return null;
-    }
-
-    if (action.skillConfigPath) {
-      const record = await client
-        .readToolConfig(toolCwd, action.skillConfigPath)
-        .then((response) => response.record)
-        .catch((error) => {
-          if (isUnsupportedRpcError(error)) {
-            return null;
-          }
-          throw error;
-        });
-      if (record?.config.kind === "skill") {
-        try {
-          const response = await client.updateToolConfig(
-            toolCwd,
-            action.skillConfigPath,
-            { ...record.config, enabled },
-          );
-          return { filePath: response.filePath, operation: "updated" };
-        } catch (error) {
-          if (!isUnsupportedRpcError(error)) {
-            throw error;
-          }
-        }
-      }
-    }
-
-    return saveOrUpdateToolConfig(toolCwd, {
-      kind: "skill",
-      title: skillName || pathBaseName(skillPath ?? "skill"),
-      name: skillName || pathBaseName(skillPath ?? "skill"),
-      description:
-        locale === "zh"
-          ? "从 Crewon UI 同步的 Skill 工具记录。"
-          : "Skill tool record synced from the Crewon UI.",
-      path: skillPath,
-      enabled,
-    });
-  }
-
   async function loadMcpRuntimeStatus(
     effectiveThreadId: string | undefined,
   ): Promise<McpServerStatus[]> {
@@ -7983,9 +7859,14 @@ export function App() {
           name: action.mcpServerName,
           reload: true,
         });
-        const deletedToolRecord = await deleteMcpToolConfigRecord(
-          action.mcpServerName,
-        );
+        const toolCwd = await resolveBackendCwd();
+        const deletedToolRecord = toolCwd
+          ? await deleteMcpToolConfigRecord(
+              client,
+              toolCwd,
+              action.mcpServerName,
+            )
+          : null;
         setNotice({
           text:
             locale === "zh"
@@ -8137,6 +8018,7 @@ export function App() {
           enabled: false,
         };
         const toolRecordResponse = await saveOrUpdateToolConfig(
+          client,
           toolCwd,
           toolRecord,
         );
@@ -8216,7 +8098,16 @@ export function App() {
           path: createResponse.skill.path,
           enabled: createResponse.skill.enabled,
         };
+        const client = clientRef.current;
+        if (!client) {
+          throw new Error(
+            locale === "zh"
+              ? "未连接本地 app-server"
+              : "Local app-server is not connected",
+          );
+        }
         const toolRecordResponse = await saveOrUpdateToolConfig(
+          client,
           skillCwd,
           skillRecord,
         );
@@ -8838,12 +8729,23 @@ export function App() {
 
       if (action.id === "toggle-skill") {
         const nextEnabled = !action.skillEnabled;
-        await clientRef.current?.writeSkillConfig({
+        const client = clientRef.current;
+        await client?.writeSkillConfig({
           path: action.skillPath ?? null,
           name: action.skillPath ? null : (action.skillName ?? null),
           enabled: nextEnabled,
         });
-        const syncedToolRecord = await syncSkillToolConfig(action, nextEnabled);
+        const toolCwd = await resolveBackendCwd();
+        const syncedToolRecord =
+          client && toolCwd
+            ? await syncSkillToolConfig(
+                client,
+                toolCwd,
+                action,
+                nextEnabled,
+                locale,
+              )
+            : null;
         setNotice({
           text:
             locale === "zh"

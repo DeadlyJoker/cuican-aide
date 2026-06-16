@@ -5,6 +5,13 @@ import type {
   LibraryPanelAction,
 } from "../../lib/crewonDomain";
 import { LibraryCard } from "./LibraryCard";
+import {
+  LibraryActions,
+  LibraryEmpty,
+  LibraryError,
+  LibraryPageHeader,
+  LibrarySectionItem,
+} from "./LibraryPrimitives";
 
 export function GenericLibraryPage({
   panel,
@@ -23,16 +30,13 @@ export function GenericLibraryPage({
 }) {
   return (
     <main className="library-page" aria-label={panel.title}>
-      <header className="library-heading">
-        <button type="button" onClick={onBack}>
-          {locale === "zh" ? "返回对话" : "Back to chat"}
-        </button>
-        <div>
-          <h1>{panel.title}</h1>
-          <p>{panel.subtitle}</p>
-        </div>
-      </header>
-      {panel.error ? <p className="library-error">{panel.error}</p> : null}
+      <LibraryPageHeader
+        title={panel.title}
+        subtitle={panel.subtitle}
+        locale={locale}
+        onBack={onBack}
+      />
+      <LibraryError error={panel.error} />
       {panel.body ? <pre>{panel.body}</pre> : null}
       {panel.fields ? (
         <div className="library-fields">
@@ -51,32 +55,18 @@ export function GenericLibraryPage({
           ))}
         </div>
       ) : null}
-      {panel.actions ? (
-        <div className="library-actions">
-          {panel.actions.map((action) => (
-            <button
-              type="button"
-              data-tone={action.tone}
-              key={`${action.id}:${action.pluginId ?? action.pluginName ?? action.label}`}
-              onClick={() => onPanelAction(action)}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <LibraryActions
+        actions={panel.actions}
+        onPanelAction={onPanelAction}
+      />
       <section className="library-list">
         {panel.items.length > 0 ? (
           panel.items.map((item) =>
             item.section ? (
-              <div
-                className="library-section"
+              <LibrarySectionItem
+                item={item}
                 key={`${item.title}:${item.meta}`}
-              >
-                <strong>{item.title}</strong>
-                <span>{item.meta}</span>
-                {item.description ? <p>{item.description}</p> : null}
-              </div>
+              />
             ) : (
               <LibraryCard
                 item={item}
@@ -86,9 +76,7 @@ export function GenericLibraryPage({
             ),
           )
         ) : (
-          <div className="library-empty">
-            {locale === "zh" ? "暂无数据" : "No data"}
-          </div>
+          <LibraryEmpty locale={locale} />
         )}
       </section>
     </main>
