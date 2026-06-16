@@ -54,7 +54,6 @@ import { Transcript, type WorkMode } from "./components/Transcript";
 import {
   AppServerClient,
   AppServerRpcError,
-  type AutomationRunRecord,
   type BackgroundTerminal,
   type AppServerNotification,
   type AppServerRequest,
@@ -128,6 +127,14 @@ import {
   readLatestOfficeConfig as readLatestBackendOfficeConfig,
   readRecruitableAgentConfig as readRecruitableBackendAgentConfig,
 } from "./lib/domainCollaborationBackend";
+import {
+  automationConfigRecordsToLibraryItems as backendAutomationConfigRecordsToLibraryItems,
+  automationRunRecordItems,
+  emptyAutomationRunItems,
+  readAutomationRunItems as readBackendAutomationRunItems,
+  runAutomationConfig as runBackendAutomationConfig,
+  updateAutomationRun as updateBackendAutomationRun,
+} from "./lib/domainAutomationBackend";
 import {
   deleteMcpToolConfigRecord,
   saveOrUpdateToolConfig,
@@ -692,98 +699,6 @@ function automationRunHistoryItems(
         locale === "zh"
           ? "来自 app-server 线程的最近运行记录。"
           : "Recent runs loaded from the app-server thread.",
-      section: true,
-    },
-    ...runs,
-  ];
-}
-
-function emptyAutomationRunItems(locale: Locale): LibraryItem[] {
-  return [
-    {
-      title: locale === "zh" ? "暂无运行记录" : "No run history",
-      meta: locale === "zh" ? "等待首次运行" : "Waiting for first run",
-      description:
-        locale === "zh"
-          ? "点击立即运行后，会把请求和结果写入后端执行线程。"
-          : "Run it once to write the request and result into the backend execution thread.",
-      glyph: "◷",
-      accent: "slate",
-    },
-  ];
-}
-
-function automationRunRecordItems(
-  records: Array<{
-    filePath: string;
-    savedAt: number;
-    run: AutomationRunRecord;
-  }>,
-  locale: Locale,
-): LibraryItem[] {
-  const runs = records.slice(0, 6).map(({ filePath, savedAt, run }): LibraryItem => {
-    const statusLabel =
-      locale === "zh"
-        ? run.status === "completed"
-          ? "完成"
-          : run.status === "running"
-            ? "运行中"
-            : "排队中"
-        : run.status === "completed"
-          ? "Completed"
-          : run.status === "running"
-            ? "Running"
-            : "Queued";
-    return {
-      title: run.automationTitle,
-      meta: [
-        statusLabel,
-        formatUnixSeconds(run.completedAt ?? run.startedAt ?? savedAt, locale),
-        run.runId,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      description: [
-        run.note,
-        run.threadId
-          ? locale === "zh"
-            ? `线程：${run.threadId}`
-            : `Thread: ${run.threadId}`
-          : null,
-        run.turnId
-          ? locale === "zh"
-            ? `轮次：${run.turnId}`
-            : `Turn: ${run.turnId}`
-          : null,
-        locale === "zh" ? `文件：${filePath}` : `File: ${filePath}`,
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      glyph: run.status === "completed" ? "✓" : run.status === "running" ? "◷" : "•",
-      accent:
-        run.status === "completed"
-          ? "green"
-          : run.status === "running"
-            ? "blue"
-            : "slate",
-    };
-  });
-
-  if (runs.length === 0) {
-    return emptyAutomationRunItems(locale);
-  }
-
-  return [
-    {
-      title: locale === "zh" ? "后端运行记录" : "Backend run history",
-      meta:
-        locale === "zh"
-          ? `${records.length} 条记录`
-          : `${records.length} records`,
-      description:
-        locale === "zh"
-          ? "来自 app-server automation/runs/list 的最近运行记录。"
-          : "Recent runs loaded from app-server automation/runs/list.",
       section: true,
     },
     ...runs,
@@ -5339,32 +5254,14 @@ export function App() {
             : "The automation run continued, but no backend workspace is available, so run history was not recorded.",
       };
     }
-    try {
-      const response = await client.runAutomationConfig(
-        automationCwd,
-        config,
-        note,
-        turnId,
-      );
-      return {
-        record: {
-          runId: response.run.runId,
-          filePath: response.filePath,
-        },
-        warning: null,
-      };
-    } catch (error) {
-      if (!isUnsupportedRpcError(error)) {
-        throw error;
-      }
-      return {
-        record: null,
-        warning:
-          locale === "zh"
-            ? "自动化运行已继续，但当前 app-server 不支持 automation/run，运行历史不会被记录。"
-            : "The automation run continued, but this app-server does not support automation/run, so run history was not recorded.",
-      };
-    }
+    return runBackendAutomationConfig(
+      client,
+      automationCwd,
+      config,
+      note,
+      turnId,
+      locale,
+    );
   }
 
   async function updateAutomationRun(
@@ -5377,18 +5274,13 @@ export function App() {
     if (!automationCwd || !client) {
       return;
     }
-    try {
-      await client.updateAutomationRun(
-        automationCwd,
-        filePath,
-        status,
-        completedAt,
-      );
-    } catch (error) {
-      if (!isUnsupportedRpcError(error)) {
-        throw error;
-      }
-    }
+    await updateBackendAutomationRun(
+      client,
+      automationCwd,
+      filePath,
+      status,
+      completedAt,
+    );
   }
 
   async function readAutomationRunItems(
@@ -5402,15 +5294,12 @@ export function App() {
     if (!automationCwd || !client) {
       return emptyAutomationRunItems(locale);
     }
-    try {
-      const response = await client.listAutomationRuns(automationCwd, threadId);
-      return automationRunRecordItems(response.data, locale);
-    } catch (error) {
-      if (!isUnsupportedRpcError(error)) {
-        throw error;
-      }
-      return emptyAutomationRunItems(locale);
-    }
+    return readBackendAutomationRunItems(
+      client,
+      automationCwd,
+      threadId,
+      locale,
+    );
   }
 
   async function automationConfigRecordsToLibraryItems(
@@ -5421,27 +5310,22 @@ export function App() {
       >
     >,
   ): Promise<LibraryItem[]> {
-    const runItemsByThreadId = new Map<string, LibraryItem[]>();
-    await Promise.all(
-      records.map(async ({ config }) => {
-        if (!config.threadId || runItemsByThreadId.has(config.threadId)) {
-          return;
-        }
-        runItemsByThreadId.set(
-          config.threadId,
-          await readAutomationRunItems(config.threadId),
-        );
-      }),
-    );
-    return records.map((record) =>
-      automationConfigRecordToLibraryItem(
-        record,
-        locale,
-        record.config.threadId
-          ? (runItemsByThreadId.get(record.config.threadId) ??
-              emptyAutomationRunItems(locale))
-          : emptyAutomationRunItems(locale),
-      ),
+    const automationCwd = await resolveBackendCwd();
+    const client = clientRef.current;
+    if (!automationCwd || !client) {
+      return records.map((record) =>
+        automationConfigRecordToLibraryItem(
+          record,
+          locale,
+          emptyAutomationRunItems(locale),
+        ),
+      );
+    }
+    return backendAutomationConfigRecordsToLibraryItems(
+      client,
+      automationCwd,
+      records,
+      locale,
     );
   }
 
