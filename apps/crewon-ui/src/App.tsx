@@ -4625,7 +4625,7 @@ export function App() {
         : currentPanel,
     );
 
-    const thread = await clientRef.current?.startThread(undefined, "office");
+    const thread = await startBackendDomainThread("office");
     if (!thread) {
       return null;
     }
@@ -5027,6 +5027,20 @@ export function App() {
     );
   }
 
+  async function startBackendDomainThread(
+    threadSource: "office" | "agent" | "automation",
+  ): Promise<Thread | null> {
+    const threadCwd = await resolveBackendCwd();
+    if (!threadCwd) {
+      throw new Error(
+        locale === "zh"
+          ? "缺少后端工作区，无法创建绑定线程。"
+          : "No backend workspace is available for the bound thread.",
+      );
+    }
+    return (await clientRef.current?.startThread(threadCwd, threadSource)) ?? null;
+  }
+
   function buildOfficeUserMessage(
     workspace: OfficeWorkspace,
     rawText: string,
@@ -5416,7 +5430,7 @@ export function App() {
           }
         }
         if (!thread) {
-          thread = (await clientRef.current?.startThread(undefined, "agent")) ?? null;
+          thread = await startBackendDomainThread("agent");
         }
         if (thread) {
           try {
@@ -5426,7 +5440,7 @@ export function App() {
               throw error;
             }
             const replacementThread =
-              (await clientRef.current?.startThread(undefined, "agent")) ?? null;
+              await startBackendDomainThread("agent");
             if (replacementThread) {
               await writeAgentConfig(replacementThread);
             }
@@ -6253,7 +6267,7 @@ export function App() {
                 hour: "2-digit",
                 minute: "2-digit",
               })}`;
-        const thread = await clientRef.current?.startThread(undefined, "office");
+        const thread = await startBackendDomainThread("office");
         if (!thread) {
           throw new Error(
             locale === "zh"
@@ -6391,10 +6405,7 @@ export function App() {
           setNotice({ text: message, tone: "warning" });
           return;
         }
-        const thread = await clientRef.current?.startThread(
-          undefined,
-          "automation",
-        );
+        const thread = await startBackendDomainThread("automation");
         if (!thread) {
           throw new Error(
             locale === "zh"
@@ -7399,9 +7410,7 @@ export function App() {
           }
         }
         if (!threadId) {
-          const createdThread =
-            (await clientRef.current?.startThread(undefined, "automation")) ??
-            null;
+          const createdThread = await startBackendDomainThread("automation");
           if (createdThread) {
             threadId = createdThread.id;
             await clientRef.current?.renameThread(createdThread.id, title);
@@ -7487,8 +7496,7 @@ export function App() {
             throw error;
           }
           const replacementThread =
-            (await clientRef.current?.startThread(undefined, "automation")) ??
-            null;
+            await startBackendDomainThread("automation");
           if (!replacementThread) {
             return;
           }
