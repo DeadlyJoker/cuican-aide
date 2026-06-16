@@ -21,6 +21,7 @@ import type { GetAccountTokenUsageResponse } from "@crewon-protocol/v2/GetAccoun
 import type { HooksListResponse } from "@crewon-protocol/v2/HooksListResponse";
 import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
 import type { ModelProviderCapabilitiesReadResponse } from "@crewon-protocol/v2/ModelProviderCapabilitiesReadResponse";
+import type { McpServerConfigRecord } from "@crewon-protocol/v2/McpServerConfigRecord";
 import type { McpServerStatus } from "@crewon-protocol/v2/McpServerStatus";
 import type { PermissionProfileListResponse } from "@crewon-protocol/v2/PermissionProfileListResponse";
 import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse";
@@ -2770,6 +2771,117 @@ function mcpSettingsText(
     .join("\n");
 }
 
+function mcpConfigObject(
+  record: McpServerConfigRecord,
+): Record<string, JsonValue> {
+  return record.config && typeof record.config === "object" && !Array.isArray(record.config)
+    ? (record.config as Record<string, JsonValue>)
+    : {};
+}
+
+function mcpConfigEnabled(record: McpServerConfigRecord): boolean {
+  const config = mcpConfigObject(record);
+  return config.enabled !== false;
+}
+
+function mcpConfigEndpoint(record: McpServerConfigRecord): string {
+  const config = mcpConfigObject(record);
+  const command = typeof config.command === "string" ? config.command : "";
+  const url = typeof config.url === "string" ? config.url : "";
+  const args = Array.isArray(config.args)
+    ? config.args.filter((arg): arg is string => typeof arg === "string")
+    : [];
+  if (command) {
+    return [command, ...args].join(" ");
+  }
+  return url;
+}
+
+function mcpConfigEnvSummary(
+  record: McpServerConfigRecord,
+  locale: Locale,
+): string | null {
+  const config = mcpConfigObject(record);
+  const env = config.env;
+  if (!env || typeof env !== "object" || Array.isArray(env)) {
+    return null;
+  }
+  const count = Object.keys(env).length;
+  if (count === 0) {
+    return null;
+  }
+  return locale === "zh"
+    ? `环境变量: ${count} 个 key（值已隐藏）`
+    : `Environment: ${count} keys (values hidden)`;
+}
+
+function mcpConfigDetailText(
+  record: McpServerConfigRecord,
+  locale: Locale,
+): string {
+  const config = mcpConfigObject(record);
+  const endpoint = mcpConfigEndpoint(record);
+  const args = Array.isArray(config.args)
+    ? config.args.filter((arg): arg is string => typeof arg === "string")
+    : [];
+  const environmentId =
+    typeof config.environment_id === "string" ? config.environment_id : "";
+
+  return [
+    locale === "zh"
+      ? "已写入 MCP 配置，等待运行态加载或当前线程使用。"
+      : "Saved in MCP config; waiting for runtime load or thread use.",
+    `Name: ${record.name}`,
+    `${locale === "zh" ? "状态" : "Status"}: ${
+      mcpConfigEnabled(record)
+        ? locale === "zh"
+          ? "启用"
+          : "enabled"
+        : locale === "zh"
+          ? "停用"
+          : "disabled"
+    }`,
+    endpoint ? `${locale === "zh" ? "入口" : "Endpoint"}: ${endpoint}` : null,
+    args.length > 0 ? `${locale === "zh" ? "参数" : "Args"}: ${args.join(" ")}` : null,
+    mcpConfigEnvSummary(record, locale),
+    environmentId ? `Environment: ${environmentId}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function mcpConfigSummaryText(
+  records: McpServerConfigRecord[],
+  locale: Locale,
+): string {
+  if (records.length === 0) {
+    return locale === "zh"
+      ? "暂无持久化 MCP 配置。"
+      : "No persisted MCP configs.";
+  }
+
+  return records
+    .map((record) => {
+      const endpoint = mcpConfigEndpoint(record);
+      return [
+        `- ${record.name}`,
+        `  ${locale === "zh" ? "状态" : "status"}: ${
+          mcpConfigEnabled(record)
+            ? locale === "zh"
+              ? "启用"
+              : "enabled"
+            : locale === "zh"
+              ? "停用"
+              : "disabled"
+        }`,
+        endpoint ? `  ${locale === "zh" ? "入口" : "endpoint"}: ${endpoint}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n");
+}
+
 function pluginDetailText(
   response: PluginReadResponse,
   locale: Locale,
@@ -4613,31 +4725,13 @@ export function App() {
         : (selectedThreadId ?? undefined);
 
       if (kind === "tools") {
-        let mcpResponse;
-        try {
-          mcpResponse = await clientRef.current?.listMcpServerStatus(
-            effectiveThreadId,
-            "full",
-          );
-        } catch (threadScopedError) {
-          if (
-            !(threadScopedError instanceof Error) ||
-            !threadScopedError.message.includes("thread not found")
-          ) {
-            throw threadScopedError;
-          }
-          mcpResponse = await clientRef.current?.listMcpServerStatus(
-            undefined,
-            "full",
-          );
-        }
-
-        const [skillsResponse, pluginsResponse, workspaceToolItems] = await Promise.all([
+        const [mcpInventory, skillsResponse, pluginsResponse, workspaceToolItems] = await Promise.all([
+          loadMcpInventory(effectiveThreadId, effectiveCwd),
           clientRef.current?.listSkills(effectiveCwd),
           clientRef.current?.listPlugins(effectiveCwd),
           readToolConfigFiles(),
         ]);
-        const servers = mcpResponse?.data ?? [];
+        const servers = mcpInventory.servers;
         const pluginEntries = (pluginsResponse?.marketplaces ?? []).flatMap(
           (marketplace) =>
             marketplace.plugins.map((plugin) => ({
@@ -4649,35 +4743,90 @@ export function App() {
         const skills = (skillsResponse?.data ?? []).flatMap((entry) =>
           entry.skills.map((skill) => skill),
         );
-        const mcpItems: LibraryItem[] = servers.map((server) => {
-          const tools = Object.values(server.tools).filter(
+        const mcpItems: LibraryItem[] = servers.map(({ config, status }) => {
+          if (!status) {
+            if (!config) {
+              return {
+                title: "MCP",
+                meta: locale === "zh" ? "未知配置" : "unknown config",
+              };
+            }
+            const endpoint = config ? mcpConfigEndpoint(config) : "";
+            return {
+              title: `MCP · ${config?.name ?? ""}`,
+              meta: mcpConfigEnabled(config)
+                ? locale === "zh"
+                  ? "已配置 · 等待加载"
+                  : "configured · waiting to load"
+                : locale === "zh"
+                  ? "已配置 · 停用"
+                  : "configured · disabled",
+              description:
+                endpoint ||
+                (locale === "zh"
+                  ? "已保存到 MCP 配置，但当前运行态未返回该服务器。"
+                  : "Saved in MCP config, but not present in the current runtime status."),
+              badge: {
+                label: locale === "zh" ? "配置" : "config",
+                tone: mcpConfigEnabled(config) ? "planning" : "warning",
+              },
+              action: config
+                ? {
+                    type: "mcp-detail",
+                    title: config.name,
+                    subtitle: config.name,
+                    configName: config.name,
+                    body: mcpConfigDetailText(config, locale),
+                  }
+                : undefined,
+            };
+          }
+
+          const tools = Object.values(status.tools).filter(
             (tool) => tool !== undefined,
           );
           const firstTool = tools[0];
           const toolCount = tools.length;
           const resourceCount =
-            server.resources.length + server.resourceTemplates.length;
+            status.resources.length + status.resourceTemplates.length;
           const serverTitle =
-            server.serverInfo?.title || server.serverInfo?.name || server.name;
+            status.serverInfo?.title || status.serverInfo?.name || status.name;
+          const configState = config
+            ? mcpConfigEnabled(config)
+              ? locale === "zh"
+                ? "已配置"
+                : "configured"
+              : locale === "zh"
+                ? "配置停用"
+                : "config disabled"
+            : null;
           return {
             title: `MCP · ${serverTitle}`,
-            meta: `${server.authStatus} · ${toolCount} ${locale === "zh" ? "工具" : "tools"} · ${resourceCount} ${
+            meta: `${status.authStatus} · ${toolCount} ${locale === "zh" ? "工具" : "tools"} · ${resourceCount} ${
               locale === "zh" ? "资源" : "resources"
-            }`,
+            }${configState ? ` · ${configState}` : ""}`,
             description:
-              server.serverInfo?.description ||
+              status.serverInfo?.description ||
               (locale === "zh"
-                ? `已分配给工程师和自动化使用：${Object.keys(server.tools).slice(0, 5).join(", ")}`
-                : `Assigned to engineers and automations: ${Object.keys(server.tools).slice(0, 5).join(", ")}`),
+                ? `已分配给工程师和自动化使用：${Object.keys(status.tools).slice(0, 5).join(", ")}`
+                : `Assigned to engineers and automations: ${Object.keys(status.tools).slice(0, 5).join(", ")}`),
             action: {
               type: "mcp-detail",
               title: serverTitle,
-              subtitle: server.name,
-              body: mcpServerDetailText(server, locale),
-              authStatus: server.authStatus,
+              subtitle: status.name,
+              body: [
+                mcpServerDetailText(status, locale),
+                config
+                  ? `\n${locale === "zh" ? "持久化配置" : "Persisted config"}\n${mcpConfigDetailText(config, locale)}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join("\n"),
+              authStatus: status.authStatus,
+              configName: config?.name,
               tool: firstTool
                 ? {
-                    server: server.name,
+                    server: status.name,
                     name: firstTool.name,
                     label: firstTool.title || firstTool.name,
                     inputSchema: JSON.stringify(
@@ -4688,14 +4837,14 @@ export function App() {
                   }
                 : undefined,
               resource:
-                server.resources.length > 0
+                status.resources.length > 0
                   ? {
-                      server: server.name,
-                      uri: server.resources[0].uri,
+                      server: status.name,
+                      uri: status.resources[0].uri,
                       label:
-                        server.resources[0].title ||
-                        server.resources[0].name ||
-                        server.resources[0].uri,
+                        status.resources[0].title ||
+                        status.resources[0].name ||
+                        status.resources[0].uri,
                     }
                   : undefined,
             },
@@ -4728,8 +4877,8 @@ export function App() {
           title,
           subtitle:
             locale === "zh"
-              ? `${servers.length} 个 MCP · ${skills.length} 个 Skill · ${workspaceToolItems.length} 个工作区配置`
-              : `${servers.length} MCP · ${skills.length} skills · ${workspaceToolItems.length} workspace configs`,
+              ? `${servers.length} 个 MCP · ${mcpInventory.configs.length} 个配置 · ${skills.length} 个 Skill`
+              : `${servers.length} MCP · ${mcpInventory.configs.length} configs · ${skills.length} skills`,
           body:
             locale === "zh"
               ? "工具库是智能体和办公室的能力市场。MCP 负责连接外部系统，Skill 负责沉淀可复用流程；新建后可以分配给某个智能体或办公室。"
@@ -4774,12 +4923,12 @@ export function App() {
               title: "MCP",
               meta:
                 locale === "zh"
-                  ? `${servers.length} 个服务器`
-                  : `${servers.length} servers`,
+                  ? `${servers.length} 个服务器 · ${mcpInventory.configs.length} 个配置`
+                  : `${servers.length} servers · ${mcpInventory.configs.length} configs`,
               description:
                 locale === "zh"
-                  ? "运行态连接：浏览器、GitHub、数据库、内部 API、文件系统。可被智能体按权限调用。"
-                  : "Runtime connectors: browser, GitHub, databases, internal APIs, and filesystems. Agents call them by permission.",
+                  ? "运行态连接与持久化配置合并展示；未加载或停用的 MCP 也会保留在这里。"
+                  : "Runtime connectors merged with persisted config; unloaded or disabled MCPs remain visible here.",
               section: true,
             },
             ...mcpItems,
@@ -5397,6 +5546,14 @@ export function App() {
           mcpServerName: tool.server,
           mcpToolName: tool.name,
           tone: action.authStatus === "notLoggedIn" ? undefined : "primary",
+        });
+      }
+      if (action.configName) {
+        actions.push({
+          id: "delete-mcp-config",
+          label: locale === "zh" ? "删除 MCP 配置" : "Delete MCP config",
+          mcpServerName: action.configName,
+          tone: "danger",
         });
       }
       if (action.configPath) {
@@ -6664,8 +6821,92 @@ export function App() {
               path: config.path ?? filePath,
               enabled: config.enabled ?? true,
               configPath: filePath,
-            },
+      },
     }));
+  }
+
+  async function loadMcpRuntimeStatus(
+    effectiveThreadId: string | undefined,
+  ): Promise<McpServerStatus[]> {
+    try {
+      return (
+        (
+          await clientRef.current?.listMcpServerStatus(
+            effectiveThreadId,
+            "full",
+          )
+        )?.data ?? []
+      );
+    } catch (threadScopedError) {
+      if (
+        !(threadScopedError instanceof Error) ||
+        !threadScopedError.message.includes("thread not found")
+      ) {
+        throw threadScopedError;
+      }
+      return (
+        (await clientRef.current?.listMcpServerStatus(undefined, "full"))
+          ?.data ?? []
+      );
+    }
+  }
+
+  async function loadMcpConfigRecords(
+    effectiveCwd: string | null | undefined,
+  ): Promise<McpServerConfigRecord[]> {
+    try {
+      return (
+        (
+          await clientRef.current?.listMcpServerConfigs({
+            cwd: effectiveCwd ?? null,
+            limit: 100,
+          })
+        )?.data ?? []
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  async function loadMcpInventory(
+    effectiveThreadId: string | undefined,
+    effectiveCwd: string | null | undefined,
+  ): Promise<{
+    configs: McpServerConfigRecord[];
+    servers: Array<{
+      config?: McpServerConfigRecord;
+      name: string;
+      status?: McpServerStatus;
+    }>;
+    statuses: McpServerStatus[];
+  }> {
+    const [statuses, configs] = await Promise.all([
+      loadMcpRuntimeStatus(effectiveThreadId),
+      loadMcpConfigRecords(effectiveCwd),
+    ]);
+    const byName = new Map<
+      string,
+      { config?: McpServerConfigRecord; name: string; status?: McpServerStatus }
+    >();
+    statuses.forEach((status) => {
+      byName.set(status.name, { name: status.name, status });
+    });
+    configs.forEach((config) => {
+      const existing = byName.get(config.name);
+      byName.set(config.name, {
+        name: config.name,
+        status: existing?.status,
+        config,
+      });
+    });
+
+    return {
+      statuses,
+      configs,
+      servers: [...byName.values()].sort((left, right) =>
+        left.name.localeCompare(right.name),
+      ),
+    };
   }
 
   async function readRecruitableAgentConfig(
@@ -8906,8 +9147,12 @@ export function App() {
                         : "Updating skill config..."
                       : action.id === "delete-config-file"
                         ? locale === "zh"
-                          ? "正在删除配置文件..."
-                          : "Deleting config file..."
+                      ? "正在删除配置文件..."
+                      : "Deleting config file..."
+                    : action.id === "delete-mcp-config"
+                      ? locale === "zh"
+                        ? "正在删除 MCP 配置..."
+                        : "Deleting MCP config..."
                         : locale === "zh"
                           ? "正在卸载插件..."
                           : "Uninstalling plugin...",
@@ -8963,6 +9208,33 @@ export function App() {
           tone: "success",
         });
         await openLibrary(libraryPanel?.kind ?? "agents");
+        return;
+      }
+
+      if (action.id === "delete-mcp-config") {
+        if (!action.mcpServerName) {
+          return;
+        }
+        const client = clientRef.current;
+        if (!client) {
+          throw new Error(
+            locale === "zh"
+              ? "未连接本地 app-server"
+              : "Local app-server is not connected",
+          );
+        }
+        await client.deleteMcpServerConfig({
+          name: action.mcpServerName,
+          reload: true,
+        });
+        setNotice({
+          text:
+            locale === "zh"
+              ? `已删除 MCP 配置：${action.mcpServerName}`
+              : `Deleted MCP config: ${action.mcpServerName}`,
+          tone: "success",
+        });
+        await openLibrary("tools");
         return;
       }
 
@@ -12134,42 +12406,49 @@ export function App() {
     });
 
     try {
-      let response;
-      try {
-        response = await clientRef.current?.listMcpServerStatus(
-          isDemoPreview ? undefined : (selectedThreadId ?? undefined),
-          "full",
-        );
-      } catch (threadScopedError) {
-        if (
-          !(threadScopedError instanceof Error) ||
-          !threadScopedError.message.includes("thread not found")
-        ) {
-          throw threadScopedError;
-        }
-        response = await clientRef.current?.listMcpServerStatus(
-          undefined,
-          "full",
-        );
-      }
-
-      const servers = response?.data ?? [];
+      const configCwd = await resolveBackendCwd();
+      const inventory = await loadMcpInventory(
+        isDemoPreview ? undefined : (selectedThreadId ?? undefined),
+        configCwd,
+      );
+      const servers = inventory.servers;
+      const runtimeServers = inventory.statuses;
+      const configOnlyCount = inventory.servers.filter(
+        (server) => server.config && !server.status,
+      ).length;
       const toolCount = servers.reduce(
-        (total, server) => total + Object.keys(server.tools).length,
+        (total, server) =>
+          total + (server.status ? Object.keys(server.status.tools).length : 0),
         0,
       );
       const resourceCount = servers.reduce(
         (total, server) =>
-          total + server.resources.length + server.resourceTemplates.length,
+          total +
+          (server.status
+            ? server.status.resources.length + server.status.resourceTemplates.length
+            : 0),
         0,
       );
       setCapabilityPanel({
         title: locale === "zh" ? "MCP 服务器" : "MCP servers",
         subtitle:
           locale === "zh"
-            ? `${servers.length} 服务器 · ${toolCount} 工具 · ${resourceCount} 资源`
-            : `${servers.length} servers · ${toolCount} tools · ${resourceCount} resources`,
-        body: mcpSettingsText(servers, locale),
+            ? `${servers.length} 服务器 · ${inventory.configs.length} 配置 · ${configOnlyCount} 未加载`
+            : `${servers.length} servers · ${inventory.configs.length} configs · ${configOnlyCount} unloaded`,
+        body: [
+          mcpSettingsText(runtimeServers, locale),
+          "",
+          locale === "zh"
+            ? `持久化配置 (${inventory.configs.length})`
+            : `Persisted config (${inventory.configs.length})`,
+          mcpConfigSummaryText(inventory.configs, locale),
+          "",
+          locale === "zh"
+            ? `运行态工具: ${toolCount} · 资源: ${resourceCount}`
+            : `Runtime tools: ${toolCount} · resources: ${resourceCount}`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
         actions: [
           {
             id: "refresh-mcp-settings",

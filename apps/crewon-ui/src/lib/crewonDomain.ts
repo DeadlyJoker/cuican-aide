@@ -39,6 +39,7 @@ export type LibraryPanelAction = {
     | "create-office"
     | "create-skill"
     | "delete-config-file"
+    | "delete-mcp-config"
     | "install-plugin"
     | "login-mcp-oauth"
     | "open-path"
@@ -324,6 +325,7 @@ export type LibraryItem = {
         subtitle: string;
         body: string;
         authStatus?: string;
+        configName?: string;
         resource?: {
           server: string;
           uri: string;
