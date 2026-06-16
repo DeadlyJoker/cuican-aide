@@ -5474,7 +5474,8 @@ export function App() {
       isDemo &&
       action.type !== "mcp-detail" &&
       action.type !== "office-detail" &&
-      action.type !== "agent-config"
+      action.type !== "agent-config" &&
+      action.type !== "automation-detail"
     ) {
       return;
     }
