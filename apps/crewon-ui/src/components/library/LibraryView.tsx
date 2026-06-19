@@ -7,7 +7,8 @@ import type {
   LibraryItem,
   LibraryPanel,
   LibraryPanelAction,
-} from "../../lib/crewonDomain";
+  OfficeRunActivity,
+} from "../../lib/domain/crewonDomain";
 import { GenericLibraryPage } from "./GenericLibraryPage";
 import { KnowledgeView } from "./KnowledgeView";
 
@@ -24,6 +25,8 @@ type LibraryViewProps = {
   onSaveAgentConfig: () => void;
   onApprovalDecision: (id: string, decision: "approved" | "denied") => void;
   onArtifact: (artifact: ArtifactItem) => void;
+  onOfficeRunCancel: (run: OfficeRunActivity) => void;
+  onOfficeRunRetry: (run: OfficeRunActivity) => void;
 };
 
 export function LibraryView({
@@ -39,6 +42,8 @@ export function LibraryView({
   onSaveAgentConfig,
   onApprovalDecision,
   onArtifact,
+  onOfficeRunCancel,
+  onOfficeRunRetry,
 }: LibraryViewProps) {
   if (panel.knowledge) {
     return (
@@ -81,6 +86,8 @@ export function LibraryView({
         onSendMessage={onSendOfficeMessage}
         onDecision={onApprovalDecision}
         onArtifact={onArtifact}
+        onRunCancel={onOfficeRunCancel}
+        onRunRetry={onOfficeRunRetry}
       />
     );
   }

@@ -21,9 +21,7 @@ import {
   settingsSidebarCopy,
   type SettingsIconKey,
   type SettingsSection,
-} from "../../lib/settingsCatalog";
-
-export type { SettingsSection } from "../../lib/settingsCatalog";
+} from "../../lib/settings/settingsCatalog";
 
 type SettingsNavigationProps = {
   activeSection: SettingsSection;

@@ -1,4 +1,4 @@
-import type { LibraryItem } from "../../lib/crewonDomain";
+import type { LibraryItem } from "../../lib/domain/crewonDomain";
 
 export function LibraryCard({
   item,

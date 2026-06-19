@@ -1,7 +1,7 @@
 import type {
   LibraryItem,
   LibraryPanelAction,
-} from "../../lib/crewonDomain";
+} from "../../lib/domain/crewonDomain";
 import type { Locale } from "../../lib/i18n";
 
 export function libraryLabel(locale: Locale, zh: string, en: string) {

@@ -1,13 +1,6 @@
-import {
-  ArrowUp,
-  Circle,
-  FolderOpen,
-  Paperclip,
-  RefreshCw,
-  Settings2,
-  Square,
-} from "lucide-react";
 import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
+import { ComposerContextBar } from "./ComposerContextBar";
+import { ComposerInputRow } from "./ComposerInputRow";
 
 type ComposerProps = {
   attachContextLabel: string;
@@ -121,60 +114,34 @@ export function Composer({
 
   return (
     <form className="composer" onSubmit={submit}>
-      <div className="composer-context">
-        <span className="composer-workspace-chip" title={cwd || noWorkspaceSelectedLabel}>
-          <FolderOpen size={14} />
-          {cwd || noWorkspaceSelectedLabel}
-        </span>
-        <div className="composer-context-actions">
-          <span className="composer-status-pill" data-tone={connectionTone} title={connectionStatusLabel}>
-            <Circle size={8} fill="currentColor" />
-            {connectionStatusLabel}
-          </span>
-          {connectionTone === "demo" ? (
-            <button className="composer-retry-button" type="button" title={retryConnectionLabel} onClick={onRetryConnection}>
-              <RefreshCw size={13} />
-              {retryConnectionLabel}
-            </button>
-          ) : null}
-          <button className="icon-button" type="button" aria-label={threadSettingsLabel} title={threadSettingsLabel} onClick={onThreadSettings}>
-            <Settings2 size={16} />
-          </button>
-        </div>
-      </div>
-      <div className="composer-input-row" data-state={composerState}>
-        <button className="icon-button" type="button" aria-label={attachContextLabel} title={attachContextLabel} disabled={disabled} onClick={onAttachContext}>
-          <Paperclip size={17} />
-        </button>
-        <textarea
-          ref={textareaRef}
-          value={value}
-          rows={2}
-          placeholder={placeholder}
-          disabled={disabled}
-          onKeyDown={handleKeyDown}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <button
-          className="send-button"
-          type={isRunning && !value.trim() ? "button" : "submit"}
-          aria-label={isRunning && !value.trim() ? stopLabel : sendLabel}
-          title={isRunning && !value.trim() ? stopLabel : `${sendLabel} (${sendShortcutLabel})`}
-          disabled={!isRunning && (disabled || !value.trim())}
-          onClick={isRunning && !value.trim() ? onStop : undefined}
-        >
-          {isRunning && !value.trim() ? <Square size={13} fill="currentColor" /> : <ArrowUp size={18} />}
-        </button>
-        <div className="composer-tool-row">
-          <span className={hasDraft ? "composer-draft-status" : disabled ? "composer-busy-status" : undefined}>
-            <span className="composer-state-dot" data-state={composerState} aria-hidden="true" />
-            <span className="composer-state-text">{statusText}</span>
-          </span>
-          <kbd className="composer-shortcut" title={`${sendLabel} (${sendShortcutLabel})`}>
-            {sendShortcutLabel}
-          </kbd>
-        </div>
-      </div>
+      <ComposerContextBar
+        connectionStatusLabel={connectionStatusLabel}
+        connectionTone={connectionTone}
+        cwd={cwd}
+        noWorkspaceSelectedLabel={noWorkspaceSelectedLabel}
+        retryConnectionLabel={retryConnectionLabel}
+        threadSettingsLabel={threadSettingsLabel}
+        onRetryConnection={onRetryConnection}
+        onThreadSettings={onThreadSettings}
+      />
+      <ComposerInputRow
+        attachContextLabel={attachContextLabel}
+        composerState={composerState}
+        disabled={disabled}
+        hasDraft={hasDraft}
+        isRunning={isRunning}
+        placeholder={placeholder}
+        sendLabel={sendLabel}
+        sendShortcutLabel={sendShortcutLabel}
+        statusText={statusText}
+        stopLabel={stopLabel}
+        textareaRef={textareaRef}
+        value={value}
+        onAttachContext={onAttachContext}
+        onChange={onChange}
+        onKeyDown={handleKeyDown}
+        onStop={onStop}
+      />
     </form>
   );
 }

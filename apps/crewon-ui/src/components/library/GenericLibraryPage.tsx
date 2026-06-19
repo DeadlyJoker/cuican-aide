@@ -3,7 +3,7 @@ import type {
   LibraryItem,
   LibraryPanel,
   LibraryPanelAction,
-} from "../../lib/crewonDomain";
+} from "../../lib/domain/crewonDomain";
 import { LibraryCard } from "./LibraryCard";
 import {
   LibraryActions,

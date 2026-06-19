@@ -1,4 +1,4 @@
-import type { CapabilityPanel } from "../CapabilityDock";
+import type { CapabilityPanel } from "../../lib/capability/capabilityPanelTypes";
 import type { Locale } from "../../lib/i18n";
 
 type SettingsContentProps = {
