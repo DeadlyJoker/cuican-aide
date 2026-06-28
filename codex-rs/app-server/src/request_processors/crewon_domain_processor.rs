@@ -29,6 +29,7 @@ use crewon_app_server_protocol::AutomationReadResponse;
 use crewon_app_server_protocol::AutomationRunParams;
 use crewon_app_server_protocol::AutomationRunRecord;
 use crewon_app_server_protocol::AutomationRunResponse;
+use crewon_app_server_protocol::AutomationRunStartParams;
 use crewon_app_server_protocol::AutomationRunUpdateParams;
 use crewon_app_server_protocol::AutomationRunUpdateResponse;
 use crewon_app_server_protocol::AutomationRunsListParams;
@@ -48,18 +49,37 @@ use crewon_app_server_protocol::OfficeArtifactUpsertParams;
 use crewon_app_server_protocol::OfficeArtifactUpsertResponse;
 use crewon_app_server_protocol::OfficeCreateParams;
 use crewon_app_server_protocol::OfficeCreateResponse;
+use crewon_app_server_protocol::OfficeDelegationCancelParams;
+use crewon_app_server_protocol::OfficeDelegationDispatchNextParams;
+use crewon_app_server_protocol::OfficeDelegationDispatchParams;
+use crewon_app_server_protocol::OfficeDelegationRetryParams;
 use crewon_app_server_protocol::OfficeDeleteParams;
 use crewon_app_server_protocol::OfficeDeleteResponse;
 use crewon_app_server_protocol::OfficeListParams;
 use crewon_app_server_protocol::OfficeListResponse;
 use crewon_app_server_protocol::OfficeMemberAddParams;
 use crewon_app_server_protocol::OfficeMemberAddResponse;
+use crewon_app_server_protocol::OfficeMemberContextPreviewParams;
+use crewon_app_server_protocol::OfficeMemberContextPreviewResponse;
+use crewon_app_server_protocol::OfficeMemoryDecideParams;
+use crewon_app_server_protocol::OfficeMemoryDecideResponse;
+use crewon_app_server_protocol::OfficeMemoryListParams;
+use crewon_app_server_protocol::OfficeMemoryListResponse;
 use crewon_app_server_protocol::OfficeMessageSendParams;
 use crewon_app_server_protocol::OfficeMessageSendResponse;
 use crewon_app_server_protocol::OfficeReadParams;
 use crewon_app_server_protocol::OfficeReadResponse;
+use crewon_app_server_protocol::OfficeRunCancelParams;
+use crewon_app_server_protocol::OfficeRunParams;
+use crewon_app_server_protocol::OfficeRunRetryParams;
+use crewon_app_server_protocol::OfficeRunSyncParams;
+use crewon_app_server_protocol::OfficeRunUpdatedNotification;
 use crewon_app_server_protocol::OfficeSaveParams;
 use crewon_app_server_protocol::OfficeSaveResponse;
+use crewon_app_server_protocol::OfficeVerificationCancelParams;
+use crewon_app_server_protocol::OfficeVerificationDispatchNextParams;
+use crewon_app_server_protocol::OfficeVerificationRetryParams;
+use crewon_app_server_protocol::ServerNotification;
 use crewon_app_server_protocol::ToolConfigKind;
 use crewon_app_server_protocol::ToolDeleteParams;
 use crewon_app_server_protocol::ToolDeleteResponse;
@@ -71,12 +91,17 @@ use crewon_app_server_protocol::ToolSaveParams;
 use crewon_app_server_protocol::ToolSaveResponse;
 use crewon_app_server_protocol::ToolUpdateParams;
 use crewon_app_server_protocol::ToolUpdateResponse;
+use crewon_app_server_protocol::Turn;
+use crewon_app_server_protocol::TurnStatus;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
+use sha2::Digest as _;
+use sha2::Sha256;
 use std::cmp::Reverse;
 use std::collections::HashSet;
 use tokio::fs;
+use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
 use crate::error_code::internal_error;
@@ -84,7 +109,51 @@ use crate::error_code::invalid_params;
 
 const MAX_CONFIG_RECORDS: usize = 24;
 const MAX_LIST_LIMIT: usize = 100;
+const MAX_OFFICE_ARTIFACT_FINGERPRINTS: usize = 64;
+const MAX_OFFICE_ARTIFACT_FINGERPRINT_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_OFFICE_ARTIFACT_CONTENT_ERROR_CHARS: usize = 240;
+const OFFICE_ARTIFACT_FINGERPRINT_CHUNK_BYTES: usize = 64 * 1024;
+const OFFICE_ARTIFACT_CONTENT_SOURCE_FILE: &str = "file";
+const OFFICE_ARTIFACT_CONTENT_SOURCE_INLINE: &str = "inline";
+const OFFICE_ARTIFACT_CONTENT_STATUS_FINGERPRINTED: &str = "fingerprinted";
+const OFFICE_ARTIFACT_CONTENT_STATUS_MISSING: &str = "missing";
+const OFFICE_ARTIFACT_CONTENT_STATUS_NOT_FILE: &str = "notFile";
+const OFFICE_ARTIFACT_CONTENT_STATUS_OUTSIDE_WORKSPACE: &str = "outsideWorkspace";
+const OFFICE_ARTIFACT_CONTENT_STATUS_TOO_LARGE: &str = "tooLarge";
+const OFFICE_ARTIFACT_CONTENT_STATUS_UNREADABLE: &str = "unreadable";
 const AUTOMATION_RUNS_DIRECTORY: &str = "automation-runs";
+
+#[path = "crewon_domain_office_agent_profile.rs"]
+mod office_agent_profile;
+#[path = "crewon_domain_office_run.rs"]
+mod office_run;
+
+pub(crate) struct OfficeAutoDispatchIntentDispatched<'a> {
+    pub(crate) run_id: &'a str,
+    pub(crate) dispatch_kind: &'a str,
+    pub(crate) delegation_id: Option<&'a str>,
+    pub(crate) verification_check_id: Option<&'a str>,
+    pub(crate) file_path: &'a str,
+    pub(crate) dispatched_thread_id: &'a str,
+    pub(crate) dispatched_turn_id: &'a str,
+}
+
+pub(crate) struct OfficeVerificationDispatchStarted<'a> {
+    pub(crate) run_id: &'a str,
+    pub(crate) verification_check_id: &'a str,
+    pub(crate) automation_run_file_path: &'a str,
+    pub(crate) automation_run_id: &'a str,
+    pub(crate) automation_thread_id: &'a str,
+    pub(crate) automation_turn_id: &'a str,
+    pub(crate) runtime_repair_source_thread_id: Option<&'a str>,
+    pub(crate) runtime_repaired_at: Option<&'a str>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct OfficeRunSyncUpdate {
+    pub(crate) file_path: String,
+    pub(crate) config: JsonValue,
+}
 
 #[derive(Clone, Copy)]
 enum DomainKind {
@@ -307,11 +376,371 @@ impl CrewonDomainRequestProcessor {
             .map(|file_path| OfficeMessageSendResponse { file_path, config })
     }
 
+    pub(crate) async fn office_run_prepare(
+        &self,
+        params: OfficeRunParams,
+    ) -> Result<office_run::PreparedOfficeRun, JSONRPCErrorError> {
+        office_run::prepare(params).await
+    }
+
+    pub(crate) async fn office_run_retry_prepare(
+        &self,
+        params: OfficeRunRetryParams,
+    ) -> Result<office_run::PreparedOfficeRun, JSONRPCErrorError> {
+        office_run::prepare_retry(params).await
+    }
+
+    pub(crate) async fn office_run_cancel_prepare(
+        &self,
+        params: OfficeRunCancelParams,
+    ) -> Result<office_run::PreparedOfficeRunCancel, JSONRPCErrorError> {
+        office_run::prepare_cancel(params).await
+    }
+
+    pub(crate) async fn office_run_mark_cancel_requested(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        turn_id: &str,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        office_run::mark_cancel_requested(cwd, config, run_id, turn_id).await
+    }
+
+    pub(crate) async fn office_delegation_cancel_prepare(
+        &self,
+        params: OfficeDelegationCancelParams,
+    ) -> Result<office_run::PreparedOfficeChildCancel, JSONRPCErrorError> {
+        office_run::prepare_delegation_cancel(params).await
+    }
+
+    pub(crate) async fn office_delegation_mark_cancel_requested(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        delegation_id: &str,
+        turn_id: &str,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        office_run::mark_delegation_cancel_requested(cwd, config, run_id, delegation_id, turn_id)
+            .await
+    }
+
+    pub(crate) async fn office_verification_cancel_prepare(
+        &self,
+        params: OfficeVerificationCancelParams,
+    ) -> Result<office_run::PreparedOfficeChildCancel, JSONRPCErrorError> {
+        office_run::prepare_verification_cancel(params).await
+    }
+
+    pub(crate) async fn office_verification_mark_cancel_requested(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        verification_check_id: &str,
+        turn_id: &str,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        office_run::mark_verification_cancel_requested(
+            cwd,
+            config,
+            run_id,
+            verification_check_id,
+            turn_id,
+        )
+        .await
+    }
+
+    pub(crate) async fn office_run_mark_started(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        turn_id: &str,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        office_run::mark_started(cwd, config, run_id, turn_id).await
+    }
+
+    pub(crate) async fn office_run_mark_failed(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        message: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        office_run::mark_failed(cwd, config, run_id, message).await
+    }
+
+    pub(crate) async fn office_run_sync(
+        &self,
+        params: OfficeRunSyncParams,
+    ) -> Result<office_run::SyncedOfficeRun, JSONRPCErrorError> {
+        office_run::sync(params).await
+    }
+
+    pub(crate) async fn office_memory_list(
+        &self,
+        params: OfficeMemoryListParams,
+    ) -> Result<OfficeMemoryListResponse, JSONRPCErrorError> {
+        office_run::list_memories(params).await
+    }
+
+    pub(crate) async fn office_memory_decide(
+        &self,
+        params: OfficeMemoryDecideParams,
+    ) -> Result<OfficeMemoryDecideResponse, JSONRPCErrorError> {
+        office_run::decide_memory(params).await
+    }
+
+    pub(crate) async fn office_member_context_preview(
+        &self,
+        params: OfficeMemberContextPreviewParams,
+    ) -> Result<OfficeMemberContextPreviewResponse, JSONRPCErrorError> {
+        office_run::preview_member_context(params).await
+    }
+
+    pub(crate) async fn office_delegation_dispatch_prepare(
+        &self,
+        params: OfficeDelegationDispatchParams,
+    ) -> Result<office_run::PreparedOfficeDelegationDispatch, JSONRPCErrorError> {
+        office_run::prepare_delegation_dispatch(params).await
+    }
+
+    pub(crate) async fn office_delegation_dispatch_next_prepare(
+        &self,
+        params: OfficeDelegationDispatchNextParams,
+    ) -> Result<office_run::PreparedOfficeDelegationDispatch, JSONRPCErrorError> {
+        office_run::prepare_next_delegation_dispatch(params).await
+    }
+
+    pub(crate) async fn office_delegation_retry_prepare(
+        &self,
+        params: OfficeDelegationRetryParams,
+    ) -> Result<office_run::PreparedOfficeDelegationDispatch, JSONRPCErrorError> {
+        office_run::prepare_delegation_retry(params).await
+    }
+
+    pub(crate) async fn office_verification_dispatch_next_prepare(
+        &self,
+        params: OfficeVerificationDispatchNextParams,
+    ) -> Result<office_run::PreparedOfficeVerificationDispatch, JSONRPCErrorError> {
+        office_run::prepare_next_verification_dispatch(params).await
+    }
+
+    pub(crate) async fn office_verification_retry_prepare(
+        &self,
+        params: OfficeVerificationRetryParams,
+    ) -> Result<office_run::PreparedOfficeVerificationDispatch, JSONRPCErrorError> {
+        office_run::prepare_verification_retry(params).await
+    }
+
+    pub(crate) async fn office_auto_delegation_dispatch_prepare_after_thread_turn(
+        &self,
+        cwd: &str,
+        thread_id: &str,
+        turn: &Turn,
+    ) -> Result<Option<office_run::PreparedOfficeDelegationDispatch>, JSONRPCErrorError> {
+        office_run::prepare_auto_delegation_dispatch_after_thread_turn(cwd, thread_id, turn).await
+    }
+
+    pub(crate) async fn office_auto_verification_dispatch_prepare_after_thread_turn(
+        &self,
+        cwd: &str,
+        thread_id: &str,
+        turn: &Turn,
+    ) -> Result<Option<office_run::PreparedOfficeVerificationDispatch>, JSONRPCErrorError> {
+        office_run::prepare_auto_verification_dispatch_after_thread_turn(cwd, thread_id, turn).await
+    }
+
+    pub(crate) async fn office_auto_retry_prepare_after_thread_turn(
+        &self,
+        cwd: &str,
+        thread_id: &str,
+        turn: &Turn,
+    ) -> Result<Option<office_run::PreparedOfficeRun>, JSONRPCErrorError> {
+        office_run::prepare_auto_retry_after_thread_turn(cwd, thread_id, turn).await
+    }
+
+    pub(crate) async fn office_auto_verification_automation_records_after_thread_turn(
+        &self,
+        cwd: &str,
+        thread_id: &str,
+        turn: &Turn,
+    ) -> Result<Vec<CrewonDomainConfigRecord>, JSONRPCErrorError> {
+        office_run::auto_verification_automation_records_after_thread_turn(cwd, thread_id, turn)
+            .await
+    }
+
+    pub(crate) async fn office_auto_dispatch_intent_queue(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        source_turn_id: &str,
+        reason: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        office_run::queue_auto_dispatch_intent(cwd, source_thread_id, source_turn_id, reason).await
+    }
+
+    pub(crate) async fn office_auto_dispatch_pending_intents(
+        &self,
+        cwd: &str,
+    ) -> Result<Vec<(String, String)>, JSONRPCErrorError> {
+        Ok(office_run::pending_auto_dispatch_intents(cwd)
+            .await?
+            .into_iter()
+            .map(|intent| (intent.source_thread_id, intent.source_turn_id))
+            .collect())
+    }
+
+    pub(crate) async fn office_auto_dispatch_intent_claim(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        source_turn_id: &str,
+        lease_id: &str,
+    ) -> Result<bool, JSONRPCErrorError> {
+        office_run::claim_auto_dispatch_intent(cwd, source_thread_id, source_turn_id, lease_id)
+            .await
+    }
+
+    pub(crate) async fn office_auto_dispatch_intent_dispatched(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        source_turn_id: &str,
+        dispatched: OfficeAutoDispatchIntentDispatched<'_>,
+    ) -> Result<(), JSONRPCErrorError> {
+        office_run::mark_auto_dispatch_intent_dispatched(
+            cwd,
+            source_thread_id,
+            source_turn_id,
+            office_run::AutoDispatchIntentDispatched {
+                run_id: dispatched.run_id,
+                dispatch_kind: dispatched.dispatch_kind,
+                delegation_id: dispatched.delegation_id,
+                verification_check_id: dispatched.verification_check_id,
+                file_path: dispatched.file_path,
+                dispatched_thread_id: dispatched.dispatched_thread_id,
+                dispatched_turn_id: dispatched.dispatched_turn_id,
+            },
+        )
+        .await
+    }
+
+    pub(crate) async fn office_auto_dispatch_intent_failed(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        source_turn_id: &str,
+        message: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        office_run::mark_auto_dispatch_intent_failed(cwd, source_thread_id, source_turn_id, message)
+            .await
+    }
+
+    pub(crate) async fn office_auto_dispatch_intent_clear(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        source_turn_id: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        office_run::clear_auto_dispatch_intent(cwd, source_thread_id, source_turn_id).await
+    }
+
+    pub(crate) async fn office_delegation_dispatch_mark_started(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        delegation_id: &str,
+        turn_id: &str,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        office_run::mark_delegation_started(cwd, config, run_id, delegation_id, turn_id).await
+    }
+
+    pub(crate) async fn office_delegation_dispatch_mark_failed(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        delegation_id: &str,
+        message: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        office_run::mark_delegation_failed(cwd, config, run_id, delegation_id, message).await
+    }
+
+    pub(crate) async fn office_verification_dispatch_mark_started(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        started: OfficeVerificationDispatchStarted<'_>,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        office_run::mark_verification_dispatch_started(
+            cwd,
+            config,
+            office_run::StartedOfficeVerificationDispatch {
+                run_id: started.run_id,
+                verification_check_id: started.verification_check_id,
+                automation_run_file_path: started.automation_run_file_path,
+                automation_run_id: started.automation_run_id,
+                automation_thread_id: started.automation_thread_id,
+                automation_turn_id: started.automation_turn_id,
+                runtime_repair_source_thread_id: started.runtime_repair_source_thread_id,
+                runtime_repaired_at: started.runtime_repaired_at,
+            },
+        )
+        .await
+    }
+
+    pub(crate) async fn office_verification_dispatch_mark_failed(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        verification_check_id: &str,
+        message: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        office_run::mark_verification_dispatch_failed(
+            cwd,
+            config,
+            run_id,
+            verification_check_id,
+            message,
+        )
+        .await
+    }
+
+    pub(crate) async fn office_verification_dispatch_mark_retryable_start_failure(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        verification_check_id: &str,
+        message: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        office_run::mark_verification_dispatch_retryable_start_failure(
+            cwd,
+            config,
+            run_id,
+            verification_check_id,
+            message,
+        )
+        .await
+    }
+
     pub(crate) async fn office_member_add(
         &self,
         params: OfficeMemberAddParams,
     ) -> Result<OfficeMemberAddResponse, JSONRPCErrorError> {
-        let config = append_office_member(params.config, &params.agent_id, params.member)?;
+        let agent_record =
+            read_agent_record(&params.cwd, Some(&params.agent_id), None, None).await?;
+        let mut config = append_office_member(
+            params.config,
+            &params.agent_id,
+            params.member,
+            agent_record.as_ref().map(|record| &record.config),
+        )?;
+        resolve_office_member_runtimes(&params.cwd, &mut config).await?;
         save_record(DomainKind::Office, &params.cwd, config.clone())
             .await
             .map(|file_path| OfficeMemberAddResponse { file_path, config })
@@ -336,7 +765,8 @@ impl CrewonDomainRequestProcessor {
         &self,
         params: OfficeArtifactUpsertParams,
     ) -> Result<OfficeArtifactUpsertResponse, JSONRPCErrorError> {
-        let config = upsert_office_artifact(params.config, params.artifact, params.message)?;
+        let mut config = upsert_office_artifact(params.config, params.artifact, params.message)?;
+        apply_office_artifact_file_fingerprints(&params.cwd, &mut config).await?;
         save_record(DomainKind::Office, &params.cwd, config.clone())
             .await
             .map(|file_path| OfficeArtifactUpsertResponse { file_path, config })
@@ -414,11 +844,40 @@ impl CrewonDomainRequestProcessor {
         .map(|file_path| AutomationUpdateResponse { file_path, config })
     }
 
+    pub(crate) async fn automation_read_by_identifier(
+        &self,
+        cwd: &str,
+        automation_id: &str,
+    ) -> Result<Option<CrewonDomainConfigRecord>, JSONRPCErrorError> {
+        office_run::read_automation_record_by_identifier(cwd, automation_id).await
+    }
+
     pub(crate) async fn automation_run(
         &self,
         params: AutomationRunParams,
     ) -> Result<AutomationRunResponse, JSONRPCErrorError> {
         create_automation_run(&params.cwd, params.config, params.note, params.turn_id).await
+    }
+
+    pub(crate) async fn automation_run_start_prepare(
+        &self,
+        params: AutomationRunStartParams,
+    ) -> Result<PreparedAutomationRunStart, JSONRPCErrorError> {
+        prepare_automation_run_start(params)
+    }
+
+    pub(crate) async fn automation_run_start_record(
+        &self,
+        prepared: &PreparedAutomationRunStart,
+        turn_id: &str,
+    ) -> Result<AutomationRunResponse, JSONRPCErrorError> {
+        create_automation_run(
+            &prepared.cwd,
+            prepared.config.clone(),
+            prepared.note.clone(),
+            Some(turn_id.to_string()),
+        )
+        .await
     }
 
     pub(crate) async fn automation_run_update(
@@ -526,6 +985,51 @@ struct PersistedAutomationRunRecord {
     version: u32,
     saved_at: Option<i64>,
     run: AutomationRunRecord,
+}
+
+#[derive(Debug)]
+pub(crate) struct PreparedAutomationRunStart {
+    pub(crate) cwd: String,
+    pub(crate) config: JsonValue,
+    pub(crate) thread_id: String,
+    pub(crate) prompt: String,
+    pub(crate) note: Option<String>,
+    pub(crate) client_user_message_id: Option<String>,
+}
+
+#[cfg(test)]
+pub(crate) async fn sync_office_runs_for_thread_turn(
+    cwd: &str,
+    thread_id: &str,
+    turn: &Turn,
+) -> Result<usize, JSONRPCErrorError> {
+    office_run::sync_thread_turn(cwd, thread_id, turn).await
+}
+
+pub(crate) async fn sync_office_run_updates_for_thread_turn(
+    cwd: &str,
+    thread_id: &str,
+    turn: &Turn,
+) -> Result<Vec<OfficeRunSyncUpdate>, JSONRPCErrorError> {
+    office_run::sync_thread_turn_updates(cwd, thread_id, turn).await
+}
+
+pub(crate) fn office_run_updated_notification(
+    cwd: &str,
+    file_path: &str,
+    config: &JsonValue,
+    reason: &str,
+    source_thread_id: Option<&str>,
+    source_turn_id: Option<&str>,
+) -> ServerNotification {
+    ServerNotification::OfficeRunUpdated(OfficeRunUpdatedNotification {
+        cwd: cwd.to_string(),
+        file_path: file_path.to_string(),
+        config: config.clone(),
+        reason: reason.to_string(),
+        source_thread_id: source_thread_id.map(str::to_string),
+        source_turn_id: source_turn_id.map(str::to_string),
+    })
 }
 
 async fn list_records(
@@ -815,6 +1319,94 @@ async fn create_automation_run(
     })
 }
 
+fn prepare_automation_run_start(
+    params: AutomationRunStartParams,
+) -> Result<PreparedAutomationRunStart, JSONRPCErrorError> {
+    let AutomationRunStartParams {
+        cwd,
+        config,
+        note,
+        locale,
+        client_user_message_id,
+    } = params;
+    if !DomainKind::Automation.config_matches(&config) {
+        return Err(invalid_params(
+            "automation config is missing required fields",
+        ));
+    }
+    let thread_id = config
+        .get("threadId")
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|thread_id| !thread_id.is_empty())
+        .ok_or_else(|| invalid_params("automation config has no threadId to start"))?
+        .to_string();
+    let prompt = build_automation_run_start_prompt(&config, note.as_deref(), locale.as_deref());
+    Ok(PreparedAutomationRunStart {
+        cwd,
+        config,
+        thread_id,
+        prompt,
+        note,
+        client_user_message_id,
+    })
+}
+
+fn build_automation_run_start_prompt(
+    config: &JsonValue,
+    note: Option<&str>,
+    locale: Option<&str>,
+) -> String {
+    let is_zh = locale != Some("en");
+    let title = config
+        .get("title")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("Automation");
+    let prompt = config
+        .get("prompt")
+        .and_then(JsonValue::as_str)
+        .filter(|prompt| !prompt.trim().is_empty())
+        .unwrap_or({
+            if is_zh {
+                "运行自动化，记录结果、下一步和风险。"
+            } else {
+                "Run the automation. Record results, next steps, and risks."
+            }
+        });
+    let thread_id = config
+        .get("threadId")
+        .and_then(JsonValue::as_str)
+        .unwrap_or_default();
+    let mut parts = vec![
+        prompt.to_string(),
+        if is_zh {
+            format!("自动化：{title}")
+        } else {
+            format!("Automation: {title}")
+        },
+        if is_zh {
+            format!("执行线程：{thread_id}")
+        } else {
+            format!("Execution thread: {thread_id}")
+        },
+        if is_zh {
+            "执行要求：遵守当前线程权限、审批和沙箱策略；完成后总结结果、证据、下一步和风险。"
+                .to_string()
+        } else {
+            "Execution contract: follow this thread's permission, approval, and sandbox policy; finish with results, evidence, next steps, and risks."
+                .to_string()
+        },
+    ];
+    if let Some(note) = note.map(str::trim).filter(|note| !note.is_empty()) {
+        parts.push(if is_zh {
+            format!("运行备注：{note}")
+        } else {
+            format!("Run note: {note}")
+        });
+    }
+    parts.join("\n\n")
+}
+
 fn create_automation_config(
     params: AutomationCreateParams,
 ) -> Result<JsonValue, JSONRPCErrorError> {
@@ -973,6 +1565,68 @@ async fn update_automation_run(
         file_path: file_path.to_string_lossy().into_owned(),
         run,
     })
+}
+
+pub(crate) async fn sync_automation_runs_for_thread_turn(
+    cwd: &str,
+    thread_id: &str,
+    turn: &Turn,
+) -> Result<usize, JSONRPCErrorError> {
+    if !automation_turn_status_is_terminal(&turn.status) {
+        return Ok(0);
+    }
+    let directory = automation_runs_directory(cwd)?;
+    let mut entries = match fs::read_dir(&directory).await {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(err) => {
+            return Err(internal_error(format!(
+                "failed to read {}: {err}",
+                directory.display()
+            )));
+        }
+    };
+    let mut synced = 0;
+    while let Some(entry) = entries.next_entry().await.map_err(map_io_error)? {
+        let path = entry.path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
+            continue;
+        }
+        let Some(mut record) = read_persisted_automation_run_record(&path).await? else {
+            continue;
+        };
+        if record.run.thread_id.as_deref() != Some(thread_id)
+            || record.run.turn_id.as_deref() != Some(turn.id.as_str())
+            || automation_run_status_is_terminal(&record.run.status)
+        {
+            continue;
+        }
+        record.run.status = automation_status_from_turn_status(&turn.status).to_string();
+        record.run.completed_at = Some(turn.completed_at.unwrap_or_else(|| Utc::now().timestamp()));
+        write_automation_run_record(&path, &record).await?;
+        synced += 1;
+    }
+    Ok(synced)
+}
+
+fn automation_turn_status_is_terminal(status: &TurnStatus) -> bool {
+    matches!(
+        status,
+        TurnStatus::Completed | TurnStatus::Failed | TurnStatus::Interrupted
+    )
+}
+
+fn automation_run_status_is_terminal(status: &str) -> bool {
+    matches!(status, "completed" | "failed" | "interrupted")
+}
+
+fn automation_status_from_turn_status(status: &TurnStatus) -> &'static str {
+    match status {
+        TurnStatus::Completed => "completed",
+        TurnStatus::Failed => "failed",
+        TurnStatus::Interrupted => "interrupted",
+        TurnStatus::InProgress => "running",
+    }
 }
 
 async fn list_automation_runs(
@@ -1344,6 +1998,7 @@ fn append_office_member(
     mut config: JsonValue,
     agent_id: &str,
     mut member: JsonValue,
+    agent_config: Option<&JsonValue>,
 ) -> Result<JsonValue, JSONRPCErrorError> {
     if agent_id.trim().is_empty() {
         return Err(invalid_params("agentId must not be empty"));
@@ -1358,6 +2013,9 @@ fn append_office_member(
         "agentId".to_string(),
         JsonValue::String(agent_id.trim().to_string()),
     );
+    if let Some(agent_config) = agent_config {
+        merge_office_member_runtime(member_object, agent_config);
+    }
 
     let Some(workspace) = config
         .get_mut("workspace")
@@ -1375,6 +2033,110 @@ fn append_office_member(
         .retain(|existing| existing.get("agentId").and_then(JsonValue::as_str) != Some(agent_id));
     members.push(member);
     Ok(config)
+}
+
+async fn resolve_office_member_runtimes(
+    cwd: &str,
+    config: &mut JsonValue,
+) -> Result<(), JSONRPCErrorError> {
+    if !DomainKind::Office.config_matches(config) {
+        return Err(invalid_params("office config is missing required fields"));
+    }
+    let Some(member_values) = config
+        .get("workspace")
+        .and_then(|workspace| workspace.get("members"))
+        .and_then(JsonValue::as_array)
+    else {
+        return Ok(());
+    };
+    let mut agent_ids = Vec::new();
+    for agent_id in member_values
+        .iter()
+        .filter_map(|member| member.get("agentId").and_then(JsonValue::as_str))
+        .map(str::trim)
+        .filter(|agent_id| !agent_id.is_empty())
+    {
+        if !agent_ids.iter().any(|existing| existing == agent_id) {
+            agent_ids.push(agent_id.to_string());
+        }
+    }
+    if agent_ids.is_empty() {
+        return Ok(());
+    }
+
+    let (agent_records, _) =
+        list_records(DomainKind::Agent, cwd, None, Some(MAX_LIST_LIMIT as u32)).await?;
+    if agent_records.is_empty() {
+        return Ok(());
+    }
+
+    let Some(members) = config
+        .get_mut("workspace")
+        .and_then(|workspace| workspace.get_mut("members"))
+        .and_then(JsonValue::as_array_mut)
+    else {
+        return Ok(());
+    };
+    for member in members {
+        let Some(agent_id) = member
+            .get("agentId")
+            .and_then(JsonValue::as_str)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let Some(agent_record) = agent_records.iter().find(|record| {
+            record.config.get("agentId").and_then(JsonValue::as_str) == Some(agent_id.as_str())
+        }) else {
+            continue;
+        };
+        if let Some(member_object) = member.as_object_mut() {
+            merge_office_member_runtime(member_object, &agent_record.config);
+        }
+    }
+    Ok(())
+}
+
+fn merge_office_member_runtime(
+    member_object: &mut serde_json::Map<String, JsonValue>,
+    agent_config: &JsonValue,
+) {
+    let fallback_thread_id = member_object
+        .get("threadId")
+        .and_then(JsonValue::as_str)
+        .or_else(|| agent_config.get("threadId").and_then(JsonValue::as_str))
+        .map(str::trim)
+        .filter(|thread_id| !thread_id.is_empty())
+        .map(str::to_string);
+    let runtime = member_object
+        .entry("runtime".to_string())
+        .or_insert_with(|| JsonValue::Object(serde_json::Map::new()));
+    if !runtime.is_object() {
+        *runtime = JsonValue::Object(serde_json::Map::new());
+    }
+    let Some(runtime_object) = runtime.as_object_mut() else {
+        return;
+    };
+    if !runtime_object.contains_key("threadId")
+        && let Some(thread_id) = fallback_thread_id
+    {
+        runtime_object.insert("threadId".to_string(), JsonValue::String(thread_id));
+    }
+    runtime_object
+        .entry("contextPolicy".to_string())
+        .or_insert_with(|| JsonValue::String("sharedDigest".to_string()));
+    runtime_object
+        .entry("memoryScope".to_string())
+        .or_insert_with(|| JsonValue::String("privateAndShared".to_string()));
+    let has_agent_profile = runtime_object
+        .get("agentProfile")
+        .and_then(JsonValue::as_str)
+        .is_some_and(|profile| !profile.trim().is_empty());
+    if !has_agent_profile
+        && let Some(agent_profile) = office_agent_profile::agent_profile_summary(agent_config)
+    {
+        runtime_object.insert("agentProfile".to_string(), JsonValue::String(agent_profile));
+    }
 }
 
 fn decide_office_approval(
@@ -1452,7 +2214,7 @@ fn decide_office_approval(
 
 fn upsert_office_artifact(
     mut config: JsonValue,
-    artifact: JsonValue,
+    mut artifact: JsonValue,
     message: Option<JsonValue>,
 ) -> Result<JsonValue, JSONRPCErrorError> {
     if !DomainKind::Office.config_matches(&config) {
@@ -1461,12 +2223,17 @@ fn upsert_office_artifact(
     if !artifact.is_object() {
         return Err(invalid_params("artifact must be an object"));
     }
-    let Some(artifact_title) = artifact.get("title").and_then(JsonValue::as_str) else {
+    let Some(artifact_title) = artifact
+        .get("title")
+        .and_then(JsonValue::as_str)
+        .map(str::to_string)
+    else {
         return Err(invalid_params("artifact.title is required"));
     };
     if artifact_title.trim().is_empty() {
         return Err(invalid_params("artifact.title must not be empty"));
     }
+    apply_artifact_content_fingerprint(&mut artifact)?;
 
     let Some(workspace) = config
         .get_mut("workspace")
@@ -1489,7 +2256,7 @@ fn upsert_office_artifact(
         ));
     };
     artifacts.retain(|existing| {
-        existing.get("title").and_then(JsonValue::as_str) != Some(artifact_title)
+        existing.get("title").and_then(JsonValue::as_str) != Some(artifact_title.as_str())
     });
     artifacts.insert(0, artifact);
 
@@ -1507,6 +2274,251 @@ fn upsert_office_artifact(
     }
 
     Ok(config)
+}
+
+fn apply_artifact_content_fingerprint(artifact: &mut JsonValue) -> Result<(), JSONRPCErrorError> {
+    for key in ["content", "body", "text"] {
+        if artifact.get(key).is_some_and(|value| !value.is_string()) {
+            return Err(invalid_params(
+                "artifact inline content fields must be strings",
+            ));
+        }
+    }
+
+    let Some((content_sha256, content_bytes)) = ["content", "body", "text"]
+        .into_iter()
+        .find_map(|key| artifact.get(key).and_then(JsonValue::as_str))
+        .map(|content| {
+            let bytes = content.as_bytes();
+            (sha256_hex(bytes), bytes.len())
+        })
+    else {
+        return Ok(());
+    };
+    set_artifact_content_observation(
+        artifact,
+        OFFICE_ARTIFACT_CONTENT_SOURCE_INLINE,
+        OFFICE_ARTIFACT_CONTENT_STATUS_FINGERPRINTED,
+        Some(content_sha256),
+        Some(content_bytes as u64),
+        None,
+    );
+    if let Some(artifact) = artifact.as_object_mut() {
+        for key in ["content", "body", "text"] {
+            artifact.remove(key);
+        }
+    }
+    Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    format!("{digest:x}")
+}
+
+struct OfficeArtifactFileObservation {
+    status: &'static str,
+    content_sha256: Option<String>,
+    content_bytes: Option<u64>,
+    error: Option<String>,
+}
+
+fn set_artifact_content_observation(
+    artifact: &mut JsonValue,
+    source: &str,
+    status: &str,
+    content_sha256: Option<String>,
+    content_bytes: Option<u64>,
+    error: Option<String>,
+) {
+    if let Some(artifact) = artifact.as_object_mut() {
+        artifact.remove("contentSha256");
+        artifact.remove("contentBytes");
+        artifact.remove("contentError");
+    }
+
+    artifact["contentSource"] = JsonValue::String(source.to_string());
+    artifact["contentStatus"] = JsonValue::String(status.to_string());
+    artifact["contentObservedAt"] =
+        JsonValue::String(Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true));
+    if let Some(content_sha256) = content_sha256 {
+        artifact["contentSha256"] = JsonValue::String(content_sha256);
+    }
+    if let Some(content_bytes) = content_bytes {
+        artifact["contentBytes"] = JsonValue::Number(content_bytes.into());
+    }
+    if let Some(error) = error {
+        artifact["contentError"] = JsonValue::String(error);
+    }
+}
+
+fn office_artifact_content_error(message: String) -> String {
+    let mut truncated = String::new();
+    for (index, ch) in message.chars().enumerate() {
+        if index >= MAX_OFFICE_ARTIFACT_CONTENT_ERROR_CHARS {
+            truncated.push_str("...");
+            return truncated;
+        }
+        truncated.push(ch);
+    }
+    truncated
+}
+
+pub(super) async fn apply_office_artifact_file_fingerprints(
+    cwd: &str,
+    config: &mut JsonValue,
+) -> Result<(), JSONRPCErrorError> {
+    let Some(artifacts) = config
+        .get_mut("workspace")
+        .and_then(|workspace| workspace.get_mut("activity"))
+        .and_then(|activity| activity.get_mut("artifacts"))
+        .and_then(JsonValue::as_array_mut)
+    else {
+        return Ok(());
+    };
+    let Ok(canonical_cwd) = fs::canonicalize(Path::new(cwd)).await else {
+        return Ok(());
+    };
+    for artifact in artifacts.iter_mut().take(MAX_OFFICE_ARTIFACT_FINGERPRINTS) {
+        let Some(path) = artifact
+            .get("path")
+            .and_then(JsonValue::as_str)
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+        else {
+            continue;
+        };
+
+        if artifact.get("contentSource").and_then(JsonValue::as_str)
+            == Some(OFFICE_ARTIFACT_CONTENT_SOURCE_INLINE)
+            && artifact.get("contentSha256").is_some()
+        {
+            continue;
+        }
+
+        let observation = office_artifact_file_fingerprint(&canonical_cwd, path).await;
+        set_artifact_content_observation(
+            artifact,
+            OFFICE_ARTIFACT_CONTENT_SOURCE_FILE,
+            observation.status,
+            observation.content_sha256,
+            observation.content_bytes,
+            observation.error,
+        );
+    }
+    Ok(())
+}
+
+async fn office_artifact_file_fingerprint(
+    canonical_cwd: &Path,
+    path: &str,
+) -> OfficeArtifactFileObservation {
+    let candidate = office_artifact_candidate_path(canonical_cwd, path);
+    let canonical_path = match fs::canonicalize(candidate).await {
+        Ok(canonical_path) => canonical_path,
+        Err(err) => {
+            let status = if err.kind() == io::ErrorKind::NotFound {
+                OFFICE_ARTIFACT_CONTENT_STATUS_MISSING
+            } else {
+                OFFICE_ARTIFACT_CONTENT_STATUS_UNREADABLE
+            };
+            return OfficeArtifactFileObservation {
+                status,
+                content_sha256: None,
+                content_bytes: None,
+                error: Some(office_artifact_content_error(format!(
+                    "canonicalize failed: {err}"
+                ))),
+            };
+        }
+    };
+    if !canonical_path.starts_with(canonical_cwd) {
+        return OfficeArtifactFileObservation {
+            status: OFFICE_ARTIFACT_CONTENT_STATUS_OUTSIDE_WORKSPACE,
+            content_sha256: None,
+            content_bytes: None,
+            error: Some("path resolves outside the workspace".to_string()),
+        };
+    }
+    let metadata = match fs::metadata(&canonical_path).await {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            return OfficeArtifactFileObservation {
+                status: OFFICE_ARTIFACT_CONTENT_STATUS_UNREADABLE,
+                content_sha256: None,
+                content_bytes: None,
+                error: Some(office_artifact_content_error(format!(
+                    "metadata failed: {err}"
+                ))),
+            };
+        }
+    };
+    if !metadata.is_file() {
+        return OfficeArtifactFileObservation {
+            status: OFFICE_ARTIFACT_CONTENT_STATUS_NOT_FILE,
+            content_sha256: None,
+            content_bytes: None,
+            error: Some("path is not a regular file".to_string()),
+        };
+    }
+    if metadata.len() > MAX_OFFICE_ARTIFACT_FINGERPRINT_BYTES {
+        return OfficeArtifactFileObservation {
+            status: OFFICE_ARTIFACT_CONTENT_STATUS_TOO_LARGE,
+            content_sha256: None,
+            content_bytes: None,
+            error: Some(format!(
+                "file is {} bytes; fingerprint limit is {} bytes",
+                metadata.len(),
+                MAX_OFFICE_ARTIFACT_FINGERPRINT_BYTES
+            )),
+        };
+    }
+    let mut file = match fs::File::open(&canonical_path).await {
+        Ok(file) => file,
+        Err(err) => {
+            return OfficeArtifactFileObservation {
+                status: OFFICE_ARTIFACT_CONTENT_STATUS_UNREADABLE,
+                content_sha256: None,
+                content_bytes: None,
+                error: Some(office_artifact_content_error(format!("open failed: {err}"))),
+            };
+        }
+    };
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0; OFFICE_ARTIFACT_FINGERPRINT_CHUNK_BYTES];
+    loop {
+        let read = match file.read(&mut buffer).await {
+            Ok(read) => read,
+            Err(err) => {
+                return OfficeArtifactFileObservation {
+                    status: OFFICE_ARTIFACT_CONTENT_STATUS_UNREADABLE,
+                    content_sha256: None,
+                    content_bytes: None,
+                    error: Some(office_artifact_content_error(format!("read failed: {err}"))),
+                };
+            }
+        };
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+
+    OfficeArtifactFileObservation {
+        status: OFFICE_ARTIFACT_CONTENT_STATUS_FINGERPRINTED,
+        content_sha256: Some(format!("{:x}", hasher.finalize())),
+        content_bytes: Some(metadata.len()),
+        error: None,
+    }
+}
+
+fn office_artifact_candidate_path(canonical_cwd: &Path, path: &str) -> PathBuf {
+    let path = Path::new(path);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        canonical_cwd.join(path)
+    }
 }
 
 fn office_thread_id(config: &JsonValue) -> Option<&str> {

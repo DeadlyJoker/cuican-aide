@@ -1,5 +1,6 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
+import { upsertThread } from "../thread/threadModel";
 import { connectionLostNotice } from "./appNotificationPresentation";
 import type { ConnectionState, NoticeState } from "./appRuntimeState";
 import type { AccountStatus } from "./appStatusTypes";
@@ -16,6 +17,7 @@ type BootstrapConnectionClient = AppServerConnection & {
   connect(): Promise<unknown>;
   getAccount(): Promise<AccountStatus>;
   listThreads(showArchived: boolean): Promise<Thread[]>;
+  readThread?(threadId: string): Promise<Thread>;
 };
 
 type ConnectionStateSetter = (state: ConnectionState) => void;
@@ -83,8 +85,17 @@ export function runConnectionBootstrapEffectAction<
       if (params.isDemoPreview) {
         params.showDemoThreads();
       } else {
+        const selectedThread = serverThreads[0] ?? null;
         params.setThreads(serverThreads);
-        params.setSelectedThreadId(serverThreads[0]?.id ?? null);
+        params.setSelectedThreadId(selectedThread?.id ?? null);
+        refreshSelectedThreadAfterBootstrap({
+          client,
+          currentClient: params.currentClient,
+          isMounted: () => isMounted,
+          selectedThread,
+          setThreads: params.setThreads,
+          serverThreads,
+        });
       }
 
       void client
@@ -108,6 +119,31 @@ export function runConnectionBootstrapEffectAction<
     isMounted = false;
     client.close();
   };
+}
+
+function refreshSelectedThreadAfterBootstrap<
+  Client extends BootstrapConnectionClient,
+>(params: {
+  client: Client;
+  currentClient: () => Client | null | undefined;
+  isMounted: () => boolean;
+  selectedThread: Thread | null;
+  setThreads: ThreadListSetter;
+  serverThreads: Thread[];
+}) {
+  if (!params.selectedThread || !params.client.readThread) {
+    return;
+  }
+
+  void params.client
+    .readThread(params.selectedThread.id)
+    .then((thread) => {
+      if (!params.isMounted() || params.currentClient() !== params.client) {
+        return;
+      }
+      params.setThreads(upsertThread(params.serverThreads, thread));
+    })
+    .catch(() => undefined);
 }
 
 export function pollLoadedThreadIdsAction(params: {
@@ -182,23 +218,16 @@ export function switchToDemoThreadsAction(params: {
 
 export function preserveThreadsAfterConnectionLossAction(params: {
   connectionLostMessage: string;
-  currentThreads: readonly Thread[];
-  demoThreads: Thread[];
   setConnectionState: ConnectionStateSetter;
   setNotice: NoticeSetter;
-  setSelectedThreadId: SelectedThreadSetter;
   setStreamingTextByThread: StreamingTextSetter;
-  setThreads: ThreadListSetter;
   showConnectionNotice?: boolean;
 }): void {
-  params.setConnectionState("demo");
+  params.setConnectionState("disconnected");
   params.setNotice(
     params.showConnectionNotice ?? true
       ? connectionLostNotice(params.connectionLostMessage)
       : null,
   );
   params.setStreamingTextByThread({});
-  if (params.currentThreads.length === 0) {
-    showDemoThreadsAction(params);
-  }
 }

@@ -7,6 +7,7 @@ import {
   upsertPendingComposerMention,
   type PendingComposerMention,
 } from "../shared/composerMentions";
+import type { ConfirmHandler } from "../shared/confirmHandler";
 import { appMentionAddedPanel } from "./appMentionPresentation";
 import type { NoticeState } from "../shared/noticeState";
 import {
@@ -76,7 +77,7 @@ type PendingContextFile = {
 export type CapabilityPanelItemActionParams = {
   busyToolId: string | null;
   client: CapabilityPanelItemClient | null | undefined;
-  confirm: (message: string) => boolean;
+  confirm: ConfirmHandler;
   isConnected: boolean;
   isDemo: boolean;
   item: CapabilityPanelItem;
@@ -192,7 +193,7 @@ async function handleBackgroundTerminalItem(
     setCapabilityPanel,
     setNotice,
   } = params;
-  const confirmed = confirm(
+  const confirmed = await confirm(
     backgroundTerminalTerminateConfirmMessage(itemAction.processId, locale),
   );
   if (!confirmed) {

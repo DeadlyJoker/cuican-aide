@@ -6,7 +6,10 @@ import {
   threadListFailureNotice,
   threadSearchFailureNotice,
 } from "./threadActionPresentation";
-import { selectedThreadIdAfterThreadList } from "./threadModel";
+import {
+  mergeThreadListSummaries,
+  selectedThreadIdAfterThreadList,
+} from "./threadModel";
 
 type ThreadSearchClient = {
   listThreads(showArchived: boolean): Promise<Thread[]>;
@@ -16,6 +19,7 @@ type ThreadSearchClient = {
 type SelectedThreadSetter = (
   updater: (currentThreadId: string | null) => string | null,
 ) => void;
+type ThreadListSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
 
 export function runThreadSearchEffectAction(params: {
   clearTimeout: (timeoutId: ReturnType<typeof setTimeout>) => void;
@@ -29,7 +33,7 @@ export function runThreadSearchEffectAction(params: {
   setIsSearchingThreads: (isSearching: boolean) => void;
   setNotice: (notice: NoticeState | null) => void;
   setSelectedThreadId: SelectedThreadSetter;
-  setThreads: (threads: Thread[]) => void;
+  setThreads: ThreadListSetter;
   setTimeout: (
     handler: () => void,
     timeout: number,
@@ -85,7 +89,7 @@ async function runThreadRequest(params: {
   setIsSearchingThreads: (isSearching: boolean) => void;
   setNotice: (notice: NoticeState | null) => void;
   setSelectedThreadId: SelectedThreadSetter;
-  setThreads: (threads: Thread[]) => void;
+  setThreads: ThreadListSetter;
 }): Promise<void> {
   try {
     const serverThreads = await params.request();
@@ -93,7 +97,9 @@ async function runThreadRequest(params: {
       return;
     }
 
-    params.setThreads(serverThreads ?? []);
+    params.setThreads((currentThreads) =>
+      mergeThreadListSummaries(currentThreads, serverThreads ?? []),
+    );
     params.setSelectedThreadId((currentThreadId) =>
       selectedThreadIdAfterThreadList(currentThreadId, serverThreads),
     );

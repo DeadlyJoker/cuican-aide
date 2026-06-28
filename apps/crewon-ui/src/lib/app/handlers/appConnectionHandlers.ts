@@ -28,7 +28,6 @@ export type AppConnectionHandlersParams = {
   setSelectedThreadId: (threadId: string | null) => void;
   setStreamingTextByThread: (streamingTextByThread: Record<string, string>) => void;
   setThreads: (threads: Thread[]) => void;
-  threadsRef: MutableRefObject<Thread[]>;
 };
 
 export function createAppConnectionHandlers({
@@ -40,7 +39,6 @@ export function createAppConnectionHandlers({
   setSelectedThreadId,
   setStreamingTextByThread,
   setThreads,
-  threadsRef,
 }: AppConnectionHandlersParams): AppConnectionHandlers {
   const demoThreads = () => getDemoThreads(localeRef.current);
   const connectionLostMessage = () =>
@@ -50,13 +48,9 @@ export function createAppConnectionHandlers({
     preserveThreadsAfterConnectionLoss: (showConnectionNotice = true) => {
       preserveThreadsAfterConnectionLossAction({
         connectionLostMessage: connectionLostMessage(),
-        currentThreads: threadsRef.current,
-        demoThreads: demoThreads(),
         setConnectionState,
         setNotice,
-        setSelectedThreadId,
         setStreamingTextByThread,
-        setThreads,
         showConnectionNotice,
       });
     },

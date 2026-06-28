@@ -46,7 +46,28 @@ describe("composer mention helpers", () => {
       ),
     ).toEqual([
       { name: "Browser", path: "app://browser" },
-      { name: "Terminal", path: "app://terminal" },
+      { name: "Terminal", path: "app://terminal", token: "$terminal" },
+    ]);
+  });
+
+  it("preserves structured skill mention kind", () => {
+    expect(
+      upsertPendingComposerMention(
+        [],
+        {
+          kind: "skill",
+          path: "/repo/.crewon/skills/review/SKILL.md",
+          token: "$review",
+        },
+        "review",
+      ),
+    ).toEqual([
+      {
+        kind: "skill",
+        name: "review",
+        path: "/repo/.crewon/skills/review/SKILL.md",
+        token: "$review",
+      },
     ]);
   });
 });

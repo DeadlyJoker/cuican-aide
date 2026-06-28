@@ -10,6 +10,7 @@ import type {
   OfficeWorkspace,
 } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
+import { artifactRecordText } from "./officeArtifactProvenance";
 
 export function officeArtifactDisconnectedPanel(
   artifact: ArtifactItem,
@@ -181,6 +182,20 @@ export function officeArtifactDraftPanelBody(params: {
   ].join("\n\n");
 }
 
+function officeArtifactPanelMetadata(
+  artifact: ArtifactItem,
+  metadataText: string,
+  locale: Locale,
+  currentContentSha256?: string | null,
+) {
+  return [
+    metadataText,
+    artifactRecordText(artifact, locale, currentContentSha256),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function officeArtifactLoadedPanelBody(params: {
   fileText: string;
   locale: Locale;
@@ -209,9 +224,17 @@ export function officeArtifactDraftPanel(params: {
   artifactPath: string;
   locale: Locale;
   metadataText: string;
+  currentContentSha256?: string | null;
 }): CapabilityPanel {
-  const { artifact, artifactBody, artifactDir, artifactPath, locale, metadataText } =
-    params;
+  const {
+    artifact,
+    artifactBody,
+    artifactDir,
+    artifactPath,
+    currentContentSha256,
+    locale,
+    metadataText,
+  } = params;
   const controls = filePanelSearchControls(locale, artifactDir, artifact.title);
   return {
     title: artifact.title,
@@ -219,7 +242,12 @@ export function officeArtifactDraftPanel(params: {
     body: officeArtifactDraftPanelBody({
       artifactBody,
       locale,
-      metadataText,
+      metadataText: officeArtifactPanelMetadata(
+        artifact,
+        metadataText,
+        locale,
+        currentContentSha256,
+      ),
     }),
     actions: [copyCurrentPathAction(locale), ...(controls.actions ?? [])],
     fields: controls.fields,
@@ -252,10 +280,19 @@ export function officeArtifactLoadedPanel(params: {
   items: CapabilityPanelItem[];
   locale: Locale;
   metadataText: string;
+  currentContentSha256?: string | null;
   searchRoot: string;
 }): CapabilityPanel {
-  const { artifact, artifactPath, fileText, items, locale, metadataText, searchRoot } =
-    params;
+  const {
+    artifact,
+    artifactPath,
+    currentContentSha256,
+    fileText,
+    items,
+    locale,
+    metadataText,
+    searchRoot,
+  } = params;
   const controls = filePanelSearchControls(locale, searchRoot, artifact.title);
   return {
     title: artifact.title,
@@ -263,7 +300,12 @@ export function officeArtifactLoadedPanel(params: {
     body: officeArtifactLoadedPanelBody({
       fileText,
       locale,
-      metadataText,
+      metadataText: officeArtifactPanelMetadata(
+        artifact,
+        metadataText,
+        locale,
+        currentContentSha256,
+      ),
     }),
     actions: [copyCurrentPathAction(locale), ...(controls.actions ?? [])],
     fields: controls.fields,

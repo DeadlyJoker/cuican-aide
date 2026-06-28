@@ -31,6 +31,7 @@ import {
   officeSavedArtifact,
   officeWorkspaceWithArtifactMessage,
 } from "./officeArtifactPanel";
+import { sha256Base64 } from "./officeArtifactContentHash";
 import { joinPath, pathDirName, resolveSearchPath } from "../shared/pathUtils";
 import { decodeBase64Text } from "../server-request/serverRequestPresentation";
 import { slugifySkillName } from "../shared/text";
@@ -129,6 +130,37 @@ export async function handleOfficeArtifactAction({
       );
     }
 
+    const explicitArtifactPath = artifact.path?.trim();
+    const artifactUrl = artifact.url?.trim();
+    const explicitArtifactLocation = explicitArtifactPath
+      ? {
+          label: explicitArtifactPath,
+          path: resolveSearchPath(root, explicitArtifactPath),
+        }
+      : artifactUrl
+        ? {
+            label: artifactUrl,
+            path: artifactUrl,
+          }
+        : null;
+    if (explicitArtifactLocation) {
+      await loadOfficeArtifactFile({
+        artifact,
+        artifactPath: explicitArtifactLocation.path,
+        client,
+        items: [
+          {
+            label: `  ${explicitArtifactLocation.label}`,
+            path: explicitArtifactLocation.path,
+            kind: "file",
+          },
+        ],
+        locale,
+        setCapabilityPanel,
+      });
+      return true;
+    }
+
     const response = await client?.fuzzyFileSearch(
       artifact.title,
       [root],
@@ -187,28 +219,50 @@ export async function handleOfficeArtifactAction({
       return true;
     }
 
-    const [file, metadata] = await Promise.all([
-      client?.readFile(artifactPath),
-      client?.getMetadata(artifactPath),
-    ]);
-    const fileText = file ? decodeBase64Text(file.dataBase64) : "";
-    setCapabilityPanel(
-      officeArtifactLoadedPanel({
-        artifact,
-        artifactPath,
-        fileText,
-        items: topMatches,
-        locale,
-        metadataText: fileMetadataText(metadata ?? null, locale),
-        searchRoot: pathDirName(artifactPath),
-      }),
-    );
+    await loadOfficeArtifactFile({
+      artifact,
+      artifactPath,
+      client,
+      items: topMatches,
+      locale,
+      setCapabilityPanel,
+    });
   } catch (error) {
     setCapabilityPanel(officeArtifactErrorPanel({ artifact, error, locale }));
   } finally {
     setBusyToolId(null);
   }
   return true;
+}
+
+async function loadOfficeArtifactFile(params: {
+  artifact: ArtifactItem;
+  artifactPath: string;
+  client: OfficeArtifactClient | null;
+  items: CapabilityPanelItem[];
+  locale: Locale;
+  setCapabilityPanel: (panel: CapabilityPanel) => void;
+}) {
+  const { artifact, artifactPath, client, items, locale, setCapabilityPanel } =
+    params;
+  const [file, metadata] = await Promise.all([
+    client?.readFile(artifactPath),
+    client?.getMetadata(artifactPath),
+  ]);
+  const fileText = file ? decodeBase64Text(file.dataBase64) : "";
+  const currentContentSha256 = file ? await sha256Base64(file.dataBase64) : null;
+  setCapabilityPanel(
+    officeArtifactLoadedPanel({
+      artifact,
+      artifactPath,
+      currentContentSha256,
+      fileText,
+      items,
+      locale,
+      metadataText: fileMetadataText(metadata ?? null, locale),
+      searchRoot: pathDirName(artifactPath),
+    }),
+  );
 }
 
 async function createOfficeArtifactDraft(params: {

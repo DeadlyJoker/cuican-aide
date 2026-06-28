@@ -125,6 +125,23 @@ describe("automation content helpers", () => {
     expect(body).not.toContain("Database");
   });
 
+  it("handles minimal backend agents without capability arrays", () => {
+    const body = automationBodyText({
+      title: "Nightly check",
+      targetOffice: office,
+      executionAgent: {
+        agentId: "agent-1",
+        name: "Backend Agent",
+      } as AgentConfig,
+      triggerType: "manual",
+      locale: "en",
+    });
+
+    expect(body).toContain("Agent: Backend Agent");
+    expect(body).toContain("MCP: not configured");
+    expect(body).toContain("Skills: not configured");
+  });
+
   it("formats run prompts and lifecycle text", () => {
     expect(
       automationRunPrompt({

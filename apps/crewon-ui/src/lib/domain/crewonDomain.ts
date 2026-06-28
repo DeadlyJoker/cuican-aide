@@ -14,6 +14,7 @@ export type LibraryPanel = {
   kind: LibraryKind;
   title: string;
   subtitle: string;
+  configPath?: string;
   actions?: LibraryPanelAction[];
   body?: string;
   fields?: LibraryPanelField[];
@@ -72,6 +73,7 @@ export type LibraryPanelAction = {
   pathToOpen?: string;
   pathKind?: "directory" | "file";
   domainConfigKind?: DomainConfigKind;
+  agentConfig?: AgentConfig;
   automationConfig?: AutomationConfig;
   automationConfigPath?: string;
   automationTitle?: string;
@@ -112,6 +114,13 @@ export type OfficeMember = {
   accent: LibraryAccent;
   status: string;
   online?: boolean;
+  runtime?: {
+    threadId?: string | null;
+    contextPolicy?: "isolated" | "forkLastN" | "sharedDigest" | string;
+    forkTurns?: "none" | "all" | number | null;
+    memoryScope?: "private" | "shared" | "privateAndShared" | string;
+    lastRunId?: string | null;
+  };
 };
 
 export type OfficeMessage = {
@@ -178,7 +187,10 @@ export type AutomationConfig = {
   subtitle: string;
   body: string;
   prompt: string;
-  trigger?: { type: "manual" | "schedule" | "event" | "file"; [key: string]: unknown };
+  trigger?: {
+    type: "manual" | "schedule" | "event" | "file";
+    [key: string]: unknown;
+  };
   targetOffice?: OfficeConfig | null;
   executionAgent?: AgentConfig | null;
   enabled?: boolean;
@@ -266,6 +278,129 @@ export type ArtifactItem = {
   glyph: string;
   accent: LibraryAccent;
   meta: string;
+  path?: string;
+  url?: string;
+  contentSha256?: string;
+  contentBytes?: number;
+  contentSource?: "inline" | "file" | string;
+  contentStatus?:
+    | "fingerprinted"
+    | "missing"
+    | "notFile"
+    | "outsideWorkspace"
+    | "tooLarge"
+    | "unreadable"
+    | string;
+  contentObservedAt?: string;
+  contentError?: string;
+  sourceType?: string;
+  sourceThreadId?: string;
+  sourceTurnId?: string;
+  observedAt?: string;
+  member?: string;
+  agentId?: string;
+  delegationId?: string;
+};
+
+export type OfficeMemoryRefActivity = {
+  id: string;
+  scope?: "office" | "member" | "project" | "user" | string;
+  kind?:
+    | "decision"
+    | "fact"
+    | "preference"
+    | "lesson"
+    | "artifact"
+    | "runSummary"
+    | string;
+  content?: string;
+  confidence?: "low" | "medium" | "high" | string;
+  importance?: "low" | "medium" | "high" | string;
+  status?: OfficeMemoryStatus | string;
+  evidenceRefs?: OfficeMemoryEvidenceRef[];
+  member?: string;
+  agentId?: string;
+};
+
+export type OfficeMemoryStatus = "accepted" | "pending" | "rejected";
+
+export type OfficeMemoryEvidenceRef = {
+  runId: string | null;
+  threadId: string | null;
+  turnId: string | null;
+};
+
+export type OfficeMemoryRecord = {
+  id: string;
+  officeKey: string;
+  scope: "office" | "member" | "project" | "user" | string;
+  member: string | null;
+  agentId: string | null;
+  kind:
+    | "decision"
+    | "fact"
+    | "preference"
+    | "lesson"
+    | "artifact"
+    | "runSummary"
+    | string;
+  content: string;
+  confidence: "low" | "medium" | "high" | string;
+  importance: "low" | "medium" | "high" | string;
+  status: OfficeMemoryStatus | string;
+  evidenceRefs: OfficeMemoryEvidenceRef[];
+  keywords: string[];
+  createdAt: string;
+  updatedAt: string;
+  lastUsedAt: string | null;
+  usageCount: number;
+};
+
+export type OfficeMemoryListResult = {
+  data: OfficeMemoryRecord[];
+  nextCursor: string | null;
+};
+
+export type OfficeMemberContextPreview = {
+  runId: string;
+  member: string;
+  agentId: string;
+  threadId: string;
+  contextPolicy: string;
+  memoryScope: string;
+  agentProfile: string;
+  sharedContext: string;
+  memoryContext: string;
+};
+
+export type OfficeRunDelegationActivity = {
+  id?: string;
+  retryOf?: string;
+  member?: string;
+  agentId?: string;
+  task?: string;
+  status?: string;
+  turnId?: string;
+  threadId?: string;
+  target?: string;
+  targetKind?: "runtimeThread" | string;
+  tool?: "followup_task" | "send_message" | "spawn_agent" | string;
+  contextPolicy?: string;
+  memoryScope?: string;
+  agentPath?: string;
+  dispatchMethod?: string;
+  dispatchMode?: string;
+  dispatchPolicy?: string;
+  riskSeverity?: "low" | "medium" | "high" | string;
+  approvalRequired?: boolean;
+  requiresApproval?: boolean;
+  manualDispatch?: boolean;
+  approvalId?: string;
+  completedAt?: string;
+  resultPreview?: string;
+  error?: string;
+  updatedAt?: string;
+  memoryRefs?: OfficeMemoryRefActivity[];
 };
 
 export type OfficeRunActivity = {
@@ -283,6 +418,9 @@ export type OfficeRunActivity = {
   createdAt?: string;
   updatedAt?: string;
   completedAt?: string;
+  lastNotificationReason?: string;
+  lastNotificationSourceThreadId?: string;
+  lastNotificationSourceTurnId?: string;
   cancelRequestedAt?: string;
   requestText?: string;
   promptPreview?: string;
@@ -290,27 +428,207 @@ export type OfficeRunActivity = {
   retryOf?: string;
   goal?: string;
   locale?: string;
+  loop?: {
+    mode?: string;
+    iteration?: number;
+    maxIterations?: number;
+    phase?: string;
+    status?: string;
+    cycle?: string[];
+    memoryPolicy?: string;
+    stopConditions?: Array<{
+      condition?: string;
+      met?: boolean;
+    }>;
+    metrics?: {
+      iteration?: number;
+      maxIterations?: number;
+      retryBudgetRemaining?: number;
+      acceptance?: {
+        total?: number;
+        passed?: number;
+        failed?: number;
+        pending?: number;
+      };
+      evidence?: {
+        total?: number;
+        verified?: number;
+        blocked?: number;
+      };
+      verification?: {
+        total?: number;
+        passed?: number;
+        failed?: number;
+        pending?: number;
+        runnablePending?: number;
+        missingRunnablePending?: number;
+      };
+      risks?: {
+        total?: number;
+        high?: number;
+        openHigh?: number;
+      };
+      delegations?: {
+        total?: number;
+        queued?: number;
+        running?: number;
+        completed?: number;
+        failed?: number;
+      };
+      updatedAt?: string;
+    };
+    review?: {
+      status?: "passed" | "blocked" | "needsReview" | "incomplete" | string;
+      nextAction?: string;
+      acceptance?: {
+        total?: number;
+        passed?: number;
+        failed?: number;
+        pending?: number;
+      };
+      evidence?: {
+        total?: number;
+        verified?: number;
+        blocked?: number;
+      };
+      verification?: {
+        total?: number;
+        passed?: number;
+        failed?: number;
+        pending?: number;
+        runnablePending?: number;
+        missingRunnablePending?: number;
+      };
+      risks?: {
+        total?: number;
+        high?: number;
+        openHigh?: number;
+      };
+      updatedAt?: string;
+    };
+  };
+  memoryRefs?: OfficeMemoryRefActivity[];
+  delegationRoutes?: Array<{
+    member?: string;
+    agentId?: string;
+    threadId?: string;
+    target?: string;
+    targetKind?: "runtimeThread" | string;
+    tool?: "followup_task" | "send_message" | "spawn_agent" | string;
+    contextPolicy?: string;
+    memoryScope?: string;
+  }>;
   plan?: Array<{
     step: string;
     status?: "pending" | "inProgress" | "completed" | string;
   }>;
-  delegations?: Array<{
+  acceptanceCriteria?: Array<{
+    criterion: string;
+    criterionId?: string;
+    itemId?: string;
+    status?: "pending" | "passed" | "failed" | string;
+    evidence?: string;
+    source?: string;
+    verifiedByCheck?: string;
+    verifiedByCheckItemId?: string;
+    sourceType?: string;
+    sourceThreadId?: string;
+    sourceTurnId?: string;
+    observedAt?: string;
     member?: string;
     agentId?: string;
-    task?: string;
-    status?: string;
-    threadId?: string;
-    agentPath?: string;
+    delegationId?: string;
   }>;
+  verificationChecks?: Array<{
+    check: string;
+    criterion?: string;
+    criterionId?: string;
+    acceptanceId?: string;
+    status?: "pending" | "passed" | "failed" | string;
+    command?: string;
+    automationId?: string;
+    automationRunFilePath?: string;
+    automationRunId?: string;
+    automationThreadId?: string;
+    automationTurnId?: string;
+    retryOfAutomationTurnId?: string;
+    automationStatus?: string;
+    dispatchStatus?:
+      | "queued"
+      | "running"
+      | "canceling"
+      | "completed"
+      | "failed"
+      | string;
+    artifact?: string;
+    evidence?: string;
+    error?: string;
+    source?: string;
+    evidenceKind?: "commandExecution" | string;
+    itemId?: string;
+    exitCode?: number;
+    durationMs?: number;
+    outputPreview?: string;
+    outputSha256?: string;
+    sourceType?: string;
+    sourceThreadId?: string;
+    sourceTurnId?: string;
+    observedAt?: string;
+    member?: string;
+    agentId?: string;
+    delegationId?: string;
+  }>;
+  evidence?: Array<{
+    summary: string;
+    status?: "observed" | "verified" | "blocked" | string;
+    source?: string;
+    sourceType?: string;
+    sourceThreadId?: string;
+    sourceTurnId?: string;
+    observedAt?: string;
+    evidenceKind?: "commandExecution" | "fileChange" | string;
+    itemId?: string;
+    command?: string;
+    cwd?: string;
+    exitCode?: number;
+    durationMs?: number;
+    outputPreview?: string;
+    outputSha256?: string;
+    changeCount?: number;
+    changesSha256?: string;
+    paths?: string[];
+    url?: string;
+    member?: string;
+    agentId?: string;
+    delegationId?: string;
+  }>;
+  risks?: Array<{
+    summary: string;
+    severity?: "low" | "medium" | "high" | string;
+    mitigation?: string;
+    owner?: string;
+    sourceType?: string;
+    sourceThreadId?: string;
+    sourceTurnId?: string;
+    observedAt?: string;
+    member?: string;
+    agentId?: string;
+    delegationId?: string;
+  }>;
+  delegations?: OfficeRunDelegationActivity[];
   error?: string;
 };
 
+export type OfficeRunVerificationCheckActivity = NonNullable<
+  OfficeRunActivity["verificationChecks"]
+>[number];
+
 export type ActivityData = {
-  trace: TraceStep[];
-  approvals: ApprovalRequest[];
-  budget: BudgetRow[];
-  budgetCapUsd: number;
-  artifacts: ArtifactItem[];
+  trace?: TraceStep[];
+  approvals?: ApprovalRequest[];
+  budget?: BudgetRow[];
+  budgetCapUsd?: number;
+  artifacts?: ArtifactItem[];
   runs?: OfficeRunActivity[];
 };
 

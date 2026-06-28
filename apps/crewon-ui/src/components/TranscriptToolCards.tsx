@@ -1,6 +1,7 @@
 import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
 
 import type { Locale } from "../lib/i18n";
+import { renderMarkdown } from "./TranscriptMarkdown";
 
 function commandDurationLabel(
   durationMs: number | null,
@@ -29,6 +30,44 @@ function commandExitLabel(
   return locale === "zh" ? `退出码 ${exitCode}` : `exit ${exitCode}`;
 }
 
+function commandStatusLabel(
+  item: Extract<ThreadItem, { type: "commandExecution" }>,
+  locale: Locale,
+): string {
+  switch (item.status) {
+    case "inProgress":
+      return locale === "zh" ? "运行中" : "Running";
+    case "completed": {
+      const durationLabel = commandDurationLabel(item.durationMs, locale);
+      const exitLabel = commandExitLabel(item.exitCode, locale);
+      return (
+        [durationLabel, exitLabel].filter(Boolean).join(" · ") ||
+        (locale === "zh" ? "已完成" : "Completed")
+      );
+    }
+    case "failed": {
+      const exitLabel = commandExitLabel(item.exitCode, locale);
+      return [locale === "zh" ? "失败" : "Failed", exitLabel]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    case "declined":
+      return locale === "zh" ? "已拒绝" : "Declined";
+  }
+}
+
+function disclosureLabel(locale: Locale): string {
+  return locale === "zh" ? "明细" : "Details";
+}
+
+function lineCountLabel(count: number, locale: Locale): string {
+  if (locale === "zh") {
+    return `${count} 行`;
+  }
+
+  return `${count} line${count === 1 ? "" : "s"}`;
+}
+
 function fileChangeStatusLabel(
   status: Extract<ThreadItem, { type: "fileChange" }>["status"],
   locale: Locale,
@@ -43,6 +82,14 @@ function fileChangeStatusLabel(
     case "declined":
       return locale === "zh" ? "已拒绝" : "Declined";
   }
+}
+
+function fileChangeCountLabel(count: number, locale: Locale): string {
+  if (locale === "zh") {
+    return `${count} 个文件`;
+  }
+
+  return `${count} ${count === 1 ? "file" : "files"}`;
 }
 
 function fileChangeKindLabel(
@@ -86,6 +133,51 @@ function diffStats(diff: string): { added: number; removed: number } {
   );
 }
 
+export function TranscriptReasoningCard({
+  item,
+  locale,
+}: {
+  item: Extract<ThreadItem, { type: "reasoning" }>;
+  locale: Locale;
+}) {
+  const lines = [...item.summary, ...item.content].filter(
+    (line) => line.trim().length > 0,
+  );
+
+  if (lines.length === 0) {
+    return (
+      <div
+        className="process-card reasoning-card"
+        data-status="inProgress"
+        role="status"
+      >
+        <span className="process-card-status">
+          <span className="status-dot" aria-hidden="true" />
+          {locale === "zh" ? "正在思考" : "Thinking"}
+        </span>
+        <span className="thinking-dots" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <details className="process-card reasoning-card">
+      <summary>
+        <span>{locale === "zh" ? "推理过程" : "Reasoning"}</span>
+        <em>{lineCountLabel(lines.length, locale)}</em>
+        <strong>{disclosureLabel(locale)}</strong>
+      </summary>
+      <div className="process-card-body">
+        {renderMarkdown(lines.join("\n\n"))}
+      </div>
+    </details>
+  );
+}
+
 export function TranscriptCommandCard({
   item,
   locale,
@@ -94,20 +186,30 @@ export function TranscriptCommandCard({
   locale: Locale;
 }) {
   const output = item.aggregatedOutput?.trim();
-  const durationLabel = commandDurationLabel(item.durationMs, locale);
-  const exitLabel = commandExitLabel(item.exitCode, locale);
-  const statusLabel =
-    [durationLabel, exitLabel].filter(Boolean).join(" · ") ||
-    (locale === "zh" ? "运行中" : "running");
+  const outputLineCount = output ? output.split("\n").length : 0;
 
   return (
-    <div className="tool-card command-card">
-      <div className="tool-card-header command-card-header">
+    <details
+      className="tool-card command-card compact-tool-card"
+      data-status={item.status}
+      open={item.status === "failed" || item.status === "inProgress"}
+    >
+      <summary className="tool-card-header command-card-header">
         <code>$ {item.command}</code>
-        <span>{statusLabel}</span>
-      </div>
+        <span className="tool-card-status">
+          <span className="status-dot" aria-hidden="true" />
+          {commandStatusLabel(item, locale)}
+        </span>
+        <em>
+          {output
+            ? lineCountLabel(outputLineCount, locale)
+            : locale === "zh"
+              ? "无输出"
+              : "No output"}
+        </em>
+      </summary>
       {output ? <pre>{output}</pre> : null}
-    </div>
+    </details>
   );
 }
 
@@ -130,24 +232,25 @@ export function TranscriptFileChangeCard({
   );
 
   return (
-    <div className="tool-card file-change-card">
-      <div className="tool-card-header file-change-header">
-        <span>{fileChangeStatusLabel(item.status, locale)}</span>
-        <strong>
-          {item.changes.length}{" "}
-          {locale === "zh"
-            ? "个文件"
-            : item.changes.length === 1
-              ? "file"
-              : "files"}
-        </strong>
+    <details
+      className="tool-card file-change-card compact-tool-card"
+      data-status={item.status}
+      open={item.status === "failed" || item.status === "declined"}
+    >
+      <summary className="tool-card-header file-change-header">
+        <span className="tool-card-status">
+          <span className="status-dot" aria-hidden="true" />
+          {fileChangeStatusLabel(item.status, locale)}
+        </span>
+        <strong>{fileChangeCountLabel(item.changes.length, locale)}</strong>
         <em className="file-change-stat">
           <span data-tone="added">+{total.added}</span>{" "}
           <span data-tone="removed">-{total.removed}</span>
         </em>
-      </div>
+        <small>{disclosureLabel(locale)}</small>
+      </summary>
       <div className="file-change-list">
-        {item.changes.slice(0, 4).map((change) => {
+        {item.changes.slice(0, 8).map((change) => {
           const stats = diffStats(change.diff);
 
           return (
@@ -164,7 +267,18 @@ export function TranscriptFileChangeCard({
             </div>
           );
         })}
+        {item.changes.length > 8 ? (
+          <div className="file-change-row file-change-overflow">
+            <span>...</span>
+            <code>
+              {locale === "zh"
+                ? `还有 ${item.changes.length - 8} 个文件`
+                : `${item.changes.length - 8} more files`}
+            </code>
+            <strong />
+          </div>
+        ) : null}
       </div>
-    </div>
+    </details>
   );
 }

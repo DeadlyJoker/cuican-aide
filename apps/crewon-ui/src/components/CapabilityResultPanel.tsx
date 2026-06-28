@@ -66,7 +66,13 @@ export function CapabilityResultPanel({
               disabled || busyToolId === "terminal" || !commandValue.trim()
             }
           >
-            {locale === "zh" ? "运行" : "Run"}
+            {busyToolId === "terminal"
+              ? locale === "zh"
+                ? "运行中"
+                : "Running"
+              : locale === "zh"
+                ? "运行"
+                : "Run"}
           </button>
         </form>
       ) : null}

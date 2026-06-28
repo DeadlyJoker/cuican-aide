@@ -53,6 +53,14 @@ export async function readRecruitableAgentConfig(
   cwd: string,
   existingMembers: OfficeMember[],
 ): Promise<AgentConfig | null> {
+  return (await listRecruitableAgentConfigs(client, cwd, existingMembers))[0] ?? null;
+}
+
+export async function listRecruitableAgentConfigs(
+  client: AppServerClient,
+  cwd: string,
+  existingMembers: OfficeMember[],
+): Promise<AgentConfig[]> {
   const memberNames = new Set(existingMembers.map((member) => member.name));
   const memberAgentIds = new Set(
     existingMembers
@@ -67,12 +75,11 @@ export async function readRecruitableAgentConfig(
       existingNames: [...memberNames],
       limit: 24,
     });
-    const backendConfig = response.data.find((record) =>
-      Boolean(record.config.agentId),
-    )?.config;
-    if (backendConfig) {
-      return backendConfig;
-    }
+    return response.data
+      .map((record) => record.config)
+      .filter((config): config is AgentConfig & { agentId: string } =>
+        Boolean(config.agentId),
+      );
   } catch (error) {
     if (!isUnsupportedRpcError(error)) {
       throw error;
@@ -86,11 +93,9 @@ export async function readRecruitableAgentConfig(
       .filter((config): config is AgentConfig & { agentId: string } =>
         Boolean(config.agentId),
       );
-    return (
-      candidates.find(
-        (config) =>
-          !memberNames.has(config.name) && !memberAgentIds.has(config.agentId),
-      ) ?? null
+    return candidates.filter(
+      (config) =>
+        !memberNames.has(config.name) && !memberAgentIds.has(config.agentId),
     );
   } catch (error) {
     if (!isUnsupportedRpcError(error)) {
@@ -98,7 +103,7 @@ export async function readRecruitableAgentConfig(
     }
   }
 
-  return null;
+  return [];
 }
 
 export async function readAppRecruitableAgentConfig(params: {
@@ -117,6 +122,25 @@ export async function readAppRecruitableAgentConfig(params: {
     resolveBackendCwd: params.resolveBackendCwd,
     run: ({ client, cwd }) =>
       readRecruitableAgentConfig(client, cwd, params.existingMembers),
+  });
+}
+
+export async function listAppRecruitableAgentConfigs(params: {
+  client: AppServerClient | null | undefined;
+  existingMembers: OfficeMember[];
+  isConnected: boolean;
+  resolveBackendCwd: () => Promise<string>;
+}): Promise<AgentConfig[]> {
+  if (!params.isConnected) {
+    return [];
+  }
+
+  return withBackendWorkspace({
+    client: params.client,
+    fallback: [],
+    resolveBackendCwd: params.resolveBackendCwd,
+    run: ({ client, cwd }) =>
+      listRecruitableAgentConfigs(client, cwd, params.existingMembers),
   });
 }
 

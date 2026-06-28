@@ -42,12 +42,12 @@ export function automationCapabilitySummary(
   return {
     enabledMcp:
       agent?.mcp
-        .filter((option) => option.enabled)
+        ?.filter((option) => option.enabled)
         .map((option) => option.name)
         .join(", ") || fallback,
     enabledSkills:
       agent?.skills
-        .filter((option) => option.enabled)
+        ?.filter((option) => option.enabled)
         .map((option) => option.name)
         .join(", ") || fallback,
   };
@@ -90,7 +90,7 @@ export function automationBodyText(params: {
         `模型：${executionAgent?.model ?? "未配置"}`,
         `MCP：${enabledMcp}`,
         `Skill：${enabledSkills}`,
-        `动作：运行自动化「${title}」，并把执行记录写入 automation/run。`,
+        `动作：通过 office/run 运行目标办公室「${title}」，并把执行记录写入 automation/run。`,
       ].join("\n")
     : [
         `Trigger: ${triggerType}`,
@@ -99,7 +99,7 @@ export function automationBodyText(params: {
         `Model: ${executionAgent?.model ?? "not configured"}`,
         `MCP: ${enabledMcp}`,
         `Skills: ${enabledSkills}`,
-        `Action: run automation "${title}" and write the execution record through automation/run.`,
+        `Action: run target Office "${title}" through office/run and write the execution record through automation/run.`,
       ].join("\n");
 }
 

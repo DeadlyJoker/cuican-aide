@@ -1,7 +1,9 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
+import { MessageSquare, UsersRound } from "lucide-react";
 
 import { Composer } from "../Composer";
 import { Transcript } from "../Transcript";
+import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import type { Locale } from "../../lib/i18n";
 import type { WorkMode } from "../../lib/workMode";
@@ -38,6 +40,7 @@ type AppConversationSurfaceProps = {
   sendLabel: string;
   sendShortcutLabel: string;
   sendingLabel: string;
+  slashCommands: ComposerSlashCommand[];
   streamingText: string;
   thread: Thread | null;
   threadSettingsLabel: string;
@@ -49,6 +52,7 @@ type AppConversationSurfaceProps = {
   onModeChange: (mode: WorkMode) => void;
   onRetryConnection: () => void;
   onSend: (text: string) => void;
+  onSlashCommandSelect: (command: ComposerSlashCommand) => void;
   onStop: () => void;
   onThreadSettings: () => void;
 };
@@ -85,6 +89,7 @@ export function AppConversationSurface({
   sendLabel,
   sendShortcutLabel,
   sendingLabel,
+  slashCommands,
   streamingText,
   thread,
   threadSettingsLabel,
@@ -96,17 +101,27 @@ export function AppConversationSurface({
   onModeChange,
   onRetryConnection,
   onSend,
+  onSlashCommandSelect,
   onStop,
   onThreadSettings,
 }: AppConversationSurfaceProps) {
-  const disabled = connectionState === "connecting" || isSending;
-  const busyStatusLabel = activeTurnId
+  const isThreadRunning =
+    Boolean(activeTurnId) ||
+    Boolean(thread?.turns.some((turn) => turn.status === "inProgress"));
+  const disabled =
+    connectionState === "connecting" ||
+    connectionState === "disconnected" ||
+    isSending;
+  const busyStatusLabel = isThreadRunning
     ? locale === "zh"
       ? "正在执行"
       : "Running"
     : isSending
       ? sendingLabel
       : connectingLabel;
+  const surfaceTitle = thread?.name || thread?.preview || emptyTitle;
+  const surfaceMeta = thread?.cwd || noWorkspaceSelectedLabel;
+  const stopLabel = locale === "zh" ? "停止" : "Stop";
 
   return (
     <section
@@ -114,6 +129,33 @@ export function AppConversationSurface({
       data-mode={workMode}
       data-state={thread ? "thread" : "start"}
     >
+      <div className="conversation-mode-bar">
+        <div className="conversation-mode-title">
+          <span>{workMode === "office" ? modeOfficeLabel : modeCodeLabel}</span>
+          <strong>{surfaceTitle}</strong>
+          <em>{surfaceMeta}</em>
+        </div>
+        <div className="mode-switch" aria-label={modeTitleLabel}>
+          <button
+            type="button"
+            aria-pressed={workMode === "code"}
+            data-active={workMode === "code"}
+            onClick={() => onModeChange("code")}
+          >
+            <MessageSquare size={15} />
+            {modeCodeLabel}
+          </button>
+          <button
+            type="button"
+            aria-pressed={workMode === "office"}
+            data-active={workMode === "office"}
+            onClick={() => onModeChange("office")}
+          >
+            <UsersRound size={15} />
+            {modeOfficeLabel}
+          </button>
+        </div>
+      </div>
       <Transcript
         commandLabel={commandLabel}
         crewonLabel={crewonLabel}
@@ -130,8 +172,10 @@ export function AppConversationSurface({
         modeOfficeDescription={modeOfficeDescription}
         modeTitleLabel={modeTitleLabel}
         onModeChange={onModeChange}
+        onStop={onStop}
         planLabel={planLabel}
         reasoningLabel={reasoningLabel}
+        stopLabel={stopLabel}
         thread={thread}
         streamingText={streamingText}
         youLabel={youLabel}
@@ -150,8 +194,9 @@ export function AppConversationSurface({
         retryConnectionLabel={retryConnectionLabel}
         sendLabel={sendLabel}
         sendShortcutLabel={sendShortcutLabel}
-        stopLabel={locale === "zh" ? "停止当前任务" : "Stop current turn"}
-        isRunning={Boolean(activeTurnId)}
+        stopLabel={stopLabel}
+        slashCommands={slashCommands}
+        isRunning={isThreadRunning}
         busyStatusLabel={busyStatusLabel}
         threadSettingsLabel={threadSettingsLabel}
         value={value}
@@ -159,6 +204,7 @@ export function AppConversationSurface({
         onChange={onChange}
         onRetryConnection={onRetryConnection}
         onSend={onSend}
+        onSlashCommandSelect={onSlashCommandSelect}
         onThreadSettings={onThreadSettings}
         onStop={onStop}
       />

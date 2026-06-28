@@ -1,6 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
 
+import type { OfficeRunResponse } from "../app-server/appServer";
 import type { NoticeState } from "../shared/noticeState";
 import type {
   AgentConfig,
@@ -20,6 +21,10 @@ import {
   prepareAutomationRun,
 } from "../domain/domainAutomationContent";
 import type { Locale } from "../i18n";
+import {
+  officeRunTurnRecord,
+  type OfficeRunTurnRecord,
+} from "../office/officeRunPanel";
 import { automationRunHistoryItems } from "../thread/threadHistoryItems";
 import { upsertThread, upsertTurnInThread } from "../thread/threadModel";
 
@@ -43,7 +48,12 @@ export type LibraryAutomationRunActionParams = {
     turnId: string,
     record: AutomationRunRecord & { threadId: string },
   ) => void;
+  recordOfficeRunTurn?: (turnId: string, record: OfficeRunTurnRecord) => void;
   renameThread: (threadId: string, title: string) => Promise<void>;
+  runOfficeAutomation?: (
+    config: AutomationConfig,
+    text: string,
+  ) => Promise<{ cwd: string; response: OfficeRunResponse | null } | null>;
   runAutomationConfig: (
     config: AutomationConfig,
     note: string | null,
@@ -51,11 +61,6 @@ export type LibraryAutomationRunActionParams = {
   ) => Promise<{ record: AutomationRunRecord | null; warning: string | null }>;
   setLibraryPanel: LibraryPanelSetter;
   setNotice: (notice: NoticeState | null) => void;
-  setThreadGoal: (
-    threadId: string,
-    goal: string,
-    tokenBudget: number | null,
-  ) => Promise<void>;
   setThreads: StateSetter<Thread[]>;
   startAutomationThread: () => Promise<Thread | null>;
   startTurn: (
@@ -84,11 +89,12 @@ export async function handleLibraryAutomationRunAction({
   readAutomationRunItems,
   readThread,
   recordAutomationRunForTurn,
+  recordOfficeRunTurn,
   renameThread,
+  runOfficeAutomation,
   runAutomationConfig,
   setLibraryPanel,
   setNotice,
-  setThreadGoal,
   setThreads,
   startAutomationThread,
   startTurn,
@@ -126,6 +132,104 @@ export async function handleLibraryAutomationRunAction({
     targetOffice,
     title,
   } = runPreparation;
+  const officeThreadId = targetOffice.workspace.threadId?.trim();
+  if (runOfficeAutomation && officeThreadId) {
+    const automationConfig = automationConfigForRun({
+      baseConfig: savedAutomationConfig,
+      threadId: officeThreadId,
+      title,
+      prompt: fullAutomationPrompt,
+      targetOffice,
+      executionAgent,
+      body: automationBody,
+      locale,
+    });
+    const automationConfigPath = await persistAutomationConfigForRun({
+      action,
+      automationConfig,
+      updateAutomationConfig,
+      writeAutomationConfig,
+    });
+    const officeRunText = automationTurnStartPrompt({
+      automationConfig,
+      configPath: automationConfigPath,
+      locale,
+      runNote,
+      threadId: officeThreadId,
+    });
+    const officeRunResult = await runOfficeAutomation(
+      automationConfig,
+      officeRunText,
+    );
+    const officeRunResponse = officeRunResult?.response ?? null;
+    if (officeRunResult && officeRunResponse) {
+      const automationRunResult = await runAutomationConfig(
+        automationConfig,
+        runNote || null,
+        officeRunResponse.turn.id,
+      );
+      const automationRunRecord = automationRunResult.record;
+      recordOfficeRunTurn?.(
+        officeRunResponse.turn.id,
+        officeRunTurnRecord(officeRunResult.cwd, officeRunResponse),
+      );
+      setThreads((current) =>
+        upsertTurnInThread(
+          current,
+          officeRunResponse.threadId,
+          officeRunResponse.turn,
+        ),
+      );
+      if (automationRunRecord) {
+        if (officeRunResponse.turn.status === "inProgress") {
+          recordAutomationRunForTurn(officeRunResponse.turn.id, {
+            filePath: automationRunRecord.filePath,
+            runId: automationRunRecord.runId,
+            threadId: officeRunResponse.threadId,
+          });
+          scheduleAutomationRunCompletionSync({
+            automationConfig,
+            automationConfigPath,
+            automationRunRecord,
+            locale,
+            readAutomationRunItems,
+            readThread,
+            responseTurnId: officeRunResponse.turn.id,
+            setLibraryPanel,
+            threadId: officeRunResponse.threadId,
+            updateAutomationRun,
+          });
+        } else {
+          await updateAutomationRun(
+            automationRunRecord.filePath,
+            officeRunResponse.turn.status ?? "failed",
+            officeRunResponse.turn.completedAt ?? Math.floor(Date.now() / 1000),
+          );
+        }
+      }
+      const latestRunItems = await readAutomationRunItems(
+        officeRunResponse.threadId,
+      );
+      setLibraryPanel((currentPanel) =>
+        automationRunUpdatedPanel(currentPanel, {
+          automationConfig,
+          configPath: automationConfigPath,
+          fallbackItems: latestRunItems,
+          locale,
+          phase:
+            officeRunResponse.turn.status === "completed"
+              ? "completed"
+              : "started",
+          runFilePath: automationRunRecord?.filePath,
+          runId: automationRunRecord?.runId,
+          threadId: officeRunResponse.threadId,
+          warning: automationRunResult.warning,
+        }),
+      );
+      return true;
+    }
+  }
+
   let threadId = await validExistingThreadId(
     initialThreadId,
     readThread,
@@ -133,9 +237,7 @@ export async function handleLibraryAutomationRunAction({
   );
   if (!threadId) {
     threadId = await createAutomationThread({
-      locale,
       renameThread,
-      setThreadGoal,
       setThreads,
       startAutomationThread,
       title,
@@ -180,9 +282,7 @@ export async function handleLibraryAutomationRunAction({
       throw error;
     }
     const replacementThreadId = await createAutomationThread({
-      locale,
       renameThread,
-      setThreadGoal,
       setThreads,
       startAutomationThread,
       title,
@@ -231,6 +331,21 @@ export async function handleLibraryAutomationRunAction({
         runId: automationRunRecord.runId,
         threadId,
       });
+      scheduleAutomationRunCompletionSync({
+        automationConfig: {
+          ...automationConfig,
+          threadId,
+        },
+        automationConfigPath,
+        automationRunRecord,
+        locale,
+        readAutomationRunItems,
+        readThread,
+        responseTurnId: response.turn.id,
+        setLibraryPanel,
+        threadId,
+        updateAutomationRun,
+      });
     } else {
       await updateAutomationRun(
         automationRunRecord.filePath,
@@ -272,6 +387,61 @@ export async function handleLibraryAutomationRunAction({
   return true;
 }
 
+function scheduleAutomationRunCompletionSync(params: {
+  automationConfig: AutomationConfig;
+  automationConfigPath: string | null;
+  automationRunRecord: AutomationRunRecord;
+  locale: Locale;
+  readAutomationRunItems: (threadId: string) => Promise<LibraryItem[]>;
+  readThread: (threadId: string) => Promise<Thread | null | undefined>;
+  responseTurnId: string;
+  setLibraryPanel: LibraryPanelSetter;
+  threadId: string;
+  updateAutomationRun: (
+    filePath: string,
+    status: string,
+    completedAt: number | null,
+  ) => Promise<void>;
+}): void {
+  void (async () => {
+    try {
+      for (const delayMs of [100, 300, 700, 1500]) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        const thread = await params.readThread(params.threadId).catch(() => null);
+        const latestTurn = thread?.turns.find(
+          (turn) => turn.id === params.responseTurnId,
+        );
+        if (!latestTurn || latestTurn.status === "inProgress") {
+          continue;
+        }
+
+        await params.updateAutomationRun(
+          params.automationRunRecord.filePath,
+          latestTurn.status ?? "failed",
+          latestTurn.completedAt ?? Math.floor(Date.now() / 1000),
+        );
+        const latestRunItems = await params.readAutomationRunItems(params.threadId);
+        params.setLibraryPanel((currentPanel) =>
+          automationRunUpdatedPanel(currentPanel, {
+            automationConfig: params.automationConfig,
+            configPath: params.automationConfigPath,
+            fallbackItems: latestRunItems,
+            locale: params.locale,
+            phase: "completed",
+            runFilePath: params.automationRunRecord.filePath,
+            runId: params.automationRunRecord.runId,
+            threadId: params.threadId,
+          }),
+        );
+        return;
+      }
+    } catch {
+      // Best-effort fallback for the turn/completed race; the notification path
+      // still handles normal completion sync and surfaces its own failures.
+    }
+  })();
+}
+
 async function validExistingThreadId(
   threadId: string | undefined,
   readThread: (threadId: string) => Promise<Thread | null | undefined>,
@@ -292,37 +462,17 @@ async function validExistingThreadId(
 }
 
 async function createAutomationThread(params: {
-  locale: Locale;
   renameThread: (threadId: string, title: string) => Promise<void>;
-  setThreadGoal: (
-    threadId: string,
-    goal: string,
-    tokenBudget: number | null,
-  ) => Promise<void>;
   setThreads: StateSetter<Thread[]>;
   startAutomationThread: () => Promise<Thread | null>;
   title: string;
 }): Promise<string | undefined> {
-  const {
-    locale,
-    renameThread,
-    setThreadGoal,
-    setThreads,
-    startAutomationThread,
-    title,
-  } = params;
+  const { renameThread, setThreads, startAutomationThread, title } = params;
   const createdThread = await startAutomationThread();
   if (!createdThread) {
     return undefined;
   }
   await renameThread(createdThread.id, title);
-  await setThreadGoal(
-    createdThread.id,
-    locale === "zh"
-      ? `执行并记录自动化「${title}」的运行结果。`
-      : `Run and record automation "${title}".`,
-    null,
-  );
   setThreads((current) => upsertThread(current, { ...createdThread, name: title }));
   return createdThread.id;
 }

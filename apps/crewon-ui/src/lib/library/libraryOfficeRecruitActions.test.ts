@@ -17,7 +17,11 @@ type CapturedRecruitState = {
   ensuredThreads: Array<{ forceNew?: boolean; workspaceThreadId?: string }>;
   libraryPanel: LibraryPanel | null;
   notice: NoticeState | null;
-  persistedMembers: Array<{ agentId?: string; memberName: string; threadId: string }>;
+  persistedMembers: Array<{
+    agentId?: string;
+    memberName: string;
+    threadId?: string | null;
+  }>;
   startedTurns: Array<{ text: string; threadId: string }>;
   threads: Thread[];
 };
@@ -183,12 +187,14 @@ async function handleAction(
       threadId,
     ) => {
       state.persistedMembers.push({ agentId, memberName: member.name, threadId });
+      const workspaceWithoutThread = { ...workspaceBeforeMember };
+      delete workspaceWithoutThread.threadId;
       return Object.hasOwn(options, "persistResult")
         ? (options.persistResult ?? null)
         : officeConfig({
-            ...workspaceBeforeMember,
+            ...workspaceWithoutThread,
             members: [...workspaceBeforeMember.members, member],
-            threadId,
+            ...(threadId ? { threadId } : {}),
           });
     },
     readRecruitableAgentConfig: async () =>
@@ -277,6 +283,51 @@ describe("library office recruit actions", () => {
     });
     expect(state.notice).toEqual({
       text: "Recruited Planner and wrote it to the backend office config",
+      tone: "success",
+    });
+  });
+
+  it("persists selected agents in draft offices without starting a thread", async () => {
+    const selectedAgent = agentConfig({
+      agentId: "agent-selected",
+      name: "Researcher",
+      glyph: "R",
+      role: "Research options",
+    });
+    const { handled, state } = await handleAction(
+      {
+        id: "recruit-agent",
+        label: "Recruit Researcher",
+        agentConfig: selectedAgent,
+      },
+      {
+        agent: null,
+        libraryPanel: panel(
+          workspace({
+            backendStatus: "local",
+            threadId: undefined,
+          }),
+        ),
+      },
+    );
+
+    expect(handled).toBe(true);
+    expect(state.ensuredThreads).toEqual([]);
+    expect(state.persistedMembers).toEqual([
+      {
+        agentId: "agent-selected",
+        memberName: "Researcher",
+        threadId: null,
+      },
+    ]);
+    expect(state.startedTurns).toEqual([]);
+    expect(state.libraryPanel?.workspace).toMatchObject({
+      backendStatus: "local",
+      members: [expect.objectContaining({ name: "Researcher" })],
+    });
+    expect(state.libraryPanel?.workspace?.threadId).toBeUndefined();
+    expect(state.notice).toEqual({
+      text: "Recruited Researcher and wrote it to the backend office config",
       tone: "success",
     });
   });

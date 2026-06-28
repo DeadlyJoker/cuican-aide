@@ -68,6 +68,14 @@ coverage/
 
 # personal files
 personal/
+.crewon/.env
+.crewon/auth.json
+.crewon/config.toml
+.crewon/models_cache.json
+.crewon/app-server-control/
+.crewon/logs/
+.crewon/office-runs/
+.crewon/proxy/
 
 # os
 .DS_Store

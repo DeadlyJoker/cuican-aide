@@ -1,7 +1,10 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { Turn } from "@crewon-protocol/v2/Turn";
 
-import type { AppServerNotification } from "../app-server/appServer";
+import type {
+  AppServerNotification,
+  OfficeDelegationDispatchResponse,
+} from "../app-server/appServer";
 import {
   automationRunSyncFailureNotice,
   officeRunSyncFailureNotice,
@@ -14,13 +17,16 @@ import {
   type LibraryPanel,
   type OfficeConfig,
 } from "../domain/crewonDomain";
-import {
-  matchingAutomationRunSyncedPanel,
-} from "../automation/automationDetailPanel";
+import { matchingAutomationRunSyncedPanel } from "../automation/automationDetailPanel";
 import { automationRunLifecycleText } from "../domain/domainAutomationContent";
 import type { Locale } from "../i18n";
-import { officeRunSyncedPanel } from "../office/officeRunPanel";
-import { upsertTurnInThread } from "../thread/threadModel";
+import {
+  officeDelegationDispatchFailureNotice,
+  officeRunActiveTurnByThread,
+  officeRunSyncedPanel,
+  officeRunTurnRecord,
+} from "../office/officeRunPanel";
+import { updateThreadTurns, upsertTurnInThread } from "../thread/threadModel";
 
 type StateSetter<T> = (updater: (current: T) => T) => void;
 
@@ -35,6 +41,7 @@ export type OfficeRunTurnRecord = {
   cwd: string;
   runId: string;
   threadId: string;
+  turnThreadId?: string;
 };
 
 export type TurnCompletionNotificationHandlerParams = {
@@ -55,6 +62,10 @@ export type TurnCompletionNotificationHandlerParams = {
     status: string,
     completedAt: number | null,
   ) => Promise<void>;
+  autoDispatchNextOfficeDelegation?: (
+    record: OfficeRunTurnRecord,
+    config: OfficeConfig,
+  ) => Promise<OfficeDelegationDispatchResponse | null | undefined>;
   syncOfficeRun: (
     record: OfficeRunTurnRecord,
     config: OfficeConfig,
@@ -77,6 +88,7 @@ export function handleTurnCompletionAppNotification({
   setStreamingTextByThread,
   setThreads,
   syncAutomationRun,
+  autoDispatchNextOfficeDelegation,
   syncOfficeRun,
   unixNow,
 }: TurnCompletionNotificationHandlerParams): boolean {
@@ -88,6 +100,11 @@ export function handleTurnCompletionAppNotification({
   setThreads((current) => upsertTurnInThread(current, threadId, turn));
   setStreamingTextByThread((current) => clearThreadText(current, threadId));
   setActiveTurnByThread((current) => removeRecordKey(current, threadId));
+  void refreshCompletedThreadTurns({
+    listThreadTurns,
+    setThreads,
+    threadId,
+  });
 
   const automationRunRecord = automationRunsByTurn[turn.id];
   if (automationRunRecord) {
@@ -115,13 +132,32 @@ export function handleTurnCompletionAppNotification({
       officeRunsByTurn,
       setLibraryPanel,
       setNotice,
+      setActiveTurnByThread,
       syncOfficeRun,
+      autoDispatchNextOfficeDelegation,
       threadId,
       turn,
+      setThreads,
     });
   }
 
   return true;
+}
+
+async function refreshCompletedThreadTurns({
+  listThreadTurns,
+  setThreads,
+  threadId,
+}: {
+  listThreadTurns: (threadId: string) => Promise<Turn[] | null | undefined>;
+  setThreads: StateSetter<Thread[]>;
+  threadId: string;
+}): Promise<void> {
+  const turns = await listThreadTurns(threadId).catch(() => null);
+  if (!turns) {
+    return;
+  }
+  setThreads((current) => updateThreadTurns(current, threadId, turns));
 }
 
 async function syncAutomationTurnCompletion({
@@ -179,24 +215,33 @@ async function syncAutomationTurnCompletion({
 }
 
 async function syncOfficeTurnCompletion({
+  autoDispatchNextOfficeDelegation,
   getLibraryPanel,
   listThreadTurns,
   locale,
   officeRunRecord,
   officeRunsByTurn,
+  setActiveTurnByThread,
   setLibraryPanel,
   setNotice,
+  setThreads,
   syncOfficeRun,
   threadId,
   turn,
 }: {
+  autoDispatchNextOfficeDelegation?: (
+    record: OfficeRunTurnRecord,
+    config: OfficeConfig,
+  ) => Promise<OfficeDelegationDispatchResponse | null | undefined>;
   getLibraryPanel: () => LibraryPanel | null;
   listThreadTurns: (threadId: string) => Promise<Turn[] | null | undefined>;
   locale: Locale;
   officeRunRecord: OfficeRunTurnRecord;
   officeRunsByTurn: Record<string, OfficeRunTurnRecord>;
+  setActiveTurnByThread: StateSetter<Record<string, string>>;
   setLibraryPanel: StateSetter<LibraryPanel | null>;
   setNotice: (notice: NoticeState | null) => void;
+  setThreads: StateSetter<Thread[]>;
   syncOfficeRun: (
     record: OfficeRunTurnRecord,
     config: OfficeConfig,
@@ -229,6 +274,39 @@ async function syncOfficeTurnCompletion({
     setLibraryPanel((currentPanel) =>
       officeRunSyncedPanel(currentPanel, {
         config: syncedConfig,
+        threadId: officeRunRecord.threadId,
+      }),
+    );
+    if (!autoDispatchNextOfficeDelegation) {
+      return;
+    }
+    const dispatchResponse = await autoDispatchNextOfficeDelegation(
+      officeRunRecord,
+      syncedConfig,
+    ).catch((error) => {
+      setNotice(officeDelegationDispatchFailureNotice(error, locale));
+      return null;
+    });
+    if (!dispatchResponse) {
+      return;
+    }
+    officeRunsByTurn[dispatchResponse.turn.id] = officeRunTurnRecord(
+      officeRunRecord.cwd,
+      dispatchResponse,
+    );
+    setThreads((current) =>
+      upsertTurnInThread(
+        current,
+        dispatchResponse.threadId,
+        dispatchResponse.turn,
+      ),
+    );
+    setActiveTurnByThread((current) =>
+      officeRunActiveTurnByThread(current, dispatchResponse),
+    );
+    setLibraryPanel((currentPanel) =>
+      officeRunSyncedPanel(currentPanel, {
+        config: dispatchResponse.config,
         threadId: officeRunRecord.threadId,
       }),
     );

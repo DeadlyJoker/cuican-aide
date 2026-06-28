@@ -15,7 +15,6 @@ use crate::skills_watcher::SkillsWatcher;
 use crate::thread_status::ThreadWatchManager;
 use crate::thread_status::resolve_thread_status;
 use chrono::Duration as ChronoDuration;
-use chrono::SecondsFormat;
 use crewon_analytics::AnalyticsEventsClient;
 use crewon_analytics::AnalyticsJsonRpcError;
 use crewon_analytics::InputError;
@@ -515,6 +514,11 @@ pub(crate) use catalog_processor::CatalogRequestProcessor;
 pub(crate) use command_exec_processor::CommandExecRequestProcessor;
 pub(crate) use config_processor::ConfigRequestProcessor;
 pub(crate) use crewon_domain_processor::CrewonDomainRequestProcessor;
+pub(crate) use crewon_domain_processor::OfficeAutoDispatchIntentDispatched;
+pub(crate) use crewon_domain_processor::OfficeVerificationDispatchStarted;
+pub(crate) use crewon_domain_processor::office_run_updated_notification;
+pub(crate) use crewon_domain_processor::sync_automation_runs_for_thread_turn;
+pub(crate) use crewon_domain_processor::sync_office_run_updates_for_thread_turn;
 pub(crate) use environment_processor::EnvironmentRequestProcessor;
 pub(crate) use external_agent_config_processor::ExternalAgentConfigRequestProcessor;
 pub(crate) use feedback_processor::FeedbackRequestProcessor;
@@ -530,6 +534,7 @@ pub(crate) use process_exec_processor::ProcessExecRequestProcessor;
 pub(crate) use remote_control_processor::RemoteControlRequestProcessor;
 pub(crate) use search::SearchRequestProcessor;
 pub(crate) use thread_goal_processor::ThreadGoalRequestProcessor;
+pub(crate) use thread_processor::OfficeMemberRuntimeThreadStart;
 pub(crate) use thread_processor::ThreadRequestProcessor;
 pub(crate) use turn_processor::TurnRequestProcessor;
 pub(crate) use windows_sandbox_processor::WindowsSandboxRequestProcessor;
@@ -564,6 +569,7 @@ fn resolve_runtime_workspace_roots(workspace_roots: Vec<AbsolutePathBuf>) -> Vec
 }
 
 mod config_errors;
+mod office_auto_dispatch;
 mod request_errors;
 mod thread_delete;
 mod thread_goal_processor;
@@ -572,12 +578,15 @@ mod thread_resume_redaction;
 mod thread_summary;
 
 use self::config_errors::*;
+use self::office_auto_dispatch::office_terminal_turn_from_event;
 use self::request_errors::*;
 use self::thread_goal_processor::api_thread_goal_from_state;
 use self::thread_lifecycle::*;
 use self::thread_resume_redaction::*;
 use self::thread_summary::*;
 
+pub(crate) use self::office_auto_dispatch::OfficeAutoDispatchContext;
+pub(crate) use self::office_auto_dispatch::OfficeAutoDispatchStarted;
 pub(crate) use self::thread_lifecycle::populate_thread_turns_from_history;
 pub(crate) use self::thread_processor::thread_from_stored_thread;
 #[cfg(test)]

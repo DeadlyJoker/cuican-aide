@@ -5,6 +5,7 @@ import type { PendingComposerMention } from "../shared/composerMentions";
 import type { Locale } from "../i18n";
 import type { ConnectionState } from "../shared/connectionState";
 import type { NoticeState } from "../shared/noticeState";
+import type { ConfirmHandler } from "../shared/confirmHandler";
 import {
   removeThreadFromList,
   selectedThreadIdAfterThreadList,
@@ -95,7 +96,7 @@ export type DeleteArchivedThreadActionParams = {
     | Pick<ThreadListClient, "deleteThread" | "listThreads">
     | null
     | undefined;
-  confirm: (message: string) => boolean;
+  confirm: ConfirmHandler;
   isConnected: boolean;
   locale: Locale;
   setNotice: (notice: NoticeState | null) => void;
@@ -251,7 +252,7 @@ export async function deleteArchivedThreadAction({
   untitledThreadLabel,
 }: DeleteArchivedThreadActionParams): Promise<void> {
   const title = threadTitle(thread, untitledThreadLabel);
-  if (!confirm(threadDeleteArchivedConfirmMessage(title, locale))) {
+  if (!(await confirm(threadDeleteArchivedConfirmMessage(title, locale)))) {
     return;
   }
 

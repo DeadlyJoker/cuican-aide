@@ -1,4 +1,5 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Turn } from "@crewon-protocol/v2/Turn";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -37,6 +38,20 @@ function thread(id: string): Thread {
   };
 }
 
+function turn(overrides: Partial<Turn> = {}): Turn {
+  return {
+    id: "turn-1",
+    items: [],
+    itemsView: "full",
+    status: "completed",
+    error: null,
+    startedAt: 1,
+    completedAt: 2,
+    durationMs: 1,
+    ...overrides,
+  };
+}
+
 async function flushAsyncWork() {
   await Promise.resolve();
   await Promise.resolve();
@@ -54,6 +69,7 @@ type TestConnectionClient = {
   connect(): Promise<unknown>;
   getAccount(): Promise<AccountStatus>;
   listThreads(showArchived: boolean): Promise<Thread[]>;
+  readThread?(threadId: string): Promise<Thread>;
 };
 
 describe("app connection actions", () => {
@@ -144,6 +160,52 @@ describe("app connection actions", () => {
     expect(threads).toEqual(serverThreads);
     expect(selectedThreadId).toBe("thread-1");
     expect(refreshedAccount).toEqual(account);
+  });
+
+  it("refreshes the selected thread after bootstrap loads summary threads", async () => {
+    const serverThreads = [thread("thread-1"), thread("thread-2")];
+    const fullThread = { ...serverThreads[0], turns: [turn()] };
+    let threads: Thread[] = [];
+    let currentClient: TestConnectionClient | null = null;
+    const readThreadIds: string[] = [];
+
+    runConnectionBootstrapEffectAction({
+      createClient: () => ({
+        close: vi.fn(),
+        async connect() {},
+        async getAccount() {
+          return accountStatus();
+        },
+        async listThreads() {
+          return serverThreads;
+        },
+        async readThread(threadId) {
+          readThreadIds.push(threadId);
+          return fullThread;
+        },
+      }),
+      currentClient: () => currentClient,
+      isDemoPreview: false,
+      preserveThreadsAfterConnectionLoss: () => {},
+      setAccountStatus: () => {},
+      setClient: (client) => {
+        currentClient = client;
+      },
+      setConnectionState: () => {},
+      setNotice: () => {},
+      setSelectedThreadId: () => {},
+      setThreads: (nextThreads) => {
+        threads = nextThreads;
+      },
+      showArchivedThreads: false,
+      showDemoThreads: () => {},
+      switchToDemoThreads: () => {},
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(readThreadIds).toEqual(["thread-1"]);
+    expect(threads).toEqual([fullThread, serverThreads[1]]);
   });
 
   it("keeps demo threads after a successful demo preview connection", async () => {
@@ -463,53 +525,53 @@ describe("app connection actions", () => {
   });
 
   it("preserves existing threads after connection loss", () => {
+    let connectionState: ConnectionState = "connected";
     let threads: Thread[] = [thread("existing")];
     let selectedThreadId: string | null = "existing";
     let streamingTextByThread: Record<string, string> = { existing: "partial" };
+    let notice: NoticeState | null = null;
 
     preserveThreadsAfterConnectionLossAction({
       connectionLostMessage: "Connection lost",
-      currentThreads: threads,
-      demoThreads: [thread("demo-1")],
-      setConnectionState: () => {},
-      setNotice: () => {},
-      setSelectedThreadId: (threadId) => {
-        selectedThreadId = threadId;
+      setConnectionState: (state) => {
+        connectionState = state;
+      },
+      setNotice: (nextNotice) => {
+        notice = nextNotice;
       },
       setStreamingTextByThread: (nextStreamingText) => {
         streamingTextByThread = nextStreamingText;
       },
-      setThreads: (nextThreads) => {
-        threads = nextThreads;
-      },
     });
 
+    expect(connectionState).toBe("disconnected");
+    expect(notice).toEqual({ text: "Connection lost", tone: "warning" });
     expect(threads).toEqual([thread("existing")]);
     expect(selectedThreadId).toBe("existing");
     expect(streamingTextByThread).toEqual({});
   });
 
-  it("falls back to demo threads after connection loss with no threads", () => {
+  it("does not seed demo threads after connection loss with no threads", () => {
+    let connectionState: ConnectionState = "connected";
     let selectedThreadId: string | null = null;
     let threads: Thread[] = [];
+    let notice: NoticeState | null = { text: "old", tone: "warning" };
 
     preserveThreadsAfterConnectionLossAction({
       connectionLostMessage: "Connection lost",
-      currentThreads: threads,
-      demoThreads: [thread("demo-1")],
-      setConnectionState: () => {},
-      setNotice: () => {},
-      setSelectedThreadId: (threadId) => {
-        selectedThreadId = threadId;
+      setConnectionState: (state) => {
+        connectionState = state;
+      },
+      setNotice: (nextNotice) => {
+        notice = nextNotice;
       },
       setStreamingTextByThread: () => {},
-      setThreads: (nextThreads) => {
-        threads = nextThreads;
-      },
       showConnectionNotice: false,
     });
 
-    expect(threads).toEqual([thread("demo-1")]);
-    expect(selectedThreadId).toBe("demo-1");
+    expect(connectionState).toBe("disconnected");
+    expect(notice).toBeNull();
+    expect(threads).toEqual([]);
+    expect(selectedThreadId).toBeNull();
   });
 });

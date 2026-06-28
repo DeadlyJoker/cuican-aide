@@ -8,6 +8,7 @@ import type {
 } from "../../app-server/appServer";
 import { handleLocalAppNotification } from "../appLocalNotificationHandler";
 import { handleRefreshAppNotification } from "../appRefreshNotificationHandler";
+import { handleOfficeRunUpdatedAppNotification } from "../appOfficeRunUpdatedNotificationHandler";
 import type {
   NoticeState,
   PendingApprovalRequest,
@@ -32,6 +33,7 @@ import type { Locale } from "../../i18n";
 import type { SettingsSection } from "../../settings/settingsCatalog";
 import { handleIncomingServerRequest } from "../../server-request/serverRequestHandler";
 import {
+  autoDispatchNextOfficeDelegationFromClientAction,
   listThreadTurnsFromClientAction,
   syncOfficeRunFromClientAction,
 } from "../appTurnCompletionActions";
@@ -67,6 +69,7 @@ export type AppServerEventHandlersParams = {
   openLibrary: (kind: LibraryKind) => void | Promise<void>;
   openThreadSettingsPanel: () => void | Promise<void>;
   readAutomationRunItems: (threadId: string) => Promise<LibraryItem[]>;
+  refreshComposerSlashCommands: () => void;
   refreshSettingsSection: (section: SettingsSection) => void | Promise<void>;
   selectedThreadId: () => string | null;
   setActiveFileWatch: StateSetter<ActiveFileWatch | null>;
@@ -117,8 +120,10 @@ export function createAppServerEventHandlers(
           setNotice: params.setNotice,
           setPendingApprovalRequest: params.setPendingApprovalRequest,
           setPendingDynamicToolRequest: params.setPendingDynamicToolRequest,
-          setPendingExternalSecretRequest: params.setPendingExternalSecretRequest,
-          setPendingMcpElicitationRequest: params.setPendingMcpElicitationRequest,
+          setPendingExternalSecretRequest:
+            params.setPendingExternalSecretRequest,
+          setPendingMcpElicitationRequest:
+            params.setPendingMcpElicitationRequest,
           setPendingUserInputRequest: params.setPendingUserInputRequest,
           setSelectedThreadId: params.setSelectedThreadId,
           setStreamingTextByThread: params.setStreamingTextByThread,
@@ -138,6 +143,7 @@ export function createAppServerEventHandlers(
               setAccountStatus: params.setAccountStatus,
             });
           },
+          refreshComposerSlashCommands: params.refreshComposerSlashCommands,
           refreshVisibleLibrary: (kind) => {
             refreshVisibleLibraryAction({
               appView: params.currentAppView(),
@@ -196,6 +202,15 @@ export function createAppServerEventHandlers(
       }
 
       if (
+        handleOfficeRunUpdatedAppNotification({
+          notification,
+          setLibraryPanel: params.setLibraryPanel,
+        })
+      ) {
+        return;
+      }
+
+      if (
         handleTurnCompletionAppNotification({
           automationRunsByTurn: params.automationRunsByTurn(),
           getLibraryPanel: params.libraryPanel,
@@ -211,6 +226,13 @@ export function createAppServerEventHandlers(
           setStreamingTextByThread: params.setStreamingTextByThread,
           setThreads: params.setThreads,
           syncAutomationRun: params.syncAutomationRun,
+          autoDispatchNextOfficeDelegation: (record, config) =>
+            autoDispatchNextOfficeDelegationFromClientAction({
+              client,
+              config,
+              locale,
+              record,
+            }),
           syncOfficeRun: (record, config: OfficeConfig, turn) =>
             syncOfficeRunFromClientAction({
               client,

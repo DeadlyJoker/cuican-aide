@@ -20,6 +20,7 @@ import {
   type BackgroundTerminalActionHandlersParams,
 } from "../terminal/backgroundTerminalActions";
 import type { CapabilityPanel } from "./capabilityPanelTypes";
+import type { ConfirmHandler } from "../shared/confirmHandler";
 import {
   contextThreadActionForActionId,
   createContextThreadActionHandlers,
@@ -119,7 +120,7 @@ export type CapabilityPanelActionDispatcherParams = {
   busyToolId: ToolId | null;
   capabilityPanel: CapabilityPanel | null;
   client: DispatcherClient | null | undefined;
-  confirm: (message: string) => boolean;
+  confirm: ConfirmHandler;
   createThread: (initialPrompt?: string) => Promise<Thread | null>;
   cwd: string;
   fieldValue: (fieldId: string) => string;

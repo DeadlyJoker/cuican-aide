@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "config": true,
+    "cwd": {
+      "type": "string"
+    },
+    "delegationId": {
+      "type": "string"
+    },
+    "locale": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "turnId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "config",
+    "cwd",
+    "delegationId",
+    "runId"
+  ],
+  "title": "OfficeDelegationCancelParams",
+  "type": "object"
+}

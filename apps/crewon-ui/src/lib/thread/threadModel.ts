@@ -19,6 +19,28 @@ export function upsertThread(threads: Thread[], nextThread: Thread): Thread[] {
   return nextThreads;
 }
 
+export function mergeThreadListSummaries(
+  currentThreads: Thread[],
+  nextThreads: Thread[],
+): Thread[] {
+  return nextThreads.map((nextThread) => {
+    const currentThread = currentThreads.find(
+      (thread) => thread.id === nextThread.id,
+    );
+    if (
+      !currentThread ||
+      nextThread.turns.length > 0 ||
+      currentThread.turns.length === 0
+    ) {
+      return nextThread;
+    }
+    return {
+      ...nextThread,
+      turns: currentThread.turns,
+    };
+  });
+}
+
 export function updateThreadInList(
   threads: Thread[],
   threadId: string,

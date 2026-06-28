@@ -54,6 +54,7 @@ const refreshActionSpy = vi.hoisted(() => ({
 }));
 
 const turnActionSpy = vi.hoisted(() => ({
+  autoDispatch: vi.fn(async () => null),
   listTurns: vi.fn(async () => []),
   syncOffice: vi.fn(async () => null),
 }));
@@ -88,6 +89,7 @@ vi.mock("../appNotificationRefreshActions", () => ({
 }));
 
 vi.mock("../appTurnCompletionActions", () => ({
+  autoDispatchNextOfficeDelegationFromClientAction: turnActionSpy.autoDispatch,
   listThreadTurnsFromClientAction: turnActionSpy.listTurns,
   syncOfficeRunFromClientAction: turnActionSpy.syncOffice,
 }));
@@ -121,12 +123,16 @@ function createParams(
     locale: () => "en",
     officeRunsByTurn: () => ({
       "turn-2": {
-        config: { title: "Office", subtitle: "Runtime", workspace: {
-          goal: "Ship",
-          members: [],
-          messages: [],
-          tasks: [],
-        } },
+        config: {
+          title: "Office",
+          subtitle: "Runtime",
+          workspace: {
+            goal: "Ship",
+            members: [],
+            messages: [],
+            tasks: [],
+          },
+        },
         cwd: "/repo",
         runId: "office-run-1",
         threadId: "office-thread-1",
@@ -135,6 +141,7 @@ function createParams(
     openLibrary: () => {},
     openThreadSettingsPanel: () => {},
     readAutomationRunItems: async () => [],
+    refreshComposerSlashCommands: () => {},
     refreshSettingsSection: () => {},
     selectedThreadId: () => "thread-1",
     setAccountStatus: () => {},
@@ -197,11 +204,13 @@ describe("app server event handlers", () => {
     const currentClient = client();
     const setAccountStatus = vi.fn();
     const openLibrary = vi.fn();
+    const refreshComposerSlashCommands = vi.fn();
     const refreshSettingsSection = vi.fn();
     notificationSpy.refreshHandled = true;
     notificationSpy.refresh.mockImplementationOnce((params) => {
       notificationSpy.refreshParams = params;
       params.refreshAccount();
+      params.refreshComposerSlashCommands();
       params.refreshVisibleLibrary("agents");
       params.refreshVisibleSettings(["config"]);
       return true;
@@ -211,6 +220,7 @@ describe("app server event handlers", () => {
       createParams({
         client: () => currentClient,
         openLibrary,
+        refreshComposerSlashCommands,
         refreshSettingsSection,
         setAccountStatus,
       }),
@@ -222,6 +232,7 @@ describe("app server event handlers", () => {
       client: currentClient,
       setAccountStatus,
     });
+    expect(refreshComposerSlashCommands).toHaveBeenCalledOnce();
     expect(refreshActionSpy.library).toHaveBeenCalledWith({
       appView: "library",
       kind: "agents",
@@ -300,23 +311,58 @@ describe("app server event handlers", () => {
     await params.listThreadTurns("thread-1");
     await params.syncOfficeRun(
       {
-        config: { title: "Office", subtitle: "Runtime", workspace: {
-          goal: "Ship",
-          members: [],
-          messages: [],
-          tasks: [],
-        } },
+        config: {
+          title: "Office",
+          subtitle: "Runtime",
+          workspace: {
+            goal: "Ship",
+            members: [],
+            messages: [],
+            tasks: [],
+          },
+        },
         cwd: "/repo",
         runId: "office-run-1",
         threadId: "office-thread-1",
       },
-      { title: "Office", subtitle: "Runtime", workspace: {
-        goal: "Ship",
-        members: [],
-        messages: [],
-        tasks: [],
-      } },
+      {
+        title: "Office",
+        subtitle: "Runtime",
+        workspace: {
+          goal: "Ship",
+          members: [],
+          messages: [],
+          tasks: [],
+        },
+      },
       { id: "turn-1" } as never,
+    );
+    await params.autoDispatchNextOfficeDelegation?.(
+      {
+        config: {
+          title: "Office",
+          subtitle: "Runtime",
+          workspace: {
+            goal: "Ship",
+            members: [],
+            messages: [],
+            tasks: [],
+          },
+        },
+        cwd: "/repo",
+        runId: "office-run-1",
+        threadId: "office-thread-1",
+      },
+      {
+        title: "Office",
+        subtitle: "Runtime",
+        workspace: {
+          goal: "Ship",
+          members: [],
+          messages: [],
+          tasks: [],
+        },
+      },
     );
 
     expect(params.automationRunsByTurn).toEqual({
@@ -336,6 +382,90 @@ describe("app server event handlers", () => {
       record: expect.objectContaining({ runId: "office-run-1" }),
       turn: { id: "turn-1" },
     });
+    expect(turnActionSpy.autoDispatch).toHaveBeenCalledWith({
+      client: currentClient,
+      config: expect.objectContaining({ title: "Office" }),
+      locale: "en",
+      record: expect.objectContaining({ runId: "office-run-1" }),
+    });
+  });
+
+  it("applies office run updated notifications to the visible office panel", () => {
+    let libraryPanel: LibraryPanel | null = {
+      kind: "office",
+      title: "Office",
+      subtitle: "Runtime",
+      items: [],
+      workspace: {
+        goal: "Old goal",
+        threadId: "office-thread-1",
+        backendStatus: "connected",
+        members: [],
+        messages: [],
+        tasks: [],
+        activity: {
+          approvals: [],
+          artifacts: [],
+          budget: [],
+          budgetCapUsd: 0,
+          runs: [],
+          trace: [],
+        },
+      },
+    };
+    const handlers = createAppServerEventHandlers(
+      createParams({
+        libraryPanel: () => libraryPanel,
+        setLibraryPanel: (updater) => {
+          libraryPanel = updater(libraryPanel);
+        },
+      }),
+    );
+
+    handlers.handleNotification({
+      method: "office/run/updated",
+      params: {
+        cwd: "/repo",
+        filePath: "/repo/.crewon/offices/office.json",
+        reason: "autoDispatchCompletion",
+        sourceThreadId: "member-thread-1",
+        sourceTurnId: "turn-member-1",
+        config: {
+          title: "Office",
+          subtitle: "Runtime",
+          workspace: {
+            goal: "Ship",
+            threadId: "office-thread-1",
+            backendStatus: "connected",
+            members: [],
+            messages: [],
+            tasks: [],
+            activity: {
+              approvals: [],
+              artifacts: [],
+              budget: [],
+              budgetCapUsd: 0,
+              runs: [
+                {
+                  id: "office-run-1",
+                  title: "Updated run",
+                  status: "completed",
+                  resultPreview: "Auto-dispatch finished",
+                },
+              ],
+              trace: [],
+            },
+          },
+        },
+      },
+    } as never);
+
+    expect(libraryPanel?.workspace?.goal).toBe("Ship");
+    expect(libraryPanel?.workspace?.activity?.runs?.[0]).toMatchObject({
+      id: "office-run-1",
+      resultPreview: "Auto-dispatch finished",
+    });
+    expect(notificationSpy.turn).not.toHaveBeenCalled();
   });
 
   it("wires incoming server requests through direct App state setters", () => {
@@ -356,7 +486,10 @@ describe("app server event handlers", () => {
       }),
     );
 
-    handlers.handleServerRequest({ id: 1, method: "approval/request" } as never);
+    handlers.handleServerRequest({
+      id: 1,
+      method: "approval/request",
+    } as never);
     const params = notificationSpy.incomingParams;
     if (!params) {
       throw new Error("incoming request handler was not called");

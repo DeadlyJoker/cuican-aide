@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { OfficeRunResponse } from "../app-server/appServer";
-import type { OfficeRunActivity, OfficeWorkspace } from "../domain/crewonDomain";
+import type {
+  OfficeRunActivity,
+  OfficeWorkspace,
+} from "../domain/crewonDomain";
 import {
   officeRunActiveTurnByThread,
   officeRunCanceledPanel,
@@ -14,8 +17,12 @@ import {
   officeRunCancelUnsupportedNotice,
   officeRunCancelUnsupportedNoticeState,
   officeRunResponsePanel,
+  officeRunRetryActionLabel,
   officeRunRetryFallbackError,
   officeRunRetryFailureNotice,
+  officeRunRetryLimitNotice,
+  officeRunRetryLimitReached,
+  officeRunRetryPendingActionLabel,
   officeRunRetryText,
   officeRunSyncedPanel,
   officeRunTurnRecord,
@@ -92,12 +99,174 @@ describe("office run panel helpers", () => {
         }),
       ),
     ).toBe("request");
-    expect(officeRunRetryText(run({ requestText: "", promptPreview: " prompt " }))).toBe(
-      "",
+    expect(
+      officeRunRetryText(run({ requestText: "", promptPreview: " prompt " })),
+    ).toBe("");
+    expect(officeRunRetryText(run({ promptPreview: " prompt " }))).toBe(
+      "prompt",
     );
-    expect(officeRunRetryText(run({ promptPreview: " prompt " }))).toBe("prompt");
     expect(officeRunRetryText(run({ promptPreview: "" }))).toBe("");
     expect(officeRunRetryText(run())).toBe("Summarize office");
+  });
+
+  it("builds review-aware retry text and labels", () => {
+    const blockedRun = run({
+      status: "completed",
+      requestText: "Ship release",
+      loop: {
+        review: {
+          status: "blocked",
+          nextAction: "repairFailedCriteria",
+        },
+      },
+      acceptanceCriteria: [
+        {
+          criterion: "All checks pass",
+          status: "failed",
+          evidence: "Integration test failed",
+        },
+      ],
+      evidence: [
+        {
+          summary: "Integration test failed",
+          status: "blocked",
+          source: "just test",
+        },
+      ],
+      verificationChecks: [
+        {
+          check: "Run integration suite",
+          status: "failed",
+          command: "just test -p crewon-app-server",
+          evidence: "suite failed",
+        },
+      ],
+      risks: [
+        {
+          summary: "Release could regress users",
+          severity: "high",
+        },
+      ],
+    });
+
+    const retryText = officeRunRetryText(blockedRun, "en");
+    expect(retryText).toContain("Continue the previous Office Loop");
+    expect(retryText).toContain("Next action: repairFailedCriteria");
+    expect(retryText).toContain("All checks pass");
+    expect(retryText).toContain("Failed or pending verification checks");
+    expect(retryText).toContain("Run integration suite");
+    expect(retryText).toContain("Integration test failed");
+    expect(retryText).toContain("Release could regress users");
+    expect(officeRunRetryActionLabel(blockedRun, "en")).toBe("Repair");
+    expect(
+      officeRunRetryActionLabel(
+        run({
+          loop: { review: { status: "needsReview" } },
+        }),
+        "en",
+      ),
+    ).toBe("Continue loop");
+    expect(
+      officeRunRetryActionLabel(
+        run({
+          loop: { review: { status: "passed" } },
+        }),
+        "en",
+      ),
+    ).toBe("Retry");
+  });
+
+  it("builds verification-check retry text and labels", () => {
+    const needsCheckRun = run({
+      status: "completed",
+      requestText: "Verify release readiness",
+      loop: {
+        review: {
+          status: "needsReview",
+          nextAction: "runVerificationChecks",
+        },
+      },
+      verificationChecks: [
+        {
+          check: "Run smoke automation",
+          status: "pending",
+          automationId: "nightly-smoke",
+        },
+      ],
+    });
+
+    const retryText = officeRunRetryText(needsCheckRun, "en");
+    expect(retryText).toContain(
+      "Continue the previous Office Loop by running the pending verification checks.",
+    );
+    expect(retryText).toContain("Next action: runVerificationChecks");
+    expect(retryText).toContain("Run smoke automation");
+    expect(retryText).toContain(
+      "do not mark checks passed without real tool evidence",
+    );
+    expect(officeRunRetryActionLabel(needsCheckRun, "en")).toBe("Run checks");
+    expect(officeRunRetryActionLabel(needsCheckRun, "zh")).toBe("运行检查");
+    expect(officeRunRetryPendingActionLabel(needsCheckRun, "en")).toBe(
+      "Running checks",
+    );
+    expect(officeRunRetryPendingActionLabel(needsCheckRun, "zh")).toBe(
+      "运行检查中",
+    );
+  });
+
+  it("builds pending retry labels from review state", () => {
+    expect(officeRunRetryPendingActionLabel(run(), "en")).toBe("Retrying");
+    expect(
+      officeRunRetryPendingActionLabel(
+        run({
+          loop: { review: { status: "blocked", nextAction: "repairFailedCriteria" } },
+        }),
+        "en",
+      ),
+    ).toBe("Repairing");
+    expect(
+      officeRunRetryPendingActionLabel(
+        run({
+          loop: { review: { status: "needsReview" } },
+        }),
+        "en",
+      ),
+    ).toBe("Continuing loop");
+  });
+
+  it("detects office loop retry limits", () => {
+    const limitRun = run({
+      status: "completed",
+      loop: {
+        iteration: 4,
+        maxIterations: 4,
+        review: {
+          status: "needsReview",
+        },
+      },
+    });
+
+    expect(officeRunRetryLimitReached(limitRun)).toBe(true);
+    expect(officeRunRetryActionLabel(limitRun, "en")).toBe("Limit reached");
+    expect(officeRunRetryActionLabel(limitRun, "zh")).toBe("达到上限");
+    expect(officeRunRetryLimitNotice("en")).toEqual({
+      text: "Office Loop iteration limit reached. Adjust the goal or start a new team run.",
+      tone: "warning",
+    });
+    expect(
+      officeRunRetryLimitReached(
+        run({
+          status: "completed",
+          loop: {
+            iteration: 4,
+            maxIterations: 4,
+            review: {
+              status: "passed",
+            },
+          },
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("builds cancel and retry notices", () => {
@@ -140,6 +309,7 @@ describe("office run panel helpers", () => {
       cwd: "/workspace",
       runId: "run-1",
       threadId: "thread-1",
+      turnThreadId: "thread-1",
       config: response.config,
     });
     expect(officeWorkspaceFromRunResponse(response)).toEqual({
@@ -159,6 +329,7 @@ describe("office run panel helpers", () => {
         response,
       ),
     ).toMatchObject({
+      configPath: "/tmp/offices/cleaner.json",
       workspace: {
         threadId: "thread-1",
         backendStatus: "connected",
@@ -199,11 +370,63 @@ describe("office run panel helpers", () => {
     });
   });
 
+  it("keeps office identity when a delegation response targets a member thread", () => {
+    const response = runResponse({
+      threadId: "member-thread-1",
+      config: {
+        title: "Frontend office",
+        subtitle: "Cleaner frontend architecture",
+        workspace: workspace({
+          threadId: "office-thread-1",
+          activity: {
+            approvals: [],
+            artifacts: [],
+            budget: [],
+            budgetCapUsd: 8,
+            runs: [
+              run({
+                delegations: [
+                  {
+                    id: "delegation-1",
+                    member: "Reviewer",
+                    status: "running",
+                    task: "Review",
+                    threadId: "member-thread-1",
+                    turnId: "turn-1",
+                  },
+                ],
+              }),
+            ],
+            trace: [],
+          },
+        }),
+      },
+    });
+
+    expect(officeRunTurnRecord("/workspace", response)).toEqual({
+      cwd: "/workspace",
+      runId: "run-1",
+      threadId: "office-thread-1",
+      turnThreadId: "member-thread-1",
+      config: response.config,
+    });
+    expect(officeWorkspaceFromRunResponse(response)).toMatchObject({
+      threadId: "office-thread-1",
+      backendStatus: "connected",
+    });
+    expect(
+      officeRunActiveTurnByThread({ other: "turn-other" }, response),
+    ).toEqual({
+      "other": "turn-other",
+      "member-thread-1": "turn-1",
+    });
+  });
+
   it("patches the active turn only for in-progress run responses", () => {
     expect(
       officeRunActiveTurnByThread({ other: "turn-other" }, runResponse()),
     ).toEqual({
-      other: "turn-other",
+      "other": "turn-other",
       "thread-1": "turn-1",
     });
 

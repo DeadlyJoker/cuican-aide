@@ -1,6 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import { AppConversationSurface } from "./AppConversationSurface";
+import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import { translate, type Locale } from "../../lib/i18n";
 import type { PlatformKind } from "../../lib/platform";
@@ -17,6 +18,7 @@ export function AppWorkspaceConversationContent({
   platform,
   selectedThread,
   selectedThreadId,
+  slashCommands,
   streamingTextByThread,
   workMode,
   onAttachContext,
@@ -24,6 +26,7 @@ export function AppWorkspaceConversationContent({
   onModeChange,
   onRetryConnection,
   onSend,
+  onSlashCommandSelect,
   onStop,
   onThreadSettings,
 }: {
@@ -37,6 +40,7 @@ export function AppWorkspaceConversationContent({
   platform: PlatformKind;
   selectedThread: Thread | null;
   selectedThreadId: string | null;
+  slashCommands: ComposerSlashCommand[];
   streamingTextByThread: Record<string, string>;
   workMode: WorkMode;
   onAttachContext: () => void;
@@ -44,6 +48,7 @@ export function AppWorkspaceConversationContent({
   onModeChange: (mode: WorkMode) => void;
   onRetryConnection: () => void;
   onSend: (text: string) => void;
+  onSlashCommandSelect: (command: ComposerSlashCommand) => void;
   onStop: () => void;
   onThreadSettings: () => void;
 }) {
@@ -83,6 +88,7 @@ export function AppWorkspaceConversationContent({
       sendLabel={t.send}
       sendShortcutLabel={sendShortcutLabel}
       sendingLabel={t.sending}
+      slashCommands={slashCommands}
       streamingText={
         selectedThreadId ? (streamingTextByThread[selectedThreadId] ?? "") : ""
       }
@@ -96,6 +102,7 @@ export function AppWorkspaceConversationContent({
       onModeChange={onModeChange}
       onRetryConnection={onRetryConnection}
       onSend={onSend}
+      onSlashCommandSelect={onSlashCommandSelect}
       onStop={onStop}
       onThreadSettings={onThreadSettings}
     />

@@ -46,6 +46,7 @@ export function OfficeChatPanel({
   locale,
   draft,
   streamRef,
+  isSubmitting,
   onDraftChange,
   onSubmit,
 }: {
@@ -53,6 +54,7 @@ export function OfficeChatPanel({
   locale: Locale;
   draft: string;
   streamRef: RefObject<HTMLDivElement | null>;
+  isSubmitting?: boolean;
   onDraftChange: (draft: string) => void;
   onSubmit: () => void;
 }) {
@@ -109,8 +111,10 @@ export function OfficeChatPanel({
           onSubmit();
         }}
       >
-        <input
+        <textarea
           value={draft}
+          rows={2}
+          disabled={isSubmitting}
           spellCheck={false}
           placeholder={
             locale === "zh"
@@ -119,9 +123,25 @@ export function OfficeChatPanel({
           }
           aria-label={locale === "zh" ? "群聊输入" : "Group chat input"}
           onChange={(event) => onDraftChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              onSubmit();
+            }
+          }}
         />
-        <button type="submit" disabled={!draft.trim()}>
-          {locale === "zh" ? "发送" : "Send"}
+        <button
+          type="button"
+          disabled={isSubmitting || !draft.trim()}
+          onClick={onSubmit}
+        >
+          {isSubmitting
+            ? locale === "zh"
+              ? "发送中"
+              : "Sending"
+            : locale === "zh"
+              ? "发送"
+              : "Send"}
         </button>
       </form>
     </section>

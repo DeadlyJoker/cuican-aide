@@ -1,8 +1,8 @@
 import type {
   KnowledgeSource,
-  LibraryPanelAction,
 } from "../../lib/domain/crewonDomain";
 import type { Locale } from "../../lib/i18n";
+import type { LibraryPanelActionCallback } from "./LibraryPrimitives";
 
 type KnowledgeSourceStatus = KnowledgeSource["status"];
 
@@ -37,7 +37,7 @@ export function KnowledgeSourceList({
 }: {
   isZh: boolean;
   locale: Locale;
-  onPanelAction: (action: LibraryPanelAction) => void;
+  onPanelAction: LibraryPanelActionCallback;
   sources: KnowledgeSource[];
 }) {
   return (

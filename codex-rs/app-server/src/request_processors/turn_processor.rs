@@ -102,7 +102,7 @@ impl TurnRequestProcessor {
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        self.turn_start_inner(
+        self.turn_start_response(
             request_id,
             params,
             app_server_client_name,
@@ -110,6 +110,22 @@ impl TurnRequestProcessor {
         )
         .await
         .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn turn_start_response(
+        &self,
+        request_id: ConnectionRequestId,
+        params: TurnStartParams,
+        app_server_client_name: Option<String>,
+        app_server_client_version: Option<String>,
+    ) -> Result<TurnStartResponse, JSONRPCErrorError> {
+        self.turn_start_inner(
+            request_id,
+            params,
+            app_server_client_name,
+            app_server_client_version,
+        )
+        .await
     }
 
     pub(crate) async fn thread_inject_items(
@@ -149,6 +165,15 @@ impl TurnRequestProcessor {
         self.turn_interrupt_inner(request_id, params)
             .await
             .map(|response| response.map(Into::into))
+    }
+
+    pub(crate) async fn turn_interrupt_without_response(
+        &self,
+        request_id: &ConnectionRequestId,
+        params: TurnInterruptParams,
+    ) -> Result<(), JSONRPCErrorError> {
+        self.turn_interrupt_without_response_inner(request_id, params)
+            .await
     }
 
     pub(crate) async fn thread_realtime_start(
@@ -1304,6 +1329,41 @@ impl TurnRequestProcessor {
         }
     }
 
+    async fn turn_interrupt_without_response_inner(
+        &self,
+        request_id: &ConnectionRequestId,
+        params: TurnInterruptParams,
+    ) -> Result<(), JSONRPCErrorError> {
+        let TurnInterruptParams { thread_id, turn_id } = params;
+        if turn_id.is_empty() {
+            return Err(invalid_request("turnId must not be empty"));
+        }
+
+        let (thread_uuid, thread) = self.load_thread(&thread_id).await?;
+        let thread_state = self.thread_state_manager.thread_state(thread_uuid).await;
+        let is_running = matches!(thread.agent_status().await, AgentStatus::Running);
+        {
+            let thread_state = thread_state.lock().await;
+            if let Some(active_turn) = thread_state.active_turn_snapshot() {
+                if active_turn.id != turn_id {
+                    return Err(invalid_request(format!(
+                        "expected active turn id {turn_id} but found {}",
+                        active_turn.id
+                    )));
+                }
+            } else if thread_state.last_terminal_turn_id.as_deref() == Some(turn_id.as_str())
+                || !is_running
+            {
+                return Err(invalid_request("no active turn to interrupt"));
+            }
+        }
+
+        self.submit_core_op(request_id, thread.as_ref(), Op::Interrupt)
+            .await
+            .map(|_| ())
+            .map_err(|err| internal_error(format!("failed to interrupt turn: {err}")))
+    }
+
     fn listener_task_context(&self) -> ListenerTaskContext {
         ListenerTaskContext {
             thread_manager: Arc::clone(&self.thread_manager),
@@ -1315,6 +1375,13 @@ impl TurnRequestProcessor {
             fallback_model_provider: self.config.model_provider_id.clone(),
             codex_home: self.config.codex_home.to_path_buf(),
             skills_watcher: Arc::clone(&self.skills_watcher),
+            office_auto_dispatch: Some(OfficeAutoDispatchContext {
+                domain_processor: Arc::new(CrewonDomainRequestProcessor::new()),
+                outgoing: Arc::clone(&self.outgoing),
+                thread_manager: Arc::clone(&self.thread_manager),
+                turn_processor: self.clone(),
+                completion_monitors: Arc::new(Mutex::new(HashSet::new())),
+            }),
         }
     }
 

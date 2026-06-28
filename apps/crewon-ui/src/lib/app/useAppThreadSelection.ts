@@ -24,8 +24,11 @@ export function useAppThreadSelection({
   return useMemo(() => {
     const selectedThread =
       threads.find((thread) => thread.id === selectedThreadId) ?? null;
+    const inProgressTurnId =
+      selectedThread?.turns.find((turn) => turn.status === "inProgress")?.id ??
+      null;
     const activeTurnId = selectedThreadId
-      ? (activeTurnByThread[selectedThreadId] ?? null)
+      ? (activeTurnByThread[selectedThreadId] ?? inProgressTurnId)
       : null;
 
     return {

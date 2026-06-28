@@ -26,6 +26,7 @@ import {
   writeAppAutomationConfig,
 } from "../../domain/domainAutomationBackend";
 import {
+  listAppRecruitableAgentConfigs,
   readAppLatestOfficeConfig,
   readAppRecruitableAgentConfig,
 } from "../../domain/domainCollaborationBackend";
@@ -65,7 +66,7 @@ export type AppDomainBackendHandlers = {
     workspaceBeforeMember: OfficeWorkspace,
     agentId: string | undefined,
     member: OfficeMember,
-    threadId: string,
+    threadId?: string | null,
   ) => Promise<OfficeConfig | null>;
   writeOfficeConfigFile: (config: OfficeConfig) => Promise<string | null>;
   writeAgentConfigFile: (
@@ -106,6 +107,9 @@ export type AppDomainBackendHandlers = {
   readRecruitableAgentConfig: (
     existingMembers: OfficeMember[],
   ) => Promise<AgentConfig | null>;
+  listRecruitableAgentConfigs: (
+    existingMembers: OfficeMember[],
+  ) => Promise<AgentConfig[]>;
   readLatestOfficeConfig: () => Promise<OfficeConfig | null>;
   createBackendAgentConfig: () => Promise<AgentConfig>;
   createBackendKnowledgeData: () => Promise<KnowledgeData>;
@@ -244,6 +248,13 @@ export function createAppDomainBackendHandlers(params: {
       }),
     readRecruitableAgentConfig: (existingMembers) =>
       readAppRecruitableAgentConfig({
+        client: params.client,
+        existingMembers,
+        isConnected: params.isConnected,
+        resolveBackendCwd,
+      }),
+    listRecruitableAgentConfigs: (existingMembers) =>
+      listAppRecruitableAgentConfigs({
         client: params.client,
         existingMembers,
         isConnected: params.isConnected,

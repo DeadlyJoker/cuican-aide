@@ -1,7 +1,7 @@
 import type {
   KnowledgeEntry,
-  LibraryPanelAction,
 } from "../../lib/domain/crewonDomain";
+import type { LibraryPanelActionCallback } from "./LibraryPrimitives";
 
 export function KnowledgeMemoryList({
   isZh,
@@ -10,7 +10,7 @@ export function KnowledgeMemoryList({
 }: {
   isZh: boolean;
   memories: KnowledgeEntry[];
-  onPanelAction: (action: LibraryPanelAction) => void;
+  onPanelAction: LibraryPanelActionCallback;
 }) {
   return (
     <section className="knowledge-col knowledge-memory">

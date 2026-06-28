@@ -3,6 +3,7 @@ import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { AppServerClient } from "../../app-server/appServer";
 import type { AppView } from "../appRouting";
 import type { NoticeState } from "../appRuntimeState";
+import type { ConfirmHandler } from "../../shared/confirmHandler";
 import {
   automationWorkspaceUnavailableMessage,
   requireAppServerClient,
@@ -15,8 +16,10 @@ import type {
   LibraryKind,
   LibraryPanel,
   LibraryPanelAction,
+  OfficeMessage,
   ToolConfig,
 } from "../../domain/crewonDomain";
+import { officeConfigForThread } from "../../domain/crewonDomain";
 import {
   deleteMcpToolConfigRecord,
   saveOrUpdateToolConfig,
@@ -37,6 +40,7 @@ import {
   type LibraryPanelActionHandlers,
 } from "../../library/libraryPanelActionHandlers";
 import { createDefaultAgentConfig } from "../../agent-config/agentConfigDefaults";
+import type { OfficeRunTurnRecord } from "../../office/officeRunPanel";
 
 type LibraryPanelSetter = (
   panelOrUpdater:
@@ -49,7 +53,7 @@ type ThreadSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
 export type AppLibraryPanelActionHandlersParams = {
   action: LibraryPanelAction;
   client: AppServerClient | null;
-  confirm: (message: string) => boolean;
+  confirm: ConfirmHandler;
   createBackendAgentConfig: () => Promise<AgentConfig>;
   ensureBackendToolThread: (
     serverName: string,
@@ -97,6 +101,7 @@ export type AppLibraryPanelActionHandlersParams = {
         : never
       : never,
   ) => void;
+  recordOfficeRunTurn: (turnId: string, record: OfficeRunTurnRecord) => void;
   requireBackendWorkspace: (errorMessage: string) => Promise<BackendWorkspace>;
   resolveBackendCwd: () => Promise<string>;
   runAutomationConfig: Parameters<
@@ -203,11 +208,55 @@ export function createAppLibraryPanelActionHandlers(
       readAutomationRunItems: params.readAutomationRunItems,
       readThread,
       recordAutomationRunForTurn: params.recordAutomationRunForTurn,
+      recordOfficeRunTurn: params.recordOfficeRunTurn,
       renameThread,
+      runOfficeAutomation: async (automationConfig, text) => {
+        const targetOffice = automationConfig.targetOffice;
+        const officeThreadId = targetOffice?.workspace.threadId?.trim();
+        if (!params.client || !targetOffice || !officeThreadId) {
+          return null;
+        }
+        const cwd = await params.resolveBackendCwd();
+        const officeConfig = officeConfigForThread(
+          targetOffice.title,
+          targetOffice.subtitle,
+          targetOffice.workspace,
+          officeThreadId,
+        );
+        const message: OfficeMessage = {
+          author: automationConfig.title,
+          glyph: "A",
+          accent: "violet",
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          text,
+          kind: "task",
+        };
+        try {
+          return {
+            cwd,
+            response: await params.client.runOfficeConfig(
+              cwd,
+              officeConfig,
+              message,
+              text,
+              params.locale,
+              officeThreadId,
+              null,
+            ),
+          };
+        } catch (error) {
+          if (params.isUnsupportedRpcError(error)) {
+            return null;
+          }
+          throw error;
+        }
+      },
       runAutomationConfig: params.runAutomationConfig,
       setLibraryPanel: params.setLibraryPanel,
       setNotice: params.setNotice,
-      setThreadGoal,
       setThreads: params.setThreads,
       startAutomationThread,
       startTurn,
@@ -319,13 +368,8 @@ export function createAppLibraryPanelActionHandlers(
       isUnsupportedRpcError: params.isUnsupportedRpcError,
       locale: params.locale,
       now: () => new Date(),
-      renameThread,
       setLibraryPanel: params.setLibraryPanel,
       setNotice: params.setNotice,
-      setThreadGoal,
-      setThreads: params.setThreads,
-      startOfficeThread: () => params.startBackendDomainThread("office"),
-      startTurn,
       writeOfficeConfig: params.writeOfficeConfigFile,
     },
     officeRecruit: {

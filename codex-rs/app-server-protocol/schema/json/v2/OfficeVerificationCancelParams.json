@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "config": true,
+    "cwd": {
+      "type": "string"
+    },
+    "locale": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "turnId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "verificationCheckId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "config",
+    "cwd",
+    "runId",
+    "verificationCheckId"
+  ],
+  "title": "OfficeVerificationCancelParams",
+  "type": "object"
+}

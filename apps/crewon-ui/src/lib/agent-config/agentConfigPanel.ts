@@ -246,6 +246,7 @@ export function agentConfigUpdatedPanel(
   return panel?.agentConfig
     ? {
         ...panel,
+        title: patch.name ?? panel.title,
         agentConfig: { ...panel.agentConfig, ...patch },
       }
     : panel;

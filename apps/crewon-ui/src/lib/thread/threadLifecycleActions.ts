@@ -1,6 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import { removeRecordKey } from "../shared/recordState";
+import type { ConfirmHandler } from "../shared/confirmHandler";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
 import { realThreadRequiredPanel } from "../settings/settingsSavePayloads";
@@ -39,7 +40,7 @@ type SetCapabilityPanel = (
 export type ThreadLifecycleActionHandlersParams = {
   busyToolId: string | null;
   client: ThreadLifecycleClient | null | undefined;
-  confirm: (message: string) => boolean;
+  confirm: ConfirmHandler;
   isConnected: boolean;
   isDemo: boolean;
   locale: Locale;
@@ -159,11 +160,11 @@ function rollbackThread(params: ThreadLifecycleActionHandlersParams) {
     return;
   }
 
-  if (!confirm(threadRollbackConfirmMessage(locale))) {
-    return;
-  }
-
   void (async () => {
+    if (!(await confirm(threadRollbackConfirmMessage(locale)))) {
+      return;
+    }
+
     setBusyToolId("sidechat");
     setCapabilityPanel((currentPanel) =>
       threadRollbackProgressPanel(currentPanel, locale),

@@ -197,7 +197,11 @@ describe("capability panel item actions", () => {
 
     expect(composer).toBe("$browser-tools open settings");
     expect(mentions).toEqual([
-      { name: "Browser Tools", path: "app://browser" },
+      {
+        name: "Browser Tools",
+        path: "app://browser",
+        token: "$browser-tools",
+      },
     ]);
     expect(focusSignal).toBe(1);
     expect(panel).toMatchObject({

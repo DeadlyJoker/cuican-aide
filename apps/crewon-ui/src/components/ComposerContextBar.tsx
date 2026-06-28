@@ -11,7 +11,7 @@ export function ComposerContextBar({
   onThreadSettings,
 }: {
   connectionStatusLabel: string;
-  connectionTone: "connected" | "connecting" | "demo";
+  connectionTone: "connected" | "connecting" | "disconnected" | "demo";
   cwd: string;
   noWorkspaceSelectedLabel: string;
   retryConnectionLabel: string;
@@ -37,7 +37,7 @@ export function ComposerContextBar({
           <Circle size={8} fill="currentColor" />
           {connectionStatusLabel}
         </span>
-        {connectionTone === "demo" ? (
+        {connectionTone === "demo" || connectionTone === "disconnected" ? (
           <button
             className="composer-retry-button"
             type="button"

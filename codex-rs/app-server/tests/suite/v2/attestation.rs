@@ -98,12 +98,17 @@ async fn attestation_generate_round_trip_adds_header_to_responses_websocket_hand
         bail!("expected initialize response, got {initialized:?}");
     };
 
+    let mut attestation_requests = 0;
     let thread_request_id = mcp
         .send_thread_start_request(ThreadStartParams::default())
         .await?;
     let thread_response: JSONRPCResponse = timeout(
         DEFAULT_READ_TIMEOUT,
-        mcp.read_stream_until_response_message(RequestId::Integer(thread_request_id)),
+        read_response_answering_attestation_requests(
+            &mut mcp,
+            RequestId::Integer(thread_request_id),
+            &mut attestation_requests,
+        ),
     )
     .await??;
     let ThreadStartResponse { thread, .. } = to_response(thread_response)?;
@@ -121,33 +126,30 @@ async fn attestation_generate_round_trip_adds_header_to_responses_websocket_hand
         .await?;
     let turn_response: JSONRPCResponse = timeout(
         DEFAULT_READ_TIMEOUT,
-        mcp.read_stream_until_response_message(RequestId::Integer(turn_request_id)),
+        read_response_answering_attestation_requests(
+            &mut mcp,
+            RequestId::Integer(turn_request_id),
+            &mut attestation_requests,
+        ),
     )
     .await??;
     let _: TurnStartResponse = to_response(turn_response)?;
 
-    let mut attestation_requests = 0;
     timeout(DEFAULT_READ_TIMEOUT, async {
         loop {
             match mcp.read_next_message().await? {
                 JSONRPCMessage::Request(request) => {
-                    let request = ServerRequest::try_from(request)?;
-                    let ServerRequest::AttestationGenerate { request_id, .. } = request else {
-                        bail!("expected attestation/generate request, got {request:?}");
-                    };
-                    attestation_requests += 1;
-                    mcp.send_response(
-                        request_id,
-                        serde_json::to_value(AttestationGenerateResponse {
-                            token: ATTESTATION_HEADER.to_string(),
-                        })?,
+                    answer_attestation_request(
+                        &mut mcp,
+                        ServerRequest::try_from(request)?,
+                        &mut attestation_requests,
                     )
                     .await?;
                 }
                 JSONRPCMessage::Notification(notification)
                     if notification.method == "turn/completed" =>
                 {
-                    break Ok(());
+                    break Ok::<(), anyhow::Error>(());
                 }
                 _ => {}
             }
@@ -169,6 +171,47 @@ async fn attestation_generate_round_trip_adds_header_to_responses_websocket_hand
 
     websocket_server.shutdown().await;
     Ok(())
+}
+
+async fn read_response_answering_attestation_requests(
+    mcp: &mut TestAppServer,
+    response_id: RequestId,
+    attestation_requests: &mut usize,
+) -> Result<JSONRPCResponse> {
+    loop {
+        match mcp.read_next_message().await? {
+            JSONRPCMessage::Response(response) if response.id == response_id => {
+                return Ok(response);
+            }
+            JSONRPCMessage::Request(request) => {
+                answer_attestation_request(
+                    mcp,
+                    ServerRequest::try_from(request)?,
+                    attestation_requests,
+                )
+                .await?;
+            }
+            _ => {}
+        }
+    }
+}
+
+async fn answer_attestation_request(
+    mcp: &mut TestAppServer,
+    request: ServerRequest,
+    attestation_requests: &mut usize,
+) -> Result<()> {
+    let ServerRequest::AttestationGenerate { request_id, .. } = request else {
+        bail!("expected attestation/generate request, got {request:?}");
+    };
+    *attestation_requests += 1;
+    mcp.send_response(
+        request_id,
+        serde_json::to_value(AttestationGenerateResponse {
+            token: ATTESTATION_HEADER.to_string(),
+        })?,
+    )
+    .await
 }
 
 fn create_chatgpt_websocket_config(codex_home: &Path, server_uri: &str) -> std::io::Result<()> {

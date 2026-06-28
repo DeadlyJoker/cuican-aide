@@ -17,6 +17,7 @@ import {
   knowledgeWriteSuccessNotice,
 } from "../knowledge/knowledgeMemoryPanel";
 import { threadTitle } from "../thread/threadModel";
+import type { ConfirmHandler } from "../shared/confirmHandler";
 
 type LibraryPanelSetter = (
   updater: (panel: LibraryPanel | null) => LibraryPanel | null,
@@ -24,7 +25,7 @@ type LibraryPanelSetter = (
 
 export type KnowledgeLibraryActionParams = {
   action: LibraryPanelAction;
-  confirm: (message: string) => boolean;
+  confirm: ConfirmHandler;
   isConnected: boolean;
   isDemo: boolean;
   locale: Locale;
@@ -91,7 +92,7 @@ export async function handleKnowledgeLibraryAction({
       return true;
     }
 
-    if (!confirm(knowledgeResetConfirmMessage(locale))) {
+    if (!(await confirm(knowledgeResetConfirmMessage(locale)))) {
       return true;
     }
 

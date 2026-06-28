@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AppServerClient } from "../app-server/appServer";
 import type { AgentConfig, OfficeConfig, OfficeMember } from "./crewonDomain";
 import {
+  listAppRecruitableAgentConfigs,
   readAppLatestOfficeConfig,
   readAppRecruitableAgentConfig,
 } from "./domainCollaborationBackend";
@@ -115,6 +116,62 @@ describe("domain collaboration backend app helpers", () => {
         resolveBackendCwd: async () => "/repo",
       }),
     ).resolves.toMatchObject({ agentId: "agent-new" });
+    expect(readParams).toEqual([
+      {
+        cwd: "/repo",
+        params: {
+          cursor: null,
+          existingAgentIds: ["agent-old"],
+          existingNames: ["Existing"],
+          limit: 24,
+        },
+      },
+    ]);
+  });
+
+  it("lists recruitable agents through backend workspace access", async () => {
+    const existingMembers: OfficeMember[] = [
+      {
+        name: "Existing",
+        role: "Lead",
+        glyph: "E",
+        accent: "blue",
+        status: "active",
+        agentId: "agent-old",
+      },
+    ];
+    const readParams: unknown[] = [];
+
+    await expect(
+      listAppRecruitableAgentConfigs({
+        client: client({
+          async listRecruitableAgentConfigs(cwd, params) {
+            readParams.push({ cwd, params });
+            return {
+              data: [
+                {
+                  filePath: "/repo/planner.json",
+                  savedAt: "2026-06-17T00:00:00.000Z",
+                  config: agentConfig({ agentId: "agent-planner", name: "Planner" }),
+                },
+                {
+                  filePath: "/repo/reviewer.json",
+                  savedAt: "2026-06-17T00:00:00.000Z",
+                  config: agentConfig({ agentId: "agent-reviewer", name: "Reviewer" }),
+                },
+              ],
+              nextCursor: null,
+            };
+          },
+        }),
+        existingMembers,
+        isConnected: true,
+        resolveBackendCwd: async () => "/repo",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ agentId: "agent-planner", name: "Planner" }),
+      expect.objectContaining({ agentId: "agent-reviewer", name: "Reviewer" }),
+    ]);
     expect(readParams).toEqual([
       {
         cwd: "/repo",

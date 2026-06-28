@@ -120,7 +120,7 @@ describe("office approval actions", () => {
       tone: "warning",
     });
     expect(
-      captured.libraryPanel?.workspace?.activity?.approvals[0]?.decision,
+      captured.libraryPanel?.workspace?.activity?.approvals?.[0]?.decision,
     ).toBe("denied");
   });
 

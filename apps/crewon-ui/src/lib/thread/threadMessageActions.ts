@@ -1,4 +1,5 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Turn } from "@crewon-protocol/v2/Turn";
 import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
@@ -11,9 +12,11 @@ import { createDemoTurn, createDraftDemoThread } from "../demo/demoData";
 import type { Locale } from "../i18n";
 import {
   appendTurnWithFallbackPreview,
+  updateThreadInList,
   upsertThread,
   upsertTurnInThread,
 } from "./threadModel";
+import { removeRecordKey } from "../shared/recordState";
 import {
   threadCreateFailureNotice,
   threadGuidanceAppendedNotice,
@@ -31,6 +34,7 @@ type ThreadListSetter = (updater: (current: Thread[]) => Thread[]) => void;
 
 type ThreadMessageClient = {
   interruptTurn(threadId: string, turnId: string): Promise<unknown>;
+  readThread?(threadId: string): Promise<Thread>;
   resumeThread(threadId: string): Promise<Thread>;
   startThread(cwd?: string, threadSource?: ThreadSource): Promise<Thread>;
   startTurn(
@@ -76,7 +80,10 @@ export type CreateThreadActionParams = {
 export type SendMessageActionParams = {
   activeTurnId: string | null;
   client:
-    | Pick<ThreadMessageClient, "resumeThread" | "startTurn" | "steerTurn">
+    | Pick<
+        ThreadMessageClient,
+        "readThread" | "resumeThread" | "startTurn" | "steerTurn"
+      >
     | null
     | undefined;
   createThread: (initialPrompt?: string) => Promise<Thread | null>;
@@ -102,13 +109,36 @@ export type SendMessageActionParams = {
 
 export type InterruptActiveTurnActionParams = {
   activeTurnId: string | null;
-  client: Pick<ThreadMessageClient, "interruptTurn"> | null | undefined;
+  client:
+    | Pick<ThreadMessageClient, "interruptTurn" | "readThread">
+    | null
+    | undefined;
   isConnected: boolean;
   locale: Locale;
   selectedThreadId: string | null;
+  setActiveTurnByThread: ActiveTurnByThreadSetter;
   setIsSending: (isSending: boolean) => void;
   setNotice: (notice: NoticeState | null) => void;
+  setThreads: ThreadListSetter;
 };
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function textIncludesMentionToken(text: string, token: string): boolean {
+  return new RegExp(`(^|\\s)${escapeRegExp(token)}(?=\\s|$)`).test(text);
+}
+
+export function visibleComposerMentionsForText(
+  text: string,
+  mentions: PendingComposerMention[],
+): PendingComposerMention[] {
+  return mentions.filter(
+    (mention) =>
+      !mention.token || textIncludesMentionToken(text, mention.token),
+  );
+}
 
 export function createDemoThreadAction({
   initialPrompt,
@@ -157,7 +187,10 @@ export async function createThreadAction({
 
   try {
     const threadCwd = await resolveBackendCwd();
-    const thread = await client?.startThread(threadCwd || undefined, threadSource);
+    const thread = await client?.startThread(
+      threadCwd || undefined,
+      threadSource,
+    );
     if (thread) {
       setThreads((current) => upsertThread(current, thread));
       setSelectedThreadId(thread.id);
@@ -202,15 +235,20 @@ export async function sendMessageAction({
     return;
   }
 
+  const visibleMentions = visibleComposerMentionsForText(
+    text,
+    pendingComposerMentions,
+  );
   setIsSending(true);
   let thread = isDemoPreview ? null : selectedThread;
+  let failedThreadId = selectedThreadId;
 
   try {
     if (activeTurnId && selectedThreadId && isConnected) {
       const response = await client?.steerTurn(
         selectedThreadId,
         text,
-        pendingComposerMentions,
+        visibleMentions,
       );
       setPendingComposerMentions([]);
       if (response?.turnId) {
@@ -262,10 +300,11 @@ export async function sendMessageAction({
     }
 
     const turnThreadId = (resumedThread ?? activeThread).id;
+    failedThreadId = turnThreadId;
     const response = await client?.startTurn(
       turnThreadId,
       text,
-      pendingComposerMentions,
+      visibleMentions,
     );
     if (response) {
       setPendingComposerMentions([]);
@@ -275,6 +314,13 @@ export async function sendMessageAction({
       setActiveTurnByThread((current) =>
         activeTurnByThreadAfterTurn(current, turnThreadId, response.turn),
       );
+      void refreshThreadAfterTurnStart({
+        client,
+        setActiveTurnByThread,
+        setThreads,
+        threadId: turnThreadId,
+        turnId: response.turn.id,
+      });
     }
   } catch (error) {
     setPendingComposerMentions([]);
@@ -283,9 +329,83 @@ export async function sendMessageAction({
     }
     setComposerValue(text);
     setComposerFocusSignal((signal) => signal + 1);
+    const targetThreadId = failedThreadId;
+    if (!activeTurnId && targetThreadId) {
+      const now = Math.floor(Date.now() / 1000);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : locale === "zh"
+            ? "发送到模型失败"
+            : "Unable to reach the model";
+      const failedTurn: Turn = {
+        id: `local-failed-${now}`,
+        items: [
+          {
+            id: `local-failed-user-${now}`,
+            type: "userMessage",
+            clientId: null,
+            content: [{ type: "text", text, text_elements: [] }],
+          },
+        ],
+        itemsView: "full",
+        status: "failed",
+        error: {
+          message: errorMessage,
+          codexErrorInfo: null,
+          additionalDetails: null,
+        },
+        startedAt: now,
+        completedAt: now,
+        durationMs: null,
+      };
+      setThreads((current) =>
+        appendTurnWithFallbackPreview(
+          current,
+          targetThreadId,
+          failedTurn,
+          promptPreview(text),
+          now,
+        ),
+      );
+    }
     setNotice(threadSendFailureNotice(error, locale));
   } finally {
     setIsSending(false);
+  }
+}
+
+async function refreshThreadAfterTurnStart({
+  client,
+  setActiveTurnByThread,
+  setThreads,
+  threadId,
+  turnId,
+}: {
+  client: Pick<ThreadMessageClient, "readThread"> | null | undefined;
+  setActiveTurnByThread: ActiveTurnByThreadSetter;
+  setThreads: ThreadListSetter;
+  threadId: string;
+  turnId: string;
+}): Promise<void> {
+  if (!client?.readThread) {
+    return;
+  }
+
+  const delaysMs = [250, 500, 1000, 1500, 2500, 4000];
+  for (const delayMs of delaysMs) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    const thread = await client.readThread(threadId).catch(() => null);
+    if (!thread) {
+      continue;
+    }
+
+    setThreads((current) => upsertThread(current, thread));
+    const turn = thread.turns.find((candidate) => candidate.id === turnId);
+    if (turn && turn.status !== "inProgress") {
+      setActiveTurnByThread((current) => removeRecordKey(current, threadId));
+      return;
+    }
   }
 }
 
@@ -295,8 +415,10 @@ export async function interruptActiveTurnAction({
   isConnected,
   locale,
   selectedThreadId,
+  setActiveTurnByThread,
   setIsSending,
   setNotice,
+  setThreads,
 }: InterruptActiveTurnActionParams): Promise<void> {
   if (!selectedThreadId || !activeTurnId || !isConnected) {
     return;
@@ -305,6 +427,24 @@ export async function interruptActiveTurnAction({
   setIsSending(true);
   try {
     await client?.interruptTurn(selectedThreadId, activeTurnId);
+    setActiveTurnByThread((current) => removeRecordKey(current, selectedThreadId));
+    setThreads((current) =>
+      updateThreadInList(current, selectedThreadId, (thread) => ({
+        ...thread,
+        turns: thread.turns.map((turn) =>
+          turn.id === activeTurnId && turn.status === "inProgress"
+            ? { ...turn, status: "interrupted" }
+            : turn,
+        ),
+      })),
+    );
+    const refreshedThread = await client?.readThread?.(selectedThreadId).catch(() => null);
+    const refreshedTurn = refreshedThread?.turns.find(
+      (turn) => turn.id === activeTurnId,
+    );
+    if (refreshedThread && refreshedTurn?.status !== "inProgress") {
+      setThreads((current) => upsertThread(current, refreshedThread));
+    }
     setNotice(threadInterruptRequestedNotice(locale));
   } catch (error) {
     setNotice(threadInterruptFailureNotice(error, locale));

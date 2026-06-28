@@ -787,6 +787,66 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::OfficeMessageSendResponse,
     },
+    OfficeRun => "office/run" {
+        params: v2::OfficeRunParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeRunResponse,
+    },
+    OfficeRunSync => "office/run/sync" {
+        params: v2::OfficeRunSyncParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeRunSyncResponse,
+    },
+    OfficeRunCancel => "office/run/cancel" {
+        params: v2::OfficeRunCancelParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeRunCancelResponse,
+    },
+    OfficeDelegationCancel => "office/delegation/cancel" {
+        params: v2::OfficeDelegationCancelParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDelegationCancelResponse,
+    },
+    OfficeDelegationRetry => "office/delegation/retry" {
+        params: v2::OfficeDelegationRetryParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDelegationRetryResponse,
+    },
+    OfficeVerificationCancel => "office/verification/cancel" {
+        params: v2::OfficeVerificationCancelParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeVerificationCancelResponse,
+    },
+    OfficeVerificationRetry => "office/verification/retry" {
+        params: v2::OfficeVerificationRetryParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeVerificationRetryResponse,
+    },
+    OfficeRunRetry => "office/run/retry" {
+        params: v2::OfficeRunRetryParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeRunRetryResponse,
+    },
+    OfficeDelegationDispatch => "office/delegation/dispatch" {
+        params: v2::OfficeDelegationDispatchParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDelegationDispatchResponse,
+    },
+    OfficeDelegationDispatchNext => "office/delegation/dispatch/next" {
+        params: v2::OfficeDelegationDispatchNextParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDelegationDispatchNextResponse,
+    },
+    OfficeVerificationDispatchNext => "office/verification/dispatch/next" {
+        params: v2::OfficeVerificationDispatchNextParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeVerificationDispatchNextResponse,
+    },
+    OfficeMemberContextPreview => "office/member/context/preview" {
+        params: v2::OfficeMemberContextPreviewParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMemberContextPreviewResponse,
+    },
     OfficeMemberAdd => "office/member/add" {
         params: v2::OfficeMemberAddParams,
         serialization: global("crewon-domain"),
@@ -801,6 +861,16 @@ client_request_definitions! {
         params: v2::OfficeArtifactUpsertParams,
         serialization: global("crewon-domain"),
         response: v2::OfficeArtifactUpsertResponse,
+    },
+    OfficeMemoryList => "office/memory/list" {
+        params: v2::OfficeMemoryListParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMemoryListResponse,
+    },
+    OfficeMemoryDecide => "office/memory/decide" {
+        params: v2::OfficeMemoryDecideParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMemoryDecideResponse,
     },
     OfficeDelete => "office/delete" {
         params: v2::OfficeDeleteParams,
@@ -836,6 +906,11 @@ client_request_definitions! {
         params: v2::AutomationRunParams,
         serialization: global("crewon-domain"),
         response: v2::AutomationRunResponse,
+    },
+    AutomationRunStart => "automation/run/start" {
+        params: v2::AutomationRunStartParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationRunStartResponse,
     },
     AutomationRunUpdate => "automation/run/update" {
         params: v2::AutomationRunUpdateParams,
@@ -1778,6 +1853,7 @@ server_notification_definitions! {
     AccountUpdated => "account/updated" (v2::AccountUpdatedNotification),
     AccountRateLimitsUpdated => "account/rateLimits/updated" (v2::AccountRateLimitsUpdatedNotification),
     AppListUpdated => "app/list/updated" (v2::AppListUpdatedNotification),
+    OfficeRunUpdated => "office/run/updated" (v2::OfficeRunUpdatedNotification),
     RemoteControlStatusChanged => "remoteControl/status/changed" (v2::RemoteControlStatusChangedNotification),
     ExternalAgentConfigImportCompleted => "externalAgentConfig/import/completed" (v2::ExternalAgentConfigImportCompletedNotification),
     FsChanged => "fs/changed" (v2::FsChangedNotification),

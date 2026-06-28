@@ -9,11 +9,12 @@ import {
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { LibraryKind } from "../../domain/crewonDomain";
 import type { Locale } from "../../i18n";
+import type { ConnectionState } from "../../shared/connectionState";
 import type { SettingsSection } from "../../settings/settingsCatalog";
 
 export type AppViewSyncEffectsParams = {
   appView: AppView;
-  connectionState: "connecting" | "connected" | "demo";
+  connectionState: ConnectionState;
   demoSettingsPanel: (
     section: SettingsSection,
     locale: Locale,

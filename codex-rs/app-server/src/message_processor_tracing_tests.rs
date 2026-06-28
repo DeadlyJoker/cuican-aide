@@ -1,6 +1,12 @@
 use super::ConnectionSessionState;
 use super::MessageProcessor;
 use super::MessageProcessorArgs;
+use super::OfficeSchedulerRecoveryOutcome;
+use super::bounded_unique_office_recovery_cwds;
+use super::office_recovery_turn_refs;
+use super::office_scheduler_recovery_should_keep_polling;
+use super::office_scheduler_replan_source_thread_ids;
+use super::office_scheduler_turn_refs;
 use crate::analytics_utils::analytics_events_client_from_config;
 use crate::config_manager::ConfigManager;
 use crate::outgoing_message::ConnectionId;
@@ -12,6 +18,7 @@ use app_test_support::write_mock_responses_config_toml;
 use crewon_analytics::AppServerRpcTransport;
 use crewon_app_server_protocol::ClientInfo;
 use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::CrewonDomainConfigRecord;
 use crewon_app_server_protocol::InitializeCapabilities;
 use crewon_app_server_protocol::InitializeParams;
 use crewon_app_server_protocol::InitializeResponse;
@@ -42,6 +49,7 @@ use opentelemetry_sdk::trace::InMemorySpanExporter;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::trace::SpanData;
 use pretty_assertions::assert_eq;
+use serde_json::json;
 use serial_test::serial;
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -206,6 +214,326 @@ impl TracingHarness {
             .await;
         read_thread_started_notification(&mut self.outgoing_rx).await;
         response
+    }
+}
+
+#[test]
+fn office_recovery_turn_refs_include_running_verification_checks() {
+    let records = vec![office_record(json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "activity": {
+                "runs": [
+                    {
+                        "id": "office-run-1",
+                        "status": "completed",
+                        "turnId": "manager-turn-1",
+                        "verificationChecks": [
+                            {
+                                "itemId": "verification-smoke",
+                                "status": "pending",
+                                "dispatchStatus": "running",
+                                "automationId": "Nightly QA",
+                                "automationThreadId": "automation-thread-123456789",
+                                "automationTurnId": "automation-turn-1"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }))];
+
+    let refs = office_recovery_turn_refs(&records);
+
+    assert_eq!(refs.len(), 1);
+    assert_eq!(refs[0].thread_id, "automation-thread-123456789");
+    assert_eq!(refs[0].turn_id, "automation-turn-1");
+}
+
+#[test]
+fn office_scheduler_turn_refs_include_verification_sources() {
+    let records = vec![
+        office_record(json!({
+            "title": "Platform Office",
+            "workspace": {
+                "threadId": "office-thread-123456789",
+                "activity": {
+                    "runs": [
+                        {
+                            "id": "office-run-1",
+                            "status": "completed",
+                            "turnId": "manager-turn-1",
+                            "verificationChecks": [
+                                {
+                                    "itemId": "verification-regression",
+                                    "status": "pending",
+                                    "automationId": "Nightly QA"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        })),
+        office_record(json!({
+            "title": "Platform Office",
+            "workspace": {
+                "threadId": "office-thread-123456789",
+                "activity": {
+                    "runs": [
+                        {
+                            "id": "office-run-2",
+                            "status": "completed",
+                            "turnId": "manager-turn-2",
+                            "verificationChecks": [
+                                {
+                                    "itemId": "verification-smoke",
+                                    "status": "passed",
+                                    "dispatchStatus": "completed",
+                                    "automationId": "Nightly QA",
+                                    "automationThreadId": "automation-thread-123456789",
+                                    "automationTurnId": "automation-turn-1"
+                                },
+                                {
+                                    "itemId": "verification-regression",
+                                    "status": "pending",
+                                    "automationId": "Nightly QA"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        })),
+        office_record(json!({
+            "title": "Platform Office",
+            "workspace": {
+                "threadId": "office-thread-123456789",
+                "activity": {
+                    "runs": [
+                        {
+                            "id": "office-run-3",
+                            "status": "completed",
+                            "turnId": "manager-turn-3",
+                            "verificationChecks": [
+                                {
+                                    "itemId": "verification-manual",
+                                    "status": "pending",
+                                    "manualDispatch": true,
+                                    "automationId": "Nightly QA"
+                                },
+                                {
+                                    "itemId": "verification-risky",
+                                    "status": "pending",
+                                    "riskSeverity": "high",
+                                    "automationId": "Nightly QA"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        })),
+    ];
+
+    let refs = office_scheduler_turn_refs(&records);
+
+    assert_eq!(refs.len(), 3);
+    assert_eq!(refs[0].thread_id, "office-thread-123456789");
+    assert_eq!(refs[0].turn_id, "manager-turn-1");
+    assert_eq!(refs[1].thread_id, "office-thread-123456789");
+    assert_eq!(refs[1].turn_id, "manager-turn-2");
+    assert_eq!(refs[2].thread_id, "automation-thread-123456789");
+    assert_eq!(refs[2].turn_id, "automation-turn-1");
+}
+
+#[test]
+fn office_scheduler_turn_refs_include_auto_replan_sources() {
+    let records = vec![office_record(json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "activity": {
+                "runs": [
+                    {
+                        "id": "office-run-replan",
+                        "status": "completed",
+                        "turnId": "manager-turn-1",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "blocked",
+                                "nextAction": "repairFailedCriteria",
+                                "risks": { "openHigh": 0 }
+                            }
+                        }
+                    },
+                    {
+                        "id": "office-run-frame",
+                        "status": "completed",
+                        "turnId": "manager-turn-2",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "incomplete",
+                                "nextAction": "frameAcceptanceCriteria"
+                            }
+                        }
+                    },
+                    {
+                        "id": "office-run-risk",
+                        "status": "completed",
+                        "turnId": "manager-turn-3",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "needsReview",
+                                "nextAction": "collectVerificationEvidence",
+                                "risks": { "openHigh": 1 }
+                            }
+                        }
+                    },
+                    {
+                        "id": "office-run-retry",
+                        "status": "completed",
+                        "turnId": "manager-turn-4",
+                        "retryOf": "office-run-replan",
+                        "loop": {
+                            "iteration": 2,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "passed",
+                                "nextAction": "readyToSummarize"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    }))];
+
+    let refs = office_scheduler_turn_refs(&records);
+    let source_threads = office_scheduler_replan_source_thread_ids(&records);
+
+    assert_eq!(refs.len(), 0);
+    assert_eq!(source_threads, Vec::<String>::new());
+
+    let records = vec![office_record(json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "activity": {
+                "runs": [
+                    {
+                        "id": "office-run-replan",
+                        "status": "completed",
+                        "turnId": "manager-turn-1",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "blocked",
+                                "nextAction": "repairFailedCriteria",
+                                "risks": { "openHigh": 0 }
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    }))];
+
+    let refs = office_scheduler_turn_refs(&records);
+    let source_threads = office_scheduler_replan_source_thread_ids(&records);
+
+    assert_eq!(refs.len(), 1);
+    assert_eq!(refs[0].thread_id, "office-thread-123456789");
+    assert_eq!(refs[0].turn_id, "manager-turn-1");
+    assert_eq!(source_threads, vec!["office-thread-123456789".to_string()]);
+}
+
+#[test]
+fn office_scheduler_recovery_keeps_polling_when_scheduler_work_is_waiting() {
+    let records = vec![office_record(json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "activity": {
+                "runs": [
+                    {
+                        "id": "office-run-replan",
+                        "status": "completed",
+                        "turnId": "manager-turn-1",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "blocked",
+                                "nextAction": "repairFailedCriteria",
+                                "risks": { "openHigh": 0 }
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    }))];
+
+    assert!(office_recovery_turn_refs(&records).is_empty());
+    assert!(office_scheduler_recovery_should_keep_polling(
+        &records,
+        OfficeSchedulerRecoveryOutcome::Waiting
+    ));
+    assert!(!office_scheduler_recovery_should_keep_polling(
+        &records,
+        OfficeSchedulerRecoveryOutcome::Idle
+    ));
+}
+
+#[test]
+fn office_thread_cwd_recovery_is_bounded_and_deduplicated() {
+    let cwds = vec![
+        "/workspace/a",
+        "/workspace/b",
+        "/workspace/a",
+        "/workspace/c",
+        "/workspace/d",
+        "/workspace/e",
+        "/workspace/f",
+        "/workspace/g",
+        "/workspace/h",
+        "/workspace/i",
+    ]
+    .into_iter()
+    .map(str::to_string);
+
+    let got = bounded_unique_office_recovery_cwds(cwds);
+
+    assert_eq!(
+        got,
+        vec![
+            "/workspace/a".to_string(),
+            "/workspace/b".to_string(),
+            "/workspace/c".to_string(),
+            "/workspace/d".to_string(),
+            "/workspace/e".to_string(),
+            "/workspace/f".to_string(),
+            "/workspace/g".to_string(),
+            "/workspace/h".to_string(),
+        ]
+    );
+}
+
+fn office_record(config: serde_json::Value) -> CrewonDomainConfigRecord {
+    CrewonDomainConfigRecord {
+        file_path: "/workspace/.crewon/offices/platform-office.json".to_string(),
+        saved_at: "2026-06-20T00:00:00Z".to_string(),
+        config,
     }
 }
 

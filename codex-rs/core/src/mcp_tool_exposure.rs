@@ -22,6 +22,7 @@ pub(crate) fn build_mcp_tool_exposure(
     connectors: Option<&[connectors::AppInfo]>,
     config: &Config,
     search_tool_enabled: bool,
+    explicit_mcp_server_names: &HashSet<String>,
 ) -> McpToolExposure {
     let mut deferred_tools = filter_non_crewon_apps_mcp_tools_only(all_mcp_tools);
     if let Some(connectors) = connectors {
@@ -42,6 +43,16 @@ pub(crate) fn build_mcp_tool_exposure(
         return McpToolExposure {
             direct_tools: deferred_tools,
             deferred_tools: None,
+        };
+    }
+
+    if !explicit_mcp_server_names.is_empty() {
+        let (direct_tools, deferred_tools): (Vec<_>, Vec<_>) = deferred_tools
+            .into_iter()
+            .partition(|tool| explicit_mcp_server_names.contains(tool.server_name.as_str()));
+        return McpToolExposure {
+            direct_tools,
+            deferred_tools: (!deferred_tools.is_empty()).then_some(deferred_tools),
         };
     }
 

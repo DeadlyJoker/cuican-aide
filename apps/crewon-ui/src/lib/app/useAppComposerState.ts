@@ -15,6 +15,7 @@ export function useAppComposerState() {
   } | null>(null);
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [isSending, setIsSending] = useState(false);
+  const [slashCommandRefreshKey, setSlashCommandRefreshKey] = useState(0);
 
   return {
     composerFocusSignal,
@@ -22,11 +23,13 @@ export function useAppComposerState() {
     isSending,
     pendingComposerMentions,
     pendingContextFile,
+    setSlashCommandRefreshKey,
     setComposerFocusSignal,
     setComposerValue,
     setIsSending,
     setPendingComposerMentions,
     setPendingContextFile,
+    slashCommandRefreshKey,
     setWorkMode,
     workMode,
   };

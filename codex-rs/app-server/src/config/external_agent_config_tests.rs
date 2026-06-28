@@ -2379,6 +2379,34 @@ async fn import_plugins_infers_external_official_marketplace_when_missing_from_s
     let (_root, external_agent_home, codex_home) = fixture_paths();
     fs::create_dir_all(&external_agent_home).expect("create external agent home");
     fs::create_dir_all(&codex_home).expect("create crewon home");
+    let marketplace_root =
+        crewon_core_plugins::installed_marketplaces::marketplace_install_root(&codex_home)
+            .join(EXTERNAL_OFFICIAL_MARKETPLACE_NAME);
+    fs::create_dir_all(marketplace_root.join(".agents").join("plugins"))
+        .expect("create installed marketplace manifest dir");
+    fs::write(
+        marketplace_root
+            .join(".agents")
+            .join("plugins")
+            .join("marketplace.json"),
+        format!(
+            r#"{{
+          "name": "{EXTERNAL_OFFICIAL_MARKETPLACE_NAME}",
+          "plugins": []
+        }}"#
+        ),
+    )
+    .expect("write installed marketplace manifest");
+    fs::write(
+        codex_home.join("config.toml"),
+        format!(
+            r#"[marketplaces.{EXTERNAL_OFFICIAL_MARKETPLACE_NAME}]
+source_type = "git"
+source = "https://github.com/{EXTERNAL_OFFICIAL_MARKETPLACE_SOURCE}.git"
+"#
+        ),
+    )
+    .expect("write existing marketplace config");
 
     fs::write(
         external_agent_home.join("settings.json"),

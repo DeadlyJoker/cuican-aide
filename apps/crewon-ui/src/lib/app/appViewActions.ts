@@ -30,6 +30,10 @@ function hasClosestTarget(target: EventTarget | null): target is EventTarget &
   );
 }
 
+function hasViewParam(search: string): boolean {
+  return new URLSearchParams(search).has("view");
+}
+
 export function openSettingsAction(params: {
   demoSettingsPanel: (section: SettingsSection, locale: Locale) => CapabilityPanel;
   isDemo: boolean;
@@ -200,6 +204,14 @@ export function syncViewFromSearchAction(params: {
 
   params.setLastSyncedSearch(params.search);
   const view = new URLSearchParams(params.search).get("view");
+  if (!view) {
+    if (hasViewParam(params.lastSyncedSearch)) {
+      params.setAppView("chat");
+      return true;
+    }
+    return false;
+  }
+
   if (view === "settings") {
     const settingsViewSection = settingsSectionFromSearch(params.search);
     params.setAppView("settings");

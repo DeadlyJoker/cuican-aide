@@ -1,5 +1,8 @@
 use super::*;
 use crate::error_code::method_not_found;
+use chrono::SecondsFormat;
+use chrono::Utc;
+use crewon_app_server_protocol::AutomationUpdateParams;
 use crewon_app_server_protocol::SelectedCapabilityRoot;
 use crewon_extension_api::ExtensionDataInit;
 use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
@@ -7,6 +10,11 @@ use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
 
 const THREAD_LIST_DEFAULT_LIMIT: usize = 25;
 const THREAD_LIST_MAX_LIMIT: usize = 100;
+const OFFICE_SCHEDULER_STARTUP_THREAD_LIMIT: u32 = 25;
+const OFFICE_AUTOMATION_RUNTIME_REPAIR_MAX_ID_CHARS: usize = 128;
+const OFFICE_AUTOMATION_RUNTIME_REPAIR_MAX_FIELD_CHARS: usize = 1_000;
+const OFFICE_AUTOMATION_RUNTIME_REPAIR_MAX_INSTRUCTIONS_CHARS: usize = 4_000;
+const OFFICE_AUTOMATION_RUNTIME_REPAIR_TRUNCATED_SUFFIX: &str = " [truncated]";
 
 struct ThreadListFilters {
     model_providers: Option<Vec<String>>,
@@ -15,6 +23,124 @@ struct ThreadListFilters {
     cwd_filters: Option<Vec<PathBuf>>,
     search_term: Option<String>,
     use_state_db_only: bool,
+}
+
+pub(crate) struct OfficeMemberRuntimeThreadStart {
+    pub(crate) cwd: String,
+    pub(crate) base_instructions: Option<String>,
+    pub(crate) developer_instructions: Option<String>,
+}
+
+pub(crate) struct OfficeAutomationRuntimeThreadStart {
+    pub(crate) cwd: String,
+    pub(crate) base_instructions: Option<String>,
+    pub(crate) developer_instructions: Option<String>,
+}
+
+pub(crate) struct OfficeAutomationRuntimeRepair {
+    pub(crate) source_thread_id: String,
+    pub(crate) repaired_at: String,
+}
+
+struct OfficeRuntimeThreadStart {
+    cwd: String,
+    base_instructions: Option<String>,
+    developer_instructions: Option<String>,
+    thread_source: &'static str,
+    metrics_service_name: &'static str,
+    listener_label: &'static str,
+    error_context: &'static str,
+}
+
+fn office_automation_runtime_thread_id(config: &serde_json::Value) -> Option<&str> {
+    config
+        .get("threadId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|thread_id| !thread_id.is_empty())
+}
+
+fn office_automation_dispatch_thread_can_be_repaired(
+    err: &JSONRPCErrorError,
+    thread_id: &str,
+) -> bool {
+    err.message == format!("no rollout found for thread id {thread_id}")
+}
+
+fn office_automation_runtime_developer_instructions(
+    automation_config: &serde_json::Value,
+    automation_id: &str,
+) -> Option<String> {
+    let automation_id = bounded_office_automation_runtime_instruction_text(
+        automation_id,
+        OFFICE_AUTOMATION_RUNTIME_REPAIR_MAX_ID_CHARS,
+    );
+    let title = automation_config
+        .get("title")
+        .and_then(serde_json::Value::as_str)
+        .map(|title| {
+            bounded_office_automation_runtime_instruction_text(
+                title,
+                OFFICE_AUTOMATION_RUNTIME_REPAIR_MAX_ID_CHARS,
+            )
+        })
+        .unwrap_or_else(|| "Automation".to_string());
+    let mut parts = vec![format!(
+        "You are the durable runtime thread for Office verification automation {title} ({automation_id}). Preserve this automation's private execution context across verification runs. Use only the run prompt, this thread history, allowed Office memory, and bounded shared Office evidence as context."
+    )];
+    for key in [
+        "instructions",
+        "developerInstructions",
+        "systemPrompt",
+        "prompt",
+        "description",
+        "policy",
+        "guardrails",
+        "constraints",
+    ] {
+        if let Some(value) = automation_config
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            let value = bounded_office_automation_runtime_instruction_text(
+                value,
+                OFFICE_AUTOMATION_RUNTIME_REPAIR_MAX_FIELD_CHARS,
+            );
+            parts.push(format!("{key}: {value}"));
+        }
+    }
+    let instructions = bounded_office_automation_runtime_instruction_text(
+        &parts.join("\n"),
+        OFFICE_AUTOMATION_RUNTIME_REPAIR_MAX_INSTRUCTIONS_CHARS,
+    );
+    (!instructions.trim().is_empty()).then_some(instructions)
+}
+
+fn bounded_office_automation_runtime_instruction_text(value: &str, max_chars: usize) -> String {
+    let value = value.trim();
+    if value.chars().count() <= max_chars {
+        return value.to_string();
+    }
+    let suffix_chars = OFFICE_AUTOMATION_RUNTIME_REPAIR_TRUNCATED_SUFFIX
+        .chars()
+        .count();
+    let keep_chars = max_chars.saturating_sub(suffix_chars);
+    let mut bounded = value.chars().take(keep_chars).collect::<String>();
+    bounded.push_str(OFFICE_AUTOMATION_RUNTIME_REPAIR_TRUNCATED_SUFFIX);
+    bounded
+}
+
+fn set_office_automation_runtime_json_string(
+    object: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: &str,
+) {
+    object.insert(
+        key.to_string(),
+        serde_json::Value::String(value.to_string()),
+    );
 }
 
 fn collect_resume_override_mismatches(
@@ -328,6 +454,7 @@ pub(crate) struct ThreadRequestProcessor {
     pub(super) log_db: Option<LogDbLayer>,
     pub(super) background_tasks: TaskTracker,
     pub(super) skills_watcher: Arc<SkillsWatcher>,
+    pub(super) office_auto_dispatch: Option<OfficeAutoDispatchContext>,
 }
 
 /// Outcome of trying to satisfy a resume request from an already loaded thread.
@@ -359,6 +486,7 @@ impl ThreadRequestProcessor {
         state_db: Option<StateDbHandle>,
         log_db: Option<LogDbLayer>,
         skills_watcher: Arc<SkillsWatcher>,
+        office_auto_dispatch: Option<OfficeAutoDispatchContext>,
     ) -> Self {
         Self {
             auth_manager,
@@ -377,6 +505,7 @@ impl ThreadRequestProcessor {
             log_db,
             background_tasks: TaskTracker::new(),
             skills_watcher,
+            office_auto_dispatch,
         }
     }
 
@@ -600,13 +729,40 @@ impl ThreadRequestProcessor {
             .map(|()| None)
     }
 
-    pub(crate) async fn thread_list(
+    pub(crate) async fn thread_list_response(
         &self,
         params: ThreadListParams,
-    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        self.thread_list_response_inner(params)
-            .await
-            .map(|response| Some(response.into()))
+    ) -> Result<ThreadListResponse, JSONRPCErrorError> {
+        self.thread_list_response_inner(params).await
+    }
+
+    pub(crate) async fn office_scheduler_startup_threads(
+        &self,
+    ) -> Result<ThreadListResponse, JSONRPCErrorError> {
+        self.thread_list_response_inner(ThreadListParams {
+            cursor: None,
+            limit: Some(OFFICE_SCHEDULER_STARTUP_THREAD_LIMIT),
+            sort_key: Some(ThreadSortKey::UpdatedAt),
+            sort_direction: Some(SortDirection::Desc),
+            model_providers: Some(Vec::new()),
+            source_kinds: Some(vec![
+                ThreadSourceKind::LegacyCli,
+                ThreadSourceKind::VsCode,
+                ThreadSourceKind::Exec,
+                ThreadSourceKind::AppServer,
+                ThreadSourceKind::SubAgent,
+                ThreadSourceKind::SubAgentReview,
+                ThreadSourceKind::SubAgentCompact,
+                ThreadSourceKind::SubAgentThreadSpawn,
+                ThreadSourceKind::SubAgentOther,
+                ThreadSourceKind::Unknown,
+            ]),
+            archived: Some(false),
+            cwd: None,
+            use_state_db_only: false,
+            search_term: None,
+        })
+        .await
     }
 
     pub(crate) async fn thread_search(
@@ -627,13 +783,11 @@ impl ThreadRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
-    pub(crate) async fn thread_read(
+    pub(crate) async fn thread_read_response(
         &self,
         params: ThreadReadParams,
-    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        self.thread_read_response_inner(params)
-            .await
-            .map(|response| Some(response.into()))
+    ) -> Result<ThreadReadResponse, JSONRPCErrorError> {
+        self.thread_read_response_inner(params).await
     }
 
     pub(crate) async fn thread_turns_list(
@@ -804,6 +958,7 @@ impl ThreadRequestProcessor {
             fallback_model_provider: self.config.model_provider_id.clone(),
             codex_home: self.config.codex_home.to_path_buf(),
             skills_watcher: Arc::clone(&self.skills_watcher),
+            office_auto_dispatch: self.office_auto_dispatch.clone(),
         }
     }
 
@@ -901,6 +1056,7 @@ impl ThreadRequestProcessor {
             fallback_model_provider: self.config.model_provider_id.clone(),
             codex_home: self.config.codex_home.to_path_buf(),
             skills_watcher: Arc::clone(&self.skills_watcher),
+            office_auto_dispatch: self.office_auto_dispatch.clone(),
         };
         let request_trace = request_context.request_trace();
         let config_manager = self.config_manager.clone();
@@ -2411,6 +2567,130 @@ impl ThreadRequestProcessor {
         self.thread_manager.subscribe_thread_created()
     }
 
+    pub(crate) async fn start_office_member_runtime_thread(
+        &self,
+        params: OfficeMemberRuntimeThreadStart,
+        connection_id: ConnectionId,
+    ) -> Result<Thread, JSONRPCErrorError> {
+        self.start_office_runtime_thread(
+            OfficeRuntimeThreadStart {
+                cwd: params.cwd,
+                base_instructions: params.base_instructions,
+                developer_instructions: params.developer_instructions,
+                thread_source: "office_member_runtime",
+                metrics_service_name: "app-server-office-runtime-repair",
+                listener_label: "office member runtime thread",
+                error_context: "office member runtime thread",
+            },
+            connection_id,
+        )
+        .await
+    }
+
+    pub(crate) async fn start_office_automation_runtime_thread(
+        &self,
+        params: OfficeAutomationRuntimeThreadStart,
+        connection_id: ConnectionId,
+    ) -> Result<Thread, JSONRPCErrorError> {
+        self.start_office_runtime_thread(
+            OfficeRuntimeThreadStart {
+                cwd: params.cwd,
+                base_instructions: params.base_instructions,
+                developer_instructions: params.developer_instructions,
+                thread_source: "office_automation_runtime",
+                metrics_service_name: "app-server-office-automation-runtime-repair",
+                listener_label: "office automation runtime thread",
+                error_context: "office automation runtime thread",
+            },
+            connection_id,
+        )
+        .await
+    }
+
+    async fn start_office_runtime_thread(
+        &self,
+        params: OfficeRuntimeThreadStart,
+        connection_id: ConnectionId,
+    ) -> Result<Thread, JSONRPCErrorError> {
+        let mut typesafe_overrides = self.build_thread_config_overrides(
+            /*model*/ None,
+            /*model_provider*/ None,
+            /*service_tier*/ None,
+            Some(params.cwd),
+            /*runtime_workspace_roots*/ None,
+            /*approval_policy*/ None,
+            /*approvals_reviewer*/ None,
+            /*sandbox*/ None,
+            /*permissions*/ None,
+            params.base_instructions,
+            params.developer_instructions,
+            /*personality*/ None,
+        );
+        typesafe_overrides.ephemeral = Some(false);
+        let config = self
+            .config_manager
+            .load_with_overrides(/*config_overrides*/ None, typesafe_overrides)
+            .await
+            .map_err(|err| config_load_error(&err))?;
+        let environments = self
+            .thread_manager
+            .default_environment_selections(&config.cwd);
+        let NewThread {
+            thread_id,
+            thread: crewon_thread,
+            session_configured,
+            ..
+        } = self
+            .thread_manager
+            .start_thread_with_options(StartThreadOptions {
+                config,
+                initial_history: InitialHistory::New,
+                session_source: None,
+                thread_source: Some(crewon_protocol::protocol::ThreadSource::Feature(
+                    params.thread_source.to_string(),
+                )),
+                dynamic_tools: Vec::new(),
+                metrics_service_name: Some(params.metrics_service_name.to_string()),
+                parent_trace: None,
+                environments,
+                thread_extension_init: ExtensionDataInit::new(),
+            })
+            .await
+            .map_err(|err| match err {
+                CodexErr::InvalidRequest(message) => invalid_request(message),
+                err => internal_error(format!("error creating {}: {err}", params.error_context)),
+            })?;
+        log_listener_attach_result(
+            self.ensure_conversation_listener(
+                thread_id,
+                connection_id,
+                /*raw_events_enabled*/ false,
+            )
+            .await,
+            thread_id,
+            connection_id,
+            params.listener_label,
+        );
+
+        let config_snapshot = crewon_thread.config_snapshot().await;
+        let mut thread = build_thread_from_snapshot(
+            thread_id,
+            session_configured.session_id.to_string(),
+            &config_snapshot,
+            session_configured.rollout_path,
+        );
+        self.thread_watch_manager
+            .upsert_thread_silently(thread.clone())
+            .await;
+        thread.status = resolve_thread_status(
+            self.thread_watch_manager
+                .loaded_status_for_thread(&thread.id)
+                .await,
+            /*has_in_progress_turn*/ false,
+        );
+        Ok(thread)
+    }
+
     pub(crate) async fn connection_initialized(
         &self,
         connection_id: ConnectionId,
@@ -2475,6 +2755,407 @@ impl ThreadRequestProcessor {
                 connection_id,
                 "thread",
             );
+        }
+    }
+
+    pub(crate) async fn persisted_terminal_turn(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+    ) -> Result<Option<Turn>, JSONRPCErrorError> {
+        let thread_id = match ThreadId::from_string(thread_id) {
+            Ok(thread_id) => thread_id,
+            Err(err) => {
+                return Err(invalid_request(format!("invalid session id: {err}")));
+            }
+        };
+        let stored_thread = match self
+            .thread_store
+            .read_thread(StoreReadThreadParams {
+                thread_id,
+                include_archived: true,
+                include_history: true,
+            })
+            .await
+        {
+            Ok(stored_thread) => stored_thread,
+            Err(ThreadStoreError::ThreadNotFound { .. }) => return Ok(None),
+            Err(err) => return Err(thread_store_resume_read_error(err)),
+        };
+        let Some(history) = stored_thread.history else {
+            return Ok(None);
+        };
+        Ok(build_api_turns_from_rollout_items(&history.items)
+            .into_iter()
+            .find(|turn| {
+                turn.id == turn_id
+                    && matches!(
+                        turn.status,
+                        TurnStatus::Completed | TurnStatus::Interrupted | TurnStatus::Failed
+                    )
+            }))
+    }
+
+    pub(crate) async fn thread_has_persisted_rollout(
+        &self,
+        thread_id: &str,
+    ) -> Result<bool, JSONRPCErrorError> {
+        let thread_id = ThreadId::from_string(thread_id)
+            .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
+        match self
+            .thread_store
+            .read_thread(StoreReadThreadParams {
+                thread_id,
+                include_archived: true,
+                include_history: true,
+            })
+            .await
+        {
+            Ok(stored_thread) => Ok(stored_thread
+                .history
+                .as_ref()
+                .is_some_and(|history| !history.items.is_empty())),
+            Err(ThreadStoreError::ThreadNotFound { .. }) => Ok(false),
+            Err(ThreadStoreError::InvalidRequest { message })
+                if message == format!("no rollout found for thread id {thread_id}") =>
+            {
+                Ok(false)
+            }
+            Err(err) => Err(thread_store_resume_read_error(err)),
+        }
+    }
+
+    pub(crate) async fn office_dispatch_thread_is_loaded(
+        &self,
+        thread_id: &str,
+    ) -> Result<bool, JSONRPCErrorError> {
+        let parsed_thread_id = ThreadId::from_string(thread_id)
+            .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
+        Ok(self
+            .thread_manager
+            .get_thread(parsed_thread_id)
+            .await
+            .is_ok())
+    }
+
+    pub(crate) async fn ensure_office_automation_runtime_thread(
+        &self,
+        domain_processor: &CrewonDomainRequestProcessor,
+        cwd: &str,
+        automation_file_path: &str,
+        automation_id: &str,
+        automation_config: &mut serde_json::Value,
+        connection_id: ConnectionId,
+    ) -> Result<Option<OfficeAutomationRuntimeRepair>, JSONRPCErrorError> {
+        let Some(old_thread_id) = office_automation_runtime_thread_id(automation_config) else {
+            return Ok(None);
+        };
+        let old_thread_id = old_thread_id.to_string();
+        let repair_reason = if self
+            .office_dispatch_thread_is_loaded(&old_thread_id)
+            .await?
+        {
+            if automation_config
+                .get("runtimeRepairSourceThreadId")
+                .and_then(serde_json::Value::as_str)
+                .is_some()
+            {
+                return Ok(None);
+            }
+            if self.thread_has_persisted_rollout(&old_thread_id).await? {
+                return Ok(None);
+            }
+            "loaded thread has no persisted rollout".to_string()
+        } else {
+            match self
+                .ensure_thread_loaded_for_office_dispatch(&old_thread_id, connection_id)
+                .await
+            {
+                Ok(()) => {
+                    if self.thread_has_persisted_rollout(&old_thread_id).await? {
+                        return Ok(None);
+                    }
+                    "missing persisted rollout".to_string()
+                }
+                Err(err) => {
+                    if office_automation_dispatch_thread_can_be_repaired(&err, &old_thread_id) {
+                        err.message.clone()
+                    } else {
+                        return Err(err);
+                    }
+                }
+            }
+        };
+        tracing::warn!(
+            automation_id,
+            thread_id = %old_thread_id,
+            reason = %repair_reason,
+            "repairing office automation runtime thread"
+        );
+        let developer_instructions =
+            office_automation_runtime_developer_instructions(automation_config, automation_id);
+        let thread = self
+            .start_office_automation_runtime_thread(
+                OfficeAutomationRuntimeThreadStart {
+                    cwd: cwd.to_string(),
+                    base_instructions: None,
+                    developer_instructions,
+                },
+                connection_id,
+            )
+            .await?;
+        let new_thread_id = thread.id;
+        let repaired_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let Some(object) = automation_config.as_object_mut() else {
+            return Err(invalid_request(
+                "automation config must be an object for runtime repair",
+            ));
+        };
+        set_office_automation_runtime_json_string(object, "threadId", &new_thread_id);
+        set_office_automation_runtime_json_string(
+            object,
+            "runtimeRepairSourceThreadId",
+            &old_thread_id,
+        );
+        set_office_automation_runtime_json_string(object, "runtimeRepairedAt", &repaired_at);
+        set_office_automation_runtime_json_string(object, "updatedAt", &repaired_at);
+        domain_processor
+            .automation_update(AutomationUpdateParams {
+                cwd: cwd.to_string(),
+                file_path: automation_file_path.to_string(),
+                config: automation_config.clone(),
+            })
+            .await?;
+        Ok(Some(OfficeAutomationRuntimeRepair {
+            source_thread_id: old_thread_id,
+            repaired_at,
+        }))
+    }
+
+    pub(crate) async fn ensure_thread_loaded_for_office_dispatch(
+        &self,
+        thread_id: &str,
+        connection_id: ConnectionId,
+    ) -> Result<(), JSONRPCErrorError> {
+        let parsed_thread_id = ThreadId::from_string(thread_id)
+            .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
+        if self
+            .thread_manager
+            .get_thread(parsed_thread_id)
+            .await
+            .is_ok()
+        {
+            return Ok(());
+        }
+        if self
+            .pending_thread_unloads
+            .lock()
+            .await
+            .contains(&parsed_thread_id)
+        {
+            return Err(invalid_request(format!(
+                "thread {parsed_thread_id} is closing; retry office dispatch after the thread is closed"
+            )));
+        }
+
+        let _thread_list_state_permit = self.acquire_thread_list_state_permit().await?;
+        if self
+            .thread_manager
+            .get_thread(parsed_thread_id)
+            .await
+            .is_ok()
+        {
+            return Ok(());
+        }
+
+        let (thread_history, resume_source_thread) = self
+            .resume_thread_from_rollout(thread_id, /*path*/ None)
+            .await?;
+        let history_cwd = thread_history.session_cwd();
+        let mut request_overrides = None;
+        let mut typesafe_overrides = self.build_thread_config_overrides(
+            /*model*/ None, /*model_provider*/ None, /*service_tier*/ None,
+            /*cwd*/ None, /*runtime_workspace_roots*/ None,
+            /*approval_policy*/ None, /*approvals_reviewer*/ None, /*sandbox*/ None,
+            /*permissions*/ None, /*base_instructions*/ None,
+            /*developer_instructions*/ None, /*personality*/ None,
+        );
+        self.load_and_apply_persisted_resume_metadata(
+            &thread_history,
+            &mut request_overrides,
+            &mut typesafe_overrides,
+        )
+        .await;
+
+        let config = self
+            .config_manager
+            .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
+            .await
+            .map_err(|err| config_load_error(&err))?;
+        let response_history = thread_history.clone();
+        let NewThread {
+            thread_id,
+            thread: crewon_thread,
+            session_configured,
+            ..
+        } = self
+            .thread_manager
+            .resume_thread_with_history(
+                config,
+                thread_history,
+                self.auth_manager.clone(),
+                /*parent_trace*/ None,
+            )
+            .await
+            .map_err(|err| {
+                internal_error(format!("error loading office dispatch thread: {err}"))
+            })?;
+        let Some(rollout_path) = session_configured.rollout_path else {
+            return Err(internal_error(format!(
+                "rollout path missing for office dispatch thread {thread_id}"
+            )));
+        };
+
+        log_listener_attach_result(
+            self.ensure_conversation_listener(
+                thread_id,
+                connection_id,
+                /*raw_events_enabled*/ false,
+            )
+            .await,
+            thread_id,
+            connection_id,
+            "office dispatch thread",
+        );
+
+        let mut thread = self
+            .load_thread_from_resume_source_or_send_internal(
+                thread_id,
+                crewon_thread.as_ref(),
+                &response_history,
+                rollout_path.as_path(),
+                Some(resume_source_thread),
+                /*include_turns*/ false,
+            )
+            .await
+            .map_err(internal_error)?;
+        thread.thread_source = crewon_thread
+            .config_snapshot()
+            .await
+            .thread_source
+            .map(Into::into);
+        self.thread_watch_manager
+            .upsert_thread_silently(thread)
+            .await;
+        Ok(())
+    }
+
+    pub(crate) async fn dispatch_office_after_terminal_turn(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        turn: Turn,
+        connection_id: ConnectionId,
+    ) -> Option<OfficeAutoDispatchStarted> {
+        self.ensure_office_auto_verification_runtime_threads(
+            cwd,
+            source_thread_id,
+            &turn,
+            connection_id,
+        )
+        .await;
+        if let Some(office_auto_dispatch) = self.office_auto_dispatch.as_ref() {
+            return office_auto_dispatch
+                .dispatch_after_terminal_turn(cwd, source_thread_id, turn, connection_id)
+                .await;
+        }
+        None
+    }
+
+    pub(crate) async fn monitor_office_dispatched_turn_completion(
+        &self,
+        cwd: &str,
+        thread_id: &str,
+        turn_id: &str,
+        connection_id: ConnectionId,
+    ) {
+        if let Err(err) = self
+            .ensure_thread_loaded_for_office_dispatch(thread_id, connection_id)
+            .await
+        {
+            tracing::warn!(
+                thread_id,
+                turn_id,
+                error = %err.message,
+                "failed to load office dispatched thread for completion monitor recovery"
+            );
+            return;
+        }
+        if let Some(office_auto_dispatch) = self.office_auto_dispatch.as_ref() {
+            office_auto_dispatch.spawn_completion_monitor(
+                cwd.to_string(),
+                thread_id.to_string(),
+                turn_id.to_string(),
+                connection_id,
+            );
+        }
+    }
+
+    async fn ensure_office_auto_verification_runtime_threads(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        turn: &Turn,
+        connection_id: ConnectionId,
+    ) {
+        let domain_processor = CrewonDomainRequestProcessor::new();
+        let records = match domain_processor
+            .office_auto_verification_automation_records_after_thread_turn(
+                cwd,
+                source_thread_id,
+                turn,
+            )
+            .await
+        {
+            Ok(records) => records,
+            Err(err) => {
+                tracing::warn!(
+                    thread_id = %source_thread_id,
+                    turn_id = %turn.id,
+                    error = %err.message,
+                    "failed to read office auto verification automation targets"
+                );
+                return;
+            }
+        };
+        for record in records {
+            let automation_id = record
+                .config
+                .get("automationId")
+                .or_else(|| record.config.get("id"))
+                .or_else(|| record.config.get("title"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("automation")
+                .to_string();
+            let mut config = record.config;
+            if let Err(err) = self
+                .ensure_office_automation_runtime_thread(
+                    &domain_processor,
+                    cwd,
+                    &record.file_path,
+                    &automation_id,
+                    &mut config,
+                    connection_id,
+                )
+                .await
+            {
+                tracing::warn!(
+                    automation_id,
+                    file_path = %record.file_path,
+                    error = %err.message,
+                    "failed to repair office auto verification automation runtime"
+                );
+            }
         }
     }
 

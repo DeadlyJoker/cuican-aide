@@ -5,9 +5,16 @@ import type {
   ArtifactItem,
   LibraryItem,
   LibraryPanel,
-  LibraryPanelAction,
+  OfficeMember,
+  OfficeMemberContextPreview,
+  OfficeMemoryListResult,
+  OfficeMemoryRecord,
+  OfficeMemoryStatus,
   OfficeRunActivity,
+  OfficeRunDelegationActivity,
+  OfficeRunVerificationCheckActivity,
 } from "../../lib/domain/crewonDomain";
+import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
 import { translate, type Locale } from "../../lib/i18n";
 
 const LibraryView = lazy(() =>
@@ -24,6 +31,16 @@ export function AppWorkspaceLibraryContent({
   onBackLibrary,
   onItemAction,
   onLibraryPanelAction,
+  onOfficeDelegationDispatch,
+  onOfficeDelegationCancel,
+  onOfficeDelegationRetry,
+  onOfficeDelegationDispatchNext,
+  onOfficeVerificationCancel,
+  onOfficeVerificationRetry,
+  onOfficeMemoryDecision,
+  onOfficeMemoryList,
+  onOfficeMemberContextPreview,
+  onRecruitableAgentList,
   onOfficeRunCancel,
   onOfficeRunRetry,
   onPanelFieldChange,
@@ -38,12 +55,50 @@ export function AppWorkspaceLibraryContent({
   onArtifact: (artifact: ArtifactItem) => void;
   onBackLibrary: () => void;
   onItemAction: (item: LibraryItem) => void;
-  onLibraryPanelAction: (action: LibraryPanelAction) => void;
-  onOfficeRunCancel: (run: OfficeRunActivity) => void;
-  onOfficeRunRetry: (run: OfficeRunActivity) => void;
+  onLibraryPanelAction: LibraryPanelActionCallback;
+  onOfficeDelegationDispatch: (
+    run: OfficeRunActivity,
+    delegation: OfficeRunDelegationActivity,
+  ) => void | Promise<void>;
+  onOfficeDelegationCancel: (
+    run: OfficeRunActivity,
+    delegation: OfficeRunDelegationActivity,
+  ) => void | Promise<void>;
+  onOfficeDelegationRetry: (
+    run: OfficeRunActivity,
+    delegation: OfficeRunDelegationActivity,
+  ) => void | Promise<void>;
+  onOfficeDelegationDispatchNext?: (
+    run: OfficeRunActivity,
+  ) => void | Promise<void>;
+  onOfficeVerificationCancel: (
+    run: OfficeRunActivity,
+    check: OfficeRunVerificationCheckActivity,
+  ) => void | Promise<void>;
+  onOfficeVerificationRetry: (
+    run: OfficeRunActivity,
+    check: OfficeRunVerificationCheckActivity,
+  ) => void | Promise<void>;
+  onOfficeMemoryDecision?: (
+    memoryId: string,
+    status: OfficeMemoryStatus,
+  ) => Promise<OfficeMemoryRecord | null>;
+  onOfficeMemoryList?: (
+    status: OfficeMemoryStatus,
+    cursor?: string | null,
+  ) => Promise<OfficeMemoryListResult | null>;
+  onOfficeMemberContextPreview?: (
+    run: OfficeRunActivity,
+    member: OfficeMember,
+  ) => Promise<OfficeMemberContextPreview | null>;
+  onRecruitableAgentList?: (
+    existingMembers: OfficeMember[],
+  ) => Promise<AgentConfig[]>;
+  onOfficeRunCancel: (run: OfficeRunActivity) => void | Promise<void>;
+  onOfficeRunRetry: (run: OfficeRunActivity) => void | Promise<void>;
   onPanelFieldChange: (fieldId: string, value: string) => void;
   onSaveAgentConfig: () => void;
-  onSendOfficeMessage: (text: string) => void;
+  onSendOfficeMessage: (text: string) => void | Promise<void>;
   onToggleAgentCapability: (group: "mcp" | "skills", id: string) => void;
   onUpdateAgentConfig: (patch: Partial<AgentConfig>) => void;
 }) {
@@ -70,6 +125,16 @@ export function AppWorkspaceLibraryContent({
         onSaveAgentConfig={onSaveAgentConfig}
         onApprovalDecision={onApprovalDecision}
         onArtifact={onArtifact}
+        onOfficeDelegationDispatch={onOfficeDelegationDispatch}
+        onOfficeDelegationCancel={onOfficeDelegationCancel}
+        onOfficeDelegationRetry={onOfficeDelegationRetry}
+        onOfficeDelegationDispatchNext={onOfficeDelegationDispatchNext}
+        onOfficeVerificationCancel={onOfficeVerificationCancel}
+        onOfficeVerificationRetry={onOfficeVerificationRetry}
+        onOfficeMemoryDecision={onOfficeMemoryDecision}
+        onOfficeMemoryList={onOfficeMemoryList}
+        onOfficeMemberContextPreview={onOfficeMemberContextPreview}
+        onRecruitableAgentList={onRecruitableAgentList}
         onOfficeRunCancel={onOfficeRunCancel}
         onOfficeRunRetry={onOfficeRunRetry}
       />

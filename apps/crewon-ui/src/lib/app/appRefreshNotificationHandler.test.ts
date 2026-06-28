@@ -10,6 +10,7 @@ type CapturedRefreshState = {
   accountRefreshes: number;
   libraries: LibraryKind[];
   notice: NoticeState | null;
+  slashRefreshes: number;
   settingsSections: SettingsSection[][];
 };
 
@@ -21,6 +22,7 @@ function handleNotification(notification: AppServerNotification): {
     accountRefreshes: 0,
     libraries: [],
     notice: null,
+    slashRefreshes: 0,
     settingsSections: [],
   };
 
@@ -29,6 +31,9 @@ function handleNotification(notification: AppServerNotification): {
     notification,
     refreshAccount: () => {
       state.accountRefreshes += 1;
+    },
+    refreshComposerSlashCommands: () => {
+      state.slashRefreshes += 1;
     },
     refreshVisibleLibrary: (kind) => {
       state.libraries.push(kind);
@@ -60,12 +65,13 @@ describe("refresh app notification handler", () => {
   });
 
   it("handles app and remote control notifications by refreshing settings", () => {
-    expect(
-      handleNotification({
-        method: "app/list/updated",
-        params: {},
-      } as AppServerNotification).state.settingsSections,
-    ).toEqual([["browser", "connections"]]);
+    const appList = handleNotification({
+      method: "app/list/updated",
+      params: {},
+    } as AppServerNotification).state;
+
+    expect(appList.settingsSections).toEqual([["browser", "connections"]]);
+    expect(appList.slashRefreshes).toBe(1);
 
     expect(
       handleNotification({
@@ -83,6 +89,7 @@ describe("refresh app notification handler", () => {
 
     expect(handled).toBe(true);
     expect(state.libraries).toEqual(["tools"]);
+    expect(state.slashRefreshes).toBe(1);
     expect(state.settingsSections).toEqual([["mcp-servers"]]);
   });
 
@@ -101,15 +108,16 @@ describe("refresh app notification handler", () => {
       tone: "warning",
     });
 
-    expect(
-      handleNotification({
-        method: "mcpServer/startupStatus/updated",
-        params: { name: "github", status: "failed", error: "port busy" },
-      } as AppServerNotification).state.notice,
-    ).toEqual({
+    const mcpStartup = handleNotification({
+      method: "mcpServer/startupStatus/updated",
+      params: { name: "github", status: "failed", error: "port busy" },
+    } as AppServerNotification).state;
+
+    expect(mcpStartup.notice).toEqual({
       text: "github: failed\nport busy",
       tone: "warning",
     });
+    expect(mcpStartup.slashRefreshes).toBe(1);
   });
 
   it("leaves thread notifications for the app-level handler", () => {

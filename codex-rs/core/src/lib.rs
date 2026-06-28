@@ -75,6 +75,7 @@ pub(crate) mod mentions {
     pub(crate) use crate::plugins::build_connector_slug_counts;
     pub(crate) use crate::plugins::build_skill_name_counts;
     pub(crate) use crate::plugins::collect_explicit_app_ids;
+    pub(crate) use crate::plugins::collect_explicit_mcp_server_names;
     pub(crate) use crate::plugins::collect_explicit_plugin_mentions;
     pub(crate) use crate::plugins::collect_tool_mentions_from_messages;
 }

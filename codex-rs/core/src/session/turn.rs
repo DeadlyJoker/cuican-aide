@@ -32,6 +32,7 @@ use crate::mcp_tool_exposure::build_mcp_tool_exposure;
 use crate::mentions::build_connector_slug_counts;
 use crate::mentions::build_skill_name_counts;
 use crate::mentions::collect_explicit_app_ids;
+use crate::mentions::collect_explicit_mcp_server_names;
 use crate::mentions::collect_explicit_plugin_mentions;
 use crate::mentions::collect_tool_mentions_from_messages;
 use crate::plugins::build_plugin_injections;
@@ -118,6 +119,9 @@ use tracing::trace;
 use tracing::trace_span;
 use tracing::warn;
 
+#[derive(Debug)]
+struct ExplicitMcpServerMentions(HashSet<String>);
+
 /// Takes initial turn input and runs a loop where, at each sampling request,
 /// the model replies with either:
 ///
@@ -157,8 +161,11 @@ pub(crate) async fn run_turn(
     sess.record_context_updates_and_set_reference_context_item(turn_context.as_ref())
         .await;
 
-    let (injection_items, explicitly_enabled_connectors) =
+    let (injection_items, explicitly_enabled_connectors, explicit_mcp_server_names) =
         build_skills_and_plugins(&sess, turn_context.as_ref(), &input, &cancellation_token).await?;
+    turn_context
+        .extension_data
+        .insert(ExplicitMcpServerMentions(explicit_mcp_server_names));
 
     if run_pending_session_start_hooks(&sess, &turn_context).await {
         return None;
@@ -458,7 +465,7 @@ async fn build_skills_and_plugins(
     turn_context: &TurnContext,
     input: &[TurnInput],
     cancellation_token: &CancellationToken,
-) -> Option<(Vec<ResponseItem>, HashSet<String>)> {
+) -> Option<(Vec<ResponseItem>, HashSet<String>, HashSet<String>)> {
     let user_input = input
         .iter()
         .filter_map(|item| match item {
@@ -567,6 +574,7 @@ async fn build_skills_and_plugins(
     let plugin_items =
         build_plugin_injections(&mentioned_plugins, &mcp_tools, &available_connectors);
     let mut explicitly_enabled_connectors = collect_explicit_app_ids(&user_input);
+    let explicit_mcp_server_names = collect_explicit_mcp_server_names(&user_input);
     explicitly_enabled_connectors.extend(skill_connector_ids);
     let connector_names_by_id = available_connectors
         .iter()
@@ -606,7 +614,11 @@ async fn build_skills_and_plugins(
     };
     injection_items.extend(plugin_items);
     injection_items.extend(extension_injection_items);
-    Some((injection_items, explicitly_enabled_connectors))
+    Some((
+        injection_items,
+        explicitly_enabled_connectors,
+        explicit_mcp_server_names,
+    ))
 }
 
 async fn build_extension_turn_input_items(
@@ -1204,11 +1216,20 @@ pub(crate) async fn built_tools(
     .instrument(trace_span!("built_tools.load_discoverable_tools"))
     .await;
 
+    let explicit_mcp_server_mentions = turn_context
+        .extension_data
+        .get::<ExplicitMcpServerMentions>();
+    let empty_mcp_server_names = HashSet::new();
+    let explicit_mcp_server_names = explicit_mcp_server_mentions
+        .as_deref()
+        .map(|mentions| &mentions.0)
+        .unwrap_or(&empty_mcp_server_names);
     let mcp_tool_exposure = build_mcp_tool_exposure(
         &all_mcp_tools,
         connectors.as_deref(),
         &turn_context.config,
         search_tool_enabled(turn_context),
+        explicit_mcp_server_names,
     );
     let mcp_tools = has_mcp_servers.then_some(mcp_tool_exposure.direct_tools);
     let deferred_mcp_tools = mcp_tool_exposure.deferred_tools;

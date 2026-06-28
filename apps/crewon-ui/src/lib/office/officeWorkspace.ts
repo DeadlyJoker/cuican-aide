@@ -244,3 +244,47 @@ export function newBackendOfficeWorkspace(
     ],
   };
 }
+
+export function newDraftOfficeWorkspace(
+  title: string,
+  locale: Locale,
+): OfficeWorkspace {
+  const goal =
+    locale === "zh"
+      ? `围绕「${title}」进行多智能体协作，先配置成员，再启动群聊。`
+      : `Coordinate multi-agent work for "${title}". Configure members first, then start the group chat.`;
+  return {
+    goal,
+    backendStatus: "local",
+    members: [
+      {
+        name: locale === "zh" ? "协调者" : "Coordinator",
+        role: locale === "zh" ? "办公室调度" : "Office coordination",
+        glyph: "@",
+        accent: "blue",
+        status: locale === "zh" ? "配置阶段" : "Configuring",
+        online: true,
+      },
+    ],
+    messages: [
+      {
+        author: locale === "zh" ? "系统" : "System",
+        glyph: "⌗",
+        accent: "blue",
+        time: locale === "zh" ? "现在" : "now",
+        kind: "system",
+        text:
+          locale === "zh"
+            ? "办公室配置已创建。先选择已有智能体加入成员，再发送第一条群聊消息。"
+            : "Office config created. Choose existing agents as members, then send the first group chat message.",
+      },
+    ],
+    tasks: [
+      {
+        title: locale === "zh" ? "选择智能体成员" : "Choose agent members",
+        owner: locale === "zh" ? "协调者" : "Coordinator",
+        status: "todo",
+      },
+    ],
+  };
+}

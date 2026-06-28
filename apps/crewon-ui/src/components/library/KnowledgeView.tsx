@@ -8,6 +8,7 @@ import {
   LibraryError,
   LibraryPageHeader,
   libraryLabel,
+  type LibraryPanelActionCallback,
 } from "./LibraryPrimitives";
 import { KnowledgeMemoryList } from "./KnowledgeMemoryList";
 import { KnowledgeSourceList } from "./KnowledgeSourceList";
@@ -21,7 +22,7 @@ export function KnowledgeView({
   panel: LibraryPanel;
   locale: Locale;
   onBack: () => void;
-  onPanelAction: (action: LibraryPanelAction) => void;
+  onPanelAction: LibraryPanelActionCallback;
 }) {
   const data = panel.knowledge;
   if (!data) return null;

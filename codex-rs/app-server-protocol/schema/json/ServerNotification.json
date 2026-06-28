@@ -2470,6 +2470,39 @@
       ],
       "type": "string"
     },
+    "OfficeRunUpdatedNotification": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "sourceThreadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceTurnId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "filePath",
+        "reason"
+      ],
+      "type": "object"
+    },
     "PatchApplyStatus": {
       "enum": [
         "inProgress",
@@ -6174,6 +6207,26 @@
         "params"
       ],
       "title": "App/list/updatedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "office/run/updated"
+          ],
+          "title": "Office/run/updatedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeRunUpdatedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "Office/run/updatedNotification",
       "type": "object"
     },
     {

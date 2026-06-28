@@ -18,6 +18,7 @@ type Messages = {
   connectionHints: {
     connected: string;
     connecting: string;
+    disconnected: string;
     demo: string;
   };
   connectionLost: string;
@@ -76,7 +77,8 @@ const messages: Record<Locale, Messages> = {
     connectionHints: {
       connected: "已连接到本地 app-server",
       connecting: "正在连接本地 app-server",
-      demo: "未连接本地 app-server，请求暂不发送",
+      disconnected: "未连接本地 app-server，请求暂不发送",
+      demo: "演示模式",
     },
     connectionLost: "无法连接本地 app-server，已保留当前会话，等待重连。",
     crewon: "Crewon",
@@ -92,11 +94,11 @@ const messages: Record<Locale, Messages> = {
     hideSidebar: "隐藏侧栏",
     language: "语言",
     loadingThreads: "正在加载会话…",
-    modeCode: "代码开发",
-    modeCodeDescription: "适合审查、修复、测试、重构和运行项目命令。",
-    modeOffice: "日常办公",
-    modeOfficeDescription: "适合文档、研究、幻灯片、数据分析和业务任务。",
-    modeTitle: "选择工作模式",
+    modeCode: "单体对话",
+    modeCodeDescription: "和一个智能体连续对话，适合审查、修复、测试和运行项目命令。",
+    modeOffice: "群聊对话",
+    modeOfficeDescription: "进入办公室群聊，选择已有智能体协作并沉淀任务、审批和交付物。",
+    modeTitle: "切换对话类型",
     newDraftPreview: "为 Crewon 起草一个新任务",
     newDraftThread: "新的草稿会话",
     newThread: "新对话",
@@ -138,7 +140,8 @@ const messages: Record<Locale, Messages> = {
     connectionHints: {
       connected: "Connected to local app-server",
       connecting: "Connecting to local app-server",
-      demo: "Local app-server disconnected; requests are paused",
+      disconnected: "Local app-server disconnected; requests are paused",
+      demo: "Demo mode",
     },
     connectionLost: "Could not connect to local app-server. Current sessions are preserved for retry.",
     crewon: "Crewon",
@@ -154,11 +157,11 @@ const messages: Record<Locale, Messages> = {
     hideSidebar: "Hide sidebar",
     language: "Language",
     loadingThreads: "Loading sessions...",
-    modeCode: "Code Development",
-    modeCodeDescription: "Best for review, fixes, tests, refactors, and project commands.",
-    modeOffice: "Daily Office",
-    modeOfficeDescription: "Best for docs, research, slides, analysis, and business tasks.",
-    modeTitle: "Choose mode",
+    modeCode: "Direct chat",
+    modeCodeDescription: "Talk with one agent for review, fixes, tests, and project commands.",
+    modeOffice: "Group chat",
+    modeOfficeDescription: "Open an office group chat, choose existing agents, and track tasks, approvals, and artifacts.",
+    modeTitle: "Switch conversation type",
     newDraftPreview: "Draft a new task for Crewon",
     newDraftThread: "New draft session",
     newThread: "New chat",

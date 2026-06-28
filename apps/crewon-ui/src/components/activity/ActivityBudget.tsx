@@ -19,7 +19,10 @@ export function ActivityBudget({
 }: ActivityBudgetProps) {
   const isZh = locale === "zh";
   const totalCost = budget.reduce((sum, row) => sum + row.costUsd, 0);
-  const capPct = Math.min(100, Math.round((totalCost / budgetCapUsd) * 100));
+  const capPct =
+    budgetCapUsd > 0
+      ? Math.min(100, Math.round((totalCost / budgetCapUsd) * 100))
+      : 0;
 
   return (
     <section className="activity-card activity-budget">
@@ -41,7 +44,9 @@ export function ActivityBudget({
         {budget.map((row) => {
           const pct = Math.min(
             100,
-            Math.round((row.usedTokens / row.budgetTokens) * 100),
+            row.budgetTokens > 0
+              ? Math.round((row.usedTokens / row.budgetTokens) * 100)
+              : 0,
           );
           return (
             <div className="budget-row" key={row.name}>

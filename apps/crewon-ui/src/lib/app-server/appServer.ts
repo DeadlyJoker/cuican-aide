@@ -60,6 +60,7 @@ import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse"
 import type { PluginReadResponse } from "@crewon-protocol/v2/PluginReadResponse";
 import type { PluginSkillReadResponse } from "@crewon-protocol/v2/PluginSkillReadResponse";
 import type { PlanDeltaNotification } from "@crewon-protocol/v2/PlanDeltaNotification";
+import type { OfficeRunUpdatedNotification } from "@crewon-protocol/v2/OfficeRunUpdatedNotification";
 import type { RemoteControlStatusChangedNotification } from "@crewon-protocol/v2/RemoteControlStatusChangedNotification";
 import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
 import type { SandboxPolicy } from "@crewon-protocol/v2/SandboxPolicy";
@@ -185,6 +186,34 @@ type LoadedThreadsListResponse = {
   nextCursor: string | null;
 };
 
+type ComposerMentionInput = {
+  kind?: "mention" | "skill";
+  name: string;
+  path: string;
+};
+
+export function turnInputFromComposer(
+  text: string,
+  mentions: ComposerMentionInput[] = [],
+): UserInput[] {
+  return [
+    { type: "text", text, text_elements: [] },
+    ...mentions.map((mention) =>
+      mention.kind === "skill"
+        ? ({
+            type: "skill" as const,
+            name: mention.name,
+            path: mention.path,
+          } satisfies UserInput)
+        : ({
+            type: "mention" as const,
+            name: mention.name,
+            path: mention.path,
+          } satisfies UserInput),
+    ),
+  ];
+}
+
 export type DomainConfigListResponse<TConfig> = {
   data: Array<{
     filePath: string;
@@ -234,12 +263,93 @@ export type OfficeRunResponse = {
   turn: Turn;
 };
 
+export type OfficeDelegationDispatchResponse = {
+  filePath: string;
+  config: OfficeConfig;
+  runId: string;
+  delegationId: string;
+  threadId: string;
+  turn: Turn;
+};
+
+export type OfficeDelegationRetryResponse = OfficeDelegationDispatchResponse & {
+  retryOfDelegationId: string;
+};
+
+export type OfficeVerificationDispatchResponse = OfficeRunResponse & {
+  verificationCheckId: string;
+  automationId: string;
+  automationRunFilePath: string;
+  automationRunId: string;
+};
+
+export type OfficeVerificationRetryResponse =
+  OfficeVerificationDispatchResponse & {
+    retryOfAutomationTurnId: string | null;
+  };
+
+export type OfficeMemberContextPreviewResponse = {
+  runId: string;
+  member: string;
+  agentId: string;
+  threadId: string;
+  contextPolicy: string;
+  memoryScope: string;
+  agentProfile: string;
+  sharedContext: string;
+  memoryContext: string;
+};
+
 export type OfficeRunSyncResponse = {
   filePath: string;
   config: OfficeConfig;
 };
 
+export type OfficeMemoryEvidenceRef = {
+  runId: string | null;
+  threadId: string | null;
+  turnId: string | null;
+};
+
+export type OfficeMemoryRecord = {
+  id: string;
+  officeKey: string;
+  scope: string;
+  member: string | null;
+  agentId: string | null;
+  kind: string;
+  content: string;
+  confidence: string;
+  importance: string;
+  status: "accepted" | "pending" | "rejected" | string;
+  evidenceRefs: OfficeMemoryEvidenceRef[];
+  keywords: string[];
+  createdAt: string;
+  updatedAt: string;
+  lastUsedAt: string | null;
+  usageCount: number;
+};
+
+export type OfficeMemoryListResponse = {
+  data: OfficeMemoryRecord[];
+  nextCursor: string | null;
+};
+
+export type OfficeMemoryDecideResponse = {
+  memory: OfficeMemoryRecord;
+};
+
 export type OfficeRunCancelResponse = {
+  filePath: string;
+  config: OfficeConfig;
+};
+
+export type OfficeDelegationCancelResponse = {
+  filePath: string;
+  config: OfficeConfig;
+};
+
+export type OfficeVerificationCancelResponse = {
   filePath: string;
   config: OfficeConfig;
 };
@@ -285,6 +395,11 @@ export type AutomationRunRecord = {
 export type AutomationRunResponse = {
   filePath: string;
   run: AutomationRunRecord;
+};
+
+export type AutomationRunStartResponse = AutomationRunResponse & {
+  threadId: string;
+  turn: Turn;
 };
 
 export type AutomationRunUpdateResponse = AutomationRunResponse;
@@ -407,24 +522,58 @@ export type AppServerRequest = {
 
 export type KnownAppServerNotification =
   | { method: "error"; params: ErrorNotification }
-  | { method: "account/login/completed"; params: AccountLoginCompletedNotification }
-  | { method: "account/rateLimits/updated"; params: AccountRateLimitsUpdatedNotification }
+  | {
+      method: "account/login/completed";
+      params: AccountLoginCompletedNotification;
+    }
+  | {
+      method: "account/rateLimits/updated";
+      params: AccountRateLimitsUpdatedNotification;
+    }
   | { method: "account/updated"; params: AccountUpdatedNotification }
   | { method: "app/list/updated"; params: AppListUpdatedNotification }
   | { method: "configWarning"; params: ConfigWarningNotification }
-  | { method: "externalAgentConfig/import/completed"; params: ExternalAgentConfigImportCompletedNotification }
+  | {
+      method: "externalAgentConfig/import/completed";
+      params: ExternalAgentConfigImportCompletedNotification;
+    }
   | { method: "fs/changed"; params: FsChangedNotification }
-  | { method: "command/exec/outputDelta"; params: CommandExecOutputDeltaNotification }
+  | {
+      method: "command/exec/outputDelta";
+      params: CommandExecOutputDeltaNotification;
+    }
   | { method: "item/agentMessage/delta"; params: AgentMessageDeltaNotification }
-  | { method: "item/commandExecution/outputDelta"; params: CommandExecutionOutputDeltaNotification }
+  | {
+      method: "item/commandExecution/outputDelta";
+      params: CommandExecutionOutputDeltaNotification;
+    }
   | { method: "item/completed"; params: ItemCompletedNotification }
-  | { method: "item/fileChange/patchUpdated"; params: FileChangePatchUpdatedNotification }
+  | {
+      method: "item/fileChange/patchUpdated";
+      params: FileChangePatchUpdatedNotification;
+    }
   | { method: "item/plan/delta"; params: PlanDeltaNotification }
   | { method: "item/started"; params: ItemStartedNotification }
-  | { method: "mcpServer/oauthLogin/completed"; params: McpServerOauthLoginCompletedNotification }
-  | { method: "mcpServer/startupStatus/updated"; params: McpServerStatusUpdatedNotification }
-  | { method: "remoteControl/status/changed"; params: RemoteControlStatusChangedNotification }
-  | { method: "serverRequest/resolved"; params: ServerRequestResolvedNotification }
+  | {
+      method: "mcpServer/oauthLogin/completed";
+      params: McpServerOauthLoginCompletedNotification;
+    }
+  | {
+      method: "mcpServer/startupStatus/updated";
+      params: McpServerStatusUpdatedNotification;
+    }
+  | {
+      method: "remoteControl/status/changed";
+      params: RemoteControlStatusChangedNotification;
+    }
+  | {
+      method: "office/run/updated";
+      params: OfficeRunUpdatedNotification;
+    }
+  | {
+      method: "serverRequest/resolved";
+      params: ServerRequestResolvedNotification;
+    }
   | { method: "skills/changed"; params: SkillsChangedNotification }
   | { method: "thread/archived"; params: ThreadArchivedNotification }
   | { method: "thread/compacted"; params: ContextCompactedNotification }
@@ -432,10 +581,16 @@ export type KnownAppServerNotification =
   | { method: "thread/goal/cleared"; params: ThreadGoalClearedNotification }
   | { method: "thread/goal/updated"; params: ThreadGoalUpdatedNotification }
   | { method: "thread/name/updated"; params: ThreadNameUpdatedNotification }
-  | { method: "thread/settings/updated"; params: ThreadSettingsUpdatedNotification }
+  | {
+      method: "thread/settings/updated";
+      params: ThreadSettingsUpdatedNotification;
+    }
   | { method: "thread/started"; params: ThreadStartedNotification }
   | { method: "thread/status/changed"; params: ThreadStatusChangedNotification }
-  | { method: "thread/tokenUsage/updated"; params: ThreadTokenUsageUpdatedNotification }
+  | {
+      method: "thread/tokenUsage/updated";
+      params: ThreadTokenUsageUpdatedNotification;
+    }
   | { method: "thread/unarchived"; params: ThreadUnarchivedNotification }
   | { method: "turn/completed"; params: TurnCompletedNotification }
   | { method: "turn/diff/updated"; params: TurnDiffUpdatedNotification }
@@ -462,7 +617,9 @@ export class AppServerClient {
 
   constructor(
     private readonly url: string,
-    private readonly onNotification: (notification: AppServerNotification) => void,
+    private readonly onNotification: (
+      notification: AppServerNotification,
+    ) => void,
     private readonly onClose?: () => void,
     private readonly onServerRequest?: (request: AppServerRequest) => void,
   ) {}
@@ -526,10 +683,13 @@ export class AppServerClient {
   }
 
   async listLoadedThreadIds(): Promise<string[]> {
-    const response = await this.request<LoadedThreadsListResponse>("thread/loaded/list", {
-      cursor: null,
-      limit: 50,
-    });
+    const response = await this.request<LoadedThreadsListResponse>(
+      "thread/loaded/list",
+      {
+        cursor: null,
+        limit: 50,
+      },
+    );
     return response.data;
   }
 
@@ -538,7 +698,9 @@ export class AppServerClient {
   }
 
   async getAccountRateLimits(): Promise<GetAccountRateLimitsResponse> {
-    return this.request<GetAccountRateLimitsResponse>("account/rateLimits/read");
+    return this.request<GetAccountRateLimitsResponse>(
+      "account/rateLimits/read",
+    );
   }
 
   async getAccountUsage(): Promise<GetAccountTokenUsageResponse> {
@@ -560,16 +722,24 @@ export class AppServerClient {
     });
   }
 
-  async listPermissionProfiles(cwd?: string): Promise<PermissionProfileListResponse> {
-    return this.request<PermissionProfileListResponse>("permissionProfile/list", {
-      cursor: null,
-      limit: 24,
-      cwd: cwd || null,
-    });
+  async listPermissionProfiles(
+    cwd?: string,
+  ): Promise<PermissionProfileListResponse> {
+    return this.request<PermissionProfileListResponse>(
+      "permissionProfile/list",
+      {
+        cursor: null,
+        limit: 24,
+        cwd: cwd || null,
+      },
+    );
   }
 
   async getModelProviderCapabilities(): Promise<ModelProviderCapabilitiesReadResponse> {
-    return this.request<ModelProviderCapabilitiesReadResponse>("modelProvider/capabilities/read", {});
+    return this.request<ModelProviderCapabilitiesReadResponse>(
+      "modelProvider/capabilities/read",
+      {},
+    );
   }
 
   async readConfig(cwd?: string): Promise<ConfigReadResponse> {
@@ -580,15 +750,21 @@ export class AppServerClient {
   }
 
   async readConfigRequirements(): Promise<ConfigRequirementsReadResponse> {
-    return this.request<ConfigRequirementsReadResponse>("configRequirements/read");
+    return this.request<ConfigRequirementsReadResponse>(
+      "configRequirements/read",
+    );
   }
 
   async readWindowsSandboxReadiness(): Promise<WindowsSandboxReadinessResponse> {
-    return this.request<WindowsSandboxReadinessResponse>("windowsSandbox/readiness");
+    return this.request<WindowsSandboxReadinessResponse>(
+      "windowsSandbox/readiness",
+    );
   }
 
   async readRemoteControlStatus(): Promise<RemoteControlStatusResponse> {
-    return this.request<RemoteControlStatusResponse>("remoteControl/status/read");
+    return this.request<RemoteControlStatusResponse>(
+      "remoteControl/status/read",
+    );
   }
 
   async enableRemoteControl(): Promise<RemoteControlStatusResponse> {
@@ -599,32 +775,48 @@ export class AppServerClient {
     return this.request<RemoteControlStatusResponse>("remoteControl/disable");
   }
 
-  async startRemoteControlPairing(manualCode = false): Promise<RemoteControlPairingStartResponse> {
-    return this.request<RemoteControlPairingStartResponse>("remoteControl/pairing/start", {
-      manualCode,
-    });
+  async startRemoteControlPairing(
+    manualCode = false,
+  ): Promise<RemoteControlPairingStartResponse> {
+    return this.request<RemoteControlPairingStartResponse>(
+      "remoteControl/pairing/start",
+      {
+        manualCode,
+      },
+    );
   }
 
   async getRemoteControlPairingStatus(
     pairingCode: string | null,
     manualPairingCode: string | null,
   ): Promise<RemoteControlPairingStatusResponse> {
-    return this.request<RemoteControlPairingStatusResponse>("remoteControl/pairing/status", {
-      pairingCode,
-      manualPairingCode,
-    });
+    return this.request<RemoteControlPairingStatusResponse>(
+      "remoteControl/pairing/status",
+      {
+        pairingCode,
+        manualPairingCode,
+      },
+    );
   }
 
-  async listRemoteControlClients(environmentId: string): Promise<RemoteControlClientsListResponse> {
-    return this.request<RemoteControlClientsListResponse>("remoteControl/client/list", {
-      environmentId,
-      cursor: null,
-      limit: 24,
-      order: "desc",
-    });
+  async listRemoteControlClients(
+    environmentId: string,
+  ): Promise<RemoteControlClientsListResponse> {
+    return this.request<RemoteControlClientsListResponse>(
+      "remoteControl/client/list",
+      {
+        environmentId,
+        cursor: null,
+        limit: 24,
+        order: "desc",
+      },
+    );
   }
 
-  async revokeRemoteControlClient(environmentId: string, clientId: string): Promise<void> {
+  async revokeRemoteControlClient(
+    environmentId: string,
+    clientId: string,
+  ): Promise<void> {
     await this.request("remoteControl/client/revoke", {
       environmentId,
       clientId,
@@ -635,14 +827,21 @@ export class AppServerClient {
     mode: WindowsSandboxSetupMode,
     cwd?: string,
   ): Promise<WindowsSandboxSetupStartResponse> {
-    return this.request<WindowsSandboxSetupStartResponse>("windowsSandbox/setupStart", {
-      mode,
-      cwd: cwd || null,
-    });
+    return this.request<WindowsSandboxSetupStartResponse>(
+      "windowsSandbox/setupStart",
+      {
+        mode,
+        cwd: cwd || null,
+      },
+    );
   }
 
   async writeConfigBatch(
-    edits: Array<{ keyPath: string; value: JsonValue; mergeStrategy?: "replace" | "upsert" }>,
+    edits: Array<{
+      keyPath: string;
+      value: JsonValue;
+      mergeStrategy?: "replace" | "upsert";
+    }>,
   ): Promise<ConfigWriteResponse> {
     return this.request<ConfigWriteResponse>("config/batchWrite", {
       edits: edits.map((edit) => ({
@@ -656,7 +855,9 @@ export class AppServerClient {
     });
   }
 
-  async loginAccount(params: LoginAccountParams): Promise<LoginAccountResponse> {
+  async loginAccount(
+    params: LoginAccountParams,
+  ): Promise<LoginAccountResponse> {
     return this.request<LoginAccountResponse>("account/login/start", params);
   }
 
@@ -664,7 +865,10 @@ export class AppServerClient {
     return this.request<LogoutAccountResponse>("account/logout");
   }
 
-  async startThread(cwd?: string, threadSource = "app_server"): Promise<Thread> {
+  async startThread(
+    cwd?: string,
+    threadSource = "app_server",
+  ): Promise<Thread> {
     const response = await this.request<ThreadStartResponse>("thread/start", {
       cwd: cwd || undefined,
       threadSource,
@@ -681,27 +885,39 @@ export class AppServerClient {
   }
 
   async listThreadTurns(threadId: string): Promise<Turn[]> {
-    const response = await this.request<ThreadTurnsListResponse>("thread/turns/list", {
-      threadId,
-      cursor: null,
-      limit: 50,
-      sortDirection: "asc",
-      itemsView: "full",
-    });
+    const response = await this.request<ThreadTurnsListResponse>(
+      "thread/turns/list",
+      {
+        threadId,
+        cursor: null,
+        limit: 50,
+        sortDirection: "asc",
+        itemsView: "full",
+      },
+    );
     return response.data;
   }
 
-  async getConversationSummary(threadId: string): Promise<GetConversationSummaryResponse> {
-    return this.request<GetConversationSummaryResponse>("getConversationSummary", {
-      conversationId: threadId,
-    });
+  async getConversationSummary(
+    threadId: string,
+  ): Promise<GetConversationSummaryResponse> {
+    return this.request<GetConversationSummaryResponse>(
+      "getConversationSummary",
+      {
+        conversationId: threadId,
+      },
+    );
   }
 
   async getThreadGoal(threadId: string): Promise<ThreadGoalGetResponse> {
     return this.request<ThreadGoalGetResponse>("thread/goal/get", { threadId });
   }
 
-  async setThreadGoal(threadId: string, objective: string, tokenBudget: number | null): Promise<ThreadGoalSetResponse> {
+  async setThreadGoal(
+    threadId: string,
+    objective: string,
+    tokenBudget: number | null,
+  ): Promise<ThreadGoalSetResponse> {
     return this.request<ThreadGoalSetResponse>("thread/goal/set", {
       threadId,
       objective,
@@ -714,7 +930,10 @@ export class AppServerClient {
     await this.request("thread/goal/clear", { threadId });
   }
 
-  async setThreadMemoryMode(threadId: string, mode: "enabled" | "disabled"): Promise<void> {
+  async setThreadMemoryMode(
+    threadId: string,
+    mode: "enabled" | "disabled",
+  ): Promise<void> {
     await this.request("thread/memoryMode/set", { threadId, mode });
   }
 
@@ -736,7 +955,8 @@ export class AppServerClient {
     await this.request("thread/settings/update", {
       threadId,
       model: settings.model || null,
-      approvalPolicy: (settings.approvalPolicy || null) as AskForApproval | null,
+      approvalPolicy: (settings.approvalPolicy ||
+        null) as AskForApproval | null,
       sandboxPolicy,
     });
   }
@@ -754,7 +974,9 @@ export class AppServerClient {
   }
 
   async resumeThread(threadId: string): Promise<Thread> {
-    const response = await this.request<ThreadResumeResponse>("thread/resume", { threadId });
+    const response = await this.request<ThreadResumeResponse>("thread/resume", {
+      threadId,
+    });
     return response.thread;
   }
 
@@ -763,7 +985,10 @@ export class AppServerClient {
   }
 
   async unarchiveThread(threadId: string): Promise<Thread> {
-    const response = await this.request<ThreadUnarchiveResponse>("thread/unarchive", { threadId });
+    const response = await this.request<ThreadUnarchiveResponse>(
+      "thread/unarchive",
+      { threadId },
+    );
     return response.thread;
   }
 
@@ -778,19 +1003,11 @@ export class AppServerClient {
   async startTurn(
     threadId: string,
     text: string,
-    mentions: Array<{ name: string; path: string }> = [],
+    mentions: ComposerMentionInput[] = [],
   ): Promise<TurnStartResponse> {
-    const input: UserInput[] = [
-      { type: "text", text, text_elements: [] },
-      ...mentions.map((mention) => ({
-        type: "mention" as const,
-        name: mention.name,
-        path: mention.path,
-      })),
-    ];
     return this.request<TurnStartResponse>(
       "turn/start",
-      { threadId, input },
+      { threadId, input: turnInputFromComposer(text, mentions) },
       { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
     );
   }
@@ -798,33 +1015,33 @@ export class AppServerClient {
   async steerTurn(
     threadId: string,
     text: string,
-    mentions: Array<{ name: string; path: string }> = [],
+    mentions: ComposerMentionInput[] = [],
   ): Promise<{ turnId: string }> {
-    const input: UserInput[] = [
-      { type: "text", text, text_elements: [] },
-      ...mentions.map((mention) => ({
-        type: "mention" as const,
-        name: mention.name,
-        path: mention.path,
-      })),
-    ];
     return this.request<{ turnId: string }>(
       "turn/steer",
-      { threadId, input },
+      { threadId, input: turnInputFromComposer(text, mentions) },
       { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
     );
   }
 
-  async runThreadShellCommand(threadId: string, command: string): Promise<void> {
+  async runThreadShellCommand(
+    threadId: string,
+    command: string,
+  ): Promise<void> {
     await this.request("thread/shellCommand", { threadId, command });
   }
 
-  async listBackgroundTerminals(threadId: string): Promise<BackgroundTerminalsListResponse> {
-    return this.request<BackgroundTerminalsListResponse>("thread/backgroundTerminals/list", {
-      threadId,
-      cursor: null,
-      limit: 20,
-    });
+  async listBackgroundTerminals(
+    threadId: string,
+  ): Promise<BackgroundTerminalsListResponse> {
+    return this.request<BackgroundTerminalsListResponse>(
+      "thread/backgroundTerminals/list",
+      {
+        threadId,
+        cursor: null,
+        limit: 20,
+      },
+    );
   }
 
   async cleanBackgroundTerminals(threadId: string): Promise<void> {
@@ -854,7 +1071,11 @@ export class AppServerClient {
     });
   }
 
-  async runCommand(cwd: string, command: string, processId?: string): Promise<CommandExecResponse> {
+  async runCommand(
+    cwd: string,
+    command: string,
+    processId?: string,
+  ): Promise<CommandExecResponse> {
     return this.request<CommandExecResponse>(
       "command/exec",
       {
@@ -870,7 +1091,11 @@ export class AppServerClient {
     );
   }
 
-  async writeCommandInput(processId: string, text: string, closeStdin = false): Promise<void> {
+  async writeCommandInput(
+    processId: string,
+    text: string,
+    closeStdin = false,
+  ): Promise<void> {
     await this.request("command/exec/write", {
       processId,
       deltaBase64: text ? textToBase64(text) : null,
@@ -886,7 +1111,10 @@ export class AppServerClient {
     return this.request<FsReadDirectoryResponse>("fs/readDirectory", { path });
   }
 
-  async createDirectory(path: string, recursive = true): Promise<FsCreateDirectoryResponse> {
+  async createDirectory(
+    path: string,
+    recursive = true,
+  ): Promise<FsCreateDirectoryResponse> {
     return this.request<FsCreateDirectoryResponse>("fs/createDirectory", {
       path,
       recursive,
@@ -897,14 +1125,19 @@ export class AppServerClient {
     return this.request<FsReadFileResponse>("fs/readFile", { path });
   }
 
-  async writeTextFile(path: string, text: string): Promise<FsWriteFileResponse> {
+  async writeTextFile(
+    path: string,
+    text: string,
+  ): Promise<FsWriteFileResponse> {
     return this.request<FsWriteFileResponse>("fs/writeFile", {
       path,
       dataBase64: textToBase64(text),
     });
   }
 
-  async listAgentConfigs(cwd: string): Promise<DomainConfigListResponse<AgentConfig>> {
+  async listAgentConfigs(
+    cwd: string,
+  ): Promise<DomainConfigListResponse<AgentConfig>> {
     return this.request<DomainConfigListResponse<AgentConfig>>("agent/list", {
       cwd,
       cursor: null,
@@ -963,13 +1196,16 @@ export class AppServerClient {
       limit?: number | null;
     },
   ): Promise<AgentRecruitableListResponse> {
-    return this.request<AgentRecruitableListResponse>("agent/recruitable/list", {
-      cwd,
-      cursor: params.cursor ?? null,
-      existingAgentIds: params.existingAgentIds ?? null,
-      existingNames: params.existingNames ?? null,
-      limit: params.limit ?? 24,
-    });
+    return this.request<AgentRecruitableListResponse>(
+      "agent/recruitable/list",
+      {
+        cwd,
+        cursor: params.cursor ?? null,
+        existingAgentIds: params.existingAgentIds ?? null,
+        existingNames: params.existingNames ?? null,
+        limit: params.limit ?? 24,
+      },
+    );
   }
 
   async deleteAgentConfig(
@@ -982,7 +1218,9 @@ export class AppServerClient {
     });
   }
 
-  async listOfficeConfigs(cwd: string): Promise<DomainConfigListResponse<OfficeConfig>> {
+  async listOfficeConfigs(
+    cwd: string,
+  ): Promise<DomainConfigListResponse<OfficeConfig>> {
     return this.request<DomainConfigListResponse<OfficeConfig>>("office/list", {
       cwd,
       cursor: null,
@@ -994,7 +1232,10 @@ export class AppServerClient {
     cwd: string,
     config: OfficeConfig,
   ): Promise<DomainConfigSaveResponse> {
-    return this.request<DomainConfigSaveResponse>("office/save", { cwd, config });
+    return this.request<DomainConfigSaveResponse>("office/save", {
+      cwd,
+      config,
+    });
   }
 
   async createOfficeConfig(
@@ -1102,6 +1343,79 @@ export class AppServerClient {
     });
   }
 
+  async cancelOfficeDelegationConfig(
+    cwd: string,
+    config: OfficeConfig,
+    runId: string,
+    delegationId: string,
+    params?: {
+      threadId?: string | null;
+      turnId?: string | null;
+      locale?: "zh" | "en" | null;
+    },
+  ): Promise<OfficeDelegationCancelResponse> {
+    return this.request<OfficeDelegationCancelResponse>(
+      "office/delegation/cancel",
+      {
+        cwd,
+        config,
+        runId,
+        delegationId,
+        threadId: params?.threadId ?? null,
+        turnId: params?.turnId ?? null,
+        locale: params?.locale ?? null,
+      },
+    );
+  }
+
+  async cancelOfficeVerificationConfig(
+    cwd: string,
+    config: OfficeConfig,
+    runId: string,
+    verificationCheckId: string,
+    params?: {
+      threadId?: string | null;
+      turnId?: string | null;
+      locale?: "zh" | "en" | null;
+    },
+  ): Promise<OfficeVerificationCancelResponse> {
+    return this.request<OfficeVerificationCancelResponse>(
+      "office/verification/cancel",
+      {
+        cwd,
+        config,
+        runId,
+        verificationCheckId,
+        threadId: params?.threadId ?? null,
+        turnId: params?.turnId ?? null,
+        locale: params?.locale ?? null,
+      },
+    );
+  }
+
+  async retryOfficeDelegationConfig(
+    cwd: string,
+    config: OfficeConfig,
+    runId: string,
+    delegationId: string,
+    params?: {
+      locale?: "zh" | "en" | null;
+      clientUserMessageId?: string | null;
+    },
+  ): Promise<OfficeDelegationRetryResponse> {
+    return this.request<OfficeDelegationRetryResponse>(
+      "office/delegation/retry",
+      {
+        cwd,
+        config,
+        runId,
+        delegationId,
+        locale: params?.locale ?? null,
+        clientUserMessageId: params?.clientUserMessageId ?? null,
+      },
+    );
+  }
+
   async retryOfficeRunConfig(
     cwd: string,
     config: OfficeConfig,
@@ -1122,6 +1436,125 @@ export class AppServerClient {
       locale: params?.locale ?? null,
       clientUserMessageId: params?.clientUserMessageId ?? null,
     });
+  }
+
+  async dispatchOfficeDelegationConfig(
+    cwd: string,
+    config: OfficeConfig,
+    runId: string,
+    task: string,
+    params?: {
+      member?: string | null;
+      agentId?: string | null;
+      locale?: "zh" | "en" | null;
+      clientUserMessageId?: string | null;
+    },
+  ): Promise<OfficeDelegationDispatchResponse> {
+    return this.request<OfficeDelegationDispatchResponse>(
+      "office/delegation/dispatch",
+      {
+        cwd,
+        config,
+        runId,
+        task,
+        member: params?.member ?? null,
+        agentId: params?.agentId ?? null,
+        locale: params?.locale ?? null,
+        clientUserMessageId: params?.clientUserMessageId ?? null,
+      },
+    );
+  }
+
+  async dispatchNextOfficeDelegationConfig(
+    cwd: string,
+    config: OfficeConfig,
+    runId: string,
+    params?: {
+      dispatchPolicy?: "interactive" | "auto" | null;
+      locale?: "zh" | "en" | null;
+      clientUserMessageId?: string | null;
+    },
+  ): Promise<OfficeDelegationDispatchResponse> {
+    return this.request<OfficeDelegationDispatchResponse>(
+      "office/delegation/dispatch/next",
+      {
+        cwd,
+        config,
+        runId,
+        dispatchPolicy: params?.dispatchPolicy ?? null,
+        locale: params?.locale ?? null,
+        clientUserMessageId: params?.clientUserMessageId ?? null,
+      },
+    );
+  }
+
+  async dispatchNextOfficeVerificationConfig(
+    cwd: string,
+    config: OfficeConfig,
+    runId: string,
+    params?: {
+      locale?: "zh" | "en" | null;
+      clientUserMessageId?: string | null;
+    },
+  ): Promise<OfficeVerificationDispatchResponse> {
+    return this.request<OfficeVerificationDispatchResponse>(
+      "office/verification/dispatch/next",
+      {
+        cwd,
+        config,
+        runId,
+        locale: params?.locale ?? null,
+        clientUserMessageId: params?.clientUserMessageId ?? null,
+      },
+    );
+  }
+
+  async retryOfficeVerificationConfig(
+    cwd: string,
+    config: OfficeConfig,
+    runId: string,
+    verificationCheckId: string,
+    params?: {
+      locale?: "zh" | "en" | null;
+      clientUserMessageId?: string | null;
+    },
+  ): Promise<OfficeVerificationRetryResponse> {
+    return this.request<OfficeVerificationRetryResponse>(
+      "office/verification/retry",
+      {
+        cwd,
+        config,
+        runId,
+        verificationCheckId,
+        locale: params?.locale ?? null,
+        clientUserMessageId: params?.clientUserMessageId ?? null,
+      },
+    );
+  }
+
+  async previewOfficeMemberContextConfig(
+    cwd: string,
+    config: OfficeConfig,
+    runId: string,
+    params?: {
+      task?: string | null;
+      member?: string | null;
+      agentId?: string | null;
+      locale?: "zh" | "en" | null;
+    },
+  ): Promise<OfficeMemberContextPreviewResponse> {
+    return this.request<OfficeMemberContextPreviewResponse>(
+      "office/member/context/preview",
+      {
+        cwd,
+        config,
+        runId,
+        task: params?.task ?? null,
+        member: params?.member ?? null,
+        agentId: params?.agentId ?? null,
+        locale: params?.locale ?? null,
+      },
+    );
   }
 
   async addOfficeMemberConfig(
@@ -1145,13 +1578,16 @@ export class AppServerClient {
     decision: "approved" | "denied",
     message?: OfficeMessage | null,
   ): Promise<OfficeApprovalDecideResponse> {
-    return this.request<OfficeApprovalDecideResponse>("office/approval/decide", {
-      cwd,
-      config,
-      approvalId,
-      decision,
-      message: message ?? null,
-    });
+    return this.request<OfficeApprovalDecideResponse>(
+      "office/approval/decide",
+      {
+        cwd,
+        config,
+        approvalId,
+        decision,
+        message: message ?? null,
+      },
+    );
   }
 
   async upsertOfficeArtifactConfig(
@@ -1160,11 +1596,46 @@ export class AppServerClient {
     artifact: ArtifactItem,
     message?: OfficeMessage | null,
   ): Promise<OfficeArtifactUpsertResponse> {
-    return this.request<OfficeArtifactUpsertResponse>("office/artifact/upsert", {
+    return this.request<OfficeArtifactUpsertResponse>(
+      "office/artifact/upsert",
+      {
+        cwd,
+        config,
+        artifact,
+        message: message ?? null,
+      },
+    );
+  }
+
+  async listOfficeMemories(
+    cwd: string,
+    config: OfficeConfig,
+    params?: {
+      status?: "accepted" | "pending" | "rejected" | string | null;
+      cursor?: string | null;
+      limit?: number | null;
+    },
+  ): Promise<OfficeMemoryListResponse> {
+    return this.request<OfficeMemoryListResponse>("office/memory/list", {
       cwd,
       config,
-      artifact,
-      message: message ?? null,
+      status: params?.status ?? null,
+      cursor: params?.cursor ?? null,
+      limit: params?.limit ?? 24,
+    });
+  }
+
+  async decideOfficeMemory(
+    cwd: string,
+    config: OfficeConfig,
+    memoryId: string,
+    status: "accepted" | "pending" | "rejected",
+  ): Promise<OfficeMemoryDecideResponse> {
+    return this.request<OfficeMemoryDecideResponse>("office/memory/decide", {
+      cwd,
+      config,
+      memoryId,
+      status,
     });
   }
 
@@ -1178,19 +1649,27 @@ export class AppServerClient {
     });
   }
 
-  async listAutomationConfigs(cwd: string): Promise<DomainConfigListResponse<AutomationConfig>> {
-    return this.request<DomainConfigListResponse<AutomationConfig>>("automation/list", {
-      cwd,
-      cursor: null,
-      limit: 24,
-    });
+  async listAutomationConfigs(
+    cwd: string,
+  ): Promise<DomainConfigListResponse<AutomationConfig>> {
+    return this.request<DomainConfigListResponse<AutomationConfig>>(
+      "automation/list",
+      {
+        cwd,
+        cursor: null,
+        limit: 24,
+      },
+    );
   }
 
   async saveAutomationConfig(
     cwd: string,
     config: AutomationConfig,
   ): Promise<DomainConfigSaveResponse> {
-    return this.request<DomainConfigSaveResponse>("automation/save", { cwd, config });
+    return this.request<DomainConfigSaveResponse>("automation/save", {
+      cwd,
+      config,
+    });
   }
 
   async createAutomationConfig(
@@ -1259,6 +1738,24 @@ export class AppServerClient {
     });
   }
 
+  async startAutomationRunConfig(
+    cwd: string,
+    config: AutomationConfig,
+    params: {
+      note?: string | null;
+      locale?: string | null;
+      clientUserMessageId?: string | null;
+    } = {},
+  ): Promise<AutomationRunStartResponse> {
+    return this.request<AutomationRunStartResponse>("automation/run/start", {
+      cwd,
+      config,
+      note: params.note ?? null,
+      locale: params.locale ?? null,
+      clientUserMessageId: params.clientUserMessageId ?? null,
+    });
+  }
+
   async updateAutomationRun(
     cwd: string,
     filePath: string,
@@ -1308,12 +1805,15 @@ export class AppServerClient {
     threadId?: string | null;
     note?: string | null;
   }): Promise<KnowledgeMemoryWriteResponse> {
-    return this.request<KnowledgeMemoryWriteResponse>("knowledge/memory/write", {
-      cwd: params.cwd,
-      title: params.title ?? null,
-      threadId: params.threadId ?? null,
-      note: params.note ?? null,
-    });
+    return this.request<KnowledgeMemoryWriteResponse>(
+      "knowledge/memory/write",
+      {
+        cwd: params.cwd,
+        title: params.title ?? null,
+        threadId: params.threadId ?? null,
+        note: params.note ?? null,
+      },
+    );
   }
 
   async listToolConfigs(
@@ -1367,7 +1867,11 @@ export class AppServerClient {
     });
   }
 
-  async copyPath(sourcePath: string, destinationPath: string, recursive = false): Promise<void> {
+  async copyPath(
+    sourcePath: string,
+    destinationPath: string,
+    recursive = false,
+  ): Promise<void> {
     await this.request("fs/copy", {
       sourcePath,
       destinationPath,
@@ -1375,7 +1879,11 @@ export class AppServerClient {
     });
   }
 
-  async removePath(path: string, recursive = false, force = true): Promise<void> {
+  async removePath(
+    path: string,
+    recursive = false,
+    force = true,
+  ): Promise<void> {
     await this.request("fs/remove", {
       path,
       recursive,
@@ -1399,7 +1907,11 @@ export class AppServerClient {
     return this.request<GitDiffToRemoteResponse>("gitDiffToRemote", { cwd });
   }
 
-  async fuzzyFileSearch(query: string, roots: string[], cancellationToken: string | null = null): Promise<FuzzyFileSearchResponse> {
+  async fuzzyFileSearch(
+    query: string,
+    roots: string[],
+    cancellationToken: string | null = null,
+  ): Promise<FuzzyFileSearchResponse> {
     return this.request<FuzzyFileSearchResponse>("fuzzyFileSearch", {
       query,
       roots,
@@ -1416,7 +1928,10 @@ export class AppServerClient {
     });
   }
 
-  async listMcpServerStatus(threadId?: string, detail: "full" | "toolsAndAuthOnly" = "toolsAndAuthOnly"): Promise<ListMcpServerStatusResponse> {
+  async listMcpServerStatus(
+    threadId?: string,
+    detail: "full" | "toolsAndAuthOnly" = "toolsAndAuthOnly",
+  ): Promise<ListMcpServerStatusResponse> {
     return this.request<ListMcpServerStatusResponse>("mcpServerStatus/list", {
       cursor: null,
       limit: 24,
@@ -1425,11 +1940,13 @@ export class AppServerClient {
     });
   }
 
-  async listMcpServerConfigs(params: {
-    cwd?: string | null;
-    cursor?: string | null;
-    limit?: number | null;
-  } = {}): Promise<McpServerConfigListResponse> {
+  async listMcpServerConfigs(
+    params: {
+      cwd?: string | null;
+      cursor?: string | null;
+      limit?: number | null;
+    } = {},
+  ): Promise<McpServerConfigListResponse> {
     return this.request<McpServerConfigListResponse>("mcpServerConfig/list", {
       cwd: params.cwd ?? null,
       cursor: params.cursor ?? null,
@@ -1437,7 +1954,10 @@ export class AppServerClient {
     });
   }
 
-  async readMcpServerConfig(name: string, cwd?: string | null): Promise<McpServerConfigReadResponse> {
+  async readMcpServerConfig(
+    name: string,
+    cwd?: string | null,
+  ): Promise<McpServerConfigReadResponse> {
     return this.request<McpServerConfigReadResponse>("mcpServerConfig/read", {
       cwd: cwd ?? null,
       name,
@@ -1463,18 +1983,28 @@ export class AppServerClient {
     expectedVersion?: string | null;
     reload?: boolean;
   }): Promise<McpServerConfigDeleteResponse> {
-    return this.request<McpServerConfigDeleteResponse>("mcpServerConfig/delete", {
-      name: params.name,
-      expectedVersion: params.expectedVersion ?? null,
-      reload: params.reload ?? false,
-    });
+    return this.request<McpServerConfigDeleteResponse>(
+      "mcpServerConfig/delete",
+      {
+        name: params.name,
+        expectedVersion: params.expectedVersion ?? null,
+        reload: params.reload ?? false,
+      },
+    );
   }
 
   async reloadMcpServers(): Promise<McpServerRefreshResponse> {
-    return this.request<McpServerRefreshResponse>("config/mcpServer/reload", {});
+    return this.request<McpServerRefreshResponse>(
+      "config/mcpServer/reload",
+      {},
+    );
   }
 
-  async readMcpResource(server: string, uri: string, threadId?: string): Promise<McpResourceReadResponse> {
+  async readMcpResource(
+    server: string,
+    uri: string,
+    threadId?: string,
+  ): Promise<McpResourceReadResponse> {
     return this.request<McpResourceReadResponse>("mcpServer/resource/read", {
       threadId: threadId || null,
       server,
@@ -1567,7 +2097,11 @@ export class AppServerClient {
     return this.request<SkillsCreateResponse>("skills/create", params);
   }
 
-  async writeSkillConfig(params: { path?: string | null; name?: string | null; enabled: boolean }): Promise<SkillsConfigWriteResponse> {
+  async writeSkillConfig(params: {
+    path?: string | null;
+    name?: string | null;
+    enabled: boolean;
+  }): Promise<SkillsConfigWriteResponse> {
     return this.request<SkillsConfigWriteResponse>("skills/config/write", {
       path: params.path ?? null,
       name: params.name ?? null,
@@ -1575,7 +2109,9 @@ export class AppServerClient {
     });
   }
 
-  async setSkillExtraRoots(extraRoots: string[]): Promise<SkillsExtraRootsSetResponse> {
+  async setSkillExtraRoots(
+    extraRoots: string[],
+  ): Promise<SkillsExtraRootsSetResponse> {
     return this.request<SkillsExtraRootsSetResponse>("skills/extraRoots/set", {
       extraRoots,
     });
@@ -1587,17 +2123,27 @@ export class AppServerClient {
     });
   }
 
-  async detectExternalAgentConfig(cwd?: string): Promise<ExternalAgentConfigDetectResponse> {
-    return this.request<ExternalAgentConfigDetectResponse>("externalAgentConfig/detect", {
-      includeHome: false,
-      cwds: cwd ? [cwd] : null,
-    });
+  async detectExternalAgentConfig(
+    cwd?: string,
+  ): Promise<ExternalAgentConfigDetectResponse> {
+    return this.request<ExternalAgentConfigDetectResponse>(
+      "externalAgentConfig/detect",
+      {
+        includeHome: false,
+        cwds: cwd ? [cwd] : null,
+      },
+    );
   }
 
-  async importExternalAgentConfig(item: ExternalAgentConfigMigrationItem): Promise<ExternalAgentConfigImportResponse> {
-    return this.request<ExternalAgentConfigImportResponse>("externalAgentConfig/import", {
-      migrationItems: [item],
-    });
+  async importExternalAgentConfig(
+    item: ExternalAgentConfigMigrationItem,
+  ): Promise<ExternalAgentConfigImportResponse> {
+    return this.request<ExternalAgentConfigImportResponse>(
+      "externalAgentConfig/import",
+      {
+        migrationItems: [item],
+      },
+    );
   }
 
   async forkThread(threadId: string): Promise<ThreadForkResponse> {
@@ -1612,7 +2158,11 @@ export class AppServerClient {
     this.respond(id, result);
   }
 
-  rejectServerRequest(id: number | string, message: string, code = -32000): void {
+  rejectServerRequest(
+    id: number | string,
+    message: string,
+    code = -32000,
+  ): void {
     this.socket?.send(JSON.stringify({ id, error: { code, message } }));
   }
 
@@ -1671,16 +2221,25 @@ export class AppServerClient {
           window.clearTimeout(pending.timeoutId);
           this.pending.delete(id);
         }
-        reject(error instanceof Error ? error : new Error("Unable to send app-server request"));
+        reject(
+          error instanceof Error
+            ? error
+            : new Error("Unable to send app-server request"),
+        );
       }
     });
   }
 
   private handleMessage(rawData: unknown): void {
-    let message: JsonRpcResponse<unknown> | JsonRpcNotification | JsonRpcRequest;
+    let message:
+      | JsonRpcResponse<unknown>
+      | JsonRpcNotification
+      | JsonRpcRequest;
 
     try {
-      message = JSON.parse(String(rawData)) as JsonRpcResponse<unknown> | JsonRpcNotification;
+      message = JSON.parse(String(rawData)) as
+        | JsonRpcResponse<unknown>
+        | JsonRpcNotification;
     } catch {
       return;
     }
@@ -1755,7 +2314,9 @@ export class AppServerClient {
   }
 }
 
-function isKnownNotification(message: JsonRpcNotification): message is KnownAppServerNotification {
+function isKnownNotification(
+  message: JsonRpcNotification,
+): message is KnownAppServerNotification {
   return (
     message.method === "error" ||
     message.method === "account/login/completed" ||
@@ -1774,6 +2335,7 @@ function isKnownNotification(message: JsonRpcNotification): message is KnownAppS
     message.method === "item/started" ||
     message.method === "mcpServer/oauthLogin/completed" ||
     message.method === "mcpServer/startupStatus/updated" ||
+    message.method === "office/run/updated" ||
     message.method === "remoteControl/status/changed" ||
     message.method === "serverRequest/resolved" ||
     message.method === "skills/changed" ||
@@ -1796,6 +2358,10 @@ function isKnownNotification(message: JsonRpcNotification): message is KnownAppS
   );
 }
 
-function isJsonRpcRequest(message: JsonRpcResponse<unknown> | JsonRpcNotification | JsonRpcRequest): message is JsonRpcRequest {
-  return "id" in message && "method" in message && typeof message.method === "string";
+function isJsonRpcRequest(
+  message: JsonRpcResponse<unknown> | JsonRpcNotification | JsonRpcRequest,
+): message is JsonRpcRequest {
+  return (
+    "id" in message && "method" in message && typeof message.method === "string"
+  );
 }

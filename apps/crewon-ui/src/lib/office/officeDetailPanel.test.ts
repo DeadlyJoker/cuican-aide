@@ -204,9 +204,9 @@ describe("office detail panel content", () => {
     expect(officeCreateTitle("14:30", "en")).toBe("New office 14:30");
     expect(officeCreateTitle("14:30", "zh")).toBe("新办公室 14:30");
     expect(officeCreateSubtitle("en")).toBe(
-      "New office · backend thread bound",
+      "New office · configuration stage",
     );
-    expect(officeCreateSubtitle("zh")).toBe("新建办公室 · 已绑定后端线程");
+    expect(officeCreateSubtitle("zh")).toBe("新建办公室 · 配置阶段");
     expect(
       officeCreateTurnPrompt({
         locale: "en",
@@ -237,6 +237,7 @@ describe("office detail panel content", () => {
       kind: "office",
       title: "新办公室 14:30",
       subtitle: "新建办公室 · 已绑定后端线程",
+      configPath: "/repo/.crewon/offices/frontend.json",
       body: "后端记录：/repo/.crewon/offices/frontend.json",
       items: [],
       actions: [
@@ -861,6 +862,7 @@ describe("office detail panel content", () => {
       kind: "office",
       title: "Frontend Office",
       subtitle: "Refactor desk",
+      configPath: undefined,
       body: "Office summary",
       actions: [
         {

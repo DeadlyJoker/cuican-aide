@@ -1,7 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { Turn } from "@crewon-protocol/v2/Turn";
 import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { NoticeState } from "../shared/noticeState";
 import type {
@@ -15,14 +15,17 @@ import type {
 import {
   handleLibraryAutomationRunAction,
   type AutomationRunRecord,
+  type LibraryAutomationRunActionParams,
 } from "./libraryAutomationRunActions";
+import type { OfficeRunTurnRecord } from "../office/officeRunPanel";
 
 type CapturedAutomationRunState = {
   configUpdates: Array<{ filePath: string; threadId?: string }>;
   configWrites: AutomationConfig[];
-  goals: Array<{ goal: string; threadId: string; tokenBudget: number | null }>;
   libraryPanel: LibraryPanel | null;
   notice: NoticeState | null;
+  officeAutomationRuns: Array<{ text: string; threadId?: string }>;
+  officeRunsByTurn: Record<string, OfficeRunTurnRecord>;
   renamedThreads: Array<{ threadId: string; title: string }>;
   runRecordsByTurn: Record<string, AutomationRunRecord & { threadId: string }>;
   runs: Array<{ note: string | null; threadId?: string; turnId: string | null }>;
@@ -97,8 +100,8 @@ function agentConfig(): AgentConfig {
   };
 }
 
-function officeConfig(): OfficeConfig {
-  return {
+function officeConfig(overrides: Partial<OfficeConfig> = {}): OfficeConfig {
+  const base = {
     title: "Office",
     subtitle: "Workspace",
     workspace: {
@@ -106,6 +109,14 @@ function officeConfig(): OfficeConfig {
       members: [],
       messages: [],
       tasks: [],
+    },
+  };
+  return {
+    ...base,
+    ...overrides,
+    workspace: {
+      ...base.workspace,
+      ...overrides.workspace,
     },
   };
 }
@@ -155,6 +166,7 @@ async function handleAction(
     latestOffice?: OfficeConfig | null;
     readThread?: (threadId: string) => Promise<Thread | null | undefined>;
     runRecord?: AutomationRunRecord | null;
+    runOfficeAutomation?: LibraryAutomationRunActionParams["runOfficeAutomation"];
     startAutomationThread?: () => Promise<Thread | null>;
     startTurn?: (
       threadId: string,
@@ -165,9 +177,10 @@ async function handleAction(
   const state: CapturedAutomationRunState = {
     configUpdates: [],
     configWrites: [],
-    goals: [],
     libraryPanel: panel(),
     notice: null,
+    officeAutomationRuns: [],
+    officeRunsByTurn: {},
     renamedThreads: [],
     runRecordsByTurn: {},
     runs: [],
@@ -197,9 +210,30 @@ async function handleAction(
     recordAutomationRunForTurn: (turnId, record) => {
       state.runRecordsByTurn[turnId] = record;
     },
+    recordOfficeRunTurn: (turnId, record) => {
+      state.officeRunsByTurn[turnId] = record;
+    },
     renameThread: async (threadId, title) => {
       state.renamedThreads.push({ threadId, title });
     },
+    runOfficeAutomation:
+      options.runOfficeAutomation ??
+      (async (config, text) => {
+        state.officeAutomationRuns.push({
+          text,
+          threadId: config.targetOffice?.workspace.threadId,
+        });
+        return {
+          cwd: "/workspace",
+          response: {
+            config: config.targetOffice ?? officeConfig(),
+            filePath: "/offices/office.json",
+            runId: "office-run-1",
+            threadId: config.targetOffice?.workspace.threadId ?? "office-thread",
+            turn: turn(),
+          },
+        };
+      }),
     runAutomationConfig: async (config, note, turnId) => {
       state.runs.push({ note, threadId: config.threadId, turnId });
       return {
@@ -215,9 +249,6 @@ async function handleAction(
     },
     setNotice: (notice) => {
       state.notice = notice;
-    },
-    setThreadGoal: async (threadId, goal, tokenBudget) => {
-      state.goals.push({ goal, threadId, tokenBudget });
     },
     setThreads: (updater) => {
       state.threads = updater(state.threads);
@@ -248,6 +279,10 @@ async function handleAction(
 }
 
 describe("library automation run actions", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("leaves unrelated actions for the app handler", async () => {
     const { handled, state } = await handleAction({
       id: "reload-tools",
@@ -288,13 +323,6 @@ describe("library automation run actions", () => {
     expect(state.renamedThreads).toEqual([
       { threadId: "created-thread", title: "Daily sync" },
     ]);
-    expect(state.goals).toEqual([
-      {
-        goal: 'Run and record automation "Daily sync".',
-        threadId: "created-thread",
-        tokenBudget: null,
-      },
-    ]);
     expect(state.configWrites.map((config) => config.threadId)).toEqual([
       "created-thread",
     ]);
@@ -322,6 +350,101 @@ describe("library automation run actions", () => {
       subtitle: "Written to backend execution thread",
       error: undefined,
     });
+    expect(state.libraryPanel?.items?.[0]?.title).toBe("Backend run history");
+  });
+
+  it("runs bound automations through the target office run", async () => {
+    const targetOffice = officeConfig({
+      workspace: {
+        ...officeConfig().workspace,
+        threadId: "office-thread",
+      },
+    });
+    const { handled, state } = await handleAction({
+      id: "run-automation",
+      label: "Run",
+      automationConfig: automationConfig({ targetOffice }),
+    });
+
+    expect(handled).toBe(true);
+    expect(state.renamedThreads).toEqual([]);
+    expect(state.startedTurns).toEqual([]);
+    expect(state.officeAutomationRuns).toEqual([
+      {
+        text: expect.stringContaining("Run note: Ship summary"),
+        threadId: "office-thread",
+      },
+    ]);
+    expect(state.configWrites.map((config) => config.threadId)).toEqual([
+      "office-thread",
+    ]);
+    expect(state.runs).toEqual([
+      {
+        note: "Ship summary",
+        threadId: "office-thread",
+        turnId: "turn-1",
+      },
+    ]);
+    expect(state.officeRunsByTurn["turn-1"]).toMatchObject({
+      cwd: "/workspace",
+      runId: "office-run-1",
+      threadId: "office-thread",
+    });
+    expect(state.runRecordsByTurn).toEqual({
+      "turn-1": {
+        filePath: "/runs/run-1.json",
+        runId: "run-1",
+        threadId: "office-thread",
+      },
+    });
+    expect(state.libraryPanel).toMatchObject({
+      subtitle: "Written to backend execution thread",
+      error: undefined,
+    });
+  });
+
+  it("polls completed turns when completion notifications race run tracking", async () => {
+    vi.useFakeTimers();
+    let readCount = 0;
+    const { state } = await handleAction(
+      {
+        id: "run-automation",
+        label: "Run",
+        automationConfig: automationConfig(),
+      },
+      {
+        readThread: async (threadId) => {
+          readCount += 1;
+          return thread({
+            id: threadId,
+            turns: [
+              turn({
+                status: readCount === 1 ? "inProgress" : "completed",
+                completedAt: readCount === 1 ? null : 9,
+              }),
+            ],
+          });
+        },
+      },
+    );
+
+    expect(state.runRecordsByTurn).toEqual({
+      "turn-1": {
+        filePath: "/runs/run-1.json",
+        runId: "run-1",
+        threadId: "created-thread",
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(state.updatedRuns).toEqual([
+      {
+        completedAt: 9,
+        filePath: "/runs/run-1.json",
+        status: "completed",
+      },
+    ]);
     expect(state.libraryPanel?.items?.[0]?.title).toBe("Backend run history");
   });
 

@@ -4,7 +4,9 @@ import type { AppServerClient } from "../../app-server/appServer";
 import type { BackendWorkspace } from "../../backend/backendWorkspace";
 import type {
   AgentConfig,
+  AutomationConfig,
   LibraryPanelAction,
+  OfficeConfig,
   ToolConfig,
 } from "../../domain/crewonDomain";
 import type { AutomationRunRecord } from "../../library/libraryAutomationRunActions";
@@ -76,6 +78,7 @@ function createHandlers(
     readLatestOfficeConfig: async () => null,
     readRecruitableAgentConfig: async () => null,
     recordAutomationRunForTurn: () => {},
+    recordOfficeRunTurn: () => {},
     recordBackendToolEvent: async () => {},
     requireBackendWorkspace: async () => {
       throw new Error("unexpected backend workspace requirement");
@@ -205,6 +208,104 @@ describe("app library panel action handlers", () => {
     capturedParams().automationRun.recordAutomationRunForTurn("turn-1", record);
 
     expect(recordAutomationRunForTurn).toHaveBeenCalledWith("turn-1", record);
+  });
+
+  it("passes office run records back to App state wiring", () => {
+    const recordOfficeRunTurn = vi.fn();
+    createHandlers({ recordOfficeRunTurn });
+
+    const record = {
+      cwd: "/repo",
+      runId: "office-run-1",
+      threadId: "office-thread",
+      config: {
+        title: "Office",
+        subtitle: "Workspace",
+        workspace: { goal: "", members: [], messages: [], tasks: [] },
+      },
+    };
+    capturedParams().automationRun.recordOfficeRunTurn?.("turn-1", record);
+
+    expect(recordOfficeRunTurn).toHaveBeenCalledWith("turn-1", record);
+  });
+
+  it("runs automation actions through the bound target office", async () => {
+    const calls: unknown[] = [];
+    createHandlers({
+      client: client({
+        async runOfficeConfig(cwd, config, message, text, locale, threadId) {
+          calls.push({ config, cwd, locale, message, text, threadId });
+          return {
+            filePath: "/repo/.crewon/offices/office.json",
+            config,
+            runId: "office-run-1",
+            threadId: threadId ?? "",
+            turn: {
+              id: "turn-office",
+              items: [],
+              itemsView: "full",
+              status: "inProgress",
+              error: null,
+              startedAt: 1,
+              completedAt: null,
+              durationMs: null,
+            },
+          };
+        },
+      }),
+    });
+
+    const targetOffice: OfficeConfig = {
+      title: "Office",
+      subtitle: "Workspace",
+      workspace: {
+        goal: "Deliver",
+        members: [],
+        messages: [],
+        tasks: [],
+        threadId: "office-thread",
+      },
+    };
+    const automationConfig: AutomationConfig = {
+      title: "Nightly",
+      subtitle: "Manual",
+      body: "Body",
+      prompt: "Prompt",
+      targetOffice,
+      executionAgent: null,
+    };
+
+    const result = await capturedParams().automationRun.runOfficeAutomation?.(
+      automationConfig,
+      "Run office",
+    );
+
+    expect(result?.cwd).toBe("/repo");
+    expect(result?.response?.runId).toBe("office-run-1");
+    expect(calls).toEqual([
+      expect.objectContaining({
+        cwd: "/repo",
+        locale: "en",
+        text: "Run office",
+        threadId: "office-thread",
+      }),
+    ]);
+    expect(calls[0]).toMatchObject({
+      config: {
+        title: "Office",
+        workspace: {
+          backendStatus: "connected",
+          threadId: "office-thread",
+        },
+      },
+      message: {
+        author: "Nightly",
+        glyph: "A",
+        accent: "violet",
+        text: "Run office",
+        kind: "task",
+      },
+    });
   });
 
   it("passes tool records through draft persistence without changing shape", async () => {

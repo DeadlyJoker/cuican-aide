@@ -3,6 +3,7 @@ import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { AppServerClient } from "../../app-server/appServer";
 import type { AppView } from "../appRouting";
 import type { PendingComposerMention } from "../../shared/composerMentions";
+import type { ConfirmHandler } from "../../shared/confirmHandler";
 import type { NoticeState } from "../appRuntimeState";
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { Locale, ToolId } from "../../i18n";
@@ -58,7 +59,7 @@ export type AppThreadRuntimeHandlersParams = {
   activeTurnId: string | null;
   busyToolId: ToolId | null;
   client: AppServerClient | null;
-  confirm: (message: string) => boolean;
+  confirm: ConfirmHandler;
   demoResponse: string;
   getShowArchivedThreads: () => boolean;
   isConnected: boolean;
@@ -96,9 +97,17 @@ export type AppThreadRuntimeHandlersParams = {
   untitledThreadLabel: string;
 };
 
+function inProgressTurnId(thread: Thread | null): string | null {
+  return (
+    thread?.turns.find((turn) => turn.status === "inProgress")?.id ?? null
+  );
+}
+
 export function createAppThreadRuntimeHandlers(
   params: AppThreadRuntimeHandlersParams,
 ): AppThreadRuntimeHandlers {
+  const activeTurnId =
+    params.activeTurnId ?? inProgressTurnId(params.selectedThread);
   const createDemoThread = (initialPrompt?: string) =>
     createDemoThreadAction({
       initialPrompt,
@@ -158,13 +167,15 @@ export function createAppThreadRuntimeHandlers(
       }),
     interruptActiveTurn: () =>
       interruptActiveTurnAction({
-        activeTurnId: params.activeTurnId,
+        activeTurnId,
         client: params.client,
         isConnected: params.isConnected,
         locale: params.locale,
         selectedThreadId: params.selectedThreadId,
+        setActiveTurnByThread: params.setActiveTurnByThread,
         setIsSending: params.setIsSending,
         setNotice: params.setNotice,
+        setThreads: params.setThreads,
       }),
     renameThread: (thread) =>
       renameThreadAction({
@@ -195,7 +206,7 @@ export function createAppThreadRuntimeHandlers(
       }),
     sendMessage: (text) =>
       sendMessageAction({
-        activeTurnId: params.activeTurnId,
+        activeTurnId,
         client: params.client,
         createThread: (initialPrompt) => createThread(initialPrompt),
         demoResponse: params.demoResponse,

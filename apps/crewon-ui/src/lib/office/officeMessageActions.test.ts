@@ -275,6 +275,7 @@ describe("office message actions", () => {
         cwd: "/repo",
         runId: "run-1",
         threadId: "run-thread",
+        turnThreadId: "run-thread",
         config: response.config,
       },
     });

@@ -1,8 +1,14 @@
+import { useState } from "react";
+
 import type {
   LibraryItem,
   LibraryPanelAction,
 } from "../../lib/domain/crewonDomain";
 import type { Locale } from "../../lib/i18n";
+
+export type LibraryPanelActionCallback = (
+  action: LibraryPanelAction,
+) => void | Promise<void>;
 
 export function libraryLabel(locale: Locale, zh: string, en: string) {
   return locale === "zh" ? zh : en;
@@ -43,22 +49,37 @@ export function LibraryActions({
 }: {
   actions?: LibraryPanelAction[];
   className?: string;
-  onPanelAction: (action: LibraryPanelAction) => void;
+  onPanelAction: LibraryPanelActionCallback;
 }) {
+  const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
+
   if (!actions || actions.length === 0) return null;
 
   return (
     <div className={["library-actions", className].filter(Boolean).join(" ")}>
-      {actions.map((action) => (
-        <button
-          type="button"
-          data-tone={action.tone}
-          key={`${action.id}:${action.pluginId ?? action.pluginName ?? action.label}`}
-          onClick={() => onPanelAction(action)}
-        >
-          {action.label}
-        </button>
-      ))}
+      {actions.map((action) => {
+        const actionKey = `${action.id}:${action.pluginId ?? action.pluginName ?? action.label}`;
+        const isPending = pendingActionKey === actionKey;
+        return (
+          <button
+            type="button"
+            aria-busy={isPending}
+            data-tone={action.tone}
+            key={actionKey}
+            disabled={pendingActionKey !== null}
+            onClick={async () => {
+              setPendingActionKey(actionKey);
+              try {
+                await onPanelAction(action);
+              } finally {
+                setPendingActionKey(null);
+              }
+            }}
+          >
+            {isPending ? `${action.label}…` : action.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

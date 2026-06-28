@@ -1,4 +1,10 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import type { AppServerClient } from "../../app-server/appServer";
@@ -21,7 +27,7 @@ export type AppThreadListEffectsParams = {
   setLoadedThreadIds: (threadIds: string[]) => void;
   setNotice: (notice: NoticeState | null) => void;
   setSelectedThreadId: SelectedThreadSetter;
-  setThreads: (threads: Thread[]) => void;
+  setThreads: Dispatch<SetStateAction<Thread[]>>;
   showArchivedThreads: boolean;
   showArchivedThreadsRef: MutableRefObject<boolean>;
   showDemoThreads: () => void;
@@ -50,10 +56,10 @@ export function useAppThreadListEffects({
 
   useEffect(() => {
     return pollLoadedThreadIdsAction({
-      clearInterval: window.clearInterval,
+      clearInterval: (intervalId) => window.clearInterval(intervalId),
       client,
       isConnected,
-      setInterval: window.setInterval,
+      setInterval: (handler, timeout) => window.setInterval(handler, timeout),
       setLoadedThreadIds,
     });
   }, [client, isConnected, setLoadedThreadIds]);
@@ -63,7 +69,7 @@ export function useAppThreadListEffects({
     searchRequestRef.current = requestId;
 
     return runThreadSearchEffectAction({
-      clearTimeout: window.clearTimeout,
+      clearTimeout: (timeoutId) => window.clearTimeout(timeoutId),
       client,
       currentRequestId: () => searchRequestRef.current,
       isConnected,
@@ -75,7 +81,7 @@ export function useAppThreadListEffects({
       setNotice,
       setSelectedThreadId,
       setThreads,
-      setTimeout: window.setTimeout,
+      setTimeout: (handler, timeout) => window.setTimeout(handler, timeout),
       showArchivedThreads: showArchivedThreadsRef.current,
       showDemoThreads,
     });

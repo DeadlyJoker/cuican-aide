@@ -4,11 +4,25 @@ import type { AppServerClient } from "../../app-server/appServer";
 import { appendOfficeUserMessage } from "../../demo/demoContent";
 import type {
   LibraryPanel,
+  OfficeMember,
+  OfficeMemoryStatus,
   OfficeRunActivity,
+  OfficeRunDelegationActivity,
+  OfficeRunVerificationCheckActivity,
   OfficeWorkspace,
 } from "../../domain/crewonDomain";
 import {
+  cancelAppOfficeDelegation,
   cancelAppOfficeRun,
+  cancelAppOfficeVerification,
+  decideAppOfficeMemory,
+  dispatchAppOfficeDelegation,
+  dispatchNextAppOfficeDelegation,
+  dispatchNextAppOfficeVerification,
+  listAppOfficeMemories,
+  previewAppOfficeMemberContext,
+  retryAppOfficeDelegation,
+  retryAppOfficeVerification,
   retryAppOfficeRun,
   runAppOfficeMessage,
 } from "../../domain/domainOfficeBackend";
@@ -23,8 +37,14 @@ import {
   type OfficeMessageActionParams,
 } from "../../office/officeMessageActions";
 import {
+  handleOfficeDelegationCancelAction,
+  handleOfficeDelegationDispatchAction,
+  handleOfficeDelegationDispatchNextAction,
+  handleOfficeDelegationRetryAction,
   handleOfficeRunCancelAction,
   handleOfficeRunRetryAction,
+  handleOfficeVerificationCancelAction,
+  handleOfficeVerificationRetryAction,
 } from "../../office/officeRunActions";
 import type { NoticeState } from "../appRuntimeState";
 
@@ -42,8 +62,42 @@ export type AppOfficeRuntimeHandlers = {
     workspaceOverride?: OfficeWorkspace,
     forceNew?: boolean,
   ) => Promise<string | null>;
+  handleOfficeDelegationDispatch: (
+    run: OfficeRunActivity,
+    delegation: OfficeRunDelegationActivity,
+  ) => Promise<void>;
+  handleOfficeDelegationCancel: (
+    run: OfficeRunActivity,
+    delegation: OfficeRunDelegationActivity,
+  ) => Promise<void>;
+  handleOfficeDelegationRetry: (
+    run: OfficeRunActivity,
+    delegation: OfficeRunDelegationActivity,
+  ) => Promise<void>;
+  handleOfficeDelegationDispatchNext: (run: OfficeRunActivity) => Promise<void>;
+  handleOfficeVerificationCancel: (
+    run: OfficeRunActivity,
+    check: OfficeRunVerificationCheckActivity,
+  ) => Promise<void>;
+  handleOfficeVerificationRetry: (
+    run: OfficeRunActivity,
+    check: OfficeRunVerificationCheckActivity,
+  ) => Promise<void>;
   handleOfficeRunCancel: (run: OfficeRunActivity) => Promise<void>;
   handleOfficeRunRetry: (run: OfficeRunActivity) => Promise<void>;
+  listOfficeMemories: (
+    status: OfficeMemoryStatus,
+    cursor?: string | null,
+  ) => ReturnType<typeof listAppOfficeMemories>;
+  decideOfficeMemory: (
+    memoryId: string,
+    status: OfficeMemoryStatus,
+  ) => ReturnType<typeof decideAppOfficeMemory>;
+  previewOfficeMemberContext: (
+    run: OfficeRunActivity,
+    member: OfficeMember,
+  ) => ReturnType<typeof previewAppOfficeMemberContext>;
+  recordOfficeRunTurn: (turnId: string, record: OfficeRunTurnRecord) => void;
   sendOfficeMessage: (text: string) => Promise<void>;
 };
 
@@ -162,6 +216,21 @@ export function createAppOfficeRuntimeHandlers(
       locale: params.locale,
       panel: params.getLibraryPanel,
       recordOfficeRunTurn: params.recordOfficeRunTurn,
+      dispatchNextOfficeVerification: (
+        panel,
+        workspace,
+        targetRun,
+        clientUserMessageId,
+      ) =>
+        dispatchNextAppOfficeVerification({
+          clientUserMessageId,
+          client: params.client,
+          locale: params.locale,
+          panel,
+          resolveBackendCwd: params.resolveBackendCwd,
+          run: targetRun,
+          workspace,
+        }),
       retryOfficeRun: (panel, workspace, targetRun, clientUserMessageId) =>
         retryAppOfficeRun({
           clientUserMessageId,
@@ -178,14 +247,277 @@ export function createAppOfficeRuntimeHandlers(
       setLibraryPanel: params.setLibraryPanel,
       setNotice: params.setNotice,
       setThreads: params.setThreads,
-      uniqueId: params.uniqueOfficeRunId ?? (() => `office-retry-${Date.now()}`),
+      uniqueId:
+        params.uniqueOfficeRunId ?? (() => `office-retry-${Date.now()}`),
+    });
+  };
+
+  const handleOfficeDelegationCancel = async (
+    run: OfficeRunActivity,
+    delegation: OfficeRunDelegationActivity,
+  ) => {
+    await handleOfficeDelegationCancelAction({
+      cancelOfficeDelegation: (panel, workspace, targetRun, targetDelegation) =>
+        cancelAppOfficeDelegation({
+          client: params.client,
+          delegation: targetDelegation,
+          locale: params.locale,
+          panel,
+          resolveBackendCwd: params.resolveBackendCwd,
+          run: targetRun,
+          workspace,
+        }),
+      delegation,
+      isConnected: params.isConnected,
+      locale: params.locale,
+      panel: params.getLibraryPanel,
+      run,
+      setLibraryPanel: params.setLibraryPanel,
+      setNotice: params.setNotice,
+    });
+  };
+
+  const handleOfficeVerificationCancel = async (
+    run: OfficeRunActivity,
+    check: OfficeRunVerificationCheckActivity,
+  ) => {
+    await handleOfficeVerificationCancelAction({
+      cancelOfficeVerification: (panel, workspace, targetRun, targetCheck) =>
+        cancelAppOfficeVerification({
+          check: targetCheck,
+          client: params.client,
+          locale: params.locale,
+          panel,
+          resolveBackendCwd: params.resolveBackendCwd,
+          run: targetRun,
+          workspace,
+        }),
+      check,
+      isConnected: params.isConnected,
+      locale: params.locale,
+      panel: params.getLibraryPanel,
+      run,
+      setLibraryPanel: params.setLibraryPanel,
+      setNotice: params.setNotice,
+    });
+  };
+
+  const handleOfficeVerificationRetry = async (
+    run: OfficeRunActivity,
+    check: OfficeRunVerificationCheckActivity,
+  ) => {
+    await handleOfficeVerificationRetryAction({
+      check,
+      isConnected: params.isConnected,
+      locale: params.locale,
+      panel: params.getLibraryPanel,
+      recordOfficeRunTurn: params.recordOfficeRunTurn,
+      retryOfficeVerification: (
+        panel,
+        workspace,
+        targetRun,
+        targetCheck,
+        clientUserMessageId,
+      ) =>
+        retryAppOfficeVerification({
+          check: targetCheck,
+          client: params.client,
+          clientUserMessageId,
+          locale: params.locale,
+          panel,
+          resolveBackendCwd: params.resolveBackendCwd,
+          run: targetRun,
+          workspace,
+        }),
+      run,
+      setActiveTurnByThread: params.setActiveTurnByThread,
+      setLibraryPanel: params.setLibraryPanel,
+      setNotice: params.setNotice,
+      setThreads: params.setThreads,
+      uniqueId:
+        params.uniqueOfficeRunId ??
+        (() => `office-verification-retry-${Date.now()}`),
+    });
+  };
+
+  const handleOfficeDelegationDispatch = async (
+    run: OfficeRunActivity,
+    delegation: OfficeRunDelegationActivity,
+  ) => {
+    await handleOfficeDelegationDispatchAction({
+      delegation,
+      dispatchOfficeDelegation: (
+        panel,
+        workspace,
+        targetRun,
+        targetDelegation,
+        clientUserMessageId,
+      ) =>
+        dispatchAppOfficeDelegation({
+          client: params.client,
+          clientUserMessageId,
+          agentId: targetDelegation.agentId ?? null,
+          locale: params.locale,
+          member: targetDelegation.member ?? null,
+          panel,
+          resolveBackendCwd: params.resolveBackendCwd,
+          run: targetRun,
+          task: targetDelegation.task?.trim() ?? "",
+          workspace,
+        }),
+      isConnected: params.isConnected,
+      locale: params.locale,
+      panel: params.getLibraryPanel,
+      recordOfficeRunTurn: params.recordOfficeRunTurn,
+      run,
+      setActiveTurnByThread: params.setActiveTurnByThread,
+      setLibraryPanel: params.setLibraryPanel,
+      setNotice: params.setNotice,
+      setThreads: params.setThreads,
+      uniqueId:
+        params.uniqueOfficeRunId ?? (() => `office-delegation-${Date.now()}`),
+    });
+  };
+
+  const handleOfficeDelegationRetry = async (
+    run: OfficeRunActivity,
+    delegation: OfficeRunDelegationActivity,
+  ) => {
+    await handleOfficeDelegationRetryAction({
+      delegation,
+      isConnected: params.isConnected,
+      locale: params.locale,
+      panel: params.getLibraryPanel,
+      recordOfficeRunTurn: params.recordOfficeRunTurn,
+      retryOfficeDelegation: (
+        panel,
+        workspace,
+        targetRun,
+        targetDelegation,
+        clientUserMessageId,
+      ) =>
+        retryAppOfficeDelegation({
+          client: params.client,
+          clientUserMessageId,
+          delegation: targetDelegation,
+          locale: params.locale,
+          panel,
+          resolveBackendCwd: params.resolveBackendCwd,
+          run: targetRun,
+          workspace,
+        }),
+      run,
+      setActiveTurnByThread: params.setActiveTurnByThread,
+      setLibraryPanel: params.setLibraryPanel,
+      setNotice: params.setNotice,
+      setThreads: params.setThreads,
+      uniqueId:
+        params.uniqueOfficeRunId ?? (() => `office-delegation-retry-${Date.now()}`),
+    });
+  };
+
+  const handleOfficeDelegationDispatchNext = async (run: OfficeRunActivity) => {
+    await handleOfficeDelegationDispatchNextAction({
+      dispatchNextOfficeDelegation: (
+        panel,
+        workspace,
+        targetRun,
+        clientUserMessageId,
+      ) =>
+        dispatchNextAppOfficeDelegation({
+          client: params.client,
+          clientUserMessageId,
+          locale: params.locale,
+          panel,
+          resolveBackendCwd: params.resolveBackendCwd,
+          run: targetRun,
+          workspace,
+        }),
+      isConnected: params.isConnected,
+      locale: params.locale,
+      panel: params.getLibraryPanel,
+      recordOfficeRunTurn: params.recordOfficeRunTurn,
+      run,
+      setActiveTurnByThread: params.setActiveTurnByThread,
+      setLibraryPanel: params.setLibraryPanel,
+      setNotice: params.setNotice,
+      setThreads: params.setThreads,
+      uniqueId:
+        params.uniqueOfficeRunId ?? (() => `office-delegation-${Date.now()}`),
+    });
+  };
+
+  const listOfficeMemories = (
+    status: OfficeMemoryStatus,
+    cursor?: string | null,
+  ) => {
+    const panel = params.getLibraryPanel();
+    if (!panel?.workspace) {
+      return Promise.resolve(null);
+    }
+    return listAppOfficeMemories({
+      client: params.client,
+      cursor: cursor ?? null,
+      limit: 24,
+      panel,
+      resolveBackendCwd: params.resolveBackendCwd,
+      status,
+      threadId: panel.workspace.threadId ?? "",
+      workspace: panel.workspace,
+    });
+  };
+
+  const decideOfficeMemory = (memoryId: string, status: OfficeMemoryStatus) => {
+    const panel = params.getLibraryPanel();
+    if (!panel?.workspace) {
+      return Promise.resolve(null);
+    }
+    return decideAppOfficeMemory({
+      client: params.client,
+      memoryId,
+      panel,
+      resolveBackendCwd: params.resolveBackendCwd,
+      status,
+      threadId: panel.workspace.threadId ?? "",
+      workspace: panel.workspace,
+    });
+  };
+
+  const previewOfficeMemberContext = (
+    run: OfficeRunActivity,
+    member: OfficeMember,
+  ) => {
+    const panel = params.getLibraryPanel();
+    if (!panel?.workspace) {
+      return Promise.resolve(null);
+    }
+    return previewAppOfficeMemberContext({
+      agentId: member.agentId ?? null,
+      client: params.client,
+      locale: params.locale,
+      member: member.name,
+      panel,
+      resolveBackendCwd: params.resolveBackendCwd,
+      run,
+      task: run.title ?? run.requestText ?? null,
+      workspace: panel.workspace,
     });
   };
 
   return {
+    decideOfficeMemory,
     ensureOfficeThread,
+    handleOfficeDelegationCancel,
+    handleOfficeDelegationDispatch,
+    handleOfficeDelegationDispatchNext,
+    handleOfficeDelegationRetry,
+    handleOfficeVerificationCancel,
+    handleOfficeVerificationRetry,
     handleOfficeRunCancel,
     handleOfficeRunRetry,
+    listOfficeMemories,
+    previewOfficeMemberContext,
+    recordOfficeRunTurn: params.recordOfficeRunTurn,
     sendOfficeMessage,
   };
 }

@@ -48,7 +48,7 @@ export type LibraryOfficeRecruitActionParams = {
     workspaceBeforeMember: OfficeWorkspace,
     agentId: string | undefined,
     member: OfficeMember,
-    threadId: string,
+    threadId?: string | null,
   ) => Promise<OfficeConfig | null>;
   readRecruitableAgentConfig: (
     existingMembers: OfficeMember[],
@@ -98,7 +98,9 @@ export async function handleLibraryOfficeRecruitAction({
     return false;
   }
   try {
-    const recruitConfig = await readRecruitableAgentConfig(workspace.members);
+    const recruitConfig =
+      actionRecruitableAgentConfig(action, workspace.members) ??
+      (await readRecruitableAgentConfig(workspace.members));
     if (!recruitConfig?.agentId) {
       setNotice(officeRecruitMissingAgentNoticeState(locale));
       return true;
@@ -119,9 +121,12 @@ export async function handleLibraryOfficeRecruitAction({
       workspace,
       joinMessage,
     );
-    let threadId = await ensureOfficeThread(panel, workspace);
-    if (!threadId) {
-      return true;
+    let threadId = workspace.threadId ?? null;
+    if (threadId) {
+      threadId = await ensureOfficeThread(panel, workspace);
+      if (!threadId) {
+        return true;
+      }
     }
 
     const savedConfig = await persistOfficeMember(
@@ -133,6 +138,17 @@ export async function handleLibraryOfficeRecruitAction({
     );
     if (!savedConfig) {
       setNotice(officeRecruitPersistenceWarningNotice(locale));
+      return true;
+    }
+
+    if (!threadId) {
+      setLibraryPanel((currentPanel) =>
+        officeRecruitSavedPanel(currentPanel, {
+          config: savedConfig,
+          threadId: null,
+        }),
+      );
+      setNotice(officeRecruitSuccessNoticeState(newMember.name, locale));
       return true;
     }
 
@@ -177,4 +193,24 @@ export async function handleLibraryOfficeRecruitAction({
     setNotice(officeRecruitFailureNotice(error, locale));
   }
   return true;
+}
+
+function actionRecruitableAgentConfig(
+  action: LibraryPanelAction,
+  existingMembers: OfficeMember[],
+): AgentConfig | null {
+  const config = action.agentConfig;
+  if (!config?.agentId) {
+    return null;
+  }
+  const memberNames = new Set(existingMembers.map((member) => member.name));
+  const memberAgentIds = new Set(
+    existingMembers
+      .map((member) => member.agentId)
+      .filter((agentId): agentId is string => Boolean(agentId)),
+  );
+  if (memberNames.has(config.name) || memberAgentIds.has(config.agentId)) {
+    return null;
+  }
+  return config;
 }

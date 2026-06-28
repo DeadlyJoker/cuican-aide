@@ -6,6 +6,7 @@ use crewon_app_server_protocol::ThreadHistoryBuilder;
 use crewon_app_server_protocol::ThreadSettings;
 use crewon_app_server_protocol::Turn;
 use crewon_app_server_protocol::TurnError;
+use crewon_app_server_protocol::TurnPlanStep;
 use crewon_core::CrewonThread;
 use crewon_core::ThreadConfigSnapshot;
 use crewon_file_watcher::WatchRegistration;
@@ -70,6 +71,7 @@ pub(crate) struct TurnSummary {
     pub(crate) started_at: Option<i64>,
     pub(crate) command_execution_started: HashSet<String>,
     pub(crate) last_error: Option<TurnError>,
+    pub(crate) latest_plan: Vec<TurnPlanStep>,
 }
 
 #[derive(Default)]

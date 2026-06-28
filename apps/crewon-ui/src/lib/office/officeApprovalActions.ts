@@ -55,7 +55,7 @@ export async function handleOfficeApprovalDecisionAction({
   setNotice,
 }: OfficeApprovalDecisionActionParams): Promise<boolean> {
   const selectedApproval =
-    panel?.workspace?.activity?.approvals.find((request) => request.id === id) ??
+    panel?.workspace?.activity?.approvals?.find((request) => request.id === id) ??
     null;
   setLibraryPanel((currentPanel) =>
     officeApprovalLocalDecisionPanel(currentPanel, {

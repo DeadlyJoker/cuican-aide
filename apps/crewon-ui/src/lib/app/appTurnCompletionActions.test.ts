@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { OfficeConfig } from "../domain/crewonDomain";
 import type { OfficeRunTurnRecord } from "./appTurnCompletionNotificationHandler";
 import {
+  autoDispatchNextOfficeDelegationFromClientAction,
   listThreadTurnsFromClientAction,
   syncOfficeRunFromClientAction,
 } from "./appTurnCompletionActions";
@@ -81,7 +82,10 @@ describe("app turn completion actions", () => {
       client: {
         async syncOfficeRunConfig(cwd, config, turnArg, params) {
           calls.push({ config, cwd, params, turn: turnArg });
-          return { filePath: "/repo/.crewon/office.json", config: syncedConfig };
+          return {
+            filePath: "/repo/.crewon/office.json",
+            config: syncedConfig,
+          };
         },
       },
       config: record.config,
@@ -114,6 +118,70 @@ describe("app turn completion actions", () => {
           threadId: "thread-1",
         },
         turn: turn("turn-1"),
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("auto-dispatches the next safe office delegation through the backend client", async () => {
+    const record: OfficeRunTurnRecord = {
+      config: officeConfig("Saved"),
+      cwd: "/repo",
+      runId: "run-1",
+      threadId: "office-thread-1",
+    };
+    const calls: unknown[] = [];
+    const result = await autoDispatchNextOfficeDelegationFromClientAction({
+      client: {
+        async dispatchNextOfficeDelegationConfig(cwd, config, runId, params) {
+          calls.push({ config, cwd, params, runId });
+          return {
+            config: officeConfig("Dispatched"),
+            delegationId: "delegation-1",
+            filePath: "/repo/.crewon/office.json",
+            runId,
+            threadId: "member-thread-1",
+            turn: { id: "turn-member-1", status: "inProgress" } as never,
+          };
+        },
+      },
+      config: record.config,
+      locale: "en",
+      record,
+    });
+
+    expect(result).toMatchObject({
+      delegationId: "delegation-1",
+      threadId: "member-thread-1",
+      turn: { id: "turn-member-1" },
+    });
+    expect(calls).toEqual([
+      {
+        config: record.config,
+        cwd: "/repo",
+        params: {
+          clientUserMessageId: expect.stringMatching(
+            /^office-auto-delegation-/,
+          ),
+          dispatchPolicy: "auto",
+          locale: "en",
+        },
+        runId: "run-1",
+      },
+    ]);
+  });
+
+  it("returns null when auto-dispatching without a client", async () => {
+    await expect(
+      autoDispatchNextOfficeDelegationFromClientAction({
+        client: null,
+        config: officeConfig("Saved"),
+        locale: "en",
+        record: {
+          config: officeConfig("Saved"),
+          cwd: "/repo",
+          runId: "run-1",
+          threadId: "thread-1",
+        },
       }),
     ).resolves.toBeNull();
   });

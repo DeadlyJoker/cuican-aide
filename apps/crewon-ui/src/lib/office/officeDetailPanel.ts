@@ -34,8 +34,8 @@ export function officeCreateTitle(timeLabel: string, locale: Locale): string {
 
 export function officeCreateSubtitle(locale: Locale): string {
   return locale === "zh"
-    ? "新建办公室 · 已绑定后端线程"
-    : "New office · backend thread bound";
+    ? "新建办公室 · 配置阶段"
+    : "New office · configuration stage";
 }
 
 export function officeCreateTurnPrompt(params: {
@@ -65,6 +65,7 @@ export function buildOfficeCreatePanel(params: {
     kind: "office",
     title,
     subtitle,
+    configPath: configPath ?? undefined,
     body: configPath
       ? locale === "zh"
         ? `后端记录：${configPath}`
@@ -279,13 +280,15 @@ export function officeRecruitSavedPanel(
   panel: LibraryPanel | null,
   params: {
     config: OfficeConfig;
-    threadId: string;
+    threadId: string | null;
   },
 ): LibraryPanel | null {
   return panel?.workspace
     ? {
         ...panel,
-        ...officeWorkspaceConnectedPatch(params.config.workspace, params.threadId),
+        ...(params.threadId
+          ? officeWorkspaceConnectedPatch(params.config.workspace, params.threadId)
+          : { workspace: params.config.workspace }),
       }
     : panel;
 }
@@ -510,12 +513,12 @@ export function officeWorkspaceWithApprovalDecision(params: {
 }): OfficeWorkspace {
   const { decision, message, requestId, workspace } = params;
   const activity = workspace.activity
-    ? {
-        ...workspace.activity,
-        approvals: workspace.activity.approvals.map((request) =>
-          request.id === requestId ? { ...request, decision } : request,
-        ),
-      }
+      ? {
+          ...workspace.activity,
+          approvals: (workspace.activity.approvals ?? []).map((request) =>
+            request.id === requestId ? { ...request, decision } : request,
+          ),
+        }
     : undefined;
   return {
     ...workspace,
@@ -615,6 +618,7 @@ export function buildOfficeDetailPanel(
     kind: "office",
     title,
     subtitle,
+    configPath: action.configPath,
     body: workspace ? undefined : action.body,
     actions: officeDetailActions(action, workspace?.threadId, locale),
     items: action.items,

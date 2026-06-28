@@ -8,6 +8,7 @@ export {
   useAppConnectionEffects,
   useAppDocumentPreferenceEffects,
   useAppKeyboardShortcutEffects,
+  useAppModelResponseTimeoutEffect,
   useAppStateRefsEffect,
   useAppThreadListEffects,
   useAppThreadMetadataEffects,
@@ -25,6 +26,7 @@ export { createAppOfficeRuntimeCoordinator } from "./appOfficeRuntimeCoordinator
 export { createAppSettingsCoordinator } from "./appSettingsCoordinator";
 export { useAppChromeState } from "./useAppChromeState";
 export { useAppComposerState } from "./useAppComposerState";
+export { useAppConfirmDialog } from "./useAppConfirmDialog";
 export { useAppConnectionHandlerSet } from "./useAppConnectionHandlerSet";
 export { useAppCoordinatorRefs } from "./useAppCoordinatorRefs";
 export { useAppEnvironment } from "./useAppEnvironment";
@@ -33,6 +35,7 @@ export { useAppPendingServerRequests } from "./useAppPendingServerRequests";
 export { useAppRunTrackingRefs } from "./useAppRunTrackingRefs";
 export { useAppServerEventHandlerSet } from "./useAppServerEventHandlerSet";
 export { useAppShellRuntimeState } from "./useAppShellRuntimeState";
+export { useAppSlashCommands } from "./useAppSlashCommands";
 export { useAppTerminalState } from "./useAppTerminalState";
 export { useAppThreadSelection } from "./useAppThreadSelection";
 export { useAppThreadState } from "./useAppThreadState";

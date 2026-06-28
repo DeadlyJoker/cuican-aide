@@ -1,5 +1,6 @@
 import type { ArtifactItem } from "../../lib/domain/crewonDomain";
 import type { Locale } from "../../lib/i18n";
+import { artifactActivityMeta } from "../../lib/office/officeArtifactProvenance";
 
 type ActivityArtifactsProps = {
   artifacts: ArtifactItem[];
@@ -40,7 +41,7 @@ export function ActivityArtifacts({
                 <strong>{art.title}</strong>
                 <span className="artifact-kind">{art.kind}</span>
               </div>
-              <p className="artifact-meta">{art.meta}</p>
+              <p className="artifact-meta">{artifactActivityMeta(art, locale)}</p>
             </div>
           </button>
         ))}

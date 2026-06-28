@@ -1412,6 +1412,294 @@
             },
             "method": {
               "enum": [
+                "office/run"
+              ],
+              "title": "Office/runRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeRunParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/runRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/run/sync"
+              ],
+              "title": "Office/run/syncRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeRunSyncParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/run/syncRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/run/cancel"
+              ],
+              "title": "Office/run/cancelRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeRunCancelParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/run/cancelRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/delegation/cancel"
+              ],
+              "title": "Office/delegation/cancelRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeDelegationCancelParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/delegation/cancelRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/delegation/retry"
+              ],
+              "title": "Office/delegation/retryRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeDelegationRetryParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/delegation/retryRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/verification/cancel"
+              ],
+              "title": "Office/verification/cancelRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeVerificationCancelParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/verification/cancelRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/verification/retry"
+              ],
+              "title": "Office/verification/retryRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeVerificationRetryParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/verification/retryRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/run/retry"
+              ],
+              "title": "Office/run/retryRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeRunRetryParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/run/retryRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/delegation/dispatch"
+              ],
+              "title": "Office/delegation/dispatchRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeDelegationDispatchParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/delegation/dispatchRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/delegation/dispatch/next"
+              ],
+              "title": "Office/delegation/dispatch/nextRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeDelegationDispatchNextParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/delegation/dispatch/nextRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/verification/dispatch/next"
+              ],
+              "title": "Office/verification/dispatch/nextRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeVerificationDispatchNextParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/verification/dispatch/nextRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/member/context/preview"
+              ],
+              "title": "Office/member/context/previewRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeMemberContextPreviewParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/member/context/previewRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "office/member/add"
               ],
               "title": "Office/member/addRequestMethod",
@@ -1475,6 +1763,54 @@
             "params"
           ],
           "title": "Office/artifact/upsertRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/memory/list"
+              ],
+              "title": "Office/memory/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeMemoryListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/memory/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/memory/decide"
+              ],
+              "title": "Office/memory/decideRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeMemoryDecideParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/memory/decideRequest",
           "type": "object"
         },
         {
@@ -1643,6 +1979,30 @@
             "params"
           ],
           "title": "Automation/runRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "automation/run/start"
+              ],
+              "title": "Automation/run/startRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AutomationRunStartParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Automation/run/startRequest",
           "type": "object"
         },
         {
@@ -5682,6 +6042,26 @@
           "properties": {
             "method": {
               "enum": [
+                "office/run/updated"
+              ],
+              "title": "Office/run/updatedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeRunUpdatedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Office/run/updatedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "remoteControl/status/changed"
               ],
               "title": "RemoteControl/status/changedNotificationMethod",
@@ -8220,6 +8600,64 @@
           "run"
         ],
         "title": "AutomationRunResponse",
+        "type": "object"
+      },
+      "AutomationRunStartParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "clientUserMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "config",
+          "cwd"
+        ],
+        "title": "AutomationRunStartParams",
+        "type": "object"
+      },
+      "AutomationRunStartResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "filePath": {
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/definitions/v2/AutomationRunRecord"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/definitions/v2/Turn"
+          }
+        },
+        "required": [
+          "filePath",
+          "run",
+          "threadId",
+          "turn"
+        ],
+        "title": "AutomationRunStartResponse",
         "type": "object"
       },
       "AutomationRunUpdateParams": {
@@ -14428,6 +14866,278 @@
         "title": "OfficeCreateResponse",
         "type": "object"
       },
+      "OfficeDelegationCancelParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "delegationId": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "delegationId",
+          "runId"
+        ],
+        "title": "OfficeDelegationCancelParams",
+        "type": "object"
+      },
+      "OfficeDelegationCancelResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "filePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "filePath"
+        ],
+        "title": "OfficeDelegationCancelResponse",
+        "type": "object"
+      },
+      "OfficeDelegationDispatchNextParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "clientUserMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "dispatchPolicy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "runId"
+        ],
+        "title": "OfficeDelegationDispatchNextParams",
+        "type": "object"
+      },
+      "OfficeDelegationDispatchNextResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "delegationId": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/definitions/v2/Turn"
+          }
+        },
+        "required": [
+          "config",
+          "delegationId",
+          "filePath",
+          "runId",
+          "threadId",
+          "turn"
+        ],
+        "title": "OfficeDelegationDispatchNextResponse",
+        "type": "object"
+      },
+      "OfficeDelegationDispatchParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clientUserMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "member": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "runId",
+          "task"
+        ],
+        "title": "OfficeDelegationDispatchParams",
+        "type": "object"
+      },
+      "OfficeDelegationDispatchResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "delegationId": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/definitions/v2/Turn"
+          }
+        },
+        "required": [
+          "config",
+          "delegationId",
+          "filePath",
+          "runId",
+          "threadId",
+          "turn"
+        ],
+        "title": "OfficeDelegationDispatchResponse",
+        "type": "object"
+      },
+      "OfficeDelegationRetryParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "clientUserMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "delegationId": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "delegationId",
+          "runId"
+        ],
+        "title": "OfficeDelegationRetryParams",
+        "type": "object"
+      },
+      "OfficeDelegationRetryResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "delegationId": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "retryOfDelegationId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/definitions/v2/Turn"
+          }
+        },
+        "required": [
+          "config",
+          "delegationId",
+          "filePath",
+          "retryOfDelegationId",
+          "runId",
+          "threadId",
+          "turn"
+        ],
+        "title": "OfficeDelegationRetryResponse",
+        "type": "object"
+      },
       "OfficeDeleteParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -14543,6 +15253,295 @@
         "title": "OfficeMemberAddResponse",
         "type": "object"
       },
+      "OfficeMemberContextPreviewParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "member": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          },
+          "task": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "runId"
+        ],
+        "title": "OfficeMemberContextPreviewParams",
+        "type": "object"
+      },
+      "OfficeMemberContextPreviewResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "agentProfile": {
+            "type": "string"
+          },
+          "contextPolicy": {
+            "type": "string"
+          },
+          "member": {
+            "type": "string"
+          },
+          "memoryContext": {
+            "type": "string"
+          },
+          "memoryScope": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "sharedContext": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "agentProfile",
+          "contextPolicy",
+          "member",
+          "memoryContext",
+          "memoryScope",
+          "runId",
+          "sharedContext",
+          "threadId"
+        ],
+        "title": "OfficeMemberContextPreviewResponse",
+        "type": "object"
+      },
+      "OfficeMemoryDecideParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "memoryId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "memoryId",
+          "status"
+        ],
+        "title": "OfficeMemoryDecideParams",
+        "type": "object"
+      },
+      "OfficeMemoryDecideResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "memory": {
+            "$ref": "#/definitions/v2/OfficeMemoryRecord"
+          }
+        },
+        "required": [
+          "memory"
+        ],
+        "title": "OfficeMemoryDecideResponse",
+        "type": "object"
+      },
+      "OfficeMemoryEvidenceRef": {
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "OfficeMemoryListParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "limit": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "config",
+          "cwd"
+        ],
+        "title": "OfficeMemoryListParams",
+        "type": "object"
+      },
+      "OfficeMemoryListResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/definitions/v2/OfficeMemoryRecord"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "OfficeMemoryListResponse",
+        "type": "object"
+      },
+      "OfficeMemoryRecord": {
+        "properties": {
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "evidenceRefs": {
+            "items": {
+              "$ref": "#/definitions/v2/OfficeMemoryEvidenceRef"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "importance": {
+            "type": "string"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "member": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "officeKey": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "usageCount": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "confidence",
+          "content",
+          "createdAt",
+          "evidenceRefs",
+          "id",
+          "importance",
+          "keywords",
+          "kind",
+          "officeKey",
+          "scope",
+          "status",
+          "updatedAt",
+          "usageCount"
+        ],
+        "type": "object"
+      },
       "OfficeMessageSendParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -14630,6 +15629,270 @@
         "title": "OfficeReadResponse",
         "type": "object"
       },
+      "OfficeRunCancelParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "runId"
+        ],
+        "title": "OfficeRunCancelParams",
+        "type": "object"
+      },
+      "OfficeRunCancelResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "filePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "filePath"
+        ],
+        "title": "OfficeRunCancelResponse",
+        "type": "object"
+      },
+      "OfficeRunParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "clientUserMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": true,
+          "text": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "message",
+          "text"
+        ],
+        "title": "OfficeRunParams",
+        "type": "object"
+      },
+      "OfficeRunResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "filePath": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/definitions/v2/Turn"
+          }
+        },
+        "required": [
+          "config",
+          "filePath",
+          "runId",
+          "threadId",
+          "turn"
+        ],
+        "title": "OfficeRunResponse",
+        "type": "object"
+      },
+      "OfficeRunRetryParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "clientUserMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": true,
+          "runId": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "runId"
+        ],
+        "title": "OfficeRunRetryParams",
+        "type": "object"
+      },
+      "OfficeRunRetryResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "filePath": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/definitions/v2/Turn"
+          }
+        },
+        "required": [
+          "config",
+          "filePath",
+          "runId",
+          "threadId",
+          "turn"
+        ],
+        "title": "OfficeRunRetryResponse",
+        "type": "object"
+      },
+      "OfficeRunSyncParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turn": {
+            "$ref": "#/definitions/v2/Turn"
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "turn"
+        ],
+        "title": "OfficeRunSyncParams",
+        "type": "object"
+      },
+      "OfficeRunSyncResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "filePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "filePath"
+        ],
+        "title": "OfficeRunSyncResponse",
+        "type": "object"
+      },
+      "OfficeRunUpdatedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "sourceThreadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceTurnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "filePath",
+          "reason"
+        ],
+        "title": "OfficeRunUpdatedNotification",
+        "type": "object"
+      },
       "OfficeSaveParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -14656,6 +15919,220 @@
           "filePath"
         ],
         "title": "OfficeSaveResponse",
+        "type": "object"
+      },
+      "OfficeVerificationCancelParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verificationCheckId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "runId",
+          "verificationCheckId"
+        ],
+        "title": "OfficeVerificationCancelParams",
+        "type": "object"
+      },
+      "OfficeVerificationCancelResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "filePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "filePath"
+        ],
+        "title": "OfficeVerificationCancelResponse",
+        "type": "object"
+      },
+      "OfficeVerificationDispatchNextParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "clientUserMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "runId"
+        ],
+        "title": "OfficeVerificationDispatchNextParams",
+        "type": "object"
+      },
+      "OfficeVerificationDispatchNextResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "automationId": {
+            "type": "string"
+          },
+          "automationRunFilePath": {
+            "type": "string"
+          },
+          "automationRunId": {
+            "type": "string"
+          },
+          "config": true,
+          "filePath": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/definitions/v2/Turn"
+          },
+          "verificationCheckId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "automationId",
+          "automationRunFilePath",
+          "automationRunId",
+          "config",
+          "filePath",
+          "runId",
+          "threadId",
+          "turn",
+          "verificationCheckId"
+        ],
+        "title": "OfficeVerificationDispatchNextResponse",
+        "type": "object"
+      },
+      "OfficeVerificationRetryParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "clientUserMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          },
+          "verificationCheckId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "cwd",
+          "runId",
+          "verificationCheckId"
+        ],
+        "title": "OfficeVerificationRetryParams",
+        "type": "object"
+      },
+      "OfficeVerificationRetryResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "automationId": {
+            "type": "string"
+          },
+          "automationRunFilePath": {
+            "type": "string"
+          },
+          "automationRunId": {
+            "type": "string"
+          },
+          "config": true,
+          "filePath": {
+            "type": "string"
+          },
+          "retryOfAutomationTurnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turn": {
+            "$ref": "#/definitions/v2/Turn"
+          },
+          "verificationCheckId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "automationId",
+          "automationRunFilePath",
+          "automationRunId",
+          "config",
+          "filePath",
+          "runId",
+          "threadId",
+          "turn",
+          "verificationCheckId"
+        ],
+        "title": "OfficeVerificationRetryResponse",
         "type": "object"
       },
       "OverriddenMetadata": {

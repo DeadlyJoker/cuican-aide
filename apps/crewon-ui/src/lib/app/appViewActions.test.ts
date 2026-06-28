@@ -467,6 +467,34 @@ describe("app view actions", () => {
     expect(lastSyncedSearch).toBe("");
   });
 
+  it("does not close focused app views for unrelated URL params", () => {
+    let appView: AppView = "library";
+    let lastSyncedSearch = "";
+
+    expect(
+      syncViewFromSearchAction({
+        demoSettingsPanel: demoPanel,
+        isConnected: false,
+        isDemo: false,
+        lastSyncedSearch,
+        locale: "en",
+        openLibrary: () => {},
+        refreshSettingsSection: () => {},
+        search: "?platform=mac",
+        setAppView: (view) => {
+          appView = view;
+        },
+        setCapabilityPanel: () => {},
+        setLastSyncedSearch: (search) => {
+          lastSyncedSearch = search;
+        },
+        setSettingsSection: () => {},
+      }),
+    ).toBe(false);
+    expect(appView).toBe("library");
+    expect(lastSyncedSearch).toBe("?platform=mac");
+  });
+
   it("syncs the visible settings panel for connected and demo modes", () => {
     let refreshedSection: SettingsSection | null = null;
     let capabilityPanel: CapabilityPanel | null = null;

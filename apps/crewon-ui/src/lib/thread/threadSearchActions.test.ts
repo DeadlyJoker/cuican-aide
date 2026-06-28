@@ -1,10 +1,25 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Turn } from "@crewon-protocol/v2/Turn";
 import { describe, expect, it, vi } from "vitest";
 
 import type { NoticeState } from "../shared/noticeState";
 import { runThreadSearchEffectAction } from "./threadSearchActions";
 
-function thread(id: string): Thread {
+function turn(overrides: Partial<Turn> = {}): Turn {
+  return {
+    id: "turn-1",
+    items: [],
+    itemsView: "full",
+    status: "completed",
+    error: null,
+    startedAt: 1,
+    completedAt: 2,
+    durationMs: 1,
+    ...overrides,
+  };
+}
+
+function thread(id: string, overrides: Partial<Thread> = {}): Thread {
   return {
     id,
     sessionId: `${id}-session`,
@@ -26,6 +41,7 @@ function thread(id: string): Thread {
     gitInfo: null,
     name: id,
     turns: [],
+    ...overrides,
   };
 }
 
@@ -49,6 +65,9 @@ function state() {
     setSelectedThreadId(updater: (currentThreadId: string | null) => string | null) {
       selectedThreadId = updater(selectedThreadId);
     },
+    setThreads(updater: (currentThreads: Thread[]) => Thread[]) {
+      this.threads = updater(this.threads);
+    },
     threads: [] as Thread[],
   };
 }
@@ -70,9 +89,7 @@ describe("thread search actions", () => {
       setIsSearchingThreads: captured.setIsSearchingThreads.bind(captured),
       setNotice: captured.setNotice.bind(captured),
       setSelectedThreadId: captured.setSelectedThreadId,
-      setThreads: (threads) => {
-        captured.threads = threads;
-      },
+      setThreads: captured.setThreads.bind(captured),
       setTimeout,
       showArchivedThreads: false,
       showDemoThreads,
@@ -106,9 +123,7 @@ describe("thread search actions", () => {
       setIsSearchingThreads: captured.setIsSearchingThreads.bind(captured),
       setNotice: captured.setNotice.bind(captured),
       setSelectedThreadId: captured.setSelectedThreadId,
-      setThreads: (threads) => {
-        captured.threads = threads;
-      },
+      setThreads: captured.setThreads.bind(captured),
       setTimeout,
       showArchivedThreads: true,
       showDemoThreads: () => {},
@@ -118,6 +133,45 @@ describe("thread search actions", () => {
     expect(captured.threads.map((item) => item.id)).toEqual(["thread-2"]);
     expect(captured.selectedThreadId()).toBe("thread-2");
     expect(captured.isSearchingValues).toEqual([true, false]);
+  });
+
+  it("preserves loaded turns when empty search refreshes summary threads", async () => {
+    const captured = state();
+    const loadedTurn = turn();
+    captured.threads = [thread("thread-1", { turns: [loadedTurn] })];
+
+    runThreadSearchEffectAction({
+      clearTimeout: () => {},
+      client: {
+        async listThreads() {
+          return [thread("thread-1", { preview: "new summary" })];
+        },
+        async searchThreads() {
+          return [];
+        },
+      },
+      currentRequestId: () => 6,
+      isConnected: true,
+      isDemoPreview: false,
+      locale: "en",
+      requestId: 6,
+      searchTerm: "",
+      setIsSearchingThreads: captured.setIsSearchingThreads.bind(captured),
+      setNotice: captured.setNotice.bind(captured),
+      setSelectedThreadId: captured.setSelectedThreadId,
+      setThreads: captured.setThreads.bind(captured),
+      setTimeout,
+      showArchivedThreads: false,
+      showDemoThreads: () => {},
+    });
+    await flushAsyncWork();
+
+    expect(captured.threads).toEqual([
+      thread("thread-1", {
+        preview: "new summary",
+        turns: [loadedTurn],
+      }),
+    ]);
   });
 
   it("debounces searched threads and returns a cleanup", async () => {
@@ -146,9 +200,7 @@ describe("thread search actions", () => {
       setIsSearchingThreads: captured.setIsSearchingThreads.bind(captured),
       setNotice: captured.setNotice.bind(captured),
       setSelectedThreadId: captured.setSelectedThreadId,
-      setThreads: (threads) => {
-        captured.threads = threads;
-      },
+      setThreads: captured.setThreads.bind(captured),
       setTimeout: (handler) => {
         timeoutHandlers.push(handler);
         return 10 as ReturnType<typeof setTimeout>;
@@ -188,9 +240,7 @@ describe("thread search actions", () => {
       setIsSearchingThreads: captured.setIsSearchingThreads.bind(captured),
       setNotice: captured.setNotice.bind(captured),
       setSelectedThreadId: captured.setSelectedThreadId,
-      setThreads: (threads) => {
-        captured.threads = threads;
-      },
+      setThreads: captured.setThreads.bind(captured),
       setTimeout,
       showArchivedThreads: false,
       showDemoThreads: () => {},
@@ -223,9 +273,7 @@ describe("thread search actions", () => {
       setIsSearchingThreads: captured.setIsSearchingThreads.bind(captured),
       setNotice: captured.setNotice.bind(captured),
       setSelectedThreadId: captured.setSelectedThreadId,
-      setThreads: (threads) => {
-        captured.threads = threads;
-      },
+      setThreads: captured.setThreads.bind(captured),
       setTimeout,
       showArchivedThreads: false,
       showDemoThreads: () => {},

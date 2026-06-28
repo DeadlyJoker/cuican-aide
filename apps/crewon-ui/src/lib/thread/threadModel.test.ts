@@ -8,6 +8,7 @@ import {
   appendItemInThread,
   appendPlanDeltaInThread,
   appendTurnWithFallbackPreview,
+  mergeThreadListSummaries,
   removeThreadFromList,
   selectedThreadIdAfterThreadList,
   selectedThreadIdAfterThreadRemoval,
@@ -241,6 +242,32 @@ describe("thread model list helpers", () => {
         status,
       },
       threads[1],
+    ]);
+  });
+
+  it("merges list summaries without dropping loaded turns", () => {
+    const loadedThread = thread({
+      id: "thread-1",
+      preview: "Old preview",
+      turns: [turn({ id: "loaded-turn" })],
+    });
+    const summary = thread({
+      id: "thread-1",
+      preview: "New preview",
+      updatedAt: 2,
+      turns: [],
+    });
+    const fullThread = thread({
+      id: "thread-2",
+      turns: [turn({ id: "server-turn" })],
+    });
+
+    expect(mergeThreadListSummaries([loadedThread], [summary, fullThread])).toEqual([
+      {
+        ...summary,
+        turns: loadedThread.turns,
+      },
+      fullThread,
     ]);
   });
 

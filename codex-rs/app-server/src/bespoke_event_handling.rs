@@ -2,7 +2,10 @@ use crate::error_code::internal_error;
 use crate::error_code::invalid_request;
 use crate::outgoing_message::ClientRequestResult;
 use crate::outgoing_message::ThreadScopedOutgoingMessageSender;
+use crate::request_processors::office_run_updated_notification;
 use crate::request_processors::populate_thread_turns_from_history;
+use crate::request_processors::sync_automation_runs_for_thread_turn;
+use crate::request_processors::sync_office_run_updates_for_thread_turn;
 use crate::request_processors::thread_from_stored_thread;
 use crate::request_processors::thread_settings_from_core_snapshot;
 use crate::server_request_error::is_turn_transition_server_request_error;
@@ -77,6 +80,7 @@ use crewon_app_server_protocol::TurnInterruptResponse;
 use crewon_app_server_protocol::TurnItemsView;
 use crewon_app_server_protocol::TurnModerationMetadataNotification;
 use crewon_app_server_protocol::TurnPlanStep;
+use crewon_app_server_protocol::TurnPlanStepStatus;
 use crewon_app_server_protocol::TurnPlanUpdatedNotification;
 use crewon_app_server_protocol::TurnStartedNotification;
 use crewon_app_server_protocol::TurnStatus;
@@ -120,6 +124,8 @@ use std::time::UNIX_EPOCH;
 use tokio::sync::Mutex;
 use tokio::sync::oneshot;
 use tracing::error;
+use tracing::info;
+use tracing::warn;
 
 enum CommandExecutionApprovalPresentation {
     Network(V2NetworkApprovalContext),
@@ -185,10 +191,18 @@ pub(crate) async fn apply_bespoke_event_handling(
             outgoing.abort_pending_server_requests().await;
             respond_to_pending_interrupts(&thread_state, &outgoing).await;
             let turn_failed = thread_state.lock().await.turn_summary.last_error.is_some();
+            let thread_id = conversation_id.to_string();
+            let office_sync_cwd = conversation
+                .config_snapshot()
+                .await
+                .cwd()
+                .as_path()
+                .to_string_lossy()
+                .into_owned();
             thread_watch_manager
-                .note_turn_completed(&conversation_id.to_string(), turn_failed)
+                .note_turn_completed(&thread_id, turn_failed)
                 .await;
-            handle_turn_complete(
+            let completed_turn = handle_turn_complete(
                 conversation_id,
                 event_turn_id,
                 turn_complete_event,
@@ -196,6 +210,15 @@ pub(crate) async fn apply_bespoke_event_handling(
                 &thread_state,
             )
             .await;
+            sync_office_runs_for_terminal_turn(
+                &office_sync_cwd,
+                &thread_id,
+                &completed_turn,
+                &outgoing,
+            )
+            .await;
+            sync_automation_runs_for_terminal_turn(&office_sync_cwd, &thread_id, &completed_turn)
+                .await;
         }
         EventMsg::McpStartupUpdate(update) => {
             let (status, error) = match update.status {
@@ -1147,15 +1170,28 @@ pub(crate) async fn apply_bespoke_event_handling(
             outgoing.abort_pending_server_requests().await;
             respond_to_pending_interrupts(&thread_state, &outgoing).await;
 
-            thread_watch_manager
-                .note_turn_interrupted(&conversation_id.to_string())
-                .await;
-            handle_turn_interrupted(
+            let thread_id = conversation_id.to_string();
+            let office_sync_cwd = conversation
+                .config_snapshot()
+                .await
+                .cwd()
+                .as_path()
+                .to_string_lossy()
+                .into_owned();
+            thread_watch_manager.note_turn_interrupted(&thread_id).await;
+            let interrupted_turn = handle_turn_interrupted(
                 conversation_id,
                 event_turn_id,
                 turn_aborted_event,
                 &outgoing,
                 &thread_state,
+            )
+            .await;
+            sync_office_runs_for_terminal_turn(
+                &office_sync_cwd,
+                &thread_id,
+                &interrupted_turn,
+                &outgoing,
             )
             .await;
         }
@@ -1261,6 +1297,7 @@ pub(crate) async fn apply_bespoke_event_handling(
                 &event_turn_id,
                 plan_update_event,
                 &outgoing,
+                &thread_state,
             )
             .await;
         }
@@ -1295,17 +1332,23 @@ async fn handle_turn_plan_update(
     event_turn_id: &str,
     plan_update_event: UpdatePlanArgs,
     outgoing: &ThreadScopedOutgoingMessageSender,
+    thread_state: &Arc<Mutex<ThreadState>>,
 ) {
     // `update_plan` is a todo/checklist tool; it is not related to plan-mode updates
+    let plan = plan_update_event
+        .plan
+        .into_iter()
+        .map(TurnPlanStep::from)
+        .collect::<Vec<_>>();
+    {
+        let mut state = thread_state.lock().await;
+        state.turn_summary.latest_plan = plan.clone();
+    }
     let notification = TurnPlanUpdatedNotification {
         thread_id: conversation_id.to_string(),
         turn_id: event_turn_id.to_string(),
         explanation: plan_update_event.explanation,
-        plan: plan_update_event
-            .plan
-            .into_iter()
-            .map(TurnPlanStep::from)
-            .collect(),
+        plan,
     };
     outgoing
         .send_server_notification(ServerNotification::TurnPlanUpdated(notification))
@@ -1504,13 +1547,23 @@ async fn handle_turn_complete(
     turn_complete_event: TurnCompleteEvent,
     outgoing: &ThreadScopedOutgoingMessageSender,
     thread_state: &Arc<Mutex<ThreadState>>,
-) {
+) -> Turn {
     let turn_summary = find_and_remove_turn_summary(conversation_id, thread_state).await;
 
     let (status, error) = match turn_summary.last_error {
         Some(error) => (TurnStatus::Failed, Some(error)),
         None => (TurnStatus::Completed, None),
     };
+    let completed_turn = office_sync_turn(OfficeSyncTurnInput {
+        turn_id: event_turn_id.clone(),
+        status: status.clone(),
+        error: error.clone(),
+        started_at: turn_summary.started_at,
+        completed_at: turn_complete_event.completed_at,
+        duration_ms: turn_complete_event.duration_ms,
+        last_agent_message: turn_complete_event.last_agent_message.as_deref(),
+        latest_plan: &turn_summary.latest_plan,
+    });
 
     emit_turn_completed_with_status(
         conversation_id,
@@ -1525,6 +1578,7 @@ async fn handle_turn_complete(
         outgoing,
     )
     .await;
+    completed_turn
 }
 
 async fn handle_turn_interrupted(
@@ -1533,8 +1587,18 @@ async fn handle_turn_interrupted(
     turn_aborted_event: TurnAbortedEvent,
     outgoing: &ThreadScopedOutgoingMessageSender,
     thread_state: &Arc<Mutex<ThreadState>>,
-) {
+) -> Turn {
     let turn_summary = find_and_remove_turn_summary(conversation_id, thread_state).await;
+    let interrupted_turn = office_sync_turn(OfficeSyncTurnInput {
+        turn_id: event_turn_id.clone(),
+        status: TurnStatus::Interrupted,
+        error: None,
+        started_at: turn_summary.started_at,
+        completed_at: turn_aborted_event.completed_at,
+        duration_ms: turn_aborted_event.duration_ms,
+        last_agent_message: None,
+        latest_plan: &turn_summary.latest_plan,
+    });
 
     emit_turn_completed_with_status(
         conversation_id,
@@ -1549,6 +1613,131 @@ async fn handle_turn_interrupted(
         outgoing,
     )
     .await;
+    interrupted_turn
+}
+
+struct OfficeSyncTurnInput<'a> {
+    turn_id: String,
+    status: TurnStatus,
+    error: Option<TurnError>,
+    started_at: Option<i64>,
+    completed_at: Option<i64>,
+    duration_ms: Option<i64>,
+    last_agent_message: Option<&'a str>,
+    latest_plan: &'a [TurnPlanStep],
+}
+
+fn office_sync_turn(input: OfficeSyncTurnInput<'_>) -> Turn {
+    let OfficeSyncTurnInput {
+        turn_id,
+        status,
+        error,
+        started_at,
+        completed_at,
+        duration_ms,
+        last_agent_message,
+        latest_plan,
+    } = input;
+    let mut items = last_agent_message
+        .filter(|message| !message.trim().is_empty())
+        .map(|message| {
+            vec![ThreadItem::AgentMessage {
+                id: format!("{turn_id}:last-agent-message"),
+                text: message.to_string(),
+                phase: None,
+                memory_citation: None,
+            }]
+        })
+        .unwrap_or_default();
+    if !latest_plan.is_empty() {
+        let plan_text = latest_plan
+            .iter()
+            .map(|step| format!("- [{}] {}", plan_step_status_label(step.status), step.step))
+            .collect::<Vec<_>>()
+            .join("\n");
+        items.push(ThreadItem::Plan {
+            id: format!("{turn_id}:latest-plan"),
+            text: plan_text,
+        });
+    }
+    let items_view = if items.is_empty() {
+        TurnItemsView::NotLoaded
+    } else {
+        TurnItemsView::Full
+    };
+    Turn {
+        id: turn_id,
+        items,
+        items_view,
+        error,
+        status,
+        started_at,
+        completed_at,
+        duration_ms,
+    }
+}
+
+fn plan_step_status_label(status: TurnPlanStepStatus) -> &'static str {
+    match status {
+        TurnPlanStepStatus::Pending => "pending",
+        TurnPlanStepStatus::InProgress => "inProgress",
+        TurnPlanStepStatus::Completed => "completed",
+    }
+}
+
+async fn sync_office_runs_for_terminal_turn(
+    cwd: &str,
+    thread_id: &str,
+    turn: &Turn,
+    outgoing: &ThreadScopedOutgoingMessageSender,
+) {
+    match sync_office_run_updates_for_thread_turn(cwd, thread_id, turn).await {
+        Ok(updates) => {
+            for update in updates {
+                outgoing
+                    .send_global_server_notification(office_run_updated_notification(
+                        cwd,
+                        &update.file_path,
+                        &update.config,
+                        "terminalSync",
+                        Some(thread_id),
+                        Some(&turn.id),
+                    ))
+                    .await;
+            }
+        }
+        Err(err) => {
+            warn!(
+                thread_id,
+                turn_id = %turn.id,
+                error = %err.message,
+                "failed to sync office runs for terminal turn"
+            );
+        }
+    }
+}
+
+async fn sync_automation_runs_for_terminal_turn(cwd: &str, thread_id: &str, turn: &Turn) {
+    match sync_automation_runs_for_thread_turn(cwd, thread_id, turn).await {
+        Ok(synced) => {
+            if synced > 0 {
+                info!(
+                    thread_id,
+                    turn_id = %turn.id,
+                    synced,
+                    "synced automation runs for terminal turn"
+                );
+            }
+        }
+        Err(err) => {
+            warn!(
+                thread_id,
+                turn_id = %turn.id,
+                error = %err.message,
+                "failed to sync automation runs for terminal turn"
+            );
+        }
+    }
 }
 
 async fn handle_thread_rollback_failed(
@@ -3602,8 +3791,16 @@ mod tests {
         };
 
         let conversation_id = ThreadId::new();
+        let thread_state = Arc::new(Mutex::new(ThreadState::default()));
 
-        handle_turn_plan_update(conversation_id, "turn-123", update, &outgoing).await;
+        handle_turn_plan_update(
+            conversation_id,
+            "turn-123",
+            update,
+            &outgoing,
+            &thread_state,
+        )
+        .await;
 
         let msg = recv_broadcast_message(&mut rx).await?;
         match msg {
@@ -3619,6 +3816,7 @@ mod tests {
             }
             other => bail!("unexpected message: {other:?}"),
         }
+        assert_eq!(thread_state.lock().await.turn_summary.latest_plan.len(), 2);
         assert!(rx.try_recv().is_err(), "no extra messages expected");
         Ok(())
     }

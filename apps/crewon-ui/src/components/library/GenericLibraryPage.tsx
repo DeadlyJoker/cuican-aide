@@ -2,7 +2,6 @@ import type { Locale } from "../../lib/i18n";
 import type {
   LibraryItem,
   LibraryPanel,
-  LibraryPanelAction,
 } from "../../lib/domain/crewonDomain";
 import { LibraryCard } from "./LibraryCard";
 import {
@@ -11,6 +10,7 @@ import {
   LibraryError,
   LibraryPageHeader,
   LibrarySectionItem,
+  type LibraryPanelActionCallback,
 } from "./LibraryPrimitives";
 
 export function GenericLibraryPage({
@@ -25,7 +25,7 @@ export function GenericLibraryPage({
   locale: Locale;
   onBack: () => void;
   onItemAction: (item: LibraryItem) => void;
-  onPanelAction: (action: LibraryPanelAction) => void;
+  onPanelAction: LibraryPanelActionCallback;
   onPanelFieldChange: (fieldId: string, value: string) => void;
 }) {
   return (

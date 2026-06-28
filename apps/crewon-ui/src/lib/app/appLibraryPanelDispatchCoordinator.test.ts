@@ -25,9 +25,11 @@ const { createAppLibraryPanelDispatchCoordinator } = await import(
 
 function createParams(
   automationRunByTurnRef: AppLibraryPanelDispatchCoordinatorParams["automationRunByTurnRef"],
+  recordOfficeRunTurn = vi.fn(),
 ): AppLibraryPanelDispatchCoordinatorParams {
   return {
     automationRunByTurnRef,
+    recordOfficeRunTurn,
   } as unknown as AppLibraryPanelDispatchCoordinatorParams;
 }
 
@@ -61,5 +63,29 @@ describe("app library panel dispatch coordinator", () => {
     params.recordAutomationRunForTurn("turn-1", record);
 
     expect(automationRunByTurnRef.current).toEqual({ "turn-1": record });
+  });
+
+  it("forwards office run records through the app handler", () => {
+    const automationRunByTurnRef = { current: {} };
+    const recordOfficeRunTurn = vi.fn();
+
+    createAppLibraryPanelDispatchCoordinator(
+      createParams(automationRunByTurnRef, recordOfficeRunTurn),
+    );
+    const params = capturedParams();
+    const record = {
+      cwd: "/repo",
+      runId: "office-run-1",
+      threadId: "office-thread",
+      config: {
+        title: "Office",
+        subtitle: "Workspace",
+        workspace: { goal: "", members: [], messages: [], tasks: [] },
+      },
+    };
+
+    params.recordOfficeRunTurn("turn-1", record);
+
+    expect(recordOfficeRunTurn).toHaveBeenCalledWith("turn-1", record);
   });
 });

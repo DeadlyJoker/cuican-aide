@@ -3,6 +3,8 @@ use super::*;
 #[cfg(test)]
 use chrono::DateTime;
 #[cfg(test)]
+use chrono::SecondsFormat;
+#[cfg(test)]
 use chrono::Utc;
 
 #[cfg(test)]

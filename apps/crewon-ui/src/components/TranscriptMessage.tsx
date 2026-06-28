@@ -1,11 +1,5 @@
-import {
-  Bot,
-  Code2,
-  FilePenLine,
-  Sparkles,
-  Terminal,
-  User,
-} from "lucide-react";
+import { AlertTriangle, Bot, Code2, FilePenLine, Terminal } from "lucide-react";
+import type { Turn } from "@crewon-protocol/v2/Turn";
 import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
 
 import type { Locale } from "../lib/i18n";
@@ -14,6 +8,7 @@ import { renderMarkdown } from "./TranscriptMarkdown";
 import {
   TranscriptCommandCard,
   TranscriptFileChangeCard,
+  TranscriptReasoningCard,
 } from "./TranscriptToolCards";
 
 export type TranscriptItemLabels = {
@@ -28,14 +23,14 @@ export type TranscriptItemLabels = {
 function itemIcon(item: ThreadItem) {
   switch (item.type) {
     case "userMessage":
-      return <User size={16} />;
+    case "agentMessage":
+    case "reasoning":
+    case "plan":
+      return null;
     case "commandExecution":
       return <Terminal size={16} />;
     case "fileChange":
       return <FilePenLine size={16} />;
-    case "reasoning":
-    case "plan":
-      return <Sparkles size={16} />;
     case "mcpToolCall":
     case "dynamicToolCall":
       return <Code2 size={16} />;
@@ -114,9 +109,19 @@ function renderMessageContent(item: ThreadItem, locale: Locale) {
       return <TranscriptCommandCard item={item} locale={locale} />;
     case "fileChange":
       return <TranscriptFileChangeCard item={item} locale={locale} />;
+    case "reasoning":
+      return <TranscriptReasoningCard item={item} locale={locale} />;
     default:
       return renderMarkdown(renderItemText(item, locale));
   }
+}
+
+function itemStatus(item: ThreadItem): string | undefined {
+  if (item.type === "commandExecution" || item.type === "fileChange") {
+    return item.status;
+  }
+
+  return undefined;
 }
 
 export function TranscriptMessage({
@@ -129,10 +134,18 @@ export function TranscriptMessage({
   locale: Locale;
 }) {
   const role = itemRole(item, itemLabels);
+  const icon = itemIcon(item);
+  const status = itemStatus(item);
 
   return (
-    <article className="message" data-kind={item.type} aria-label={role}>
-      <div className="message-icon">{itemIcon(item)}</div>
+    <article
+      className="message"
+      data-kind={item.type}
+      data-has-icon={icon ? "true" : "false"}
+      data-status={status}
+      aria-label={role}
+    >
+      {icon ? <div className="message-icon">{icon}</div> : null}
       <div className="message-body">
         <div className="message-header">
           <span className="message-role">{role}</span>
@@ -157,12 +170,10 @@ export function TranscriptStreamingMessage({
     <article
       className="message"
       data-kind="agentMessage"
+      data-has-icon="false"
       aria-atomic="false"
       aria-label={crewonLabel}
     >
-      <div className="message-icon">
-        <Bot size={16} />
-      </div>
       <div className="message-body">
         <div className="message-header">
           <span className="message-role">{crewonLabel}</span>
@@ -171,6 +182,85 @@ export function TranscriptStreamingMessage({
           </span>
         </div>
         {renderMarkdown(streamingText)}
+      </div>
+    </article>
+  );
+}
+
+export function TranscriptThinkingMessage({
+  crewonLabel,
+  locale,
+  stopLabel,
+  onStop,
+}: {
+  crewonLabel: string;
+  locale: Locale;
+  stopLabel: string;
+  onStop: () => void;
+}) {
+  return (
+    <article
+      className="message"
+      data-kind="agentMessage"
+      data-has-icon="false"
+      aria-label={crewonLabel}
+    >
+      <div className="message-body">
+        <div className="process-card reasoning-card thinking-card" data-status="inProgress" role="status">
+          <div className="thinking-card-main">
+            <span className="process-card-status">
+              <span className="status-dot" aria-hidden="true" />
+              {locale === "zh" ? "正在思考" : "Thinking"}
+              <span className="thinking-dots" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </span>
+            <em>{locale === "zh" ? "等待模型响应" : "Waiting for model response"}</em>
+          </div>
+          <button type="button" className="turn-stop-button" onClick={onStop}>
+            {stopLabel}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export function TranscriptFailureMessage({
+  crewonLabel,
+  error,
+  locale,
+}: {
+  crewonLabel: string;
+  error: Turn["error"];
+  locale: Locale;
+}) {
+  const message =
+    error?.message ||
+    (locale === "zh"
+      ? "模型连接失败，当前任务没有完成。"
+      : "Model connection failed, so this turn did not complete.");
+  const details = error?.additionalDetails ?? null;
+
+  return (
+    <article
+      className="message"
+      data-kind="agentMessage"
+      data-has-icon="false"
+      data-status="failed"
+      aria-label={crewonLabel}
+    >
+      <div className="message-body">
+        <div className="process-card failure-card" data-status="failed" role="status">
+          <span className="process-card-status">
+            <AlertTriangle size={14} aria-hidden="true" />
+            {locale === "zh" ? "模型连接失败" : "Model connection failed"}
+          </span>
+          <p>{message}</p>
+          {details ? <code>{details}</code> : null}
+        </div>
       </div>
     </article>
   );

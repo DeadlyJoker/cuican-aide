@@ -27,7 +27,14 @@ type CapturedOfficeArtifactState = {
   createdDirectories: Array<{ path: string; recursive?: boolean }>;
   directoryItems: CapabilityPanelItem[];
   ensuredThreads: number;
+  fuzzySearches: Array<{
+    cancellationToken?: string | null;
+    query: string;
+    roots: string[];
+  }>;
   libraryPanel: LibraryPanel | null;
+  metadataPaths: string[];
+  readFiles: string[];
   threads: Thread[];
   upsertedArtifacts: Array<{
     artifact: ArtifactItem;
@@ -148,7 +155,10 @@ function state(initialPanel: LibraryPanel | null = panel()): CapturedOfficeArtif
     createdDirectories: [],
     directoryItems: [],
     ensuredThreads: 0,
+    fuzzySearches: [],
     libraryPanel: initialPanel,
+    metadataPaths: [],
+    readFiles: [],
     threads: [thread()],
     upsertedArtifacts: [],
     writtenFiles: [],
@@ -163,13 +173,16 @@ function client(
     async createDirectory(path, recursive) {
       captured.createdDirectories.push({ path, recursive });
     },
-    async fuzzyFileSearch() {
+    async fuzzyFileSearch(query, roots, cancellationToken) {
+      captured.fuzzySearches.push({ query, roots, cancellationToken });
       return response;
     },
-    async getMetadata() {
+    async getMetadata(path) {
+      captured.metadataPaths.push(path);
       return metadata();
     },
-    async readFile() {
+    async readFile(path) {
+      captured.readFiles.push(path);
       return { dataBase64: btoa("artifact body") };
     },
     async startTurn() {
@@ -341,6 +354,12 @@ describe("office artifact actions", () => {
   it("loads matching artifact files into the capability panel", async () => {
     const captured = state();
     const handled = await runAction(captured, {
+      artifact: artifact({
+        contentSha256:
+          "9938be87d35f2a7a2b80237e8dc71806b209aaea8252f12c1b12949f61d40476",
+        contentSource: "file",
+        contentStatus: "fingerprinted",
+      }),
       client: client(captured, {
         files: [
           {
@@ -364,6 +383,90 @@ describe("office artifact actions", () => {
         {
           label: "  docs/client-brief.md",
           path: "/repo/docs/client-brief.md",
+          kind: "file",
+        },
+      ],
+    });
+    expect(captured.capabilityPanel?.body).toContain(
+      "- Current read SHA-256: 9938be87d35f2a7a2b80237e8dc71806b209aaea8252f12c1b12949f61d40476",
+    );
+    expect(captured.capabilityPanel?.body).toContain(
+      "- Fingerprint: matches backend record",
+    );
+  });
+
+  it("loads explicit artifact paths before fuzzy title matches", async () => {
+    const captured = state();
+    const handled = await runAction(captured, {
+      artifact: artifact({
+        path: "docs/exact/client-brief.md",
+      }),
+      client: client(captured, {
+        files: [
+          {
+            root: "/repo",
+            path: "docs/wrong/client-brief.md",
+            match_type: "file",
+            file_name: "Client brief",
+            score: 1,
+            indices: null,
+          },
+        ],
+      }),
+    });
+
+    expect(handled).toBe(true);
+    expect(captured.fuzzySearches).toEqual([]);
+    expect(captured.readFiles).toEqual(["/repo/docs/exact/client-brief.md"]);
+    expect(captured.metadataPaths).toEqual([
+      "/repo/docs/exact/client-brief.md",
+    ]);
+    expect(captured.capabilityPanel).toMatchObject({
+      title: "Client brief",
+      subtitle: "/repo/docs/exact/client-brief.md",
+      body: expect.stringContaining("artifact body"),
+      items: [
+        {
+          label: "  docs/exact/client-brief.md",
+          path: "/repo/docs/exact/client-brief.md",
+          kind: "file",
+        },
+      ],
+    });
+  });
+
+  it("loads explicit artifact URLs before fuzzy title matches", async () => {
+    const captured = state();
+    const handled = await runAction(captured, {
+      artifact: artifact({
+        url: "artifact://office/client-brief.md",
+      }),
+      client: client(captured, {
+        files: [
+          {
+            root: "/repo",
+            path: "docs/wrong/client-brief.md",
+            match_type: "file",
+            file_name: "Client brief",
+            score: 1,
+            indices: null,
+          },
+        ],
+      }),
+    });
+
+    expect(handled).toBe(true);
+    expect(captured.fuzzySearches).toEqual([]);
+    expect(captured.readFiles).toEqual(["artifact://office/client-brief.md"]);
+    expect(captured.metadataPaths).toEqual(["artifact://office/client-brief.md"]);
+    expect(captured.capabilityPanel).toMatchObject({
+      title: "Client brief",
+      subtitle: "artifact://office/client-brief.md",
+      body: expect.stringContaining("artifact body"),
+      items: [
+        {
+          label: "  artifact://office/client-brief.md",
+          path: "artifact://office/client-brief.md",
           kind: "file",
         },
       ],

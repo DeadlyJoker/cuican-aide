@@ -10,12 +10,13 @@ import {
 } from "../demo/demoContent";
 import { localizeSeedDemoThreads } from "./appUiState";
 import type { AccountStatus, GitRemoteDiffSummary } from "./appStatusTypes";
+import type { ConnectionState } from "./appRuntimeState";
 import type { Locale } from "../i18n";
 
 type ThreadListSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
 
 export function localizeDemoThreadsAction(params: {
-  connectionState: "connecting" | "connected" | "demo";
+  connectionState: ConnectionState;
   locale: Locale;
   setThreads: ThreadListSetter;
 }): boolean {

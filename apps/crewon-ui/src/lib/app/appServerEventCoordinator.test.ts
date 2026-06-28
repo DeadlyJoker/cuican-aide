@@ -7,13 +7,15 @@ import type { createAppServerEventHandlers } from "./handlers/appServerEventHand
 
 const serverEventHandlerSpy = vi.hoisted(() => ({
   lastParams: null as Parameters<typeof createAppServerEventHandlers>[0] | null,
-  create: vi.fn((params: Parameters<typeof createAppServerEventHandlers>[0]) => {
-    serverEventHandlerSpy.lastParams = params;
-    return {
-      handleNotification: vi.fn(),
-      handleServerRequest: vi.fn(),
-    };
-  }),
+  create: vi.fn(
+    (params: Parameters<typeof createAppServerEventHandlers>[0]) => {
+      serverEventHandlerSpy.lastParams = params;
+      return {
+        handleNotification: vi.fn(),
+        handleServerRequest: vi.fn(),
+      };
+    },
+  ),
 }));
 
 vi.mock("./handlers/appServerEventHandlers", () => ({
@@ -38,6 +40,7 @@ function createParams(
     openLibraryRef: { current: async () => undefined },
     openThreadSettingsPanelRef: { current: async () => undefined },
     readAutomationRunItems: async () => [],
+    refreshComposerSlashCommands: () => {},
     refreshSettingsSectionRef: { current: async () => undefined },
     selectedThreadIdRef: { current: null },
     setAccountStatus: () => {},

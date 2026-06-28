@@ -1,5 +1,10 @@
 import type { Turn } from "@crewon-protocol/v2/Turn";
 
+import type {
+  AppServerClient,
+  OfficeDelegationDispatchResponse,
+} from "../app-server/appServer";
+import { isUnsupportedRpcError } from "../app-server/appServer";
 import type { OfficeConfig } from "../domain/crewonDomain";
 import {
   syncOfficeRun as syncBackendOfficeRun,
@@ -36,5 +41,46 @@ export async function syncOfficeRunFromClientAction(params: {
     params.turn,
     params.locale,
     params.record.runId,
+  );
+}
+
+export async function autoDispatchNextOfficeDelegationFromClientAction(params: {
+  client:
+    | Pick<AppServerClient, "dispatchNextOfficeDelegationConfig">
+    | null
+    | undefined;
+  config: OfficeConfig;
+  locale: Locale;
+  record: OfficeRunTurnRecord;
+}): Promise<OfficeDelegationDispatchResponse | null> {
+  if (!params.client) {
+    return null;
+  }
+  try {
+    return await params.client.dispatchNextOfficeDelegationConfig(
+      params.record.cwd,
+      params.config,
+      params.record.runId,
+      {
+        clientUserMessageId: `office-auto-delegation-${Date.now()}`,
+        dispatchPolicy: "auto",
+        locale: params.locale,
+      },
+    );
+  } catch (error) {
+    if (
+      isUnsupportedRpcError(error) ||
+      isNoDispatchableDelegationError(error)
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function isNoDispatchableDelegationError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("no dispatchable office delegation was found")
   );
 }

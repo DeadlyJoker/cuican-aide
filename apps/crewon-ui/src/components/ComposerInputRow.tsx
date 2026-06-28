@@ -1,5 +1,6 @@
 import { ArrowUp, Paperclip, Square } from "lucide-react";
 import type { KeyboardEvent, RefObject } from "react";
+import type { ComposerSlashCommand } from "../lib/composer/composerSlashCommands";
 
 export function ComposerInputRow({
   attachContextLabel,
@@ -10,6 +11,8 @@ export function ComposerInputRow({
   placeholder,
   sendLabel,
   sendShortcutLabel,
+  slashActiveIndex,
+  slashOptions,
   statusText,
   stopLabel,
   textareaRef,
@@ -17,6 +20,7 @@ export function ComposerInputRow({
   onAttachContext,
   onChange,
   onKeyDown,
+  onSlashCommandSelect,
   onStop,
 }: {
   attachContextLabel: string;
@@ -27,6 +31,8 @@ export function ComposerInputRow({
   placeholder: string;
   sendLabel: string;
   sendShortcutLabel: string;
+  slashActiveIndex: number;
+  slashOptions: ComposerSlashCommand[];
   statusText: string;
   stopLabel: string;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
@@ -34,13 +40,43 @@ export function ComposerInputRow({
   onAttachContext: () => void;
   onChange: (value: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onSlashCommandSelect: (command: ComposerSlashCommand) => void;
   onStop: () => void;
 }) {
   const trimmedValue = value.trim();
-  const shouldShowStop = isRunning && !trimmedValue;
+  const shouldShowStop = isRunning;
+  const showSlashMenu = slashOptions.length > 0;
 
   return (
     <div className="composer-input-row" data-state={composerState}>
+      {showSlashMenu ? (
+        <div
+          className="composer-slash-menu"
+          role="listbox"
+          aria-label="Tools"
+        >
+          {slashOptions.map((command, index) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={index === slashActiveIndex}
+              data-active={index === slashActiveIndex}
+              key={command.id}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onSlashCommandSelect(command)}
+            >
+              <span className="composer-slash-kind" data-kind={command.kind}>
+                {command.kind}
+              </span>
+              <span className="composer-slash-text">
+                <strong>{command.label}</strong>
+                <em>{command.description}</em>
+              </span>
+              <code>{command.token}</code>
+            </button>
+          ))}
+        </div>
+      ) : null}
       <button
         className="icon-button"
         type="button"
@@ -63,13 +99,17 @@ export function ComposerInputRow({
       <button
         className="send-button"
         type={shouldShowStop ? "button" : "submit"}
+        data-action={shouldShowStop ? "stop" : undefined}
         aria-label={shouldShowStop ? stopLabel : sendLabel}
         title={shouldShowStop ? stopLabel : `${sendLabel} (${sendShortcutLabel})`}
         disabled={!isRunning && (disabled || !trimmedValue)}
         onClick={shouldShowStop ? onStop : undefined}
       >
         {shouldShowStop ? (
-          <Square size={13} fill="currentColor" />
+          <>
+            <Square size={10} fill="currentColor" />
+            <span>{stopLabel}</span>
+          </>
         ) : (
           <ArrowUp size={18} />
         )}

@@ -15,6 +15,7 @@ export type RefreshNotificationHandlerParams = {
   locale: Locale;
   notification: AppServerNotification;
   refreshAccount: () => void;
+  refreshComposerSlashCommands: () => void;
   refreshVisibleLibrary: (kind: LibraryKind) => void;
   refreshVisibleSettings: (sections: SettingsSection[]) => void;
   setNotice: (notice: NoticeState | null) => void;
@@ -24,6 +25,7 @@ export function handleRefreshAppNotification({
   locale,
   notification,
   refreshAccount,
+  refreshComposerSlashCommands,
   refreshVisibleLibrary,
   refreshVisibleSettings,
   setNotice,
@@ -44,6 +46,7 @@ export function handleRefreshAppNotification({
       return true;
     }
     case "app/list/updated": {
+      refreshComposerSlashCommands();
       refreshVisibleSettings(["browser", "connections"]);
       return true;
     }
@@ -58,11 +61,13 @@ export function handleRefreshAppNotification({
     }
     case "mcpServer/oauthLogin/completed": {
       const { name, success, error } = notification.params;
+      refreshComposerSlashCommands();
       setNotice(mcpOauthNotice(name, success, error, locale));
       return true;
     }
     case "mcpServer/startupStatus/updated": {
       const { name, status, error } = notification.params;
+      refreshComposerSlashCommands();
       setNotice(mcpStartupNotice(name, status, error));
       return true;
     }
@@ -71,6 +76,7 @@ export function handleRefreshAppNotification({
       return true;
     }
     case "skills/changed": {
+      refreshComposerSlashCommands();
       refreshVisibleLibrary("tools");
       refreshVisibleSettings(["mcp-servers"]);
       return true;

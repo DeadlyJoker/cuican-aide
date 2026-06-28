@@ -70,6 +70,7 @@ export function AppShellChrome({
       data-right-sidebar-open={
         capabilityDockOpen && hasCapabilityPanel && appView !== "settings"
       }
+      data-has-notice={Boolean(notice)}
       data-sidebar-open={sidebarOpen}
     >
       <TitleBar

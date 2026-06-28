@@ -1,13 +1,18 @@
 import { appMentionSlug } from "./text";
 
 export type AppMentionInfo = {
+  kind?: PendingComposerMentionKind;
   path: string;
   token: string;
 };
 
+export type PendingComposerMentionKind = "mention" | "skill";
+
 export type PendingComposerMention = {
+  kind?: PendingComposerMentionKind;
   name: string;
   path: string;
+  token?: string;
 };
 
 export function appMentionInfo(appId: string, appName: string): AppMentionInfo {
@@ -38,8 +43,10 @@ export function upsertPendingComposerMention(
     : [
         ...mentions,
         {
+          ...(mention.kind ? { kind: mention.kind } : {}),
           name: appName,
           path: mention.path,
+          token: mention.token,
         },
       ];
 }

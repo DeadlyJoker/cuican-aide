@@ -117,6 +117,13 @@ function thread(id = "thread-1"): Thread {
   } as unknown as Thread;
 }
 
+function runningThread(id = "thread-1", turnId = "turn-running"): Thread {
+  return {
+    ...thread(id),
+    turns: [{ id: turnId, status: "inProgress", items: [] }],
+  } as unknown as Thread;
+}
+
 function createParams(
   overrides: Partial<AppThreadRuntimeHandlersParams> = {},
 ): AppThreadRuntimeHandlersParams {
@@ -256,6 +263,27 @@ describe("app thread runtime handlers", () => {
     expect(threadListSpy.startDraft).toHaveBeenCalledOnce();
     expect(threadMessageSpy.interruptParams).toMatchObject({
       activeTurnId: "turn-1",
+      selectedThreadId: "selected-thread",
+    });
+  });
+
+  it("falls back to the selected thread running turn when interrupting", async () => {
+    const handlers = createAppThreadRuntimeHandlers(
+      createParams({
+        activeTurnId: null,
+        selectedThread: runningThread("selected-thread", "turn-recovered"),
+      }),
+    );
+
+    await handlers.interruptActiveTurn();
+    await handlers.sendMessage("add guidance");
+
+    expect(threadMessageSpy.interruptParams).toMatchObject({
+      activeTurnId: "turn-recovered",
+      selectedThreadId: "selected-thread",
+    });
+    expect(threadMessageSpy.sendParams).toMatchObject({
+      activeTurnId: "turn-recovered",
       selectedThreadId: "selected-thread",
     });
   });

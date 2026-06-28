@@ -288,4 +288,63 @@ describe("office artifact panel helpers", () => {
       items: [{ label: "  client-brief.md", path: "/repo/client-brief.md", kind: "file" }],
     });
   });
+
+  it("includes backend artifact content records in artifact panels", () => {
+    const artifact = artifactItem({
+      contentBytes: 2048,
+      contentObservedAt: "2026-06-20T08:00:00.000Z",
+      contentSha256:
+        "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      contentSource: "file",
+      contentStatus: "fingerprinted",
+      delegationId: "delegation-1",
+      member: "Engineer",
+      agentId: "agent-engineer",
+      path: ".crewon/offices/artifacts/member-checklist.md",
+      sourceThreadId: "thread-member",
+      sourceTurnId: "turn-member",
+    });
+
+    const panel = officeArtifactLoadedPanel({
+      artifact,
+      artifactPath: "/repo/member-checklist.md",
+      currentContentSha256:
+        "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      fileText: "file body",
+      items: [],
+      locale: "en",
+      metadataText: "Type: file",
+      searchRoot: "/repo",
+    });
+
+    expect(panel.body).toContain("Backend content record:");
+    expect(panel.body).toContain("- Content: file verified");
+    expect(panel.body).toContain(
+      "- SHA-256: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    );
+    expect(panel.body).toContain(
+      "- Current read SHA-256: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    );
+    expect(panel.body).toContain("- Fingerprint: matches backend record");
+    expect(panel.body).toContain("- Bytes: 2048");
+    expect(panel.body).toContain("- Observed: 2026-06-20T08:00:00.000Z");
+    expect(panel.body).toContain("- Producer: Engineer/agent-engineer");
+    expect(panel.body).toContain("- Delegation: delegation-1");
+    expect(panel.body).toContain("- Thread: thread-member");
+    expect(panel.body).toContain("- Turn: turn-member");
+
+    expect(
+      officeArtifactLoadedPanel({
+        artifact,
+        artifactPath: "/repo/member-checklist.md",
+        currentContentSha256:
+          "0000000000000000000000000000000000000000000000000000000000000000",
+        fileText: "changed body",
+        items: [],
+        locale: "en",
+        metadataText: "Type: file",
+        searchRoot: "/repo",
+      }).body,
+    ).toContain("- Fingerprint: differs from backend record");
+  });
 });

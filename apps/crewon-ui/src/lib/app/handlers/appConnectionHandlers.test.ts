@@ -34,7 +34,6 @@ describe("app connection handlers", () => {
         streamingTextByThread = nextStreamingText;
       },
       setThreads: () => {},
-      threadsRef: { current: [] },
     });
 
     currentClient = client;
@@ -74,7 +73,6 @@ describe("app connection handlers", () => {
       setThreads: (nextThreads) => {
         threads = nextThreads;
       },
-      threadsRef: { current: [] },
     });
 
     localeRef.current = "zh";

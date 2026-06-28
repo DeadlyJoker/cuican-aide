@@ -12,6 +12,7 @@ import {
   sendMessageAction,
   type InterruptActiveTurnActionParams,
   type SendMessageActionParams,
+  visibleComposerMentionsForText,
 } from "./threadMessageActions";
 
 function turn(overrides: Partial<Turn> = {}): Turn {
@@ -169,6 +170,19 @@ function baseSendParams(
 }
 
 describe("thread message actions", () => {
+  it("keeps pending composer mentions only while their visible tokens remain", () => {
+    expect(
+      visibleComposerMentionsForText("$files summarize", [
+        { name: "Files", path: "app://files", token: "$files" },
+        { name: "Browser", path: "app://browser", token: "$browser" },
+        { name: "Pinned", path: "app://pinned" },
+      ]),
+    ).toEqual([
+      { name: "Files", path: "app://files", token: "$files" },
+      { name: "Pinned", path: "app://pinned" },
+    ]);
+  });
+
   it("creates a demo thread when disconnected", () => {
     const state = threadState([]);
     let inspectorOpen = true;
@@ -308,6 +322,49 @@ describe("thread message actions", () => {
     expect(state.isSending).toBe(false);
   });
 
+  it("filters removed slash mentions before steering an active turn", async () => {
+    const state = threadState();
+    const steerCalls: Array<{
+      mentions: PendingComposerMention[];
+      text: string;
+      threadId: string;
+    }> = [];
+
+    await sendMessageAction(
+      baseSendParams({
+        activeTurnId: "turn-active",
+        client: {
+          async resumeThread(threadId) {
+            return thread({ id: threadId });
+          },
+          async startTurn() {
+            throw new Error("should not start turn");
+          },
+          async steerTurn(threadId, text, mentions = []) {
+            steerCalls.push({ mentions, text, threadId });
+            return { turnId: "turn-steered" };
+          },
+        },
+        pendingComposerMentions: [
+          { name: "Files", path: "app://files", token: "$files" },
+        ],
+        setActiveTurnByThread: state.setActiveTurnByThread,
+        setIsSending: state.setIsSending,
+        setNotice: state.setNotice,
+        setPendingComposerMentions: state.setPendingComposerMentions,
+        text: "Hello",
+      }),
+    );
+
+    expect(steerCalls).toEqual([
+      {
+        mentions: [],
+        text: "Hello",
+        threadId: "thread-1",
+      },
+    ]);
+  });
+
   it("creates demo thread content when disconnected", async () => {
     const state = threadState([]);
     const demoThread = thread({ id: "demo-thread", preview: "", turns: [] });
@@ -354,7 +411,10 @@ describe("thread message actions", () => {
             throw new Error("should not steer");
           },
         },
-        selectedThread: thread({ id: "thread-1", status: { type: "notLoaded" } }),
+        selectedThread: thread({
+          id: "thread-1",
+          status: { type: "notLoaded" },
+        }),
         setActiveTurnByThread: state.setActiveTurnByThread,
         setIsSending: state.setIsSending,
         setPendingComposerMentions: state.setPendingComposerMentions,
@@ -370,6 +430,54 @@ describe("thread message actions", () => {
     ]);
     expect(state.activeTurns).toEqual({ "thread-1": "turn-started" });
     expect(state.pendingMentions).toEqual([]);
+  });
+
+  it("filters removed slash mentions before starting a turn", async () => {
+    const state = threadState();
+    const startCalls: Array<{
+      mentions: PendingComposerMention[];
+      text: string;
+      threadId: string;
+    }> = [];
+
+    await sendMessageAction(
+      baseSendParams({
+        client: {
+          async resumeThread(threadId) {
+            return thread({ id: threadId });
+          },
+          async startTurn(threadId, text, mentions = []) {
+            startCalls.push({ mentions, text, threadId });
+            return turnStartResponse({ turn: turn({ id: "turn-started" }) });
+          },
+          async steerTurn() {
+            throw new Error("should not steer");
+          },
+        },
+        pendingComposerMentions: [
+          { name: "Files", path: "app://files", token: "$files" },
+          { name: "Browser", path: "app://browser", token: "$browser" },
+          { name: "Pinned", path: "app://pinned" },
+        ],
+        setActiveTurnByThread: state.setActiveTurnByThread,
+        setIsSending: state.setIsSending,
+        setPendingComposerMentions: state.setPendingComposerMentions,
+        setSelectedThreadId: state.setSelectedThreadId,
+        setThreads: state.setThreads,
+        text: "$files Hello",
+      }),
+    );
+
+    expect(startCalls).toEqual([
+      {
+        mentions: [
+          { name: "Files", path: "app://files", token: "$files" },
+          { name: "Pinned", path: "app://pinned" },
+        ],
+        text: "$files Hello",
+        threadId: "thread-1",
+      },
+    ]);
   });
 
   it("restores composer text and preserves threads after send failure", async () => {
@@ -397,6 +505,7 @@ describe("thread message actions", () => {
         setIsSending: state.setIsSending,
         setNotice: state.setNotice,
         setPendingComposerMentions: state.setPendingComposerMentions,
+        setThreads: state.setThreads,
         text: "Keep this text",
       }),
     );
@@ -405,12 +514,24 @@ describe("thread message actions", () => {
     expect(state.pendingMentions).toEqual([]);
     expect(state.composerValue).toBe("Keep this text");
     expect(state.focusSignal).toBe(1);
+    expect(state.threads[0]?.turns).toHaveLength(1);
+    expect(state.threads[0]?.turns[0]).toMatchObject({
+      status: "failed",
+      error: { message: "send failed" },
+      items: [
+        {
+          type: "userMessage",
+          content: [{ type: "text", text: "Keep this text", text_elements: [] }],
+        },
+      ],
+    });
     expect(state.notice).toEqual({ text: "send failed", tone: "warning" });
     expect(state.isSending).toBe(false);
   });
 
   it("interrupts the active turn", async () => {
-    const state = threadState();
+    const state = threadState([thread({ turns: [turn()] })]);
+    state.setActiveTurnByThread(() => ({ "thread-1": "turn-1" }));
     const interrupts: Array<{ threadId: string; turnId: string }> = [];
 
     await interruptActiveTurnAction({
@@ -419,15 +540,25 @@ describe("thread message actions", () => {
         async interruptTurn(threadId, turnId) {
           interrupts.push({ threadId, turnId });
         },
+        async readThread(threadId) {
+          return thread({
+            id: threadId,
+            turns: [turn({ status: "interrupted" })],
+          });
+        },
       },
       isConnected: true,
       locale: "en",
       selectedThreadId: "thread-1",
+      setActiveTurnByThread: state.setActiveTurnByThread,
       setIsSending: state.setIsSending,
       setNotice: state.setNotice,
+      setThreads: state.setThreads,
     } satisfies InterruptActiveTurnActionParams);
 
     expect(interrupts).toEqual([{ threadId: "thread-1", turnId: "turn-1" }]);
+    expect(state.activeTurns).toEqual({});
+    expect(state.threads[0]?.turns[0]).toEqual(turn({ status: "interrupted" }));
     expect(state.notice).toEqual({
       text: "Requested stop for current turn",
       tone: "success",

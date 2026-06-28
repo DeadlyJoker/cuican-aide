@@ -1,4 +1,5 @@
 import type { CapabilityPanelItemActionParams } from "../../capability/capabilityPanelItemActions";
+import type { ConfirmHandler } from "../../shared/confirmHandler";
 import { handleCapabilityPanelItemAction } from "../../capability/capabilityPanelItemActions";
 import type { CapabilityPanelActionDispatcherParams } from "../../capability/capabilityPanelActionDispatcher";
 import { handleCapabilityPanelActionDispatch } from "../../capability/capabilityPanelActionDispatcher";
@@ -48,7 +49,7 @@ export type AppCapabilityPanelHandlersParams = Omit<
 > &
   AppCapabilityPanelItemParams & {
     client: AppCapabilityPanelClient | null | undefined;
-    confirm: (message: string) => boolean;
+    confirm: ConfirmHandler;
     setLibraryPanel: Parameters<
       typeof updateCapabilityPanelFieldAction
     >[0]["setLibraryPanel"];

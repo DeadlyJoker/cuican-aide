@@ -1,4 +1,5 @@
 import type { NoticeState } from "../shared/noticeState";
+import type { ConfirmHandler } from "../shared/confirmHandler";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
 import {
@@ -30,7 +31,7 @@ export type TerminalActionHandlersParams = {
   busyToolId: string | null;
   client: TerminalClient | null | undefined;
   command: string;
-  confirm: (message: string) => boolean;
+  confirm: ConfirmHandler;
   isConnected: boolean;
   isDemo: boolean;
   locale: Locale;
@@ -119,13 +120,18 @@ function sendTerminalToThread(params: TerminalActionHandlersParams) {
     return;
   }
 
-  if (!confirm(terminalSendConfirmMessage(trimmedCommand, locale))) {
-    return;
-  }
+  void (async () => {
+    if (!(await confirm(terminalSendConfirmMessage(trimmedCommand, locale)))) {
+      return false;
+    }
 
-  void client
-    ?.runThreadShellCommand(threadId, trimmedCommand)
-    .then(() => {
+    await client?.runThreadShellCommand(threadId, trimmedCommand);
+    return true;
+  })()
+    .then((sent) => {
+      if (!sent) {
+        return;
+      }
       setCapabilityPanel((currentPanel) =>
         terminalSentToThreadPanel(currentPanel, trimmedCommand, locale),
       );
