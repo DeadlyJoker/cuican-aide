@@ -1272,21 +1272,15 @@ async fn office_message_send_appends_message_and_saves_config() {
                 { "author": "System", "text": "Ready" },
                 message,
                 {
-                    "author": "Reviewer",
-                    "glyph": "R",
-                    "accent": "blue",
+                    "author": "Manager agent",
+                    "glyph": "M",
+                    "accent": "indigo",
                     "time": send_response.config["workspace"]["messages"][2]["time"],
-                    "text": "Got it. I'll take \"Ship the demo\", added it to the task board and will report back here.",
-                    "kind": "task"
+                    "text": "Got it. I'll decide whether this is a question, context, or new actionable work before updating the plan or delegating tasks.",
+                    "kind": "message"
                 }
             ],
-            "tasks": [
-                {
-                    "title": "Ship the demo",
-                    "owner": "Reviewer",
-                    "status": "doing"
-                }
-            ]
+            "tasks": []
         }
     });
     assert!(
@@ -1424,7 +1418,12 @@ async fn office_run_prepare_records_run_and_mark_started_attaches_turn_id() {
         prepared.client_user_message_id.as_deref(),
         Some("client-message-1")
     );
-    assert!(prepared.prompt.contains("Agent team turn"));
+    assert!(prepared.prompt.contains("manager agent"));
+    assert!(
+        prepared
+            .prompt
+            .contains("Do not treat every chat message as a task")
+    );
     assert!(prepared.prompt.contains("Design and implement office runs"));
     assert!(
         prepared

@@ -66,8 +66,21 @@ export function preferredBackendCwd(
     backendThreads
       .map((thread) => thread.cwd)
       .find((threadCwd) => threadCwd && !isPlaceholderBackendCwd(threadCwd)) ??
+    configuredBackendCwd() ??
     ""
   );
+}
+
+export function configuredBackendCwd(): string | null {
+  const urlCwd =
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("cwd")?.trim();
+  if (urlCwd) {
+    return urlCwd;
+  }
+
+  return import.meta.env.VITE_CREWON_DEFAULT_CWD?.trim() || null;
 }
 
 export async function resolvePreferredBackendCwd(params: {

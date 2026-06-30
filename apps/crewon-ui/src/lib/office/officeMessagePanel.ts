@@ -75,6 +75,9 @@ export function officeMessageTurnPrompt(params: {
       ? `办公室「${officeTitle}」群聊消息：${text}`
       : `Office "${officeTitle}" group chat message: ${text}`,
     locale === "zh"
+      ? "主控智能体：先识别这条消息是提问、状态催办、背景补充还是新的可执行目标，再决定是否规划或派发任务。"
+      : "Manager agent: first decide whether this message is a question, status nudge, added context, or new actionable goal before planning or delegating tasks.",
+    locale === "zh"
       ? "后端记录：已提交到 office/message/send"
       : "Backend record: submitted to office/message/send",
     locale === "zh" ? `执行线程：${threadId}` : `Execution thread: ${threadId}`,

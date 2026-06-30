@@ -1885,47 +1885,18 @@ fn apply_office_text_message(
         return Err(invalid_params("text must not be empty"));
     }
     let is_zh = locale != Some("en");
-    let task_title = text
-        .split_whitespace()
-        .filter(|part| !part.starts_with('@'))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let task_title = if task_title.trim().is_empty() {
-        if is_zh { "新任务" } else { "New task" }
-    } else {
-        task_title.trim()
-    };
-    let task_title = task_title.chars().take(24).collect::<String>();
     let now = Utc::now().format("%H:%M").to_string();
-    let member = find_office_reply_member(workspace, text)?;
-    let member_name = member
-        .get("name")
-        .and_then(JsonValue::as_str)
-        .unwrap_or(if is_zh { "智能体" } else { "Agent" })
-        .to_string();
-    let member_glyph = member
-        .get("glyph")
-        .and_then(JsonValue::as_str)
-        .unwrap_or("A")
-        .to_string();
-    let member_accent = member
-        .get("accent")
-        .and_then(JsonValue::as_str)
-        .unwrap_or("indigo")
-        .to_string();
-    let will_dispatch = text.contains('@') || text.chars().count() > 6;
-    let reply_text = if will_dispatch {
+    let reply = office_manager_reply_identity(workspace, is_zh);
+    let reply_text = if text.contains('@') {
         if is_zh {
-            format!("收到，我来跟进「{task_title}」，已加到任务看板，完成后在群里同步。")
+            "收到。我会先理解这条群聊信息，判断是否需要形成任务，再按需派发给合适成员。".to_string()
         } else {
-            format!(
-                "Got it. I'll take \"{task_title}\", added it to the task board and will report back here."
-            )
+            "Got it. I'll interpret this group-chat message first, decide whether it should become task work, then delegate to the right member if useful.".to_string()
         }
     } else if is_zh {
-        "明白，我先评估一下，有进展同步到群聊。".to_string()
+        "收到。我会先判断这是提问、补充背景还是新的可执行工作，再更新计划或派发任务。".to_string()
     } else {
-        "Understood. I'll assess it and post progress to the chat.".to_string()
+        "Got it. I'll decide whether this is a question, context, or new actionable work before updating the plan or delegating tasks.".to_string()
     };
 
     let messages = workspace
@@ -1936,62 +1907,88 @@ fn apply_office_text_message(
     };
     messages.push(message);
     messages.push(serde_json::json!({
-        "author": member_name,
-        "glyph": member_glyph,
-        "accent": member_accent,
+        "author": reply.author,
+        "glyph": reply.glyph,
+        "accent": reply.accent,
         "time": now,
         "text": reply_text,
-        "kind": if will_dispatch { "task" } else { "message" }
+        "kind": "message"
     }));
-
-    if will_dispatch {
-        let tasks = workspace
-            .entry("tasks")
-            .or_insert_with(|| JsonValue::Array(Vec::new()));
-        let Some(tasks) = tasks.as_array_mut() else {
-            return Err(invalid_params("workspace.tasks must be an array"));
-        };
-        tasks.insert(
-            0,
-            serde_json::json!({
-                "title": task_title,
-                "owner": member_name,
-                "status": "doing"
-            }),
-        );
-    }
 
     Ok(())
 }
 
-fn find_office_reply_member<'a>(
-    workspace: &'a serde_json::Map<String, JsonValue>,
-    text: &str,
-) -> Result<&'a JsonValue, JSONRPCErrorError> {
-    let members = workspace
+struct OfficeReplyIdentity {
+    author: String,
+    glyph: String,
+    accent: String,
+}
+
+fn office_manager_reply_identity(
+    workspace: &serde_json::Map<String, JsonValue>,
+    is_zh: bool,
+) -> OfficeReplyIdentity {
+    let manager = workspace
         .get("members")
         .and_then(JsonValue::as_array)
-        .ok_or_else(|| invalid_params("workspace.members must be an array"))?;
-    let mention = text
-        .split_whitespace()
-        .find_map(|part| part.strip_prefix('@'))
-        .map(|part| part.trim_matches(|ch: char| ch.is_ascii_punctuation()));
-    if let Some(mention) = mention
-        && let Some(member) = members.iter().find(|member| {
-            member.get("glyph").and_then(JsonValue::as_str) != Some("@")
-                && member
-                    .get("name")
-                    .and_then(JsonValue::as_str)
-                    .is_some_and(|name| name == mention || mention.starts_with(name))
-        })
-    {
-        return Ok(member);
+        .and_then(|members| members.iter().find(is_office_manager_member));
+    if let Some(manager) = manager {
+        return OfficeReplyIdentity {
+            author: manager
+                .get("name")
+                .and_then(JsonValue::as_str)
+                .unwrap_or(if is_zh {
+                    "主控智能体"
+                } else {
+                    "Manager agent"
+                })
+                .to_string(),
+            glyph: manager
+                .get("glyph")
+                .and_then(JsonValue::as_str)
+                .unwrap_or("M")
+                .to_string(),
+            accent: manager
+                .get("accent")
+                .and_then(JsonValue::as_str)
+                .unwrap_or("indigo")
+                .to_string(),
+        };
     }
-    members
-        .iter()
-        .find(|member| member.get("glyph").and_then(JsonValue::as_str) != Some("@"))
-        .or_else(|| members.first())
-        .ok_or_else(|| invalid_params("workspace.members must not be empty"))
+    OfficeReplyIdentity {
+        author: if is_zh {
+            "主控智能体"
+        } else {
+            "Manager agent"
+        }
+        .to_string(),
+        glyph: "M".to_string(),
+        accent: "indigo".to_string(),
+    }
+}
+
+fn is_office_manager_member(member: &&JsonValue) -> bool {
+    let haystack = [
+        member.get("name").and_then(JsonValue::as_str),
+        member.get("role").and_then(JsonValue::as_str),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ")
+    .to_ascii_lowercase();
+    [
+        "manager",
+        "coordinator",
+        "planner",
+        "lead",
+        "主控",
+        "协调",
+        "负责人",
+        "规划",
+    ]
+    .iter()
+    .any(|marker| haystack.contains(marker))
 }
 
 fn append_office_member(

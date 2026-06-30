@@ -297,6 +297,7 @@ describe("office message actions", () => {
         threadId: "office-thread",
         input: [
           'Office "Office" group chat message: Ship it',
+          "Manager agent: first decide whether this message is a question, status nudge, added context, or new actionable goal before planning or delegating tasks.",
           "Backend record: submitted to office/message/send",
           "Execution thread: office-thread",
         ].join("\n"),

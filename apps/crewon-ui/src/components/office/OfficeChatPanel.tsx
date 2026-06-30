@@ -118,8 +118,8 @@ export function OfficeChatPanel({
           spellCheck={false}
           placeholder={
             locale === "zh"
-              ? "在群聊里 @ 成员派发任务…"
-              : "@mention a member to dispatch a task…"
+              ? "告诉主控智能体目标、背景或下一步…"
+              : "Tell the manager agent the goal, context, or next step…"
           }
           aria-label={locale === "zh" ? "群聊输入" : "Group chat input"}
           onChange={(event) => onDraftChange(event.target.value)}

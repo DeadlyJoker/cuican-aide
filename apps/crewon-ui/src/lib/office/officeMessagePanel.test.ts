@@ -101,9 +101,10 @@ describe("office message panel helpers", () => {
         threadId: "thread-1",
         locale: "en",
       }),
-    ).toBe(
+      ).toBe(
       [
         'Office "Frontend Office" group chat message: Ship it',
+        "Manager agent: first decide whether this message is a question, status nudge, added context, or new actionable goal before planning or delegating tasks.",
         "Backend record: submitted to office/message/send",
         "Execution thread: thread-1",
       ].join("\n"),

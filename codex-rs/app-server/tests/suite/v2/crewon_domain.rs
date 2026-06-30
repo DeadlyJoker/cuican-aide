@@ -398,8 +398,18 @@ async fn office_config_round_trips_through_v2_rpc() -> Result<()> {
     )
     .await?;
     assert_eq!(
-        message_sent.config["workspace"]["tasks"][0]["owner"],
-        "Engineer"
+        message_sent.config["workspace"]["messages"][1]["author"],
+        "Manager agent"
+    );
+    assert_eq!(
+        message_sent.config["workspace"]["messages"][1]["kind"],
+        "message"
+    );
+    assert!(
+        message_sent.config["workspace"]["tasks"]
+            .as_array()
+            .expect("tasks array")
+            .is_empty()
     );
 
     let member_added: OfficeMemberAddResponse = request(
@@ -679,7 +689,8 @@ async fn office_run_starts_real_turn_and_auto_syncs_terminal_state() -> Result<(
     assert_eq!(model_requests.len(), 1);
     let request_body = model_requests[0].body_json::<serde_json::Value>()?;
     let request_body_text = request_body.to_string();
-    assert!(request_body_text.contains("You are running an Agent team turn"));
+    assert!(request_body_text.contains("You are the manager agent"));
+    assert!(request_body_text.contains("Do not treat every chat message as a task"));
     assert!(request_body_text.contains("Prepare the launch demo"));
     Ok(())
 }

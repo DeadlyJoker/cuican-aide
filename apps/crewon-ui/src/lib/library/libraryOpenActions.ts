@@ -3,6 +3,7 @@ import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse"
 import type { SkillsListResponse } from "@crewon-protocol/v2/SkillsListResponse";
 
 import type { AppServerClient } from "../app-server/appServer";
+import { isPlaceholderBackendCwd } from "../backend/backendWorkspace";
 import type {
   KnowledgeData,
   LibraryItem,
@@ -141,7 +142,16 @@ export async function openLibraryAction({
   }
 
   try {
-    const effectiveCwd = isDemoPreview ? await resolveBackendCwd() : cwd;
+    const shouldResolveCwd =
+      isDemoPreview || !cwd.trim() || isPlaceholderBackendCwd(cwd);
+    const effectiveCwd = shouldResolveCwd ? await resolveBackendCwd() : cwd;
+    if (!effectiveCwd.trim()) {
+      throw new Error(
+        locale === "zh"
+          ? "缺少后端工作区，无法读取资源库。"
+          : "No backend workspace is available for the library.",
+      );
+    }
     const effectiveThreadId = isDemoPreview
       ? undefined
       : (selectedThreadId ?? undefined);

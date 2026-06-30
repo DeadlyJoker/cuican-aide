@@ -176,6 +176,49 @@ describe("openLibraryAction", () => {
     });
   });
 
+  it("resolves an empty current cwd before loading backend library data", async () => {
+    const harness = createPanelHarness();
+    const listPlugins = vi.fn(async () => emptyPluginResponse());
+
+    await openLibraryAction(
+      baseParams({
+        cwd: "",
+        kind: "plugins",
+        listPlugins,
+        resolveBackendCwd: async () => "/resolved",
+        setLibraryPanel: harness.setLibraryPanel,
+      }),
+    );
+
+    expect(listPlugins).toHaveBeenCalledWith("/resolved");
+    expect(harness.panel()).toMatchObject({
+      kind: "plugins",
+      error: undefined,
+    });
+  });
+
+  it("shows a library error instead of sending an empty resolved cwd", async () => {
+    const harness = createPanelHarness();
+    const listPlugins = vi.fn(async () => emptyPluginResponse());
+
+    await openLibraryAction(
+      baseParams({
+        cwd: "",
+        kind: "plugins",
+        listPlugins,
+        resolveBackendCwd: async () => "",
+        setLibraryPanel: harness.setLibraryPanel,
+      }),
+    );
+
+    expect(listPlugins).not.toHaveBeenCalled();
+    expect(harness.panel()).toMatchObject({
+      kind: "plugins",
+      subtitle: "Unable to load",
+      error: "No backend workspace is available for the library.",
+    });
+  });
+
   it("marks office list as unsupported without failing the whole load", async () => {
     const harness = createPanelHarness();
     const unsupported = new Error("unsupported");
