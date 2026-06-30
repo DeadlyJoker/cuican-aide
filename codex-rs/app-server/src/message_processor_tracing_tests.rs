@@ -1,6 +1,7 @@
 use super::ConnectionSessionState;
 use super::MessageProcessor;
 use super::MessageProcessorArgs;
+use super::OfficeHistoryRecoveryOutcome;
 use super::OfficeSchedulerRecoveryOutcome;
 use super::bounded_unique_office_recovery_cwds;
 use super::office_recovery_turn_refs;
@@ -486,11 +487,15 @@ fn office_scheduler_recovery_keeps_polling_when_scheduler_work_is_waiting() {
 
     assert!(office_recovery_turn_refs(&records).is_empty());
     assert!(office_scheduler_recovery_should_keep_polling(
-        &records,
+        OfficeHistoryRecoveryOutcome::Idle,
         OfficeSchedulerRecoveryOutcome::Waiting
     ));
+    assert!(office_scheduler_recovery_should_keep_polling(
+        OfficeHistoryRecoveryOutcome::Waiting,
+        OfficeSchedulerRecoveryOutcome::Idle
+    ));
     assert!(!office_scheduler_recovery_should_keep_polling(
-        &records,
+        OfficeHistoryRecoveryOutcome::Idle,
         OfficeSchedulerRecoveryOutcome::Idle
     ));
 }

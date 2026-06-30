@@ -100,7 +100,6 @@ use crewon_app_server_protocol::OfficeVerificationCancelResponse;
 use crewon_app_server_protocol::OfficeVerificationDispatchNextResponse;
 use crewon_app_server_protocol::OfficeVerificationRetryResponse;
 use crewon_app_server_protocol::ServerRequestPayload;
-use crewon_app_server_protocol::Thread;
 use crewon_app_server_protocol::TurnInterruptParams;
 use crewon_app_server_protocol::TurnStartParams;
 use crewon_app_server_protocol::TurnStatus;
@@ -346,6 +345,13 @@ enum OfficeSchedulerRecoveryOutcome {
     Dispatched,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OfficeHistoryRecoveryOutcome {
+    Idle,
+    Waiting,
+    Recovered,
+}
+
 const MAX_OFFICE_THREAD_CWD_RECOVERY: usize = 8;
 const OFFICE_RUNTIME_REPAIR_MAX_ID_CHARS: usize = 128;
 const OFFICE_RUNTIME_REPAIR_MAX_FIELD_CHARS: usize = 1_000;
@@ -423,11 +429,11 @@ fn bounded_unique_office_recovery_cwds(cwds: impl IntoIterator<Item = String>) -
 }
 
 fn office_scheduler_recovery_should_keep_polling(
-    records: &[CrewonDomainConfigRecord],
+    history_outcome: OfficeHistoryRecoveryOutcome,
     scheduler_outcome: OfficeSchedulerRecoveryOutcome,
 ) -> bool {
     scheduler_outcome == OfficeSchedulerRecoveryOutcome::Waiting
-        || !office_recovery_turn_refs(records).is_empty()
+        || history_outcome == OfficeHistoryRecoveryOutcome::Waiting
 }
 
 fn collect_office_recovery_turn_refs(
@@ -1532,8 +1538,8 @@ async fn recover_office_records_from_history_with(
     connection_id: ConnectionId,
     cwd: &str,
     records: &mut [CrewonDomainConfigRecord],
-) -> bool {
-    let mut recovered = false;
+) -> OfficeHistoryRecoveryOutcome {
+    let mut outcome = OfficeHistoryRecoveryOutcome::Idle;
     for turn_ref in office_recovery_turn_refs(records) {
         let turn = match thread_processor
             .persisted_terminal_turn(&turn_ref.thread_id, &turn_ref.turn_id)
@@ -1541,6 +1547,9 @@ async fn recover_office_records_from_history_with(
         {
             Ok(Some(turn)) => turn,
             Ok(None) => {
+                if outcome == OfficeHistoryRecoveryOutcome::Idle {
+                    outcome = OfficeHistoryRecoveryOutcome::Waiting;
+                }
                 thread_processor
                     .monitor_office_dispatched_turn_completion(
                         cwd,
@@ -1579,7 +1588,7 @@ async fn recover_office_records_from_history_with(
             continue;
         }
         for update in updates {
-            recovered = true;
+            outcome = OfficeHistoryRecoveryOutcome::Recovered;
             apply_office_recovery_update(records, &update.file_path, &update.config);
             send_office_run_updated_with(
                 outgoing,
@@ -1601,11 +1610,11 @@ async fn recover_office_records_from_history_with(
             )
             .await
         {
-            recovered = true;
+            outcome = OfficeHistoryRecoveryOutcome::Recovered;
             apply_office_recovery_update(records, &update.file_path, &update.config);
         }
     }
-    recovered
+    outcome
 }
 
 async fn recover_office_scheduler_from_records_with(
@@ -2023,30 +2032,6 @@ async fn repair_office_scheduler_dispatch_target_thread(
     true
 }
 
-async fn recover_office_scheduler_for_threads_with<'a>(
-    domain_processor: &CrewonDomainRequestProcessor,
-    outgoing: &OutgoingMessageSender,
-    thread_processor: &ThreadRequestProcessor,
-    connection_id: ConnectionId,
-    threads: impl IntoIterator<Item = &'a Thread>,
-) {
-    let cwds = bounded_unique_office_recovery_cwds(
-        threads
-            .into_iter()
-            .map(|thread| thread.cwd.as_path().to_string_lossy().into_owned()),
-    );
-    for cwd in cwds {
-        recover_office_scheduler_for_cwd_with(
-            domain_processor,
-            outgoing,
-            thread_processor,
-            connection_id,
-            &cwd,
-        )
-        .await;
-    }
-}
-
 async fn recover_office_scheduler_for_cwd_with(
     domain_processor: &CrewonDomainRequestProcessor,
     outgoing: &OutgoingMessageSender,
@@ -2077,7 +2062,7 @@ async fn recover_office_scheduler_for_cwd_with(
     }
     let mut idle_passes = 0usize;
     for _ in 0..OFFICE_SCHEDULER_RECOVERY_MAX_PASSES {
-        let recovered = recover_office_records_from_history_with(
+        let history_outcome = recover_office_records_from_history_with(
             outgoing,
             thread_processor,
             connection_id,
@@ -2094,12 +2079,14 @@ async fn recover_office_scheduler_for_cwd_with(
             &mut response.data,
         )
         .await;
-        if recovered || scheduler_outcome == OfficeSchedulerRecoveryOutcome::Dispatched {
+        if history_outcome == OfficeHistoryRecoveryOutcome::Recovered
+            || scheduler_outcome == OfficeSchedulerRecoveryOutcome::Dispatched
+        {
             idle_passes = 0;
             tokio::time::sleep(OFFICE_SCHEDULER_RECOVERY_IDLE_POLL_INTERVAL).await;
             continue;
         }
-        if !office_scheduler_recovery_should_keep_polling(&response.data, scheduler_outcome) {
+        if !office_scheduler_recovery_should_keep_polling(history_outcome, scheduler_outcome) {
             break;
         }
         idle_passes += 1;
@@ -2546,21 +2533,6 @@ impl MessageProcessor {
             connection_id,
             cwd,
             records,
-        )
-        .await;
-    }
-
-    async fn recover_office_scheduler_for_threads<'a>(
-        &self,
-        connection_id: ConnectionId,
-        threads: impl IntoIterator<Item = &'a Thread>,
-    ) {
-        recover_office_scheduler_for_threads_with(
-            &self.crewon_domain_processor,
-            self.outgoing.as_ref(),
-            &self.thread_processor,
-            connection_id,
-            threads,
         )
         .await;
     }
@@ -3173,8 +3145,6 @@ impl MessageProcessor {
             }
             ClientRequest::ThreadList { params, .. } => {
                 let response = self.thread_processor.thread_list_response(params).await?;
-                self.recover_office_scheduler_for_threads(connection_id, response.data.iter())
-                    .await;
                 Ok(Some(response.into()))
             }
             ClientRequest::ThreadSearch { params, .. } => {
@@ -3185,11 +3155,6 @@ impl MessageProcessor {
             }
             ClientRequest::ThreadRead { params, .. } => {
                 let response = self.thread_processor.thread_read_response(params).await?;
-                self.recover_office_scheduler_for_threads(
-                    connection_id,
-                    std::iter::once(&response.thread),
-                )
-                .await;
                 Ok(Some(response.into()))
             }
             ClientRequest::ThreadTurnsList { params, .. } => {

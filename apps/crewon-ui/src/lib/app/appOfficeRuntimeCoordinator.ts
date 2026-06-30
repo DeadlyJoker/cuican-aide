@@ -39,6 +39,9 @@ export function createAppOfficeRuntimeCoordinator(
     ...params,
     getLibraryPanel: () => params.libraryPanelRef.current,
     recordOfficeRunTurn: (turnId, record) => {
+      if (params.officeRunByTurnRef.current[turnId]) {
+        return;
+      }
       params.officeRunByTurnRef.current[turnId] = record;
       scheduleOfficeRunCompletionSync(params, turnId, record);
     },

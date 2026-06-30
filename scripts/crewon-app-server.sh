@@ -13,6 +13,31 @@ if [[ -f "$crewon_home/.env" ]]; then
   set +a
 fi
 
+if [[ -f "$crewon_home/auth.json" ]]; then
+  auth_exports="$(python3 - "$crewon_home/auth.json" <<'PY'
+import json
+import sys
+
+try:
+    auth = json.load(open(sys.argv[1]))
+except Exception:
+    auth = {}
+
+for key in ("OPENAI_API_KEY", "AICUICAN_API_KEY"):
+    value = auth.get(key)
+    if isinstance(value, str) and value:
+        print(f"export {key}={json.dumps(value)}")
+PY
+)"
+  if [[ -n "$auth_exports" ]]; then
+    eval "$auth_exports"
+  fi
+fi
+
+if [[ -z "${AICUICAN_API_KEY:-}" && -n "${OPENAI_API_KEY:-}" ]]; then
+  export AICUICAN_API_KEY="$OPENAI_API_KEY"
+fi
+
 export CREWON_HOME="$crewon_home"
 export CREWON_APP_SERVER_DISABLE_MANAGED_CONFIG=1
 

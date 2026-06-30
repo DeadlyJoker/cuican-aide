@@ -155,6 +155,44 @@ describe("app office runtime coordinator", () => {
     expect(officeRunByTurnRef.current).toEqual({ "turn-1": record });
   });
 
+  it("does not schedule duplicate completion syncs for the same office turn", async () => {
+    vi.useFakeTimers();
+    const officeRunByTurnRef = {
+      current: {} as Record<string, OfficeRunTurnRecord>,
+    };
+    const readThreads: string[] = [];
+
+    createAppOfficeRuntimeCoordinator(
+      createParams({
+        client: client({
+          async readThread(threadId) {
+            readThreads.push(threadId);
+            return {
+              id: threadId,
+              turns: [turn({ id: "turn-1", status: "inProgress" })],
+            } as Thread;
+          },
+        }),
+        officeRunByTurnRef,
+      }),
+    );
+    const params = capturedParams();
+    const record: OfficeRunTurnRecord = {
+      config: config(),
+      cwd: "/repo",
+      runId: "run-1",
+      threadId: "office-thread",
+      turnThreadId: "turn-thread",
+    };
+
+    params.recordOfficeRunTurn("turn-1", record);
+    params.recordOfficeRunTurn("turn-1", record);
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(readThreads).toEqual(["turn-thread"]);
+  });
+
   it("syncs completed office runs when completion notifications win the race", async () => {
     vi.useFakeTimers();
     const officeRunByTurnRef = {
