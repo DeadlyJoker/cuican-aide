@@ -495,6 +495,7 @@ export function App() {
     selectedThreadId,
     serverUrl,
     setAccountStatus,
+    setConnectionAttempt,
     setConnectionState,
     setConversationSummary,
     setGitRemoteDiff,

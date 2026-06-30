@@ -78,6 +78,62 @@ describe("app server notifications", () => {
   });
 });
 
+describe("app server thread RPC", () => {
+  it("lists threads through the state DB fast path", async () => {
+    vi.stubGlobal("window", {
+      clearTimeout: globalThis.clearTimeout,
+      setTimeout: globalThis.setTimeout,
+    });
+    const sent: string[] = [];
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    (
+      client as unknown as {
+        socket: Pick<WebSocket, "readyState" | "send">;
+      }
+    ).socket = {
+      readyState: WebSocket.OPEN,
+      send: (payload: string) => {
+        sent.push(payload);
+      },
+    };
+
+    const pending = client.listThreads(false);
+    const request = JSON.parse(sent[0] ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        id: request.id,
+        result: {
+          data: [],
+          nextCursor: null,
+          backwardsCursor: null,
+        },
+      }),
+    );
+
+    await expect(pending).resolves.toEqual([]);
+    expect(request).toMatchObject({
+      method: "thread/list",
+      params: {
+        cursor: null,
+        limit: 24,
+        sortKey: "updated_at",
+        sortDirection: "desc",
+        sourceKinds: null,
+        archived: false,
+        useStateDbOnly: true,
+      },
+    });
+  });
+});
+
 describe("app server automation RPC", () => {
   it("sends automation run start requests", async () => {
     vi.stubGlobal("window", {

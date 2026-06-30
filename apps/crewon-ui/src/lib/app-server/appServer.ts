@@ -662,10 +662,19 @@ export class AppServerClient {
   }
 
   async listThreads(archived = false): Promise<Thread[]> {
-    const response = await this.request<ThreadListResponse>("thread/list", {
-      limit: 24,
-      archived,
-    });
+    const response = await this.request<ThreadListResponse>(
+      "thread/list",
+      {
+        cursor: null,
+        limit: 24,
+        sortKey: "updated_at",
+        sortDirection: "desc",
+        sourceKinds: null,
+        archived,
+        useStateDbOnly: true,
+      },
+      { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
+    );
     return response.data;
   }
 

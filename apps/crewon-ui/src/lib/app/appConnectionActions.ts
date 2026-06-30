@@ -26,6 +26,8 @@ type StreamingTextSetter = (streamingTextByThread: Record<string, string>) => vo
 type ThreadListSetter = (threads: Thread[]) => void;
 type SelectedThreadSetter = (threadId: string | null) => void;
 
+export const APP_SERVER_RECONNECT_DELAY_MS = 5000;
+
 export function retryConnectionAction(params: {
   client: AppServerConnection | null | undefined;
   setConnectionAttempt: (updater: (attempt: number) => number) => void;
@@ -38,6 +40,28 @@ export function retryConnectionAction(params: {
   params.setNotice(null);
   params.setStreamingTextByThread({});
   params.setConnectionAttempt((attempt) => attempt + 1);
+}
+
+export function scheduleReconnectAction(params: {
+  clearTimeout: (timeoutId: ReturnType<typeof setTimeout>) => void;
+  client: AppServerConnection | null | undefined;
+  delayMs?: number;
+  setConnectionAttempt: (updater: (attempt: number) => number) => void;
+  setConnectionState: ConnectionStateSetter;
+  setTimeout: (
+    handler: () => void,
+    timeout: number,
+  ) => ReturnType<typeof setTimeout>;
+}): () => void {
+  const timeoutId = params.setTimeout(() => {
+    params.client?.close();
+    params.setConnectionState("connecting");
+    params.setConnectionAttempt((attempt) => attempt + 1);
+  }, params.delayMs ?? APP_SERVER_RECONNECT_DELAY_MS);
+
+  return () => {
+    params.clearTimeout(timeoutId);
+  };
 }
 
 export function runConnectionBootstrapEffectAction<
@@ -74,8 +98,7 @@ export function runConnectionBootstrapEffectAction<
 
   void client
     .connect()
-    .then(() => client.listThreads(params.showArchivedThreads))
-    .then((serverThreads) => {
+    .then(() => {
       if (!isMounted) {
         return;
       }
@@ -85,17 +108,25 @@ export function runConnectionBootstrapEffectAction<
       if (params.isDemoPreview) {
         params.showDemoThreads();
       } else {
-        const selectedThread = serverThreads[0] ?? null;
-        params.setThreads(serverThreads);
-        params.setSelectedThreadId(selectedThread?.id ?? null);
-        refreshSelectedThreadAfterBootstrap({
-          client,
-          currentClient: params.currentClient,
-          isMounted: () => isMounted,
-          selectedThread,
-          setThreads: params.setThreads,
-          serverThreads,
-        });
+        void client
+          .listThreads(params.showArchivedThreads)
+          .then((serverThreads) => {
+            if (!isMounted || params.currentClient() !== client) {
+              return;
+            }
+            const selectedThread = serverThreads[0] ?? null;
+            params.setThreads(serverThreads);
+            params.setSelectedThreadId(selectedThread?.id ?? null);
+            refreshSelectedThreadAfterBootstrap({
+              client,
+              currentClient: params.currentClient,
+              isMounted: () => isMounted,
+              selectedThread,
+              setThreads: params.setThreads,
+              serverThreads,
+            });
+          })
+          .catch(() => undefined);
       }
 
       void client

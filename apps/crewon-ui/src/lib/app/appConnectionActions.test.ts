@@ -3,10 +3,12 @@ import type { Turn } from "@crewon-protocol/v2/Turn";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  APP_SERVER_RECONNECT_DELAY_MS,
   pollLoadedThreadIdsAction,
   preserveThreadsAfterConnectionLossAction,
   retryConnectionAction,
   runConnectionBootstrapEffectAction,
+  scheduleReconnectAction,
   showDemoThreadsAction,
   switchToDemoThreadsAction,
 } from "./appConnectionActions";
@@ -103,6 +105,43 @@ describe("app connection actions", () => {
     expect(connectionAttempt).toBe(3);
   });
 
+  it("schedules an app-server reconnect", () => {
+    let connectionState: ConnectionState = "disconnected";
+    let connectionAttempt = 4;
+    const scheduledHandlers: Array<() => void> = [];
+    let scheduledDelay = 0;
+    let clearedTimeout: number | null = null;
+    const client = { close: vi.fn() };
+
+    const cleanup = scheduleReconnectAction({
+      clearTimeout: (timeoutId) => {
+        clearedTimeout = timeoutId as number;
+      },
+      client,
+      setConnectionAttempt: (updater) => {
+        connectionAttempt = updater(connectionAttempt);
+      },
+      setConnectionState: (state) => {
+        connectionState = state;
+      },
+      setTimeout: (handler, timeout) => {
+        scheduledHandlers.push(handler);
+        scheduledDelay = timeout;
+        return 42 as ReturnType<typeof setTimeout>;
+      },
+    });
+
+    expect(scheduledDelay).toBe(APP_SERVER_RECONNECT_DELAY_MS);
+    expect(scheduledHandlers).toHaveLength(1);
+    scheduledHandlers[0]();
+    expect(client.close).toHaveBeenCalledOnce();
+    expect(connectionState).toBe("connecting");
+    expect(connectionAttempt).toBe(5);
+
+    cleanup();
+    expect(clearedTimeout).toBe(42);
+  });
+
   it("connects, loads threads, selects the first thread, and refreshes account status", async () => {
     const serverThreads = [thread("thread-1"), thread("thread-2")];
     const account = accountStatus();
@@ -160,6 +199,56 @@ describe("app connection actions", () => {
     expect(threads).toEqual(serverThreads);
     expect(selectedThreadId).toBe("thread-1");
     expect(refreshedAccount).toEqual(account);
+  });
+
+  it("keeps the app-server connected when thread listing fails", async () => {
+    let connectionState: ConnectionState = "connecting";
+    let notice: NoticeState | null = { text: "old", tone: "warning" };
+    let selectedThreadId: string | null = "existing";
+    let currentClient: TestConnectionClient | null = null;
+    const preserveThreadsAfterConnectionLoss = vi.fn();
+    const setThreads = vi.fn();
+
+    runConnectionBootstrapEffectAction({
+      createClient: () => ({
+        close: vi.fn(),
+        async connect() {},
+        async getAccount() {
+          return accountStatus();
+        },
+        async listThreads() {
+          throw new Error("thread list stalled");
+        },
+      }),
+      currentClient: () => currentClient,
+      isDemoPreview: false,
+      preserveThreadsAfterConnectionLoss,
+      setAccountStatus: () => {},
+      setClient: (client) => {
+        currentClient = client;
+      },
+      setConnectionState: (state) => {
+        connectionState = state;
+      },
+      setNotice: (nextNotice) => {
+        notice = nextNotice;
+      },
+      setSelectedThreadId: (threadId) => {
+        selectedThreadId = threadId;
+      },
+      setThreads,
+      showArchivedThreads: false,
+      showDemoThreads: () => {},
+      switchToDemoThreads: () => {},
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(connectionState).toBe("connected");
+    expect(notice).toBeNull();
+    expect(selectedThreadId).toBe("existing");
+    expect(setThreads).not.toHaveBeenCalled();
+    expect(preserveThreadsAfterConnectionLoss).not.toHaveBeenCalled();
   });
 
   it("refreshes the selected thread after bootstrap loads summary threads", async () => {

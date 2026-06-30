@@ -8,7 +8,10 @@ import {
   type AppServerNotification,
   type AppServerRequest,
 } from "../../app-server/appServer";
-import { runConnectionBootstrapEffectAction } from "../appConnectionActions";
+import {
+  runConnectionBootstrapEffectAction,
+  scheduleReconnectAction,
+} from "../appConnectionActions";
 import {
   localizeDemoThreadsAction,
   syncDemoInspectorStateAction,
@@ -34,6 +37,7 @@ export type AppConnectionEffectsParams = {
   selectedThreadId: string | null;
   serverUrl: string;
   setAccountStatus: (accountStatus: AccountStatus | null) => void;
+  setConnectionAttempt: (updater: (attempt: number) => number) => void;
   setConnectionState: (state: ConnectionState) => void;
   setConversationSummary: (summary: ConversationSummary | null) => void;
   setGitRemoteDiff: (diff: GitRemoteDiffSummary | null) => void;
@@ -60,6 +64,7 @@ export function useAppConnectionEffects({
   selectedThreadId,
   serverUrl,
   setAccountStatus,
+  setConnectionAttempt,
   setConnectionState,
   setConversationSummary,
   setGitRemoteDiff,
@@ -104,6 +109,20 @@ export function useAppConnectionEffects({
     serverUrl,
     switchToDemoThreads,
   ]);
+
+  useEffect(() => {
+    if (connectionState !== "disconnected") {
+      return undefined;
+    }
+
+    return scheduleReconnectAction({
+      clearTimeout: (timeoutId) => window.clearTimeout(timeoutId),
+      client: clientRef.current,
+      setConnectionAttempt,
+      setConnectionState,
+      setTimeout: (handler, timeout) => window.setTimeout(handler, timeout),
+    });
+  }, [clientRef, connectionState, setConnectionAttempt, setConnectionState]);
 
   useEffect(() => {
     localizeDemoThreadsAction({
