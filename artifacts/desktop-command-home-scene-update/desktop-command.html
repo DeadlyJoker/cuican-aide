@@ -1,0 +1,1074 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crewon 桌面工作台</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="desktop-command.css">
+  <link rel="stylesheet" href="desktop-pages.css">
+</head>
+<body>
+  <main class="screen-shell" data-od-id="desktop-command-screen">
+    <section class="desktop-window command-window" data-od-id="desktop-window">
+      <aside class="command-sidebar" data-sidebar-shell="" data-sidebar-current="command" data-sidebar-log="command-log" data-sidebar-prefix="desktop" data-od-id="desktop-sidebar"></aside>
+
+      <section class="command-canvas" data-od-id="desktop-main-pane">
+        <section class="shell-view command-home-view active" data-shell-view="command" data-shell-view-title-zh="新建任务" data-shell-view-title-en="New task" data-od-id="shell-view-command">
+        <button class="workspace-pill" type="button" data-run="#command-log" data-run-title-zh="当前空间" data-run-title-en="Current space" data-run-copy="当前空间已同步：Agent 小队交付空间。" data-run-copy-en="Current space synced: Agent team delivery." data-toast="当前空间已同步" data-toast-en="Current space synced" data-od-id="workspace-pill">
+          <span aria-hidden="true"></span>
+          <strong data-zh="Agent 小队交付空间 · 已同步" data-en="Agent team delivery · synced">Agent 小队交付空间 · 已同步</strong>
+        </button>
+
+        <section class="hero-center" data-od-id="primary-work-area">
+          <header class="home-title" data-od-id="desktop-command-header">
+            <h1><span>Crewon</span><br><span data-zh="创建可编排的 Agent 小队" data-en="Create orchestrated Agent teams">创建可编排的 Agent 小队</span></h1>
+          </header>
+
+          <div class="scene-tabs scene-pills" data-od-id="scene-tabs">
+            <button class="active" type="button" data-scene-target="office" data-run="#command-log" data-run-title-zh="日常办公" data-run-title-en="Daily work" data-run-copy="已切换到日常办公场景，优先推荐事项整理、会议安排、项目同步和知识库沉淀。" data-run-copy-en="Switched to daily work with tasks, meetings, project sync, and knowledge capture prioritized." data-toast="已切换场景" data-toast-en="Scene switched" data-zh="日常办公" data-en="Daily work">日常办公</button>
+            <button type="button" data-scene-target="code" data-run="#command-log" data-run-title-zh="代码开发" data-run-title-en="Code development" data-run-copy="已切换到代码开发场景，优先推荐开发任务拆解、Code Review、测试生成和 GitHub MCP 授权。" data-run-copy-en="Switched to code development with implementation planning, Code Review, test generation, and GitHub MCP authorization prioritized." data-toast="已切换场景" data-toast-en="Scene switched" data-zh="代码开发" data-en="Code development">代码开发</button>
+            <button type="button" data-scene-target="design" data-run="#command-log" data-run-title-zh="设计创意" data-run-title-en="Creative design" data-run-copy="已切换到设计创意场景，优先推荐方向发散、界面走查、视觉打磨和交付清单。" data-run-copy-en="Switched to creative design with direction exploration, UI review, visual polish, and handoff checklist prioritized." data-toast="已切换场景" data-toast-en="Scene switched" data-zh="设计创意" data-en="Creative design">设计创意</button>
+          </div>
+
+          <div class="quick-row" data-od-id="quick-scenarios">
+            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="整理今日事项" data-run-title-en="Plan today" data-run-copy="已准备今日办公清单：待办、会议、跟进人和截止时间。" data-run-copy-en="Prepared today's work list with tasks, meetings, owners, and due times." data-toast="今日事项已准备" data-toast-en="Today planned" data-zh="整理今日事项" data-en="Plan today">整理今日事项</button>
+            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="安排会议" data-run-title-en="Schedule meeting" data-run-copy="已准备会议安排草稿：议题、参会人、材料和提醒时间。" data-run-copy-en="Prepared a meeting draft with agenda, attendees, materials, and reminder time." data-toast="会议安排已准备" data-toast-en="Meeting draft ready" data-zh="安排会议" data-en="Schedule meeting">安排会议</button>
+            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="同步项目进展" data-run-title-en="Project sync" data-run-copy="已准备项目同步摘要：当前进度、阻塞项、负责人和下一步。" data-run-copy-en="Prepared a project sync summary with progress, blockers, owners, and next steps." data-toast="项目同步已准备" data-toast-en="Project sync ready" data-zh="同步项目进展" data-en="Project sync">同步项目进展</button>
+            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="沉淀知识库" data-run-title-en="Capture knowledge" data-run-copy="已准备知识库条目：结论、引用来源、适用范围和后续更新人。" data-run-copy-en="Prepared a knowledge entry with conclusion, citations, scope, and maintainer." data-toast="知识库条目已准备" data-toast-en="Knowledge entry ready" data-zh="沉淀知识库" data-en="Capture knowledge">沉淀知识库</button>
+            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="拆开发任务" data-run-title-en="Break down dev task" data-run-copy="已准备开发任务拆解：范围、接口、风险、测试点和负责人。" data-run-copy-en="Prepared a development breakdown with scope, APIs, risks, tests, and owners." data-toast="开发任务已拆解" data-toast-en="Dev task broken down" data-zh="拆开发任务" data-en="Dev task">拆开发任务</button>
+            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="Code Review" data-run-title-en="Code Review" data-run-copy="已准备 Code Review 自动化：PR 更新触发审阅 Agent，高风险结果进入 Gate。" data-run-copy-en="Prepared Code Review automation: PR updates trigger review Agent and high-risk output enters Gate." data-toast="Code Review 已准备" data-toast-en="Code Review ready" data-zh="Code Review" data-en="Code Review">Code Review</button>
+            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="生成测试" data-run-title-en="Generate tests" data-run-copy="已准备测试生成计划：核心路径、边界条件、回归用例和执行命令。" data-run-copy-en="Prepared a test plan with core paths, edge cases, regression cases, and commands." data-toast="测试计划已准备" data-toast-en="Test plan ready" data-zh="生成测试" data-en="Generate tests">生成测试</button>
+            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="生成设计方向" data-run-title-en="Design directions" data-run-copy="已准备 3 个设计方向：布局节奏、视觉语气、组件密度和适用场景。" data-run-copy-en="Prepared three design directions with layout rhythm, visual tone, component density, and use cases." data-toast="设计方向已准备" data-toast-en="Design directions ready" data-zh="生成设计方向" data-en="Design directions">生成设计方向</button>
+            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="界面走查" data-run-title-en="UI review" data-run-copy="已准备界面走查清单：层级、对齐、文案、交互状态和响应式风险。" data-run-copy-en="Prepared a UI review checklist for hierarchy, alignment, copy, states, and responsive risks." data-toast="走查清单已准备" data-toast-en="Review checklist ready" data-zh="界面走查" data-en="UI review">界面走查</button>
+            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="设计交付清单" data-run-title-en="Design handoff" data-run-copy="已准备设计交付清单：页面状态、组件约束、标注重点和验收口径。" data-run-copy-en="Prepared a design handoff checklist with screen states, component constraints, annotations, and acceptance criteria." data-toast="交付清单已准备" data-toast-en="Handoff checklist ready" data-zh="设计交付清单" data-en="Design handoff">设计交付清单</button>
+          </div>
+
+          <section class="command-input" data-od-id="ai-composer">
+            <label class="visually-hidden" for="desktop-task-input" data-zh="任务输入" data-en="Task input">任务输入</label>
+            <textarea id="desktop-task-input" data-composer="" data-od-id="composer-input" aria-describedby="composer-status composer-error" placeholder="例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库" data-placeholder-zh="例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库" data-placeholder-en="Example: plan today's project work, schedule meetings, track blockers, and save outcomes to the knowledge base"></textarea>
+            <button class="shortcut-proxy" type="button" data-context-open="" hidden="" aria-hidden="true" tabindex="-1"></button>
+            <button class="shortcut-proxy" type="button" data-slash-open="" hidden="" aria-hidden="true" tabindex="-1"></button>
+            <div class="input-tools" data-od-id="composer-tools">
+              <div class="composer-controls" data-od-id="composer-control-row">
+                <div class="control-select mode-dropdown" aria-label="任务类型">
+                  <select data-task-mode="" aria-label="任务类型">
+                    <option value="plan" data-zh="计划" data-en="Plan">计划</option>
+                    <option value="goal" data-zh="目标" data-en="Goal">目标</option>
+                    <option value="agent" data-zh="智能体" data-en="Agent">智能体</option>
+                  </select>
+                </div>
+                <div class="control-select model-dropdown" aria-label="模型选择">
+                  <select data-model-select="" aria-label="模型选择">
+                    <option value="auto" data-zh="自动选择" data-en="Auto select">自动选择</option>
+                    <option value="fast" data-zh="快速模型" data-en="Fast model">快速模型</option>
+                    <option value="reasoning" data-zh="推理模型" data-en="Reasoning model">推理模型</option>
+                    <option value="vision" data-zh="视觉模型" data-en="Vision model">视觉模型</option>
+                  </select>
+                </div>
+                <div class="control-select agent-dropdown" data-agent-menu="" hidden="" aria-label="智能体配置">
+                  <select data-agent-select="" aria-label="智能体配置">
+                    <option value="product-review" data-zh="产品审阅智能体" data-en="Product review agent">产品审阅智能体</option>
+                    <option value="engineering-handoff" data-zh="开发交付智能体" data-en="Engineering handoff agent">开发交付智能体</option>
+                    <option value="visual-polish" data-zh="视觉打磨智能体" data-en="Visual polish agent">视觉打磨智能体</option>
+                    <option value="meeting-prep" data-zh="会议准备智能体" data-en="Meeting prep agent">会议准备智能体</option>
+                  </select>
+                </div>
+                <div class="control-select permission-dropdown" aria-label="权限选择">
+                  <select data-permission-select="" aria-label="权限选择">
+                    <option value="approve-for-me" data-zh="替我审批" data-en="Approve for me">替我审批</option>
+                    <option value="request-approval" data-zh="请求批准" data-en="Request approval">请求批准</option>
+                    <option value="full-access" data-zh="完全访问" data-en="Full access">完全访问</option>
+                  </select>
+                </div>
+              </div>
+              <div class="composer-actions" data-od-id="composer-action-row">
+                <button class="icon-action prompt-action" type="button" data-run="#command-log" data-run-title-zh="优化提示词" data-run-title-en="Prompt refine" data-run-copy="已准备优化当前任务描述，保留目标、约束和验收项。" data-run-copy-en="Ready to refine the prompt while keeping goals, constraints, and acceptance checks." data-toast="准备优化提示词" data-toast-en="Prompt refine ready" aria-label="优化提示词">Aa</button>
+                <button class="icon-action" type="button" data-run="#command-log" data-run-title-zh="语音输入" data-run-title-en="Voice input" data-run-copy="语音输入入口已聚焦。" data-run-copy-en="Voice input focused." data-toast="语音输入已聚焦" data-toast-en="Voice input focused" aria-label="语音输入">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a3 3 0 0 0-3 3v4.2a3 3 0 0 0 6 0v-4.2a3 3 0 0 0-3-3Z"></path><path d="M6.8 11.7a5.2 5.2 0 0 0 10.4 0"></path><path d="M12 17v2.75"></path><path d="M8.8 19.75h6.4"></path></svg>
+                </button>
+                <button class="send-button" type="button" data-run="#command-log" data-run-title-zh="Agent 小队草稿" data-run-title-en="Agent team draft" data-run-copy="已生成小队草稿，并推荐角色配置、Workflow、Stage Gate 和 Skill/MCP 权限。" data-run-copy-en="Created an Agent team draft with role config, Workflow, Stage Gate, and Skill/MCP access." data-toast="小队草稿已创建" data-toast-en="Team draft created" aria-label="发送任务">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75 5.25 19.25 12 16.35l6.75 2.9L12 4.75Z"></path><path d="M12 4.75v11.6"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="context-palette" data-context-palette="" hidden="" data-od-id="context-search-panel">
+              <label class="visually-hidden" for="context-search" data-zh="搜索上下文" data-en="Search context">搜索上下文</label>
+              <input id="context-search" type="search" data-context-search="" placeholder="搜索文件、会话或工作空间" data-placeholder-zh="搜索文件、会话或工作空间" data-placeholder-en="Search files, conversations, or workspaces">
+              <div class="context-list">
+                <button type="button" data-context-item="" data-kind="file" data-label="desktop-command.html"><span>文件</span><strong>desktop-command.html</strong><em>当前新建任务页面</em></button>
+                <button type="button" data-context-item="" data-kind="conversation" data-label="项目交付清单"><span>会话</span><strong>项目交付清单</strong><em>验收点、负责人和风险记录</em></button>
+                <button type="button" data-context-item="" data-kind="workspace" data-label="Agent 小队交付空间"><span>空间</span><strong>Agent 小队交付空间</strong><em>默认创建新小队任务的位置</em></button>
+                <button type="button" data-context-item="" data-kind="agent" data-label="产品审阅智能体"><span>智能体</span><strong>产品审阅智能体</strong><em>引用左侧智能体配置</em></button>
+              </div>
+            </div>
+
+            <div class="slash-palette" data-slash-palette="" hidden="" data-od-id="slash-search-panel">
+              <label class="visually-hidden" for="slash-search" data-zh="搜索 Skill 和 MCP" data-en="Search Skill and MCP">搜索 Skill 和 MCP</label>
+              <input id="slash-search" type="search" data-slash-search="" placeholder="搜索 Skill 或 MCP，例如 页面审阅、Filesystem" data-placeholder-zh="搜索 Skill 或 MCP，例如 页面审阅、Filesystem" data-placeholder-en="Search Skill or MCP, e.g. page review, Filesystem">
+              <div class="slash-list">
+                <button type="button" data-slash-item="" data-kind="skill" data-label="页面审阅 Skill"><span>Skill</span><strong>页面审阅 Skill</strong><em>检查层级、文案、交互和验收点</em></button>
+                <button type="button" data-slash-item="" data-kind="skill" data-label="文档整理 Skill"><span>Skill</span><strong>文档整理 Skill</strong><em>整理会议、需求和交付说明</em></button>
+                <button type="button" data-slash-item="" data-kind="skill" data-label="交付检查 Skill"><span>Skill</span><strong>交付检查 Skill</strong><em>生成测试点、风险和上线清单</em></button>
+                <button type="button" data-slash-item="" data-kind="mcp" data-label="Filesystem MCP"><span>MCP</span><strong>Filesystem MCP</strong><em>读取和写入当前项目文件</em></button>
+                <button type="button" data-slash-item="" data-kind="mcp" data-label="Screenshot MCP"><span>MCP</span><strong>Screenshot MCP</strong><em>渲染页面并做视觉核验</em></button>
+                <button type="button" data-slash-item="" data-kind="mcp" data-label="Calendar MCP"><span>MCP</span><strong>Calendar MCP</strong><em>读取日程并生成会议准备</em></button>
+              </div>
+            </div>
+
+            <div class="composer-state-row">
+              <div class="workspace-picker" data-od-id="workspace-picker">
+                <select data-workspace-select="" aria-label="选择工作空间">
+                  <option value="product" data-zh="Agent 小队交付空间" data-en="Agent team delivery">Agent 小队交付空间</option>
+                  <option value="team" data-zh="办公室权限空间" data-en="Office access">办公室权限空间</option>
+                  <option value="agents" data-zh="智能体能力库" data-en="Agent capability library">智能体能力库</option>
+                </select>
+              </div>
+              <span id="composer-status" class="composer-state" role="status" aria-live="polite" data-composer-status="" data-zh="空闲 · 等待输入" data-en="Idle · waiting for input">空闲 · 等待输入</span>
+              <span id="composer-error" class="composer-error" hidden="" data-zh="连接器暂不可用，请稍后重试。" data-en="Connector unavailable. Try again later.">连接器暂不可用，请稍后重试。</span>
+            </div>
+          </section>
+        </section>
+        </section>
+
+        <section class="shell-view shell-page-view assistant-only-view" data-shell-view="assist" data-shell-view-title-zh="助理" data-shell-view-title-en="Assistant" data-od-id="shell-view-assist" hidden="">
+          <div class="assistant-canvas" data-od-id="assistant-canvas">
+            <div class="assistant-top-status" data-od-id="assistant-top-status">
+              <span data-zh="已连接：" data-en="Connected:">已连接：</span>
+              <strong><span aria-hidden="true"></span><span data-zh="Crewon 助理" data-en="Crewon Assistant">Crewon 助理</span></strong>
+              <button class="icon-action compact" type="button" data-run="#assist-log" data-run-title-zh="连接设置" data-run-title-en="Connection settings" data-run-copy="已打开助理连接设置，可调整上下文来源、能力权限和默认模型。" data-run-copy-en="Opened assistant connection settings for context sources, capability access, and default model." data-toast="连接设置已打开" data-toast-en="Connection settings opened" aria-label="连接设置">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.4a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2Z"></path><path d="M4.8 12h2.1"></path><path d="M17.1 12h2.1"></path><path d="m6.9 6.9 1.5 1.5"></path><path d="m15.6 15.6 1.5 1.5"></path><path d="m17.1 6.9-1.5 1.5"></path><path d="m8.4 15.6-1.5 1.5"></path></svg>
+              </button>
+            </div>
+
+            <div class="assistant-log-canvas" id="assist-log" aria-live="polite" data-od-id="assistant-log-canvas"></div>
+
+            <div class="assistant-bottom-zone">
+              <div class="command-input assistant-home-composer" data-od-id="assistant-composer">
+                <label class="visually-hidden" for="assist-input" data-zh="助理输入" data-en="Assistant input">助理输入</label>
+                <textarea id="assist-input" data-composer="" data-od-id="assistant-composer-input" aria-describedby="assist-composer-status" placeholder="今天帮你做些什么？ @ 引用对话文件，/ 调用技能与指令" data-placeholder-zh="今天帮你做些什么？ @ 引用对话文件，/ 调用技能与指令" data-placeholder-en="What can I help with today? @ reference files, / call skills and commands"></textarea>
+                <button class="shortcut-proxy" type="button" data-context-open="" hidden="" aria-hidden="true" tabindex="-1"></button>
+                <button class="shortcut-proxy" type="button" data-slash-open="" hidden="" aria-hidden="true" tabindex="-1"></button>
+                <div class="input-tools" data-od-id="assistant-composer-tools">
+                  <div class="composer-controls" data-od-id="assistant-composer-control-row">
+                    <div class="control-select mode-dropdown" aria-label="任务类型">
+                      <select data-task-mode="" aria-label="任务类型">
+                        <option value="plan" data-zh="计划" data-en="Plan">计划</option>
+                        <option value="goal" data-zh="目标" data-en="Goal">目标</option>
+                        <option value="agent" data-zh="智能体" data-en="Agent">智能体</option>
+                      </select>
+                    </div>
+                    <div class="control-select model-dropdown" aria-label="模型选择">
+                      <select data-model-select="" aria-label="模型选择">
+                        <option value="auto" data-zh="自动选择" data-en="Auto select">自动选择</option>
+                        <option value="fast" data-zh="快速模型" data-en="Fast model">快速模型</option>
+                        <option value="reasoning" data-zh="推理模型" data-en="Reasoning model">推理模型</option>
+                        <option value="vision" data-zh="视觉模型" data-en="Vision model">视觉模型</option>
+                      </select>
+                    </div>
+                    <div class="control-select agent-dropdown" data-agent-menu="" hidden="" aria-label="智能体配置">
+                      <select data-agent-select="" aria-label="智能体配置">
+                        <option value="product-review" data-zh="产品审阅智能体" data-en="Product review agent">产品审阅智能体</option>
+                        <option value="engineering-handoff" data-zh="开发交付智能体" data-en="Engineering handoff agent">开发交付智能体</option>
+                        <option value="visual-polish" data-zh="视觉打磨智能体" data-en="Visual polish agent">视觉打磨智能体</option>
+                        <option value="meeting-prep" data-zh="会议准备智能体" data-en="Meeting prep agent">会议准备智能体</option>
+                      </select>
+                    </div>
+                    <div class="control-select permission-dropdown" aria-label="权限选择">
+                      <select data-permission-select="" aria-label="权限选择">
+                        <option value="approve-for-me" data-zh="替我审批" data-en="Approve for me">替我审批</option>
+                        <option value="request-approval" data-zh="请求批准" data-en="Request approval">请求批准</option>
+                        <option value="full-access" data-zh="完全访问" data-en="Full access">完全访问</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="composer-actions">
+                    <button class="icon-action prompt-action" type="button" data-run="#assist-log" data-run-title-zh="优化提示词" data-run-title-en="Prompt refine" data-run-copy="已准备优化当前描述，保留目标、约束和验收项。" data-run-copy-en="Ready to refine the prompt while keeping goals, constraints, and acceptance checks." data-toast="准备优化提示词" data-toast-en="Prompt refine ready" aria-label="优化提示词">Aa</button>
+                    <button class="icon-action" type="button" data-run="#assist-log" data-run-title-zh="语音输入" data-run-title-en="Voice input" data-run-copy="语音输入入口已聚焦。" data-run-copy-en="Voice input focused." data-toast="语音输入已聚焦" data-toast-en="Voice input focused" aria-label="语音输入">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a3 3 0 0 0-3 3v4.2a3 3 0 0 0 6 0v-4.2a3 3 0 0 0-3-3Z"></path><path d="M6.8 11.7a5.2 5.2 0 0 0 10.4 0"></path><path d="M12 17v2.75"></path><path d="M8.8 19.75h6.4"></path></svg>
+                    </button>
+                    <button class="send-button" type="button" data-run="#assist-log" data-run-title-zh="助理草稿" data-run-title-en="Assistant draft" data-run-copy="已生成 Agent 小队执行草稿，包含角色、Workflow、Gate 和权限边界。" data-run-copy-en="Drafted an Agent Team run plan with roles, Workflow, gates, and access boundaries." data-toast="助理草稿已生成" data-toast-en="Assistant draft generated" aria-label="发送">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75 5.25 19.25 12 16.35l6.75 2.9L12 4.75Z"></path><path d="M12 4.75v11.6"></path></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="context-palette" data-context-palette="" hidden="" data-od-id="assistant-context-search-panel">
+                  <label class="visually-hidden" for="assist-context-search" data-zh="搜索上下文" data-en="Search context">搜索上下文</label>
+                  <input id="assist-context-search" type="search" data-context-search="" placeholder="搜索文件、会话或智能体" data-placeholder-zh="搜索文件、会话或智能体" data-placeholder-en="Search files, conversations, or agents">
+                  <div class="context-list">
+                    <button type="button" data-context-item="" data-kind="file" data-label="当前对话草稿"><span>文件</span><strong>当前对话草稿</strong><em>把正在讨论的内容加入上下文</em></button>
+                    <button type="button" data-context-item="" data-kind="conversation" data-label="项目交付清单"><span>会话</span><strong>项目交付清单</strong><em>验收点、负责人和风险记录</em></button>
+                    <button type="button" data-context-item="" data-kind="agent" data-label="产品审阅智能体"><span>智能体</span><strong>产品审阅智能体</strong><em>引用智能体配置与权限边界</em></button>
+                    <button type="button" data-context-item="" data-kind="tool" data-label="最近一次能力结果"><span>结果</span><strong>最近一次能力结果</strong><em>把 Skill/MCP 输出写回对话</em></button>
+                  </div>
+                </div>
+
+                <div class="slash-palette" data-slash-palette="" hidden="" data-od-id="assistant-slash-search-panel">
+                  <label class="visually-hidden" for="assist-slash-search" data-zh="搜索 Skill 和 MCP" data-en="Search Skill and MCP">搜索 Skill 和 MCP</label>
+                  <input id="assist-slash-search" type="search" data-slash-search="" placeholder="搜索 Skill 或 MCP，例如 页面审阅、Filesystem" data-placeholder-zh="搜索 Skill 或 MCP，例如 页面审阅、Filesystem" data-placeholder-en="Search Skill or MCP, e.g. page review, Filesystem">
+                  <div class="slash-list">
+                    <button type="button" data-slash-item="" data-kind="skill" data-label="页面审阅 Skill"><span>Skill</span><strong>页面审阅 Skill</strong><em>检查层级、文案、交互和验收点</em></button>
+                    <button type="button" data-slash-item="" data-kind="skill" data-label="交付检查 Skill"><span>Skill</span><strong>交付检查 Skill</strong><em>生成测试点、风险和上线清单</em></button>
+                    <button type="button" data-slash-item="" data-kind="skill" data-label="小队编排 Skill"><span>Skill</span><strong>小队编排 Skill</strong><em>解释 Agent / Team 生命周期</em></button>
+                    <button type="button" data-slash-item="" data-kind="mcp" data-label="Filesystem MCP"><span>MCP</span><strong>Filesystem MCP</strong><em>读取和写入当前项目文件</em></button>
+                    <button type="button" data-slash-item="" data-kind="mcp" data-label="Screenshot MCP"><span>MCP</span><strong>Screenshot MCP</strong><em>渲染页面并做视觉核验</em></button>
+                    <button type="button" data-slash-item="" data-kind="mcp" data-label="Calendar MCP"><span>MCP</span><strong>Calendar MCP</strong><em>读取日程并生成会议准备</em></button>
+                  </div>
+                </div>
+
+                <div class="composer-state-row assistant-state-row">
+                  <span id="assist-composer-status" class="composer-state" role="status" aria-live="polite" data-composer-status="" data-zh="内容由 AI 生成，请核实重要信息" data-en="AI-generated content. Verify important information.">内容由 AI 生成，请核实重要信息</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="shell-view shell-page-view" data-shell-view="projects" data-shell-view-title-zh="项目" data-shell-view-title-en="Projects" data-od-id="shell-view-projects" hidden="">
+          <div class="page-stack" data-filter-scope="">
+            <header class="catalog-market-header function-market-header" data-od-id="projects-header-inline">
+              <div class="catalog-mode-tabs" role="group" aria-label="项目视图筛选">
+                <button class="filter-chip mode-tab active" type="button" data-filter-group="project-mode" data-filter="current" data-zh="当前任务" data-en="Current tasks">当前任务</button>
+                <button class="filter-chip mode-tab" type="button" data-filter-group="project-mode" data-filter="gate" data-zh="Gate" data-en="Gate">Gate</button>
+                <button class="filter-chip mode-tab" type="button" data-filter-group="project-mode" data-filter="handoff" data-zh="交付" data-en="Handoff">交付</button>
+              </div>
+              <div class="catalog-header-actions">
+                <label class="catalog-search" aria-label="搜索项目任务">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15.7 15.7 3.55 3.55"></path><circle cx="10.8" cy="10.8" r="5.6"></circle></svg>
+                  <input type="search" placeholder="搜索任务、Gate、MCP" data-placeholder-zh="搜索任务、Gate、MCP" data-placeholder-en="Search tasks, gates, MCP">
+                </label>
+                <button class="button" type="button" data-run="#project-log" data-run-title-zh="同步执行流" data-run-title-en="Sync flow" data-run-copy="已同步任务状态、审批卡点和 Agent 输出。" data-run-copy-en="Synced task state, approval gates, and agent output." data-toast="执行流已同步" data-toast-en="Flow synced" data-zh="同步" data-en="Sync">同步</button>
+                <button class="button primary" type="button" data-run="#project-log" data-run-title-zh="发起任务" data-run-title-en="Start task" data-run-copy="已创建任务发起草稿，可选择小队、工作流和上下文文件。" data-run-copy-en="Created a task draft with team, workflow, and context file options." data-toast="任务草稿已创建" data-toast-en="Task draft created" data-zh="发起任务" data-en="Start task">发起任务</button>
+              </div>
+            </header>
+
+            <section class="catalog-source-bar" data-od-id="project-filters-inline">
+              <div class="catalog-source-tabs" role="group" aria-label="项目来源筛选">
+                <button class="filter-chip source-tab active" type="button" data-filter-group="project-source" data-filter="teamflow" data-zh="小队队列" data-en="Team queue">小队队列</button>
+                <button class="filter-chip source-tab" type="button" data-filter-group="project-source" data-filter="personal" data-zh="个人关注" data-en="Personal watch">个人关注</button>
+              </div>
+              <span class="catalog-context-note" data-zh="Stage Gate：需求确认 · running 56%" data-en="Stage Gate: requirement · running 56%">Stage Gate：需求确认 · running 56%</span>
+            </section>
+
+            <section class="capability-catalog function-catalog" data-od-id="project-task-catalog">
+              <article class="catalog-card project-card" data-card-filter="current gate teamflow" data-od-id="project-card-requirement-gate">
+                <div class="catalog-icon" aria-hidden="true">审</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Gate</span><strong data-zh="需求确认 Gate" data-en="Requirement Gate">需求确认 Gate</strong></div>
+                  <p data-zh="展示任务分解、角色分配、预估时长；批准后进入并行执行。" data-en="Shows breakdown, role assignment, and estimate; approval starts parallel execution.">展示任务分解、角色分配、预估时长；批准后进入并行执行。</p>
+                  <div class="catalog-meta"><span class="source-badge">小队队列</span><span>待批准</span><span>高优先级</span></div>
+                </div>
+                <button class="button compact" type="button" data-run="#project-log" data-run-title-zh="Gate 批准" data-run-title-en="Gate approval" data-run-copy="需求确认 Gate 已通过，Workflow 继续进入并行执行。" data-run-copy-en="Requirement Gate approved. Workflow continues to parallel execution." data-toast="Gate 已通过" data-toast-en="Gate approved">批准</button>
+              </article>
+              <article class="catalog-card project-card" data-card-filter="current agent teamflow" data-od-id="project-card-parallel-nodes">
+                <div class="catalog-icon" aria-hidden="true">并</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Workflow</span><strong data-zh="并行任务节点" data-en="Parallel task nodes">并行任务节点</strong></div>
+                  <p data-zh="前端实现、测试生成、文档更新并行执行，输出进入共享 Context。" data-en="Frontend, tests, and docs run in parallel and write to shared context.">前端实现、测试生成、文档更新并行执行，输出进入共享 Context。</p>
+                  <div class="catalog-meta"><span class="source-badge">小队队列</span><span>3/6</span><span>运行中</span></div>
+                </div>
+                <span class="status success" data-zh="运行中" data-en="Running">运行中</span>
+              </article>
+              <article class="catalog-card project-card" data-card-filter="current gate teamflow" data-od-id="project-card-github-auth">
+                <div class="catalog-icon" aria-hidden="true">GH</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>MCP</span><strong data-zh="GitHub MCP 授权" data-en="GitHub MCP auth">GitHub MCP 授权</strong></div>
+                  <p data-zh="读取 Issue 前需要 Owner 确认；失败后进入重试 1/3。" data-en="Owner approval is needed before reading issues; failure enters retry 1/3.">读取 Issue 前需要 Owner 确认；失败后进入重试 1/3。</p>
+                  <div class="catalog-meta"><span class="source-badge">小队队列</span><span>待授权</span><span>Gate</span></div>
+                </div>
+                <button class="button compact" type="button" data-run="#project-log" data-run-title-zh="权限请求" data-run-title-en="Permission request" data-run-copy="已向 Owner 发出 GitHub MCP 读取授权请求。" data-run-copy-en="Requested owner approval for GitHub MCP issue read." data-toast="已请求授权" data-toast-en="Permission requested">请求</button>
+              </article>
+              <article class="catalog-card project-card" data-card-filter="current handoff teamflow" data-od-id="project-card-audit-archive">
+                <div class="catalog-icon" aria-hidden="true">档</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Handoff</span><strong data-zh="产物与审计归档" data-en="Output and audit archive">产物与审计归档</strong></div>
+                  <p data-zh="节点完成后保留文件、报告、权限使用和敏感访问记录。" data-en="Completed nodes keep files, reports, access usage, and sensitive access records.">节点完成后保留文件、报告、权限使用和敏感访问记录。</p>
+                  <div class="catalog-meta"><span class="source-badge">小队队列</span><span>交付中</span><span>180 天</span></div>
+                </div>
+                <span class="status" data-zh="待完成" data-en="Pending">待完成</span>
+              </article>
+              <article class="catalog-card project-card" data-card-filter="current personal" data-od-id="project-card-my-review">
+                <div class="catalog-icon" aria-hidden="true">我</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Personal</span><strong data-zh="我的审阅任务" data-en="My review task">我的审阅任务</strong></div>
+                  <p data-zh="只保留需要你确认的说明、差异和下一步动作。" data-en="Keeps only the explanation, diffs, and next action that need your confirmation.">只保留需要你确认的说明、差异和下一步动作。</p>
+                  <div class="catalog-meta"><span>个人关注</span><span>待审阅</span><span>今天</span></div>
+                </div>
+                <button class="button compact" type="button" data-run="#project-log" data-run-title-zh="打开审阅" data-run-title-en="Open review" data-run-copy="已打开你的待审阅任务。" data-run-copy-en="Opened your pending review task." data-toast="已打开审阅" data-toast-en="Review opened">打开</button>
+              </article>
+            </section>
+
+            <section class="workspace-grid">
+              <section class="page-panel" data-od-id="project-execution-inline">
+                <div class="panel-head"><h3 data-zh="Workflow 执行队列" data-en="Workflow execution queue">Workflow 执行队列</h3><span class="status warn" data-zh="可中断" data-en="Interruptible">可中断</span></div>
+                <div class="compact-list" id="project-log" aria-live="polite">
+                  <article class="capability-row is-priority"><div><strong data-zh="需求确认 Gate" data-en="Requirement Gate">需求确认 Gate</strong><p data-zh="展示任务分解、角色分配、预估时长；用户可批准、驳回或修改后通过。" data-en="Shows breakdown, role assignment, and estimate; user can approve, reject, or edit then approve.">展示任务分解、角色分配、预估时长；用户可批准、驳回或修改后通过。</p></div><button class="button compact" type="button" data-run="#project-log" data-run-title-zh="Gate 批准" data-run-title-en="Gate approval" data-run-copy="需求确认 Gate 已通过，Workflow 继续进入并行执行。" data-run-copy-en="Requirement Gate approved. Workflow continues to parallel execution." data-toast="Gate 已通过" data-toast-en="Gate approved">批准</button></article>
+                  <article class="capability-row"><div><strong data-zh="并行任务节点" data-en="Parallel task nodes">并行任务节点</strong><p data-zh="前端实现、测试生成、文档更新并行执行，输出写入共享 Workflow Context。" data-en="Frontend implementation, test generation, and docs update run in parallel and write to shared Workflow Context.">前端实现、测试生成、文档更新并行执行，输出写入共享 Workflow Context。</p></div><span class="status success" data-zh="运行中" data-en="Running">运行中</span></article>
+                  <article class="capability-row"><div><strong data-zh="GitHub MCP 授权" data-en="GitHub MCP auth">GitHub MCP 授权</strong><p data-zh="读取 Issue 前需要 Owner 确认；失败后进入重试 1/3，不暴露堆栈。" data-en="Owner approval is needed before reading issues; failure enters retry 1/3 without exposing stack traces.">读取 Issue 前需要 Owner 确认；失败后进入重试 1/3，不暴露堆栈。</p></div><button class="button compact" type="button" data-run="#project-log" data-run-title-zh="权限请求" data-run-title-en="Permission request" data-run-copy="已向 Owner 发出 GitHub MCP 读取授权请求。" data-run-copy-en="Requested owner approval for GitHub MCP issue read." data-toast="已请求授权" data-toast-en="Permission requested">请求</button></article>
+                  <article class="capability-row"><div><strong data-zh="产物与审计归档" data-en="Output and audit archive">产物与审计归档</strong><p data-zh="节点完成后保留文件、报告、权限使用和敏感访问记录，可回溯 180 天。" data-en="Completed nodes keep files, reports, access usage, and sensitive access records for 180-day traceability.">节点完成后保留文件、报告、权限使用和敏感访问记录，可回溯 180 天。</p></div><span class="status" data-zh="待完成" data-en="Pending">待完成</span></article>
+                </div>
+              </section>
+
+              <aside class="side-rail" data-od-id="project-flow-inspector-inline">
+                <section class="rail-panel">
+                  <div class="panel-head"><h3 data-zh="执行状态机" data-en="Execution state machine">执行状态机</h3><span class="status">6 态</span></div>
+                  <div class="step-list">
+                    <div class="step-row done"><span></span><strong>pending · 排队</strong></div>
+                    <div class="step-row done"><span></span><strong>initialized · 已解析</strong></div>
+                    <div class="step-row active"><span></span><strong>running · 并行执行</strong></div>
+                    <div class="step-row active"><span></span><strong>waiting_approval · Gate</strong></div>
+                    <div class="step-row"><span></span><strong>completed · 交付</strong></div>
+                    <div class="step-row"><span></span><strong>failed/retrying · 恢复</strong></div>
+                  </div>
+                </section>
+                <section class="rail-panel">
+                  <div class="panel-head"><h3 data-zh="节点类型" data-en="Node types">节点类型</h3><span class="status">start/task/gate</span></div>
+                  <div class="compact-list">
+                    <div class="capability-row"><div><strong>start → task</strong><p data-zh="接收需求后拆成可执行节点。" data-en="Receive requirement and split into executable nodes.">接收需求后拆成可执行节点。</p></div><span class="status">核心</span></div>
+                    <div class="capability-row"><div><strong>parallel → merge</strong><p data-zh="并行分发给多个角色，合并为共享上下文。" data-en="Fan out to roles, then merge into shared context.">并行分发给多个角色，合并为共享上下文。</p></div><span class="status">并行</span></div>
+                    <div class="capability-row"><div><strong>gate → end</strong><p data-zh="人类确认关键决策，再进入交付或回退。" data-en="Human confirms key decisions before delivery or rollback.">人类确认关键决策，再进入交付或回退。</p></div><span class="status warn">卡点</span></div>
+                  </div>
+                </section>
+                <section class="rail-panel">
+                  <div class="panel-head"><h3 data-zh="最小上下文" data-en="Minimum context">最小上下文</h3><span class="status success" data-zh="已锁定" data-en="Locked">已锁定</span></div>
+                  <p data-zh="只传 PRD 能力域、当前页面壳、审批策略，不把完整历史对话塞给 Agent。" data-en="Pass capability domains, current shell, and approval policy only, not the full conversation history.">只传 PRD 能力域、当前页面壳、审批策略，不把完整历史对话塞给 Agent。</p>
+                </section>
+              </aside>
+            </section>
+          </div>
+        </section>
+
+        <section class="shell-view shell-page-view" data-shell-view="agents" data-shell-view-title-zh="智能体" data-shell-view-title-en="Agents" data-od-id="shell-view-agents" hidden="">
+          <div class="page-stack" data-filter-scope="">
+            <header class="catalog-market-header" data-od-id="agents-header-inline">
+              <div class="catalog-mode-tabs" role="group" aria-label="能力分类筛选">
+                <button class="filter-chip mode-tab" type="button" data-filter-group="category" data-filter="employee" data-zh="员工" data-en="Employees">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 10.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"></path><path d="M3.8 18.8c.72-3.22 2.45-4.9 5.2-4.9s4.48 1.68 5.2 4.9"></path><path d="M16 7.2h4.2"></path><path d="M16 11.2h4.2"></path><path d="M16 15.2h3"></path></svg>
+                  <span data-zh="员工" data-en="Employees">员工</span>
+                </button>
+                <button class="filter-chip mode-tab active" type="button" data-filter-group="category" data-filter="skill" data-zh="技能" data-en="Skills">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 4.8 2.2 4.5 5 .72-3.6 3.5.85 4.95L12 16.1l-4.45 2.34.85-4.95-3.6-3.5 5-.72Z"></path></svg>
+                  <span data-zh="技能" data-en="Skills">技能</span>
+                </button>
+                <button class="filter-chip mode-tab" type="button" data-filter-group="category" data-filter="service" data-zh="服务" data-en="Services">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.3 12a3.25 3.25 0 0 1 3.25-3.25h2.1"></path><path d="M15.7 12a3.25 3.25 0 0 1-3.25 3.25h-2.1"></path><path d="M8.8 8.8 6.9 6.9a3 3 0 0 0-4.25 4.24l1.9 1.9"></path><path d="m15.2 15.2 1.9 1.9a3 3 0 0 0 4.25-4.24l-1.9-1.9"></path></svg>
+                  <span data-zh="服务" data-en="Services">服务</span>
+                </button>
+              </div>
+              <div class="catalog-header-actions">
+              <label class="catalog-search" aria-label="搜索能力">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4"></path></svg>
+                <input type="search" placeholder="搜索员工、技能或服务" data-placeholder-zh="搜索员工、技能或服务" data-placeholder-en="Search employees, skills, or services">
+              </label>
+                <button class="button primary compact" type="button" data-run="#command-log" data-run-title-zh="新建个人能力" data-run-title-en="Create personal capability" data-run-copy="已打开个人能力创建草稿。" data-run-copy-en="Opened a personal capability draft." data-toast="准备新建个人能力" data-toast-en="Ready to create personal capability" data-zh="新建个人能力" data-en="New personal capability">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.25"></circle><path d="M12 8.5v7"></path><path d="M8.5 12h7"></path></svg>
+                  <span data-zh="新建个人能力" data-en="New personal capability">新建个人能力</span>
+                </button>
+              </div>
+            </header>
+
+            <section class="catalog-source-bar" data-od-id="agent-filters-inline">
+              <div class="catalog-source-tabs" role="group" aria-label="来源筛选">
+                <button class="filter-chip source-tab" type="button" data-filter-group="source" data-filter="personal" data-zh="个人能力" data-en="Personal">个人能力</button>
+                <button class="filter-chip source-tab active" type="button" data-filter-group="source" data-filter="market" data-zh="市场" data-en="Market">市场</button>
+              </div>
+            </section>
+
+            <section class="capability-catalog" data-od-id="agent-capability-catalog">
+              <article class="catalog-card employee-card" data-card-filter="employee personal" data-od-id="employee-card-product-review">
+                <div class="catalog-icon" aria-hidden="true">产</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span data-zh="员工" data-en="Employee">员工</span><strong data-zh="产品审阅智能体" data-en="Product review agent">产品审阅智能体</strong></div>
+                  <p data-zh="审阅需求、页面结构和交互风险，把不确定项推到 Gate。" data-en="Reviews requirements, page structure, and interaction risk; pushes ambiguity into Gate.">审阅需求、页面结构和交互风险，把不确定项推到 Gate。</p>
+                  <div class="catalog-meta"><span>PRD</span><span>Gate</span><span>只读</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="分配产品审阅" data-run-title-en="Assign product review" data-run-copy="已把产品审阅智能体加入当前任务，并绑定 PRD 与页面上下文。" data-run-copy-en="Assigned product review agent with PRD and page context." data-toast="已分配员工" data-toast-en="Employee assigned" aria-label="分配产品审阅智能体">+</button>
+              </article>
+
+              <article class="catalog-card employee-card" data-card-filter="employee personal" data-od-id="employee-card-engineering-handoff">
+                <div class="catalog-icon" aria-hidden="true">交</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span data-zh="员工" data-en="Employee">员工</span><strong data-zh="开发交付智能体" data-en="Engineering handoff agent">开发交付智能体</strong></div>
+                  <p data-zh="把设计意图转成开发任务、边界条件和验收清单。" data-en="Turns design intent into engineering tasks, edge cases, and acceptance checks.">把设计意图转成开发任务、边界条件和验收清单。</p>
+                  <div class="catalog-meta"><span>MRD</span><span>任务拆解</span><span>写草稿</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="分配开发交付" data-run-title-en="Assign engineering handoff" data-run-copy="已把开发交付智能体加入当前任务，输出将进入交付清单。" data-run-copy-en="Assigned engineering handoff agent; output will enter the delivery checklist." data-toast="已分配员工" data-toast-en="Employee assigned" aria-label="分配开发交付智能体">+</button>
+              </article>
+
+              <article class="catalog-card employee-card" data-card-filter="employee market" data-od-id="employee-card-visual-polish">
+                <div class="catalog-icon" aria-hidden="true">视</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span data-zh="员工" data-en="Employee">员工</span><strong data-zh="视觉打磨智能体" data-en="Visual polish agent">视觉打磨智能体</strong></div>
+                  <p data-zh="检查层级、密度、间距和组件一致性，避免功能页漂移。" data-en="Checks hierarchy, density, spacing, and component consistency to prevent view drift.">检查层级、密度、间距和组件一致性，避免功能页漂移。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>UI QA</span><span>组件</span><span>建议态</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加视觉打磨到个人" data-run-title-en="Add visual polish to personal" data-run-copy="视觉打磨智能体已加入个人能力库，可继续配置权限。" data-run-copy-en="Added visual polish agent to the personal library for access setup." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加视觉打磨智能体到个人">+</button>
+              </article>
+
+              <article class="catalog-card employee-card" data-card-filter="employee market" data-od-id="employee-card-meeting-prep">
+                <div class="catalog-icon" aria-hidden="true">会</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span data-zh="员工" data-en="Employee">员工</span><strong data-zh="会议准备智能体" data-en="Meeting prep agent">会议准备智能体</strong></div>
+                  <p data-zh="整理决策记录、待审批事项和对齐摘要，发送前保留人工确认。" data-en="Prepares decision records, approvals, and alignment summaries with human confirmation before send.">整理决策记录、待审批事项和对齐摘要，发送前保留人工确认。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>Channel</span><span>纪要</span><span>Gate</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加会议准备到个人" data-run-title-en="Add meeting prep to personal" data-run-copy="会议准备智能体已加入个人能力库，可继续配置 Channel 权限。" data-run-copy-en="Added meeting prep agent to the personal library for Channel access setup." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加会议准备智能体到个人">+</button>
+              </article>
+
+              <article class="catalog-card skill-card" data-card-filter="skill market" data-od-id="skill-card-code-review">
+                <div class="catalog-icon" aria-hidden="true">CR</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Skill</span><strong>code-review-system</strong></div>
+                  <p data-zh="读取 PR diff、运行静态检查，只把高风险结论送入 Gate。" data-en="Reads PR diff, runs static checks, and sends only high-risk findings to Gate.">读取 PR diff、运行静态检查，只把高风险结论送入 Gate。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>/review</span><span>只读</span><span>高风险</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加 Code Review 到个人" data-run-title-en="Add Code Review to personal" data-run-copy="Code Review Skill 已加入个人能力库，可再绑定到员工。" data-run-copy-en="Added Code Review Skill to the personal library for later employee binding." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加 Code Review Skill 到个人">+</button>
+              </article>
+
+              <article class="catalog-card skill-card" data-card-filter="skill personal" data-od-id="skill-card-page-review">
+                <div class="catalog-icon" aria-hidden="true">页</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Skill</span><strong data-zh="页面审阅 Skill" data-en="Page review skill">页面审阅 Skill</strong></div>
+                  <p data-zh="检查当前界面的层级、可读性、组件复用和移动端风险。" data-en="Checks hierarchy, readability, component reuse, and mobile risks in the current view.">检查当前界面的层级、可读性、组件复用和移动端风险。</p>
+                  <div class="catalog-meta"><span>/ui-review</span><span>视觉</span><span>建议态</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="挂载页面审阅" data-run-title-en="Mount page review" data-run-copy="页面审阅 Skill 已挂载到视觉打磨智能体。" data-run-copy-en="Mounted page review skill to visual polish agent." data-toast="Skill 已挂载" data-toast-en="Skill mounted" aria-label="挂载页面审阅 Skill">+</button>
+              </article>
+
+              <article class="catalog-card skill-card" data-card-filter="skill personal" data-od-id="skill-card-handoff">
+                <div class="catalog-icon" aria-hidden="true">交</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Skill</span><strong data-zh="交付检查 Skill" data-en="Handoff check skill">交付检查 Skill</strong></div>
+                  <p data-zh="把变更压缩成开发可执行的验收点、风险和回归范围。" data-en="Condenses changes into acceptance points, risks, and regression scope for engineering.">把变更压缩成开发可执行的验收点、风险和回归范围。</p>
+                  <div class="catalog-meta"><span>/handoff</span><span>验收</span><span>导出</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="挂载交付检查" data-run-title-en="Mount handoff check" data-run-copy="交付检查 Skill 已加入当前小队的出站检查。" data-run-copy-en="Added handoff check skill to the team's outbound checks." data-toast="Skill 已挂载" data-toast-en="Skill mounted" aria-label="挂载交付检查 Skill">+</button>
+              </article>
+
+              <article class="catalog-card skill-card" data-card-filter="skill market" data-od-id="skill-card-agent-management">
+                <div class="catalog-icon" aria-hidden="true">队</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Skill</span><strong data-zh="小队编排 Skill" data-en="Team orchestration skill">小队编排 Skill</strong></div>
+                  <p data-zh="解释 Agent / Team 生命周期，生成串行、并行或嵌套 Workflow。" data-en="Explains Agent and Team lifecycle, then drafts serial, parallel, or nested workflows.">解释 Agent / Team 生命周期，生成串行、并行或嵌套 Workflow。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>/team</span><span>Workflow</span><span>Gate</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加小队编排到个人" data-run-title-en="Add team orchestration to personal" data-run-copy="小队编排 Skill 已加入个人能力库，可用于 Solo 到 Team 升级。" data-run-copy-en="Added team orchestration skill to the personal library for Solo to Team upgrade." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加小队编排 Skill 到个人">+</button>
+              </article>
+
+              <article class="catalog-card skill-card" data-card-filter="skill market" data-od-id="skill-card-web-access">
+                <div class="catalog-icon" aria-hidden="true">WA</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Skill</span><strong>Web Access</strong></div>
+                  <p data-zh="读取网页、抽取结构化片段，并把来源回写到当前任务上下文。" data-en="Reads webpages, extracts structured snippets, and writes sources back into task context.">读取网页、抽取结构化片段，并把来源回写到当前任务上下文。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>/web</span><span>引用</span><span>只读</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加 Web Access 到个人" data-run-title-en="Add Web Access to personal" data-run-copy="Web Access Skill 已加入个人能力库，可用于网页读取和引用整理。" data-run-copy-en="Added Web Access Skill to the personal library for webpage reading and citation capture." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加 Web Access 到个人">+</button>
+              </article>
+
+              <article class="catalog-card skill-card" data-card-filter="skill market" data-od-id="skill-card-doc-generator">
+                <div class="catalog-icon" aria-hidden="true">文</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Skill</span><strong data-zh="文档生成 Skill" data-en="Document generation skill">文档生成 Skill</strong></div>
+                  <p data-zh="把会议、PRD 或验收点整理成可复制的文档草稿。" data-en="Turns meetings, PRDs, or acceptance points into copy-ready document drafts.">把会议、PRD 或验收点整理成可复制的文档草稿。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>/doc</span><span>草稿</span><span>导出</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加文档生成到个人" data-run-title-en="Add document generation to personal" data-run-copy="文档生成 Skill 已加入个人能力库，可继续绑定到开发交付智能体。" data-run-copy-en="Added document generation skill to the personal library for later engineering handoff binding." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加文档生成 Skill 到个人">+</button>
+              </article>
+
+              <article class="catalog-card skill-card" data-card-filter="skill market" data-od-id="skill-card-browser-automation">
+                <div class="catalog-icon" aria-hidden="true">BR</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Skill</span><strong data-zh="浏览器自动化" data-en="Browser automation">浏览器自动化</strong></div>
+                  <p data-zh="打开页面、点击表单、采集状态，用于低风险网页任务。" data-en="Opens pages, clicks forms, and captures state for low-risk web tasks.">打开页面、点击表单、采集状态，用于低风险网页任务。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>/browser</span><span>沙箱</span><span>Gate</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加浏览器自动化到个人" data-run-title-en="Add browser automation to personal" data-run-copy="浏览器自动化 Skill 已加入个人能力库，执行前会校验权限边界。" data-run-copy-en="Added browser automation skill to the personal library; access boundaries will be checked before use." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加浏览器自动化到个人">+</button>
+              </article>
+
+              <article class="catalog-card skill-card" data-card-filter="skill market" data-od-id="skill-card-feedback-mining">
+                <div class="catalog-icon" aria-hidden="true">馈</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Skill</span><strong data-zh="反馈归因 Skill" data-en="Feedback mining skill">反馈归因 Skill</strong></div>
+                  <p data-zh="把用户反馈、缺陷记录和会议备注聚类成可执行问题。" data-en="Clusters feedback, defects, and meeting notes into actionable issues.">把用户反馈、缺陷记录和会议备注聚类成可执行问题。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>/feedback</span><span>聚类</span><span>建议态</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加反馈归因到个人" data-run-title-en="Add feedback mining to personal" data-run-copy="反馈归因 Skill 已加入个人能力库，可绑定到产品审阅智能体。" data-run-copy-en="Added feedback mining skill to the personal library for product review binding." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加反馈归因 Skill 到个人">+</button>
+              </article>
+
+              <article class="catalog-card service-card" data-card-filter="service personal" data-od-id="service-card-filesystem">
+                <div class="catalog-icon" aria-hidden="true">FS</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Service</span><strong>Filesystem MCP</strong></div>
+                  <p data-zh="项目内文件读写，默认读自动、写入进入审批或任务确认。" data-en="Project file reads and writes; reads are automatic while writes enter approval or task confirmation.">项目内文件读写，默认读自动、写入进入审批或任务确认。</p>
+                  <div class="catalog-meta"><span>@文件</span><span>项目内</span><span>就绪</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="检查 Filesystem" data-run-title-en="Check Filesystem" data-run-copy="Filesystem MCP 状态正常，已允许当前小队读取项目文件。" data-run-copy-en="Filesystem MCP healthy; current team can read project files." data-toast="服务正常" data-toast-en="Service healthy" aria-label="检查 Filesystem MCP">+</button>
+              </article>
+
+              <article class="catalog-card service-card" data-card-filter="service market" data-od-id="service-card-github">
+                <div class="catalog-icon" aria-hidden="true">GH</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Service</span><strong>GitHub MCP</strong></div>
+                  <p data-zh="读取 Issue、PR 和提交状态；写入评论或触发 Action 前需要 Gate。" data-en="Reads issues, PRs, and commit status; comments or actions require Gate.">读取 Issue、PR 和提交状态；写入评论或触发 Action 前需要 Gate。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>@PR</span><span>待授权</span><span>Gate</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加 GitHub 到个人" data-run-title-en="Add GitHub to personal" data-run-copy="GitHub MCP 已加入个人能力库，授权后可读取 Issue 与 PR。" data-run-copy-en="Added GitHub MCP to the personal library; issues and PRs become available after auth." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加 GitHub MCP 到个人">+</button>
+              </article>
+
+              <article class="catalog-card service-card" data-card-filter="service personal" data-od-id="service-card-knowledge">
+                <div class="catalog-icon" aria-hidden="true">KB</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Service</span><strong data-zh="知识库 RAG" data-en="Knowledge RAG">知识库 RAG</strong></div>
+                  <p data-zh="只检索办公室授权的知识集合，并把引用来源写入上下文。" data-en="Searches only office-authorized knowledge sets and writes citations into context.">只检索办公室授权的知识集合，并把引用来源写入上下文。</p>
+                  <div class="catalog-meta"><span>@知识库</span><span>引用</span><span>正常</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="连接知识库" data-run-title-en="Connect knowledge base" data-run-copy="知识库 RAG 已绑定到产品审阅智能体。" data-run-copy-en="Knowledge RAG bound to product review agent." data-toast="服务已连接" data-toast-en="Service connected" aria-label="连接知识库 RAG">+</button>
+              </article>
+
+              <article class="catalog-card service-card" data-card-filter="service market" data-od-id="service-card-channel">
+                <div class="catalog-icon" aria-hidden="true">信</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Service</span><strong data-zh="Channel 服务" data-en="Channel service">Channel 服务</strong></div>
+                  <p data-zh="对外只发送状态更新、审批通知和完成报告，发送前必须确认。" data-en="Sends only status updates, approvals, and completion reports after confirmation.">对外只发送状态更新、审批通知和完成报告，发送前必须确认。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>@消息</span><span>草稿</span><span>确认</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加 Channel 到个人" data-run-title-en="Add Channel to personal" data-run-copy="Channel 服务已加入个人能力库，外发消息仍需人工确认。" data-run-copy-en="Added Channel service to the personal library; outbound messages still require confirmation." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加 Channel 服务到个人">+</button>
+              </article>
+
+              <article class="catalog-card service-card" data-card-filter="service market" data-od-id="service-card-calendar">
+                <div class="catalog-icon" aria-hidden="true">日</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Service</span><strong data-zh="日历服务" data-en="Calendar service">日历服务</strong></div>
+                  <p data-zh="读取会议、提醒和自动化窗口；创建外部事件需要 Gate。" data-en="Reads meetings, reminders, and automation windows; external event creation requires Gate.">读取会议、提醒和自动化窗口；创建外部事件需要 Gate。</p>
+                  <div class="catalog-meta"><span class="source-badge">来源：市场</span><span>@日程</span><span>只读</span><span>正常</span></div>
+                </div>
+                <button class="icon-action compact" type="button" data-run="#command-log" data-run-title-zh="添加日历到个人" data-run-title-en="Add calendar to personal" data-run-copy="日历服务已加入个人能力库，可为会议准备智能体提供上下文。" data-run-copy-en="Added calendar service to the personal library for meeting prep context." data-toast="已添加到个人" data-toast-en="Added to personal" aria-label="添加日历服务到个人">+</button>
+              </article>
+            </section>
+
+          </div>
+        </section>
+
+        <section class="shell-view shell-page-view" data-shell-view="schedule" data-shell-view-title-zh="日程安排" data-shell-view-title-en="Schedule" data-od-id="shell-view-schedule" hidden="">
+          <div class="page-stack" data-filter-scope="">
+            <header class="catalog-market-header function-market-header" data-od-id="schedule-header-inline">
+              <div class="catalog-mode-tabs" role="group" aria-label="日程视图筛选">
+                <button class="filter-chip mode-tab active" type="button" data-filter-group="schedule-mode" data-filter="calendar" data-zh="日程" data-en="Schedule">日程</button>
+                <button class="filter-chip mode-tab" type="button" data-filter-group="schedule-mode" data-filter="arrangement" data-zh="安排" data-en="Arrangements">安排</button>
+              </div>
+              <div class="catalog-header-actions">
+                <label class="catalog-search" aria-label="搜索日程">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15.7 15.7 3.55 3.55"></path><circle cx="10.8" cy="10.8" r="5.6"></circle></svg>
+                  <input type="search" placeholder="搜索日程、安排、结果" data-placeholder-zh="搜索日程、安排、结果" data-placeholder-en="Search schedule, arrangements, results">
+                </label>
+                <button class="button" type="button" data-run="#schedule-log" data-run-title-zh="日程同步" data-run-title-en="Schedule sync" data-run-copy="已同步团队日历和空间任务。" data-run-copy-en="Synced team calendar and space tasks." data-toast="日程已同步" data-toast-en="Schedule synced" data-zh="同步日程" data-en="Sync schedule">同步日程</button>
+                <button class="button primary" type="button" data-open-modal="#schedule-arrangement-modal" data-run="#schedule-log" data-run-title-zh="新建安排" data-run-title-en="New arrangement" data-run-copy="已打开任务安排创建浮框。" data-run-copy-en="Opened the task arrangement composer." data-toast="准备创建任务安排" data-toast-en="Ready to create arrangement" data-zh="新建安排" data-en="New arrangement">新建安排</button>
+              </div>
+            </header>
+
+            <section class="catalog-source-bar" data-od-id="schedule-filters-inline">
+              <div class="catalog-source-tabs" role="group" aria-label="日程范围筛选">
+                <button class="filter-chip source-tab active" type="button" data-filter-group="schedule-source" data-filter="personal" data-zh="个人日程" data-en="Personal schedule">个人日程</button>
+                <button class="filter-chip source-tab" type="button" data-filter-group="schedule-source" data-filter="teamflow" data-zh="小队日程" data-en="Team schedule">小队日程</button>
+              </div>
+              <span class="catalog-context-note" data-zh="今天 4 项安排 · 2 项执行中 · 1 个结果待确认" data-en="4 arrangements today · 2 running · 1 result to review">今天 4 项安排 · 2 项执行中 · 1 个结果待确认</span>
+            </section>
+
+            <section class="schedule-calendar-panel" data-card-filter="calendar personal" data-od-id="schedule-calendar-personal">
+              <div class="calendar-month" aria-label="个人日历">
+                <div class="calendar-month-head"><strong>2026 年 7 月</strong><span>个人日程</span></div>
+                <div class="calendar-grid">
+                  <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+                  <button type="button">1</button><button type="button">2</button><button type="button">3</button><button type="button">4</button><button type="button">5</button><button type="button">6</button><button type="button">7</button>
+                  <button type="button">8</button><button type="button">9</button><button type="button">10</button><button type="button">11</button><button type="button">12</button><button type="button">13</button><button type="button">14</button>
+                  <button type="button" class="has-event">15</button><button type="button">16</button><button type="button" class="has-event is-selected">17</button><button type="button">18</button><button type="button">19</button><button type="button">20</button><button type="button">21</button>
+                </div>
+              </div>
+              <div class="calendar-agenda">
+                <div class="panel-head"><h3 data-zh="7 月 17 日安排" data-en="Jul 17 arrangements">7 月 17 日安排</h3><span class="status success">2/3 完成</span></div>
+                <article class="agenda-item"><span class="time-block">09:00</span><div><strong data-zh="审批待确认 Gate" data-en="Approval gate">审批待确认 Gate</strong><p data-zh="安排：审阅需求拆解；状态：等待你确认；产出：任务分解摘要。" data-en="Arrangement: review requirement split; status: waiting for you; output: task breakdown.">安排：审阅需求拆解；状态：等待你确认；产出：任务分解摘要。</p></div><span class="status warn">待确认</span></article>
+                <article class="agenda-item"><span class="time-block">11:30</span><div><strong data-zh="个人周报草稿" data-en="Personal weekly draft">个人周报草稿</strong><p data-zh="安排：汇总本周项目变化；状态：执行完成；产出：周报草稿可编辑。" data-en="Arrangement: summarize weekly changes; status: done; output: editable weekly draft.">安排：汇总本周项目变化；状态：执行完成；产出：周报草稿可编辑。</p></div><span class="status success">已产出</span></article>
+                <article class="agenda-item"><span class="time-block">16:00</span><div><strong data-zh="设计走查提醒" data-en="Design review reminder">设计走查提醒</strong><p data-zh="安排：检查能力库与日程页；状态：待开始；产出：检查清单。" data-en="Arrangement: check library and schedule pages; status: pending; output: checklist.">安排：检查能力库与日程页；状态：待开始；产出：检查清单。</p></div><span class="status">待开始</span></article>
+              </div>
+            </section>
+
+            <section class="schedule-calendar-panel" data-card-filter="calendar teamflow" data-od-id="schedule-calendar-team">
+              <div class="calendar-month" aria-label="小队日历">
+                <div class="calendar-month-head"><strong>2026 年 7 月</strong><span>小队日程</span></div>
+                <div class="calendar-grid">
+                  <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+                  <button type="button">1</button><button type="button">2</button><button type="button">3</button><button type="button">4</button><button type="button">5</button><button type="button">6</button><button type="button">7</button>
+                  <button type="button">8</button><button type="button" class="has-event">9</button><button type="button">10</button><button type="button">11</button><button type="button">12</button><button type="button">13</button><button type="button">14</button>
+                  <button type="button" class="has-event">15</button><button type="button">16</button><button type="button" class="has-event is-selected">17</button><button type="button">18</button><button type="button">19</button><button type="button">20</button><button type="button">21</button>
+                </div>
+              </div>
+              <div class="calendar-agenda">
+                <div class="panel-head"><h3 data-zh="小队执行安排" data-en="Team execution arrangements">小队执行安排</h3><span class="status warn">1 项卡点</span></div>
+                <article class="agenda-item"><span class="time-block">10:00</span><div><strong>Code Review 安排</strong><p data-zh="安排：PR 更新后触发审阅智能体；状态：运行中；产出：高风险结果推到 Gate。" data-en="Arrangement: trigger review agent on PR update; status: running; output: high-risk results to Gate.">安排：PR 更新后触发审阅智能体；状态：运行中；产出：高风险结果推到 Gate。</p></div><span class="status success">运行中</span></article>
+                <article class="agenda-item"><span class="time-block">14:00</span><div><strong data-zh="需求 Gate 超时" data-en="Requirement gate timeout">需求 Gate 超时</strong><p data-zh="安排：72h 未确认自动驳回；状态：待人介入；产出：驳回说明草稿。" data-en="Arrangement: auto-reject after 72h; status: needs human; output: rejection note draft.">安排：72h 未确认自动驳回；状态：待人介入；产出：驳回说明草稿。</p></div><span class="status warn">待确认</span></article>
+                <article class="agenda-item"><span class="time-block">17:30</span><div><strong data-zh="小队日报推送" data-en="Team daily digest">小队日报推送</strong><p data-zh="安排：汇总执行状态、失败重试和完成报告；状态：待开始；产出：Channel 草稿。" data-en="Arrangement: summarize state, retries, and completion reports; status: pending; output: Channel draft.">安排：汇总执行状态、失败重试和完成报告；状态：待开始；产出：Channel 草稿。</p></div><span class="status">待开始</span></article>
+              </div>
+            </section>
+
+            <section class="capability-catalog function-catalog schedule-arrangement-catalog" data-od-id="schedule-arrangement-catalog">
+              <article class="catalog-card schedule-card" data-card-filter="arrangement personal" data-od-id="schedule-arrange-personal">
+                <div class="catalog-icon" aria-hidden="true">我</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Personal</span><strong data-zh="创建个人任务安排" data-en="Create personal arrangement">创建个人任务安排</strong></div>
+                  <p data-zh="给自己创建周期提醒、材料整理、审批跟进等自动化任务安排。" data-en="Create personal automated arrangements for reminders, prep, and approval follow-up.">给自己创建周期提醒、材料整理、审批跟进等自动化任务安排。</p>
+                  <div class="catalog-meta"><span>个人日程</span><span>单次 / 周期</span><span>可推送</span></div>
+                </div>
+                <button class="button compact" type="button" data-open-modal="#schedule-arrangement-modal" data-run="#schedule-log" data-run-title-zh="创建个人安排" data-run-title-en="Create personal arrangement" data-run-copy="已打开个人任务安排创建浮框。" data-run-copy-en="Opened the personal arrangement composer." data-toast="准备创建个人安排" data-toast-en="Ready to create personal arrangement">创建</button>
+              </article>
+              <article class="catalog-card schedule-card" data-card-filter="arrangement teamflow" data-od-id="schedule-arrange-team">
+                <div class="catalog-icon" aria-hidden="true">队</div>
+                <div class="catalog-card-body">
+                  <div class="catalog-card-head"><span>Team</span><strong data-zh="创建小队任务安排" data-en="Create team arrangement">创建小队任务安排</strong></div>
+                  <p data-zh="为小队创建 Code Review、日报、Gate 超时和 Channel 推送安排。" data-en="Create team arrangements for code review, digest, gate timeout, and Channel push.">为小队创建 Code Review、日报、Gate 超时和 Channel 推送安排。</p>
+                  <div class="catalog-meta"><span class="source-badge">小队日程</span><span>自动执行</span><span>Gate</span></div>
+                </div>
+                <button class="button compact" type="button" data-open-modal="#schedule-arrangement-modal" data-run="#schedule-log" data-run-title-zh="创建小队安排" data-run-title-en="Create team arrangement" data-run-copy="已打开小队任务安排创建浮框。" data-run-copy-en="Opened the team arrangement composer." data-toast="准备创建小队安排" data-toast-en="Ready to create team arrangement">创建</button>
+              </article>
+            </section>
+
+            <div id="schedule-log" class="sr-log" aria-live="polite"></div>
+          </div>
+
+          <div class="modal-backdrop" id="schedule-arrangement-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-arrangement-title">
+            <section class="arrangement-modal-card" data-od-id="schedule-arrangement-modal">
+              <header class="arrangement-modal-header">
+                <h2 id="schedule-arrangement-title" data-zh="创建任务安排" data-en="Create task arrangement">创建任务安排</h2>
+                <button class="icon-action compact" type="button" data-close-modal="" aria-label="关闭">×</button>
+              </header>
+              <label class="form-field"><span data-zh="名称" data-en="Name">名称</span><input type="text" value="每日交付状态同步"></label>
+              <div class="form-field"><span data-zh="日程空间（可选）" data-en="Schedule space optional">日程空间（可选）</span><button class="space-input" type="button" aria-label="选择日程空间"><span aria-hidden="true">+</span><em data-zh="个人日程 / 小队日程" data-en="Personal / team schedule">个人日程 / 小队日程</em></button></div>
+              <label class="form-field"><span data-zh="任务提示词" data-en="Task prompt">任务提示词</span><textarea>汇总当天执行状态、卡点和结果产出，只推送需要确认的内容。</textarea></label>
+              <div class="modal-chip-row" aria-label="执行配置"><span>Auto</span><span>技能</span><span>产品专家</span><span class="warn">完全访问权限</span></div>
+              <label class="form-field"><span data-zh="连接器" data-en="Connector">连接器</span><select><option>选择连接器</option><option>GitHub MCP</option><option>日历服务</option><option>Channel 服务</option></select></label>
+              <div class="form-field"><span data-zh="执行频率" data-en="Frequency">执行频率</span><div class="frequency-tabs"><button class="active" type="button">周期</button><button type="button">按间隔</button><button type="button">单次</button></div></div>
+              <div class="modal-form-grid"><label class="form-field"><span data-zh="日期" data-en="Date">日期</span><select><option>每天</option><option>工作日</option><option>每周五</option></select></label><label class="form-field"><span data-zh="时间" data-en="Time">时间</span><input type="time" value="09:00"></label></div>
+              <label class="form-field"><span data-zh="生效日期区间" data-en="Date range">生效日期区间</span><input type="text" placeholder="选择生效日期"></label>
+              <div class="modal-toggle-row"><span data-zh="推送到 Crewon 通知" data-en="Push to Crewon notifications">推送到 Crewon 通知</span><button class="switch" type="button" aria-pressed="false" aria-label="推送到 Crewon 通知"></button></div>
+              <footer class="arrangement-modal-actions"><button class="button" type="button" data-close-modal="" data-zh="取消" data-en="Cancel">取消</button><button class="button primary" type="button" data-submit-task="" data-submit-toast-zh="任务安排已创建" data-submit-toast-en="Arrangement created" data-zh="创建" data-en="Create">创建</button></footer>
+            </section>
+          </div>
+        </section>
+
+        <section class="shell-view shell-page-view" data-shell-view="team" data-shell-view-title-zh="团队" data-shell-view-title-en="Team" data-od-id="shell-view-team" hidden="">
+          <div class="page-stack" data-filter-scope="">
+            <header class="catalog-market-header function-market-header" data-od-id="team-header-inline">
+              <div class="catalog-mode-tabs" role="group" aria-label="团队视图筛选">
+                <button class="filter-chip mode-tab active" type="button" data-filter-group="team-mode" data-filter="office" data-zh="办公室" data-en="Office">办公室</button>
+                <button class="filter-chip mode-tab" type="button" data-filter-group="team-mode" data-filter="workflow" data-zh="协作流" data-en="Agent workflow">协作流</button>
+                <button class="filter-chip mode-tab" type="button" data-filter-group="team-mode" data-filter="experts" data-zh="专家团" data-en="Expert team">专家团</button>
+              </div>
+              <div class="catalog-header-actions">
+                <label class="catalog-search" aria-label="搜索团队">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15.7 15.7 3.55 3.55"></path><circle cx="10.8" cy="10.8" r="5.6"></circle></svg>
+                  <input type="search" placeholder="搜索办公室、协作流、专家团" data-placeholder-zh="搜索办公室、协作流、专家团" data-placeholder-en="Search office, workflow, expert team">
+                </label>
+                <button class="button" type="button" data-run="#team-log" data-run-title-zh="同步能力库" data-run-title-en="Sync library" data-run-copy="已从智能体能力库同步可用员工、技能和服务。" data-run-copy-en="Synced available employees, skills, and services from the capability library." data-toast="能力库已同步" data-toast-en="Library synced" data-zh="同步能力库" data-en="Sync library">同步能力库</button>
+                <button class="button primary" type="button" data-team-action="office" data-open-modal="#team-office-create-modal" data-run="#team-log" data-run-title-zh="创建办公室" data-run-title-en="Create office" data-run-copy="已打开办公室创建面板，可选择智能体、工作任务、执行流程和员工职责。" data-run-copy-en="Opened office creation panel for agents, tasks, workflow, and responsibilities." data-toast="准备创建办公室" data-toast-en="Ready to create office" data-zh="创建办公室" data-en="Create office">创建办公室</button>
+                <button class="button primary" type="button" data-team-action="workflow" data-run="#team-log" data-run-title-zh="创建协作流" data-run-title-en="Create workflow" data-run-copy="已准备创建协作流，可配置执行阶段、负责 Agent 和人工 Gate。" data-run-copy-en="Ready to create a workflow with stages, agent owners, and human gates." data-toast="准备创建协作流" data-toast-en="Ready to create workflow" data-zh="创建协作流" data-en="Create workflow" hidden="">创建协作流</button>
+                <button class="button primary" type="button" data-team-action="experts" data-run="#team-log" data-run-title-zh="创建专家团" data-run-title-en="Create expert team" data-run-copy="已准备创建专家团，可选择组长、后台员工和主页可选状态。" data-run-copy-en="Ready to create an expert team with leader, background members, and home availability." data-toast="准备创建专家团" data-toast-en="Ready to create expert team" data-zh="创建专家团" data-en="Create expert team" hidden="">创建专家团</button>
+              </div>
+            </header>
+
+            <section class="catalog-source-bar" data-od-id="team-filters-inline">
+              <span class="catalog-context-note" data-zh="团队能力来自左侧智能体页 · 办公室可 @ 任意员工 · 专家团只和组长对话" data-en="Team capabilities come from Agents · Office supports @ any member · Expert team only chats through leader">团队能力来自左侧智能体页 · 办公室可 @ 任意员工 · 专家团只和组长对话</span>
+            </section>
+
+            <section class="team-office-shell" data-card-filter="office" data-office-shell="" data-od-id="team-office-shell">
+              <div class="office-card-grid" data-office-list="" aria-label="办公室卡片">
+                <button class="office-card office-card-button is-active" type="button" data-office-open="" data-office-title-zh="设计交付办公室" data-office-title-en="Design delivery office" data-office-subtitle-zh="组长 · 产品审阅智能体 · 4 成员" data-office-subtitle-en="Leader · Product review agent · 4 members" data-run="#team-log" data-run-title-zh="进入办公室" data-run-title-en="Enter office" data-run-copy="已进入页内办公室聊天框。" data-run-copy-en="Opened the inline office chat workspace." data-toast="已进入办公室" data-toast-en="Entered office" data-od-id="office-card-design-delivery">
+                  <span class="office-card-head"><strong data-zh="设计交付办公室" data-en="Design delivery office">设计交付办公室</strong><em class="status success" data-zh="运行中" data-en="Running">运行中</em></span>
+                  <span class="office-card-copy" data-zh="组长 · 产品审阅智能体 · 4 成员" data-en="Leader · Product review agent · 4 members">组长 · 产品审阅智能体 · 4 成员</span>
+                  <span class="office-card-foot"><span data-zh="当前：PRD 风险与界面打磨" data-en="Now: PRD risks and UI polish">当前：PRD 风险与界面打磨</span><em data-zh="进入群聊" data-en="Open chat">进入群聊</em></span>
+                </button>
+                <button class="office-card office-card-button" type="button" data-office-open="" data-office-title-zh="项目联调办公室" data-office-title-en="Project integration office" data-office-subtitle-zh="组长 · 开发交付智能体 · 3 成员" data-office-subtitle-en="Leader · Delivery agent · 3 members" data-run="#team-log" data-run-title-zh="进入办公室" data-run-title-en="Enter office" data-run-copy="已进入页内项目联调办公室。" data-run-copy-en="Opened the inline project integration office." data-toast="已进入办公室" data-toast-en="Entered office" data-od-id="office-card-project-integration">
+                  <span class="office-card-head"><strong data-zh="项目联调办公室" data-en="Project integration office">项目联调办公室</strong><em class="status warn" data-zh="待确认" data-en="Pending">待确认</em></span>
+                  <span class="office-card-copy" data-zh="组长 · 开发交付智能体 · 3 成员" data-en="Leader · Delivery agent · 3 members">组长 · 开发交付智能体 · 3 成员</span>
+                  <span class="office-card-foot"><span data-zh="当前：接口卡点与变更追踪" data-en="Now: API blockers and change tracking">当前：接口卡点与变更追踪</span><em data-zh="进入群聊" data-en="Open chat">进入群聊</em></span>
+                </button>
+                <button class="office-card office-card-button" type="button" data-office-open="" data-office-title-zh="会议准备办公室" data-office-title-en="Meeting prep office" data-office-subtitle-zh="组长 · 会议准备智能体 · 3 成员" data-office-subtitle-en="Leader · Meeting prep agent · 3 members" data-run="#team-log" data-run-title-zh="进入办公室" data-run-title-en="Enter office" data-run-copy="已进入页内会议准备办公室。" data-run-copy-en="Opened the inline meeting prep office." data-toast="已进入办公室" data-toast-en="Entered office" data-od-id="office-card-meeting-prep">
+                  <span class="office-card-head"><strong data-zh="会议准备办公室" data-en="Meeting prep office">会议准备办公室</strong><em class="status" data-zh="草稿" data-en="Draft">草稿</em></span>
+                  <span class="office-card-copy" data-zh="组长 · 会议准备智能体 · 3 成员" data-en="Leader · Meeting prep agent · 3 members">组长 · 会议准备智能体 · 3 成员</span>
+                  <span class="office-card-foot"><span data-zh="当前：议题整理与材料补齐" data-en="Now: Agenda and material prep">当前：议题整理与材料补齐</span><em data-zh="进入群聊" data-en="Open chat">进入群聊</em></span>
+                </button>
+              </div>
+              <section class="office-room-inline" data-office-room="" data-tab-scope="" data-od-id="team-office-room-inline" aria-labelledby="team-office-room-title" hidden="">
+                <header class="office-room-top">
+                  <button class="button compact" type="button" data-office-back="" data-zh="返回" data-en="Back">返回</button>
+                  <div class="office-room-title-block">
+                    <span data-zh="办公室群聊" data-en="Office chat">办公室群聊</span>
+                    <h3 id="team-office-room-title" data-office-title="" data-zh="设计交付办公室" data-en="Design delivery office">设计交付办公室</h3>
+                    <p data-office-subtitle="" data-zh="组长 · 产品审阅智能体 · 4 成员" data-en="Leader · Product review agent · 4 members">组长 · 产品审阅智能体 · 4 成员</p>
+                  </div>
+                  <div class="office-room-tabs" role="tablist" aria-label="办公室视图">
+                    <button class="active" type="button" role="tab" aria-selected="true" data-tab-target="#office-chat-panel">群聊</button>
+                    <button type="button" role="tab" aria-selected="false" data-tab-target="#office-run-panel">运行台</button>
+                    <button type="button" role="tab" aria-selected="false" data-tab-target="#office-memory-panel">记忆</button>
+                  </div>
+                  <div class="office-room-actions">
+                    <button class="button compact" type="button" data-office-drawer-open="members" aria-expanded="false" data-zh="成员" data-en="Members">成员</button>
+                    <button class="button compact" type="button" data-office-drawer-open="runs" aria-expanded="false" data-zh="执行中" data-en="Running">执行中</button>
+                  </div>
+                </header>
+                <main class="office-room-stage">
+                  <section class="office-tab-panel office-chat-panel" id="office-chat-panel" data-tab-panel="" data-od-id="office-chat-panel">
+                    <div class="office-room-thread" role="log" aria-label="办公室群聊">
+                      <article class="office-room-message is-user"><span class="team-avatar">你</span><div><strong>你</strong><p>@产品审阅智能体 先把 PRD 里的风险点列出来，@开发交付智能体 准备拆实现任务。</p></div></article>
+                      <article class="office-room-message"><span class="team-avatar">组</span><div><strong>办公室组长智能体</strong><p>已派发：产品审阅负责风险清单，开发交付负责实现拆解；不 @ 指定员工时，我会先接收并分派。</p></div></article>
+                      <article class="office-room-message"><span class="team-avatar">产</span><div><strong>产品审阅智能体</strong><p>中间产物已生成：核心风险集中在权限边界、执行结果可追溯和人工确认 Gate。</p></div></article>
+                      <article class="office-room-message"><span class="team-avatar">人</span><div><strong>真实员工 · 设计负责人</strong><p>我会补充页面优先级和验收口径，产物先回到办公室里确认。</p></div></article>
+                    </div>
+                    <section class="command-input office-global-composer" data-global-composer="office" data-od-id="office-global-composer">
+                      <label class="visually-hidden" for="office-message-input" data-zh="办公室消息输入" data-en="Office message input">办公室消息输入</label>
+                      <textarea id="office-message-input" data-composer="" data-office-focus="" data-od-id="office-composer-input" aria-describedby="office-composer-status office-composer-error" placeholder="@ 指定员工；留空默认交给办公室组长" data-placeholder-zh="@ 指定员工；留空默认交给办公室组长" data-placeholder-en="@ a member, or leave it to the office leader">告诉组长目标、背景或下一步...</textarea>
+                      <button class="shortcut-proxy" type="button" data-context-open="" hidden="" aria-hidden="true" tabindex="-1"></button>
+                      <button class="shortcut-proxy" type="button" data-slash-open="" hidden="" aria-hidden="true" tabindex="-1"></button>
+                      <div class="input-tools" data-od-id="office-composer-tools">
+                        <div class="composer-controls" data-od-id="office-composer-control-row">
+                          <div class="control-select mode-dropdown" aria-label="任务类型">
+                            <select data-task-mode="" aria-label="任务类型">
+                              <option value="plan" data-zh="计划" data-en="Plan">计划</option>
+                              <option value="goal" data-zh="目标" data-en="Goal">目标</option>
+                              <option value="agent" data-zh="智能体" data-en="Agent">智能体</option>
+                            </select>
+                          </div>
+                          <div class="control-select model-dropdown" aria-label="模型选择">
+                            <select data-model-select="" aria-label="模型选择">
+                              <option value="auto" data-zh="自动选择" data-en="Auto select">自动选择</option>
+                              <option value="fast" data-zh="快速模型" data-en="Fast model">快速模型</option>
+                              <option value="reasoning" data-zh="推理模型" data-en="Reasoning model">推理模型</option>
+                              <option value="vision" data-zh="视觉模型" data-en="Vision model">视觉模型</option>
+                            </select>
+                          </div>
+                          <div class="control-select agent-dropdown" data-agent-menu="" hidden="" aria-label="智能体配置">
+                            <select data-agent-select="" aria-label="智能体配置">
+                              <option value="office-leader" data-zh="办公室组长智能体" data-en="Office leader agent">办公室组长智能体</option>
+                              <option value="product-review" data-zh="产品审阅智能体" data-en="Product review agent">产品审阅智能体</option>
+                              <option value="engineering-handoff" data-zh="开发交付智能体" data-en="Engineering handoff agent">开发交付智能体</option>
+                              <option value="meeting-prep" data-zh="会议准备智能体" data-en="Meeting prep agent">会议准备智能体</option>
+                            </select>
+                          </div>
+                          <div class="control-select permission-dropdown" aria-label="权限选择">
+                            <select data-permission-select="" aria-label="权限选择">
+                              <option value="request-approval" data-zh="请求批准" data-en="Request approval">请求批准</option>
+                              <option value="approve-for-me" data-zh="替我审批" data-en="Approve for me">替我审批</option>
+                              <option value="full-access" data-zh="完全访问" data-en="Full access">完全访问</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="composer-actions" data-od-id="office-composer-action-row">
+                          <button class="icon-action prompt-action" type="button" data-run="#team-log" data-run-title-zh="优化提示词" data-run-title-en="Prompt refine" data-run-copy="已准备优化办公室消息，保留目标、@ 对象和验收项。" data-run-copy-en="Ready to refine the office message while keeping goals, mentions, and acceptance checks." data-toast="准备优化提示词" data-toast-en="Prompt refine ready" aria-label="优化提示词">Aa</button>
+                          <button class="icon-action" type="button" data-run="#team-log" data-run-title-zh="语音输入" data-run-title-en="Voice input" data-run-copy="语音输入入口已聚焦。" data-run-copy-en="Voice input focused." data-toast="语音输入已聚焦" data-toast-en="Voice input focused" aria-label="语音输入">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a3 3 0 0 0-3 3v4.2a3 3 0 0 0 6 0v-4.2a3 3 0 0 0-3-3Z"></path><path d="M6.8 11.7a5.2 5.2 0 0 0 10.4 0"></path><path d="M12 17v2.75"></path><path d="M8.8 19.75h6.4"></path></svg>
+                          </button>
+                          <button class="send-button" type="button" data-run="#team-log" data-run-title-zh="发送办公室消息" data-run-title-en="Send office message" data-run-copy="消息已发送到办公室组长智能体。" data-run-copy-en="Message sent to the office leader agent." data-toast="已发送" data-toast-en="Sent" aria-label="发送">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75 5.25 19.25 12 16.35l6.75 2.9L12 4.75Z"></path><path d="M12 4.75v11.6"></path></svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="context-palette" data-context-palette="" hidden="" data-od-id="office-context-search-panel">
+                        <label class="visually-hidden" for="office-context-search" data-zh="搜索上下文" data-en="Search context">搜索上下文</label>
+                        <input id="office-context-search" type="search" data-context-search="" placeholder="搜索员工、文件或办公室记忆" data-placeholder-zh="搜索员工、文件或办公室记忆" data-placeholder-en="Search members, files, or office memories">
+                        <div class="context-list">
+                          <button type="button" data-context-item="" data-kind="agent" data-label="办公室组长智能体"><span>员工</span><strong>办公室组长智能体</strong><em>默认入口与任务派发</em></button>
+                          <button type="button" data-context-item="" data-kind="agent" data-label="产品审阅智能体"><span>员工</span><strong>产品审阅智能体</strong><em>PRD 风险与验收口径</em></button>
+                          <button type="button" data-context-item="" data-kind="human" data-label="真实员工 · 设计负责人"><span>人工</span><strong>真实员工 · 设计负责人</strong><em>业务优先级与最终判断</em></button>
+                          <button type="button" data-context-item="" data-kind="memory" data-label="办公室验收口径"><span>记忆</span><strong>办公室验收口径</strong><em>本办公室长期偏好</em></button>
+                        </div>
+                      </div>
+                      <div class="slash-palette" data-slash-palette="" hidden="" data-od-id="office-slash-search-panel">
+                        <label class="visually-hidden" for="office-slash-search" data-zh="搜索 Skill 和 MCP" data-en="Search Skill and MCP">搜索 Skill 和 MCP</label>
+                        <input id="office-slash-search" type="search" data-slash-search="" placeholder="搜索 Skill 或 MCP，例如 页面审阅、GitHub" data-placeholder-zh="搜索 Skill 或 MCP，例如 页面审阅、GitHub" data-placeholder-en="Search Skill or MCP, e.g. page review, GitHub">
+                        <div class="slash-list">
+                          <button type="button" data-slash-item="" data-kind="skill" data-label="页面审阅 Skill"><span>Skill</span><strong>页面审阅 Skill</strong><em>检查层级、文案、交互和验收点</em></button>
+                          <button type="button" data-slash-item="" data-kind="skill" data-label="交付检查 Skill"><span>Skill</span><strong>交付检查 Skill</strong><em>生成测试点、风险和上线清单</em></button>
+                          <button type="button" data-slash-item="" data-kind="mcp" data-label="GitHub MCP"><span>MCP</span><strong>GitHub MCP</strong><em>读取 PR、Issue 和变更记录</em></button>
+                          <button type="button" data-slash-item="" data-kind="mcp" data-label="Filesystem MCP"><span>MCP</span><strong>Filesystem MCP</strong><em>读取和写入当前项目文件</em></button>
+                        </div>
+                      </div>
+                      <div class="composer-state-row">
+                        <span id="office-composer-status" class="composer-state" role="status" aria-live="polite" data-composer-status="" data-zh="办公室 · 等待输入" data-en="Office · waiting for input">办公室 · 等待输入</span>
+                        <span id="office-composer-error" class="composer-error" hidden="" data-zh="连接器暂不可用，请稍后重试。" data-en="Connector unavailable. Try again later.">连接器暂不可用，请稍后重试。</span>
+                      </div>
+                    </section>
+                  </section>
+                  <section class="office-tab-panel office-run-panel" id="office-run-panel" data-tab-panel="" data-od-id="office-run-panel" hidden="">
+                    <div class="office-kanban-board" aria-label="办公室运行台看板">
+                      <section class="office-kanban-column"><header><strong>待接收</strong><span>1</span></header><article><b>补齐验收口径</b><p>等待真实员工确认优先级</p><em>Human Gate</em></article></section>
+                      <section class="office-kanban-column is-running"><header><strong>执行中</strong><span>2</span></header><article><b>PRD 风险清单</b><p>产品审阅智能体正在合并风险</p><em>产品审阅</em></article><article><b>实现任务拆解</b><p>开发交付智能体标注依赖</p><em>开发交付</em></article></section>
+                      <section class="office-kanban-column"><header><strong>Gate</strong><span>1</span></header><article><b>权限边界确认</b><p>需要组长发起二次确认</p><em>请求批准</em></article></section>
+                      <section class="office-kanban-column is-done"><header><strong>完成</strong><span>2</span></header><article><b>界面验收口径</b><p>已写入办公室记忆</p><em>已归档</em></article><article><b>页面风险摘要</b><p>已回到群聊确认</p><em>已发送</em></article></section>
+                    </div>
+                  </section>
+                  <section class="office-tab-panel office-memory-panel" id="office-memory-panel" data-tab-panel="" data-od-id="office-memory-panel" hidden="">
+                    <div class="office-memory-layout" aria-label="办公室记忆">
+                      <aside class="office-memory-nav"><button class="active" type="button">全部记忆</button><button type="button">偏好</button><button type="button">事实</button><button type="button">决策</button><button type="button">待确认</button></aside>
+                      <div class="office-memory-list">
+                        <article class="office-memory-card"><span>偏好</span><strong>页面交付先保留蓝灰轻工作台语言</strong><p>来源：团队页群聊 · 可见：组长、产品审阅、开发交付</p><button type="button">设为长期记忆</button></article>
+                        <article class="office-memory-card"><span>事实</span><strong>办公室默认由组长智能体接收未 @ 的消息</strong><p>来源：办公室规则 · 可见：全部成员</p><button type="button">查看来源</button></article>
+                        <article class="office-memory-card"><span>决策</span><strong>高风险输出必须进入人工确认 Gate</strong><p>来源：本次 PRD 审阅 · 可见：组长、真实员工</p><button type="button">编辑可见范围</button></article>
+                        <article class="office-memory-card is-muted"><span>待确认</span><strong>是否把会议准备办公室共享给项目联调办公室</strong><p>来源：会议准备 Skill · 状态：等待你确认</p><button type="button">确认写入</button></article>
+                      </div>
+                    </div>
+                  </section>
+                </main>
+                <aside class="office-drawer" data-office-drawer="members" hidden="">
+                  <header><strong data-zh="成员" data-en="Members">成员</strong><button type="button" data-office-drawer-close="" aria-label="关闭">×</button></header>
+                  <div class="office-room-member"><span class="team-avatar">组</span><div><strong>办公室组长智能体</strong><p>默认入口 · 任务派发</p></div><em>Leader</em></div>
+                  <div class="office-room-member"><span class="team-avatar">产</span><div><strong>产品审阅智能体</strong><p>PRD 风险与验收口径</p></div><em>Agent</em></div>
+                  <div class="office-room-member"><span class="team-avatar">交</span><div><strong>开发交付智能体</strong><p>实现拆解与依赖追踪</p></div><em>Agent</em></div>
+                  <div class="office-room-member"><span class="team-avatar">人</span><div><strong>真实员工 · 设计负责人</strong><p>业务优先级与最终判断</p></div><em>Human</em></div>
+                  <button class="office-room-side-action" type="button" data-run="#team-log" data-run-title-zh="招募员工" data-run-title-en="Recruit employee" data-run-copy="可继续从智能体页把员工招募到办公室。" data-run-copy-en="You can recruit employees from Agents into this office." data-toast="准备招募员工" data-toast-en="Ready to recruit">招募员工</button>
+                </aside>
+                <aside class="office-drawer" data-office-drawer="runs" hidden="">
+                  <header><strong data-zh="执行中" data-en="Running">执行中</strong><button type="button" data-office-drawer-close="" aria-label="关闭">×</button></header>
+                  <div class="office-task-item is-running"><span></span><div><strong data-zh="PRD 风险清单" data-en="PRD risk list">PRD 风险清单</strong><p data-zh="产品审阅智能体负责" data-en="Owned by product review agent">产品审阅智能体负责</p></div><em class="status warn" data-zh="进行中" data-en="Running">进行中</em></div>
+                  <div class="office-task-item is-done"><span></span><div><strong data-zh="界面验收口径" data-en="UI acceptance criteria">界面验收口径</strong><p data-zh="真实员工已确认" data-en="Human confirmed">真实员工已确认</p></div><em class="status success" data-zh="完成" data-en="Done">完成</em></div>
+                  <div class="office-task-item"><span></span><div><strong data-zh="实现任务拆解" data-en="Implementation split">实现任务拆解</strong><p data-zh="等待开发交付智能体合流" data-en="Waiting for delivery agent merge">等待开发交付智能体合流</p></div><em class="status" data-zh="排队" data-en="Queued">排队</em></div>
+                </aside>
+              </section>
+            </section>
+
+            <section class="team-workflow-shell" data-card-filter="workflow" data-workflow-shell="" data-od-id="team-workflow-shell">
+              <div class="workflow-list" data-workflow-list="" aria-label="协作流列表">
+                <button class="workflow-list-item is-active" type="button" data-workflow-open="" data-workflow-title-zh="页面交付协作流" data-workflow-title-en="Page delivery workflow" data-workflow-stage-zh="当前阶段：02 产品审阅智能体 · 界面风险审阅" data-workflow-stage-en="Current stage: 02 Product review agent · UI risk review" data-run="#team-log" data-run-title-zh="进入协作流" data-run-title-en="Open workflow" data-run-copy="已进入页面交付协作流群聊。" data-run-copy-en="Opened the page delivery workflow chat." data-toast="已进入协作流" data-toast-en="Entered workflow" data-od-id="workflow-item-page-delivery">
+                  <span class="workflow-list-main">
+                    <strong data-zh="页面交付协作流" data-en="Page delivery workflow">页面交付协作流</strong>
+                    <em class="status warn" data-zh="运行中" data-en="Running">运行中</em>
+                  </span>
+                  <span class="workflow-list-meta">
+                    <span class="workflow-list-copy" data-zh="当前阶段：02 产品审阅智能体 · 界面风险审阅" data-en="Current stage: 02 Product review agent · UI risk review">当前阶段：02 产品审阅智能体 · 界面风险审阅</span>
+                    <span class="workflow-member-strip" aria-label="协作流成员"><small>组</small><small>产</small><small>交</small><small>人</small><em>4 成员</em></span>
+                  </span>
+                  <span class="workflow-list-foot"><span class="workflow-list-progress" aria-hidden="true"><i class="is-done"></i><i class="is-running"></i><i></i><i></i></span><b data-zh="进入群聊" data-en="Open chat">进入群聊</b></span>
+                </button>
+                <button class="workflow-list-item" type="button" data-workflow-open="" data-workflow-title-zh="代码审查协作流" data-workflow-title-en="Code review workflow" data-workflow-stage-zh="当前阶段：01 开发交付智能体 · 变更扫描" data-workflow-stage-en="Current stage: 01 Engineering handoff agent · Change scan" data-run="#team-log" data-run-title-zh="进入协作流" data-run-title-en="Open workflow" data-run-copy="已进入代码审查协作流群聊。" data-run-copy-en="Opened the code review workflow chat." data-toast="已进入协作流" data-toast-en="Entered workflow" data-od-id="workflow-item-code-review">
+                  <span class="workflow-list-main">
+                    <strong data-zh="代码审查协作流" data-en="Code review workflow">代码审查协作流</strong>
+                    <em class="status" data-zh="待启动" data-en="Queued">待启动</em>
+                  </span>
+                  <span class="workflow-list-meta">
+                    <span class="workflow-list-copy" data-zh="当前阶段：01 开发交付智能体 · 变更扫描" data-en="Current stage: 01 Engineering handoff agent · Change scan">当前阶段：01 开发交付智能体 · 变更扫描</span>
+                    <span class="workflow-member-strip" aria-label="协作流成员"><small>交</small><small>审</small><small>服</small><small>人</small><em>4 成员</em></span>
+                  </span>
+                  <span class="workflow-list-foot"><span class="workflow-list-progress" aria-hidden="true"><i class="is-running"></i><i></i><i></i><i></i></span><b data-zh="进入群聊" data-en="Open chat">进入群聊</b></span>
+                </button>
+                <button class="workflow-list-item" type="button" data-workflow-open="" data-workflow-title-zh="发布准备协作流" data-workflow-title-en="Release prep workflow" data-workflow-stage-zh="当前阶段：03 会议准备智能体 · 人工 Gate 确认" data-workflow-stage-en="Current stage: 03 Meeting prep agent · Human gate confirmation" data-run="#team-log" data-run-title-zh="进入协作流" data-run-title-en="Open workflow" data-run-copy="已进入发布准备协作流群聊。" data-run-copy-en="Opened the release prep workflow chat." data-toast="已进入协作流" data-toast-en="Entered workflow" data-od-id="workflow-item-release-prep">
+                  <span class="workflow-list-main">
+                    <strong data-zh="发布准备协作流" data-en="Release prep workflow">发布准备协作流</strong>
+                    <em class="status success" data-zh="Gate" data-en="Gate">Gate</em>
+                  </span>
+                  <span class="workflow-list-meta">
+                    <span class="workflow-list-copy" data-zh="当前阶段：03 会议准备智能体 · 人工 Gate 确认" data-en="Current stage: 03 Meeting prep agent · Human gate confirmation">当前阶段：03 会议准备智能体 · 人工 Gate 确认</span>
+                    <span class="workflow-member-strip" aria-label="协作流成员"><small>会</small><small>交</small><small>频</small><small>人</small><em>4 成员</em></span>
+                  </span>
+                  <span class="workflow-list-foot"><span class="workflow-list-progress" aria-hidden="true"><i class="is-done"></i><i class="is-done"></i><i class="is-running"></i><i></i></span><b data-zh="进入群聊" data-en="Open chat">进入群聊</b></span>
+                </button>
+              </div>
+
+              <section class="workflow-room-inline" data-workflow-room="" data-od-id="team-workflow-room-inline" aria-labelledby="team-workflow-room-title" hidden="">
+                <header class="workflow-room-top">
+                  <button class="button compact" type="button" data-workflow-back="" data-zh="返回" data-en="Back">返回</button>
+                  <div class="workflow-room-title-block">
+                    <span data-zh="协作流群聊" data-en="Workflow chat">协作流群聊</span>
+                    <h3 id="team-workflow-room-title" data-workflow-title="" data-zh="页面交付协作流" data-en="Page delivery workflow">页面交付协作流</h3>
+                    <p data-workflow-stage="" data-zh="当前阶段：02 产品审阅智能体 · 界面风险审阅" data-en="Current stage: 02 Product review agent · UI risk review">当前阶段：02 产品审阅智能体 · 界面风险审阅</p>
+                  </div>
+                  <div class="workflow-room-actions">
+                    <span class="status warn" data-zh="按节点推进" data-en="Stage-based">按节点推进</span>
+                    <button class="button compact" type="button" data-workflow-drawer-open="members" aria-expanded="false" data-zh="成员" data-en="Members">成员</button>
+                    <button class="button compact" type="button" data-workflow-drawer-open="runs" aria-expanded="false" data-zh="执行中" data-en="Running">执行中</button>
+                  </div>
+                </header>
+                <main class="workflow-room-stage">
+                  <section class="workflow-execution-strip" data-od-id="workflow-execution-strip" aria-label="执行步节点流">
+                    <article class="workflow-step-node is-done">
+                      <span>01</span>
+                      <div><strong>接收目标</strong><p>协作流组长智能体</p></div>
+                      <em class="status success">完成</em>
+                    </article>
+                    <article class="workflow-step-node is-running">
+                      <span>02</span>
+                      <div><strong>界面风险审阅</strong><p>产品审阅智能体</p></div>
+                      <em class="status warn">运行中</em>
+                    </article>
+                    <article class="workflow-step-node">
+                      <span>03</span>
+                      <div><strong>实现拆解</strong><p>开发交付智能体</p></div>
+                      <em class="status">排队</em>
+                    </article>
+                    <article class="workflow-step-node">
+                      <span>04</span>
+                      <div><strong>人工 Gate</strong><p>真实员工 · 设计负责人</p></div>
+                      <em class="status">待确认</em>
+                    </article>
+                  </section>
+                  <section class="workflow-chat-panel" data-od-id="workflow-chat-panel">
+                    <div class="workflow-room-thread" role="log" aria-label="协作流群聊">
+                      <article class="office-room-message"><span class="team-avatar">流</span><div><strong>协作流组长智能体</strong><p>已按节点推进到 02：产品审阅智能体负责界面风险审阅，后续会自动交给开发交付智能体拆解实现。</p></div></article>
+                      <article class="office-room-message"><span class="team-avatar">产</span><div><strong>产品审阅智能体</strong><p>中间产物：当前页面风险集中在协作流入口状态、执行阶段可读性和人工 Gate 的确认口径。</p></div></article>
+                      <article class="office-room-message is-user"><span class="team-avatar">你</span><div><strong>你</strong><p>@开发交付智能体 下一步把执行阶段拆成可验收任务，保留人工确认节点。</p></div></article>
+                    </div>
+                    <section class="command-input workflow-global-composer" data-global-composer="workflow" data-od-id="workflow-global-composer">
+                      <label class="visually-hidden" for="workflow-message-input" data-zh="协作流消息输入" data-en="Workflow message input">协作流消息输入</label>
+                      <textarea id="workflow-message-input" data-composer="" data-workflow-focus="" data-od-id="workflow-composer-input" aria-describedby="workflow-composer-status workflow-composer-error" placeholder="@ 指定阶段 Agent；/ 调用 Skill 或 MCP" data-placeholder-zh="@ 指定阶段 Agent；/ 调用 Skill 或 MCP" data-placeholder-en="@ a stage agent; / call a Skill or MCP">继续推进这个协作流...</textarea>
+                      <button class="shortcut-proxy" type="button" data-context-open="" hidden="" aria-hidden="true" tabindex="-1"></button>
+                      <button class="shortcut-proxy" type="button" data-slash-open="" hidden="" aria-hidden="true" tabindex="-1"></button>
+                      <div class="input-tools" data-od-id="workflow-composer-tools">
+                        <div class="composer-controls" data-od-id="workflow-composer-control-row">
+                          <div class="control-select mode-dropdown" aria-label="任务类型">
+                            <select data-task-mode="" aria-label="任务类型">
+                              <option value="plan" data-zh="计划" data-en="Plan">计划</option>
+                              <option value="goal" data-zh="目标" data-en="Goal">目标</option>
+                              <option value="agent" data-zh="智能体" data-en="Agent">智能体</option>
+                            </select>
+                          </div>
+                          <div class="control-select model-dropdown" aria-label="模型选择">
+                            <select data-model-select="" aria-label="模型选择">
+                              <option value="auto" data-zh="自动选择" data-en="Auto select">自动选择</option>
+                              <option value="fast" data-zh="快速模型" data-en="Fast model">快速模型</option>
+                              <option value="reasoning" data-zh="推理模型" data-en="Reasoning model">推理模型</option>
+                              <option value="vision" data-zh="视觉模型" data-en="Vision model">视觉模型</option>
+                            </select>
+                          </div>
+                          <div class="control-select agent-dropdown" data-agent-menu="" hidden="" aria-label="智能体配置">
+                            <select data-agent-select="" aria-label="智能体配置">
+                              <option value="workflow-leader" data-zh="协作流组长智能体" data-en="Workflow leader agent">协作流组长智能体</option>
+                              <option value="product-review" data-zh="产品审阅智能体" data-en="Product review agent">产品审阅智能体</option>
+                              <option value="engineering-handoff" data-zh="开发交付智能体" data-en="Engineering handoff agent">开发交付智能体</option>
+                              <option value="human-gate" data-zh="真实员工 · 设计负责人" data-en="Human gate · design owner">真实员工 · 设计负责人</option>
+                            </select>
+                          </div>
+                          <div class="control-select permission-dropdown" aria-label="权限选择">
+                            <select data-permission-select="" aria-label="权限选择">
+                              <option value="request-approval" data-zh="请求批准" data-en="Request approval">请求批准</option>
+                              <option value="approve-for-me" data-zh="替我审批" data-en="Approve for me">替我审批</option>
+                              <option value="full-access" data-zh="完全访问" data-en="Full access">完全访问</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="composer-actions" data-od-id="workflow-composer-action-row">
+                          <button class="icon-action prompt-action" type="button" data-run="#team-log" data-run-title-zh="优化协作流消息" data-run-title-en="Refine workflow message" data-run-copy="已准备优化协作流消息，保留阶段、Agent 和 Gate 条件。" data-run-copy-en="Ready to refine the workflow message while keeping stage, agent, and gate conditions." data-toast="准备优化提示词" data-toast-en="Prompt refine ready" aria-label="优化提示词">Aa</button>
+                          <button class="icon-action" type="button" data-run="#team-log" data-run-title-zh="语音输入" data-run-title-en="Voice input" data-run-copy="语音输入入口已聚焦。" data-run-copy-en="Voice input focused." data-toast="语音输入已聚焦" data-toast-en="Voice input focused" aria-label="语音输入">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a3 3 0 0 0-3 3v4.2a3 3 0 0 0 6 0v-4.2a3 3 0 0 0-3-3Z"></path><path d="M6.8 11.7a5.2 5.2 0 0 0 10.4 0"></path><path d="M12 17v2.75"></path><path d="M8.8 19.75h6.4"></path></svg>
+                          </button>
+                          <button class="send-button" type="button" data-run="#team-log" data-run-title-zh="发送协作流消息" data-run-title-en="Send workflow message" data-run-copy="消息已发送到当前阶段 Agent。" data-run-copy-en="Message sent to the current stage agent." data-toast="已发送" data-toast-en="Sent" aria-label="发送">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75 5.25 19.25 12 16.35l6.75 2.9L12 4.75Z"></path><path d="M12 4.75v11.6"></path></svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="context-palette" data-context-palette="" hidden="" data-od-id="workflow-context-search-panel">
+                        <label class="visually-hidden" for="workflow-context-search" data-zh="搜索上下文" data-en="Search context">搜索上下文</label>
+                        <input id="workflow-context-search" type="search" data-context-search="" placeholder="搜索阶段 Agent、产物或协作流记忆" data-placeholder-zh="搜索阶段 Agent、产物或协作流记忆" data-placeholder-en="Search stage agents, artifacts, or workflow memories">
+                        <div class="context-list">
+                          <button type="button" data-context-item="" data-kind="agent" data-label="协作流组长智能体"><span>员工</span><strong>协作流组长智能体</strong><em>节点推进与合流</em></button>
+                          <button type="button" data-context-item="" data-kind="agent" data-label="产品审阅智能体"><span>员工</span><strong>产品审阅智能体</strong><em>当前阶段负责人</em></button>
+                          <button type="button" data-context-item="" data-kind="agent" data-label="开发交付智能体"><span>员工</span><strong>开发交付智能体</strong><em>下一阶段负责人</em></button>
+                          <button type="button" data-context-item="" data-kind="human" data-label="真实员工 · 设计负责人"><span>人工</span><strong>真实员工 · 设计负责人</strong><em>Gate 确认</em></button>
+                        </div>
+                      </div>
+                      <div class="slash-palette" data-slash-palette="" hidden="" data-od-id="workflow-slash-search-panel">
+                        <label class="visually-hidden" for="workflow-slash-search" data-zh="搜索 Skill 和 MCP" data-en="Search Skill and MCP">搜索 Skill 和 MCP</label>
+                        <input id="workflow-slash-search" type="search" data-slash-search="" placeholder="搜索 Skill 或 MCP，例如 交付检查、GitHub" data-placeholder-zh="搜索 Skill 或 MCP，例如 交付检查、GitHub" data-placeholder-en="Search Skill or MCP, e.g. delivery check, GitHub">
+                        <div class="slash-list">
+                          <button type="button" data-slash-item="" data-kind="skill" data-label="交付检查 Skill"><span>Skill</span><strong>交付检查 Skill</strong><em>生成验收点与卡点清单</em></button>
+                          <button type="button" data-slash-item="" data-kind="skill" data-label="页面审阅 Skill"><span>Skill</span><strong>页面审阅 Skill</strong><em>检查层级、交互和文案</em></button>
+                          <button type="button" data-slash-item="" data-kind="mcp" data-label="GitHub MCP"><span>MCP</span><strong>GitHub MCP</strong><em>读取 PR、Issue 和提交记录</em></button>
+                          <button type="button" data-slash-item="" data-kind="mcp" data-label="Filesystem MCP"><span>MCP</span><strong>Filesystem MCP</strong><em>读取当前项目产物</em></button>
+                        </div>
+                      </div>
+                      <div class="composer-state-row">
+                        <span id="workflow-composer-status" class="composer-state" role="status" aria-live="polite" data-composer-status="" data-zh="协作流 · 等待输入" data-en="Workflow · waiting for input">协作流 · 等待输入</span>
+                        <span id="workflow-composer-error" class="composer-error" hidden="" data-zh="连接器暂不可用，请稍后重试。" data-en="Connector unavailable. Try again later.">连接器暂不可用，请稍后重试。</span>
+                      </div>
+                    </section>
+                  </section>
+                </main>
+                <aside class="office-drawer workflow-drawer" data-workflow-drawer="members" hidden="">
+                  <header><strong data-zh="群聊成员" data-en="Chat members">群聊成员</strong><button type="button" data-workflow-drawer-close="" aria-label="关闭">×</button></header>
+                  <div class="office-room-member"><span class="team-avatar">流</span><div><strong>协作流组长智能体</strong><p>负责节点推进、合流和异常回退</p></div><em>Leader</em></div>
+                  <div class="office-room-member"><span class="team-avatar">产</span><div><strong>产品审阅智能体</strong><p>02 阶段 · 界面风险审阅</p></div><em>Agent</em></div>
+                  <div class="office-room-member"><span class="team-avatar">交</span><div><strong>开发交付智能体</strong><p>03 阶段 · 实现拆解与依赖追踪</p></div><em>Agent</em></div>
+                  <div class="office-room-member"><span class="team-avatar">人</span><div><strong>真实员工 · 设计负责人</strong><p>04 阶段 · 人工 Gate 与最终判断</p></div><em>Human</em></div>
+                  <button class="office-room-side-action" type="button" data-run="#team-log" data-run-title-zh="调整协作流成员" data-run-title-en="Adjust workflow members" data-run-copy="可从智能体页调整每个执行阶段的负责人。" data-run-copy-en="You can adjust the owner of each workflow stage from Agents." data-toast="准备调整成员" data-toast-en="Ready to adjust members">调整成员</button>
+                </aside>
+                <aside class="office-drawer workflow-drawer" data-workflow-drawer="runs" hidden="">
+                  <header><strong data-zh="执行中" data-en="Running">执行中</strong><button type="button" data-workflow-drawer-close="" aria-label="关闭">×</button></header>
+                  <div class="office-task-item is-done"><span></span><div><strong data-zh="接收目标" data-en="Receive goal">接收目标</strong><p data-zh="协作流组长智能体已完成" data-en="Workflow leader completed">协作流组长智能体已完成</p></div><em class="status success" data-zh="完成" data-en="Done">完成</em></div>
+                  <div class="office-task-item is-running"><span></span><div><strong data-zh="界面风险审阅" data-en="UI risk review">界面风险审阅</strong><p data-zh="产品审阅智能体负责" data-en="Owned by product review agent">产品审阅智能体负责</p></div><em class="status warn" data-zh="进行中" data-en="Running">进行中</em></div>
+                  <div class="office-task-item"><span></span><div><strong data-zh="实现拆解" data-en="Implementation split">实现拆解</strong><p data-zh="等待开发交付智能体接收" data-en="Waiting for engineering handoff agent">等待开发交付智能体接收</p></div><em class="status" data-zh="排队" data-en="Queued">排队</em></div>
+                </aside>
+              </section>
+            </section>
+
+            <section class="team-experts-shell" data-card-filter="experts" data-od-id="team-experts-shell">
+              <div class="expert-team-grid" aria-label="专家团卡片">
+                <article class="expert-team-card">
+                  <div class="catalog-card-head"><span>主页可选</span><strong data-zh="产品交付专家团" data-en="Product delivery expert team">产品交付专家团</strong></div>
+                  <p data-zh="用户只和组长智能体多轮澄清；员工在后台协作，不展示办公室群聊。" data-en="The user clarifies only with the leader agent; employees collaborate in background without an office chat.">用户只和组长智能体多轮澄清；员工在后台协作，不展示办公室群聊。</p>
+                  <div class="expert-member-stack"><span>组长：产品审阅智能体</span><span>员工：开发交付智能体</span><span>员工：视觉打磨智能体</span></div>
+                  <button class="button compact" type="button" data-run="#team-log" data-run-title-zh="选择专家团" data-run-title-en="Select expert team" data-run-copy="已把产品交付专家团设为主页对话框可选团队。" data-run-copy-en="Product delivery expert team is now selectable in the home composer." data-toast="专家团已可选" data-toast-en="Expert team selectable">设为主页可选</button>
+                </article>
+                <article class="expert-team-card">
+                  <div class="catalog-card-head"><span>后台执行</span><strong data-zh="代码审查专家团" data-en="Code review expert team">代码审查专家团</strong></div>
+                  <p data-zh="组长接收需求，后台调度 Code Review Skill、Filesystem MCP 和 GitHub MCP。" data-en="Leader receives requests and orchestrates Code Review Skill, Filesystem MCP, and GitHub MCP in background.">组长接收需求，后台调度 Code Review Skill、Filesystem MCP 和 GitHub MCP。</p>
+                  <div class="expert-member-stack"><span>组长：开发交付智能体</span><span>员工：Code Review Skill</span><span>服务：Filesystem / GitHub</span></div>
+                  <button class="button compact" type="button" data-run="#team-log" data-run-title-zh="后台执行" data-run-title-en="Run in background" data-run-copy="代码审查专家团已进入后台执行；需要人工接入时只会由组长向你澄清。" data-run-copy-en="Code review expert team is running in background; only the leader will clarify with you if human input is needed." data-toast="专家团后台执行" data-toast-en="Expert team running">后台执行</button>
+                </article>
+                <article class="expert-team-card">
+                  <div class="catalog-card-head"><span>草稿</span><strong data-zh="会议准备专家团" data-en="Meeting prep expert team">会议准备专家团</strong></div>
+                  <p data-zh="组长负责澄清会议目标，后台员工整理议程、参会人上下文和材料清单。" data-en="The leader clarifies meeting goals while background members prepare agenda, attendee context, and material checklist.">组长负责澄清会议目标，后台员工整理议程、参会人上下文和材料清单。</p>
+                  <div class="expert-member-stack"><span>组长：会议准备智能体</span><span>员工：日历服务</span><span>员工：文档生成 Skill</span></div>
+                  <button class="button compact" type="button" data-run="#team-log" data-run-title-zh="完善专家团" data-run-title-en="Complete expert team" data-run-copy="会议准备专家团草稿已打开，可继续补充成员和权限。" data-run-copy-en="Meeting prep expert team draft opened for members and permissions." data-toast="专家团草稿已打开" data-toast-en="Expert team draft opened">继续配置</button>
+                </article>
+              </div>
+            </section>
+
+            <div class="modal-backdrop" id="team-office-create-modal" role="dialog" aria-modal="true" aria-labelledby="team-office-create-title">
+              <section class="office-modal-card office-create-card" data-od-id="team-office-create-modal">
+                <header class="arrangement-modal-header">
+                  <div><span class="modal-kicker" data-zh="办公室创建" data-en="Office builder">办公室创建</span><h2 id="team-office-create-title" data-zh="创建办公室" data-en="Create office">创建办公室</h2></div>
+                  <button class="icon-action compact" type="button" data-close-modal="" aria-label="关闭">×</button>
+                </header>
+                <div class="office-create-layout">
+                  <div class="office-create-main">
+                    <label class="form-field"><span data-zh="办公室名称" data-en="Office name">办公室名称</span><input type="text" value="设计交付办公室"></label>
+                    <label class="form-field"><span data-zh="负责的工作任务" data-en="Owned work task">负责的工作任务</span><textarea>围绕 PRD 风险、界面打磨和开发拆解，把需要人机协同的工作集中到一个办公室里。</textarea></label>
+                    <div class="form-field"><span data-zh="执行流程" data-en="Execution flow">执行流程</span><div class="office-flow-builder"><span>接收目标</span><span>组长拆解</span><span>员工并行</span><span>人工确认</span><span>结果归档</span></div></div>
+                    <div class="form-field"><span data-zh="每个员工负责的内容" data-en="Responsibilities">每个员工负责的内容</span><div class="office-role-matrix">
+                      <label><span>产品审阅智能体</span><input type="text" value="负责 PRD 风险清单与验收口径"></label>
+                      <label><span>开发交付智能体</span><input type="text" value="负责拆实现任务、标注依赖和卡点"></label>
+                      <label><span>真实员工 · 设计负责人</span><input type="text" value="负责业务优先级和最终判断"></label>
+                    </div></div>
+                  </div>
+                  <aside class="agent-picker-panel" aria-label="选择智能体">
+                    <strong data-zh="从智能体页选择" data-en="Select from Agents">从智能体页选择</strong>
+                    <label class="agent-pick-card"><input type="checkbox" checked><span><b>产品审阅智能体</b><em>员工 · 个人能力</em></span></label>
+                    <label class="agent-pick-card"><input type="checkbox" checked><span><b>开发交付智能体</b><em>员工 · 个人能力</em></span></label>
+                    <label class="agent-pick-card"><input type="checkbox"><span><b>页面审阅 Skill</b><em>技能 · 个人能力</em></span></label>
+                    <label class="agent-pick-card"><input type="checkbox" checked><span><b>真实员工 · 设计负责人</b><em>人工接入</em></span></label>
+                  </aside>
+                </div>
+                <footer class="arrangement-modal-actions"><button class="button" type="button" data-close-modal="" data-zh="取消" data-en="Cancel">取消</button><button class="button primary" type="button" data-submit-task="" data-submit-toast-zh="办公室已创建" data-submit-toast-en="Office created" data-zh="创建办公室" data-en="Create office">创建办公室</button></footer>
+              </section>
+            </div>
+
+            <div class="filter-empty-state" data-filter-empty="" role="status" aria-live="polite" hidden="" data-zh="没有匹配项" data-en="No matches">没有匹配项</div>
+            <div id="team-log" class="sr-log" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <div id="command-log" class="sr-log" aria-live="polite">
+          <div class="log-line"><div class="log-top"><strong>Crewon</strong><span class="mono">14:32</span></div><p data-zh="已载入 PRD 能力：Agent 小队、Workflow、Stage Gate、Channel、Skill/MCP 与 Harness 审计。" data-en="Loaded PRD capabilities: Agent team, Workflow, Stage Gate, Channel, Skill/MCP, and Harness audit.">已载入 PRD 能力：Agent 小队、Workflow、Stage Gate、Channel、Skill/MCP 与 Harness 审计。</p></div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="app.js"></script>
+
+
+</body></html>

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "office",
+  "savedAt": "2026-06-28T14:54:11.074Z",
+  "config": {
+    "subtitle": "新建办公室 · 配置阶段",
+    "title": "新办公室 22:54",
+    "workspace": {
+      "activity": {
+        "approvals": [],
+        "artifacts": []
+      },
+      "goal": "围绕「新办公室 22:54」进行多智能体协作，先配置成员，再启动群聊。",
+      "members": [],
+      "messages": [],
+      "tasks": []
+    }
+  }
+}
