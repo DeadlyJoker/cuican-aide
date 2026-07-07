@@ -6,6 +6,7 @@ import {
   cleanSlotTitle,
   CommandWorkspace,
   selectCommandHomeSlots,
+  setDefaultTeamOfficePreview,
   setActiveFilter,
   syncDesignFilterState,
 } from "./CommandWorkspace";
@@ -293,6 +294,46 @@ describe("CommandWorkspace", () => {
     applyDesignCardVisibility(scope);
     expect(scope.querySelectorAll<HTMLElement>("[data-card-filter]")[0]?.hidden).toBe(false);
     expect(scope.querySelectorAll<HTMLElement>("[data-card-filter]")[1]?.hidden).toBe(true);
+  });
+
+  it("resets team page to the original office list state without showing inline rooms", () => {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const view = document.createElement("section");
+    view.setAttribute("data-shell-view", "team");
+    view.innerHTML = `
+      <div data-filter-scope>
+        <button class="filter-chip active" data-filter-group="team-mode" data-filter="workflow"></button>
+        <button class="filter-chip" data-filter-group="team-mode" data-filter="office"></button>
+        <section data-card-filter="office" data-office-shell class="team-office-shell is-room-open">
+          <div data-office-list hidden></div>
+          <section data-office-room></section>
+          <aside data-office-drawer="members"></aside>
+          <button data-office-drawer-open="members" aria-expanded="true"></button>
+        </section>
+        <section data-card-filter="workflow" data-workflow-shell class="team-workflow-shell is-room-open">
+          <div data-workflow-list hidden></div>
+          <section data-workflow-room></section>
+          <aside data-workflow-drawer="members"></aside>
+          <button data-workflow-drawer-open="members" aria-expanded="true"></button>
+        </section>
+      </div>
+    `;
+    view.classList.add("office-room-active", "workflow-room-active");
+
+    setDefaultTeamOfficePreview(view);
+
+    expect(view.querySelector<HTMLElement>("[data-office-list]")?.hidden).toBe(false);
+    expect(view.querySelector<HTMLElement>("[data-office-room]")?.hidden).toBe(true);
+    expect(view.querySelector<HTMLElement>("[data-workflow-list]")?.hidden).toBe(false);
+    expect(view.querySelector<HTMLElement>("[data-workflow-room]")?.hidden).toBe(true);
+    expect(view.querySelector<HTMLElement>("[data-office-shell]")?.classList.contains("is-room-open")).toBe(false);
+    expect(view.querySelector<HTMLElement>("[data-workflow-shell]")?.classList.contains("is-room-open")).toBe(false);
+    expect(view.classList.contains("office-room-active")).toBe(false);
+    expect(view.classList.contains("workflow-room-active")).toBe(false);
+    expect(view.querySelector<HTMLElement>('[data-office-drawer="members"]')?.hidden).toBe(true);
+    expect(view.querySelector<HTMLElement>("[data-office-drawer-open]")?.getAttribute("aria-expanded")).toBe("false");
   });
 
 });

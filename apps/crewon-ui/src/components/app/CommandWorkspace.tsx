@@ -229,10 +229,11 @@ function applyInitialShellView(html: string, activeView: ShellViewId) {
       return match;
     }
     const classList = classes.split(/\s+/).filter((item: string) => item && item !== "active");
-    let nextRest = rest.replace(/\s+hidden(="")?/g, "");
+    const hasHidden = /\s+hidden(="")?/.test(rest);
+    let nextRest = view === activeView ? rest.replace(/\s+hidden(="")?/g, "") : rest;
     if (view === activeView) {
       classList.push("active");
-    } else {
+    } else if (!hasHidden) {
       nextRest += ' hidden=""';
     }
     return `<section class="${classList.join(" ")}"${nextRest}>`;
@@ -402,20 +403,40 @@ export function setDefaultScheduleFilters(view: HTMLElement) {
   setActiveFilter(scope, "schedule-source", "teamflow");
 }
 
-function setDefaultTeamOfficePreview(view: HTMLElement) {
-  const scope = filterScopeFor(view) ?? view;
-  setActiveFilter(scope, "team-mode", "office");
+function closeTeamInlineRooms(view: HTMLElement) {
   const officeRoom = view.querySelector<HTMLElement>("[data-office-room]");
   const officeList = view.querySelector<HTMLElement>("[data-office-list]");
   const officeShell = view.querySelector<HTMLElement>("[data-office-shell]");
+  const workflowRoom = view.querySelector<HTMLElement>("[data-workflow-room]");
+  const workflowList = view.querySelector<HTMLElement>("[data-workflow-list]");
+  const workflowShell = view.querySelector<HTMLElement>("[data-workflow-shell]");
   if (officeRoom) {
     officeRoom.hidden = true;
   }
   if (officeList) {
     officeList.hidden = false;
   }
+  if (workflowRoom) {
+    workflowRoom.hidden = true;
+  }
+  if (workflowList) {
+    workflowList.hidden = false;
+  }
   officeShell?.classList.remove("is-room-open");
+  workflowShell?.classList.remove("is-room-open");
   view.classList.remove("office-room-active", "workflow-room-active");
+  view.querySelectorAll<HTMLElement>("[data-office-drawer], [data-workflow-drawer]").forEach((drawer) => {
+    drawer.hidden = true;
+  });
+  view.querySelectorAll<HTMLElement>("[data-office-drawer-open], [data-workflow-drawer-open]").forEach((button) => {
+    button.setAttribute("aria-expanded", "false");
+  });
+}
+
+export function setDefaultTeamOfficePreview(view: HTMLElement) {
+  const scope = filterScopeFor(view) ?? view;
+  setActiveFilter(scope, "team-mode", "office");
+  closeTeamInlineRooms(view);
 }
 
 function openDesignPalette(root: HTMLElement, input: HTMLTextAreaElement, type: "slash" | "context") {
@@ -666,6 +687,13 @@ export function CommandWorkspace({
           event.preventDefault();
           const group = filterChip.dataset.filterGroup ?? "default";
           setActiveFilter(scope, group, filterChip.dataset.filter ?? "all");
+          if (group === "team-mode") {
+            const view = filterChip.closest<HTMLElement>('[data-shell-view="team"]');
+            if (view) {
+              closeTeamInlineRooms(view);
+              syncDesignFilterState(scope);
+            }
+          }
         }
         return;
       }
