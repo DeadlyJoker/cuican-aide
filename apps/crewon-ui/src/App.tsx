@@ -1,4 +1,5 @@
 import { AppConfirmDialog, AppShellChromeFrame, AppWorkspaceContent, AppWorkspaceNavigationPanel, AppWorkspaceSidePanels } from "./components/app";
+import { CommandWorkspace } from "./components/app/CommandWorkspace";
 import { isMissingThreadError, isUnsupportedRpcError } from "./lib/app-server/appServer";
 import {
   createAppCapabilityPanelHandlers, createAppDomainActionCoordinator, createAppDomainBackendCoordinator,
@@ -18,7 +19,6 @@ import { persistLocale, translate } from "./lib/i18n";
 import { upsertPendingComposerMention } from "./lib/shared/composerMentions";
 import { persistTheme } from "./lib/theme";
 import { isSingleConversationThread } from "./lib/thread/threadSourceFilters";
-
 export function App() {
   const { isDemoPreview, platform, serverUrl } = useAppEnvironment();
   const {
@@ -171,11 +171,7 @@ export function App() {
     );
   };
   const conversationThreads = threads.filter(isSingleConversationThread);
-  const sidebarSelectedThreadId = conversationThreads.some(
-    (thread) => thread.id === selectedThreadId,
-  )
-    ? selectedThreadId
-    : null;
+  const sidebarSelectedThreadId = conversationThreads.some((thread) => thread.id === selectedThreadId) ? selectedThreadId : null;
   useAppDocumentPreferenceEffects({
     client: clientRef.current,
     composerValue,
@@ -205,12 +201,7 @@ export function App() {
     threadsRef,
   });
 
-  const {
-    preserveThreadsAfterConnectionLoss,
-    retryConnection,
-    showDemoThreads,
-    switchToDemoThreads,
-  } = useAppConnectionHandlerSet({
+  const { preserveThreadsAfterConnectionLoss, retryConnection, showDemoThreads, switchToDemoThreads } = useAppConnectionHandlerSet({
     getClient: () => clientRef.current,
     localeRef,
     setConnectionAttempt,
@@ -747,6 +738,13 @@ export function App() {
     terminalCommand,
     terminalProcessId: terminalProcessIdRef.current,
   });
+
+  if (appView === "chat" && !selectedThread) return (
+    <>
+      <CommandWorkspace composerValue={composerValue} connectionState={connectionState} cwd={cwd} isSending={isSending} workMode={workMode} onAttachContext={attachWorkspaceContext} onChangeComposerValue={setComposerValue} onModeChange={setWorkMode} onRetryConnection={retryConnection} onSend={sendMessage} />
+      <AppConfirmDialog locale={locale} request={confirmRequest} onCancel={() => resolveConfirm(false)} onConfirm={() => resolveConfirm(true)} />
+    </>
+  );
 
   return (
     <AppShellChromeFrame

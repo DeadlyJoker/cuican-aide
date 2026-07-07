@@ -11,6 +11,8 @@ type WebSocketProxy = {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
   const appServerTarget = env.CREWON_APP_SERVER_TARGET ?? "ws://127.0.0.1:6176";
+  const agentPlatformTarget =
+    env.CREWON_AGENT_PLATFORM_TARGET ?? "http://127.0.0.1:8000";
 
   return {
     plugins: [react()],
@@ -30,6 +32,11 @@ export default defineConfig(({ mode }) => {
               },
             );
           },
+        },
+        "/agent-platform-api": {
+          target: agentPlatformTarget,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/agent-platform-api/, ""),
         },
       },
     },

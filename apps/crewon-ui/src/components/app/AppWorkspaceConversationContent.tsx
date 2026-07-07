@@ -1,6 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import { AppConversationSurface } from "./AppConversationSurface";
+import { CommandWorkspace } from "./CommandWorkspace";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import { translate, type Locale } from "../../lib/i18n";
@@ -55,6 +56,30 @@ export function AppWorkspaceConversationContent({
   const t = translate(locale);
   const sendShortcutLabel = platform === "mac" ? "⌘ Enter" : "Ctrl Enter";
 
+  const streamingText = selectedThreadId
+    ? (streamingTextByThread[selectedThreadId] ?? "")
+    : "";
+  const hasConversation =
+    Boolean(selectedThread) &&
+    ((selectedThread?.turns.length ?? 0) > 0 || streamingText.length > 0);
+
+  if (!hasConversation) {
+    return (
+      <CommandWorkspace
+        composerValue={composerValue}
+        connectionState={connectionState}
+        cwd={cwd}
+        isSending={isSending}
+        workMode={workMode}
+        onAttachContext={onAttachContext}
+        onChangeComposerValue={onChangeComposerValue}
+        onModeChange={onModeChange}
+        onRetryConnection={onRetryConnection}
+        onSend={onSend}
+      />
+    );
+  }
+
   return (
     <AppConversationSurface
       activeTurnId={activeTurnId}
@@ -89,9 +114,7 @@ export function AppWorkspaceConversationContent({
       sendShortcutLabel={sendShortcutLabel}
       sendingLabel={t.sending}
       slashCommands={slashCommands}
-      streamingText={
-        selectedThreadId ? (streamingTextByThread[selectedThreadId] ?? "") : ""
-      }
+      streamingText={streamingText}
       thread={selectedThread}
       threadSettingsLabel={t.threadSettings}
       value={composerValue}

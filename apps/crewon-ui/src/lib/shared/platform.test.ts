@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { defaultServerUrl } from "./platform";
+import { defaultServerUrl } from "../platform";
 
 function stubLocation(location: {
   host: string;

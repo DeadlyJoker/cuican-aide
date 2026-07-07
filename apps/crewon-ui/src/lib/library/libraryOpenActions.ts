@@ -3,6 +3,11 @@ import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse"
 import type { SkillsListResponse } from "@crewon-protocol/v2/SkillsListResponse";
 
 import type { AppServerClient } from "../app-server/appServer";
+import {
+  readAgentPlatformAgentItems,
+  readAgentPlatformKnowledgeData,
+  readAgentPlatformToolItems,
+} from "../agent-platform/agentPlatformClient";
 import { isPlaceholderBackendCwd } from "../backend/backendWorkspace";
 import type {
   KnowledgeData,
@@ -131,6 +136,21 @@ export async function openLibraryAction({
   }, 1800);
 
   if (!isConnected) {
+    try {
+      const platformPanel = await loadAgentPlatformFallbackPanel(kind, locale);
+      window.clearTimeout(loadingFallbackTimer);
+      if (!isCurrentLibraryLoad()) {
+        return;
+      }
+      if (platformPanel) {
+        setLibraryPanel(platformPanel);
+        return;
+      }
+    } catch {
+      // Keep the original disconnected/demo behavior when local agent-platform
+      // is unavailable or not yet configured.
+    }
+
     window.clearTimeout(loadingFallbackTimer);
     if (isDemo) {
       setLibraryPanel(demoLibraryPanel(kind, locale));
@@ -162,11 +182,17 @@ export async function openLibraryAction({
         skillsResponse,
         pluginsResponse,
         workspaceToolItems,
+        platformToolItems,
       ] = await Promise.all([
-        loadMcpInventory(effectiveThreadId, effectiveCwd),
-        listSkills(effectiveCwd),
-        listPlugins(effectiveCwd),
-        loadToolLibraryItems(effectiveCwd),
+        loadMcpInventory(effectiveThreadId, effectiveCwd).catch(() => ({
+          configs: [],
+          servers: [],
+          statuses: [],
+        })),
+        listSkills(effectiveCwd).catch(() => null),
+        listPlugins(effectiveCwd).catch(() => null),
+        loadToolLibraryItems(effectiveCwd).catch(() => []),
+        readAgentPlatformToolItems().catch(() => []),
       ]);
       if (!isCurrentLibraryLoad()) {
         return;
@@ -178,7 +204,7 @@ export async function openLibraryAction({
             mcpInventory,
             pluginsResponse,
             skillsResponse,
-            workspaceToolItems,
+            workspaceToolItems: [...platformToolItems, ...workspaceToolItems],
             locale,
           }),
           locale,
@@ -242,18 +268,33 @@ export async function openLibraryAction({
     }
 
     if (kind === "knowledge") {
-      const knowledge = await readKnowledgeData();
+      const [knowledge, platformKnowledge] = await Promise.all([
+        readKnowledgeData().catch(() => ({ memories: [], sources: [] })),
+        readAgentPlatformKnowledgeData().catch(() => ({
+          memories: [],
+          sources: [],
+        })),
+      ]);
       if (!isCurrentLibraryLoad()) {
         return;
       }
-      setLibraryPanel(knowledgeLibraryPanel(knowledge, locale));
+      setLibraryPanel(
+        knowledgeLibraryPanel(
+          {
+            memories: [...platformKnowledge.memories, ...knowledge.memories],
+            sources: [...platformKnowledge.sources, ...knowledge.sources],
+          },
+          locale,
+        ),
+      );
       return;
     }
 
     if (kind === "agents") {
-      const [response, storedItems] = await Promise.all([
-        detectExternalAgentConfig(effectiveCwd),
-        loadAgentLibraryItems(effectiveCwd),
+      const [response, storedItems, platformItems] = await Promise.all([
+        detectExternalAgentConfig(effectiveCwd).catch(() => null),
+        loadAgentLibraryItems(effectiveCwd).catch(() => []),
+        readAgentPlatformAgentItems().catch(() => []),
       ]);
       if (!isCurrentLibraryLoad()) {
         return;
@@ -262,7 +303,7 @@ export async function openLibraryAction({
         libraryCollectionPanel(
           kind,
           backendAgentCollectionContent({
-            storedItems,
+            storedItems: [...platformItems, ...storedItems],
             detectedItems: response?.items ?? [],
             locale,
           }),
@@ -295,4 +336,41 @@ export async function openLibraryAction({
   } finally {
     window.clearTimeout(loadingFallbackTimer);
   }
+}
+
+async function loadAgentPlatformFallbackPanel(
+  kind: LibraryKind,
+  locale: Locale,
+): Promise<LibraryPanel | null> {
+  if (kind === "agents") {
+    const items = await readAgentPlatformAgentItems();
+    return libraryCollectionPanel(
+      kind,
+      backendAgentCollectionContent({
+        storedItems: items,
+        detectedItems: [],
+        locale,
+      }),
+      locale,
+    );
+  }
+
+  if (kind === "tools") {
+    const items = await readAgentPlatformToolItems();
+    return libraryCollectionPanel(
+      kind,
+      {
+        subtitle: `${items.length} local agent-platform tools`,
+        body: "Loaded from local agent-platform while CrewON app-server is unavailable.",
+        items,
+      },
+      locale,
+    );
+  }
+
+  if (kind === "knowledge") {
+    return knowledgeLibraryPanel(await readAgentPlatformKnowledgeData(), locale);
+  }
+
+  return null;
 }
