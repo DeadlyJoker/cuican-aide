@@ -406,9 +406,16 @@ function setDefaultTeamOfficePreview(view: HTMLElement) {
   const scope = filterScopeFor(view) ?? view;
   setActiveFilter(scope, "team-mode", "office");
   const officeRoom = view.querySelector<HTMLElement>("[data-office-room]");
-  if (officeRoom && officeRoom.hidden) {
-    officeRoom.hidden = false;
+  const officeList = view.querySelector<HTMLElement>("[data-office-list]");
+  const officeShell = view.querySelector<HTMLElement>("[data-office-shell]");
+  if (officeRoom) {
+    officeRoom.hidden = true;
   }
+  if (officeList) {
+    officeList.hidden = false;
+  }
+  officeShell?.classList.remove("is-room-open");
+  view.classList.remove("office-room-active", "workflow-room-active");
 }
 
 function openDesignPalette(root: HTMLElement, input: HTMLTextAreaElement, type: "slash" | "context") {
