@@ -463,7 +463,36 @@ export function CommandWorkspace({
   onSend,
 }: CommandWorkspaceProps) {
   const rootRef = useRef<HTMLElement | null>(null);
+  const latestPropsRef = useRef({
+    composerValue,
+    isSending,
+    onAttachContext,
+    onChangeComposerValue,
+    onModeChange,
+    onRetryConnection,
+    onSend,
+  });
   const [snapshot, setSnapshot] = useState<AgentPlatformSnapshot>(emptySnapshot);
+
+  useEffect(() => {
+    latestPropsRef.current = {
+      composerValue,
+      isSending,
+      onAttachContext,
+      onChangeComposerValue,
+      onModeChange,
+      onRetryConnection,
+      onSend,
+    };
+  }, [
+    composerValue,
+    isSending,
+    onAttachContext,
+    onChangeComposerValue,
+    onModeChange,
+    onRetryConnection,
+    onSend,
+  ]);
 
   useEffect(() => {
     readAgentPlatformSnapshot()
@@ -555,7 +584,7 @@ export function CommandWorkspace({
     const handleInput = (event: Event) => {
       const target = event.target;
       if (target instanceof HTMLTextAreaElement && target.matches("[data-composer]")) {
-        onChangeComposerValue(target.value);
+        latestPropsRef.current.onChangeComposerValue(target.value);
         return;
       }
       if (target instanceof HTMLInputElement && target.matches(".catalog-search input")) {
@@ -813,36 +842,36 @@ export function CommandWorkspace({
 
       const slashItem = target.closest<HTMLElement>("[data-slash-item]");
       if (slashItem) {
-        insertComposerToken(slashItem, "/", onChangeComposerValue);
+        insertComposerToken(slashItem, "/", latestPropsRef.current.onChangeComposerValue);
       }
 
       const contextItem = target.closest<HTMLElement>("[data-context-item]");
       if (contextItem) {
-        insertComposerToken(contextItem, "@", onChangeComposerValue);
+        insertComposerToken(contextItem, "@", latestPropsRef.current.onChangeComposerValue);
       }
 
       if (target.closest(".workspace-pill")) {
-        onRetryConnection();
+        latestPropsRef.current.onRetryConnection();
         readAgentPlatformSnapshot().then(setSnapshot).catch(() => setSnapshot(emptySnapshot));
       }
 
       const modeSelect = target.closest(".select-option")?.parentElement?.previousElementSibling?.previousElementSibling;
       if (modeSelect instanceof HTMLSelectElement && modeSelect.matches("[data-task-mode]")) {
         const value = modeSelect.value;
-        onModeChange(value === "agent" ? "office" : "code");
+        latestPropsRef.current.onModeChange(value === "agent" ? "office" : "code");
       }
 
       const sendButton = target.closest<HTMLButtonElement>(".send-button");
       if (sendButton) {
         const input = sendButton.closest(".command-input")?.querySelector<HTMLTextAreaElement>("[data-composer]");
-        const text = input?.value.trim() || composerValue.trim();
-        if (text && !isSending) {
-          onSend(text);
+        const text = input?.value.trim() || latestPropsRef.current.composerValue.trim();
+        if (text && !latestPropsRef.current.isSending) {
+          latestPropsRef.current.onSend(text);
         }
       }
 
       if (target.closest("[data-context-open]")) {
-        onAttachContext();
+        latestPropsRef.current.onAttachContext();
       }
 
       if (
@@ -886,7 +915,7 @@ export function CommandWorkspace({
       document.removeEventListener("pointerdown", handleDocumentPointerDown);
       window.removeEventListener("hashchange", handleHashChange);
     };
-  }, [composerValue, isSending, onAttachContext, onChangeComposerValue, onModeChange, onRetryConnection, onSend]);
+  }, []);
 
   useEffect(() => {
     const root = rootRef.current;
