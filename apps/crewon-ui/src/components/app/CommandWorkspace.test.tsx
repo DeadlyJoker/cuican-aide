@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  activateDesignPanelTab,
   applyDesignCardVisibility,
   cleanSlotTitle,
   CommandWorkspace,
@@ -334,6 +335,35 @@ describe("CommandWorkspace", () => {
     expect(view.classList.contains("workflow-room-active")).toBe(false);
     expect(view.querySelector<HTMLElement>('[data-office-drawer="members"]')?.hidden).toBe(true);
     expect(view.querySelector<HTMLElement>("[data-office-drawer-open]")?.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("switches room tab panels like the original design runtime", () => {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const scope = document.createElement("section");
+    scope.setAttribute("data-tab-scope", "");
+    scope.innerHTML = `
+      <button data-tab-target="#chat" class="active" aria-selected="true"></button>
+      <button data-tab-target="#run" aria-selected="false"></button>
+      <button data-tab-target="#memory" aria-selected="false"></button>
+      <section id="chat" data-tab-panel></section>
+      <section id="run" data-tab-panel hidden></section>
+      <section id="memory" data-tab-panel hidden></section>
+    `;
+    const runTab = scope.querySelector<HTMLButtonElement>('[data-tab-target="#run"]');
+    expect(runTab).not.toBeNull();
+
+    if (runTab) {
+      activateDesignPanelTab(runTab, scope);
+    }
+
+    expect(scope.querySelector<HTMLElement>('[data-tab-target="#chat"]')?.classList.contains("active")).toBe(false);
+    expect(scope.querySelector<HTMLElement>('[data-tab-target="#run"]')?.classList.contains("active")).toBe(true);
+    expect(scope.querySelector<HTMLElement>('[data-tab-target="#run"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(scope.querySelector<HTMLElement>("#chat")?.hidden).toBe(true);
+    expect(scope.querySelector<HTMLElement>("#run")?.hidden).toBe(false);
+    expect(scope.querySelector<HTMLElement>("#memory")?.hidden).toBe(true);
   });
 
 });

@@ -439,6 +439,23 @@ export function setDefaultTeamOfficePreview(view: HTMLElement) {
   closeTeamInlineRooms(view);
 }
 
+export function activateDesignPanelTab(panelTab: HTMLElement, root: HTMLElement) {
+  const target = panelTab.dataset.tabTarget;
+  if (!target) {
+    return;
+  }
+  const scope = panelTab.closest<HTMLElement>("[data-tab-scope]") ?? root;
+  scope.querySelectorAll<HTMLElement>("[data-tab-target]").forEach((item) => {
+    const active = item === panelTab;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-pressed", active ? "true" : "false");
+    item.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  scope.querySelectorAll<HTMLElement>("[data-tab-panel]").forEach((panel) => {
+    panel.hidden = `#${panel.id}` !== target;
+  });
+}
+
 function openDesignPalette(root: HTMLElement, input: HTMLTextAreaElement, type: "slash" | "context") {
   const commandInput = input.closest<HTMLElement>(".command-input");
   const palette = commandInput?.querySelector<HTMLElement>(
@@ -758,6 +775,14 @@ export function CommandWorkspace({
             item.classList.toggle("current", item === node);
           });
         }
+        closeDesignFloating(root);
+        return;
+      }
+
+      const panelTab = target.closest<HTMLButtonElement>("[data-tab-target]");
+      if (panelTab?.dataset.tabTarget) {
+        event.preventDefault();
+        activateDesignPanelTab(panelTab, root);
         closeDesignFloating(root);
         return;
       }
