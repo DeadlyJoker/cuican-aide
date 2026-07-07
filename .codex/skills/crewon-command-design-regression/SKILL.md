@@ -32,6 +32,7 @@ Read these files before making a UI decision:
 - Keep `dangerouslySetInnerHTML` stable for the command shell. Platform data should not be a dependency of the full design HTML unless the task explicitly requires replacing the whole shell.
 - If shell navigation works briefly and then jumps back after a backend read or parent re-render, suspect React reapplying `dangerouslySetInnerHTML` over DOM state. Prefer initializing the imported design DOM once and treating it as a scoped non-controlled shell while React owns event handlers.
 - Long-lived design runtime handlers should read mutable values from refs instead of depending on frequently changing props such as `composerValue`, `isSending`, or connection callbacks. Rebinding those handlers can cause visible focus/hover/palette jitter even when the DOM tree itself is stable.
+- Team page cards are not simple links. Opening an office or workflow must hide the list, show the inline room, add `is-room-open` to the shell, and add `office-room-active` or `workflow-room-active` to the shell view. Returning must reverse all of those states.
 - Before declaring flicker fixed, capture both DOM and visual evidence: sample active shell view, root HTML length, important `hidden` states, and repeated screenshots over at least 6-8 seconds.
 
 ## Implementation Checklist
@@ -49,9 +50,13 @@ Read these files before making a UI decision:
    - important `hidden` states such as palettes, modals, and office rooms
    - screenshot hashes or visual screenshots
    - after clicking sidebar targets, verify the selected view stays selected after async platform reads complete
-5. Fix behavior in `CommandWorkspace.tsx` when state or interactions are wrong.
-6. Fix layout in both `app.css` and `original-shell-overrides.css` when fullscreen shell styles are wrong.
-7. Keep real agent-platform data limited to approved design slots; do not replace primary artifact copy unless explicitly requested.
+5. For Team page regressions, click through:
+   - `办公室` card `进入群聊`: verify `[data-office-list].hidden`, `[data-office-room]` visible, `.team-office-shell.is-room-open`, and `.shell-page-view.office-room-active`.
+   - `协作流` card `进入群聊`: verify `[data-workflow-list].hidden`, `[data-workflow-room]` visible, `.team-workflow-shell.is-room-open`, and `.shell-page-view.workflow-room-active`.
+   - Back buttons restore list visibility and remove room-active classes.
+6. Fix behavior in `CommandWorkspace.tsx` when state or interactions are wrong.
+7. Fix layout in both `app.css` and `original-shell-overrides.css` when fullscreen shell styles are wrong.
+8. Keep real agent-platform data limited to approved design slots; do not replace primary artifact copy unless explicitly requested.
 
 ## Validation
 

@@ -730,8 +730,10 @@ export function CommandWorkspace({
       const officeOpen = target.closest<HTMLButtonElement>("[data-office-open]");
       if (officeOpen) {
         const shell = officeOpen.closest<HTMLElement>("[data-office-shell]");
+        const list = shell?.querySelector<HTMLElement>("[data-office-list]");
         const room = shell?.querySelector<HTMLElement>("[data-office-room]");
-        if (shell && room) {
+        const view = shell?.closest<HTMLElement>("[data-shell-view]");
+        if (shell && list && room) {
           event.preventDefault();
           shell.querySelectorAll("[data-office-open]").forEach((item) => {
             item.classList.toggle("is-active", item === officeOpen);
@@ -746,9 +748,18 @@ export function CommandWorkspace({
           if (subtitle) {
             subtitle.dataset.zh = officeOpen.dataset.officeSubtitleZh ?? subtitle.dataset.zh ?? "";
             subtitle.dataset.en = officeOpen.dataset.officeSubtitleEn ?? subtitle.dataset.en ?? "";
-            subtitle.textContent = subtitle.dataset.zh ?? "";
+              subtitle.textContent = subtitle.dataset.zh ?? "";
           }
+          list.hidden = true;
           room.hidden = false;
+          shell.classList.add("is-room-open");
+          view?.classList.add("office-room-active");
+          room.querySelectorAll<HTMLElement>("[data-office-drawer]").forEach((drawer) => {
+            drawer.hidden = true;
+          });
+          room.querySelectorAll<HTMLElement>("[data-office-drawer-open]").forEach((button) => {
+            button.setAttribute("aria-expanded", "false");
+          });
         }
         closeDesignFloating(root);
         return;
@@ -757,9 +768,153 @@ export function CommandWorkspace({
       const officeBack = target.closest<HTMLButtonElement>("[data-office-back]");
       if (officeBack) {
         const room = officeBack.closest<HTMLElement>("[data-office-room]");
-        if (room) {
+        const shell = officeBack.closest<HTMLElement>("[data-office-shell]");
+        const list = shell?.querySelector<HTMLElement>("[data-office-list]");
+        const view = shell?.closest<HTMLElement>("[data-shell-view]");
+        if (shell && list && room) {
           event.preventDefault();
           room.hidden = true;
+          list.hidden = false;
+          shell.classList.remove("is-room-open");
+          view?.classList.remove("office-room-active");
+          room.querySelectorAll<HTMLElement>("[data-office-drawer]").forEach((drawer) => {
+            drawer.hidden = true;
+          });
+          room.querySelectorAll<HTMLElement>("[data-office-drawer-open]").forEach((button) => {
+            button.setAttribute("aria-expanded", "false");
+          });
+        }
+        return;
+      }
+
+      const officeDrawerOpen = target.closest<HTMLButtonElement>("[data-office-drawer-open]");
+      if (officeDrawerOpen) {
+        const room = officeDrawerOpen.closest<HTMLElement>("[data-office-room]");
+        const drawer = room?.querySelector<HTMLElement>(
+          `[data-office-drawer="${officeDrawerOpen.dataset.officeDrawerOpen ?? ""}"]`,
+        );
+        if (room && drawer) {
+          event.preventDefault();
+          const nextOpen = drawer.hidden;
+          room.querySelectorAll<HTMLElement>("[data-office-drawer]").forEach((item) => {
+            item.hidden = true;
+          });
+          room.querySelectorAll<HTMLElement>("[data-office-drawer-open]").forEach((button) => {
+            button.setAttribute("aria-expanded", "false");
+          });
+          drawer.hidden = !nextOpen;
+          officeDrawerOpen.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        }
+        return;
+      }
+
+      const officeDrawerClose = target.closest<HTMLButtonElement>("[data-office-drawer-close]");
+      if (officeDrawerClose) {
+        const room = officeDrawerClose.closest<HTMLElement>("[data-office-room]");
+        if (room) {
+          event.preventDefault();
+          room.querySelectorAll<HTMLElement>("[data-office-drawer]").forEach((drawer) => {
+            drawer.hidden = true;
+          });
+          room.querySelectorAll<HTMLElement>("[data-office-drawer-open]").forEach((button) => {
+            button.setAttribute("aria-expanded", "false");
+          });
+        }
+        return;
+      }
+
+      const workflowOpen = target.closest<HTMLButtonElement>("[data-workflow-open]");
+      if (workflowOpen) {
+        const shell = workflowOpen.closest<HTMLElement>("[data-workflow-shell]");
+        const list = shell?.querySelector<HTMLElement>("[data-workflow-list]");
+        const room = shell?.querySelector<HTMLElement>("[data-workflow-room]");
+        const view = shell?.closest<HTMLElement>("[data-shell-view]");
+        if (shell && list && room) {
+          event.preventDefault();
+          shell.querySelectorAll("[data-workflow-open]").forEach((item) => {
+            item.classList.toggle("is-active", item === workflowOpen);
+          });
+          const title = room.querySelector<HTMLElement>("[data-workflow-title]");
+          const stage = room.querySelector<HTMLElement>("[data-workflow-stage]");
+          if (title) {
+            title.dataset.zh = workflowOpen.dataset.workflowTitleZh ?? title.dataset.zh ?? "";
+            title.dataset.en = workflowOpen.dataset.workflowTitleEn ?? title.dataset.en ?? "";
+            title.textContent = title.dataset.zh ?? "";
+          }
+          if (stage) {
+            stage.dataset.zh = workflowOpen.dataset.workflowStageZh ?? stage.dataset.zh ?? "";
+            stage.dataset.en = workflowOpen.dataset.workflowStageEn ?? stage.dataset.en ?? "";
+            stage.textContent = stage.dataset.zh ?? "";
+          }
+          list.hidden = true;
+          room.hidden = false;
+          shell.classList.add("is-room-open");
+          view?.classList.add("workflow-room-active");
+          room.querySelectorAll<HTMLElement>("[data-workflow-drawer]").forEach((drawer) => {
+            drawer.hidden = true;
+          });
+          room.querySelectorAll<HTMLElement>("[data-workflow-drawer-open]").forEach((button) => {
+            button.setAttribute("aria-expanded", "false");
+          });
+        }
+        closeDesignFloating(root);
+        return;
+      }
+
+      const workflowBack = target.closest<HTMLButtonElement>("[data-workflow-back]");
+      if (workflowBack) {
+        const room = workflowBack.closest<HTMLElement>("[data-workflow-room]");
+        const shell = workflowBack.closest<HTMLElement>("[data-workflow-shell]");
+        const list = shell?.querySelector<HTMLElement>("[data-workflow-list]");
+        const view = shell?.closest<HTMLElement>("[data-shell-view]");
+        if (shell && list && room) {
+          event.preventDefault();
+          room.hidden = true;
+          list.hidden = false;
+          shell.classList.remove("is-room-open");
+          view?.classList.remove("workflow-room-active");
+          room.querySelectorAll<HTMLElement>("[data-workflow-drawer]").forEach((drawer) => {
+            drawer.hidden = true;
+          });
+          room.querySelectorAll<HTMLElement>("[data-workflow-drawer-open]").forEach((button) => {
+            button.setAttribute("aria-expanded", "false");
+          });
+        }
+        return;
+      }
+
+      const workflowDrawerOpen = target.closest<HTMLButtonElement>("[data-workflow-drawer-open]");
+      if (workflowDrawerOpen) {
+        const room = workflowDrawerOpen.closest<HTMLElement>("[data-workflow-room]");
+        const drawer = room?.querySelector<HTMLElement>(
+          `[data-workflow-drawer="${workflowDrawerOpen.dataset.workflowDrawerOpen ?? ""}"]`,
+        );
+        if (room && drawer) {
+          event.preventDefault();
+          const nextOpen = drawer.hidden;
+          room.querySelectorAll<HTMLElement>("[data-workflow-drawer]").forEach((item) => {
+            item.hidden = true;
+          });
+          room.querySelectorAll<HTMLElement>("[data-workflow-drawer-open]").forEach((button) => {
+            button.setAttribute("aria-expanded", "false");
+          });
+          drawer.hidden = !nextOpen;
+          workflowDrawerOpen.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        }
+        return;
+      }
+
+      const workflowDrawerClose = target.closest<HTMLButtonElement>("[data-workflow-drawer-close]");
+      if (workflowDrawerClose) {
+        const room = workflowDrawerClose.closest<HTMLElement>("[data-workflow-room]");
+        if (room) {
+          event.preventDefault();
+          room.querySelectorAll<HTMLElement>("[data-workflow-drawer]").forEach((drawer) => {
+            drawer.hidden = true;
+          });
+          room.querySelectorAll<HTMLElement>("[data-workflow-drawer-open]").forEach((button) => {
+            button.setAttribute("aria-expanded", "false");
+          });
         }
         return;
       }
