@@ -30,6 +30,7 @@ Read these files before making a UI decision:
 - Flicker usually comes from DOM replacement after async platform data, double-running design runtime, or repeated enhancement observers. Check `designHtml` dependencies, runtime boot effects, and MutationObserver loops.
 - If the user reports fixed-interval flicker such as every 2-3 seconds, do not assume it is visual CSS first. Check parent component re-renders, polling intervals, connection-status updates, and whether React effects rebind document or root event listeners on every prop change.
 - Keep `dangerouslySetInnerHTML` stable for the command shell. Platform data should not be a dependency of the full design HTML unless the task explicitly requires replacing the whole shell.
+- If shell navigation works briefly and then jumps back after a backend read or parent re-render, suspect React reapplying `dangerouslySetInnerHTML` over DOM state. Prefer initializing the imported design DOM once and treating it as a scoped non-controlled shell while React owns event handlers.
 - Long-lived design runtime handlers should read mutable values from refs instead of depending on frequently changing props such as `composerValue`, `isSending`, or connection callbacks. Rebinding those handlers can cause visible focus/hover/palette jitter even when the DOM tree itself is stable.
 - Before declaring flicker fixed, capture both DOM and visual evidence: sample active shell view, root HTML length, important `hidden` states, and repeated screenshots over at least 6-8 seconds.
 
@@ -47,6 +48,7 @@ Read these files before making a UI decision:
    - `.screen-shell.command-screen` HTML length
    - important `hidden` states such as palettes, modals, and office rooms
    - screenshot hashes or visual screenshots
+   - after clicking sidebar targets, verify the selected view stays selected after async platform reads complete
 5. Fix behavior in `CommandWorkspace.tsx` when state or interactions are wrong.
 6. Fix layout in both `app.css` and `original-shell-overrides.css` when fullscreen shell styles are wrong.
 7. Keep real agent-platform data limited to approved design slots; do not replace primary artifact copy unless explicitly requested.

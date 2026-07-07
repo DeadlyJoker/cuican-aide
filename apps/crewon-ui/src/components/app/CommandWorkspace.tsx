@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   readAgentPlatformSnapshot,
@@ -511,6 +511,13 @@ export function CommandWorkspace({
     [],
   );
 
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    root.innerHTML = designHtml;
+    root.dataset.commandShellMounted = "true";
+  }, [designHtml]);
+
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
@@ -642,6 +649,7 @@ export function CommandWorkspace({
         if (activateShellView(shellTarget.dataset.shellViewTarget)) {
           event.preventDefault();
         }
+        return;
       }
 
       const filterChip = target.closest<HTMLElement>(".filter-chip[data-filter]");
@@ -937,12 +945,18 @@ export function CommandWorkspace({
     void slots;
   }, [slots]);
 
+  const staticMarkupProps =
+    typeof window === "undefined"
+      ? { dangerouslySetInnerHTML: { __html: designHtml } }
+      : {};
+
   return (
     <main
       className="screen-shell command-screen"
       data-od-id="desktop-command-screen"
       ref={rootRef}
-      dangerouslySetInnerHTML={{ __html: designHtml }}
+      suppressHydrationWarning
+      {...staticMarkupProps}
     />
   );
 }
