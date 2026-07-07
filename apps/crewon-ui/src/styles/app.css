@@ -8965,7 +8965,9 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .shell-page-view:not(.assistant-only-view) .page-stack {
   gap: 0;
-  max-width: 1320px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .screen-shell.command-screen .catalog-market-header,

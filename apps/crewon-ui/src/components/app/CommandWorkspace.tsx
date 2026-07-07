@@ -8,7 +8,6 @@ import {
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import type { WorkMode } from "../../lib/workMode";
 import { originalCommandWindowHtml } from "./originalCommandWindowHtml";
-import { originalDesignRuntimeSource } from "./originalDesignRuntimeSource";
 import { originalSidebarHtml } from "./originalSidebarHtml";
 
 type CommandWorkspaceProps = {
@@ -57,6 +56,20 @@ const shellViewIds = [
   "schedule",
   "team",
 ] as const;
+
+type ShellViewId = (typeof shellViewIds)[number];
+
+function isShellViewId(value: string): value is ShellViewId {
+  return shellViewIds.includes(value as ShellViewId);
+}
+
+function shellViewFromHash() {
+  if (typeof window === "undefined") {
+    return "command";
+  }
+  const view = window.location.hash.replace(/^#view-/, "") || "command";
+  return isShellViewId(view) ? view : "command";
+}
 
 const sidebarNav = [
   {
@@ -210,11 +223,28 @@ function replacePaletteItems(
   );
 }
 
-function injectDesignData(html: string, slots: CommandHomeSlots) {
-  return html.replace(
+function applyInitialShellView(html: string, activeView: ShellViewId) {
+  return html.replace(/<section class="([^"]*)"([^>]*data-shell-view="([^"]+)"[^>]*)>/g, (match, classes, rest, view) => {
+    if (!isShellViewId(view)) {
+      return match;
+    }
+    const classList = classes.split(/\s+/).filter((item: string) => item && item !== "active");
+    let nextRest = rest.replace(/\s+hidden(="")?/g, "");
+    if (view === activeView) {
+      classList.push("active");
+    } else {
+      nextRest += ' hidden=""';
+    }
+    return `<section class="${classList.join(" ")}"${nextRest}>`;
+  });
+}
+
+function injectDesignData(html: string, slots: CommandHomeSlots, initialView: ShellViewId) {
+  const htmlWithSidebar = html.replace(
     /<aside class="command-sidebar"[\s\S]*?<\/aside>/,
-    `<aside class="command-sidebar" data-sidebar-shell="" data-sidebar-current="command" data-sidebar-log="command-log" data-sidebar-prefix="desktop" data-od-id="desktop-sidebar">${originalSidebarHtml("command", "command-log", "desktop")}</aside>`,
+    `<aside class="command-sidebar" data-sidebar-shell="" data-sidebar-current="${initialView}" data-sidebar-log="command-log" data-sidebar-prefix="desktop" data-od-id="desktop-sidebar">${originalSidebarHtml(initialView, "command-log", "desktop")}</aside>`,
   );
+  return applyInitialShellView(htmlWithSidebar, initialView);
 }
 
 function getOptionText(option: HTMLOptionElement | undefined) {
@@ -372,6 +402,15 @@ export function setDefaultScheduleFilters(view: HTMLElement) {
   setActiveFilter(scope, "schedule-source", "teamflow");
 }
 
+function setDefaultTeamOfficePreview(view: HTMLElement) {
+  const scope = filterScopeFor(view) ?? view;
+  setActiveFilter(scope, "team-mode", "office");
+  const officeRoom = view.querySelector<HTMLElement>("[data-office-room]");
+  if (officeRoom && officeRoom.hidden) {
+    officeRoom.hidden = false;
+  }
+}
+
 function openDesignPalette(root: HTMLElement, input: HTMLTextAreaElement, type: "slash" | "context") {
   const commandInput = input.closest<HTMLElement>(".command-input");
   const palette = commandInput?.querySelector<HTMLElement>(
@@ -424,7 +463,6 @@ export function CommandWorkspace({
   onSend,
 }: CommandWorkspaceProps) {
   const rootRef = useRef<HTMLElement | null>(null);
-  const runtimeBootedRef = useRef(false);
   const [snapshot, setSnapshot] = useState<AgentPlatformSnapshot>(emptySnapshot);
 
   useEffect(() => {
@@ -434,27 +472,15 @@ export function CommandWorkspace({
   }, []);
 
   const slots = useMemo(() => selectCommandHomeSlots(snapshot), [snapshot]);
-  const designHtml = useMemo(() => injectDesignData(originalCommandWindowHtml, slots), [slots]);
-
-  useEffect(() => {
-    runtimeBootedRef.current = false;
-  }, [designHtml]);
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root || runtimeBootedRef.current || root.dataset.designRuntimeReady === "true") {
-      return;
-    }
-    runtimeBootedRef.current = true;
-    root.dataset.designRuntimeReady = "true";
-
-    try {
-      new Function(originalDesignRuntimeSource)();
-      document.dispatchEvent(new Event("DOMContentLoaded"));
-    } finally {
-      setupDesignEnhancedSelects(root);
-    }
-  }, [designHtml]);
+  const designHtml = useMemo(
+    () =>
+      injectDesignData(
+        originalCommandWindowHtml,
+        selectCommandHomeSlots(emptySnapshot),
+        shellViewFromHash(),
+      ),
+    [],
+  );
 
   useEffect(() => {
     const root = rootRef.current;
@@ -516,6 +542,8 @@ export function CommandWorkspace({
       }
       if (key === "schedule") {
         setDefaultScheduleFilters(activeView);
+      } else if (key === "team") {
+        setDefaultTeamOfficePreview(activeView);
       }
       const scope = filterScopeFor(activeView);
       if (scope) {
@@ -594,6 +622,107 @@ export function CommandWorkspace({
           event.preventDefault();
           const group = filterChip.dataset.filterGroup ?? "default";
           setActiveFilter(scope, group, filterChip.dataset.filter ?? "all");
+        }
+        return;
+      }
+
+      const sidebarCollapse = target.closest<HTMLButtonElement>("[data-sidebar-collapse]");
+      if (sidebarCollapse) {
+        const shell = sidebarCollapse.closest<HTMLElement>(".command-window");
+        if (shell) {
+          event.preventDefault();
+          const collapsed = !shell.classList.contains("sidebar-collapsed");
+          shell.classList.toggle("sidebar-collapsed", collapsed);
+          sidebarCollapse.setAttribute("aria-pressed", collapsed ? "true" : "false");
+          if (collapsed) {
+            closeDesignFloating(root);
+          }
+        }
+        return;
+      }
+
+      const sidebarSearchOpen = target.closest<HTMLButtonElement>("[data-sidebar-search-open]");
+      if (sidebarSearchOpen) {
+        const panel = root.querySelector<HTMLElement>("[data-sidebar-search]");
+        if (panel) {
+          event.preventDefault();
+          const shouldOpen = panel.hidden;
+          closeDesignFloating(root, shouldOpen ? panel : null);
+          panel.hidden = !shouldOpen;
+          sidebarSearchOpen.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+          if (shouldOpen) {
+            window.setTimeout(() => {
+              panel.querySelector<HTMLInputElement>("[data-sidebar-search-input]")?.focus();
+            }, 0);
+          }
+        }
+        return;
+      }
+
+      const spaceTitle = target.closest<HTMLButtonElement>(".space-title");
+      if (spaceTitle) {
+        const node = spaceTitle.closest<HTMLElement>(".space-node");
+        const marker = spaceTitle.querySelector("span");
+        if (node) {
+          event.preventDefault();
+          node.classList.toggle("collapsed");
+          if (marker) {
+            marker.textContent = node.classList.contains("collapsed") ? "›" : "⌄";
+          }
+        }
+        return;
+      }
+
+      const conversationItem = target.closest<HTMLButtonElement>(".conversation-item");
+      if (conversationItem) {
+        const tree = conversationItem.closest<HTMLElement>(".space-tree");
+        const node = conversationItem.closest<HTMLElement>(".space-node");
+        if (tree) {
+          event.preventDefault();
+          tree.querySelectorAll(".conversation-item").forEach((item) => {
+            item.classList.toggle("active", item === conversationItem);
+          });
+          tree.querySelectorAll(".space-node").forEach((item) => {
+            item.classList.toggle("current", item === node);
+          });
+        }
+        closeDesignFloating(root);
+        return;
+      }
+
+      const officeOpen = target.closest<HTMLButtonElement>("[data-office-open]");
+      if (officeOpen) {
+        const shell = officeOpen.closest<HTMLElement>("[data-office-shell]");
+        const room = shell?.querySelector<HTMLElement>("[data-office-room]");
+        if (shell && room) {
+          event.preventDefault();
+          shell.querySelectorAll("[data-office-open]").forEach((item) => {
+            item.classList.toggle("is-active", item === officeOpen);
+          });
+          const title = room.querySelector<HTMLElement>("[data-office-title]");
+          const subtitle = room.querySelector<HTMLElement>("[data-office-subtitle]");
+          if (title) {
+            title.dataset.zh = officeOpen.dataset.officeTitleZh ?? title.dataset.zh ?? "";
+            title.dataset.en = officeOpen.dataset.officeTitleEn ?? title.dataset.en ?? "";
+            title.textContent = title.dataset.zh ?? "";
+          }
+          if (subtitle) {
+            subtitle.dataset.zh = officeOpen.dataset.officeSubtitleZh ?? subtitle.dataset.zh ?? "";
+            subtitle.dataset.en = officeOpen.dataset.officeSubtitleEn ?? subtitle.dataset.en ?? "";
+            subtitle.textContent = subtitle.dataset.zh ?? "";
+          }
+          room.hidden = false;
+        }
+        closeDesignFloating(root);
+        return;
+      }
+
+      const officeBack = target.closest<HTMLButtonElement>("[data-office-back]");
+      if (officeBack) {
+        const room = officeBack.closest<HTMLElement>("[data-office-room]");
+        if (room) {
+          event.preventDefault();
+          room.hidden = true;
         }
         return;
       }
@@ -774,6 +903,10 @@ export function CommandWorkspace({
     void cwd;
     void workMode;
   }, [connectionState, cwd, workMode]);
+
+  useEffect(() => {
+    void slots;
+  }, [slots]);
 
   return (
     <main
