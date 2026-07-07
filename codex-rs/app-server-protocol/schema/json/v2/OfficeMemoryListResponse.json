@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "OfficeMemoryEvidenceRef": {
+      "properties": {
+        "runId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "OfficeMemoryRecord": {
+      "properties": {
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "evidenceRefs": {
+          "items": {
+            "$ref": "#/definitions/OfficeMemoryEvidenceRef"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "importance": {
+          "type": "string"
+        },
+        "keywords": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "lastUsedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "member": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "officeKey": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "usageCount": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "confidence",
+        "content",
+        "createdAt",
+        "evidenceRefs",
+        "id",
+        "importance",
+        "keywords",
+        "kind",
+        "officeKey",
+        "scope",
+        "status",
+        "updatedAt",
+        "usageCount"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/definitions/OfficeMemoryRecord"
+      },
+      "type": "array"
+    },
+    "nextCursor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "OfficeMemoryListResponse",
+  "type": "object"
+}

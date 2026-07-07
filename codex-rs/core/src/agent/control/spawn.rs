@@ -87,7 +87,7 @@ impl AgentControl {
         config: Config,
         initial_operation: Op,
         session_source: Option<SessionSource>,
-    ) -> CodexResult<ThreadId> {
+    ) -> CrewonResult<ThreadId> {
         let spawned_agent = Box::pin(self.spawn_agent_internal(
             config,
             initial_operation,
@@ -105,7 +105,7 @@ impl AgentControl {
         initial_operation: Op,
         session_source: Option<SessionSource>,
         options: SpawnAgentOptions, // TODO(jif) drop with new fork.
-    ) -> CodexResult<LiveAgent> {
+    ) -> CrewonResult<LiveAgent> {
         Box::pin(self.spawn_agent_internal(config, initial_operation, session_source, options))
             .await
     }
@@ -114,7 +114,7 @@ impl AgentControl {
         &self,
         config: Config,
         thread_id: ThreadId,
-    ) -> CodexResult<()> {
+    ) -> CrewonResult<()> {
         let state = self.upgrade()?;
         if state.get_thread(thread_id).await.is_ok() {
             self.touch_loaded_v2_residency(&state, thread_id).await;
@@ -196,7 +196,7 @@ impl AgentControl {
         initial_operation: Op,
         session_source: Option<SessionSource>,
         options: SpawnAgentOptions,
-    ) -> CodexResult<LiveAgent> {
+    ) -> CrewonResult<LiveAgent> {
         let state = self.upgrade()?;
         let multi_agent_version = state
             .effective_multi_agent_version_for_spawn(
@@ -305,7 +305,7 @@ impl AgentControl {
             let client_metadata = match state.get_thread(*parent_thread_id).await {
                 Ok(parent_thread) => {
                     parent_thread
-                        .codex
+                        .engine
                         .session
                         .app_server_client_metadata()
                         .await
@@ -322,17 +322,17 @@ impl AgentControl {
                     }
                 }
             };
-            let thread_config = new_thread.thread.codex.thread_config_snapshot().await;
+            let thread_config = new_thread.thread.engine.thread_config_snapshot().await;
             let parent_thread_id = thread_config.parent_thread_id;
             emit_subagent_session_started(
                 &new_thread
                     .thread
-                    .codex
+                    .engine
                     .session
                     .services
                     .analytics_events_client,
                 client_metadata,
-                new_thread.thread.codex.session.session_id(),
+                new_thread.thread.engine.session.session_id(),
                 new_thread.thread_id,
                 parent_thread_id,
                 thread_config,
@@ -383,7 +383,7 @@ impl AgentControl {
         options: &SpawnAgentOptions,
         inheritance: SpawnAgentThreadInheritance,
         multi_agent_version: MultiAgentVersion,
-    ) -> CodexResult<crate::thread_manager::NewThread> {
+    ) -> CrewonResult<crate::thread_manager::NewThread> {
         let SpawnAgentThreadInheritance {
             shell_snapshot: inherited_shell_snapshot,
             exec_policy: inherited_exec_policy,
@@ -438,7 +438,7 @@ impl AgentControl {
         let multi_agent_v2_usage_hint_texts_to_filter: Vec<String> =
             if let Some(parent_thread) = parent_thread.as_ref() {
                 if multi_agent_version == MultiAgentVersion::V2 {
-                    let parent_config = parent_thread.codex.session.get_config().await;
+                    let parent_config = parent_thread.engine.session.get_config().await;
                     [
                         parent_config
                             .multi_agent_v2
@@ -525,7 +525,7 @@ impl AgentControl {
         config: Config,
         thread_id: ThreadId,
         session_source: SessionSource,
-    ) -> CodexResult<ThreadId> {
+    ) -> CrewonResult<ThreadId> {
         let root_depth = thread_spawn_depth(&session_source).unwrap_or(0);
         let (resumed_thread_id, resumed_multi_agent_version) = Box::pin(
             self.resume_single_agent_from_rollout(config.clone(), thread_id, session_source),
@@ -603,7 +603,7 @@ impl AgentControl {
         config: Config,
         thread_id: ThreadId,
         session_source: SessionSource,
-    ) -> CodexResult<(ThreadId, MultiAgentVersion)> {
+    ) -> CrewonResult<(ThreadId, MultiAgentVersion)> {
         let state = self.upgrade()?;
         let state_db_ctx = state.state_db();
         let stored_thread = state

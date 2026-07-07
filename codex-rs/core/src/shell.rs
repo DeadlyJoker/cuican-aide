@@ -1,12 +1,12 @@
 use crate::shell_snapshot::ShellSnapshot;
-use codex_shell_command::shell_detect::DetectedShell;
+use crewon_shell_command::shell_detect::DetectedShell;
 use serde::Deserialize;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::watch;
 
-pub use codex_shell_command::shell_detect::ShellType;
+pub use crewon_shell_command::shell_detect::ShellType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Shell {
@@ -87,24 +87,24 @@ impl From<DetectedShell> for Shell {
 
 #[cfg(all(test, unix))]
 fn ultimate_fallback_shell() -> Shell {
-    codex_shell_command::shell_detect::ultimate_fallback_shell().into()
+    crewon_shell_command::shell_detect::ultimate_fallback_shell().into()
 }
 
 pub fn get_shell_by_model_provided_path(shell_path: &PathBuf) -> Shell {
-    codex_shell_command::shell_detect::get_shell_by_model_provided_path(shell_path).into()
+    crewon_shell_command::shell_detect::get_shell_by_model_provided_path(shell_path).into()
 }
 
 pub fn get_shell(shell_type: ShellType, path: Option<&PathBuf>) -> Option<Shell> {
-    codex_shell_command::shell_detect::get_shell(shell_type, path).map(Into::into)
+    crewon_shell_command::shell_detect::get_shell(shell_type, path).map(Into::into)
 }
 
 pub fn default_user_shell() -> Shell {
-    codex_shell_command::shell_detect::default_user_shell().into()
+    crewon_shell_command::shell_detect::default_user_shell().into()
 }
 
 #[cfg(all(test, target_os = "macos"))]
 fn default_user_shell_from_path(user_shell_path: Option<PathBuf>) -> Shell {
-    codex_shell_command::shell_detect::default_user_shell_from_path(user_shell_path).into()
+    crewon_shell_command::shell_detect::default_user_shell_from_path(user_shell_path).into()
 }
 
 #[cfg(test)]

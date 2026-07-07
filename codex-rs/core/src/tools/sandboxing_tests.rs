@@ -1,10 +1,10 @@
 use super::*;
 use crate::sandboxing::SandboxPermissions;
 use crate::tools::hook_names::HookToolName;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::protocol::GranularApprovalConfig;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::protocol::GranularApprovalConfig;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 

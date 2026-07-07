@@ -2,22 +2,22 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use codex_config::CONFIG_TOML_FILE;
-use codex_config::ConfigLayerEntry;
-use codex_config::ConfigLayerSource;
-use codex_config::ConfigLayerStack;
-use codex_config::ConfigLayerStackOrdering;
-use codex_config::HookEventsToml;
-use codex_config::HookHandlerConfig;
-use codex_config::HookStateToml;
-use codex_config::HooksFile;
-use codex_config::ManagedHooksRequirementsToml;
-use codex_config::MatcherGroup;
-use codex_config::RequirementSource;
-use codex_config::TomlValue;
-use codex_config::version_for_toml;
-use codex_plugin::PluginHookSource;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_config::CONFIG_TOML_FILE;
+use crewon_config::ConfigLayerEntry;
+use crewon_config::ConfigLayerSource;
+use crewon_config::ConfigLayerStack;
+use crewon_config::ConfigLayerStackOrdering;
+use crewon_config::HookEventsToml;
+use crewon_config::HookHandlerConfig;
+use crewon_config::HookStateToml;
+use crewon_config::HooksFile;
+use crewon_config::ManagedHooksRequirementsToml;
+use crewon_config::MatcherGroup;
+use crewon_config::RequirementSource;
+use crewon_config::TomlValue;
+use crewon_config::version_for_toml;
+use crewon_plugin::PluginHookSource;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -26,9 +26,9 @@ use super::HookListEntry;
 use crate::config_rules::hook_states_from_stack;
 use crate::events::common::matcher_pattern_for_event;
 use crate::events::common::validate_matcher_pattern;
-use codex_protocol::protocol::HookHandlerType;
-use codex_protocol::protocol::HookSource;
-use codex_protocol::protocol::HookTrustStatus;
+use crewon_protocol::protocol::HookHandlerType;
+use crewon_protocol::protocol::HookSource;
+use crewon_protocol::protocol::HookTrustStatus;
 
 pub(crate) struct DiscoveryResult {
     pub handlers: Vec<ConfiguredHandler>,
@@ -221,10 +221,15 @@ fn append_plugin_hook_sources(
         let plugin_root_value = plugin_root.display().to_string();
         let plugin_data_root_value = plugin_data_root.display().to_string();
         env.insert("PLUGIN_ROOT".to_string(), plugin_root_value.clone());
-        // For OOTB compat with existing plugins that use this env var.
+        env.insert("CREWON_PLUGIN_ROOT".to_string(), plugin_root_value.clone());
+        // Legacy alias for existing plugins that use the old env var.
         env.insert("CLAUDE_PLUGIN_ROOT".to_string(), plugin_root_value);
         env.insert("PLUGIN_DATA".to_string(), plugin_data_root_value.clone());
-        // For OOTB compat with existing plugins that use this env var.
+        env.insert(
+            "CREWON_PLUGIN_DATA".to_string(),
+            plugin_data_root_value.clone(),
+        );
+        // Legacy alias for existing plugins that use the old env var.
         env.insert("CLAUDE_PLUGIN_DATA".to_string(), plugin_data_root_value);
         let plugin_id = plugin_id.as_key();
         append_hook_events(
@@ -437,7 +442,7 @@ fn append_matcher_groups(
     warnings: &mut Vec<String>,
     display_order: &mut i64,
     source: &HookHandlerSource<'_>,
-    event_name: codex_protocol::protocol::HookEventName,
+    event_name: crewon_protocol::protocol::HookEventName,
     groups: Vec<MatcherGroup>,
 ) {
     for (group_index, group) in groups.into_iter().enumerate() {
@@ -561,7 +566,7 @@ struct NormalizedHookIdentity {
 }
 
 fn command_hook_hash(
-    event_name: codex_protocol::protocol::HookEventName,
+    event_name: crewon_protocol::protocol::HookEventName,
     matcher: Option<&str>,
     group: &MatcherGroup,
     normalized_handler: HookHandlerConfig,
@@ -646,24 +651,24 @@ fn hook_source_for_requirement_source(source: Option<&RequirementSource>) -> Hoo
 
 #[cfg(test)]
 mod tests {
-    use codex_config::ConfigLayerEntry;
-    use codex_config::ConfigLayerSource;
-    use codex_config::HookEventsToml;
-    use codex_config::RequirementSource;
-    use codex_protocol::protocol::HookEventName;
-    use codex_protocol::protocol::HookSource;
-    use codex_utils_absolute_path::AbsolutePathBuf;
-    use codex_utils_absolute_path::test_support::PathBufExt;
-    use codex_utils_absolute_path::test_support::test_path_buf;
+    use crewon_config::ConfigLayerEntry;
+    use crewon_config::ConfigLayerSource;
+    use crewon_config::HookEventsToml;
+    use crewon_config::RequirementSource;
+    use crewon_protocol::protocol::HookEventName;
+    use crewon_protocol::protocol::HookSource;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
+    use crewon_utils_absolute_path::test_support::PathBufExt;
+    use crewon_utils_absolute_path::test_support::test_path_buf;
     use pretty_assertions::assert_eq;
 
     use super::ConfiguredHandler;
     use super::append_matcher_groups;
-    use codex_config::HookHandlerConfig;
-    use codex_config::HookStateToml;
-    use codex_config::MatcherGroup;
-    use codex_config::TomlValue;
-    use codex_protocol::protocol::HookTrustStatus;
+    use crewon_config::HookHandlerConfig;
+    use crewon_config::HookStateToml;
+    use crewon_config::MatcherGroup;
+    use crewon_config::TomlValue;
+    use crewon_protocol::protocol::HookTrustStatus;
 
     fn source_path() -> AbsolutePathBuf {
         test_path_buf("/tmp/hooks.json").abs()
@@ -1054,7 +1059,7 @@ mod tests {
         );
         assert_eq!(
             super::hook_metadata_for_config_layer_source(&ConfigLayerSource::Mdm {
-                domain: "com.openai.codex".to_string(),
+                domain: "com.crewon.app".to_string(),
                 key: "config".to_string(),
             }),
             (HookSource::Mdm, true),

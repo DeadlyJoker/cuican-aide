@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
-use codex_features::Feature;
-use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
-use codex_mcp::ToolInfo as McpToolInfo;
-use codex_mcp::tool_is_model_visible;
+use crewon_features::Feature;
+use crewon_mcp::CREWON_APPS_MCP_SERVER_NAME;
+use crewon_mcp::ToolInfo as McpToolInfo;
+use crewon_mcp::tool_is_model_visible;
 use tracing::instrument;
 
 use crate::config::Config;
@@ -22,10 +22,11 @@ pub(crate) fn build_mcp_tool_exposure(
     connectors: Option<&[connectors::AppInfo]>,
     config: &Config,
     search_tool_enabled: bool,
+    explicit_mcp_server_names: &HashSet<String>,
 ) -> McpToolExposure {
-    let mut deferred_tools = filter_non_codex_apps_mcp_tools_only(all_mcp_tools);
+    let mut deferred_tools = filter_non_crewon_apps_mcp_tools_only(all_mcp_tools);
     if let Some(connectors) = connectors {
-        deferred_tools.extend(filter_codex_apps_mcp_tools(
+        deferred_tools.extend(filter_crewon_apps_mcp_tools(
             all_mcp_tools,
             connectors,
             config,
@@ -45,23 +46,33 @@ pub(crate) fn build_mcp_tool_exposure(
         };
     }
 
+    if !explicit_mcp_server_names.is_empty() {
+        let (direct_tools, deferred_tools): (Vec<_>, Vec<_>) = deferred_tools
+            .into_iter()
+            .partition(|tool| explicit_mcp_server_names.contains(tool.server_name.as_str()));
+        return McpToolExposure {
+            direct_tools,
+            deferred_tools: (!deferred_tools.is_empty()).then_some(deferred_tools),
+        };
+    }
+
     McpToolExposure {
         direct_tools: Vec::new(),
         deferred_tools: (!deferred_tools.is_empty()).then_some(deferred_tools),
     }
 }
 
-fn filter_non_codex_apps_mcp_tools_only(mcp_tools: &[McpToolInfo]) -> Vec<McpToolInfo> {
+fn filter_non_crewon_apps_mcp_tools_only(mcp_tools: &[McpToolInfo]) -> Vec<McpToolInfo> {
     mcp_tools
         .iter()
         .filter(|tool| {
-            tool.server_name != CODEX_APPS_MCP_SERVER_NAME && tool_is_model_visible(tool)
+            tool.server_name != CREWON_APPS_MCP_SERVER_NAME && tool_is_model_visible(tool)
         })
         .cloned()
         .collect()
 }
 
-fn filter_codex_apps_mcp_tools(
+fn filter_crewon_apps_mcp_tools(
     mcp_tools: &[McpToolInfo],
     connectors: &[connectors::AppInfo],
     config: &Config,
@@ -74,7 +85,7 @@ fn filter_codex_apps_mcp_tools(
     mcp_tools
         .iter()
         .filter(|tool| {
-            if tool.server_name != CODEX_APPS_MCP_SERVER_NAME {
+            if tool.server_name != CREWON_APPS_MCP_SERVER_NAME {
                 return false;
             }
             if !tool_is_model_visible(tool) {
@@ -83,7 +94,7 @@ fn filter_codex_apps_mcp_tools(
             let Some(connector_id) = tool.connector_id.as_deref() else {
                 return false;
             };
-            allowed.contains(connector_id) && connectors::codex_app_tool_is_enabled(config, tool)
+            allowed.contains(connector_id) && connectors::crewon_app_tool_is_enabled(config, tool)
         })
         .cloned()
         .collect()

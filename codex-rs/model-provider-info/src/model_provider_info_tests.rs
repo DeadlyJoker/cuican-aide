@@ -1,6 +1,6 @@
 use super::*;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_absolute_path::AbsolutePathBufGuard;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBufGuard;
 use pretty_assertions::assert_eq;
 use std::num::NonZeroU64;
 use tempfile::tempdir;
@@ -233,7 +233,7 @@ name = "Amazon Bedrock"
 base_url = "https://bedrock.example.com/v1"
 
 [aws]
-profile = "codex-bedrock"
+profile = "crewon-bedrock"
 region = "us-west-2"
         "#;
 
@@ -242,7 +242,7 @@ region = "us-west-2"
     assert_eq!(
         provider.aws,
         Some(ModelProviderAwsAuthInfo {
-            profile: Some("codex-bedrock".to_string()),
+            profile: Some("crewon-bedrock".to_string()),
             region: Some("us-west-2".to_string()),
         })
     );
@@ -335,7 +335,7 @@ fn test_merge_configured_model_providers_applies_amazon_bedrock_profile_override
         AMAZON_BEDROCK_PROVIDER_ID.to_string(),
         ModelProviderInfo {
             aws: Some(ModelProviderAwsAuthInfo {
-                profile: Some("codex-bedrock".to_string()),
+                profile: Some("crewon-bedrock".to_string()),
                 region: Some("us-west-2".to_string()),
             }),
             ..ModelProviderInfo::default()
@@ -347,7 +347,7 @@ fn test_merge_configured_model_providers_applies_amazon_bedrock_profile_override
         .get_mut(AMAZON_BEDROCK_PROVIDER_ID)
         .expect("Amazon Bedrock provider should be built in")
         .aws = Some(ModelProviderAwsAuthInfo {
-        profile: Some("codex-bedrock".to_string()),
+        profile: Some("crewon-bedrock".to_string()),
         region: Some("us-west-2".to_string()),
     });
 
@@ -367,7 +367,7 @@ fn test_merge_configured_model_providers_rejects_amazon_bedrock_non_default_fiel
         ModelProviderInfo {
             name: "Custom Bedrock".to_string(),
             aws: Some(ModelProviderAwsAuthInfo {
-                profile: Some("codex-bedrock".to_string()),
+                profile: Some("crewon-bedrock".to_string()),
                 region: None,
             }),
             ..ModelProviderInfo::default()

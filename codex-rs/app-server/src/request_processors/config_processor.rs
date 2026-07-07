@@ -6,42 +6,42 @@ use crate::error_code::internal_error;
 use crate::error_code::invalid_request;
 use crate::outgoing_message::ConnectionRequestId;
 use crate::outgoing_message::OutgoingMessageSender;
-use codex_analytics::AnalyticsEventsClient;
-use codex_app_server_protocol::ClientResponsePayload;
-use codex_app_server_protocol::ComputerUseRequirements;
-use codex_app_server_protocol::ConfigBatchWriteParams;
-use codex_app_server_protocol::ConfigReadParams;
-use codex_app_server_protocol::ConfigReadResponse;
-use codex_app_server_protocol::ConfigRequirements;
-use codex_app_server_protocol::ConfigRequirementsReadResponse;
-use codex_app_server_protocol::ConfigValueWriteParams;
-use codex_app_server_protocol::ConfigWriteErrorCode;
-use codex_app_server_protocol::ConfigWriteResponse;
-use codex_app_server_protocol::ConfiguredHookHandler;
-use codex_app_server_protocol::ConfiguredHookMatcherGroup;
-use codex_app_server_protocol::ExperimentalFeatureEnablementSetParams;
-use codex_app_server_protocol::ExperimentalFeatureEnablementSetResponse;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::ManagedHooksRequirements;
-use codex_app_server_protocol::ModelProviderCapabilitiesReadResponse;
-use codex_app_server_protocol::NetworkDomainPermission;
-use codex_app_server_protocol::NetworkRequirements;
-use codex_app_server_protocol::NetworkUnixSocketPermission;
-use codex_app_server_protocol::SandboxMode;
-use codex_app_server_protocol::WindowsSandboxSetupMode;
-use codex_config::ConfigRequirementsToml;
-use codex_config::HookEventsToml;
-use codex_config::HookHandlerConfig as CoreHookHandlerConfig;
-use codex_config::ManagedHooksRequirementsToml;
-use codex_config::MatcherGroup as CoreMatcherGroup;
-use codex_config::ResidencyRequirement as CoreResidencyRequirement;
-use codex_config::SandboxModeRequirement as CoreSandboxModeRequirement;
-use codex_core::ThreadManager;
-use codex_features::canonical_feature_for_key;
-use codex_features::feature_for_key;
-use codex_model_provider::create_model_provider;
-use codex_plugin::PluginId;
-use codex_protocol::config_types::WebSearchMode;
+use crewon_analytics::AnalyticsEventsClient;
+use crewon_app_server_protocol::ClientResponsePayload;
+use crewon_app_server_protocol::ComputerUseRequirements;
+use crewon_app_server_protocol::ConfigBatchWriteParams;
+use crewon_app_server_protocol::ConfigReadParams;
+use crewon_app_server_protocol::ConfigReadResponse;
+use crewon_app_server_protocol::ConfigRequirements;
+use crewon_app_server_protocol::ConfigRequirementsReadResponse;
+use crewon_app_server_protocol::ConfigValueWriteParams;
+use crewon_app_server_protocol::ConfigWriteErrorCode;
+use crewon_app_server_protocol::ConfigWriteResponse;
+use crewon_app_server_protocol::ConfiguredHookHandler;
+use crewon_app_server_protocol::ConfiguredHookMatcherGroup;
+use crewon_app_server_protocol::ExperimentalFeatureEnablementSetParams;
+use crewon_app_server_protocol::ExperimentalFeatureEnablementSetResponse;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::ManagedHooksRequirements;
+use crewon_app_server_protocol::ModelProviderCapabilitiesReadResponse;
+use crewon_app_server_protocol::NetworkDomainPermission;
+use crewon_app_server_protocol::NetworkRequirements;
+use crewon_app_server_protocol::NetworkUnixSocketPermission;
+use crewon_app_server_protocol::SandboxMode;
+use crewon_app_server_protocol::WindowsSandboxSetupMode;
+use crewon_config::ConfigRequirementsToml;
+use crewon_config::HookEventsToml;
+use crewon_config::HookHandlerConfig as CoreHookHandlerConfig;
+use crewon_config::ManagedHooksRequirementsToml;
+use crewon_config::MatcherGroup as CoreMatcherGroup;
+use crewon_config::ResidencyRequirement as CoreResidencyRequirement;
+use crewon_config::SandboxModeRequirement as CoreSandboxModeRequirement;
+use crewon_core::ThreadManager;
+use crewon_features::canonical_feature_for_key;
+use crewon_features::feature_for_key;
+use crewon_model_provider::create_model_provider;
+use crewon_plugin::PluginId;
+use crewon_protocol::config_types::WebSearchMode;
 use serde_json::json;
 use std::path::PathBuf;
 
@@ -184,7 +184,7 @@ impl ConfigRequestProcessor {
     async fn load_latest_config(
         &self,
         fallback_cwd: Option<PathBuf>,
-    ) -> Result<codex_core::config::Config, JSONRPCErrorError> {
+    ) -> Result<crewon_core::config::Config, JSONRPCErrorError> {
         self.config_manager
             .load_latest_config(fallback_cwd)
             .await
@@ -199,7 +199,7 @@ impl ConfigRequestProcessor {
         &self,
         params: ConfigValueWriteParams,
     ) -> Result<ConfigWriteResponse, JSONRPCErrorError> {
-        let pending_changes = codex_core_plugins::toggles::collect_plugin_enabled_candidates(
+        let pending_changes = crewon_core_plugins::toggles::collect_plugin_enabled_candidates(
             [(&params.key_path, &params.value)].into_iter(),
         );
         let response = self
@@ -216,7 +216,7 @@ impl ConfigRequestProcessor {
         params: ConfigBatchWriteParams,
     ) -> Result<ConfigWriteResponse, JSONRPCErrorError> {
         let reload_user_config = params.reload_user_config;
-        let pending_changes = codex_core_plugins::toggles::collect_plugin_enabled_candidates(
+        let pending_changes = crewon_core_plugins::toggles::collect_plugin_enabled_candidates(
             params
                 .edits
                 .iter()
@@ -299,7 +299,7 @@ impl ConfigRequestProcessor {
             let Ok(plugin_id) = PluginId::parse(&plugin_id) else {
                 continue;
             };
-            let metadata = codex_core_plugins::loader::installed_plugin_telemetry_metadata(
+            let metadata = crewon_core_plugins::loader::installed_plugin_telemetry_metadata(
                 self.config_manager.codex_home(),
                 &plugin_id,
             )
@@ -318,13 +318,13 @@ fn map_requirements_toml_to_api(requirements: ConfigRequirementsToml) -> ConfigR
         allowed_approval_policies: requirements.allowed_approval_policies.map(|policies| {
             policies
                 .into_iter()
-                .map(codex_app_server_protocol::AskForApproval::from)
+                .map(crewon_app_server_protocol::AskForApproval::from)
                 .collect()
         }),
         allowed_approvals_reviewers: requirements.allowed_approvals_reviewers.map(|reviewers| {
             reviewers
                 .into_iter()
-                .map(codex_app_server_protocol::ApprovalsReviewer::from)
+                .map(crewon_app_server_protocol::ApprovalsReviewer::from)
                 .collect()
         }),
         allowed_sandbox_modes: requirements.allowed_sandbox_modes.map(|modes| {
@@ -340,10 +340,10 @@ fn map_requirements_toml_to_api(requirements: ConfigRequirementsToml) -> ConfigR
                     implementations
                         .into_iter()
                         .map(|implementation| match implementation {
-                            codex_config::types::WindowsSandboxModeToml::Elevated => {
+                            crewon_config::types::WindowsSandboxModeToml::Elevated => {
                                 WindowsSandboxSetupMode::Elevated
                             }
-                            codex_config::types::WindowsSandboxModeToml::Unelevated => {
+                            crewon_config::types::WindowsSandboxModeToml::Unelevated => {
                                 WindowsSandboxSetupMode::Unelevated
                             }
                         })
@@ -379,7 +379,7 @@ fn map_requirements_toml_to_api(requirements: ConfigRequirementsToml) -> ConfigR
 }
 
 fn map_computer_use_requirements_to_api(
-    computer_use: codex_config::ComputerUseRequirementsToml,
+    computer_use: crewon_config::ComputerUseRequirementsToml,
 ) -> ComputerUseRequirements {
     ComputerUseRequirements {
         allow_locked_computer_use: computer_use.allow_locked_computer_use,
@@ -472,27 +472,27 @@ fn map_sandbox_mode_requirement_to_api(mode: CoreSandboxModeRequirement) -> Opti
 
 fn map_residency_requirement_to_api(
     residency: CoreResidencyRequirement,
-) -> codex_app_server_protocol::ResidencyRequirement {
+) -> crewon_app_server_protocol::ResidencyRequirement {
     match residency {
-        CoreResidencyRequirement::Us => codex_app_server_protocol::ResidencyRequirement::Us,
+        CoreResidencyRequirement::Us => crewon_app_server_protocol::ResidencyRequirement::Us,
     }
 }
 
 fn map_network_requirements_to_api(
-    network: codex_config::NetworkRequirementsToml,
+    network: crewon_config::NetworkRequirementsToml,
 ) -> NetworkRequirements {
     let allowed_domains = network
         .domains
         .as_ref()
-        .and_then(codex_config::NetworkDomainPermissionsToml::allowed_domains);
+        .and_then(crewon_config::NetworkDomainPermissionsToml::allowed_domains);
     let denied_domains = network
         .domains
         .as_ref()
-        .and_then(codex_config::NetworkDomainPermissionsToml::denied_domains);
+        .and_then(crewon_config::NetworkDomainPermissionsToml::denied_domains);
     let allow_unix_sockets = network
         .unix_sockets
         .as_ref()
-        .map(codex_config::NetworkUnixSocketPermissionsToml::allow_unix_sockets)
+        .map(crewon_config::NetworkUnixSocketPermissionsToml::allow_unix_sockets)
         .filter(|entries| !entries.is_empty());
 
     NetworkRequirements {
@@ -529,20 +529,20 @@ fn map_network_requirements_to_api(
 }
 
 fn map_network_domain_permission_to_api(
-    permission: codex_config::NetworkDomainPermissionToml,
+    permission: crewon_config::NetworkDomainPermissionToml,
 ) -> NetworkDomainPermission {
     match permission {
-        codex_config::NetworkDomainPermissionToml::Allow => NetworkDomainPermission::Allow,
-        codex_config::NetworkDomainPermissionToml::Deny => NetworkDomainPermission::Deny,
+        crewon_config::NetworkDomainPermissionToml::Allow => NetworkDomainPermission::Allow,
+        crewon_config::NetworkDomainPermissionToml::Deny => NetworkDomainPermission::Deny,
     }
 }
 
 fn map_network_unix_socket_permission_to_api(
-    permission: codex_config::NetworkUnixSocketPermissionToml,
+    permission: crewon_config::NetworkUnixSocketPermissionToml,
 ) -> NetworkUnixSocketPermission {
     match permission {
-        codex_config::NetworkUnixSocketPermissionToml::Allow => NetworkUnixSocketPermission::Allow,
-        codex_config::NetworkUnixSocketPermissionToml::Deny => NetworkUnixSocketPermission::Deny,
+        crewon_config::NetworkUnixSocketPermissionToml::Allow => NetworkUnixSocketPermission::Allow,
+        crewon_config::NetworkUnixSocketPermissionToml::Deny => NetworkUnixSocketPermission::Deny,
     }
 }
 
@@ -565,10 +565,10 @@ fn config_write_error(code: ConfigWriteErrorCode, message: impl Into<String>) ->
 #[cfg(test)]
 mod tests {
     use super::map_requirements_toml_to_api;
-    use codex_app_server_protocol::WindowsSandboxSetupMode;
-    use codex_config::ComputerUseRequirementsToml;
-    use codex_config::ConfigRequirementsToml;
-    use codex_config::WindowsRequirementsToml;
+    use crewon_app_server_protocol::WindowsSandboxSetupMode;
+    use crewon_config::ComputerUseRequirementsToml;
+    use crewon_config::ConfigRequirementsToml;
+    use crewon_config::WindowsRequirementsToml;
     use pretty_assertions::assert_eq;
     use std::collections::BTreeMap;
 
@@ -640,8 +640,8 @@ mod tests {
         let mapped = map_requirements_toml_to_api(ConfigRequirementsToml {
             windows: Some(WindowsRequirementsToml {
                 allowed_sandbox_implementations: Some(vec![
-                    codex_config::types::WindowsSandboxModeToml::Elevated,
-                    codex_config::types::WindowsSandboxModeToml::Unelevated,
+                    crewon_config::types::WindowsSandboxModeToml::Elevated,
+                    crewon_config::types::WindowsSandboxModeToml::Unelevated,
                 ]),
             }),
             ..ConfigRequirementsToml::default()

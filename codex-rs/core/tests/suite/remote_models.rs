@@ -1,28 +1,6 @@
 #![cfg(not(target_os = "windows"))]
 #![allow(clippy::expect_used)]
 use anyhow::Result;
-use codex_login::CodexAuth;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::built_in_model_providers;
-use codex_models_manager::bundled_models_response;
-use codex_models_manager::manager::RefreshStrategy;
-use codex_models_manager::manager::SharedModelsManager;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::openai_models::ReasoningEffortPreset;
-use codex_protocol::openai_models::TruncationPolicyConfig;
-use codex_protocol::openai_models::default_input_modalities;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ExecCommandSource;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::TempDirExt;
 use core_test_support::load_default_config_for_test;
 use core_test_support::responses::ev_assistant_message;
@@ -36,12 +14,34 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
+use crewon_login::CrewonAuth;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::built_in_model_providers;
+use crewon_models_manager::bundled_models_response;
+use crewon_models_manager::manager::RefreshStrategy;
+use crewon_models_manager::manager::SharedModelsManager;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelPreset;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::openai_models::ReasoningEffortPreset;
+use crewon_protocol::openai_models::TruncationPolicyConfig;
+use crewon_protocol::openai_models::default_input_modalities;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ExecCommandSource;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use tempfile::TempDir;
@@ -93,14 +93,14 @@ async fn remote_models_get_model_info_uses_longest_matching_prefix() -> Result<(
     let codex_home = TempDir::new()?;
     let config = load_default_config_for_test(&codex_home).await;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone()
     };
-    let manager = codex_core::test_support::models_manager_with_provider(
+    let manager = crewon_core::test_support::models_manager_with_provider(
         codex_home.path().to_path_buf(),
-        codex_core::test_support::auth_manager_from_auth(auth),
+        crewon_core::test_support::auth_manager_from_auth(auth),
         provider,
     );
 
@@ -144,8 +144,8 @@ async fn remote_models_config_context_window_override_clamps_to_max_context_wind
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let TestCrewon { crewon: codex, .. } = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some(requested_model.to_string());
             config.model_context_window = Some(1_000_000);
@@ -211,8 +211,8 @@ async fn remote_models_config_override_above_max_uses_max_context_window() -> Re
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let TestCrewon { crewon: codex, .. } = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some(requested_model.to_string());
             config.model_context_window = Some(500_000);
@@ -278,8 +278,8 @@ async fn remote_models_use_context_window_when_config_override_is_absent() -> Re
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let TestCrewon { crewon: codex, .. } = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some(requested_model.to_string());
         })
@@ -358,8 +358,8 @@ async fn remote_models_long_model_slug_is_sent_with_custom_reasoning() -> Result
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let TestCrewon { crewon: codex, .. } = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some(requested_model.to_string());
         })
@@ -411,7 +411,7 @@ async fn namespaced_model_slug_uses_catalog_metadata_without_fallback_warning() 
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_model(requested_model)
         .build(&server)
         .await?;
@@ -512,13 +512,13 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some("gpt-5.4".to_string());
         });
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         cwd,
         config,
         thread_manager,
@@ -545,7 +545,7 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
 
     core_test_support::submit_thread_settings(
         &codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             model: Some(REMOTE_MODEL_SLUG.to_string()),
             ..Default::default()
         },
@@ -583,7 +583,7 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(cwd_path)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
@@ -632,8 +632,8 @@ async fn remote_models_truncation_policy_without_override_preserves_remote() -> 
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some("gpt-5.4".to_string());
         });
@@ -678,8 +678,8 @@ async fn remote_models_truncation_policy_with_tool_output_override() -> Result<(
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some("gpt-5.4".to_string());
             config.tool_output_token_limit = Some(50);
@@ -774,13 +774,13 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some("gpt-5.2".to_string());
         });
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         cwd,
         config,
         thread_manager,
@@ -792,7 +792,7 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
 
     core_test_support::submit_thread_settings(
         &codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             model: Some(model.to_string()),
             ..Default::default()
         },
@@ -811,7 +811,7 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(cwd_path)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
@@ -852,14 +852,14 @@ async fn remote_models_do_not_append_removed_builtin_presets() -> Result<()> {
 
     let codex_home = TempDir::new()?;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone()
     };
-    let manager = codex_core::test_support::models_manager_with_provider(
+    let manager = crewon_core::test_support::models_manager_with_provider(
         codex_home.path().to_path_buf(),
-        codex_core::test_support::auth_manager_from_auth(auth),
+        crewon_core::test_support::auth_manager_from_auth(auth),
         provider,
     );
 
@@ -913,14 +913,14 @@ async fn remote_models_merge_adds_new_high_priority_first() -> Result<()> {
 
     let codex_home = TempDir::new()?;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone()
     };
-    let manager = codex_core::test_support::models_manager_with_provider(
+    let manager = crewon_core::test_support::models_manager_with_provider(
         codex_home.path().to_path_buf(),
-        codex_core::test_support::auth_manager_from_auth(auth),
+        crewon_core::test_support::auth_manager_from_auth(auth),
         provider,
     );
 
@@ -960,14 +960,14 @@ async fn remote_models_merge_replaces_overlapping_model() -> Result<()> {
 
     let codex_home = TempDir::new()?;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone()
     };
-    let manager = codex_core::test_support::models_manager_with_provider(
+    let manager = crewon_core::test_support::models_manager_with_provider(
         codex_home.path().to_path_buf(),
-        codex_core::test_support::auth_manager_from_auth(auth),
+        crewon_core::test_support::auth_manager_from_auth(auth),
         provider,
     );
 
@@ -1004,14 +1004,14 @@ async fn remote_models_merge_preserves_bundled_models_on_empty_response() -> Res
 
     let codex_home = TempDir::new()?;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone()
     };
-    let manager = codex_core::test_support::models_manager_with_provider(
+    let manager = crewon_core::test_support::models_manager_with_provider(
         codex_home.path().to_path_buf(),
-        codex_core::test_support::auth_manager_from_auth(auth),
+        crewon_core::test_support::auth_manager_from_auth(auth),
         provider,
     );
 
@@ -1046,14 +1046,14 @@ async fn remote_models_request_times_out_after_5s() -> Result<()> {
 
     let codex_home = TempDir::new()?;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone()
     };
-    let manager = codex_core::test_support::models_manager_with_provider(
+    let manager = crewon_core::test_support::models_manager_with_provider(
         codex_home.path().to_path_buf(),
-        codex_core::test_support::auth_manager_from_auth(auth),
+        crewon_core::test_support::auth_manager_from_auth(auth),
         provider,
     );
 
@@ -1116,14 +1116,14 @@ async fn remote_models_hide_picker_only_models() -> Result<()> {
 
     let codex_home = TempDir::new()?;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone()
     };
-    let manager = codex_core::test_support::models_manager_with_provider(
+    let manager = crewon_core::test_support::models_manager_with_provider(
         codex_home.path().to_path_buf(),
-        codex_core::test_support::auth_manager_from_auth(auth),
+        crewon_core::test_support::auth_manager_from_auth(auth),
         provider,
     );
 
@@ -1177,7 +1177,7 @@ fn bundled_model_slug() -> String {
 }
 
 fn bundled_default_model_slug() -> String {
-    codex_core::test_support::all_model_presets()
+    crewon_core::test_support::all_model_presets()
         .iter()
         .find(|preset| preset.is_default)
         .expect("bundled models should include a default")

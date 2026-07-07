@@ -1,13 +1,13 @@
 use crate::config::Config;
-use codex_config::types::OtelExporterKind as Kind;
-use codex_config::types::OtelHttpProtocol as Protocol;
-use codex_features::Feature;
-use codex_login::default_client::originator;
-use codex_otel::OtelExporter;
-use codex_otel::OtelHttpProtocol;
-use codex_otel::OtelProvider;
-use codex_otel::OtelSettings;
-use codex_otel::OtelTlsConfig as OtelTlsSettings;
+use crewon_config::types::OtelExporterKind as Kind;
+use crewon_config::types::OtelHttpProtocol as Protocol;
+use crewon_features::Feature;
+use crewon_login::default_client::originator;
+use crewon_otel::OtelExporter;
+use crewon_otel::OtelHttpProtocol;
+use crewon_otel::OtelProvider;
+use crewon_otel::OtelSettings;
+use crewon_otel::OtelTlsConfig as OtelTlsSettings;
 use std::error::Error;
 
 /// Build an OpenTelemetry provider from the app Config.
@@ -94,23 +94,23 @@ pub fn build_provider(
     })
 }
 
-/// Filter predicate for exporting only Codex-owned events via OTEL.
-/// Keeps events that originated from codex_otel module
+/// Filter predicate for exporting only Crewon-owned events via OTEL.
+/// Keeps events that originated from crewon_otel module
 pub fn codex_export_filter(meta: &tracing::Metadata<'_>) -> bool {
-    meta.target().starts_with("codex_otel")
+    meta.target().starts_with("crewon_otel")
 }
 
 pub fn record_process_start(otel: Option<&OtelProvider>, originator: &str) {
     let Some(metrics) = otel.and_then(OtelProvider::metrics) else {
         return;
     };
-    let _ = codex_otel::record_process_start_once(metrics, originator);
+    let _ = crewon_otel::record_process_start_once(metrics, originator);
 }
 
 pub fn install_sqlite_telemetry(otel: Option<&OtelProvider>, originator: &str) {
     let Some(metrics) = otel.and_then(OtelProvider::metrics) else {
         return;
     };
-    let telemetry = codex_rollout::sqlite_telemetry_recorder(metrics.clone(), originator);
-    let _ = codex_state::install_process_db_telemetry(telemetry);
+    let telemetry = crewon_rollout::sqlite_telemetry_recorder(metrics.clone(), originator);
+    let _ = crewon_state::install_process_db_telemetry(telemetry);
 }

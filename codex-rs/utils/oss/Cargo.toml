@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-oss"
+name = "crewon-utils-oss"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,10 +8,11 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-codex-core = { workspace = true }
-codex-lmstudio = { workspace = true }
-codex-model-provider-info = { workspace = true }
-codex-ollama = { workspace = true }
+crewon-core = { workspace = true }
+crewon-lmstudio = { workspace = true }
+crewon-model-provider-info = { workspace = true }
+crewon-ollama = { workspace = true }
 
 [lib]
+name = "crewon_utils_oss"
 doctest = false

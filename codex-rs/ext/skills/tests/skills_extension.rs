@@ -4,45 +4,45 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
-use codex_core_skills::HostLoadedSkills;
-use codex_core_skills::SKILLS_HOW_TO_USE_WITH_ABSOLUTE_PATHS;
-use codex_core_skills::SKILLS_INTRO_WITH_ABSOLUTE_PATHS;
-use codex_core_skills::SkillLoadOutcome;
-use codex_core_skills::SkillMetadata;
-use codex_core_skills::injection::InjectedHostSkillPrompts;
-use codex_extension_api::ExtensionData;
-use codex_extension_api::ExtensionEventSink;
-use codex_extension_api::ExtensionRegistryBuilder;
-use codex_extension_api::ThreadStartInput;
-use codex_extension_api::TurnInputContext;
-use codex_protocol::capabilities::CapabilityRootLocation;
-use codex_protocol::capabilities::SelectedCapabilityRoot;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::SKILLS_INSTRUCTIONS_CLOSE_TAG;
-use codex_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SkillScope;
-use codex_protocol::user_input::UserInput;
-use codex_skills_extension::SkillProviders;
-use codex_skills_extension::SkillsExtensionConfig;
-use codex_skills_extension::catalog::SkillAuthority;
-use codex_skills_extension::catalog::SkillCatalog;
-use codex_skills_extension::catalog::SkillCatalogEntry;
-use codex_skills_extension::catalog::SkillPackageId;
-use codex_skills_extension::catalog::SkillProviderError;
-use codex_skills_extension::catalog::SkillReadResult;
-use codex_skills_extension::catalog::SkillResourceId;
-use codex_skills_extension::catalog::SkillSearchResult;
-use codex_skills_extension::catalog::SkillSourceKind;
-use codex_skills_extension::install;
-use codex_skills_extension::install_with_providers;
-use codex_skills_extension::provider::SkillListQuery;
-use codex_skills_extension::provider::SkillProvider;
-use codex_skills_extension::provider::SkillProviderFuture;
-use codex_skills_extension::provider::SkillReadRequest;
-use codex_skills_extension::provider::SkillSearchRequest;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_core_skills::HostLoadedSkills;
+use crewon_core_skills::SKILLS_HOW_TO_USE_WITH_ABSOLUTE_PATHS;
+use crewon_core_skills::SKILLS_INTRO_WITH_ABSOLUTE_PATHS;
+use crewon_core_skills::SkillLoadOutcome;
+use crewon_core_skills::SkillMetadata;
+use crewon_core_skills::injection::InjectedHostSkillPrompts;
+use crewon_extension_api::ExtensionData;
+use crewon_extension_api::ExtensionEventSink;
+use crewon_extension_api::ExtensionRegistryBuilder;
+use crewon_extension_api::ThreadStartInput;
+use crewon_extension_api::TurnInputContext;
+use crewon_protocol::capabilities::CapabilityRootLocation;
+use crewon_protocol::capabilities::SelectedCapabilityRoot;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::SKILLS_INSTRUCTIONS_CLOSE_TAG;
+use crewon_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SkillScope;
+use crewon_protocol::user_input::UserInput;
+use crewon_skills_extension::SkillProviders;
+use crewon_skills_extension::SkillsExtensionConfig;
+use crewon_skills_extension::catalog::SkillAuthority;
+use crewon_skills_extension::catalog::SkillCatalog;
+use crewon_skills_extension::catalog::SkillCatalogEntry;
+use crewon_skills_extension::catalog::SkillPackageId;
+use crewon_skills_extension::catalog::SkillProviderError;
+use crewon_skills_extension::catalog::SkillReadResult;
+use crewon_skills_extension::catalog::SkillResourceId;
+use crewon_skills_extension::catalog::SkillSearchResult;
+use crewon_skills_extension::catalog::SkillSourceKind;
+use crewon_skills_extension::install;
+use crewon_skills_extension::install_with_providers;
+use crewon_skills_extension::provider::SkillListQuery;
+use crewon_skills_extension::provider::SkillProvider;
+use crewon_skills_extension::provider::SkillProviderFuture;
+use crewon_skills_extension::provider::SkillReadRequest;
+use crewon_skills_extension::provider::SkillSearchRequest;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -53,7 +53,7 @@ const DEMO_SKILL_CONTENTS: &str =
 
 #[tokio::test]
 async fn installed_extension_uses_host_loaded_skills() -> TestResult {
-    let codex_home = test_codex_home();
+    let codex_home = test_crewon_home();
     let skill_path = codex_home.join("skills").join("demo").join("SKILL.md");
     std::fs::create_dir_all(
         skill_path
@@ -68,7 +68,7 @@ async fn installed_extension_uses_host_loaded_skills() -> TestResult {
     let registry = builder.build();
     let session_store = ExtensionData::new("session");
     let thread_store = ExtensionData::new("thread");
-    let session_source = SessionSource::Cli;
+    let session_source = SessionSource::LegacyCli;
     registry.thread_lifecycle_contributors()[0]
         .on_thread_start(ThreadStartInput {
             config: &config,
@@ -168,7 +168,7 @@ async fn selected_executor_catalog_is_context_and_selected_entrypoint_is_turn_in
             path: "/skills/lint-fix".to_string(),
         },
     }]);
-    let session_source = SessionSource::Cli;
+    let session_source = SessionSource::LegacyCli;
     let config = default_config();
     registry.thread_lifecycle_contributors()[0]
         .on_thread_start(ThreadStartInput {
@@ -261,7 +261,7 @@ async fn orchestrator_catalog_snapshot_caches_failure() -> TestResult {
             catalog: SkillCatalog {
                 entries: vec![test_entry(
                     SkillSourceKind::Orchestrator,
-                    "codex_apps",
+                    "crewon_apps",
                     "orchestrator/first",
                     "skill://orchestrator/first/SKILL.md",
                 )],
@@ -278,7 +278,7 @@ async fn orchestrator_catalog_snapshot_caches_failure() -> TestResult {
     let registry = builder.build();
     let session_store = ExtensionData::new("session");
     let thread_store = ExtensionData::new("thread");
-    let session_source = SessionSource::Cli;
+    let session_source = SessionSource::LegacyCli;
     let config = default_config();
     registry.thread_lifecycle_contributors()[0]
         .on_thread_start(ThreadStartInput {
@@ -369,7 +369,7 @@ async fn root_qualified_locator_selects_only_the_matching_executor_skill() -> Te
             })
             .collect::<Vec<_>>(),
     );
-    let session_source = SessionSource::Cli;
+    let session_source = SessionSource::LegacyCli;
     let config = default_config();
     registry.thread_lifecycle_contributors()[0]
         .on_thread_start(ThreadStartInput {
@@ -443,7 +443,7 @@ async fn prompt_hidden_skill_can_still_be_invoked() -> TestResult {
     let registry = builder.build();
     let session_store = ExtensionData::new("session");
     let thread_store = ExtensionData::new("thread");
-    let session_source = SessionSource::Cli;
+    let session_source = SessionSource::LegacyCli;
     let config = default_config();
     registry.thread_lifecycle_contributors()[0]
         .on_thread_start(ThreadStartInput {
@@ -576,10 +576,10 @@ fn skills_extension_config(config: &TestConfig) -> SkillsExtensionConfig {
     }
 }
 
-fn test_codex_home() -> PathBuf {
+fn test_crewon_home() -> PathBuf {
     let id = NEXT_CODEX_HOME_ID.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
-        "codex-skills-extension-test-{}-{id}",
+        "crewon-skills-extension-test-{}-{id}",
         std::process::id(),
     ))
 }

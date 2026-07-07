@@ -3,15 +3,15 @@ use std::time::Duration;
 use anyhow::Result;
 use app_test_support::TestAppServer;
 use app_test_support::to_response;
-use codex_app_server_protocol::CapabilityRootLocation;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::SelectedCapabilityRoot;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::UserInput;
 use core_test_support::responses;
+use crewon_app_server_protocol::CapabilityRootLocation;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::SelectedCapabilityRoot;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::UserInput;
 use tempfile::TempDir;
 use tokio::time::timeout;
 
@@ -65,7 +65,7 @@ stream_max_retries = 0
         ),
     )?;
     let plugin_dir = TempDir::new()?;
-    let manifest_dir = plugin_dir.path().join(".codex-plugin");
+    let manifest_dir = plugin_dir.path().join(".crewon-plugin");
     let skill_dir = plugin_dir.path().join("skills/deploy");
     std::fs::create_dir_all(&manifest_dir)?;
     std::fs::create_dir_all(&skill_dir)?;

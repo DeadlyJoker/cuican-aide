@@ -4,26 +4,26 @@ use std::time::Duration;
 
 use crate::chatgpt_client::chatgpt_get_request_with_timeout;
 
-use codex_app_server_protocol::AppInfo;
-use codex_connectors::ConnectorDirectoryCacheContext;
-use codex_connectors::ConnectorDirectoryCacheKey;
-use codex_connectors::DirectoryListResponse;
-use codex_connectors::filter::filter_disallowed_connectors;
-use codex_connectors::merge::merge_connectors;
-use codex_connectors::merge::merge_plugin_connectors;
-use codex_core::config::Config;
-pub use codex_core::connectors::list_accessible_connectors_from_mcp_tools;
-pub use codex_core::connectors::list_accessible_connectors_from_mcp_tools_with_environment_manager;
-pub use codex_core::connectors::list_accessible_connectors_from_mcp_tools_with_mcp_manager;
-pub use codex_core::connectors::list_accessible_connectors_from_mcp_tools_with_options;
-pub use codex_core::connectors::list_accessible_connectors_from_mcp_tools_with_options_and_status;
-pub use codex_core::connectors::list_cached_accessible_connectors_from_mcp_tools;
-pub use codex_core::connectors::with_app_enabled_state;
-use codex_core_plugins::PluginsManager;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::default_client::originator;
-use codex_plugin::AppConnectorId;
+use crewon_app_server_protocol::AppInfo;
+use crewon_connectors::ConnectorDirectoryCacheContext;
+use crewon_connectors::ConnectorDirectoryCacheKey;
+use crewon_connectors::DirectoryListResponse;
+use crewon_connectors::filter::filter_disallowed_connectors;
+use crewon_connectors::merge::merge_connectors;
+use crewon_connectors::merge::merge_plugin_connectors;
+use crewon_core::config::Config;
+pub use crewon_core::connectors::list_accessible_connectors_from_mcp_tools;
+pub use crewon_core::connectors::list_accessible_connectors_from_mcp_tools_with_environment_manager;
+pub use crewon_core::connectors::list_accessible_connectors_from_mcp_tools_with_mcp_manager;
+pub use crewon_core::connectors::list_accessible_connectors_from_mcp_tools_with_options;
+pub use crewon_core::connectors::list_accessible_connectors_from_mcp_tools_with_options_and_status;
+pub use crewon_core::connectors::list_cached_accessible_connectors_from_mcp_tools;
+pub use crewon_core::connectors::with_app_enabled_state;
+use crewon_core_plugins::PluginsManager;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_login::default_client::originator;
+use crewon_plugin::AppConnectorId;
 
 const DIRECTORY_CONNECTORS_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -33,10 +33,10 @@ async fn apps_enabled(config: &Config) -> bool {
     let auth = auth_manager.auth().await;
     config
         .features
-        .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend))
+        .apps_enabled_for_auth(auth.as_ref().is_some_and(CrewonAuth::uses_crewon_backend))
 }
 
-async fn connector_auth(config: &Config) -> anyhow::Result<CodexAuth> {
+async fn connector_auth(config: &Config) -> anyhow::Result<CrewonAuth> {
     let auth_manager =
         AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
     let auth = auth_manager
@@ -44,8 +44,8 @@ async fn connector_auth(config: &Config) -> anyhow::Result<CodexAuth> {
         .await
         .ok_or_else(|| anyhow::anyhow!("ChatGPT auth not available"))?;
     anyhow::ensure!(
-        auth.uses_codex_backend(),
-        "ChatGPT connectors require Codex backend auth"
+        auth.uses_crewon_backend(),
+        "ChatGPT connectors require Crewon backend auth"
     );
     Ok(auth)
 }
@@ -79,7 +79,7 @@ pub async fn list_cached_all_connectors(config: &Config) -> Option<Vec<AppInfo>>
 
     let auth = connector_auth(config).await.ok()?;
     let cache_context = connector_directory_cache_context(config, &auth);
-    let connectors = codex_connectors::cached_directory_connectors(&cache_context)?;
+    let connectors = crewon_connectors::cached_directory_connectors(&cache_context)?;
     let connectors = merge_plugin_connectors(
         connectors,
         plugin_apps_for_config(config)
@@ -102,7 +102,7 @@ pub async fn list_all_connectors_with_options(
     }
     let auth = connector_auth(config).await?;
     let cache_context = connector_directory_cache_context(config, &auth);
-    let connectors = codex_connectors::list_all_connectors_with_options(
+    let connectors = crewon_connectors::list_all_connectors_with_options(
         cache_context,
         auth.is_workspace_account(),
         force_refetch,
@@ -131,7 +131,7 @@ pub async fn list_all_connectors_with_options(
 
 fn connector_directory_cache_context(
     config: &Config,
-    auth: &CodexAuth,
+    auth: &CrewonAuth,
 ) -> ConnectorDirectoryCacheContext {
     ConnectorDirectoryCacheContext::new(
         config.codex_home.to_path_buf(),
@@ -198,8 +198,8 @@ pub fn merge_connectors_with_accessible(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_connectors::metadata::connector_install_url;
-    use codex_plugin::AppConnectorId;
+    use crewon_connectors::metadata::connector_install_url;
+    use crewon_plugin::AppConnectorId;
     use pretty_assertions::assert_eq;
 
     fn app(id: &str) -> AppInfo {

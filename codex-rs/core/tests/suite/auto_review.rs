@@ -1,27 +1,6 @@
 #![allow(clippy::expect_used)]
 
 use anyhow::Result;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_models_manager::manager::RefreshStrategy;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ApplyPatchToolType;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::openai_models::ReasoningEffortPreset;
-use codex_protocol::openai_models::TruncationPolicyConfig;
-use codex_protocol::openai_models::default_input_modalities;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::request_permissions::PermissionGrantScope;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
-use codex_protocol::user_input::UserInput;
 use core_test_support::TempDirExt;
 use core_test_support::responses::ev_apply_patch_custom_tool_call;
 use core_test_support::responses::ev_assistant_message;
@@ -33,11 +12,32 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_models_manager::manager::RefreshStrategy;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ApplyPatchToolType;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::openai_models::ReasoningEffortPreset;
+use crewon_protocol::openai_models::TruncationPolicyConfig;
+use crewon_protocol::openai_models::default_input_modalities;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::request_permissions::PermissionGrantScope;
+use crewon_protocol::request_permissions::RequestPermissionsResponse;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use wiremock::MockServer;
@@ -109,8 +109,8 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some("gpt-5.4".to_string());
             config.approvals_reviewer = ApprovalsReviewer::User;
@@ -123,8 +123,8 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
                 .enable(Feature::RequestPermissionsTool)
                 .expect("test config should allow feature update");
         });
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         cwd,
         config,
         thread_manager,
@@ -145,7 +145,7 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
 
     core_test_support::submit_thread_settings(
         &codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             model: Some(model.to_string()),
             ..Default::default()
         },
@@ -164,7 +164,7 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(cwd_path)),
                 approval_policy: Some(AskForApproval::OnRequest),
                 sandbox_policy: Some(sandbox_policy),

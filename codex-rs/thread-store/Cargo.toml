@@ -1,11 +1,11 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-thread-store"
+name = "crewon-thread-store"
 version.workspace = true
 
 [lib]
-name = "codex_thread_store"
+name = "crewon_thread_store"
 path = "src/lib.rs"
 doctest = false
 
@@ -15,12 +15,12 @@ workspace = true
 [dependencies]
 async-trait = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
-codex-git-utils = { workspace = true }
-codex-install-context = { workspace = true }
-codex-protocol = { workspace = true }
-codex-rollout = { workspace = true }
-codex-state = { workspace = true }
-codex-utils-path = { workspace = true }
+crewon-git-utils = { workspace = true }
+crewon-install-context = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-rollout = { workspace = true }
+crewon-state = { workspace = true }
+crewon-utils-path = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -3,8 +3,6 @@
 [changelog]
 header = """
 # Changelog
-
-You can install any of these versions: `npm install -g @openai/codex@<version>`
 """
 
 body = """

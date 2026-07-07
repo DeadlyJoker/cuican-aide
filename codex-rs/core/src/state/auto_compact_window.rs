@@ -1,4 +1,4 @@
-use codex_protocol::protocol::TokenUsage;
+use crewon_protocol::protocol::TokenUsage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AutoCompactWindowSnapshot {

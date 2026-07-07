@@ -107,7 +107,7 @@
       "type": "object"
     },
     "CodexErrorInfo": {
-      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
+      "description": "This translation layer makes sure that we expose Crewon error codes in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
       "oneOf": [
         {
           "enum": [
@@ -825,11 +825,17 @@
       "oneOf": [
         {
           "enum": [
-            "cli",
             "vscode",
             "exec",
             "appServer",
             "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Legacy source value for threads created before terminal CLI removal.",
+          "enum": [
+            "cli"
           ],
           "type": "string"
         },
@@ -984,8 +990,8 @@
             "null"
           ]
         },
-        "cliVersion": {
-          "description": "Version of the CLI that created the thread.",
+        "clientVersion": {
+          "description": "Version of the client/runtime that created the thread.",
           "type": "string"
         },
         "createdAt": {
@@ -1065,7 +1071,7 @@
               "$ref": "#/definitions/SessionSource"
             }
           ],
-          "description": "Origin of the thread (CLI, VSCode, codex exec, codex app-server, etc.)."
+          "description": "Origin of the thread (legacy CLI, VSCode, Crewon app-server, etc.)."
         },
         "status": {
           "allOf": [
@@ -1100,7 +1106,7 @@
         }
       },
       "required": [
-        "cliVersion",
+        "clientVersion",
         "createdAt",
         "cwd",
         "ephemeral",

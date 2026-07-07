@@ -16,23 +16,23 @@ use crate::session::session::Session;
 use crate::session::turn::built_tools;
 use crate::session::turn_context::TurnContext;
 use crate::turn_metadata::CompactionTurnMetadata;
-use codex_analytics::CompactionImplementation;
-use codex_analytics::CompactionPhase;
-use codex_analytics::CompactionReason;
-use codex_analytics::CompactionTrigger;
-use codex_app_server_protocol::AuthMode;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::items::ContextCompactionItem;
-use codex_protocol::items::TurnItem;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::models::FunctionCallOutputBody;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::CompactedItem;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::TurnStartedEvent;
-use codex_rollout_trace::CompactionCheckpointTracePayload;
+use crewon_analytics::CompactionImplementation;
+use crewon_analytics::CompactionPhase;
+use crewon_analytics::CompactionReason;
+use crewon_analytics::CompactionTrigger;
+use crewon_app_server_protocol::AuthMode;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
+use crewon_protocol::items::ContextCompactionItem;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::models::FunctionCallOutputBody;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::CompactedItem;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::TurnStartedEvent;
+use crewon_rollout_trace::CompactionCheckpointTracePayload;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -45,7 +45,7 @@ pub(crate) async fn run_inline_remote_auto_compact_task(
     initial_context_injection: InitialContextInjection,
     reason: CompactionReason,
     phase: CompactionPhase,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     run_remote_compact_task_inner(
         &sess,
         &turn_context,
@@ -61,7 +61,7 @@ pub(crate) async fn run_inline_remote_auto_compact_task(
 pub(crate) async fn run_remote_compact_task(
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let start_event = EventMsg::TurnStarted(TurnStartedEvent {
         turn_id: turn_context.sub_id.clone(),
         trace_id: turn_context.trace_id.clone(),
@@ -90,7 +90,7 @@ async fn run_remote_compact_task_inner(
     trigger: CompactionTrigger,
     reason: CompactionReason,
     phase: CompactionPhase,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let compaction_metadata = CompactionTurnMetadata::new(
         trigger,
         reason,
@@ -118,7 +118,7 @@ async fn run_remote_compact_task_inner(
             attempt
                 .track(
                     sess.as_ref(),
-                    codex_analytics::CompactionStatus::Interrupted,
+                    crewon_analytics::CompactionStatus::Interrupted,
                     Some(&error),
                     analytics_details,
                 )
@@ -149,7 +149,7 @@ async fn run_remote_compact_task_inner(
         .track(sess.as_ref(), status, codex_error, analytics_details)
         .await;
     if let Err(err) = result {
-        sess.track_turn_codex_error(turn_context, &err);
+        sess.track_turn_crewon_error(turn_context, &err);
         let event = EventMsg::Error(
             err.to_error_event(Some("Error running remote compact task".to_string())),
         );
@@ -165,7 +165,7 @@ async fn run_remote_compact_task_inner_impl(
     initial_context_injection: InitialContextInjection,
     compaction_metadata: CompactionTurnMetadata,
     analytics_details: &mut CompactionAnalyticsDetails,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let context_compaction_item = ContextCompactionItem::new();
     // Use the UI compaction item ID as the trace compaction ID so protocol lifecycle events,
     // endpoint attempts, and the installed history checkpoint all have one join key.

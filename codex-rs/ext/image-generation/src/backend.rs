@@ -1,10 +1,10 @@
-use codex_api::ImageEditRequest;
-use codex_api::ImageGenerationRequest;
-use codex_api::ImageResponse;
-use codex_api::ImagesClient;
-use codex_api::ReqwestTransport;
-use codex_login::default_client::build_reqwest_client;
-use codex_model_provider::SharedModelProvider;
+use crewon_api::ImageEditRequest;
+use crewon_api::ImageGenerationRequest;
+use crewon_api::ImageResponse;
+use crewon_api::ImagesClient;
+use crewon_api::ReqwestTransport;
+use crewon_login::default_client::build_reqwest_client;
+use crewon_model_provider::SharedModelProvider;
 use http::HeaderMap;
 
 #[derive(Clone)]

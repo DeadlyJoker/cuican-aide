@@ -1,16 +1,16 @@
 #![recursion_limit = "256"]
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
-use codex_arg0::Arg0DispatchPaths;
-use codex_config::ConfigLayerStackOrdering;
-use codex_config::LoaderOverrides;
-use codex_config::NoopThreadConfigLoader;
-use codex_config::RemoteThreadConfigLoader;
-use codex_config::ThreadConfigLoader;
-use codex_core::config::Config;
-use codex_core::resolve_installation_id;
-use codex_login::AuthManager;
-use codex_utils_cli::CliConfigOverrides;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_config::ConfigLayerStackOrdering;
+use crewon_config::LoaderOverrides;
+use crewon_config::NoopThreadConfigLoader;
+use crewon_config::RemoteThreadConfigLoader;
+use crewon_config::ThreadConfigLoader;
+use crewon_core::config::Config;
+use crewon_core::resolve_installation_id;
+use crewon_login::AuthManager;
+use crewon_utils_options::ConfigOverrides;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::ErrorKind;
@@ -42,24 +42,24 @@ use crate::transport::start_control_socket_acceptor;
 use crate::transport::start_remote_control;
 use crate::transport::start_stdio_connection;
 use crate::transport::start_websocket_acceptor;
-use codex_analytics::AppServerRpcTransport;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_app_server_protocol::ConfigWarningNotification;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::TextPosition as AppTextPosition;
-use codex_app_server_protocol::TextRange as AppTextRange;
-use codex_config::ConfigLoadError;
-use codex_config::TextRange as CoreTextRange;
-use codex_core::ExecPolicyError;
-use codex_core::check_execpolicy_for_warnings;
-use codex_core::config::find_codex_home;
-use codex_exec_server::EnvironmentManager;
-use codex_exec_server::ExecServerRuntimePaths;
-use codex_feedback::CodexFeedback;
-use codex_protocol::protocol::SessionSource;
-use codex_rollout::state_db as rollout_state_db;
-use codex_state::log_db;
+use crewon_analytics::AppServerRpcTransport;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_app_server_protocol::ConfigWarningNotification;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::TextPosition as AppTextPosition;
+use crewon_app_server_protocol::TextRange as AppTextRange;
+use crewon_config::ConfigLoadError;
+use crewon_config::TextRange as CoreTextRange;
+use crewon_core::ExecPolicyError;
+use crewon_core::check_execpolicy_for_warnings;
+use crewon_core::config::find_crewon_home;
+use crewon_exec_server::EnvironmentManager;
+use crewon_exec_server::ExecServerRuntimePaths;
+use crewon_feedback::CrewonFeedback;
+use crewon_protocol::protocol::SessionSource;
+use crewon_rollout::state_db as rollout_state_db;
+use crewon_state::log_db;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -75,7 +75,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::Registry;
 use tracing_subscriber::util::SubscriberInitExt;
 
-const SQLITE_RECOVERY_CONFIG_WARNING_SUMMARY: &str = "Codex rebuilt its local database.";
+const SQLITE_RECOVERY_CONFIG_WARNING_SUMMARY: &str = "Crewon rebuilt its local database.";
 
 mod analytics_utils;
 mod app_server_tracing;
@@ -115,7 +115,7 @@ pub use crate::transport::auth::AppServerWebsocketAuthSettings;
 pub use crate::transport::auth::WebsocketAuthCliMode;
 
 const LOG_FORMAT_ENV_VAR: &str = "LOG_FORMAT";
-const OTEL_SERVICE_NAME: &str = "codex-app-server";
+const OTEL_SERVICE_NAME: &str = "crewon-app-server";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LogFormat {
@@ -379,14 +379,14 @@ fn log_format_from_env() -> LogFormat {
 
 pub async fn run_main(
     arg0_paths: Arg0DispatchPaths,
-    cli_config_overrides: CliConfigOverrides,
+    config_overrides: ConfigOverrides,
     loader_overrides: LoaderOverrides,
     strict_config: bool,
     default_analytics_enabled: bool,
 ) -> IoResult<()> {
     run_main_with_transport_options(
         arg0_paths,
-        cli_config_overrides,
+        config_overrides,
         loader_overrides,
         strict_config,
         default_analytics_enabled,
@@ -424,7 +424,7 @@ impl Default for AppServerRuntimeOptions {
 #[allow(clippy::too_many_arguments)]
 pub async fn run_main_with_transport_options(
     arg0_paths: Arg0DispatchPaths,
-    cli_config_overrides: CliConfigOverrides,
+    config_overrides: ConfigOverrides,
     loader_overrides: LoaderOverrides,
     strict_config: bool,
     default_analytics_enabled: bool,
@@ -439,18 +439,18 @@ pub async fn run_main_with_transport_options(
     let (outbound_control_tx, mut outbound_control_rx) =
         mpsc::channel::<OutboundControlEvent>(CHANNEL_CAPACITY);
 
-    // Parse CLI overrides once and derive the base Config eagerly so later
+    // Parse config overrides once and derive the base Config eagerly so later
     // components do not need to work with raw TOML values.
-    let cli_kv_overrides = cli_config_overrides.parse_overrides().map_err(|e| {
+    let config_kv_overrides = config_overrides.parse_overrides().map_err(|e| {
         std::io::Error::new(
             ErrorKind::InvalidInput,
             format!("error parsing -c overrides: {e}"),
         )
     })?;
-    let codex_home = find_codex_home()?;
+    let codex_home = find_crewon_home()?;
     let local_runtime_paths = ExecServerRuntimePaths::from_optional_paths(
         arg0_paths.codex_self_exe.clone(),
-        arg0_paths.codex_linux_sandbox_exe.clone(),
+        arg0_paths.crewon_linux_sandbox_exe.clone(),
     )?;
     let environment_manager = if loader_overrides.ignore_user_config {
         EnvironmentManager::from_env(Some(local_runtime_paths)).await
@@ -461,7 +461,7 @@ pub async fn run_main_with_transport_options(
     .map_err(std::io::Error::other)?;
     let config_manager = ConfigManager::new(
         codex_home.to_path_buf(),
-        cli_kv_overrides.clone(),
+        config_kv_overrides.clone(),
         loader_overrides,
         strict_config,
         Default::default(),
@@ -513,7 +513,7 @@ pub async fn run_main_with_transport_options(
         }
     };
 
-    let otel = codex_core::otel_init::build_provider(
+    let otel = crewon_core::otel_init::build_provider(
         &config,
         env!("CARGO_PKG_VERSION"),
         Some(OTEL_SERVICE_NAME),
@@ -525,8 +525,8 @@ pub async fn run_main_with_transport_options(
             format!("error loading otel config: {e}"),
         )
     })?;
-    codex_core::otel_init::record_process_start(otel.as_ref(), OTEL_SERVICE_NAME);
-    codex_core::otel_init::install_sqlite_telemetry(otel.as_ref(), OTEL_SERVICE_NAME);
+    crewon_core::otel_init::record_process_start(otel.as_ref(), OTEL_SERVICE_NAME);
+    crewon_core::otel_init::install_sqlite_telemetry(otel.as_ref(), OTEL_SERVICE_NAME);
     let unix_socket_startup_lock = match &transport {
         AppServerTransport::UnixSocket { socket_path } => {
             let startup_lock_path = app_server_startup_lock_path(&codex_home)?;
@@ -559,14 +559,14 @@ pub async fn run_main_with_transport_options(
         let effective_toml = config.config_layer_stack.effective_config();
         match effective_toml.try_into() {
             Ok(config_toml) => {
-                match codex_core::personality_migration::maybe_migrate_personality(
+                match crewon_core::personality_migration::maybe_migrate_personality(
                     &config.codex_home,
                     &config_toml,
                     state_db.clone(),
                 )
                 .await
                 {
-                    Ok(codex_core::personality_migration::PersonalityMigrationStatus::Applied) => {
+                    Ok(crewon_core::personality_migration::PersonalityMigrationStatus::Applied) => {
                         config = config_manager
                             .load_latest_config(/*fallback_cwd*/ None)
                             .await
@@ -580,9 +580,9 @@ pub async fn run_main_with_transport_options(
                             })?;
                     }
                     Ok(
-                        codex_core::personality_migration::PersonalityMigrationStatus::SkippedMarker
-                        | codex_core::personality_migration::PersonalityMigrationStatus::SkippedExplicitPersonality
-                        | codex_core::personality_migration::PersonalityMigrationStatus::SkippedNoSessions,
+                        crewon_core::personality_migration::PersonalityMigrationStatus::SkippedMarker
+                        | crewon_core::personality_migration::PersonalityMigrationStatus::SkippedExplicitPersonality
+                        | crewon_core::personality_migration::PersonalityMigrationStatus::SkippedNoSessions,
                     ) => {}
                     Err(err) => {
                         warn!(error = %err, "Failed to run personality migration");
@@ -618,7 +618,7 @@ pub async fn run_main_with_transport_options(
         });
     }
     if let Some(warning) =
-        codex_core::config::system_bwrap_warning(config.permissions.permission_profile())
+        crewon_core::config::system_bwrap_warning(config.permissions.permission_profile())
     {
         config_warnings.push(ConfigWarningNotification {
             summary: warning,
@@ -628,7 +628,7 @@ pub async fn run_main_with_transport_options(
         });
     }
 
-    let feedback = CodexFeedback::new();
+    let feedback = CrewonFeedback::new();
 
     // Install a simple subscriber so `tracing` output is visible. Users can
     // control the log level with `RUST_LOG` and switch to JSON logs with
@@ -1154,12 +1154,12 @@ async fn init_sqlite_state_db_with_fresh_start_on_corruption(
             }
             Err(err) => err,
         };
-        if !codex_state::is_sqlite_corruption_error(&err) {
+        if !crewon_state::is_sqlite_corruption_error(&err) {
             return Err(err);
         }
 
-        let database_path = codex_state::runtime_db_path_for_corruption_error(&err)
-            .unwrap_or_else(|| codex_state::state_db_path(config.sqlite_home.as_path()));
+        let database_path = crewon_state::runtime_db_path_for_corruption_error(&err)
+            .unwrap_or_else(|| crewon_state::state_db_path(config.sqlite_home.as_path()));
         if !attempted_backups.insert(database_path.clone()) {
             return Err(anyhow::anyhow!(
                 "failed to initialize sqlite state runtime after moving damaged database file into a backup folder: {err}"
@@ -1168,10 +1168,10 @@ async fn init_sqlite_state_db_with_fresh_start_on_corruption(
 
         let original_error = err.to_string();
         emit_state_db_backup_warning(&format!(
-            "Codex local database at {} appears damaged. Moving it into a backup folder so the app server can rebuild it from saved data.",
+            "Crewon local database at {} appears damaged. Moving it into a backup folder so the app server can rebuild it from saved data.",
             database_path.display()
         ));
-        let backups = codex_state::backup_runtime_db_for_fresh_start(database_path.as_path())
+        let backups = crewon_state::backup_runtime_db_for_fresh_start(database_path.as_path())
             .await
             .map_err(|backup_err| {
                 anyhow::anyhow!(
@@ -1180,7 +1180,7 @@ async fn init_sqlite_state_db_with_fresh_start_on_corruption(
             })?;
         for backup in &backups {
             emit_state_db_backup_warning(&format!(
-                "Moved damaged Codex local database file {} to {}",
+                "Moved damaged Crewon local database file {} to {}",
                 backup.original_path.display(),
                 backup.backup_path.display()
             ));

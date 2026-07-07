@@ -3,9 +3,9 @@ use crate::context::ContextualUserFragment;
 use crate::context::InternalContextSource;
 use crate::context::InternalModelContextFragment;
 use crate::context::SubagentNotification;
-use codex_protocol::items::HookPromptFragment;
-use codex_protocol::items::build_hook_prompt_message;
-use codex_protocol::models::ResponseItem;
+use crewon_protocol::items::HookPromptFragment;
+use crewon_protocol::items::build_hook_prompt_message;
+use crewon_protocol::models::ResponseItem;
 use pretty_assertions::assert_eq;
 
 #[test]

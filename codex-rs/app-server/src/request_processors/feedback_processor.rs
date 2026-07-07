@@ -1,13 +1,13 @@
 use super::*;
 #[cfg(target_os = "windows")]
-use codex_feedback::WINDOWS_SANDBOX_LOG_ATTACHMENT_FILENAME;
+use crewon_feedback::WINDOWS_SANDBOX_LOG_ATTACHMENT_FILENAME;
 
 #[derive(Clone)]
 pub(crate) struct FeedbackRequestProcessor {
     auth_manager: Arc<AuthManager>,
     thread_manager: Arc<ThreadManager>,
     config: Arc<Config>,
-    feedback: CodexFeedback,
+    feedback: CrewonFeedback,
     log_db: Option<LogDbLayer>,
     state_db: Option<StateDbHandle>,
 }
@@ -17,7 +17,7 @@ impl FeedbackRequestProcessor {
         auth_manager: Arc<AuthManager>,
         thread_manager: Arc<ThreadManager>,
         config: Arc<Config>,
-        feedback: CodexFeedback,
+        feedback: CrewonFeedback,
         log_db: Option<LogDbLayer>,
         state_db: Option<StateDbHandle>,
     ) -> Self {
@@ -103,8 +103,8 @@ impl FeedbackRequestProcessor {
                         let mut thread_ids = vec![conversation_id];
                         if let Some(state_db_ctx) = state_db_ctx.as_ref() {
                             for status in [
-                                codex_state::DirectionalThreadSpawnEdgeStatus::Open,
-                                codex_state::DirectionalThreadSpawnEdgeStatus::Closed,
+                                crewon_state::DirectionalThreadSpawnEdgeStatus::Open,
+                                crewon_state::DirectionalThreadSpawnEdgeStatus::Closed,
                             ] {
                                 match state_db_ctx
                                     .list_thread_spawn_descendants_with_status(
@@ -275,7 +275,7 @@ fn auto_review_rollout_filename(thread_id: ThreadId) -> String {
 
 #[cfg(target_os = "windows")]
 fn windows_sandbox_log_attachment(codex_home: &Path) -> Option<FeedbackAttachmentPath> {
-    let sandbox_log_path = codex_windows_sandbox::current_log_file_path_for_codex_home(codex_home);
+    let sandbox_log_path = crewon_windows_sandbox::current_log_file_path_for_codex_home(codex_home);
     sandbox_log_path
         .is_file()
         .then_some(FeedbackAttachmentPath {
@@ -297,10 +297,10 @@ mod tests {
     #[test]
     fn windows_sandbox_log_attachment_uses_current_log() {
         let codex_home = tempfile::tempdir().expect("create tempdir");
-        let sandbox_dir = codex_windows_sandbox::sandbox_dir(codex_home.path());
+        let sandbox_dir = crewon_windows_sandbox::sandbox_dir(codex_home.path());
         std::fs::create_dir_all(&sandbox_dir).expect("create sandbox dir");
         let sandbox_log_path =
-            codex_windows_sandbox::current_log_file_path_for_codex_home(codex_home.path());
+            crewon_windows_sandbox::current_log_file_path_for_codex_home(codex_home.path());
         std::fs::write(&sandbox_log_path, "sandbox log").expect("write sandbox log");
 
         let attachment = windows_sandbox_log_attachment(codex_home.path())

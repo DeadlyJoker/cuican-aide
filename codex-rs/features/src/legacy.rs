@@ -43,7 +43,11 @@ const ALIASES: &[Alias] = &[
     },
     Alias {
         legacy_key: "codex_hooks",
-        feature: Feature::CodexHooks,
+        feature: Feature::Hooks,
+    },
+    Alias {
+        legacy_key: "codex_git_commit",
+        feature: Feature::GitCommit,
     },
 ];
 

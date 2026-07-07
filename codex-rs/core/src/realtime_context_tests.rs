@@ -10,17 +10,17 @@ use super::format_section;
 use super::format_startup_context_blob;
 use chrono::TimeZone;
 use chrono::Utc;
-use codex_git_utils::GitSha;
-use codex_protocol::ThreadId;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::GitInfo;
-use codex_protocol::protocol::SessionSource;
-use codex_thread_store::StoredThread;
 use core_test_support::PathBufExt;
 use core_test_support::PathExt;
+use crewon_git_utils::GitSha;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::GitInfo;
+use crewon_protocol::protocol::SessionSource;
+use crewon_thread_store::StoredThread;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::PathBuf;
@@ -50,7 +50,7 @@ fn stored_thread(cwd: &str, title: &str, first_user_message: &str) -> StoredThre
         archived_at: None,
         cwd: PathBuf::from(cwd),
         cli_version: "test".to_string(),
-        source: SessionSource::Cli,
+        source: SessionSource::LegacyCli,
         thread_source: None,
         agent_nickname: None,
         agent_role: None,
@@ -183,12 +183,12 @@ fn current_thread_section_keeps_latest_turns_when_history_exceeds_budget() {
 
 #[test]
 fn startup_context_blob_is_wrapped_in_tags_without_final_truncation() {
-    let body = "Startup context from Codex.\n## Current Thread\nhello";
+    let body = "Startup context from Crewon.\n## Current Thread\nhello";
     let wrapped = format_startup_context_blob(body);
 
     assert_eq!(
         wrapped,
-        "<startup_context>\nStartup context from Codex.\n## Current Thread\nhello\n</startup_context>"
+        "<startup_context>\nStartup context from Crewon.\n## Current Thread\nhello\n</startup_context>"
     );
 }
 

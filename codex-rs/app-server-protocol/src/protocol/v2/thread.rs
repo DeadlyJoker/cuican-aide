@@ -10,18 +10,18 @@ use super::Turn;
 use super::TurnEnvironmentParams;
 use super::TurnItemsView;
 use super::shared::v2_enum_from_core;
-use codex_experimental_api_macros::ExperimentalApi;
-pub use codex_protocol::capabilities::CapabilityRootLocation;
-pub use codex_protocol::capabilities::SelectedCapabilityRoot;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::Personality;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::ThreadGoalStatus as CoreThreadGoalStatus;
-use codex_protocol::protocol::TokenUsage as CoreTokenUsage;
-use codex_protocol::protocol::TokenUsageInfo as CoreTokenUsageInfo;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_experimental_api_macros::ExperimentalApi;
+pub use crewon_protocol::capabilities::CapabilityRootLocation;
+pub use crewon_protocol::capabilities::SelectedCapabilityRoot;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::ThreadGoalStatus as CoreThreadGoalStatus;
+use crewon_protocol::protocol::TokenUsage as CoreTokenUsage;
+use crewon_protocol::protocol::TokenUsageInfo as CoreTokenUsageInfo;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -165,7 +165,7 @@ pub struct ThreadStartParams {
     #[ts(optional = nullable)]
     pub mock_experimental_field: Option<String>,
     /// If true, opt into emitting raw Responses API items on the event stream.
-    /// This is for internal use only (e.g. Codex Cloud).
+    /// This is for internal use only (e.g. Crewon Cloud).
     #[experimental("thread/start.experimentalRawEvents")]
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub experimental_raw_events: bool,
@@ -719,8 +719,8 @@ pub struct ThreadGoal {
     pub updated_at: i64,
 }
 
-impl From<codex_protocol::protocol::ThreadGoal> for ThreadGoal {
-    fn from(value: codex_protocol::protocol::ThreadGoal) -> Self {
+impl From<crewon_protocol::protocol::ThreadGoal> for ThreadGoal {
+    fn from(value: crewon_protocol::protocol::ThreadGoal) -> Self {
         Self {
             thread_id: value.thread_id.to_string(),
             objective: value.objective,
@@ -859,10 +859,10 @@ impl ThreadMemoryMode {
         }
     }
 
-    pub fn to_core(self) -> codex_protocol::protocol::ThreadMemoryMode {
+    pub fn to_core(self) -> crewon_protocol::protocol::ThreadMemoryMode {
         match self {
-            Self::Enabled => codex_protocol::protocol::ThreadMemoryMode::Enabled,
-            Self::Disabled => codex_protocol::protocol::ThreadMemoryMode::Disabled,
+            Self::Enabled => crewon_protocol::protocol::ThreadMemoryMode::Enabled,
+            Self::Disabled => crewon_protocol::protocol::ThreadMemoryMode::Disabled,
         }
     }
 }
@@ -926,7 +926,7 @@ pub struct ThreadShellCommandResponse {}
 #[ts(export_to = "v2/")]
 pub struct ThreadApproveGuardianDeniedActionParams {
     pub thread_id: String,
-    /// Serialized `codex_protocol::protocol::GuardianAssessmentEvent`.
+    /// Serialized `crewon_protocol::protocol::GuardianAssessmentEvent`.
     pub event: JsonValue,
 }
 
@@ -1043,7 +1043,7 @@ pub struct ThreadListParams {
     #[ts(optional = nullable)]
     pub model_providers: Option<Vec<String>>,
     /// Optional source filter; when set, only sessions from these source kinds
-    /// are returned. When omitted or empty, defaults to interactive sources.
+    /// are returned. When omitted or empty, defaults to client sessions.
     #[ts(optional = nullable)]
     pub source_kinds: Option<Vec<ThreadSourceKind>>,
     /// Optional archived filter; when set to true, only archived threads are returned.
@@ -1081,7 +1081,7 @@ pub struct ThreadSearchParams {
     #[ts(optional = nullable)]
     pub sort_direction: Option<SortDirection>,
     /// Optional source filter; when set, only sessions from these source kinds
-    /// are returned. When omitted or empty, defaults to interactive sources.
+    /// are returned. When omitted or empty, defaults to client sessions.
     #[ts(optional = nullable)]
     pub source_kinds: Option<Vec<ThreadSourceKind>>,
     /// Optional archived filter; when set to true, only archived threads are returned.
@@ -1103,7 +1103,10 @@ pub enum ThreadListCwdFilter {
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase", export_to = "v2/")]
 pub enum ThreadSourceKind {
-    Cli,
+    /// Legacy source value for threads created before terminal CLI removal.
+    #[serde(rename = "cli")]
+    #[ts(rename = "cli")]
+    LegacyCli,
     #[serde(rename = "vscode")]
     #[ts(rename = "vscode")]
     VsCode,

@@ -1,12 +1,12 @@
 use anyhow::Context;
-use codex_config::config_toml::ConfigLockfileToml;
-use codex_config::config_toml::ConfigToml;
-use codex_config::types::MemoriesToml;
-use codex_features::Feature;
-use codex_features::FeatureToml;
-use codex_features::FeaturesToml;
-use codex_features::MultiAgentV2ConfigToml;
-use codex_protocol::ThreadId;
+use crewon_config::config_toml::ConfigLockfileToml;
+use crewon_config::config_toml::ConfigToml;
+use crewon_config::types::MemoriesToml;
+use crewon_features::Feature;
+use crewon_features::FeatureToml;
+use crewon_features::FeaturesToml;
+use crewon_features::MultiAgentV2ConfigToml;
+use crewon_protocol::ThreadId;
 
 use crate::config::Config;
 use crate::config_lock::ConfigLockReplayOptions;
@@ -121,7 +121,7 @@ fn save_session_resolved_fields(sc: &SessionConfiguration, lock_config: &mut Con
 /// normalization, defaulting, or feature materialization.
 ///
 /// Persist the resolved representation so replay compares against the behavior
-/// Codex actually ran with, not only the user-authored TOML inputs.
+/// Crewon actually ran with, not only the user-authored TOML inputs.
 fn save_config_resolved_fields(
     config: &Config,
     lock_config: &mut ConfigToml,
@@ -238,7 +238,7 @@ mod tests {
             .as_ref()
             .expect("lock should materialize feature states");
         let feature_entries = features.entries();
-        for spec in codex_features::FEATURES {
+        for spec in crewon_features::FEATURES {
             assert_eq!(
                 feature_entries.get(spec.key),
                 Some(&sc.original_config_do_not_use.features.enabled(spec.id)),
@@ -358,7 +358,7 @@ mod tests {
                 .expect_err("version drift should fail");
         let message = error.to_string();
         assert!(
-            message.contains("config lock Codex version mismatch"),
+            message.contains("config lock Crewon version mismatch"),
             "{message}"
         );
         assert!(

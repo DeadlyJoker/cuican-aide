@@ -1,12 +1,12 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-core-skills"
+name = "crewon-core-skills"
 version.workspace = true
 
 [lib]
 doctest = false
-name = "codex_core_skills"
+name = "crewon_core_skills"
 path = "src/lib.rs"
 
 [lints]
@@ -14,19 +14,19 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-codex-analytics = { workspace = true }
-codex-app-server-protocol = { workspace = true }
-codex-config = { workspace = true }
-codex-context-fragments = { workspace = true }
-codex-exec-server = { workspace = true }
-codex-login = { workspace = true }
-codex-model-provider = { workspace = true }
-codex-otel = { workspace = true }
-codex-protocol = { workspace = true }
-codex-skills = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
-codex-utils-output-truncation = { workspace = true }
-codex-utils-plugins = { workspace = true }
+crewon-analytics = { workspace = true }
+crewon-app-server-protocol = { workspace = true }
+crewon-config = { workspace = true }
+crewon-context-fragments = { workspace = true }
+crewon-exec-server = { workspace = true }
+crewon-login = { workspace = true }
+crewon-model-provider = { workspace = true }
+crewon-otel = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-skills = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
+crewon-utils-output-truncation = { workspace = true }
+crewon-utils-plugins = { workspace = true }
 dirs = { workspace = true }
 dunce = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

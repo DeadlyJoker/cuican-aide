@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use codex_exec_server::EnvironmentManager;
-use codex_exec_server::ExecServerRuntimePaths;
-use codex_login::AuthManager;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::user_input::UserInput;
+use crewon_exec_server::EnvironmentManager;
+use crewon_exec_server::ExecServerRuntimePaths;
+use crewon_login::AuthManager;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::user_input::UserInput;
 use tokio_util::sync::CancellationToken;
 
 use crate::config::Config;
@@ -18,7 +18,7 @@ use crate::session::turn::built_tools;
 use crate::state_db_bridge::StateDbHandle;
 use crate::thread_manager::ThreadManager;
 use crate::thread_manager::thread_store_from_config;
-use codex_extension_api::empty_extension_registry;
+use crewon_extension_api::empty_extension_registry;
 
 /// Build the model-visible `input` list for a single debug turn.
 #[doc(hidden)]
@@ -26,7 +26,7 @@ pub async fn build_prompt_input(
     mut config: Config,
     input: Vec<UserInput>,
     state_db: Option<StateDbHandle>,
-) -> CodexResult<Vec<ResponseItem>> {
+) -> CrewonResult<Vec<ResponseItem>> {
     config.ephemeral = true;
 
     let auth_manager =
@@ -34,7 +34,7 @@ pub async fn build_prompt_input(
 
     let local_runtime_paths = ExecServerRuntimePaths::from_optional_paths(
         config.codex_self_exe.clone(),
-        config.codex_linux_sandbox_exe.clone(),
+        config.crewon_linux_sandbox_exe.clone(),
     )?;
 
     let thread_store = thread_store_from_config(&config, state_db.clone());
@@ -60,7 +60,8 @@ pub async fn build_prompt_input(
     );
     let thread = thread_manager.start_thread(config).await?;
 
-    let output = build_prompt_input_from_session(thread.thread.codex.session.as_ref(), input).await;
+    let output =
+        build_prompt_input_from_session(thread.thread.engine.session.as_ref(), input).await;
     let shutdown = thread.thread.shutdown_and_wait().await;
     let _removed = thread_manager.remove_thread(&thread.thread_id).await;
 
@@ -71,7 +72,7 @@ pub async fn build_prompt_input(
 pub(crate) async fn build_prompt_input_from_session(
     sess: &Session,
     input: Vec<UserInput>,
-) -> CodexResult<Vec<ResponseItem>> {
+) -> CrewonResult<Vec<ResponseItem>> {
     let turn_context = sess.new_default_turn().await;
     sess.record_context_updates_and_set_reference_context_item(turn_context.as_ref())
         .await;

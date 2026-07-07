@@ -1,11 +1,11 @@
 use super::*;
 use crate::manifest::load_plugin_manifest;
 use crate::test_support::write_file;
-use codex_config::ConfigLayerEntry;
-use codex_config::ConfigLayerSource;
-use codex_config::ConfigRequirements;
-use codex_config::ConfigRequirementsToml;
-use codex_plugin::PluginId;
+use crewon_config::ConfigLayerEntry;
+use crewon_config::ConfigLayerSource;
+use crewon_config::ConfigRequirements;
+use crewon_config::ConfigRequirementsToml;
+use crewon_plugin::PluginId;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
@@ -71,7 +71,7 @@ async fn hooks_only_scope_shares_plugin_resolution_without_loading_other_capabil
     let temp_dir = TempDir::new().expect("tempdir");
     let plugin_root = temp_dir.path().join("plugins/cache/test/valid/local");
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"valid"}"#,
     );
     write_file(
@@ -106,7 +106,7 @@ async fn hooks_only_scope_shares_plugin_resolution_without_loading_other_capabil
 
     let disabled_root = temp_dir.path().join("plugins/cache/test/disabled/local");
     write_file(
-        &disabled_root.join(".codex-plugin/plugin.json"),
+        &disabled_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"disabled"}"#,
     );
     write_file(
@@ -116,13 +116,13 @@ async fn hooks_only_scope_shares_plugin_resolution_without_loading_other_capabil
 
     let malformed_root = temp_dir.path().join("plugins/cache/test/malformed/local");
     write_file(
-        &malformed_root.join(".codex-plugin/plugin.json"),
+        &malformed_root.join(".crewon-plugin/plugin.json"),
         "not valid json",
     );
 
     let warning_root = temp_dir.path().join("plugins/cache/test/warning/local");
     write_file(
-        &warning_root.join(".codex-plugin/plugin.json"),
+        &warning_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"warning"}"#,
     );
     write_file(&warning_root.join("hooks/hooks.json"), "not valid json");
@@ -160,7 +160,7 @@ enabled = true
         &stack,
         HashMap::new(),
         &store,
-        Some(Product::Codex),
+        Some(Product::Crewon),
         /*prefer_remote_curated_conflicts*/ false,
     )
     .await;
@@ -319,13 +319,13 @@ fn plugin_root() -> (tempfile::TempDir, AbsolutePathBuf) {
     let tmp = tempfile::tempdir().expect("tempdir");
     let plugin_root =
         AbsolutePathBuf::try_from(tmp.path().join("demo-plugin")).expect("plugin root");
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).expect("create manifest dir");
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).expect("create manifest dir");
     fs::create_dir_all(plugin_root.join("hooks")).expect("create hooks dir");
     (tmp, plugin_root)
 }
 
 fn write_manifest(plugin_root: &AbsolutePathBuf, manifest: &str) {
-    fs::write(plugin_root.join(".codex-plugin/plugin.json"), manifest).expect("write manifest");
+    fs::write(plugin_root.join(".crewon-plugin/plugin.json"), manifest).expect("write manifest");
 }
 
 fn write_hook_file(plugin_root: &AbsolutePathBuf, relative_path: &str, event: &str, command: &str) {
@@ -538,7 +538,7 @@ fn load_plugin_hooks_supports_inline_manifest_hook_list() {
 
 #[test]
 fn materialize_git_subdir_uses_sparse_checkout() {
-    let codex_home = tempfile::tempdir().expect("create codex home");
+    let codex_home = tempfile::tempdir().expect("create crewon home");
     let repo = tempfile::tempdir().expect("create git repo");
     let plugin_dir = repo.path().join("plugins/toolkit");
     fs::create_dir_all(&plugin_dir).expect("create plugin directory");

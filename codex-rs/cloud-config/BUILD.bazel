@@ -1,6 +1,6 @@
-load("//:defs.bzl", "codex_rust_crate")
+load("//:defs.bzl", "crewon_rust_crate")
 
-codex_rust_crate(
+crewon_rust_crate(
     name = "cloud-config",
-    crate_name = "codex_cloud_config",
+    crate_name = "crewon_cloud_config",
 )

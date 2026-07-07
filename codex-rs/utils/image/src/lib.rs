@@ -5,8 +5,8 @@ use std::sync::LazyLock;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use codex_utils_cache::BlockingLruCache;
-use codex_utils_cache::sha1_digest;
+use crewon_utils_cache::BlockingLruCache;
+use crewon_utils_cache::sha1_digest;
 use image::ColorType;
 use image::DynamicImage;
 use image::GenericImageView;

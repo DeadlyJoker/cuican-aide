@@ -12,8 +12,8 @@ use super::remote_plugin_canonical_marketplace_name;
 use crate::store::PLUGINS_CACHE_DIR;
 use crate::store::PluginStore;
 use crate::store::PluginStoreError;
-use codex_login::CodexAuth;
-use codex_plugin::PluginId;
+use crewon_login::CrewonAuth;
+use crewon_plugin::PluginId;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -81,7 +81,7 @@ pub struct RemotePluginCacheMutationGuard {
 pub(crate) fn maybe_start_remote_installed_plugin_bundle_sync(
     codex_home: PathBuf,
     config: RemotePluginServiceConfig,
-    auth: Option<CodexAuth>,
+    auth: Option<CrewonAuth>,
     on_local_cache_changed: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
 ) {
     let Some(auth) = auth else {
@@ -125,7 +125,7 @@ pub(crate) fn maybe_start_remote_installed_plugin_bundle_sync(
 pub async fn sync_remote_installed_plugin_bundles_once(
     codex_home: PathBuf,
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
 ) -> Result<RemoteInstalledPluginBundleSyncOutcome, RemoteInstalledPluginBundleSyncError> {
     let auth = ensure_chatgpt_auth(auth)?;
     let global = async {
@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn remote_installed_plugin_sync_in_flight_dedupes_by_cache_root() {
-        let codex_home = tempfile::tempdir().expect("create codex home");
+        let codex_home = tempfile::tempdir().expect("create crewon home");
         let key = RemoteInstalledPluginBundleSyncKey {
             plugin_cache_root: remote_plugin_cache_root(codex_home.path()),
         };
@@ -449,14 +449,14 @@ mod tests {
 
     #[test]
     fn stale_remote_plugin_cleanup_skips_cache_mutations_in_progress() {
-        let codex_home = tempfile::tempdir().expect("create codex home");
+        let codex_home = tempfile::tempdir().expect("create crewon home");
         let cached_manifest = codex_home
             .path()
             .join(PLUGINS_CACHE_DIR)
             .join(REMOTE_GLOBAL_MARKETPLACE_NAME)
             .join("linear")
             .join("1.2.3")
-            .join(".codex-plugin")
+            .join(".crewon-plugin")
             .join("plugin.json");
         std::fs::create_dir_all(cached_manifest.parent().expect("manifest parent"))
             .expect("create cached plugin manifest parent");
@@ -518,14 +518,14 @@ mod tests {
 
     #[test]
     fn stale_remote_plugin_cleanup_removes_old_shared_with_me_cache_and_keeps_canonical_cache() {
-        let codex_home = tempfile::tempdir().expect("create codex home");
+        let codex_home = tempfile::tempdir().expect("create crewon home");
         let cached_manifest = codex_home
             .path()
             .join(PLUGINS_CACHE_DIR)
             .join(REMOTE_WORKSPACE_SHARED_WITH_ME_PRIVATE_MARKETPLACE_NAME)
             .join("private-plugin")
             .join("1.2.3")
-            .join(".codex-plugin")
+            .join(".crewon-plugin")
             .join("plugin.json");
         std::fs::create_dir_all(cached_manifest.parent().expect("manifest parent"))
             .expect("create cached plugin manifest parent");
@@ -537,7 +537,7 @@ mod tests {
             .join(REMOTE_WORKSPACE_SHARED_WITH_ME_MARKETPLACE_NAME)
             .join("shared-plugin")
             .join("1.2.3")
-            .join(".codex-plugin")
+            .join(".crewon-plugin")
             .join("plugin.json");
         std::fs::create_dir_all(canonical_cached_manifest.parent().expect("manifest parent"))
             .expect("create canonical cached plugin manifest parent");

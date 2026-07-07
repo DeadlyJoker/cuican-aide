@@ -2,24 +2,24 @@
 #![cfg(unix)]
 
 use anyhow::Result;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ExecApprovalRequestEvent;
-use codex_protocol::protocol::GranularApprovalConfig;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses::mount_function_call_agent_response;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use core_test_support::zsh_fork::build_zsh_fork_test;
 use core_test_support::zsh_fork::restrictive_workspace_write_profile;
 use core_test_support::zsh_fork::zsh_fork_runtime;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ExecApprovalRequestEvent;
+use crewon_protocol::protocol::GranularApprovalConfig;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -39,14 +39,14 @@ fn shell_command_arguments(command: &str) -> Result<String> {
 }
 
 async fn submit_turn_with_policies(
-    test: &TestCodex,
+    test: &TestCrewon,
     prompt: &str,
     approval_policy: AskForApproval,
     permission_profile: PermissionProfile,
 ) -> Result<()> {
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(permission_profile, test.cwd_path());
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: prompt.to_string(),
@@ -55,14 +55,14 @@ async fn submit_turn_with_policies(
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(approval_policy),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: test.session_configured.model.clone(),
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -106,7 +106,7 @@ description: {name} skill
     Ok(script_path)
 }
 
-fn skill_script_command(test: &TestCodex, script_name: &str) -> Result<String> {
+fn skill_script_command(test: &TestCrewon, script_name: &str) -> Result<String> {
     let script_path = fs::canonicalize(
         test.codex_home_path()
             .join("skills/mbolin-test-skill/scripts")
@@ -115,8 +115,8 @@ fn skill_script_command(test: &TestCodex, script_name: &str) -> Result<String> {
     Ok(shlex::try_join([script_path.to_string_lossy().as_ref()])?)
 }
 
-async fn wait_for_exec_approval_request(test: &TestCodex) -> Option<ExecApprovalRequestEvent> {
-    wait_for_event_match(test.codex.as_ref(), |event| match event {
+async fn wait_for_exec_approval_request(test: &TestCrewon) -> Option<ExecApprovalRequestEvent> {
+    wait_for_event_match(test.crewon.as_ref(), |event| match event {
         EventMsg::ExecApprovalRequest(request) => Some(Some(request.clone())),
         EventMsg::TurnComplete(_) => Some(None),
         _ => None,
@@ -124,8 +124,8 @@ async fn wait_for_exec_approval_request(test: &TestCodex) -> Option<ExecApproval
     .await
 }
 
-async fn wait_for_turn_complete(test: &TestCodex) {
-    wait_for_event(test.codex.as_ref(), |event| {
+async fn wait_for_turn_complete(test: &TestCrewon) {
+    wait_for_event(test.crewon.as_ref(), |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -243,7 +243,7 @@ async fn shell_zsh_fork_still_enforces_workspace_write_sandbox() -> Result<()> {
 
     let server = start_mock_server().await;
     let tool_call_id = "zsh-fork-workspace-write-deny";
-    let outside_path = "/tmp/codex-zsh-fork-workspace-write-deny.txt";
+    let outside_path = "/tmp/crewon-zsh-fork-workspace-write-deny.txt";
     let workspace_write_profile = restrictive_workspace_write_profile();
     let _ = fs::remove_file(outside_path);
     let test = build_zsh_fork_test(

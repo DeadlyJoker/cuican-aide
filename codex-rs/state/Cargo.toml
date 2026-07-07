@@ -1,5 +1,5 @@
 [package]
-name = "codex-state"
+name = "crewon-state"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,11 +7,8 @@ license.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
-clap = { workspace = true, features = ["derive", "env"] }
-codex-protocol = { workspace = true }
-dirs = { workspace = true }
+crewon-protocol = { workspace = true }
 log = { workspace = true }
-owo-colors = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
@@ -22,7 +19,7 @@ tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-codex-git-utils = { workspace = true }
+crewon-git-utils = { workspace = true }
 pretty_assertions = { workspace = true }
 
 [lints]

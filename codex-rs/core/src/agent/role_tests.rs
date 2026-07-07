@@ -2,25 +2,25 @@ use super::*;
 use crate::SkillsManager;
 use crate::config::ConfigBuilder;
 use crate::skills_load_input_from_config;
-use codex_config::ConfigLayerStackOrdering;
-use codex_core_plugins::PluginsManager;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_utils_absolute_path::test_support::PathExt;
+use crewon_config::ConfigLayerStackOrdering;
+use crewon_core_plugins::PluginsManager;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_utils_absolute_path::test_support::PathExt;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-async fn test_config_with_cli_overrides(
-    cli_overrides: Vec<(String, TomlValue)>,
+async fn test_config_with_config_overrides(
+    config_overrides: Vec<(String, TomlValue)>,
 ) -> (TempDir, Config) {
     let home = TempDir::new().expect("create temp dir");
     let home_path = home.path().to_path_buf();
     let config = ConfigBuilder::default()
         .codex_home(home_path.clone())
-        .cli_overrides(cli_overrides)
+        .config_overrides(config_overrides)
         .fallback_cwd(Some(home_path))
         .build()
         .await
@@ -50,7 +50,7 @@ fn session_flags_layer_count(config: &Config) -> usize {
 
 #[tokio::test]
 async fn apply_role_defaults_to_default_and_leaves_config_unchanged() {
-    let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (_home, mut config) = test_config_with_config_overrides(Vec::new()).await;
     let before = config.clone();
 
     apply_role_to_config(&mut config, /*role_name*/ None)
@@ -62,7 +62,7 @@ async fn apply_role_defaults_to_default_and_leaves_config_unchanged() {
 
 #[tokio::test]
 async fn apply_role_returns_error_for_unknown_role() {
-    let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (_home, mut config) = test_config_with_config_overrides(Vec::new()).await;
 
     let err = apply_role_to_config(&mut config, Some("missing-role"))
         .await
@@ -74,7 +74,7 @@ async fn apply_role_returns_error_for_unknown_role() {
 #[tokio::test]
 #[ignore = "No role requiring it for now"]
 async fn apply_explorer_role_sets_model_and_adds_session_flags_layer() {
-    let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (_home, mut config) = test_config_with_config_overrides(Vec::new()).await;
     let before_layers = session_flags_layer_count(&config);
 
     apply_role_to_config(&mut config, Some("explorer"))
@@ -88,7 +88,7 @@ async fn apply_explorer_role_sets_model_and_adds_session_flags_layer() {
 
 #[tokio::test]
 async fn apply_empty_explorer_role_preserves_current_model_and_reasoning_effort() {
-    let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (_home, mut config) = test_config_with_config_overrides(Vec::new()).await;
     let before_layers = session_flags_layer_count(&config);
     config.model = Some("gpt-5.4-mini".to_string());
     config.model_reasoning_effort = Some(ReasoningEffort::High);
@@ -104,7 +104,7 @@ async fn apply_empty_explorer_role_preserves_current_model_and_reasoning_effort(
 
 #[tokio::test]
 async fn apply_role_returns_unavailable_for_missing_user_role_file() {
-    let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (_home, mut config) = test_config_with_config_overrides(Vec::new()).await;
     config.agent_roles.insert(
         "custom".to_string(),
         AgentRoleConfig {
@@ -123,7 +123,7 @@ async fn apply_role_returns_unavailable_for_missing_user_role_file() {
 
 #[tokio::test]
 async fn apply_role_returns_unavailable_for_invalid_user_role_toml() {
-    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (home, mut config) = test_config_with_config_overrides(Vec::new()).await;
     let role_path = write_role_config(&home, "invalid-role.toml", "model = [").await;
     config.agent_roles.insert(
         "custom".to_string(),
@@ -143,7 +143,7 @@ async fn apply_role_returns_unavailable_for_invalid_user_role_toml() {
 
 #[tokio::test]
 async fn apply_role_ignores_agent_metadata_fields_in_user_role_file() {
-    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (home, mut config) = test_config_with_config_overrides(Vec::new()).await;
     let role_path = write_role_config(
         &home,
         "metadata-role.toml",
@@ -174,13 +174,13 @@ model = "role-model"
 
 #[tokio::test]
 async fn apply_role_preserves_unspecified_keys() {
-    let (home, mut config) = test_config_with_cli_overrides(vec![(
+    let (home, mut config) = test_config_with_config_overrides(vec![(
         "model".to_string(),
         TomlValue::String("base-model".to_string()),
     )])
     .await;
-    config.codex_linux_sandbox_exe = Some(PathBuf::from("/tmp/codex-linux-sandbox"));
-    config.main_execve_wrapper_exe = Some(PathBuf::from("/tmp/codex-execve-wrapper"));
+    config.crewon_linux_sandbox_exe = Some(PathBuf::from("/tmp/crewon-linux-sandbox"));
+    config.main_execve_wrapper_exe = Some(PathBuf::from("/tmp/crewon-execve-wrapper"));
     let role_path = write_role_config(
         &home,
         "effort-only.toml",
@@ -203,18 +203,18 @@ async fn apply_role_preserves_unspecified_keys() {
     assert_eq!(config.model.as_deref(), Some("base-model"));
     assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::High));
     assert_eq!(
-        config.codex_linux_sandbox_exe,
-        Some(PathBuf::from("/tmp/codex-linux-sandbox"))
+        config.crewon_linux_sandbox_exe,
+        Some(PathBuf::from("/tmp/crewon-linux-sandbox"))
     );
     assert_eq!(
         config.main_execve_wrapper_exe,
-        Some(PathBuf::from("/tmp/codex-execve-wrapper"))
+        Some(PathBuf::from("/tmp/crewon-execve-wrapper"))
     );
 }
 
 #[tokio::test]
 async fn apply_role_reports_explicit_service_tier() {
-    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (home, mut config) = test_config_with_config_overrides(Vec::new()).await;
     let role_path = write_role_config(
         &home,
         "tiered-role.toml",
@@ -244,7 +244,7 @@ service_tier = "priority"
 
 #[tokio::test]
 async fn apply_role_preserves_existing_service_tier_without_override() {
-    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (home, mut config) = test_config_with_config_overrides(Vec::new()).await;
     config.service_tier = Some(ServiceTier::Fast.request_value().to_string());
     let role_path = write_role_config(
         &home,
@@ -275,8 +275,8 @@ async fn apply_role_preserves_existing_service_tier_without_override() {
 #[tokio::test]
 #[cfg(not(windows))]
 async fn apply_role_does_not_materialize_default_sandbox_workspace_write_fields() {
-    use codex_protocol::protocol::SandboxPolicy;
-    let (home, mut config) = test_config_with_cli_overrides(vec![
+    use crewon_protocol::protocol::SandboxPolicy;
+    let (home, mut config) = test_config_with_config_overrides(vec![
         (
             "sandbox_mode".to_string(),
             TomlValue::String("workspace-write".to_string()),
@@ -347,7 +347,7 @@ writable_roots = ["./sandbox-root"]
 
 #[tokio::test]
 async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() {
-    let (home, mut config) = test_config_with_cli_overrides(vec![(
+    let (home, mut config) = test_config_with_config_overrides(vec![(
         "model".to_string(),
         TomlValue::String("cli-model".to_string()),
     )])
@@ -379,7 +379,7 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
 #[cfg_attr(windows, ignore)]
 #[tokio::test]
 async fn apply_role_skills_config_disables_skill_for_spawned_agent() {
-    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    let (home, mut config) = test_config_with_config_overrides(Vec::new()).await;
     let skill_dir = home.path().join("skills").join("demo");
     fs::create_dir_all(&skill_dir).expect("create skill dir");
     let skill_path = skill_dir.join("SKILL.md");
@@ -425,7 +425,7 @@ enabled = false
     let outcome = skills_manager
         .skills_for_config(
             &skills_input,
-            Some(Arc::clone(&codex_exec_server::LOCAL_FS)),
+            Some(Arc::clone(&crewon_exec_server::LOCAL_FS)),
         )
         .await;
     let skill = outcome

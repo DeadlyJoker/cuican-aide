@@ -1,6 +1,6 @@
-use codex_tools::JsonSchema;
-use codex_tools::ResponsesApiTool;
-use codex_tools::ToolSpec;
+use crewon_tools::JsonSchema;
+use crewon_tools::ResponsesApiTool;
+use crewon_tools::ToolSpec;
 use std::collections::BTreeMap;
 
 pub(crate) const GET_CONTEXT_REMAINING_TOOL_NAME: &str = "get_context_remaining";

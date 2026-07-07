@@ -5,26 +5,26 @@ use crate::event_mapping::is_contextual_user_message_content;
 use crate::session::turn_context::TurnContext;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::FunctionCallOutputBody;
-use codex_protocol::models::FunctionCallOutputContentItem;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ImageDetail;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::protocol::TokenUsageInfo;
-use codex_protocol::protocol::TurnContextItem;
-use codex_utils_cache::BlockingLruCache;
-use codex_utils_cache::sha1_digest;
-use codex_utils_output_truncation::TruncationPolicy;
-use codex_utils_output_truncation::approx_bytes_for_tokens;
-use codex_utils_output_truncation::approx_token_count;
-use codex_utils_output_truncation::approx_tokens_from_byte_count_i64;
-use codex_utils_output_truncation::truncate_function_output_items_with_policy;
-use codex_utils_output_truncation::truncate_text;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::FunctionCallOutputBody;
+use crewon_protocol::models::FunctionCallOutputContentItem;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::ImageDetail;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::InputModality;
+use crewon_protocol::protocol::InterAgentCommunication;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::protocol::TokenUsageInfo;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_utils_cache::BlockingLruCache;
+use crewon_utils_cache::sha1_digest;
+use crewon_utils_output_truncation::TruncationPolicy;
+use crewon_utils_output_truncation::approx_bytes_for_tokens;
+use crewon_utils_output_truncation::approx_token_count;
+use crewon_utils_output_truncation::approx_tokens_from_byte_count_i64;
+use crewon_utils_output_truncation::truncate_function_output_items_with_policy;
+use crewon_utils_output_truncation::truncate_text;
 use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::sync::LazyLock;
@@ -351,11 +351,28 @@ impl ContextManager {
                 call_id,
                 name,
                 output,
-            } => ResponseItem::CustomToolCallOutput {
-                call_id: call_id.clone(),
-                name: name.clone(),
-                output: truncate_function_output_payload(output, policy_with_serialization_budget),
-            },
+            } => {
+                let is_exec_output = self.items.iter().any(|item| {
+                    matches!(
+                        item,
+                        ResponseItem::CustomToolCall {
+                            call_id: existing_call_id,
+                            name,
+                            ..
+                        } if existing_call_id == call_id && name == "exec"
+                    )
+                });
+                let output = if is_exec_output {
+                    output.clone()
+                } else {
+                    truncate_function_output_payload(output, policy_with_serialization_budget)
+                };
+                ResponseItem::CustomToolCallOutput {
+                    call_id: call_id.clone(),
+                    name: name.clone(),
+                    output,
+                }
+            }
             ResponseItem::Message { .. }
             | ResponseItem::AgentMessage { .. }
             | ResponseItem::Reasoning { .. }

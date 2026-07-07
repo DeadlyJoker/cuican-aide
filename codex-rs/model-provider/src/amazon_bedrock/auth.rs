@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use codex_api::AuthError;
-use codex_api::AuthProvider;
-use codex_api::SharedAuthProvider;
-use codex_aws_auth::AwsAuthContext;
-use codex_aws_auth::AwsAuthError;
-use codex_aws_auth::AwsRequestToSign;
-use codex_client::Request;
-use codex_client::RequestBody;
-use codex_client::RequestCompression;
-use codex_model_provider_info::ModelProviderAwsAuthInfo;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result;
+use crewon_api::AuthError;
+use crewon_api::AuthProvider;
+use crewon_api::SharedAuthProvider;
+use crewon_aws_auth::AwsAuthContext;
+use crewon_aws_auth::AwsAuthError;
+use crewon_aws_auth::AwsRequestToSign;
+use crewon_client::Request;
+use crewon_client::RequestBody;
+use crewon_client::RequestCompression;
+use crewon_model_provider_info::ModelProviderAwsAuthInfo;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result;
 use http::HeaderMap;
 
 use crate::BearerAuthProvider;
@@ -100,7 +100,7 @@ fn remove_headers_not_preserved_by_bedrock_mantle(headers: &mut HeaderMap) {
     // The Bedrock Mantle front door does not preserve legacy OpenAI
     // compatibility headers that use snake_case, such as `session_id` and
     // `thread_id`, before SigV4 verification. Signing that header class makes
-    // richer Codex agent requests fail even though raw Responses requests work.
+    // richer Crewon agent requests fail even though raw Responses requests work.
     let headers_to_remove = headers
         .keys()
         .filter(|name| name.as_str().contains('_'))
@@ -111,7 +111,7 @@ fn remove_headers_not_preserved_by_bedrock_mantle(headers: &mut HeaderMap) {
     }
 }
 
-/// AWS SigV4 auth provider for Bedrock Mantle OpenAI-compatible requests.
+/// AWS SigV4 auth provider for Bedrock Mantle Responses-compatible requests.
 #[derive(Debug)]
 struct BedrockMantleSigV4AuthProvider {
     context: AwsAuthContext,
@@ -152,7 +152,7 @@ impl AuthProvider for BedrockMantleSigV4AuthProvider {
 
 #[cfg(test)]
 mod tests {
-    use codex_api::AuthProvider;
+    use crewon_api::AuthProvider;
     use http::HeaderValue;
     use pretty_assertions::assert_eq;
 

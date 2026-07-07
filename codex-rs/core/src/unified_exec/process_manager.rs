@@ -11,7 +11,7 @@ use tokio::time::Duration;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
-use crate::codex_thread::BackgroundTerminalInfo;
+use crate::crewon_thread::BackgroundTerminalInfo;
 use crate::exec_env::CODEX_THREAD_ID_ENV_VAR;
 use crate::exec_env::create_env;
 use crate::exec_policy::ExecApprovalRequest;
@@ -50,13 +50,13 @@ use crate::unified_exec::process::OutputBuffer;
 use crate::unified_exec::process::OutputHandles;
 use crate::unified_exec::process::SpawnLifecycleHandle;
 use crate::unified_exec::process::UnifiedExecProcess;
-use codex_protocol::config_types::ShellEnvironmentPolicy;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::SandboxErr;
-use codex_protocol::protocol::ExecCommandSource;
-use codex_tools::ToolName;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_output_truncation::approx_token_count;
+use crewon_protocol::config_types::ShellEnvironmentPolicy;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::SandboxErr;
+use crewon_protocol::protocol::ExecCommandSource;
+use crewon_tools::ToolName;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_output_truncation::approx_token_count;
 
 const UNIFIED_EXEC_ENV: [(&str, &str); 10] = [
     ("NO_COLOR", "1"),
@@ -71,7 +71,7 @@ const UNIFIED_EXEC_ENV: [(&str, &str); 10] = [
     ("CODEX_CI", "1"),
 ];
 const NETWORK_ACCESS_DENIED_MESSAGE: &str =
-    "Network access was denied by the Codex sandbox network proxy.";
+    "Network access was denied by the Crewon sandbox network proxy.";
 const LATE_NETWORK_DENIAL_GRACE_PERIOD: Duration = Duration::from_millis(100);
 const INTERRUPT: &str = "\u{3}";
 
@@ -102,8 +102,8 @@ fn apply_unified_exec_env(mut env: HashMap<String, String>) -> HashMap<String, S
 
 fn exec_env_policy_from_shell_policy(
     policy: &ShellEnvironmentPolicy,
-) -> codex_exec_server::ExecEnvPolicy {
-    codex_exec_server::ExecEnvPolicy {
+) -> crewon_exec_server::ExecEnvPolicy {
+    crewon_exec_server::ExecEnvPolicy {
         inherit: policy.inherit.clone(),
         ignore_default_excludes: policy.ignore_default_excludes,
         exclude: policy
@@ -134,7 +134,7 @@ fn env_overlay_for_exec_server(
 fn exec_server_env_for_request(
     request: &ExecRequest,
 ) -> (
-    Option<codex_exec_server::ExecEnvPolicy>,
+    Option<crewon_exec_server::ExecEnvPolicy>,
     HashMap<String, String>,
 ) {
     if let Some(exec_server_env_config) = &request.exec_server_env_config {
@@ -151,9 +151,9 @@ fn exec_server_params_for_request(
     process_id: i32,
     request: &ExecRequest,
     tty: bool,
-) -> codex_exec_server::ExecParams {
+) -> crewon_exec_server::ExecParams {
     let (env_policy, env) = exec_server_env_for_request(request);
-    codex_exec_server::ExecParams {
+    crewon_exec_server::ExecParams {
         process_id: exec_server_process_id(process_id).into(),
         argv: request.command.clone(),
         cwd: request.cwd.to_path_buf(),
@@ -234,7 +234,7 @@ async fn finish_deferred_network_approval_for_session(
 fn network_approval_error_message(err: ToolError) -> String {
     match err {
         ToolError::Rejected(message) => message,
-        ToolError::Codex(err) => err.to_string(),
+        ToolError::Crewon(err) => err.to_string(),
     }
 }
 
@@ -892,15 +892,15 @@ impl UnifiedExecProcessManager {
         request: &ExecRequest,
         tty: bool,
         mut spawn_lifecycle: SpawnLifecycleHandle,
-        environment: &codex_exec_server::Environment,
+        environment: &crewon_exec_server::Environment,
     ) -> Result<UnifiedExecProcess, UnifiedExecError> {
         let inherited_fds = spawn_lifecycle.inherited_fds();
 
         #[cfg(target_os = "windows")]
-        if request.sandbox == codex_sandboxing::SandboxType::WindowsRestrictedToken {
-            let codex_home = crate::config::find_codex_home().map_err(|err| {
+        if request.sandbox == crewon_sandboxing::SandboxType::WindowsRestrictedToken {
+            let codex_home = crate::config::find_crewon_home().map_err(|err| {
                 UnifiedExecError::create_process(format!(
-                    "windows sandbox: failed to resolve codex_home: {err}"
+                    "windows sandbox: failed to resolve crewon_home: {err}"
                 ))
             })?;
             let additional_deny_write_paths = request
@@ -926,8 +926,8 @@ impl UnifiedExecProcessManager {
                 .as_ref()
                 .and_then(|overrides| overrides.write_roots_override.clone());
             let spawned = match request.windows_sandbox_level {
-                codex_protocol::config_types::WindowsSandboxLevel::Elevated => {
-                    codex_windows_sandbox::spawn_windows_sandbox_session_elevated_for_permission_profile(
+                crewon_protocol::config_types::WindowsSandboxLevel::Elevated => {
+                    crewon_windows_sandbox::spawn_windows_sandbox_session_elevated_for_permission_profile(
                         &request.permission_profile,
                         request.windows_sandbox_workspace_roots.as_slice(),
                         codex_home.as_ref(),
@@ -946,9 +946,9 @@ impl UnifiedExecProcessManager {
                     )
                     .await
                 }
-                codex_protocol::config_types::WindowsSandboxLevel::RestrictedToken
-                | codex_protocol::config_types::WindowsSandboxLevel::Disabled => {
-                    codex_windows_sandbox::spawn_windows_sandbox_session_legacy(
+                crewon_protocol::config_types::WindowsSandboxLevel::RestrictedToken
+                | crewon_protocol::config_types::WindowsSandboxLevel::Disabled => {
+                    crewon_windows_sandbox::spawn_windows_sandbox_session_legacy(
                         &request.permission_profile,
                         request.windows_sandbox_workspace_roots.as_slice(),
                         codex_home.as_ref(),
@@ -994,18 +994,18 @@ impl UnifiedExecProcessManager {
             .split_first()
             .ok_or(UnifiedExecError::MissingCommandLine)?;
         let spawn_result = if tty {
-            codex_utils_pty::pty::spawn_process_with_inherited_fds(
+            crewon_utils_pty::pty::spawn_process_with_inherited_fds(
                 program,
                 args,
                 request.cwd.as_path(),
                 &request.env,
                 &request.arg0,
-                codex_utils_pty::TerminalSize::default(),
+                crewon_utils_pty::TerminalSize::default(),
                 &inherited_fds,
             )
             .await
         } else {
-            codex_utils_pty::pipe::spawn_process_no_stdin_with_inherited_fds(
+            crewon_utils_pty::pipe::spawn_process_no_stdin_with_inherited_fds(
                 program,
                 args,
                 request.cwd.as_path(),
@@ -1097,7 +1097,7 @@ impl UnifiedExecProcessManager {
             .await
             .map(|result| (result.output, result.deferred_network_approval))
             .map_err(|err| match err {
-                ToolError::Codex(CodexErr::Sandbox(SandboxErr::Denied { output, .. })) => {
+                ToolError::Crewon(CodexErr::Sandbox(SandboxErr::Denied { output, .. })) => {
                     let output = *output;
                     let message = if output.aggregated_output.text.is_empty() {
                         let exit_code = output.exit_code;

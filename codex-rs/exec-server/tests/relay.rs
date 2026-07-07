@@ -1,6 +1,6 @@
 mod common;
 
-#[path = "../src/proto/codex.exec_server.relay.v1.rs"]
+#[path = "../src/proto/crewon.exec_server.relay.v1.rs"]
 mod relay_proto;
 
 use std::collections::HashMap;
@@ -10,17 +10,17 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
-use codex_api::AuthProvider;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCRequest;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_exec_server::ExecServerRuntimePaths;
-use codex_exec_server::InitializeParams;
-use codex_exec_server::InitializeResponse;
-use codex_exec_server::RemoteEnvironmentConfig;
+use crewon_api::AuthProvider;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCRequest;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_exec_server::ExecServerRuntimePaths;
+use crewon_exec_server::InitializeParams;
+use crewon_exec_server::InitializeResponse;
+use crewon_exec_server::RemoteEnvironmentConfig;
 use futures::SinkExt;
 use futures::StreamExt;
 use http::HeaderMap;
@@ -62,7 +62,7 @@ impl AuthProvider for StaticRegistryAuthProvider {
     }
 }
 
-fn static_registry_auth_provider() -> codex_api::SharedAuthProvider {
+fn static_registry_auth_provider() -> crewon_api::SharedAuthProvider {
     Arc::new(StaticRegistryAuthProvider)
 }
 
@@ -83,14 +83,14 @@ async fn multiplexed_remote_environment_routes_independent_virtual_streams() -> 
         .mount(&registry)
         .await;
 
-    let (codex_exe, codex_linux_sandbox_exe) = common::current_test_binary_helper_paths()?;
-    let runtime_paths = ExecServerRuntimePaths::new(codex_exe, codex_linux_sandbox_exe)?;
+    let (crewon_exe, crewon_linux_sandbox_exe) = common::current_test_binary_helper_paths()?;
+    let runtime_paths = ExecServerRuntimePaths::new(crewon_exe, crewon_linux_sandbox_exe)?;
     let config = RemoteEnvironmentConfig::new(
         registry.uri(),
         ENVIRONMENT_ID.to_string(),
         static_registry_auth_provider(),
     )?;
-    let remote_environment = tokio::spawn(codex_exec_server::run_remote_environment(
+    let remote_environment = tokio::spawn(crewon_exec_server::run_remote_environment(
         config,
         runtime_paths,
     ));

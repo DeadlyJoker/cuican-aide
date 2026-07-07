@@ -1,26 +1,4 @@
 use anyhow::Result;
-use codex_config::types::Personality;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_models_manager::manager::RefreshStrategy;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelServiceTier;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::openai_models::ReasoningEffortPreset;
-use codex_protocol::openai_models::TruncationPolicyConfig;
-use codex_protocol::openai_models::default_input_modalities;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_completed_with_tokens;
 use core_test_support::responses::ev_image_generation_call;
 use core_test_support::responses::ev_response_created;
@@ -31,17 +9,39 @@ use core_test_support::responses::sse;
 use core_test_support::responses::sse_completed;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
+use crewon_config::types::Personality;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_models_manager::manager::RefreshStrategy;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::InputModality;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelServiceTier;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::openai_models::ReasoningEffortPreset;
+use crewon_protocol::openai_models::TruncationPolicyConfig;
+use crewon_protocol::openai_models::default_input_modalities;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use std::path::PathBuf;
 use wiremock::MockServer;
 
-fn read_only_user_turn(test: &TestCodex, items: Vec<UserInput>, model: String) -> Op {
+fn read_only_user_turn(test: &TestCrewon, items: Vec<UserInput>, model: String) -> Op {
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::read_only(), test.cwd_path());
     Op::UserInput {
@@ -49,14 +49,14 @@ fn read_only_user_turn(test: &TestCodex, items: Vec<UserInput>, model: String) -
         final_output_json_schema: None,
         responsesapi_client_metadata: None,
         additional_context: Default::default(),
-        thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+        thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(test.config.cwd.clone())),
             approval_policy: Some(AskForApproval::Never),
             sandbox_policy: Some(sandbox_policy),
             permission_profile,
-            collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                mode: codex_protocol::config_types::ModeKind::Default,
-                settings: codex_protocol::config_types::Settings {
+            collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                mode: crewon_protocol::config_types::ModeKind::Default,
+                settings: crewon_protocol::config_types::Settings {
                     model,
                     reasoning_effort: test.config.model_reasoning_effort.clone(),
                     developer_instructions: None,
@@ -153,11 +153,11 @@ async fn model_change_appends_model_instructions_developer_message() -> Result<(
     )
     .await;
 
-    let mut builder = test_codex().with_model("gpt-5.3-codex");
+    let mut builder = test_crewon().with_model("gpt-5.3-codex");
     let test = builder.build(&server).await?;
     let next_model = "gpt-5.4";
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -167,18 +167,18 @@ async fn model_change_appends_model_instructions_developer_message() -> Result<(
             test.session_configured.model.clone(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     core_test_support::submit_thread_settings(
-        &test.codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        &test.crewon,
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             model: Some(next_model.to_string()),
             ..Default::default()
         },
     )
     .await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -188,7 +188,7 @@ async fn model_change_appends_model_instructions_developer_message() -> Result<(
             next_model.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = resp_mock.requests();
     assert_eq!(requests.len(), 2, "expected two model requests");
@@ -218,7 +218,7 @@ async fn model_and_personality_change_only_appends_model_instructions() -> Resul
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("gpt-5.3-codex")
         .with_config(|config| {
             config
@@ -229,7 +229,7 @@ async fn model_and_personality_change_only_appends_model_instructions() -> Resul
     let test = builder.build(&server).await?;
     let next_model = "exp-codex-personality";
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -239,11 +239,11 @@ async fn model_and_personality_change_only_appends_model_instructions() -> Resul
             test.session_configured.model.clone(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     core_test_support::submit_thread_settings(
-        &test.codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        &test.crewon,
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             model: Some(next_model.to_string()),
             personality: Some(Personality::Pragmatic),
             ..Default::default()
@@ -251,7 +251,7 @@ async fn model_and_personality_change_only_appends_model_instructions() -> Resul
     )
     .await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -261,7 +261,7 @@ async fn model_and_personality_change_only_appends_model_instructions() -> Resul
             next_model.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = resp_mock.requests();
     assert_eq!(requests.len(), 2, "expected two model requests");
@@ -295,7 +295,7 @@ async fn service_tier_change_is_applied_on_next_http_turn() -> Result<()> {
     )
     .await;
 
-    let test = test_codex().build(&server).await?;
+    let test = test_crewon().build(&server).await?;
 
     test.submit_turn_with_service_tier("fast turn", Some(ServiceTier::Fast.request_value()))
         .await?;
@@ -333,7 +333,7 @@ async fn flex_service_tier_is_applied_to_http_turn() -> Result<()> {
     }];
     let resp_mock = mount_sse_once(&server, sse_completed("resp-1")).await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model(model_slug)
         .with_config(move |config| {
             config.model_catalog = Some(ModelsResponse {
@@ -366,7 +366,7 @@ async fn unsupported_service_tier_is_omitted_from_http_turn() -> Result<()> {
     );
     let resp_mock = mount_sse_once(&server, sse_completed("resp-1")).await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model(model_slug)
         .with_config(move |config| {
             config.model_catalog = Some(ModelsResponse {
@@ -405,7 +405,7 @@ async fn default_service_tier_override_is_omitted_from_http_turn() -> Result<()>
     model.default_service_tier = Some(ServiceTier::Fast.request_value().to_string());
     let resp_mock = mount_sse_once(&server, sse_completed("resp-1")).await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model(model_slug)
         .with_config(move |config| {
             config.model_catalog = Some(ModelsResponse {
@@ -444,7 +444,7 @@ async fn null_service_tier_override_is_omitted_from_http_turn_with_catalog_defau
     model.default_service_tier = Some(ServiceTier::Fast.request_value().to_string());
     let resp_mock = mount_sse_once(&server, sse_completed("resp-1")).await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model(model_slug)
         .with_config(move |config| {
             config.model_catalog = Some(ModelsResponse {
@@ -496,8 +496,8 @@ async fn model_change_from_image_to_text_strips_prior_image_content() -> Result<
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(move |config| {
             config.model = Some(image_model_slug.to_string());
         });
@@ -509,7 +509,7 @@ async fn model_change_from_image_to_text_strips_prior_image_content() -> Result<
     let image_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
         .to_string();
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![
@@ -525,9 +525,9 @@ async fn model_change_from_image_to_text_strips_prior_image_content() -> Result<
             image_model_slug.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -537,7 +537,7 @@ async fn model_change_from_image_to_text_strips_prior_image_content() -> Result<
             text_model_slug.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = responses.requests();
     assert_eq!(requests.len(), 2, "expected two model requests");
@@ -596,8 +596,8 @@ async fn generated_image_is_replayed_for_image_capable_models() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(move |config| {
             config.model = Some(image_model_slug.to_string());
         });
@@ -613,7 +613,7 @@ async fn generated_image_is_replayed_for_image_capable_models() -> Result<()> {
         .list_models(RefreshStrategy::OnlineIfUncached)
         .await;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -623,9 +623,9 @@ async fn generated_image_is_replayed_for_image_capable_models() -> Result<()> {
             image_model_slug.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -635,7 +635,7 @@ async fn generated_image_is_replayed_for_image_capable_models() -> Result<()> {
             image_model_slug.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = responses.requests();
     assert_eq!(requests.len(), 2, "expected two model requests");
@@ -710,8 +710,8 @@ async fn model_change_from_generated_image_to_text_preserves_prior_generated_ima
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(move |config| {
             config.model = Some(image_model_slug.to_string());
         });
@@ -727,7 +727,7 @@ async fn model_change_from_generated_image_to_text_preserves_prior_generated_ima
         .list_models(RefreshStrategy::OnlineIfUncached)
         .await;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -737,9 +737,9 @@ async fn model_change_from_generated_image_to_text_preserves_prior_generated_ima
             image_model_slug.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -749,7 +749,7 @@ async fn model_change_from_generated_image_to_text_preserves_prior_generated_ima
             text_model_slug.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = responses.requests();
     assert_eq!(requests.len(), 2, "expected two model requests");
@@ -826,8 +826,8 @@ async fn thread_rollback_after_generated_image_drops_entire_image_turn_history()
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(move |config| {
             config.model = Some(image_model_slug.to_string());
         });
@@ -843,7 +843,7 @@ async fn thread_rollback_after_generated_image_drops_entire_image_turn_history()
         .list_models(RefreshStrategy::OnlineIfUncached)
         .await;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -853,17 +853,17 @@ async fn thread_rollback_after_generated_image_drops_entire_image_turn_history()
             image_model_slug.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
-    test.codex
+    test.crewon
         .submit(Op::ThreadRollback { num_turns: 1 })
         .await?;
-    wait_for_event(&test.codex, |ev| {
+    wait_for_event(&test.crewon, |ev| {
         matches!(ev, EventMsg::ThreadRolledBack(_))
     })
     .await;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -873,7 +873,7 @@ async fn thread_rollback_after_generated_image_drops_entire_image_turn_history()
             image_model_slug.to_string(),
         ))
         .await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let requests = responses.requests();
     assert_eq!(requests.len(), 2, "expected two model requests");
@@ -991,8 +991,8 @@ async fn model_switch_to_smaller_model_updates_token_context_window() -> Result<
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some(large_model_slug.to_string());
         });
@@ -1018,7 +1018,7 @@ async fn model_switch_to_smaller_model_updates_token_context_window() -> Result<
         Some(smaller_context_window)
     );
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -1029,7 +1029,7 @@ async fn model_switch_to_smaller_model_updates_token_context_window() -> Result<
         ))
         .await?;
 
-    let large_window_event = wait_for_event(&test.codex, |event| {
+    let large_window_event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::TokenCount(token_count)
@@ -1050,18 +1050,18 @@ async fn model_switch_to_smaller_model_updates_token_context_window() -> Result<
             .and_then(|info| info.model_context_window),
         Some(large_effective_window)
     );
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     core_test_support::submit_thread_settings(
-        &test.codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        &test.crewon,
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             model: Some(smaller_model_slug.to_string()),
             ..Default::default()
         },
     )
     .await?;
 
-    test.codex
+    test.crewon
         .submit(read_only_user_turn(
             &test,
             vec![UserInput::Text {
@@ -1072,7 +1072,7 @@ async fn model_switch_to_smaller_model_updates_token_context_window() -> Result<
         ))
         .await?;
 
-    let smaller_turn_started_event = wait_for_event(&test.codex, |event| {
+    let smaller_turn_started_event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::TurnStarted(started)
@@ -1088,7 +1088,7 @@ async fn model_switch_to_smaller_model_updates_token_context_window() -> Result<
         Some(smaller_effective_window)
     );
 
-    let smaller_window_event = wait_for_event(&test.codex, |event| {
+    let smaller_window_event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::TokenCount(token_count)
@@ -1108,7 +1108,7 @@ async fn model_switch_to_smaller_model_updates_token_context_window() -> Result<
         .and_then(|info| info.model_context_window);
     assert_eq!(smaller_window, Some(smaller_effective_window));
     assert_ne!(smaller_window, Some(large_effective_window));
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     Ok(())
 }

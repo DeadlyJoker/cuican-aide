@@ -6,8 +6,8 @@ handshake, JSON-RPC request/response routing, server-request resolution, and
 notification streaming. Remote connections always carry WebSocket frames, over
 either TCP WebSocket URLs or local Unix sockets. The rest of the crate uses the
 same `AppServerEvent` surface for both in-process and remote transports, so
-callers such as the TUI can switch between them without changing their
-higher-level session logic.
+clients can switch between them without changing their higher-level session
+logic.
 */
 
 use std::collections::HashMap;
@@ -22,24 +22,24 @@ use crate::RequestResult;
 use crate::SHUTDOWN_TIMEOUT;
 use crate::TypedRequestError;
 use crate::request_method_name;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::ClientNotification;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::InitializeCapabilities;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCRequest;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::Result as JsonRpcResult;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ServerRequest;
-use codex_uds::UnixStream;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::ClientNotification;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::InitializeCapabilities;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCRequest;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::Result as JsonRpcResult;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_uds::UnixStream;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_rustls_provider::ensure_rustls_crypto_provider;
 use futures::SinkExt;
 use futures::StreamExt;
 use serde::de::DeserializeOwned;

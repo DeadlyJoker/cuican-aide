@@ -4,12 +4,12 @@ use super::super::REMOTE_WORKSPACE_SHARED_WITH_ME_UNLISTED_MARKETPLACE_NAME;
 use super::super::RemotePluginCatalogError;
 use super::super::RemotePluginServiceConfig;
 use super::local_paths;
-use codex_app_server_protocol::PluginAuthPolicy;
-use codex_app_server_protocol::PluginInstallPolicy;
-use codex_login::CodexAuth;
-use codex_plugin::PluginId;
-use codex_plugin::validate_plugin_segment;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::PluginAuthPolicy;
+use crewon_app_server_protocol::PluginInstallPolicy;
+use crewon_login::CrewonAuth;
+use crewon_plugin::PluginId;
+use crewon_plugin::validate_plugin_segment;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use serde_json::Value as JsonValue;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -19,7 +19,7 @@ use std::io::Write;
 use std::path::Component;
 use std::path::Path;
 
-const PERSONAL_MARKETPLACE_NAME: &str = "codex-curated";
+const PERSONAL_MARKETPLACE_NAME: &str = "crewon-curated";
 const PERSONAL_MARKETPLACE_DISPLAY_NAME: &str = "Personal";
 const PERSONAL_MARKETPLACE_RELATIVE_PATH: &str = ".agents/plugins/marketplace.json";
 
@@ -36,7 +36,7 @@ pub struct RemotePluginShareCheckoutResult {
 
 pub async fn checkout_remote_plugin_share(
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     codex_home: &Path,
     remote_plugin_id: &str,
 ) -> Result<RemotePluginShareCheckoutResult, RemotePluginCatalogError> {

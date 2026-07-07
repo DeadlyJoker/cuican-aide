@@ -6,15 +6,15 @@ use std::process::Output;
 use std::process::Stdio;
 use std::time::Duration;
 
-use codex_otel::CURATED_PLUGINS_STARTUP_SYNC_FINAL_METRIC;
-use codex_otel::CURATED_PLUGINS_STARTUP_SYNC_METRIC;
+use crewon_otel::CURATED_PLUGINS_STARTUP_SYNC_FINAL_METRIC;
+use crewon_otel::CURATED_PLUGINS_STARTUP_SYNC_METRIC;
 use reqwest::Client;
 use serde::Deserialize;
 use tempfile::TempDir;
 use tracing::warn;
 use zip::ZipArchive;
 
-use codex_login::default_client::build_reqwest_client;
+use crewon_login::default_client::build_reqwest_client;
 
 const GITHUB_API_BASE_URL: &str = "https://api.github.com";
 const GITHUB_API_ACCEPT_HEADER: &str = "application/vnd.github+json";
@@ -32,7 +32,7 @@ const CURATED_PLUGINS_BACKUP_ARCHIVE_FALLBACK_VERSION: &str = "export-backup";
 const CURATED_PLUGINS_GIT_TIMEOUT: Duration = Duration::from_secs(30);
 const CURATED_PLUGINS_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const CURATED_PLUGINS_BACKUP_ARCHIVE_TIMEOUT: Duration = Duration::from_secs(30);
-// Keep this comfortably above a normal sync attempt so we do not race another Codex process.
+// Keep this comfortably above a normal sync attempt so we do not race another Crewon process.
 const CURATED_PLUGINS_STALE_TEMP_DIR_MAX_AGE: Duration = Duration::from_secs(10 * 60);
 
 #[derive(Debug, Deserialize)]
@@ -474,7 +474,7 @@ fn emit_curated_plugins_startup_sync_counter(
     transport: &'static str,
     status: &'static str,
 ) {
-    let Some(metrics) = codex_otel::global() else {
+    let Some(metrics) = crewon_otel::global() else {
         return;
     };
     let tags = [("transport", transport), ("status", status)];

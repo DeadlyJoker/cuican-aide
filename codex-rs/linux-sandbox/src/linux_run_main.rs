@@ -25,11 +25,11 @@ use crate::launcher::exec_bwrap;
 use crate::launcher::preferred_bwrap_supports_argv0;
 use crate::proxy_routing::activate_proxy_routes_in_netns;
 use crate::proxy_routing::prepare_host_proxy_route_spec;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::FileSystemSandboxPolicy;
-use codex_protocol::protocol::NetworkSandboxPolicy;
-use codex_sandboxing::landlock::CODEX_LINUX_SANDBOX_ARG0;
+use crewon_protocol::error::Result as CodexResult;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::FileSystemSandboxPolicy;
+use crewon_protocol::protocol::NetworkSandboxPolicy;
+use crewon_sandboxing::landlock::CREWON_LINUX_SANDBOX_ARG0;
 
 static BWRAP_CHILD_PID: AtomicI32 = AtomicI32::new(0);
 static PENDING_FORWARDED_SIGNAL: AtomicI32 = AtomicI32::new(0);
@@ -72,7 +72,7 @@ enum ProtectedCreateRemoval {
 }
 
 #[derive(Debug, Parser)]
-/// CLI surface for the Linux sandbox helper.
+/// Command-line surface for the Linux sandbox helper.
 ///
 /// The type name remains `LandlockCommand` for compatibility with existing
 /// wiring, but bubblewrap is now the default filesystem sandbox and Landlock
@@ -396,7 +396,7 @@ fn build_bwrap_argv(
     })
 }
 
-fn exit_with_bwrap_build_error(err: codex_protocol::error::CodexErr) -> ! {
+fn exit_with_bwrap_build_error(err: crewon_protocol::error::CodexErr) -> ! {
     eprintln!("error building bubblewrap command: {err}");
     std::process::exit(1);
 }
@@ -422,7 +422,7 @@ fn apply_inner_command_argv0_for_launcher(
     if supports_argv0 {
         argv.splice(
             command_separator_index..command_separator_index,
-            ["--argv0".to_string(), CODEX_LINUX_SANDBOX_ARG0.to_string()],
+            ["--argv0".to_string(), CREWON_LINUX_SANDBOX_ARG0.to_string()],
         );
         return;
     }
@@ -1244,7 +1244,7 @@ fn synthetic_mount_marker_dir(path: &Path) -> PathBuf {
 fn synthetic_mount_registry_root() -> PathBuf {
     let effective_uid = unsafe { libc::geteuid() };
     std::env::temp_dir().join(format!(
-        "codex-bwrap-synthetic-mount-targets-{effective_uid}"
+        "crewon-bwrap-synthetic-mount-targets-{effective_uid}"
     ))
 }
 

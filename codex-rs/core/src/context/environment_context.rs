@@ -1,15 +1,15 @@
 use crate::session::turn_context::TurnContext;
 use crate::session::turn_context::TurnEnvironment;
 use crate::shell::Shell;
-use codex_protocol::models::ManagedFileSystemPermissions;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_protocol::protocol::TurnContextItem;
-use codex_protocol::protocol::TurnContextNetworkItem;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::models::ManagedFileSystemPermissions;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_protocol::protocol::TurnContextNetworkItem;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -474,12 +474,12 @@ impl EnvironmentContext {
             network
                 .domains
                 .as_ref()
-                .and_then(codex_config::NetworkDomainPermissionsToml::allowed_domains)
+                .and_then(crewon_config::NetworkDomainPermissionsToml::allowed_domains)
                 .unwrap_or_default(),
             network
                 .domains
                 .as_ref()
-                .and_then(codex_config::NetworkDomainPermissionsToml::denied_domains)
+                .and_then(crewon_config::NetworkDomainPermissionsToml::denied_domains)
                 .unwrap_or_default(),
         ))
     }
@@ -533,8 +533,8 @@ impl ContextualUserFragment for EnvironmentContext {
 
     fn type_markers() -> (&'static str, &'static str) {
         (
-            codex_protocol::protocol::ENVIRONMENT_CONTEXT_OPEN_TAG,
-            codex_protocol::protocol::ENVIRONMENT_CONTEXT_CLOSE_TAG,
+            crewon_protocol::protocol::ENVIRONMENT_CONTEXT_OPEN_TAG,
+            crewon_protocol::protocol::ENVIRONMENT_CONTEXT_CLOSE_TAG,
         )
     }
 

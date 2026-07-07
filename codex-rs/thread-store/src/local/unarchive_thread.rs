@@ -1,6 +1,6 @@
-use codex_rollout::find_archived_thread_path_by_id_str;
-use codex_rollout::read_thread_item_from_rollout;
-use codex_rollout::rollout_date_parts;
+use crewon_rollout::find_archived_thread_path_by_id_str;
+use crewon_rollout::read_thread_item_from_rollout;
+use crewon_rollout::rollout_date_parts;
 
 use super::LocalThreadStore;
 use super::helpers::matching_rollout_file_name;
@@ -35,7 +35,7 @@ pub(super) async fn unarchive_thread(
         store
             .config
             .codex_home
-            .join(codex_rollout::ARCHIVED_SESSIONS_SUBDIR),
+            .join(crewon_rollout::ARCHIVED_SESSIONS_SUBDIR),
         archived_path.as_path(),
         "archived",
     )?;
@@ -56,7 +56,7 @@ pub(super) async fn unarchive_thread(
     let dest_dir = store
         .config
         .codex_home
-        .join(codex_rollout::SESSIONS_SUBDIR)
+        .join(crewon_rollout::SESSIONS_SUBDIR)
         .join(year)
         .join(month)
         .join(day);
@@ -103,8 +103,8 @@ pub(super) async fn unarchive_thread(
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use codex_protocol::ThreadId;
-    use codex_protocol::protocol::SessionSource;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::protocol::SessionSource;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
     use uuid::Uuid;
@@ -153,7 +153,7 @@ mod tests {
         let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
         let archived_path = write_archived_session_file(home.path(), "2025-01-03T13-00-00", uuid)
             .expect("archived session file");
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -164,11 +164,11 @@ mod tests {
             .mark_backfill_complete(/*last_watermark*/ None)
             .await
             .expect("backfill should be complete");
-        let mut builder = codex_state::ThreadMetadataBuilder::new(
+        let mut builder = crewon_state::ThreadMetadataBuilder::new(
             thread_id,
             archived_path.clone(),
             Utc::now(),
-            SessionSource::Cli,
+            SessionSource::LegacyCli,
         );
         builder.model_provider = Some(config.default_model_provider_id.clone());
         builder.cwd = home.path().to_path_buf();

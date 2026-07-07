@@ -11,23 +11,23 @@ use super::normalize_path_for_sandbox;
 use super::seatbelt_regex_for_unreadable_glob;
 use super::unix_socket_dir_params;
 use super::unix_socket_policy;
-use codex_network_proxy::ConfigReloader;
-use codex_network_proxy::ConfigState;
-use codex_network_proxy::NetworkMode;
-use codex_network_proxy::NetworkProxy;
-use codex_network_proxy::NetworkProxyConfig;
-use codex_network_proxy::NetworkProxyConstraints;
-use codex_network_proxy::NetworkProxyState;
-use codex_network_proxy::build_config_state;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::permissions::PROTECTED_METADATA_PATH_NAMES;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_network_proxy::ConfigReloader;
+use crewon_network_proxy::ConfigState;
+use crewon_network_proxy::NetworkMode;
+use crewon_network_proxy::NetworkProxy;
+use crewon_network_proxy::NetworkProxyConfig;
+use crewon_network_proxy::NetworkProxyConstraints;
+use crewon_network_proxy::NetworkProxyState;
+use crewon_network_proxy::build_config_state;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::permissions::PROTECTED_METADATA_PATH_NAMES;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
@@ -185,7 +185,7 @@ fn dynamic_network_policy_allows_tls_without_darwin_user_cache_write() {
 
 #[test]
 fn explicit_unreadable_paths_are_excluded_from_full_disk_read_and_write_access() {
-    let unreadable = absolute_path("/tmp/codex-unreadable");
+    let unreadable = absolute_path("/tmp/crewon-unreadable");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
         FileSystemSandboxEntry {
             path: FileSystemPath::Special {
@@ -258,8 +258,8 @@ fn explicit_unreadable_paths_are_excluded_from_full_disk_read_and_write_access()
 
 #[test]
 fn explicit_unreadable_paths_are_excluded_from_readable_roots() {
-    let root = absolute_path("/tmp/codex-readable");
-    let unreadable = absolute_path("/tmp/codex-readable/private");
+    let root = absolute_path("/tmp/crewon-readable");
+    let unreadable = absolute_path("/tmp/crewon-readable/private");
     let file_system_policy = FileSystemSandboxPolicy::restricted(vec![
         FileSystemSandboxEntry {
             path: FileSystemPath::Path { path: root },
@@ -573,7 +573,7 @@ fn create_seatbelt_args_allowlists_explicit_unix_socket_paths_without_proxy() {
         &SandboxPolicy::new_read_only_policy(),
         cwd.path(),
     );
-    let extra_allow_unix_sockets = vec![absolute_path("/tmp/codex-browser-use")];
+    let extra_allow_unix_sockets = vec![absolute_path("/tmp/crewon-browser-use")];
     let args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
         command: vec!["/usr/bin/true".to_string()],
         file_system_sandbox_policy: &file_system_policy,
@@ -595,7 +595,7 @@ fn create_seatbelt_args_allowlists_explicit_unix_socket_paths_without_proxy() {
         ),
         "policy should allow outbound AF_UNIX traffic for explicit socket paths:\n{policy}"
     );
-    let expected_socket_root = normalize_path_for_sandbox(Path::new("/tmp/codex-browser-use"))
+    let expected_socket_root = normalize_path_for_sandbox(Path::new("/tmp/crewon-browser-use"))
         .expect("socket root should normalize")
         .to_string_lossy()
         .into_owned();
@@ -613,8 +613,8 @@ async fn create_seatbelt_args_merges_proxy_and_explicit_unix_socket_paths() -> a
         &SandboxPolicy::new_read_only_policy(),
         cwd.path(),
     );
-    let network_socket = "/tmp/codex-proxy-use";
-    let explicit_socket = "/tmp/codex-browser-use";
+    let network_socket = "/tmp/crewon-proxy-use";
+    let explicit_socket = "/tmp/crewon-browser-use";
     let mut network_config = NetworkProxyConfig::default();
     network_config.network.enabled = true;
     network_config.network.mode = NetworkMode::Full;
@@ -627,7 +627,7 @@ async fn create_seatbelt_args_merges_proxy_and_explicit_unix_socket_paths() -> a
             state,
             Arc::new(TestConfigReloader),
         )))
-        .managed_by_codex(/*managed_by_codex*/ false)
+        .managed_by_crewon(/*managed_by_crewon*/ false)
         .build()
         .await?;
     let extra_allow_unix_sockets = vec![absolute_path(explicit_socket)];
@@ -672,7 +672,7 @@ fn create_seatbelt_args_preserves_full_network_with_explicit_unix_socket_paths()
         &SandboxPolicy::new_read_only_policy(),
         cwd.path(),
     );
-    let extra_allow_unix_sockets = vec![absolute_path("/tmp/codex-browser-use")];
+    let extra_allow_unix_sockets = vec![absolute_path("/tmp/crewon-browser-use")];
     let args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
         command: vec!["/usr/bin/true".to_string()],
         file_system_sandbox_policy: &file_system_policy,

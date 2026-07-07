@@ -14,26 +14,26 @@ use axum::http::StatusCode;
 use axum::http::Uri;
 use axum::http::header::AUTHORIZATION;
 use axum::routing::get;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::McpElicitationSchema;
-use codex_app_server_protocol::McpServerElicitationAction;
-use codex_app_server_protocol::McpServerElicitationRequest;
-use codex_app_server_protocol::McpServerElicitationRequestParams;
-use codex_app_server_protocol::McpServerElicitationRequestResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ServerRequestResolvedNotification;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnCompletedNotification;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::TurnStatus;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_config::types::AuthCredentialsStoreMode;
 use core_test_support::assert_regex_match;
 use core_test_support::responses;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::McpElicitationSchema;
+use crewon_app_server_protocol::McpServerElicitationAction;
+use crewon_app_server_protocol::McpServerElicitationRequest;
+use crewon_app_server_protocol::McpServerElicitationRequestParams;
+use crewon_app_server_protocol::McpServerElicitationRequestResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ServerRequestResolvedNotification;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnCompletedNotification;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::TurnStatus;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_config::types::AuthCredentialsStoreMode;
 use pretty_assertions::assert_eq;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::BooleanSchema;
@@ -66,7 +66,7 @@ use tokio::time::timeout;
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const CONNECTOR_ID: &str = "calendar";
 const CONNECTOR_NAME: &str = "Calendar";
-const TOOL_NAMESPACE: &str = "mcp__codex_apps__calendar";
+const TOOL_NAMESPACE: &str = "mcp__crewon_apps__calendar";
 const CALLABLE_TOOL_NAME: &str = "_confirm_action";
 const TOOL_NAME: &str = "calendar_confirm_action";
 const TOOL_CALL_ID: &str = "call-calendar-confirm";
@@ -204,7 +204,7 @@ async fn mcp_server_elicitation_round_trip() -> Result<()> {
         McpServerElicitationRequestParams {
             thread_id: thread.id.clone(),
             turn_id: Some(turn.id.clone()),
-            server_name: "codex_apps".to_string(),
+            server_name: "crewon_apps".to_string(),
             request: McpServerElicitationRequest::Form {
                 meta: None,
                 message: ELICITATION_MESSAGE.to_string(),

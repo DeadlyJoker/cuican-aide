@@ -4,8 +4,8 @@ use crate::agent::registry::AgentRegistry;
 use crate::agent::role::DEFAULT_ROLE_NAME;
 use crate::agent::role::resolve_role_config;
 use crate::agent::status::is_final;
-use crate::codex_thread::ThreadConfigSnapshot;
 use crate::config::Config;
+use crate::crewon_thread::ThreadConfigSnapshot;
 use crate::session::emit_subagent_session_started;
 use crate::session_prefix::format_subagent_context_line;
 use crate::session_prefix::format_subagent_notification_message;
@@ -13,27 +13,27 @@ use crate::shell_snapshot::ShellSnapshot;
 use crate::thread_manager::ResumeThreadWithHistoryOptions;
 use crate::thread_manager::ThreadManagerState;
 use crate::thread_rollout_truncation::truncate_rollout_to_last_n_fork_turns;
-use codex_protocol::AgentPath;
-use codex_protocol::SessionId;
-use codex_protocol::ThreadId;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::MessagePhase;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::ResumedHistory;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::ThreadSource;
-use codex_protocol::protocol::TurnEnvironmentSelection;
-use codex_protocol::user_input::UserInput;
-use codex_state::DirectionalThreadSpawnEdgeStatus;
-use codex_thread_store::ReadThreadParams;
+use crewon_protocol::AgentPath;
+use crewon_protocol::SessionId;
+use crewon_protocol::ThreadId;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::MessagePhase;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::InterAgentCommunication;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::ResumedHistory;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_protocol::protocol::TurnEnvironmentSelection;
+use crewon_protocol::user_input::UserInput;
+use crewon_state::DirectionalThreadSpawnEdgeStatus;
+use crewon_thread_store::ReadThreadParams;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -94,7 +94,7 @@ pub(crate) struct AgentControl {
     session_id: SessionId,
     /// Weak handle back to the global thread registry/state.
     /// This is `Weak` to avoid reference cycles and shadow persistence of the form
-    /// `ThreadManagerState -> CodexThread -> Session -> SessionServices -> ThreadManagerState`.
+    /// `ThreadManagerState -> CrewonThread -> Session -> SessionServices -> ThreadManagerState`.
     manager: Weak<ThreadManagerState>,
     state: Arc<AgentRegistry>,
     v2_residency: Arc<V2Residency>,
@@ -125,7 +125,7 @@ impl AgentControl {
         &self,
         agent_id: ThreadId,
         initial_operation: Op,
-    ) -> CodexResult<String> {
+    ) -> CrewonResult<String> {
         let state = self.upgrade()?;
         self.ensure_execution_capacity_for_op(agent_id, &initial_operation)
             .await?;
@@ -138,7 +138,7 @@ impl AgentControl {
         agent_id: ThreadId,
         state: &Arc<ThreadManagerState>,
         initial_operation: Op,
-    ) -> CodexResult<String> {
+    ) -> CrewonResult<String> {
         let last_task_message = match &initial_operation {
             Op::InterAgentCommunication { communication } => {
                 last_task_message_from_communication(communication)
@@ -167,7 +167,7 @@ impl AgentControl {
         &self,
         agent_id: ThreadId,
         communication: InterAgentCommunication,
-    ) -> CodexResult<String> {
+    ) -> CrewonResult<String> {
         let last_task_message = last_task_message_from_communication(&communication);
         let state = self.upgrade()?;
         let op = Op::InterAgentCommunication { communication };
@@ -187,7 +187,7 @@ impl AgentControl {
     }
 
     /// Interrupt the current task for an existing agent thread.
-    pub(crate) async fn interrupt_agent(&self, agent_id: ThreadId) -> CodexResult<String> {
+    pub(crate) async fn interrupt_agent(&self, agent_id: ThreadId) -> CrewonResult<String> {
         let state = self.upgrade()?;
         self.handle_thread_request_result(
             agent_id,
@@ -201,8 +201,8 @@ impl AgentControl {
         &self,
         agent_id: ThreadId,
         state: &Arc<ThreadManagerState>,
-        result: CodexResult<String>,
-    ) -> CodexResult<String> {
+        result: CrewonResult<String>,
+    ) -> CrewonResult<String> {
         if matches!(result, Err(CodexErr::InternalAgentDied)) {
             let _ = state.remove_thread(&agent_id).await;
             self.forget_v2_residency(agent_id);
@@ -237,7 +237,7 @@ impl AgentControl {
         self.state.agent_metadata_for_thread(agent_id)
     }
 
-    pub(crate) fn ensure_agent_known(&self, agent_id: ThreadId) -> CodexResult<AgentMetadata> {
+    pub(crate) fn ensure_agent_known(&self, agent_id: ThreadId) -> CrewonResult<AgentMetadata> {
         self.state
             .agent_metadata_for_thread(agent_id)
             .ok_or(CodexErr::ThreadNotFound(agent_id))
@@ -246,7 +246,7 @@ impl AgentControl {
     pub(crate) async fn list_live_agent_subtree_thread_ids(
         &self,
         agent_id: ThreadId,
-    ) -> CodexResult<Vec<ThreadId>> {
+    ) -> CrewonResult<Vec<ThreadId>> {
         let mut thread_ids = vec![agent_id];
         thread_ids.extend(self.live_thread_spawn_descendants(agent_id).await?);
         Ok(thread_ids)
@@ -270,7 +270,7 @@ impl AgentControl {
         _current_thread_id: ThreadId,
         current_session_source: &SessionSource,
         agent_reference: &str,
-    ) -> CodexResult<ThreadId> {
+    ) -> CrewonResult<ThreadId> {
         let current_agent_path = current_session_source
             .get_agent_path()
             .unwrap_or_else(AgentPath::root);
@@ -290,7 +290,7 @@ impl AgentControl {
     pub(crate) async fn subscribe_status(
         &self,
         agent_id: ThreadId,
-    ) -> CodexResult<watch::Receiver<AgentStatus>> {
+    ) -> CrewonResult<watch::Receiver<AgentStatus>> {
         let state = self.upgrade()?;
         let thread = state.get_thread(agent_id).await?;
         Ok(thread.subscribe_status())
@@ -322,7 +322,7 @@ impl AgentControl {
         &self,
         current_session_source: &SessionSource,
         path_prefix: Option<&str>,
-    ) -> CodexResult<Vec<ListedAgent>> {
+    ) -> CrewonResult<Vec<ListedAgent>> {
         let state = self.upgrade()?;
         let resolved_prefix = path_prefix
             .map(|prefix| {
@@ -483,7 +483,7 @@ impl AgentControl {
         agent_path: Option<AgentPath>,
         agent_role: Option<String>,
         preferred_agent_nickname: Option<String>,
-    ) -> CodexResult<(SessionSource, AgentMetadata)> {
+    ) -> CrewonResult<(SessionSource, AgentMetadata)> {
         if depth == 1 {
             self.state.register_root_thread(parent_thread_id);
         }
@@ -513,7 +513,7 @@ impl AgentControl {
         Ok((session_source, agent_metadata))
     }
 
-    fn upgrade(&self) -> CodexResult<Arc<ThreadManagerState>> {
+    fn upgrade(&self) -> CrewonResult<Arc<ThreadManagerState>> {
         self.manager
             .upgrade()
             .ok_or_else(|| CodexErr::UnsupportedOperation("thread manager dropped".to_string()))
@@ -532,7 +532,7 @@ impl AgentControl {
         };
 
         let parent_thread = state.get_thread(*parent_thread_id).await.ok()?;
-        parent_thread.codex.session.user_shell().shell_snapshot()
+        parent_thread.engine.session.user_shell().shell_snapshot()
     }
 
     async fn inherited_exec_policy_for_source(
@@ -549,20 +549,20 @@ impl AgentControl {
         };
 
         let parent_thread = state.get_thread(*parent_thread_id).await.ok()?;
-        let parent_config = parent_thread.codex.session.get_config().await;
+        let parent_config = parent_thread.engine.session.get_config().await;
         if !crate::exec_policy::child_uses_parent_exec_policy(&parent_config, child_config) {
             return None;
         }
 
         Some(Arc::clone(
-            &parent_thread.codex.session.services.exec_policy,
+            &parent_thread.engine.session.services.exec_policy,
         ))
     }
 
     async fn open_thread_spawn_children(
         &self,
         parent_thread_id: ThreadId,
-    ) -> CodexResult<Vec<(ThreadId, AgentMetadata)>> {
+    ) -> CrewonResult<Vec<(ThreadId, AgentMetadata)>> {
         let mut children_by_parent = self.live_thread_spawn_children().await?;
         Ok(children_by_parent
             .remove(&parent_thread_id)
@@ -571,7 +571,7 @@ impl AgentControl {
 
     async fn live_thread_spawn_children(
         &self,
-    ) -> CodexResult<HashMap<ThreadId, Vec<(ThreadId, AgentMetadata)>>> {
+    ) -> CrewonResult<HashMap<ThreadId, Vec<(ThreadId, AgentMetadata)>>> {
         let state = self.upgrade()?;
         let mut children_by_parent = HashMap::<ThreadId, Vec<(ThreadId, AgentMetadata)>>::new();
 
@@ -606,7 +606,7 @@ impl AgentControl {
 
     async fn persist_thread_spawn_edge_for_source(
         &self,
-        thread: &crate::CodexThread,
+        thread: &crate::CrewonThread,
         child_thread_id: ThreadId,
         session_source: Option<&SessionSource>,
     ) {
@@ -632,7 +632,7 @@ impl AgentControl {
     async fn live_thread_spawn_descendants(
         &self,
         root_thread_id: ThreadId,
-    ) -> CodexResult<Vec<ThreadId>> {
+    ) -> CrewonResult<Vec<ThreadId>> {
         let mut children_by_parent = self.live_thread_spawn_children().await?;
         let mut descendants = Vec::new();
         let mut stack = children_by_parent

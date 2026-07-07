@@ -6,28 +6,28 @@ use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
-use codex_analytics::CompactionImplementation;
-use codex_analytics::CompactionPhase;
-use codex_analytics::CompactionReason;
-use codex_analytics::CompactionStrategy;
-use codex_analytics::CompactionTrigger;
-use codex_utils_string::to_ascii_json_string;
+use crewon_analytics::CompactionImplementation;
+use crewon_analytics::CompactionPhase;
+use crewon_analytics::CompactionReason;
+use crewon_analytics::CompactionStrategy;
+use crewon_analytics::CompactionTrigger;
+use crewon_utils_string::to_ascii_json_string;
 use serde::Serialize;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
 use crate::sandbox_tags::permission_profile_sandbox_tag;
-use codex_git_utils::get_git_remote_urls_assume_git_repo;
-use codex_git_utils::get_git_repo_root;
-use codex_git_utils::get_has_changes;
-use codex_git_utils::get_head_commit_hash;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::ThreadSource;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_git_utils::get_git_remote_urls_assume_git_repo;
+use crewon_git_utils::get_git_repo_root;
+use crewon_git_utils::get_has_changes;
+use crewon_git_utils::get_head_commit_hash;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 const MODEL_KEY: &str = "model";
 const REASONING_EFFORT_KEY: &str = "reasoning_effort";
@@ -282,7 +282,7 @@ impl TurnMetadataState {
         );
         let subagent_kind = match session_source {
             SessionSource::SubAgent(subagent_source) => Some(subagent_source.kind().to_string()),
-            SessionSource::Cli
+            SessionSource::LegacyCli
             | SessionSource::VSCode
             | SessionSource::Exec
             | SessionSource::Mcp

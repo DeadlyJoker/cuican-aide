@@ -1,8 +1,8 @@
-//! Trace bundle format, writer, and reducer for Codex rollouts.
+//! Trace bundle format, writer, and reducer for Crewon rollouts.
 //!
-//! This crate owns the trace schema. Hot-path Codex code should depend on the
+//! This crate owns the trace schema. Hot-path Crewon code should depend on the
 //! small writer API here; semantic replay and viewer projections stay outside
-//! `codex-core`.
+//! `crewon-core`.
 //!
 //! See `README.md` for the system diagram and reducer model.
 
@@ -32,7 +32,7 @@ pub use compaction::CompactionTraceAttempt;
 pub use compaction::CompactionTraceContext;
 /// No-op-capable handle for recording one upstream inference attempt.
 pub use inference::InferenceTraceAttempt;
-/// Shared recorder context for inference attempts within one Codex turn.
+/// Shared recorder context for inference attempts within one Crewon turn.
 pub use inference::InferenceTraceContext;
 /// Trace-owned MCP execution correlation propagated to bridge request metadata.
 pub use mcp::McpCallTraceContext;
@@ -58,13 +58,15 @@ pub use raw_event::RawTraceEventPayload;
 pub use reducer::replay_bundle;
 /// Raw payload captured when a child agent reports completion to its parent.
 pub use thread::AgentResultTracePayload;
-/// Environment variable that enables local trace-bundle recording.
+/// Legacy environment variable for local trace-bundle recording.
 pub use thread::CODEX_ROLLOUT_TRACE_ROOT_ENV;
+/// Environment variable that enables local trace-bundle recording.
+pub use thread::CREWON_ROLLOUT_TRACE_ROOT_ENV;
 /// Raw metadata captured when a thread starts.
 pub use thread::ThreadStartedTraceMetadata;
 /// No-op-capable handle for recording one thread in a rollout bundle.
 pub use thread::ThreadTraceContext;
-/// Request data for the canonical Codex tool boundary.
+/// Request data for the canonical Crewon tool boundary.
 pub use tool_dispatch::ToolDispatchInvocation;
 /// Tool input observed at the registry boundary.
 pub use tool_dispatch::ToolDispatchPayload;
@@ -74,5 +76,5 @@ pub use tool_dispatch::ToolDispatchRequester;
 pub use tool_dispatch::ToolDispatchResult;
 /// No-op-capable handle for recording one resolved tool dispatch.
 pub use tool_dispatch::ToolDispatchTraceContext;
-/// Append-only writer used by hot-path Codex instrumentation.
+/// Append-only writer used by hot-path Crewon instrumentation.
 pub use writer::TraceWriter;

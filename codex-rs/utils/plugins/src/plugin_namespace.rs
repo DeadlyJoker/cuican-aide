@@ -1,12 +1,15 @@
 //! Resolve plugin namespace from skill file paths by walking ancestors for `plugin.json`.
 
-use codex_exec_server::ExecutorFileSystem;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_exec_server::ExecutorFileSystem;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::path::Path;
 use std::path::PathBuf;
 
-const DISCOVERABLE_PLUGIN_MANIFEST_PATHS: &[&str] =
-    &[".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
+const DISCOVERABLE_PLUGIN_MANIFEST_PATHS: &[&str] = &[
+    ".crewon-plugin/plugin.json",
+    ".claude-plugin/plugin.json",
+    ".codex-plugin/plugin.json",
+];
 
 pub fn find_plugin_manifest_path(plugin_root: &Path) -> Option<PathBuf> {
     DISCOVERABLE_PLUGIN_MANIFEST_PATHS
@@ -54,7 +57,7 @@ async fn plugin_manifest_name(
 }
 
 /// Returns the plugin manifest `name` for the nearest ancestor of `path` that contains a valid
-/// plugin manifest (same `name` rules as full manifest loading in codex-core).
+/// plugin manifest (same `name` rules as full manifest loading in crewon-core).
 pub async fn plugin_namespace_for_skill_path(
     fs: &dyn ExecutorFileSystem,
     path: &AbsolutePathBuf,
@@ -71,12 +74,12 @@ pub async fn plugin_namespace_for_skill_path(
 mod tests {
     use super::find_plugin_manifest_path;
     use super::plugin_namespace_for_skill_path;
-    use codex_exec_server::LOCAL_FS;
-    use codex_utils_absolute_path::test_support::PathBufExt;
+    use crewon_exec_server::LOCAL_FS;
+    use crewon_utils_absolute_path::test_support::PathBufExt;
     use std::fs;
     use tempfile::tempdir;
 
-    const ALTERNATE_PLUGIN_MANIFEST_RELATIVE_PATH: &str = ".claude-plugin/plugin.json";
+    const LEGACY_PLUGIN_MANIFEST_RELATIVE_PATH: &str = ".codex-plugin/plugin.json";
 
     #[tokio::test]
     async fn uses_manifest_name() {
@@ -85,9 +88,9 @@ mod tests {
         let skill_path = plugin_root.join("skills/search/SKILL.md");
 
         fs::create_dir_all(skill_path.parent().expect("parent")).expect("mkdir");
-        fs::create_dir_all(plugin_root.join(".codex-plugin")).expect("mkdir manifest");
+        fs::create_dir_all(plugin_root.join(".crewon-plugin")).expect("mkdir manifest");
         fs::write(
-            plugin_root.join(".codex-plugin/plugin.json"),
+            plugin_root.join(".crewon-plugin/plugin.json"),
             r#"{"name":"sample"}"#,
         )
         .expect("write manifest");
@@ -100,11 +103,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn uses_name_from_alternate_discoverable_manifest_path() {
+    async fn uses_name_from_legacy_discoverable_manifest_path() {
         let tmp = tempdir().expect("tempdir");
         let plugin_root = tmp.path().join("plugins/sample");
         let skill_path = plugin_root.join("skills/search/SKILL.md");
-        let manifest_path = plugin_root.join(ALTERNATE_PLUGIN_MANIFEST_RELATIVE_PATH);
+        let manifest_path = plugin_root.join(LEGACY_PLUGIN_MANIFEST_RELATIVE_PATH);
 
         fs::create_dir_all(skill_path.parent().expect("parent")).expect("mkdir");
         fs::create_dir_all(manifest_path.parent().expect("manifest parent"))

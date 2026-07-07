@@ -13,40 +13,40 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
-use codex_exec_server::CopyOptions;
-use codex_exec_server::CreateDirectoryOptions;
-use codex_exec_server::Environment;
-use codex_exec_server::ExecServerRuntimePaths;
-use codex_exec_server::ExecutorFileSystem;
-use codex_exec_server::FileSystemSandboxContext;
-use codex_exec_server::LocalFileSystem;
-use codex_exec_server::ReadDirectoryEntry;
-use codex_exec_server::RemoveOptions;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::models::FileSystemPermissions;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
-use codex_sandboxing::policy_transforms::effective_network_sandbox_policy;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_exec_server::CopyOptions;
+use crewon_exec_server::CreateDirectoryOptions;
+use crewon_exec_server::Environment;
+use crewon_exec_server::ExecServerRuntimePaths;
+use crewon_exec_server::ExecutorFileSystem;
+use crewon_exec_server::FileSystemSandboxContext;
+use crewon_exec_server::LocalFileSystem;
+use crewon_exec_server::ReadDirectoryEntry;
+use crewon_exec_server::RemoveOptions;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::models::FileSystemPermissions;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
+use crewon_sandboxing::policy_transforms::effective_network_sandbox_policy;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use test_case::test_case;
 
 use common::exec_server::ExecServerHarness;
-use common::exec_server::TestCodexHelperPaths;
+use common::exec_server::TestCrewonHelperPaths;
 use common::exec_server::exec_server;
 #[cfg(target_os = "linux")]
 use common::exec_server::exec_server_with_env;
-use common::exec_server::test_codex_helper_paths;
+use common::exec_server::test_crewon_helper_paths;
 
 struct FileSystemContext {
     file_system: Arc<dyn ExecutorFileSystem>,
-    _helper_paths: Option<TestCodexHelperPaths>,
+    _helper_paths: Option<TestCrewonHelperPaths>,
     _server: Option<ExecServerHarness>,
 }
 
@@ -60,10 +60,10 @@ async fn create_file_system_context(use_remote: bool) -> Result<FileSystemContex
             _server: Some(server),
         })
     } else {
-        let helper_paths = test_codex_helper_paths()?;
+        let helper_paths = test_crewon_helper_paths()?;
         let runtime_paths = ExecServerRuntimePaths::new(
-            helper_paths.codex_exe.clone(),
-            helper_paths.codex_linux_sandbox_exe.clone(),
+            helper_paths.crewon_exe.clone(),
+            helper_paths.crewon_linux_sandbox_exe.clone(),
         )?;
         Ok(FileSystemContext {
             file_system: Arc::new(LocalFileSystem::with_runtime_paths(runtime_paths)),
@@ -639,7 +639,7 @@ async fn file_system_sandboxed_write_allows_explicit_alias_roots(use_remote: boo
     let file_system = context.file_system;
 
     let tmp = tempfile::Builder::new()
-        .prefix("codex-fs-sandbox-alias-")
+        .prefix("crewon-fs-sandbox-alias-")
         .tempdir_in(&alias_root)?;
     let file_path = tmp.path().join("note.txt");
     let sandbox = workspace_write_sandbox(alias_root.clone());

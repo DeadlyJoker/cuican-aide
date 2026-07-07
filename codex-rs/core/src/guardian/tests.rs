@@ -9,45 +9,6 @@ use crate::guardian::approval_request::guardian_request_target_item_id;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::test_support;
-use codex_analytics::GuardianApprovalRequestSource;
-use codex_config::ConfigLayerStack;
-use codex_config::FeatureRequirementsToml;
-use codex_config::NetworkConstraints;
-use codex_config::NetworkDomainPermissionToml;
-use codex_config::NetworkDomainPermissionsToml;
-use codex_config::RequirementSource;
-use codex_config::Sourced;
-use codex_config::config_toml::ConfigToml;
-use codex_config::types::McpServerConfig;
-use codex_exec_server::LOCAL_FS;
-use codex_features::Feature;
-use codex_model_provider::create_model_provider;
-use codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID;
-use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_network_proxy::NetworkProxyConfig;
-use codex_protocol::ThreadId;
-use codex_protocol::approvals::NetworkApprovalProtocol;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::GranularApprovalConfig;
-use codex_protocol::protocol::GuardianAssessmentStatus;
-use codex_protocol::protocol::GuardianRiskLevel;
-use codex_protocol::protocol::GuardianUserAuthorization;
-use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::TurnCompleteEvent;
 use core_test_support::PathBufExt;
 use core_test_support::TempDirExt;
 use core_test_support::context_snapshot;
@@ -65,6 +26,45 @@ use core_test_support::skip_if_no_network;
 use core_test_support::streaming_sse::StreamingSseChunk;
 use core_test_support::streaming_sse::start_streaming_sse_server;
 use core_test_support::test_path_buf;
+use crewon_analytics::GuardianApprovalRequestSource;
+use crewon_config::ConfigLayerStack;
+use crewon_config::FeatureRequirementsToml;
+use crewon_config::NetworkConstraints;
+use crewon_config::NetworkDomainPermissionToml;
+use crewon_config::NetworkDomainPermissionsToml;
+use crewon_config::RequirementSource;
+use crewon_config::Sourced;
+use crewon_config::config_toml::ConfigToml;
+use crewon_config::types::McpServerConfig;
+use crewon_exec_server::LOCAL_FS;
+use crewon_features::Feature;
+use crewon_model_provider::create_model_provider;
+use crewon_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID;
+use crewon_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_network_proxy::NetworkProxyConfig;
+use crewon_protocol::ThreadId;
+use crewon_protocol::approvals::NetworkApprovalProtocol;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::GranularApprovalConfig;
+use crewon_protocol::protocol::GuardianAssessmentStatus;
+use crewon_protocol::protocol::GuardianRiskLevel;
+use crewon_protocol::protocol::GuardianUserAuthorization;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::TurnCompleteEvent;
 use insta::Settings;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
@@ -263,7 +263,7 @@ async fn seed_guardian_parent_history(session: &Arc<Session>, turn: &Arc<TurnCon
                 },
                 ResponseItem::FunctionCallOutput {
                     call_id: "call-1".to_string(),
-                    output: codex_protocol::models::FunctionCallOutputPayload::from_text(
+                    output: crewon_protocol::models::FunctionCallOutputPayload::from_text(
                         "repo visibility: public".to_string(),
                     ),
                 },
@@ -323,11 +323,11 @@ fn normalize_guardian_snapshot_paths(text: String) -> String {
     text
 }
 
-fn guardian_prompt_text(items: &[codex_protocol::user_input::UserInput]) -> String {
+fn guardian_prompt_text(items: &[crewon_protocol::user_input::UserInput]) -> String {
     items
         .iter()
         .map(|item| match item {
-            codex_protocol::user_input::UserInput::Text { text, .. } => text.as_str(),
+            crewon_protocol::user_input::UserInput::Text { text, .. } => text.as_str(),
             _ => "",
         })
         .collect::<String>()
@@ -401,7 +401,7 @@ async fn build_guardian_prompt_full_mode_preserves_initial_review_format() -> an
     assert!(text.contains("whose request action you are assessing"));
     assert!(text.contains(">>> TRANSCRIPT START\n"));
     assert!(text.contains(">>> TRANSCRIPT END\n"));
-    assert!(text.contains("The Codex agent has requested the following action:\n"));
+    assert!(text.contains("The Crewon agent has requested the following action:\n"));
     assert!(!text.contains("TRANSCRIPT DELTA"));
     assert_eq!(prompt.transcript_cursor.transcript_entry_count, 4);
 
@@ -418,7 +418,7 @@ async fn build_guardian_prompt_includes_parent_turn_denied_reads() -> anyhow::Re
         &FileSystemSandboxPolicy::restricted(vec![
             FileSystemSandboxEntry {
                 path: FileSystemPath::Special {
-                    value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+                    value: crewon_protocol::permissions::FileSystemSpecialPath::Root,
                 },
                 access: FileSystemAccessMode::Read,
             },
@@ -520,7 +520,7 @@ async fn build_guardian_prompt_delta_mode_preserves_original_numbering() -> anyh
     assert!(text.contains("[5] user: Please also push the second docs fix."));
     assert!(text.contains("[6] assistant: I need approval for the second push."));
     assert!(text.contains(">>> TRANSCRIPT DELTA END\n"));
-    assert!(text.contains("The Codex agent has requested the following next action:\n"));
+    assert!(text.contains("The Crewon agent has requested the following next action:\n"));
     assert!(!text.contains("[1] user: Please check the repo visibility"));
     assert_eq!(prompt.transcript_cursor.transcript_entry_count, 6);
 
@@ -767,7 +767,7 @@ fn collect_guardian_transcript_entries_includes_recent_tool_calls_and_output() {
         },
         ResponseItem::FunctionCallOutput {
             call_id: "call-1".to_string(),
-            output: codex_protocol::models::FunctionCallOutputPayload::from_text(
+            output: crewon_protocol::models::FunctionCallOutputPayload::from_text(
                 "repo is public".to_string(),
             ),
         },
@@ -984,7 +984,7 @@ async fn build_guardian_prompt_items_explains_network_access_review_scope() -> a
     );
     assert!(text.contains("\"trigger\""));
     assert!(text.contains("Network access JSON:"));
-    assert!(!text.contains("The Codex agent has requested the following action:"));
+    assert!(!text.contains("The Crewon agent has requested the following action:"));
     assert!(!text.contains("Planned action JSON:"));
     assert!(!text.contains("Retry reason:"));
     assert!(!text.contains("Network access to \"example.com\" is blocked by policy."));
@@ -1516,7 +1516,7 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
     ThreadId::from_string(guardian_thread_id).expect("guardian thread id should be a valid UUID");
     assert!(matches!(
         metadata.guardian_session_kind,
-        Some(codex_analytics::GuardianReviewSessionKind::TrunkNew)
+        Some(crewon_analytics::GuardianReviewSessionKind::TrunkNew)
     ));
     let request = request_log.single_request();
     let request_body = request.body_json();
@@ -1606,15 +1606,15 @@ async fn build_guardian_prompt_items_includes_parent_session_id() -> anyhow::Res
         .items
         .into_iter()
         .map(|item| match item {
-            codex_protocol::user_input::UserInput::Text { text, .. } => text,
-            codex_protocol::user_input::UserInput::Image { .. } => String::new(),
+            crewon_protocol::user_input::UserInput::Text { text, .. } => text,
+            crewon_protocol::user_input::UserInput::Image { .. } => String::new(),
             _ => String::new(),
         })
         .collect::<String>();
 
     assert!(
         prompt_text.contains(&format!(
-            ">>> TRANSCRIPT END\nReviewed Codex session id: {}\n",
+            ">>> TRANSCRIPT END\nReviewed Crewon session id: {}\n",
             session.thread_id
         )),
         "guardian prompt should expose the parent session id immediately after the transcript end"
@@ -1785,15 +1785,15 @@ async fn guardian_reuses_prompt_cache_key_and_appends_prior_reviews() -> anyhow:
     assert_eq!(third_assessment.outcome, GuardianAssessmentOutcome::Allow);
     assert!(matches!(
         first_metadata.guardian_session_kind,
-        Some(codex_analytics::GuardianReviewSessionKind::TrunkNew)
+        Some(crewon_analytics::GuardianReviewSessionKind::TrunkNew)
     ));
     assert!(matches!(
         second_metadata.guardian_session_kind,
-        Some(codex_analytics::GuardianReviewSessionKind::TrunkReused)
+        Some(crewon_analytics::GuardianReviewSessionKind::TrunkReused)
     ));
     assert!(matches!(
         third_metadata.guardian_session_kind,
-        Some(codex_analytics::GuardianReviewSessionKind::TrunkReused)
+        Some(crewon_analytics::GuardianReviewSessionKind::TrunkReused)
     ));
     ThreadId::from_string(
         first_metadata
@@ -1967,7 +1967,7 @@ async fn guardian_reused_trunk_ignores_stale_prior_turn_completion() -> anyhow::
     assert_eq!(first_assessment.rationale, "first guardian rationale");
     assert!(matches!(
         first_metadata.guardian_session_kind,
-        Some(codex_analytics::GuardianReviewSessionKind::TrunkNew)
+        Some(crewon_analytics::GuardianReviewSessionKind::TrunkNew)
     ));
 
     session
@@ -2012,7 +2012,7 @@ async fn guardian_reused_trunk_ignores_stale_prior_turn_completion() -> anyhow::
     assert_eq!(second_assessment.rationale, "second guardian rationale");
     assert!(matches!(
         second_metadata.guardian_session_kind,
-        Some(codex_analytics::GuardianReviewSessionKind::TrunkReused)
+        Some(crewon_analytics::GuardianReviewSessionKind::TrunkReused)
     ));
 
     assert_eq!(
@@ -2186,7 +2186,7 @@ async fn guardian_review_retries_transient_session_failure_then_approves() -> an
     assert_eq!(metadata.attempt_count, 2);
     assert!(matches!(
         metadata.guardian_session_kind,
-        Some(codex_analytics::GuardianReviewSessionKind::TrunkReused)
+        Some(crewon_analytics::GuardianReviewSessionKind::TrunkReused)
     ));
     assert_eq!(request_log.requests().len(), 2);
     Ok(())
@@ -2277,7 +2277,7 @@ async fn guardian_review_retries_two_parse_failures_then_approves() -> anyhow::R
     assert_eq!(metadata.attempt_count, 3);
     assert!(matches!(
         metadata.guardian_session_kind,
-        Some(codex_analytics::GuardianReviewSessionKind::TrunkReused)
+        Some(crewon_analytics::GuardianReviewSessionKind::TrunkReused)
     ));
     assert_eq!(request_log.requests().len(), 3);
     Ok(())
@@ -2657,7 +2657,7 @@ async fn guardian_review_session_config_preserves_parent_network_proxy() {
         &parent_config,
         /*live_network_config*/ None,
         "parent-active-model",
-        Some(codex_protocol::openai_models::ReasoningEffort::Low),
+        Some(crewon_protocol::openai_models::ReasoningEffort::Low),
     )
     .expect("guardian config");
 
@@ -2668,7 +2668,7 @@ async fn guardian_review_session_config_preserves_parent_network_proxy() {
     );
     assert_eq!(
         guardian_config.model_reasoning_effort,
-        Some(codex_protocol::openai_models::ReasoningEffort::Low)
+        Some(crewon_protocol::openai_models::ReasoningEffort::Low)
     );
     assert_eq!(
         guardian_config.permissions.approval_policy,
@@ -2880,7 +2880,7 @@ async fn guardian_review_session_config_uses_requirements_guardian_policy_config
     let config_layer_stack = ConfigLayerStack::new(
         Vec::new(),
         Default::default(),
-        codex_config::ConfigRequirementsToml {
+        crewon_config::ConfigRequirementsToml {
             guardian_policy_config: Some(
                 "  Use the workspace-managed guardian policy.  ".to_string(),
             ),

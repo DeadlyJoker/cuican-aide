@@ -10,20 +10,20 @@ use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
 use crate::tools::registry::ToolExposure;
 use crate::turn_timing::now_unix_timestamp_ms;
-use codex_protocol::dynamic_tools::DynamicToolCallRequest;
-use codex_protocol::dynamic_tools::DynamicToolResponse;
-use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::models::FunctionCallOutputContentItem;
-use codex_protocol::protocol::DynamicToolCallResponseEvent;
-use codex_protocol::protocol::EventMsg;
-use codex_tools::ResponsesApiNamespace;
-use codex_tools::ResponsesApiNamespaceTool;
-use codex_tools::ToolName;
-use codex_tools::ToolSearchInfo;
-use codex_tools::ToolSearchSourceInfo;
-use codex_tools::ToolSpec;
-use codex_tools::default_namespace_description;
-use codex_tools::dynamic_tool_to_responses_api_tool;
+use crewon_protocol::dynamic_tools::DynamicToolCallRequest;
+use crewon_protocol::dynamic_tools::DynamicToolResponse;
+use crewon_protocol::dynamic_tools::DynamicToolSpec;
+use crewon_protocol::models::FunctionCallOutputContentItem;
+use crewon_protocol::protocol::DynamicToolCallResponseEvent;
+use crewon_protocol::protocol::EventMsg;
+use crewon_tools::ResponsesApiNamespace;
+use crewon_tools::ResponsesApiNamespaceTool;
+use crewon_tools::ToolName;
+use crewon_tools::ToolSearchInfo;
+use crewon_tools::ToolSearchSourceInfo;
+use crewon_tools::ToolSpec;
+use crewon_tools::default_namespace_description;
+use crewon_tools::dynamic_tool_to_responses_api_tool;
 use serde_json::Value;
 use std::time::Instant;
 use tokio::sync::oneshot;
@@ -77,12 +77,12 @@ impl ToolExecutor<ToolInvocation> for DynamicToolHandler {
             self.spec(),
             Some(ToolSearchSourceInfo {
                 name: "Dynamic tools".to_string(),
-                description: Some("Tools provided by the current Codex thread.".to_string()),
+                description: Some("Tools provided by the current thread.".to_string()),
             }),
         )
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle(&self, invocation: ToolInvocation) -> crewon_tools::ToolExecutorFuture<'_> {
         Box::pin(self.handle_call(invocation))
     }
 }

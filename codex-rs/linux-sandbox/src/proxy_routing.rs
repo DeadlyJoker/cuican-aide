@@ -41,7 +41,7 @@ const PROXY_ENV_KEYS: &[&str] = &[
     "DOCKER_HTTPS_PROXY",
 ];
 
-const PROXY_SOCKET_DIR_PREFIX: &str = "codex-linux-sandbox-proxy-";
+const PROXY_SOCKET_DIR_PREFIX: &str = "crewon-linux-sandbox-proxy-";
 const HOST_BRIDGE_READY: u8 = 1;
 const LOOPBACK_INTERFACE_NAME: &[u8] = b"lo";
 // Linux sockaddr_un.sun_path allows 108 bytes, including the trailing NUL.
@@ -638,7 +638,7 @@ fn set_parent_death_signal() -> io::Result<()> {
 
 fn harden_bridge_process() -> io::Result<()> {
     set_parent_death_signal()?;
-    codex_process_hardening::disable_process_dumping()
+    crewon_process_hardening::disable_process_dumping()
 }
 
 fn proxy_bidirectional(mut tcp_stream: TcpStream, mut unix_stream: UnixStream) -> io::Result<()> {
@@ -773,7 +773,7 @@ mod tests {
     #[test]
     fn cleanup_proxy_socket_dir_removes_bridge_artifacts() {
         let root = tempfile::tempdir().expect("tempdir should create");
-        let socket_dir = root.path().join("codex-linux-sandbox-proxy-test");
+        let socket_dir = root.path().join("crewon-linux-sandbox-proxy-test");
         std::fs::create_dir(&socket_dir).expect("socket dir should create");
         let marker = socket_dir.join("bridge.sock");
         std::fs::write(&marker, b"test").expect("marker should write");
@@ -802,15 +802,15 @@ mod tests {
     #[test]
     fn parse_proxy_socket_dir_owner_pid_reads_owner_pid() {
         assert_eq!(
-            parse_proxy_socket_dir_owner_pid("codex-linux-sandbox-proxy-1234-0"),
+            parse_proxy_socket_dir_owner_pid("crewon-linux-sandbox-proxy-1234-0"),
             Some(1234)
         );
         assert_eq!(
-            parse_proxy_socket_dir_owner_pid("codex-linux-sandbox-proxy-1234-1000-0"),
+            parse_proxy_socket_dir_owner_pid("crewon-linux-sandbox-proxy-1234-1000-0"),
             Some(1234)
         );
         assert_eq!(
-            parse_proxy_socket_dir_owner_pid("codex-linux-sandbox-proxy-x"),
+            parse_proxy_socket_dir_owner_pid("crewon-linux-sandbox-proxy-x"),
             None
         );
         assert_eq!(parse_proxy_socket_dir_owner_pid("not-a-proxy-dir"), None);

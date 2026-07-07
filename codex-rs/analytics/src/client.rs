@@ -9,7 +9,7 @@ use crate::facts::AnalyticsJsonRpcError;
 use crate::facts::AppInvocation;
 use crate::facts::AppMentionedInput;
 use crate::facts::AppUsedInput;
-use crate::facts::CodexGoalEvent;
+use crate::facts::CrewonGoalEvent;
 use crate::facts::CustomAnalyticsFact;
 use crate::facts::HookRunFact;
 use crate::facts::HookRunInput;
@@ -19,24 +19,24 @@ use crate::facts::SkillInvocation;
 use crate::facts::SkillInvokedInput;
 use crate::facts::SubAgentThreadStartedInput;
 use crate::facts::TrackEventsContext;
-use crate::facts::TurnCodexErrorFact;
+use crate::facts::TurnCrewonErrorFact;
 use crate::facts::TurnProfileFact;
 use crate::facts::TurnResolvedConfigFact;
 use crate::facts::TurnTokenUsageFact;
 use crate::reducer::AnalyticsReducer;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::ClientResponsePayload;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ServerResponse;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::default_client::create_client;
-use codex_plugin::PluginTelemetryMetadata;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::ClientResponsePayload;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ServerResponse;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_login::default_client::create_client;
+use crewon_plugin::PluginTelemetryMetadata;
+use crewon_protocol::request_permissions::RequestPermissionsResponse;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -241,13 +241,13 @@ impl AnalyticsEventsClient {
         )));
     }
 
-    pub fn track_compaction(&self, event: crate::facts::CodexCompactionEvent) {
+    pub fn track_compaction(&self, event: crate::facts::CrewonCompactionEvent) {
         self.record_fact(AnalyticsFact::Custom(CustomAnalyticsFact::Compaction(
             Box::new(event),
         )));
     }
 
-    pub fn track_goal_event(&self, event: CodexGoalEvent) {
+    pub fn track_goal_event(&self, event: CrewonGoalEvent) {
         self.record_fact(AnalyticsFact::Custom(CustomAnalyticsFact::Goal(Box::new(
             event,
         ))));
@@ -271,8 +271,8 @@ impl AnalyticsEventsClient {
         )));
     }
 
-    pub fn track_turn_codex_error(&self, fact: TurnCodexErrorFact) {
-        self.record_fact(AnalyticsFact::Custom(CustomAnalyticsFact::TurnCodexError(
+    pub fn track_turn_crewon_error(&self, fact: TurnCrewonErrorFact) {
+        self.record_fact(AnalyticsFact::Custom(CustomAnalyticsFact::TurnCrewonError(
             Box::new(fact),
         )));
     }
@@ -420,7 +420,7 @@ async fn send_track_events(
     let Some(auth) = auth_manager.auth().await else {
         return;
     };
-    if !auth.uses_codex_backend() {
+    if !auth.uses_crewon_backend() {
         return;
     }
 
@@ -454,7 +454,7 @@ fn track_event_request_batches(events: Vec<TrackEventRequest>) -> Vec<Vec<TrackE
     batches
 }
 
-async fn send_track_events_request(auth: &CodexAuth, url: &str, events: Vec<TrackEventRequest>) {
+async fn send_track_events_request(auth: &CrewonAuth, url: &str, events: Vec<TrackEventRequest>) {
     if events.is_empty() {
         return;
     }
@@ -464,7 +464,7 @@ async fn send_track_events_request(auth: &CodexAuth, url: &str, events: Vec<Trac
     let response = create_client()
         .post(url)
         .timeout(ANALYTICS_EVENTS_TIMEOUT)
-        .headers(codex_model_provider::auth_provider_from_auth(auth).to_auth_headers())
+        .headers(crewon_model_provider::auth_provider_from_auth(auth).to_auth_headers())
         .header("Content-Type", "application/json")
         .json(&payload)
         .send()

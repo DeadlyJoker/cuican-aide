@@ -15,69 +15,69 @@ use app_test_support::format_with_current_shell_display;
 use app_test_support::to_response;
 use app_test_support::write_mock_responses_config_toml_with_chatgpt_base_url;
 use app_test_support::write_models_cache;
-use codex_app_server::INPUT_TOO_LARGE_ERROR_CODE;
-use codex_app_server::INVALID_PARAMS_ERROR_CODE;
-use codex_app_server_protocol::AdditionalContextEntry;
-use codex_app_server_protocol::AdditionalContextKind;
-use codex_app_server_protocol::ByteRange;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::CollabAgentStatus;
-use codex_app_server_protocol::CollabAgentTool;
-use codex_app_server_protocol::CollabAgentToolCallStatus;
-use codex_app_server_protocol::CommandExecutionApprovalDecision;
-use codex_app_server_protocol::CommandExecutionRequestApprovalResponse;
-use codex_app_server_protocol::CommandExecutionStatus;
-use codex_app_server_protocol::FileChangeApprovalDecision;
-use codex_app_server_protocol::FileChangePatchUpdatedNotification;
-use codex_app_server_protocol::FileChangeRequestApprovalResponse;
-use codex_app_server_protocol::ItemCompletedNotification;
-use codex_app_server_protocol::ItemStartedNotification;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::PatchApplyStatus;
-use codex_app_server_protocol::PatchChangeKind;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ServerRequestResolvedNotification;
-use codex_app_server_protocol::SubAgentActivityKind;
-use codex_app_server_protocol::TextElement;
-use codex_app_server_protocol::ThreadDeleteParams;
-use codex_app_server_protocol::ThreadDeleteResponse;
-use codex_app_server_protocol::ThreadDeletedNotification;
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::ThreadLoadedListParams;
-use codex_app_server_protocol::ThreadLoadedListResponse;
-use codex_app_server_protocol::ThreadSource;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnCompletedNotification;
-use codex_app_server_protocol::TurnEnvironmentParams;
-use codex_app_server_protocol::TurnItemsView;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::TurnStartedNotification;
-use codex_app_server_protocol::TurnStatus;
-use codex_app_server_protocol::TurnSteerParams;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_app_server_protocol::WarningNotification;
-use codex_config::config_toml::ConfigToml;
-use codex_core::personality_migration::PERSONALITY_MIGRATION_FILENAME;
-use codex_core::test_support::all_model_presets;
-use codex_features::FEATURES;
-use codex_features::Feature;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::Personality;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::Settings;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
-use codex_protocol::models::ImageDetail;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::user_input::MAX_USER_INPUT_TEXT_CHARS;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
+use crewon_app_server::INPUT_TOO_LARGE_ERROR_CODE;
+use crewon_app_server::INVALID_PARAMS_ERROR_CODE;
+use crewon_app_server_protocol::AdditionalContextEntry;
+use crewon_app_server_protocol::AdditionalContextKind;
+use crewon_app_server_protocol::ByteRange;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::CollabAgentStatus;
+use crewon_app_server_protocol::CollabAgentTool;
+use crewon_app_server_protocol::CollabAgentToolCallStatus;
+use crewon_app_server_protocol::CommandExecutionApprovalDecision;
+use crewon_app_server_protocol::CommandExecutionRequestApprovalResponse;
+use crewon_app_server_protocol::CommandExecutionStatus;
+use crewon_app_server_protocol::FileChangeApprovalDecision;
+use crewon_app_server_protocol::FileChangePatchUpdatedNotification;
+use crewon_app_server_protocol::FileChangeRequestApprovalResponse;
+use crewon_app_server_protocol::ItemCompletedNotification;
+use crewon_app_server_protocol::ItemStartedNotification;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::PatchApplyStatus;
+use crewon_app_server_protocol::PatchChangeKind;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ServerRequestResolvedNotification;
+use crewon_app_server_protocol::SubAgentActivityKind;
+use crewon_app_server_protocol::TextElement;
+use crewon_app_server_protocol::ThreadDeleteParams;
+use crewon_app_server_protocol::ThreadDeleteResponse;
+use crewon_app_server_protocol::ThreadDeletedNotification;
+use crewon_app_server_protocol::ThreadItem;
+use crewon_app_server_protocol::ThreadLoadedListParams;
+use crewon_app_server_protocol::ThreadLoadedListResponse;
+use crewon_app_server_protocol::ThreadSource;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnCompletedNotification;
+use crewon_app_server_protocol::TurnEnvironmentParams;
+use crewon_app_server_protocol::TurnItemsView;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::TurnStartedNotification;
+use crewon_app_server_protocol::TurnStatus;
+use crewon_app_server_protocol::TurnSteerParams;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_app_server_protocol::WarningNotification;
+use crewon_config::config_toml::ConfigToml;
+use crewon_core::personality_migration::PERSONALITY_MIGRATION_FILENAME;
+use crewon_core::test_support::all_model_presets;
+use crewon_features::FEATURES;
+use crewon_features::Feature;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::Settings;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
+use crewon_protocol::models::ImageDetail;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::user_input::MAX_USER_INPUT_TEXT_CHARS;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -95,7 +95,7 @@ use super::analytics::wait_for_analytics_event;
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(25);
 #[cfg(not(windows))]
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-const TEST_ORIGINATOR: &str = "codex_vscode";
+const TEST_ORIGINATOR: &str = "crewon_pc";
 const LOCAL_PRAGMATIC_TEMPLATE: &str = "You are a deeply pragmatic, effective software engineer.";
 const INVALID_REQUEST_ERROR_CODE: i64 = -32600;
 const TINY_PNG_BYTES: &[u8] = &[
@@ -111,7 +111,7 @@ fn body_contains(req: &wiremock::Request, text: &str) -> bool {
 }
 
 async fn run_local_image_turn(detail: Option<ImageDetail>) -> Result<Vec<Value>> {
-    // Two Codex turns hit the mock model (session start + turn/start).
+    // Two Crewon turns hit the mock model (session start + turn/start).
     let responses = vec![
         create_final_assistant_message_sse_response("Done")?,
         create_final_assistant_message_sse_response("Done")?,
@@ -409,7 +409,7 @@ async fn turn_start_sends_originator_header() -> Result<()> {
         DEFAULT_READ_TIMEOUT,
         mcp.initialize_with_client_info(ClientInfo {
             name: TEST_ORIGINATOR.to_string(),
-            title: Some("Codex VS Code Extension".to_string()),
+            title: Some("Crewon PC Client".to_string()),
             version: "0.1.0".to_string(),
         }),
     )
@@ -645,7 +645,7 @@ async fn turn_start_emits_thread_scoped_warning_notification_for_trimmed_skills(
     assert_eq!(warning.thread_id.as_deref(), Some(thread.id.as_str()));
     assert_eq!(
         warning.message,
-        "Exceeded skills context budget of 2%. All skill descriptions were removed and 7 additional skills were not included in the model-visible skills list."
+        "Exceeded skills context budget of 2%. All skill descriptions were removed and 6 additional skills were not included in the model-visible skills list."
     );
 
     timeout(
@@ -908,7 +908,8 @@ async fn turn_start_tracks_turn_event_analytics() -> Result<()> {
     )
     .await??;
 
-    let event = wait_for_analytics_event(&server, DEFAULT_READ_TIMEOUT, "codex_turn_event").await?;
+    let event =
+        wait_for_analytics_event(&server, DEFAULT_READ_TIMEOUT, "crewon_turn_event").await?;
     assert_eq!(event["event_params"]["thread_id"], thread.id);
     assert_eq!(event["event_params"]["session_id"], thread.session_id);
     assert_eq!(event["event_params"]["turn_id"], turn.id);
@@ -1053,7 +1054,8 @@ async fn turn_profile_tracks_blocking_tool_and_follow_up_sampling() -> Result<()
     )
     .await??;
 
-    let event = wait_for_analytics_event(&server, DEFAULT_READ_TIMEOUT, "codex_turn_event").await?;
+    let event =
+        wait_for_analytics_event(&server, DEFAULT_READ_TIMEOUT, "crewon_turn_event").await?;
     let params = &event["event_params"];
     assert_eq!(
         json!({
@@ -1356,7 +1358,7 @@ async fn turn_start_rejects_unknown_environment_before_starting_turn() -> Result
 #[tokio::test]
 async fn turn_start_emits_notifications_and_accepts_model_override() -> Result<()> {
     // Provide a mock server and config so model wiring is valid.
-    // Three Codex turns hit the mock model (session start + two turn/start calls).
+    // Three Crewon turns hit the mock model (session start + two turn/start calls).
     let responses = vec![
         create_final_assistant_message_sse_response("Done")?,
         create_final_assistant_message_sse_response("Done")?,
@@ -1420,7 +1422,7 @@ async fn turn_start_emits_notifications_and_accepts_model_override() -> Result<(
     assert_eq!(started.thread_id, thread.id);
     assert_eq!(
         started.turn.status,
-        codex_app_server_protocol::TurnStatus::InProgress
+        crewon_app_server_protocol::TurnStatus::InProgress
     );
     assert_eq!(started.turn.id, turn.id);
     assert_eq!(started.turn.items_view, TurnItemsView::NotLoaded);
@@ -2108,8 +2110,8 @@ async fn turn_start_exec_approval_toggle_v2() -> Result<()> {
                 text: "run python again".to_string(),
                 text_elements: Vec::new(),
             }],
-            approval_policy: Some(codex_app_server_protocol::AskForApproval::Never),
-            sandbox_policy: Some(codex_app_server_protocol::SandboxPolicy::DangerFullAccess),
+            approval_policy: Some(crewon_app_server_protocol::AskForApproval::Never),
+            sandbox_policy: Some(crewon_app_server_protocol::SandboxPolicy::DangerFullAccess),
             model: Some("mock-model".to_string()),
             effort: Some(ReasoningEffort::Medium),
             summary: Some(ReasoningSummary::Auto),
@@ -2346,9 +2348,9 @@ async fn turn_start_updates_sandbox_and_cwd_between_turns_v2() -> Result<()> {
             additional_context: None,
             cwd: Some(first_cwd.clone()),
             runtime_workspace_roots: None,
-            approval_policy: Some(codex_app_server_protocol::AskForApproval::Never),
+            approval_policy: Some(crewon_app_server_protocol::AskForApproval::Never),
             approvals_reviewer: None,
-            sandbox_policy: Some(codex_app_server_protocol::SandboxPolicy::WorkspaceWrite {
+            sandbox_policy: Some(crewon_app_server_protocol::SandboxPolicy::WorkspaceWrite {
                 writable_roots: vec![first_cwd.try_into()?],
                 network_access: false,
                 exclude_tmpdir_env_var: true,
@@ -2390,9 +2392,9 @@ async fn turn_start_updates_sandbox_and_cwd_between_turns_v2() -> Result<()> {
             additional_context: None,
             cwd: Some(second_cwd.clone()),
             runtime_workspace_roots: None,
-            approval_policy: Some(codex_app_server_protocol::AskForApproval::Never),
+            approval_policy: Some(crewon_app_server_protocol::AskForApproval::Never),
             approvals_reviewer: None,
-            sandbox_policy: Some(codex_app_server_protocol::SandboxPolicy::DangerFullAccess),
+            sandbox_policy: Some(crewon_app_server_protocol::SandboxPolicy::DangerFullAccess),
             permissions: None,
             model: Some("mock-model".to_string()),
             effort: Some(ReasoningEffort::Medium),
@@ -2464,8 +2466,8 @@ async fn turn_start_permission_profile_rebinds_runtime_workspace_roots_between_t
     std::fs::create_dir(&new_root)?;
     let old_root_text = old_root.to_string_lossy().into_owned();
     let new_root_text = new_root.to_string_lossy().into_owned();
-    let old_root = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(old_root)?;
-    let new_root = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(new_root)?;
+    let old_root = crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(old_root)?;
+    let new_root = crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(new_root)?;
 
     let server = responses::start_mock_server().await;
     let response_mock = responses::mount_sse_sequence(
@@ -2856,7 +2858,7 @@ async fn turn_start_file_change_approval_v2() -> Result<()> {
     let expected_readme_path = expected_readme_path.to_string_lossy().into_owned();
     pretty_assertions::assert_eq!(
         started_changes,
-        vec![codex_app_server_protocol::FileUpdateChange {
+        vec![crewon_app_server_protocol::FileUpdateChange {
             path: expected_readme_path.clone(),
             kind: PatchChangeKind::Add,
             diff: "new line\n".to_string(),
@@ -4024,7 +4026,7 @@ async fn turn_start_file_change_approval_decline_v2() -> Result<()> {
     let expected_readme_path_str = expected_readme_path.to_string_lossy().into_owned();
     pretty_assertions::assert_eq!(
         started_changes,
-        vec![codex_app_server_protocol::FileUpdateChange {
+        vec![crewon_app_server_protocol::FileUpdateChange {
             path: expected_readme_path_str.clone(),
             kind: PatchChangeKind::Add,
             diff: "new line\n".to_string(),
@@ -4119,7 +4121,7 @@ async fn command_execution_notifications_include_process_id() -> Result<()> {
                 text: "run a command".to_string(),
                 text_elements: Vec::new(),
             }],
-            sandbox_policy: Some(codex_app_server_protocol::SandboxPolicy::DangerFullAccess),
+            sandbox_policy: Some(crewon_app_server_protocol::SandboxPolicy::DangerFullAccess),
             ..Default::default()
         })
         .await?;
@@ -4249,7 +4251,7 @@ async fn turn_start_with_elevated_override_does_not_persist_project_trust() -> R
         .send_turn_start_request(TurnStartParams {
             thread_id: thread.id,
             cwd: Some(workspace.path().to_path_buf()),
-            sandbox_policy: Some(codex_app_server_protocol::SandboxPolicy::DangerFullAccess),
+            sandbox_policy: Some(crewon_app_server_protocol::SandboxPolicy::DangerFullAccess),
             input: vec![V2UserInput::Text {
                 text: "Hello".to_string(),
                 text_elements: Vec::new(),

@@ -8,11 +8,11 @@ use app_test_support::TestAppServer;
 use app_test_support::start_analytics_events_server;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::PluginUninstallParams;
-use codex_app_server_protocol::PluginUninstallResponse;
-use codex_app_server_protocol::RequestId;
-use codex_config::types::AuthCredentialsStoreMode;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::PluginUninstallParams;
+use crewon_app_server_protocol::PluginUninstallResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_config::types::AuthCredentialsStoreMode;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use tempfile::TempDir;
@@ -136,7 +136,7 @@ async fn plugin_uninstall_tracks_analytics_event() -> Result<()> {
         payload,
         json!({
             "events": [{
-                "event_type": "codex_plugin_uninstalled",
+                "event_type": "crewon_plugin_uninstalled",
                 "event_params": {
                     "plugin_id": "sample-plugin@debug",
                     "plugin_name": "sample-plugin",
@@ -220,15 +220,15 @@ async fn plugin_uninstall_writes_remote_plugin_to_cloud_when_remote_plugin_enabl
     let remote_plugin_cache_root = codex_home
         .path()
         .join("plugins/cache/openai-curated-remote/linear");
-    std::fs::create_dir_all(remote_plugin_cache_root.join("1.0.0/.codex-plugin"))?;
+    std::fs::create_dir_all(remote_plugin_cache_root.join("1.0.0/.crewon-plugin"))?;
     std::fs::write(
-        remote_plugin_cache_root.join("1.0.0/.codex-plugin/plugin.json"),
+        remote_plugin_cache_root.join("1.0.0/.crewon-plugin/plugin.json"),
         r#"{"name":"linear","version":"1.0.0"}"#,
     )?;
     let legacy_remote_plugin_cache_root = codex_home.path().join(format!(
         "plugins/cache/openai-curated-remote/{REMOTE_PLUGIN_ID}"
     ));
-    std::fs::create_dir_all(legacy_remote_plugin_cache_root.join("local/.codex-plugin"))?;
+    std::fs::create_dir_all(legacy_remote_plugin_cache_root.join("local/.crewon-plugin"))?;
 
     let mut mcp = TestAppServer::new(codex_home.path()).await?;
     timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
@@ -292,15 +292,15 @@ async fn plugin_uninstall_uses_detail_scope_for_cache_namespace() -> Result<()> 
     let workspace_cache_root = codex_home
         .path()
         .join("plugins/cache/workspace-directory/linear");
-    std::fs::create_dir_all(workspace_cache_root.join("1.0.0/.codex-plugin"))?;
+    std::fs::create_dir_all(workspace_cache_root.join("1.0.0/.crewon-plugin"))?;
     std::fs::write(
-        workspace_cache_root.join("1.0.0/.codex-plugin/plugin.json"),
+        workspace_cache_root.join("1.0.0/.crewon-plugin/plugin.json"),
         r#"{"name":"linear","version":"1.0.0"}"#,
     )?;
     let global_cache_root = codex_home
         .path()
         .join("plugins/cache/openai-curated-remote/linear");
-    std::fs::create_dir_all(global_cache_root.join("1.0.0/.codex-plugin"))?;
+    std::fs::create_dir_all(global_cache_root.join("1.0.0/.crewon-plugin"))?;
 
     let mut mcp = TestAppServer::new(codex_home.path()).await?;
     timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
@@ -370,9 +370,9 @@ async fn plugin_uninstall_accepts_workspace_remote_plugin_id_shape() -> Result<(
     let remote_plugin_cache_root = codex_home
         .path()
         .join("plugins/cache/workspace-directory/skill-improver");
-    std::fs::create_dir_all(remote_plugin_cache_root.join("1.0.0/.codex-plugin"))?;
+    std::fs::create_dir_all(remote_plugin_cache_root.join("1.0.0/.crewon-plugin"))?;
     std::fs::write(
-        remote_plugin_cache_root.join("1.0.0/.codex-plugin/plugin.json"),
+        remote_plugin_cache_root.join("1.0.0/.crewon-plugin/plugin.json"),
         r#"{"name":"skill-improver","version":"1.0.0"}"#,
     )?;
 
@@ -423,7 +423,7 @@ async fn plugin_uninstall_rejects_before_post_when_remote_detail_fetch_fails() -
     let legacy_remote_plugin_cache_root = codex_home.path().join(format!(
         "plugins/cache/openai-curated-remote/{REMOTE_PLUGIN_ID}"
     ));
-    std::fs::create_dir_all(legacy_remote_plugin_cache_root.join("local/.codex-plugin"))?;
+    std::fs::create_dir_all(legacy_remote_plugin_cache_root.join("local/.crewon-plugin"))?;
 
     let mut mcp = TestAppServer::new(codex_home.path()).await?;
     timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
@@ -567,7 +567,7 @@ fn write_installed_plugin(
         .join("plugins/cache")
         .join(marketplace_name)
         .join(plugin_name)
-        .join("local/.codex-plugin");
+        .join("local/.crewon-plugin");
     std::fs::create_dir_all(&plugin_root)?;
     std::fs::write(
         plugin_root.join("plugin.json"),

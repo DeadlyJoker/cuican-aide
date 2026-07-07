@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use codex_agent_identity::AgentIdentityKey;
-use codex_agent_identity::AgentTaskAuthorizationTarget;
-use codex_agent_identity::authorization_header_for_agent_task;
-use codex_api::AuthProvider;
-use codex_api::SharedAuthProvider;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_protocol::error::CodexErr;
+use crewon_agent_identity::AgentIdentityKey;
+use crewon_agent_identity::AgentTaskAuthorizationTarget;
+use crewon_agent_identity::authorization_header_for_agent_task;
+use crewon_api::AuthProvider;
+use crewon_api::SharedAuthProvider;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_protocol::error::CodexErr;
 use http::HeaderMap;
 use http::HeaderValue;
 
@@ -19,7 +19,7 @@ const BEDROCK_API_KEY_UNSUPPORTED_MESSAGE: &str =
 
 #[derive(Clone, Debug)]
 struct AgentIdentityAuthProvider {
-    auth: codex_login::auth::AgentIdentityAuth,
+    auth: crewon_login::auth::AgentIdentityAuth,
 }
 
 impl AuthProvider for AgentIdentityAuthProvider {
@@ -80,10 +80,10 @@ pub(crate) fn auth_manager_for_provider(
 }
 
 pub(crate) fn resolve_provider_auth(
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     provider: &ModelProviderInfo,
-) -> codex_protocol::error::Result<SharedAuthProvider> {
-    if matches!(auth, Some(CodexAuth::BedrockApiKey(_))) {
+) -> crewon_protocol::error::Result<SharedAuthProvider> {
+    if matches!(auth, Some(CrewonAuth::BedrockApiKey(_))) {
         return Err(CodexErr::UnsupportedOperation(
             BEDROCK_API_KEY_UNSUPPORTED_MESSAGE.to_string(),
         ));
@@ -101,7 +101,7 @@ pub(crate) fn resolve_provider_auth(
 
 fn bearer_auth_for_provider(
     provider: &ModelProviderInfo,
-) -> codex_protocol::error::Result<Option<BearerAuthProvider>> {
+) -> crewon_protocol::error::Result<Option<BearerAuthProvider>> {
     if let Some(api_key) = provider.api_key()? {
         return Ok(Some(BearerAuthProvider::new(api_key)));
     }
@@ -113,17 +113,17 @@ fn bearer_auth_for_provider(
     Ok(None)
 }
 
-/// Builds request-header auth for a first-party Codex auth snapshot.
-pub fn auth_provider_from_auth(auth: &CodexAuth) -> SharedAuthProvider {
+/// Builds request-header auth for a first-party Crewon auth snapshot.
+pub fn auth_provider_from_auth(auth: &CrewonAuth) -> SharedAuthProvider {
     match auth {
-        CodexAuth::AgentIdentity(auth) => {
+        CrewonAuth::AgentIdentity(auth) => {
             Arc::new(AgentIdentityAuthProvider { auth: auth.clone() })
         }
-        CodexAuth::BedrockApiKey(_) => unreachable!("{BEDROCK_API_KEY_UNSUPPORTED_MESSAGE}"),
-        CodexAuth::ApiKey(_)
-        | CodexAuth::Chatgpt(_)
-        | CodexAuth::ChatgptAuthTokens(_)
-        | CodexAuth::PersonalAccessToken(_) => Arc::new(BearerAuthProvider {
+        CrewonAuth::BedrockApiKey(_) => unreachable!("{BEDROCK_API_KEY_UNSUPPORTED_MESSAGE}"),
+        CrewonAuth::ApiKey(_)
+        | CrewonAuth::Chatgpt(_)
+        | CrewonAuth::ChatgptAuthTokens(_)
+        | CrewonAuth::PersonalAccessToken(_) => Arc::new(BearerAuthProvider {
             token: auth.get_token().ok(),
             account_id: auth.get_account_id(),
             is_fedramp_account: auth.is_fedramp_account(),
@@ -133,9 +133,9 @@ pub fn auth_provider_from_auth(auth: &CodexAuth) -> SharedAuthProvider {
 
 #[cfg(test)]
 mod tests {
-    use codex_login::auth::BedrockApiKeyAuth;
-    use codex_model_provider_info::WireApi;
-    use codex_model_provider_info::create_oss_provider_with_base_url;
+    use crewon_login::auth::BedrockApiKeyAuth;
+    use crewon_model_provider_info::WireApi;
+    use crewon_model_provider_info::create_oss_provider_with_base_url;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn openai_provider_rejects_bedrock_api_key_auth() {
         let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
-        let auth = CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
+        let auth = CrewonAuth::BedrockApiKey(BedrockApiKeyAuth {
             api_key: "bedrock-api-key-test".to_string(),
             region: "us-east-1".to_string(),
         });

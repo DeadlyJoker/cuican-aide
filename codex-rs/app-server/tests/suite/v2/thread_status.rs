@@ -3,19 +3,19 @@ use app_test_support::TestAppServer;
 use app_test_support::create_final_assistant_message_sse_response;
 use app_test_support::create_mock_responses_server_sequence;
 use app_test_support::to_response;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::InitializeCapabilities;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::ThreadStatus;
-use codex_app_server_protocol::ThreadStatusChangedNotification;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::UserInput as V2UserInput;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::InitializeCapabilities;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::ThreadStatus;
+use crewon_app_server_protocol::ThreadStatusChangedNotification;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::UserInput as V2UserInput;
 use tempfile::TempDir;
 use tokio::time::timeout;
 
@@ -140,8 +140,8 @@ async fn thread_status_changed_can_be_opted_out() -> Result<()> {
         DEFAULT_READ_TIMEOUT,
         mcp.initialize_with_capabilities(
             ClientInfo {
-                name: "codex_vscode".to_string(),
-                title: Some("Codex VS Code Extension".to_string()),
+                name: "crewon_pc".to_string(),
+                title: Some("Crewon PC Client".to_string()),
                 version: "0.1.0".to_string(),
             },
             Some(InitializeCapabilities {

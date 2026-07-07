@@ -4,28 +4,6 @@ use crate::phase1;
 use crate::phase2;
 use crate::runtime::MemoryStartupContext;
 use crate::start_memories_startup_task;
-use codex_config::types::MemoriesConfig;
-use codex_features::Feature;
-use codex_git_utils::diff_since_latest_init;
-use codex_git_utils::reset_git_repository;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_model_provider::ModelProvider;
-use codex_model_provider::ProviderAccountResult;
-use codex_model_provider::SharedModelProvider;
-use codex_model_provider::create_model_provider;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionSource;
 use core_test_support::responses::ResponseMock;
 use core_test_support::responses::ResponsesRequest;
 use core_test_support::responses::ev_assistant_message;
@@ -34,9 +12,31 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_config::types::MemoriesConfig;
+use crewon_features::Feature;
+use crewon_git_utils::diff_since_latest_init;
+use crewon_git_utils::reset_git_repository;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_model_provider::ModelProvider;
+use crewon_model_provider::ProviderAccountResult;
+use crewon_model_provider::SharedModelProvider;
+use crewon_model_provider::create_model_provider;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionSource;
 use pretty_assertions::assert_eq;
 use std::future::Future;
 use std::path::Path;
@@ -52,13 +52,13 @@ async fn memories_startup_creates_memory_root() -> anyhow::Result<()> {
     let server = start_mock_server().await;
     let home = Arc::new(TempDir::new()?);
     let memory_root = home.path().join("memories");
-    let test = build_test_codex(&server, home).await?;
+    let test = build_test_crewon(&server, home).await?;
 
     assert!(!memory_root.exists());
     trigger_memories_startup(&test).await;
     wait_for_dir(&memory_root).await?;
 
-    shutdown_test_codex(&test).await?;
+    shutdown_test_crewon(&test).await?;
     Ok(())
 }
 
@@ -66,8 +66,15 @@ async fn memories_startup_creates_memory_root() -> anyhow::Result<()> {
 async fn memories_startup_phase2_tracks_workspace_diff_across_runs() -> anyhow::Result<()> {
     let server = start_mock_server().await;
     let home = Arc::new(TempDir::new()?);
-    let db = init_state_db(&home).await?;
     let memory_root = home.path().join("memories");
+    let test =
+        build_test_crewon_with_memories_config(&server, home.clone(), startup_test_phase2_config())
+            .await?;
+    let db = test
+        .crewon
+        .state_db()
+        .ok_or_else(|| anyhow::anyhow!("state db should be enabled for memory startup test"))?;
+    db.memories().clear_memory_data().await?;
 
     let now = chrono::Utc::now();
     let _thread_a = seed_stage1_output(
@@ -114,8 +121,7 @@ async fn memories_startup_phase2_tracks_workspace_diff_across_runs() -> anyhow::
     )
     .await;
 
-    let test = build_test_codex(&server, home.clone()).await?;
-    trigger_memories_startup(&test).await;
+    run_phase2_for_test(&test).await;
 
     let request = wait_for_single_request(&phase2).await;
     let prompt = phase2_prompt_text(&request);
@@ -146,7 +152,7 @@ async fn memories_startup_phase2_tracks_workspace_diff_across_runs() -> anyhow::
             .all(|summary| !summary.contains("rollout summary A"))
     );
 
-    shutdown_test_codex(&test).await?;
+    shutdown_test_crewon(&test).await?;
     Ok(())
 }
 
@@ -154,7 +160,14 @@ async fn memories_startup_phase2_tracks_workspace_diff_across_runs() -> anyhow::
 async fn memories_startup_phase2_prunes_old_extension_resources() -> anyhow::Result<()> {
     let server = start_mock_server().await;
     let home = Arc::new(TempDir::new()?);
-    let db = init_state_db(&home).await?;
+    let test =
+        build_test_crewon_with_memories_config(&server, home.clone(), startup_test_phase2_config())
+            .await?;
+    let db = test
+        .crewon
+        .state_db()
+        .ok_or_else(|| anyhow::anyhow!("state db should be enabled for memory startup test"))?;
+    db.memories().clear_memory_data().await?;
     let now = chrono::Utc::now();
     let _thread_id = seed_stage1_output(
         db.as_ref(),
@@ -195,8 +208,7 @@ async fn memories_startup_phase2_prunes_old_extension_resources() -> anyhow::Res
     )
     .await;
 
-    let test = build_test_codex(&server, home.clone()).await?;
-    trigger_memories_startup(&test).await;
+    run_phase2_for_test(&test).await;
 
     let request = wait_for_single_request(&phase2).await;
     let prompt = phase2_prompt_text(&request);
@@ -216,7 +228,7 @@ async fn memories_startup_phase2_prunes_old_extension_resources() -> anyhow::Res
         "recent extension resource should be retained"
     );
 
-    shutdown_test_codex(&test).await?;
+    shutdown_test_crewon(&test).await?;
     Ok(())
 }
 
@@ -225,7 +237,14 @@ async fn memories_startup_phase2_prunes_old_extension_resources_without_stage1_i
 -> anyhow::Result<()> {
     let server = start_mock_server().await;
     let home = Arc::new(TempDir::new()?);
-    let db = init_state_db(&home).await?;
+    let test =
+        build_test_crewon_with_memories_config(&server, home.clone(), startup_test_phase2_config())
+            .await?;
+    let db = test
+        .crewon
+        .state_db()
+        .ok_or_else(|| anyhow::anyhow!("state db should be enabled for memory startup test"))?;
+    db.memories().clear_memory_data().await?;
     db.memories()
         .enqueue_global_consolidation(/*input_watermark*/ 1)
         .await?;
@@ -255,8 +274,7 @@ async fn memories_startup_phase2_prunes_old_extension_resources_without_stage1_i
     )
     .await;
 
-    let test = build_test_codex(&server, home.clone()).await?;
-    trigger_memories_startup(&test).await;
+    run_phase2_for_test(&test).await;
 
     let request = wait_for_single_request(&phase2).await;
     let prompt = phase2_prompt_text(&request);
@@ -268,7 +286,7 @@ async fn memories_startup_phase2_prunes_old_extension_resources_without_stage1_i
     wait_for_file_removed(&old_file).await?;
     wait_for_phase2_workspace_reset(&home.path().join("memories")).await?;
 
-    shutdown_test_codex(&test).await?;
+    shutdown_test_crewon(&test).await?;
     Ok(())
 }
 
@@ -277,13 +295,13 @@ async fn memories_startup_phase1_uses_live_thread_service_tier_and_detached_meta
 -> anyhow::Result<()> {
     let server = start_mock_server().await;
     let home = Arc::new(TempDir::new()?);
-    let test = build_test_codex(&server, home).await?;
+    let test = build_test_crewon(&server, home).await?;
     assert_eq!(test.config.service_tier, None);
     reset_git_repository(&test.config.cwd).await?;
 
     core_test_support::submit_thread_settings(
-        &test.codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        &test.crewon,
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             service_tier: Some(Some(ServiceTier::Fast.request_value().to_string())),
             ..Default::default()
         },
@@ -301,7 +319,7 @@ async fn memories_startup_phase1_uses_live_thread_service_tier_and_detached_meta
         Arc::clone(&test.thread_manager),
         test.thread_manager.auth_manager(),
         test.session_configured.thread_id,
-        Arc::clone(&test.codex),
+        Arc::clone(&test.crewon),
         &test.config,
         config_snapshot.session_source.clone(),
     );
@@ -329,7 +347,7 @@ async fn memories_startup_phase1_uses_live_thread_service_tier_and_detached_meta
     context
         .stream_stage_one_prompt(
             &test.config,
-            &codex_core::Prompt::default(),
+            &crewon_core::Prompt::default(),
             &request_context,
         )
         .await?;
@@ -346,7 +364,7 @@ async fn memories_startup_phase1_uses_live_thread_service_tier_and_detached_meta
     assert!(metadata.get("window_id").is_none());
     assert!(metadata.get("workspaces").is_some());
 
-    shutdown_test_codex(&test).await?;
+    shutdown_test_crewon(&test).await?;
     Ok(())
 }
 
@@ -421,13 +439,13 @@ async fn run_memory_phase_one_model_request_test(
     home: Arc<TempDir>,
     memories: MemoriesConfig,
 ) -> anyhow::Result<ResponsesRequest> {
-    let test = build_test_codex_with_memories_config(server, Arc::clone(&home), memories).await?;
+    let test = build_test_crewon_with_memories_config(server, Arc::clone(&home), memories).await?;
     let provider = Arc::new(MockMemoryModelProvider::new(
         test.config.model_provider.clone(),
         Some(test.thread_manager.auth_manager()),
     ));
     let db = test
-        .codex
+        .crewon
         .state_db()
         .ok_or_else(|| anyhow::anyhow!("state db should be enabled for memory startup test"))?;
     seed_stage1_candidate(
@@ -453,7 +471,7 @@ async fn run_memory_phase_one_model_request_test(
     let (context, config) = memory_startup_context_with_provider(&test, provider).await;
     phase1::run(context, config).await;
     let request = wait_for_single_request(&response).await;
-    shutdown_test_codex(&test).await?;
+    shutdown_test_crewon(&test).await?;
     Ok(request)
 }
 
@@ -462,15 +480,16 @@ async fn run_memory_phase_two_model_request_test(
     home: Arc<TempDir>,
     memories: MemoriesConfig,
 ) -> anyhow::Result<ResponsesRequest> {
-    let test = build_test_codex_with_memories_config(server, home.clone(), memories).await?;
+    let test = build_test_crewon_with_memories_config(server, home.clone(), memories).await?;
     let provider = Arc::new(MockMemoryModelProvider::new(
         test.config.model_provider.clone(),
         Some(test.thread_manager.auth_manager()),
     ));
     let db = test
-        .codex
+        .crewon
         .state_db()
         .ok_or_else(|| anyhow::anyhow!("state db should be enabled for memory startup test"))?;
+    db.memories().clear_memory_data().await?;
     seed_stage1_output(
         db.as_ref(),
         home.path(),
@@ -498,7 +517,7 @@ async fn run_memory_phase_two_model_request_test(
     phase2::run(context, config).await;
     let request = wait_for_single_request(&response).await;
     wait_for_phase2_workspace_reset(&home.path().join("memories")).await?;
-    shutdown_test_codex(&test).await?;
+    shutdown_test_crewon(&test).await?;
     Ok(request)
 }
 
@@ -510,19 +529,26 @@ fn startup_test_memories_config() -> MemoriesConfig {
     }
 }
 
-async fn build_test_codex(
-    server: &wiremock::MockServer,
-    home: Arc<TempDir>,
-) -> anyhow::Result<TestCodex> {
-    build_test_codex_with_memories_config(server, home, startup_test_memories_config()).await
+fn startup_test_phase2_config() -> MemoriesConfig {
+    MemoriesConfig {
+        max_rollouts_per_startup: 0,
+        ..startup_test_memories_config()
+    }
 }
 
-async fn build_test_codex_with_memories_config(
+async fn build_test_crewon(
+    server: &wiremock::MockServer,
+    home: Arc<TempDir>,
+) -> anyhow::Result<TestCrewon> {
+    build_test_crewon_with_memories_config(server, home, startup_test_memories_config()).await
+}
+
+async fn build_test_crewon_with_memories_config(
     server: &wiremock::MockServer,
     home: Arc<TempDir>,
     memories: MemoriesConfig,
-) -> anyhow::Result<TestCodex> {
-    test_codex()
+) -> anyhow::Result<TestCrewon> {
+    test_crewon()
         .with_home(home)
         .with_config(move |config| {
             config
@@ -535,15 +561,8 @@ async fn build_test_codex_with_memories_config(
         .await
 }
 
-async fn init_state_db(home: &Arc<TempDir>) -> anyhow::Result<Arc<codex_state::StateRuntime>> {
-    let db =
-        codex_state::StateRuntime::init(home.path().to_path_buf(), "test-provider".into()).await?;
-    db.mark_backfill_complete(/*last_watermark*/ None).await?;
-    Ok(db)
-}
-
-async fn trigger_memories_startup(test: &TestCodex) {
-    let config_snapshot = test.codex.config_snapshot().await;
+async fn trigger_memories_startup(test: &TestCrewon) {
+    let config_snapshot = test.crewon.config_snapshot().await;
     let mut config = test.config.clone();
     config
         .features
@@ -553,17 +572,17 @@ async fn trigger_memories_startup(test: &TestCodex) {
         Arc::clone(&test.thread_manager),
         test.thread_manager.auth_manager(),
         test.session_configured.thread_id,
-        Arc::clone(&test.codex),
+        Arc::clone(&test.crewon),
         Arc::new(config),
         &config_snapshot.session_source,
     );
 }
 
 async fn memory_startup_context_with_provider(
-    test: &TestCodex,
+    test: &TestCrewon,
     provider: SharedModelProvider,
-) -> (Arc<MemoryStartupContext>, Arc<codex_core::config::Config>) {
-    let config_snapshot = test.codex.config_snapshot().await;
+) -> (Arc<MemoryStartupContext>, Arc<crewon_core::config::Config>) {
+    let config_snapshot = test.crewon.config_snapshot().await;
     let mut config = test.config.clone();
     config
         .features
@@ -574,13 +593,22 @@ async fn memory_startup_context_with_provider(
         Arc::clone(&test.thread_manager),
         test.thread_manager.auth_manager(),
         test.session_configured.thread_id,
-        Arc::clone(&test.codex),
+        Arc::clone(&test.crewon),
         config.as_ref(),
         config_snapshot.session_source,
         provider,
     ));
 
     (context, config)
+}
+
+async fn run_phase2_for_test(test: &TestCrewon) {
+    let provider = Arc::new(MockMemoryModelProvider::new(
+        test.config.model_provider.clone(),
+        Some(test.thread_manager.auth_manager()),
+    ));
+    let (context, config) = memory_startup_context_with_provider(test, provider).await;
+    phase2::run(context, config).await;
 }
 
 const MOCK_PROVIDER_PHASE_ONE_MODEL: &str = "mock.phase-one";
@@ -618,7 +646,7 @@ impl ModelProvider for MockMemoryModelProvider {
 
     fn auth<'life0, 'async_trait>(
         &'life0 self,
-    ) -> Pin<Box<dyn Future<Output = Option<CodexAuth>> + Send + 'async_trait>>
+    ) -> Pin<Box<dyn Future<Output = Option<CrewonAuth>> + Send + 'async_trait>>
     where
         'life0: 'async_trait,
         Self: 'async_trait,
@@ -635,14 +663,14 @@ impl ModelProvider for MockMemoryModelProvider {
         &self,
         codex_home: PathBuf,
         config_model_catalog: Option<ModelsResponse>,
-    ) -> codex_models_manager::manager::SharedModelsManager {
+    ) -> crewon_models_manager::manager::SharedModelsManager {
         self.delegate
             .models_manager(codex_home, config_model_catalog)
     }
 }
 
 async fn seed_stage1_output(
-    db: &codex_state::StateRuntime,
+    db: &crewon_state::StateRuntime,
     codex_home: &Path,
     updated_at: chrono::DateTime<chrono::Utc>,
     raw_memory: &str,
@@ -650,17 +678,18 @@ async fn seed_stage1_output(
     rollout_slug: &str,
 ) -> anyhow::Result<ThreadId> {
     let thread_id = ThreadId::new();
-    let mut metadata_builder = codex_state::ThreadMetadataBuilder::new(
+    let mut metadata_builder = crewon_state::ThreadMetadataBuilder::new(
         thread_id,
         codex_home.join(format!("rollout-{thread_id}.jsonl")),
         updated_at,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     metadata_builder.cwd = codex_home.join(format!("workspace-{rollout_slug}"));
     metadata_builder.model_provider = Some("test-provider".to_string());
     metadata_builder.git_branch = Some(format!("branch-{rollout_slug}"));
     let metadata = metadata_builder.build("test-provider");
     db.upsert_thread(&metadata).await?;
+    db.set_thread_memory_mode(thread_id, "enabled").await?;
 
     seed_stage1_output_for_existing_thread(
         db,
@@ -676,7 +705,7 @@ async fn seed_stage1_output(
 }
 
 async fn seed_stage1_candidate(
-    db: &codex_state::StateRuntime,
+    db: &crewon_state::StateRuntime,
     codex_home: &Path,
     updated_at: chrono::DateTime<chrono::Utc>,
     rollout_slug: &str,
@@ -697,11 +726,11 @@ async fn seed_stage1_candidate(
     let jsonl = serde_json::to_string(&line)?;
     tokio::fs::write(&rollout_path, format!("{jsonl}\n")).await?;
 
-    let mut metadata_builder = codex_state::ThreadMetadataBuilder::new(
+    let mut metadata_builder = crewon_state::ThreadMetadataBuilder::new(
         thread_id,
         rollout_path,
         updated_at,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     metadata_builder.cwd = codex_home.join(format!("workspace-{rollout_slug}"));
     metadata_builder.model_provider = Some("test-provider".to_string());
@@ -766,12 +795,12 @@ async fn wait_for_request(mock: &ResponseMock, expected_count: usize) -> Vec<Res
 }
 
 async fn wait_for_service_tier(
-    test: &TestCodex,
+    test: &TestCrewon,
     expected_service_tier: Option<String>,
-) -> anyhow::Result<codex_core::ThreadConfigSnapshot> {
+) -> anyhow::Result<crewon_core::ThreadConfigSnapshot> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        let config_snapshot = test.codex.config_snapshot().await;
+        let config_snapshot = test.crewon.config_snapshot().await;
         if config_snapshot.service_tier == expected_service_tier {
             return Ok(config_snapshot);
         }
@@ -810,7 +839,7 @@ async fn wait_for_phase2_workspace_reset(memory_root: &Path) -> anyhow::Result<(
 }
 
 async fn seed_stage1_output_for_existing_thread(
-    db: &codex_state::StateRuntime,
+    db: &crewon_state::StateRuntime,
     thread_id: ThreadId,
     updated_at: i64,
     raw_memory: &str,
@@ -826,7 +855,7 @@ async fn seed_stage1_output_for_existing_thread(
         )
         .await?;
     let ownership_token = match claim {
-        codex_state::Stage1JobClaimOutcome::Claimed { ownership_token } => ownership_token,
+        crewon_state::Stage1JobClaimOutcome::Claimed { ownership_token } => ownership_token,
         other => panic!("unexpected stage-1 claim outcome: {other:?}"),
     };
 
@@ -857,8 +886,8 @@ async fn read_rollout_summary_bodies(memory_root: &Path) -> anyhow::Result<Vec<S
     Ok(summaries)
 }
 
-async fn shutdown_test_codex(test: &TestCodex) -> anyhow::Result<()> {
-    test.codex.submit(Op::Shutdown {}).await?;
-    wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::ShutdownComplete)).await;
+async fn shutdown_test_crewon(test: &TestCrewon) -> anyhow::Result<()> {
+    test.crewon.submit(Op::Shutdown {}).await?;
+    wait_for_event(&test.crewon, |ev| matches!(ev, EventMsg::ShutdownComplete)).await;
     Ok(())
 }

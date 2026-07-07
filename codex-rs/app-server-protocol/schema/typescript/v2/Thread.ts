@@ -54,11 +54,11 @@ path: string | null,
  */
 cwd: AbsolutePathBuf,
 /**
- * Version of the CLI that created the thread.
+ * Version of the client/runtime that created the thread.
  */
-cliVersion: string,
+clientVersion: string,
 /**
- * Origin of the thread (CLI, VSCode, codex exec, codex app-server, etc.).
+ * Origin of the thread (legacy CLI, VSCode, Crewon app-server, etc.).
  */
 source: SessionSource,
 /**

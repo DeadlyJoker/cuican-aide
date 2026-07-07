@@ -27,12 +27,12 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::Weak;
 
-use codex_exec_server::Environment;
-use codex_network_proxy::NetworkProxy;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_tools::UnifiedExecShellMode;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_output_truncation::TruncationPolicy;
+use crewon_exec_server::Environment;
+use crewon_network_proxy::NetworkProxy;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_tools::UnifiedExecShellMode;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_output_truncation::TruncationPolicy;
 use rand::Rng;
 use rand::rng;
 use tokio::sync::Mutex;

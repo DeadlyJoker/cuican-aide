@@ -7,8 +7,8 @@ use crate::FeaturesToml;
 use crate::Stage;
 use crate::feature_for_key;
 use crate::unstable_features_warning_event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::WarningEvent;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::WarningEvent;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use toml::Table;
@@ -352,9 +352,18 @@ fn collab_is_legacy_alias_for_multi_agent() {
 }
 
 #[test]
-fn codex_hooks_is_legacy_alias_for_hooks() {
-    assert_eq!(feature_for_key("hooks"), Some(Feature::CodexHooks));
-    assert_eq!(feature_for_key("codex_hooks"), Some(Feature::CodexHooks));
+fn legacy_codex_hooks_is_alias_for_hooks() {
+    assert_eq!(feature_for_key("hooks"), Some(Feature::Hooks));
+    assert_eq!(feature_for_key("codex_hooks"), Some(Feature::Hooks));
+}
+
+#[test]
+fn legacy_codex_git_commit_is_alias_for_git_commit() {
+    assert_eq!(feature_for_key("git_commit"), Some(Feature::GitCommit));
+    assert_eq!(
+        feature_for_key("codex_git_commit"),
+        Some(Feature::GitCommit)
+    );
 }
 
 #[test]

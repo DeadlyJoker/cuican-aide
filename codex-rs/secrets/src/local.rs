@@ -19,7 +19,7 @@ use anyhow::Context;
 use anyhow::Result;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use codex_keyring_store::KeyringStore;
+use crewon_keyring_store::KeyringStore;
 use rand::TryRngCore;
 use rand::rngs::OsRng;
 use serde::Deserialize;
@@ -53,14 +53,14 @@ impl SecretsFile {
 
 #[derive(Debug, Clone)]
 pub struct LocalSecretsBackend {
-    codex_home: PathBuf,
+    crewon_home: PathBuf,
     keyring_store: Arc<dyn KeyringStore>,
 }
 
 impl LocalSecretsBackend {
-    pub fn new(codex_home: PathBuf, keyring_store: Arc<dyn KeyringStore>) -> Self {
+    pub fn new(crewon_home: PathBuf, keyring_store: Arc<dyn KeyringStore>) -> Self {
         Self {
-            codex_home,
+            crewon_home,
             keyring_store,
         }
     }
@@ -108,7 +108,7 @@ impl LocalSecretsBackend {
     }
 
     fn secrets_dir(&self) -> PathBuf {
-        self.codex_home.join("secrets")
+        self.crewon_home.join("secrets")
     }
 
     fn secrets_path(&self) -> PathBuf {
@@ -157,7 +157,7 @@ impl LocalSecretsBackend {
     }
 
     fn load_or_create_passphrase(&self) -> Result<SecretString> {
-        let account = compute_keyring_account(&self.codex_home);
+        let account = compute_keyring_account(&self.crewon_home);
         let loaded = self
             .keyring_store
             .load(keyring_service(), &account)
@@ -332,15 +332,15 @@ fn parse_canonical_key(canonical_key: &str) -> Option<SecretListEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_keyring_store::tests::MockKeyringStore;
+    use crewon_keyring_store::tests::MockKeyringStore;
     use keyring::Error as KeyringError;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn load_file_rejects_newer_schema_versions() -> Result<()> {
-        let codex_home = tempfile::tempdir().expect("tempdir");
+        let crewon_home = tempfile::tempdir().expect("tempdir");
         let keyring = Arc::new(MockKeyringStore::default());
-        let backend = LocalSecretsBackend::new(codex_home.path().to_path_buf(), keyring);
+        let backend = LocalSecretsBackend::new(crewon_home.path().to_path_buf(), keyring);
 
         let file = SecretsFile {
             version: SECRETS_VERSION + 1,
@@ -360,15 +360,15 @@ mod tests {
 
     #[test]
     fn set_fails_when_keyring_is_unavailable() -> Result<()> {
-        let codex_home = tempfile::tempdir().expect("tempdir");
+        let crewon_home = tempfile::tempdir().expect("tempdir");
         let keyring = Arc::new(MockKeyringStore::default());
-        let account = compute_keyring_account(codex_home.path());
+        let account = compute_keyring_account(crewon_home.path());
         keyring.set_error(
             &account,
             KeyringError::Invalid("error".into(), "load".into()),
         );
 
-        let backend = LocalSecretsBackend::new(codex_home.path().to_path_buf(), keyring);
+        let backend = LocalSecretsBackend::new(crewon_home.path().to_path_buf(), keyring);
         let scope = SecretScope::Global;
         let name = SecretName::new("TEST_SECRET")?;
         let error = backend
@@ -385,9 +385,9 @@ mod tests {
 
     #[test]
     fn save_file_does_not_leave_temp_files() -> Result<()> {
-        let codex_home = tempfile::tempdir().expect("tempdir");
+        let crewon_home = tempfile::tempdir().expect("tempdir");
         let keyring = Arc::new(MockKeyringStore::default());
-        let backend = LocalSecretsBackend::new(codex_home.path().to_path_buf(), keyring);
+        let backend = LocalSecretsBackend::new(crewon_home.path().to_path_buf(), keyring);
 
         let scope = SecretScope::Global;
         let name = SecretName::new("TEST_SECRET")?;

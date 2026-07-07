@@ -1,26 +1,26 @@
 use clap::Parser;
-use codex_app_server::AppServerRuntimeOptions;
-use codex_app_server::AppServerTransport;
-use codex_app_server::AppServerWebsocketAuthArgs;
-use codex_app_server::PluginStartupTasks;
-use codex_app_server::run_main_with_transport_options;
-use codex_arg0::Arg0DispatchPaths;
-use codex_arg0::arg0_dispatch_or_else;
-use codex_config::LoaderOverrides;
-use codex_protocol::protocol::SessionSource;
-use codex_utils_cli::CliConfigOverrides;
+use crewon_app_server::AppServerRuntimeOptions;
+use crewon_app_server::AppServerTransport;
+use crewon_app_server::AppServerWebsocketAuthArgs;
+use crewon_app_server::PluginStartupTasks;
+use crewon_app_server::run_main_with_transport_options;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_arg0::arg0_dispatch_or_else;
+use crewon_config::LoaderOverrides;
+use crewon_protocol::protocol::SessionSource;
+use crewon_utils_options::ConfigOverrides;
 use std::path::PathBuf;
 
 // Debug-only test hook: lets integration tests point the server at a temporary
 // managed config file without writing to /etc.
-const MANAGED_CONFIG_PATH_ENV_VAR: &str = "CODEX_APP_SERVER_MANAGED_CONFIG_PATH";
-const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CODEX_APP_SERVER_DISABLE_MANAGED_CONFIG";
+const MANAGED_CONFIG_PATH_ENV_VAR: &str = "CREWON_APP_SERVER_MANAGED_CONFIG_PATH";
+const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CREWON_APP_SERVER_DISABLE_MANAGED_CONFIG";
 
 #[derive(Debug, Parser)]
 #[command(version)]
 struct AppServerArgs {
     #[command(flatten)]
-    config_overrides: CliConfigOverrides,
+    config_overrides: ConfigOverrides,
 
     /// Transport endpoint URL. Supported values: `stdio://` (default),
     /// `unix://`, `unix://PATH`, `ws://IP:PORT`, `off`.
@@ -35,7 +35,7 @@ struct AppServerArgs {
     #[arg(
         long = "session-source",
         value_name = "SOURCE",
-        default_value = "vscode",
+        default_value = "app-server",
         value_parser = SessionSource::from_startup_arg
     )]
     session_source: SessionSource,

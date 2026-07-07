@@ -1,12 +1,12 @@
 use crate::manifest::PluginManifestInterface;
 use crate::manifest::load_plugin_manifest;
-use codex_app_server_protocol::PluginAuthPolicy;
-use codex_app_server_protocol::PluginInstallPolicy;
-use codex_git_utils::get_git_repo_root;
-use codex_plugin::PluginId;
-use codex_plugin::PluginIdError;
-use codex_protocol::protocol::Product;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::PluginAuthPolicy;
+use crewon_app_server_protocol::PluginInstallPolicy;
+use crewon_git_utils::get_git_repo_root;
+use crewon_plugin::PluginId;
+use crewon_plugin::PluginIdError;
+use crewon_protocol::protocol::Product;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use std::collections::HashSet;
@@ -19,7 +19,9 @@ use tracing::warn;
 
 const MARKETPLACE_MANIFEST_RELATIVE_PATHS: &[&str] = &[
     ".agents/plugins/marketplace.json",
+    ".crewon-plugin/marketplace.json",
     ".claude-plugin/marketplace.json",
+    ".codex-plugin/marketplace.json",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,7 +85,7 @@ pub enum MarketplacePluginSource {
 pub struct MarketplacePluginPolicy {
     pub installation: MarketplacePluginInstallPolicy,
     pub authentication: MarketplacePluginAuthPolicy,
-    // TODO: Surface or enforce product gating at the Codex/plugin consumer boundary instead of
+    // TODO: Surface or enforce product gating at the Crewon/plugin consumer boundary instead of
     // only carrying it through core marketplace metadata.
     pub products: Option<Vec<Product>>,
 }

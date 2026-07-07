@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "clientUserMessageId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "config": true,
+    "cwd": {
+      "type": "string"
+    },
+    "locale": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "config",
+    "cwd",
+    "runId"
+  ],
+  "title": "OfficeVerificationDispatchNextParams",
+  "type": "object"
+}

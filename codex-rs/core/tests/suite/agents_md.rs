@@ -1,12 +1,5 @@
 use anyhow::Result;
 use anyhow::anyhow;
-use codex_core::ForkSnapshot;
-use codex_exec_server::CreateDirectoryOptions;
-use codex_features::Feature;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathBufExt;
 use core_test_support::create_directory_symlink;
 use core_test_support::load_default_config_for_test;
@@ -17,10 +10,17 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodexBuilder;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewonBuilder;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
+use crewon_core::ForkSnapshot;
+use crewon_exec_server::CreateDirectoryOptions;
+use crewon_features::Feature;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::sync::Arc;
@@ -41,7 +41,7 @@ const SPAWN_FRESH_PARENT_PROMPT: &str = "spawn a child with fresh context";
 const SPAWN_PARENT_PROMPT: &str = "spawn a child with the parent context";
 const SPAWN_SEED_PROMPT: &str = "seed parent history";
 
-async fn agents_instructions(mut builder: TestCodexBuilder) -> Result<String> {
+async fn agents_instructions(mut builder: TestCrewonBuilder) -> Result<String> {
     let server = start_mock_server().await;
     let resp_mock = mount_sse_once(
         &server,
@@ -109,7 +109,7 @@ fn request_body_contains(request: &wiremock::Request, text: &str) -> bool {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn agents_override_is_preferred_over_agents_md() -> Result<()> {
     let instructions =
-        agents_instructions(test_codex().with_workspace_setup(|cwd, fs| async move {
+        agents_instructions(test_crewon().with_workspace_setup(|cwd, fs| async move {
             let agents_md = cwd.join("AGENTS.md");
             let override_md = cwd.join("AGENTS.override.md");
             fs.write_file(&agents_md, b"base doc".to_vec(), /*sandbox*/ None)
@@ -139,7 +139,7 @@ async fn agents_override_is_preferred_over_agents_md() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn configured_fallback_is_used_when_agents_candidate_is_directory() -> Result<()> {
     let instructions = agents_instructions(
-        test_codex()
+        test_crewon()
             .with_config(|config| {
                 config.project_doc_fallback_filenames = vec!["WORKFLOW.md".to_string()];
             })
@@ -170,7 +170,7 @@ async fn configured_fallback_is_used_when_agents_candidate_is_directory() -> Res
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn agents_docs_are_concatenated_from_project_root_to_cwd() -> Result<()> {
     let instructions = agents_instructions(
-        test_codex()
+        test_crewon()
             .with_config(|config| {
                 config.cwd = config.cwd.join("nested/workspace");
             })
@@ -228,7 +228,7 @@ async fn symlinked_cwd_uses_logical_parent_for_agents_discovery() -> Result<()> 
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_config(|config| {
             config.cwd = config.cwd.join("logical-repo/workspace");
         })
@@ -278,7 +278,7 @@ async fn symlinked_cwd_uses_logical_parent_for_agents_discovery() -> Result<()> 
         .expect("symlink should have a parent");
 
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         vec![
             logical_root.join("AGENTS.md"),
             test.config.cwd.join("AGENTS.md")
@@ -311,7 +311,7 @@ async fn selected_environment_sources_match_model_visible_instructions() -> Resu
     let global_agents = home.path().join("AGENTS.md");
     std::fs::write(&global_agents, "global doc")?;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(home)
         .with_workspace_setup(|cwd, fs| async move {
             fs.write_file(
@@ -327,7 +327,7 @@ async fn selected_environment_sources_match_model_visible_instructions() -> Resu
     let global_agents = global_agents.abs();
 
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         vec![global_agents, project_agents]
     );
 
@@ -364,7 +364,7 @@ async fn fresh_thread_composes_global_before_project_and_reports_sources() -> Re
     let global_source =
         write_global_file(home.as_ref(), GLOBAL_AGENTS_FILENAME, GLOBAL_INSTRUCTIONS)?;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(Arc::clone(&home))
         .with_workspace_setup(|cwd, fs| async move {
             fs.write_file(
@@ -380,7 +380,7 @@ async fn fresh_thread_composes_global_before_project_and_reports_sources() -> Re
     let creation_sources = vec![global_source.clone(), project_source.clone()];
 
     // Confirm the thread records both creation-time sources in composition order.
-    assert_eq!(test.codex.instruction_sources().await, creation_sources);
+    assert_eq!(test.crewon.instruction_sources().await, creation_sources);
 
     // Materialize the initial snapshot, then rewrite both selected files in place before another
     // ordinary turn.
@@ -436,7 +436,7 @@ async fn fresh_thread_composes_global_before_project_and_reports_sources() -> Re
         "expected rendered instructions to contain {PROJECT_SEPARATOR:?}; observed: {rendered}"
     );
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         creation_sources,
         "ordinary turns retain the creation-time source list"
     );
@@ -471,9 +471,9 @@ async fn global_loading_warning_surfaces_during_thread_creation() -> Result<()> 
     )?;
 
     // Create the thread, capture its load warning, and submit one turn for rendered output.
-    let mut builder = test_codex().with_home(home);
+    let mut builder = test_crewon().with_home(home);
     let test = builder.build(&server).await?;
-    let warning = wait_for_event_match(&test.codex, |event| match event {
+    let warning = wait_for_event_match(&test.crewon, |event| match event {
         EventMsg::Warning(warning)
             if warning
                 .message
@@ -488,7 +488,10 @@ async fn global_loading_warning_surfaces_during_thread_creation() -> Result<()> 
         .await?;
 
     // Assert the source is reported, the warning is specific, and rendering is lossily decoded.
-    assert_eq!(test.codex.instruction_sources().await, vec![source.clone()]);
+    assert_eq!(
+        test.crewon.instruction_sources().await,
+        vec![source.clone()]
+    );
     assert!(
         warning.contains("invalid UTF-8"),
         "expected warning to contain \"invalid UTF-8\"; observed: {warning}"
@@ -529,12 +532,12 @@ async fn cold_resume_replays_rendered_instructions_but_reports_current_config_so
     )?;
 
     // Create the initial thread and persist its creation-time instruction snapshot.
-    let mut initial_builder = test_codex().with_home(Arc::clone(&home));
+    let mut initial_builder = test_crewon().with_home(Arc::clone(&home));
     let initial = initial_builder.build(&server).await?;
 
     // Assert the pre-resume thread reports the source used to create its snapshot.
     assert_eq!(
-        initial.codex.instruction_sources().await,
+        initial.crewon.instruction_sources().await,
         vec![old_source.clone()],
         "initial thread reports the creation-time global source"
     );
@@ -544,8 +547,8 @@ async fn cold_resume_replays_rendered_instructions_but_reports_current_config_so
         .rollout_path
         .clone()
         .expect("rollout path");
-    initial.codex.submit(Op::Shutdown).await?;
-    wait_for_event(&initial.codex, |event| {
+    initial.crewon.submit(Op::Shutdown).await?;
+    wait_for_event(&initial.crewon, |event| {
         matches!(event, EventMsg::ShutdownComplete)
     })
     .await;
@@ -557,14 +560,14 @@ async fn cold_resume_replays_rendered_instructions_but_reports_current_config_so
         NEW_GLOBAL_INSTRUCTIONS,
     )?;
     assert_ne!(old_source, new_source);
-    let mut resume_builder = test_codex().with_home(Arc::clone(&home));
+    let mut resume_builder = test_crewon().with_home(Arc::clone(&home));
     let resumed = resume_builder
         .resume(&server, Arc::clone(&home), rollout_path)
         .await?;
 
     // Assert the API reports the new source while model history replays the old structured prefix.
     assert_eq!(
-        resumed.codex.instruction_sources().await,
+        resumed.crewon.instruction_sources().await,
         vec![new_source],
         "resume reports sources from the newly loaded config"
     );
@@ -614,19 +617,19 @@ async fn fork_replays_rendered_instructions_from_shared_history() -> Result<()> 
     )?;
 
     // Create the parent and persist its creation-time instruction snapshot.
-    let mut builder = test_codex().with_home(Arc::clone(&home));
+    let mut builder = test_crewon().with_home(Arc::clone(&home));
     let parent = builder.build(&server).await?;
 
     // Assert the parent reports the source used to create its snapshot.
     assert_eq!(
-        parent.codex.instruction_sources().await,
+        parent.crewon.instruction_sources().await,
         vec![source.clone()],
         "parent reports the creation-time global source"
     );
     parent.submit_turn("persist instructions").await?;
-    parent.codex.ensure_rollout_materialized().await;
-    parent.codex.flush_rollout().await?;
-    let rollout_path = parent.codex.rollout_path().expect("rollout path");
+    parent.crewon.ensure_rollout_materialized().await;
+    parent.crewon.flush_rollout().await?;
+    let rollout_path = parent.crewon.rollout_path().expect("rollout path");
 
     // Add a preferred override source, then fork with freshly loaded configuration.
     let new_source = write_global_file(
@@ -775,7 +778,7 @@ async fn run_subagent_global_instruction_case(fork_context: bool) -> Result<()> 
         GLOBAL_AGENTS_FILENAME,
         OLD_GLOBAL_INSTRUCTIONS,
     )?;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(Arc::clone(&home))
         .with_config(|config| {
             let _ = config.features.enable(Feature::Collab);
@@ -785,7 +788,7 @@ async fn run_subagent_global_instruction_case(fork_context: bool) -> Result<()> 
 
     // Assert the parent reports the creation-time source before spawning.
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         vec![source.clone()],
         "parent reports the creation-time global source before spawning"
     );
@@ -829,7 +832,7 @@ async fn run_subagent_global_instruction_case(fork_context: bool) -> Result<()> 
     assert_single_instruction_fragment(&spawn_request, &expected_fragment);
     assert_single_instruction_fragment(&child_request, &expected_fragment);
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         vec![source.clone()],
         "running parent retains the creation-time global source after spawning"
     );

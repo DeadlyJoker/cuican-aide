@@ -6,12 +6,12 @@ pub mod model_info;
 pub mod model_presets;
 pub mod test_support;
 
-pub use codex_app_server_protocol::AuthMode;
 pub use config::ModelsManagerConfig;
+pub use crewon_app_server_protocol::AuthMode;
 
-/// Load the bundled model catalog shipped with `codex-models-manager`.
+/// Load the bundled model catalog shipped with `crewon-models-manager`.
 pub fn bundled_models_response()
--> std::result::Result<codex_protocol::openai_models::ModelsResponse, serde_json::Error> {
+-> std::result::Result<crewon_protocol::openai_models::ModelsResponse, serde_json::Error> {
     serde_json::from_str(include_str!("../models.json"))
 }
 

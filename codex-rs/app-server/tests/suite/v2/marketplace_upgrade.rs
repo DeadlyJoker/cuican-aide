@@ -6,13 +6,13 @@ use anyhow::Context;
 use anyhow::Result;
 use app_test_support::TestAppServer;
 use app_test_support::to_response;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::MarketplaceUpgradeParams;
-use codex_app_server_protocol::MarketplaceUpgradeResponse;
-use codex_app_server_protocol::RequestId;
-use codex_config::MarketplaceConfigUpdate;
-use codex_config::record_user_marketplace;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::MarketplaceUpgradeParams;
+use crewon_app_server_protocol::MarketplaceUpgradeResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_config::MarketplaceConfigUpdate;
+use crewon_config::record_user_marketplace;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::time::timeout;
@@ -48,8 +48,8 @@ fn write_marketplace_files(root: &Path, marketplace_name: &str, marker: &str) ->
 
 fn init_marketplace_repo(root: &Path, marketplace_name: &str, marker: &str) -> Result<String> {
     run_git(root, &["init"])?;
-    run_git(root, &["config", "user.email", "codex@example.com"])?;
-    run_git(root, &["config", "user.name", "Codex Tests"])?;
+    run_git(root, &["config", "user.email", "crewon@example.com"])?;
+    run_git(root, &["config", "user.name", "Crewon Tests"])?;
     write_marketplace_files(root, marketplace_name, marker)?;
     run_git(root, &["add", "."])?;
     run_git(root, &["commit", "-m", "initial marketplace"])?;

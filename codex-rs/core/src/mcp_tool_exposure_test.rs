@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use codex_features::Feature;
-use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
-use codex_mcp::ToolInfo;
-use codex_tools::ToolName;
+use crewon_features::Feature;
+use crewon_mcp::CREWON_APPS_MCP_SERVER_NAME;
+use crewon_mcp::ToolInfo;
+use crewon_tools::ToolName;
 use pretty_assertions::assert_eq;
 use rmcp::model::JsonObject;
 use rmcp::model::Meta;
@@ -77,7 +77,7 @@ fn numbered_mcp_tools(count: usize) -> Vec<ToolInfo> {
 fn tool_names(tools: &[ToolInfo]) -> HashSet<ToolName> {
     tools
         .iter()
-        .map(codex_mcp::ToolInfo::canonical_tool_name)
+        .map(crewon_mcp::ToolInfo::canonical_tool_name)
         .collect()
 }
 
@@ -97,7 +97,11 @@ async fn directly_exposes_small_effective_tool_sets() {
     let mcp_tools = numbered_mcp_tools(DIRECT_MCP_TOOL_EXPOSURE_THRESHOLD - 1);
 
     let exposure = build_mcp_tool_exposure(
-        &mcp_tools, /*connectors*/ None, &config, /*search_tool_enabled*/ true,
+        &mcp_tools,
+        /*connectors*/ None,
+        &config,
+        /*search_tool_enabled*/ true,
+        &HashSet::new(),
     );
 
     assert_eq!(tool_names(&exposure.direct_tools), tool_names(&mcp_tools));
@@ -139,9 +143,9 @@ async fn excludes_tools_hidden_from_model_exposure() {
     );
     let visible_app_tool = with_visibility(
         make_mcp_tool(
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             "calendar_read",
-            "mcp__codex_apps__calendar",
+            "mcp__crewon_apps__calendar",
             "read",
             Some("calendar"),
             Some("Calendar"),
@@ -150,9 +154,9 @@ async fn excludes_tools_hidden_from_model_exposure() {
     );
     let hidden_app_tool = with_visibility(
         make_mcp_tool(
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             "calendar_open",
-            "mcp__codex_apps__calendar",
+            "mcp__crewon_apps__calendar",
             "open",
             Some("calendar"),
             Some("Calendar"),
@@ -173,6 +177,7 @@ async fn excludes_tools_hidden_from_model_exposure() {
         Some(connectors.as_slice()),
         &config,
         /*search_tool_enabled*/ false,
+        &HashSet::new(),
     );
 
     assert_eq!(
@@ -188,7 +193,11 @@ async fn searches_large_effective_tool_sets() {
     let mcp_tools = numbered_mcp_tools(DIRECT_MCP_TOOL_EXPOSURE_THRESHOLD);
 
     let exposure = build_mcp_tool_exposure(
-        &mcp_tools, /*connectors*/ None, &config, /*search_tool_enabled*/ true,
+        &mcp_tools,
+        /*connectors*/ None,
+        &config,
+        /*search_tool_enabled*/ true,
+        &HashSet::new(),
     );
 
     assert!(exposure.direct_tools.is_empty());
@@ -216,9 +225,9 @@ async fn always_defer_feature_defers_apps_too() {
             /*connector_name*/ None,
         ),
         make_mcp_tool(
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             "calendar_create_event",
-            "mcp__codex_apps__calendar",
+            "mcp__crewon_apps__calendar",
             "_create_event",
             Some("calendar"),
             Some("Calendar"),
@@ -231,6 +240,7 @@ async fn always_defer_feature_defers_apps_too() {
         Some(connectors.as_slice()),
         &config,
         /*search_tool_enabled*/ true,
+        &HashSet::new(),
     );
 
     assert!(exposure.direct_tools.is_empty());
@@ -241,7 +251,50 @@ async fn always_defer_feature_defers_apps_too() {
     let deferred_tool_names = tool_names(deferred_tools);
     assert!(deferred_tool_names.contains(&ToolName::namespaced("mcp__rmcp", "tool")));
     assert!(deferred_tool_names.contains(&ToolName::namespaced(
-        "mcp__codex_apps__calendar",
+        "mcp__crewon_apps__calendar",
         "_create_event"
     )));
+}
+
+#[tokio::test]
+async fn explicit_mcp_server_mentions_promote_matching_deferred_tools() {
+    let mut config = test_config().await;
+    config
+        .features
+        .enable(Feature::ToolSearchAlwaysDeferMcpTools)
+        .expect("test config should allow feature update");
+    let mentioned_tool = make_mcp_tool(
+        "mentioned",
+        "search",
+        "mcp__mentioned",
+        "search",
+        /*connector_id*/ None,
+        /*connector_name*/ None,
+    );
+    let other_tool = make_mcp_tool(
+        "other",
+        "lookup",
+        "mcp__other",
+        "lookup",
+        /*connector_id*/ None,
+        /*connector_name*/ None,
+    );
+
+    let exposure = build_mcp_tool_exposure(
+        &[mentioned_tool.clone(), other_tool.clone()],
+        /*connectors*/ None,
+        &config,
+        /*search_tool_enabled*/ true,
+        &HashSet::from(["mentioned".to_string()]),
+    );
+
+    assert_eq!(
+        tool_names(&exposure.direct_tools),
+        tool_names(&[mentioned_tool])
+    );
+    let deferred_tools = exposure
+        .deferred_tools
+        .as_ref()
+        .expect("unmentioned tools should remain deferred");
+    assert_eq!(tool_names(deferred_tools), tool_names(&[other_tool]));
 }

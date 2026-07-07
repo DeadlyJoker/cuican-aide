@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-elapsed"
+name = "crewon-utils-elapsed"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,3 +9,4 @@ workspace = true
 
 [lib]
 doctest = false
+name = "crewon_utils_elapsed"

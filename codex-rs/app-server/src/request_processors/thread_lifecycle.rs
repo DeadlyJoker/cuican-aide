@@ -13,6 +13,7 @@ pub(super) struct ListenerTaskContext {
     pub(super) fallback_model_provider: String,
     pub(super) codex_home: PathBuf,
     pub(super) skills_watcher: Arc<SkillsWatcher>,
+    pub(super) office_auto_dispatch: Option<OfficeAutoDispatchContext>,
 }
 
 struct UnloadingState {
@@ -212,7 +213,7 @@ pub(super) fn log_listener_attach_result(
 pub(super) async fn ensure_listener_task_running(
     listener_task_context: ListenerTaskContext,
     conversation_id: ThreadId,
-    conversation: Arc<CodexThread>,
+    conversation: Arc<CrewonThread>,
     thread_state: Arc<Mutex<ThreadState>>,
 ) -> Result<(), JSONRPCErrorError> {
     let (cancel_tx, mut cancel_rx) = oneshot::channel();
@@ -261,6 +262,7 @@ pub(super) async fn ensure_listener_task_running(
             .register_listener_command_tx(conversation_id, listener_command_tx);
         (listener_command_rx, listener_generation)
     };
+    let office_auto_dispatch = listener_task_context.office_auto_dispatch.clone();
     let ListenerTaskContext {
         outgoing,
         thread_manager,
@@ -270,7 +272,8 @@ pub(super) async fn ensure_listener_task_running(
         thread_list_state_permit,
         fallback_model_provider,
         codex_home,
-        ..
+        office_auto_dispatch: _,
+        skills_watcher: _,
     } = listener_task_context;
     let outgoing_for_task = Arc::clone(&outgoing);
     tokio::spawn(async move {
@@ -318,6 +321,10 @@ pub(super) async fn ensure_listener_task_running(
                     let subscribed_connection_ids = thread_state_manager
                         .subscribed_connection_ids(conversation_id)
                         .await;
+                    let auto_dispatch_connection_id = subscribed_connection_ids
+                        .first()
+                        .copied()
+                        .unwrap_or(ConnectionId(0));
                     let thread_outgoing = ThreadScopedOutgoingMessageSender::new(
                         outgoing_for_task.clone(),
                         subscribed_connection_ids,
@@ -337,6 +344,8 @@ pub(super) async fn ensure_listener_task_running(
                         continue;
                     }
 
+                    let terminal_office_turn =
+                        office_terminal_turn_from_event(&event.id, &event.msg);
                     apply_bespoke_event_handling(
                         event.clone(),
                         conversation_id,
@@ -349,6 +358,25 @@ pub(super) async fn ensure_listener_task_running(
                         fallback_model_provider.clone(),
                     )
                     .await;
+                    if let (Some(office_auto_dispatch), Some(turn)) =
+                        (office_auto_dispatch.as_ref(), terminal_office_turn)
+                    {
+                        let office_sync_cwd = conversation
+                            .config_snapshot()
+                            .await
+                            .cwd()
+                            .as_path()
+                            .to_string_lossy()
+                            .into_owned();
+                        let _ = office_auto_dispatch
+                            .dispatch_after_terminal_turn(
+                                &office_sync_cwd,
+                                &conversation_id.to_string(),
+                                turn,
+                                auto_dispatch_connection_id,
+                            )
+                            .await;
+                    }
                 }
                 unloading_watchers_open = unloading_state.wait_for_unloading_trigger() => {
                     if !unloading_watchers_open {
@@ -395,7 +423,7 @@ pub(super) async fn ensure_listener_task_running(
     Ok(())
 }
 
-pub(super) async fn wait_for_thread_shutdown(thread: &Arc<CodexThread>) -> ThreadShutdownResult {
+pub(super) async fn wait_for_thread_shutdown(thread: &Arc<CrewonThread>) -> ThreadShutdownResult {
     match tokio::time::timeout(Duration::from_secs(10), thread.shutdown_and_wait()).await {
         Ok(Ok(())) => ThreadShutdownResult::Complete,
         Ok(Err(_)) => ThreadShutdownResult::SubmitFailed,
@@ -410,7 +438,7 @@ pub(super) async fn unload_thread_without_subscribers(
     thread_state_manager: ThreadStateManager,
     thread_watch_manager: ThreadWatchManager,
     thread_id: ThreadId,
-    thread: Arc<CodexThread>,
+    thread: Arc<CrewonThread>,
 ) {
     info!("thread {thread_id} has no subscribers and is idle; shutting down");
 
@@ -458,7 +486,7 @@ pub(super) async fn unload_thread_without_subscribers(
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn handle_thread_listener_command(
     conversation_id: ThreadId,
-    conversation: &Arc<CodexThread>,
+    conversation: &Arc<CrewonThread>,
     codex_home: &Path,
     thread_state_manager: &ThreadStateManager,
     thread_state: &Arc<Mutex<ThreadState>>,
@@ -528,7 +556,7 @@ pub(super) async fn handle_thread_listener_command(
 )]
 pub(super) async fn handle_pending_thread_resume_request(
     conversation_id: ThreadId,
-    conversation: &Arc<CodexThread>,
+    conversation: &Arc<CrewonThread>,
     _codex_home: &Path,
     thread_state_manager: &ThreadStateManager,
     thread_state: &Arc<Mutex<ThreadState>>,

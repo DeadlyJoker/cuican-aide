@@ -10,27 +10,27 @@ use app_test_support::create_mock_responses_server_sequence;
 use app_test_support::to_response;
 use app_test_support::write_mock_responses_config_toml;
 use axum::Router;
-use codex_app_server_protocol::ItemCompletedNotification;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::McpElicitationSchema;
-use codex_app_server_protocol::McpServerElicitationAction;
-use codex_app_server_protocol::McpServerElicitationRequest;
-use codex_app_server_protocol::McpServerElicitationRequestParams;
-use codex_app_server_protocol::McpServerElicitationRequestResponse;
-use codex_app_server_protocol::McpServerToolCallParams;
-use codex_app_server_protocol::McpServerToolCallResponse;
-use codex_app_server_protocol::McpToolCallStatus;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_utils_pty::DEFAULT_OUTPUT_BYTES_CAP;
 use core_test_support::responses;
+use crewon_app_server_protocol::ItemCompletedNotification;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::McpElicitationSchema;
+use crewon_app_server_protocol::McpServerElicitationAction;
+use crewon_app_server_protocol::McpServerElicitationRequest;
+use crewon_app_server_protocol::McpServerElicitationRequestParams;
+use crewon_app_server_protocol::McpServerElicitationRequestResponse;
+use crewon_app_server_protocol::McpServerToolCallParams;
+use crewon_app_server_protocol::McpServerToolCallResponse;
+use crewon_app_server_protocol::McpToolCallStatus;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ThreadItem;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_utils_pty::DEFAULT_OUTPUT_BYTES_CAP;
 use pretty_assertions::assert_eq;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::BooleanSchema;
@@ -218,7 +218,7 @@ url = "{mcp_server_url}/mcp"
     let thread_start_id = mcp
         .send_thread_start_request(ThreadStartParams {
             model: Some("mock-model".to_string()),
-            approval_policy: Some(codex_app_server_protocol::AskForApproval::UnlessTrusted),
+            approval_policy: Some(crewon_app_server_protocol::AskForApproval::UnlessTrusted),
             ..Default::default()
         })
         .await?;
@@ -328,7 +328,7 @@ url = "{mcp_server_url}/mcp"
     let thread_start_id = mcp
         .send_thread_start_request(ThreadStartParams {
             model: Some("mock-model".to_string()),
-            approval_policy: Some(codex_app_server_protocol::AskForApproval::UnlessTrusted),
+            approval_policy: Some(crewon_app_server_protocol::AskForApproval::UnlessTrusted),
             ..Default::default()
         })
         .await?;

@@ -5,13 +5,13 @@ use std::io::ErrorKind;
 use std::io::Result as IoResult;
 use std::sync::Arc;
 
-use codex_arg0::Arg0DispatchPaths;
-use codex_core::config::ConfigBuilder;
-use codex_core::resolve_installation_id;
-use codex_exec_server::EnvironmentManager;
-use codex_exec_server::ExecServerRuntimePaths;
-use codex_login::default_client::set_default_client_residency_requirement;
-use codex_utils_cli::CliConfigOverrides;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_core::config::ConfigBuilder;
+use crewon_core::resolve_installation_id;
+use crewon_exec_server::EnvironmentManager;
+use crewon_exec_server::ExecServerRuntimePaths;
+use crewon_login::default_client::set_default_client_residency_requirement;
+use crewon_utils_options::ConfigOverrides;
 
 use rmcp::model::ClientNotification;
 use rmcp::model::ClientRequest;
@@ -28,8 +28,8 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::prelude::*;
 
-mod codex_tool_config;
-mod codex_tool_runner;
+mod crewon_tool_config;
+mod crewon_tool_runner;
 mod exec_approval;
 pub(crate) mod message_processor;
 mod outgoing_message;
@@ -40,37 +40,36 @@ use crate::outgoing_message::OutgoingJsonRpcMessage;
 use crate::outgoing_message::OutgoingMessage;
 use crate::outgoing_message::OutgoingMessageSender;
 
-pub use crate::codex_tool_config::CodexToolCallParam;
-pub use crate::codex_tool_config::CodexToolCallReplyParam;
+pub use crate::crewon_tool_config::CrewonToolCallParam;
+pub use crate::crewon_tool_config::CrewonToolCallReplyParam;
 pub use crate::exec_approval::ExecApprovalElicitRequestParams;
 pub use crate::exec_approval::ExecApprovalResponse;
 pub use crate::patch_approval::PatchApprovalElicitRequestParams;
 pub use crate::patch_approval::PatchApprovalResponse;
 
 /// Size of the bounded channels used to communicate between tasks. The value
-/// is a balance between throughput and memory usage – 128 messages should be
-/// plenty for an interactive CLI.
+/// is a balance between throughput and memory usage.
 const CHANNEL_CAPACITY: usize = 128;
 const DEFAULT_ANALYTICS_ENABLED: bool = true;
-const OTEL_SERVICE_NAME: &str = "codex_mcp_server";
+const OTEL_SERVICE_NAME: &str = "crewon_mcp_server";
 
 type IncomingMessage = JsonRpcMessage<ClientRequest, Value, ClientNotification>;
 
 pub async fn run_main(
     arg0_paths: Arg0DispatchPaths,
-    cli_config_overrides: CliConfigOverrides,
+    config_overrides: ConfigOverrides,
     strict_config: bool,
 ) -> IoResult<()> {
-    // Parse CLI overrides once and derive the base Config eagerly so later
+    // Parse process overrides once and derive the base Config eagerly so later
     // components do not need to work with raw TOML values.
-    let cli_kv_overrides = cli_config_overrides.parse_overrides().map_err(|e| {
+    let config_overrides = config_overrides.parse_overrides().map_err(|e| {
         std::io::Error::new(
             ErrorKind::InvalidInput,
             format!("error parsing -c overrides: {e}"),
         )
     })?;
     let config = ConfigBuilder::default()
-        .cli_overrides(cli_kv_overrides)
+        .config_overrides(config_overrides)
         .strict_config(strict_config)
         .build()
         .await
@@ -78,7 +77,7 @@ pub async fn run_main(
             std::io::Error::new(ErrorKind::InvalidData, format!("error loading config: {e}"))
         })?;
     set_default_client_residency_requirement(config.enforce_residency.value());
-    let otel = codex_core::otel_init::build_provider(
+    let otel = crewon_core::otel_init::build_provider(
         &config,
         env!("CARGO_PKG_VERSION"),
         Some(OTEL_SERVICE_NAME),
@@ -90,15 +89,15 @@ pub async fn run_main(
             format!("error loading otel config: {e}"),
         )
     })?;
-    codex_core::otel_init::record_process_start(otel.as_ref(), OTEL_SERVICE_NAME);
-    codex_core::otel_init::install_sqlite_telemetry(otel.as_ref(), OTEL_SERVICE_NAME);
-    let state_db = codex_core::init_state_db(&config).await;
+    crewon_core::otel_init::record_process_start(otel.as_ref(), OTEL_SERVICE_NAME);
+    crewon_core::otel_init::install_sqlite_telemetry(otel.as_ref(), OTEL_SERVICE_NAME);
+    let state_db = crewon_core::init_state_db(&config).await;
     let environment_manager = Arc::new(
         EnvironmentManager::from_codex_home(
             config.codex_home.clone(),
             Some(ExecServerRuntimePaths::from_optional_paths(
                 arg0_paths.codex_self_exe.clone(),
-                arg0_paths.codex_linux_sandbox_exe.clone(),
+                arg0_paths.crewon_linux_sandbox_exe.clone(),
             )?),
         )
         .await
@@ -205,8 +204,8 @@ pub async fn run_main(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_config::types::OtelExporterKind;
-    use codex_core::config::ConfigBuilder;
+    use crewon_config::types::OtelExporterKind;
+    use crewon_core::config::ConfigBuilder;
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
     use tempfile::TempDir;
@@ -233,7 +232,7 @@ mod tests {
         config.otel.metrics_exporter = exporter;
         config.analytics_enabled = None;
 
-        let provider = codex_core::otel_init::build_provider(
+        let provider = crewon_core::otel_init::build_provider(
             &config,
             "0.0.0-test",
             Some(OTEL_SERVICE_NAME),

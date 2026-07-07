@@ -3,7 +3,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use codex_utils_string::take_bytes_at_char_boundary;
+use crewon_utils_string::take_bytes_at_char_boundary;
 use tracing_appender::rolling::RollingFileAppender;
 use tracing_appender::rolling::Rotation;
 
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn current_log_file_path_for_codex_home_uses_sandbox_dir() {
-        let codex_home = Path::new("codex-home");
+        let codex_home = Path::new("crewon-home");
 
         assert_eq!(
             current_log_file_path_for_codex_home(codex_home),

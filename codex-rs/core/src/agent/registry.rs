@@ -1,9 +1,9 @@
-use codex_protocol::AgentPath;
-use codex_protocol::ThreadId;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
+use crewon_protocol::AgentPath;
+use crewon_protocol::ThreadId;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
 use rand::prelude::IndexedRandom;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
-/// This structure is used to add some limits on the multi-agent capabilities for Codex. In
+/// This structure is used to add some limits on the multi-agent capabilities for Crewon. In
 /// the current implementation, it limits:
 /// * Total number of sub-agents (i.e. threads) per user session
 ///
@@ -234,9 +234,9 @@ impl AgentRegistry {
             } else {
                 active_agents.used_agent_nicknames.clear();
                 active_agents.nickname_reset_count += 1;
-                if let Some(metrics) = codex_otel::global() {
+                if let Some(metrics) = crewon_otel::global() {
                     let _ = metrics.counter(
-                        "codex.multi_agent.nickname_pool_reset",
+                        "crewon.multi_agent.nickname_pool_reset",
                         /*inc*/ 1,
                         &[],
                     );

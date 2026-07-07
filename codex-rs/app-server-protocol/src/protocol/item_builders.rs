@@ -22,18 +22,18 @@ use crate::protocol::v2::ItemGuardianApprovalReviewStartedNotification;
 use crate::protocol::v2::PatchApplyStatus;
 use crate::protocol::v2::PatchChangeKind;
 use crate::protocol::v2::ThreadItem;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::ApplyPatchApprovalRequestEvent;
-use codex_protocol::protocol::ExecApprovalRequestEvent;
-use codex_protocol::protocol::ExecCommandBeginEvent;
-use codex_protocol::protocol::ExecCommandEndEvent;
-use codex_protocol::protocol::FileChange;
-use codex_protocol::protocol::GuardianAssessmentAction;
-use codex_protocol::protocol::GuardianAssessmentEvent;
-use codex_protocol::protocol::PatchApplyBeginEvent;
-use codex_protocol::protocol::PatchApplyEndEvent;
-use codex_shell_command::parse_command::parse_command;
-use codex_shell_command::parse_command::shlex_join;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::ApplyPatchApprovalRequestEvent;
+use crewon_protocol::protocol::ExecApprovalRequestEvent;
+use crewon_protocol::protocol::ExecCommandBeginEvent;
+use crewon_protocol::protocol::ExecCommandEndEvent;
+use crewon_protocol::protocol::FileChange;
+use crewon_protocol::protocol::GuardianAssessmentAction;
+use crewon_protocol::protocol::GuardianAssessmentEvent;
+use crewon_protocol::protocol::PatchApplyBeginEvent;
+use crewon_protocol::protocol::PatchApplyEndEvent;
+use crewon_shell_command::parse_command::parse_command;
+use crewon_shell_command::parse_command::shlex_join;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -215,19 +215,19 @@ pub fn guardian_auto_approval_review_notification(
     };
     let review = GuardianApprovalReview {
         status: match assessment.status {
-            codex_protocol::protocol::GuardianAssessmentStatus::InProgress => {
+            crewon_protocol::protocol::GuardianAssessmentStatus::InProgress => {
                 GuardianApprovalReviewStatus::InProgress
             }
-            codex_protocol::protocol::GuardianAssessmentStatus::Approved => {
+            crewon_protocol::protocol::GuardianAssessmentStatus::Approved => {
                 GuardianApprovalReviewStatus::Approved
             }
-            codex_protocol::protocol::GuardianAssessmentStatus::Denied => {
+            crewon_protocol::protocol::GuardianAssessmentStatus::Denied => {
                 GuardianApprovalReviewStatus::Denied
             }
-            codex_protocol::protocol::GuardianAssessmentStatus::TimedOut => {
+            crewon_protocol::protocol::GuardianAssessmentStatus::TimedOut => {
                 GuardianApprovalReviewStatus::TimedOut
             }
-            codex_protocol::protocol::GuardianAssessmentStatus::Aborted => {
+            crewon_protocol::protocol::GuardianAssessmentStatus::Aborted => {
                 GuardianApprovalReviewStatus::Aborted
             }
         },
@@ -237,7 +237,7 @@ pub fn guardian_auto_approval_review_notification(
     };
     let action = assessment.action.clone().into();
     match assessment.status {
-        codex_protocol::protocol::GuardianAssessmentStatus::InProgress => {
+        crewon_protocol::protocol::GuardianAssessmentStatus::InProgress => {
             ServerNotification::ItemGuardianApprovalReviewStarted(
                 ItemGuardianApprovalReviewStartedNotification {
                     thread_id: conversation_id.to_string(),
@@ -250,10 +250,10 @@ pub fn guardian_auto_approval_review_notification(
                 },
             )
         }
-        codex_protocol::protocol::GuardianAssessmentStatus::Approved
-        | codex_protocol::protocol::GuardianAssessmentStatus::Denied
-        | codex_protocol::protocol::GuardianAssessmentStatus::TimedOut
-        | codex_protocol::protocol::GuardianAssessmentStatus::Aborted => {
+        crewon_protocol::protocol::GuardianAssessmentStatus::Approved
+        | crewon_protocol::protocol::GuardianAssessmentStatus::Denied
+        | crewon_protocol::protocol::GuardianAssessmentStatus::TimedOut
+        | crewon_protocol::protocol::GuardianAssessmentStatus::Aborted => {
             ServerNotification::ItemGuardianApprovalReviewCompleted(
                 ItemGuardianApprovalReviewCompletedNotification {
                     thread_id: conversation_id.to_string(),

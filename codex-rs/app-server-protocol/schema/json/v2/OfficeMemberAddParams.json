@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "agentId": {
+      "type": "string"
+    },
+    "config": true,
+    "cwd": {
+      "type": "string"
+    },
+    "member": true
+  },
+  "required": [
+    "agentId",
+    "config",
+    "cwd",
+    "member"
+  ],
+  "title": "OfficeMemberAddParams",
+  "type": "object"
+}

@@ -4,14 +4,14 @@ use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use codex_config::types::OAuthCredentialsStoreMode;
-use codex_exec_server::Environment;
-use codex_rmcp_client::McpAuthStatus;
-use codex_rmcp_client::RmcpClient;
-use codex_rmcp_client::StoredOAuthTokens;
-use codex_rmcp_client::WrappedOAuthTokenResponse;
-use codex_rmcp_client::determine_streamable_http_auth_status;
-use codex_rmcp_client::save_oauth_tokens;
+use crewon_config::types::OAuthCredentialsStoreMode;
+use crewon_exec_server::Environment;
+use crewon_rmcp_client::McpAuthStatus;
+use crewon_rmcp_client::RmcpClient;
+use crewon_rmcp_client::StoredOAuthTokens;
+use crewon_rmcp_client::WrappedOAuthTokenResponse;
+use crewon_rmcp_client::determine_streamable_http_auth_status;
+use crewon_rmcp_client::save_oauth_tokens;
 use oauth2::AccessToken;
 use oauth2::RefreshToken;
 use oauth2::basic::BasicTokenType;
@@ -103,15 +103,15 @@ async fn refreshes_expired_persisted_token_before_initialize() -> anyhow::Result
         .mount(&server)
         .await;
 
-    let codex_home = TempDir::new()?;
+    let crewon_home = TempDir::new()?;
     let server_url = format!("{}/mcp", server.uri());
 
-    // Credential storage resolves CODEX_HOME from the process environment.
+    // Credential storage resolves CREWON_HOME from the process environment.
     // Run the client half of the test in an ignored helper test so it can use
     // an isolated home without mutating the parent test runner's environment.
     let status = Command::new(std::env::current_exe()?)
         .args(["oauth_startup_child", "--exact", "--ignored", "--nocapture"])
-        .env("CODEX_HOME", codex_home.path())
+        .env("CREWON_HOME", crewon_home.path())
         .env(CHILD_SERVER_URL_ENV, server_url)
         .status()
         .await?;
@@ -122,7 +122,7 @@ async fn refreshes_expired_persisted_token_before_initialize() -> anyhow::Result
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn reports_auth_status_for_persisted_credentials() -> anyhow::Result<()> {
-    let codex_home = TempDir::new()?;
+    let crewon_home = TempDir::new()?;
 
     let status = Command::new(std::env::current_exe()?)
         .args([
@@ -131,7 +131,7 @@ async fn reports_auth_status_for_persisted_credentials() -> anyhow::Result<()> {
             "--ignored",
             "--nocapture",
         ])
-        .env("CODEX_HOME", codex_home.path())
+        .env("CREWON_HOME", crewon_home.path())
         .status()
         .await?;
 

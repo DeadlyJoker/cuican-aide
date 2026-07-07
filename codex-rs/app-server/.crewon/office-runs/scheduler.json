@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "intents": [
+    {
+      "intentId": "office-scheduler-46d0265a-ecd5-4f3f-bddb-30546c6c51fa",
+      "sourceThreadId": "019ee23d-ad2a-78d1-8069-b0abe4d3c4e5",
+      "sourceTurnId": "019ee23d-b1d6-78f3-a632-bd4c76aa4f40",
+      "status": "pending",
+      "reason": "dispatchAfterTerminalTurn",
+      "attempts": 0,
+      "createdAt": "2026-06-19T23:35:57Z",
+      "updatedAt": "2026-06-19T23:35:57Z",
+      "lastError": null,
+      "runId": null,
+      "dispatchKind": null,
+      "delegationId": null,
+      "verificationCheckId": null,
+      "filePath": null,
+      "dispatchedThreadId": null,
+      "dispatchedTurnId": null
+    },
+    {
+      "intentId": "office-scheduler-fa8d8d15-576f-4078-8b00-46a100a38f73",
+      "sourceThreadId": "019ee22a-903e-7432-b90d-565ef741bd4a",
+      "sourceTurnId": "019ee22a-9c31-7292-87c5-10372a735acc",
+      "status": "pending",
+      "reason": "dispatchAfterTerminalTurn",
+      "attempts": 0,
+      "createdAt": "2026-06-19T23:15:06Z",
+      "updatedAt": "2026-06-19T23:15:06Z",
+      "lastError": null,
+      "runId": null,
+      "dispatchKind": null,
+      "delegationId": null,
+      "verificationCheckId": null,
+      "filePath": null,
+      "dispatchedThreadId": null,
+      "dispatchedTurnId": null
+    }
+  ]
+}

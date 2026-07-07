@@ -1,7 +1,7 @@
 use super::*;
-use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
-use codex_protocol::models::SearchToolCallParams;
 use core_test_support::assert_regex_match;
+use crewon_protocol::models::DEFAULT_IMAGE_DETAIL;
+use crewon_protocol::models::SearchToolCallParams;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
@@ -327,12 +327,12 @@ fn tool_search_payloads_roundtrip_as_tool_search_outputs() {
         },
     };
     let response = ToolSearchOutput {
-        tools: vec![LoadableToolSpec::Function(codex_tools::ResponsesApiTool {
+        tools: vec![LoadableToolSpec::Function(crewon_tools::ResponsesApiTool {
             name: "create_event".to_string(),
             description: String::new(),
             strict: false,
             defer_loading: Some(true),
-            parameters: codex_tools::JsonSchema::object(
+            parameters: crewon_tools::JsonSchema::object(
                 /*properties*/ Default::default(),
                 /*required*/ None,
                 /*additional_properties*/ None,

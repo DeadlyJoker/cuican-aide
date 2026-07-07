@@ -11,35 +11,35 @@ use crate::config::Constrained;
 use crate::sandboxing::SandboxPermissions;
 use crate::session::tests::make_session_and_context;
 use anyhow::Context;
-use codex_execpolicy::Decision;
-use codex_execpolicy::Evaluation;
-use codex_execpolicy::PolicyParser;
-use codex_execpolicy::RuleMatch;
-use codex_hooks::Hooks;
-use codex_hooks::HooksConfig;
-use codex_network_proxy::PROXY_ACTIVE_ENV_KEY;
-use codex_network_proxy::PROXY_ENV_KEYS;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::models::FileSystemPermissions;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::GranularApprovalConfig;
-use codex_protocol::protocol::GuardianCommandSource;
-use codex_sandboxing::SandboxType;
-use codex_sandboxing::policy_transforms::effective_permission_profile;
-use codex_shell_escalation::EscalationExecution;
-use codex_shell_escalation::EscalationPermissions;
-use codex_shell_escalation::ExecResult;
-use codex_shell_escalation::ResolvedPermissionProfile;
-use codex_shell_escalation::ShellCommandExecutor;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_execpolicy::Decision;
+use crewon_execpolicy::Evaluation;
+use crewon_execpolicy::PolicyParser;
+use crewon_execpolicy::RuleMatch;
+use crewon_hooks::Hooks;
+use crewon_hooks::HooksConfig;
+use crewon_network_proxy::PROXY_ACTIVE_ENV_KEY;
+use crewon_network_proxy::PROXY_ENV_KEYS;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::models::FileSystemPermissions;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::GranularApprovalConfig;
+use crewon_protocol::protocol::GuardianCommandSource;
+use crewon_sandboxing::SandboxType;
+use crewon_sandboxing::policy_transforms::effective_permission_profile;
+use crewon_shell_escalation::EscalationExecution;
+use crewon_shell_escalation::EscalationPermissions;
+use crewon_shell_escalation::ExecResult;
+use crewon_shell_escalation::ResolvedPermissionProfile;
+use crewon_shell_escalation::ShellCommandExecutor;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -371,7 +371,7 @@ async fn unsandboxed_intercepted_exec_strips_managed_network_env() -> anyhow::Re
         arg0: None,
         sandbox_policy_cwd: workdir.clone(),
         windows_sandbox_workspace_roots: vec![workdir.clone()],
-        codex_linux_sandbox_exe: None,
+        crewon_linux_sandbox_exe: None,
         use_legacy_landlock: false,
     };
     let mut env = HashMap::new();
@@ -422,7 +422,7 @@ async fn preapproved_additional_permissions_escalate_intercepted_exec() -> anyho
         Some(&requested_permissions),
     );
     let provider = CoreShellActionProvider {
-        policy: Arc::new(RwLock::new(codex_execpolicy::Policy::empty())),
+        policy: Arc::new(RwLock::new(crewon_execpolicy::Policy::empty())),
         session: Arc::new(session),
         turn: Arc::new(turn_context),
         call_id: "preapproved-additional-permissions".to_string(),
@@ -433,10 +433,10 @@ async fn preapproved_additional_permissions_escalate_intercepted_exec() -> anyho
         sandbox_permissions: SandboxPermissions::WithAdditionalPermissions,
         approval_sandbox_permissions: SandboxPermissions::UseDefault,
         prompt_permissions: Some(requested_permissions),
-        stopwatch: codex_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
+        stopwatch: crewon_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
     };
 
-    let action = codex_shell_escalation::EscalationPolicy::determine_action(
+    let action = crewon_shell_escalation::EscalationPolicy::determine_action(
         &provider,
         &AbsolutePathBuf::from_absolute_path("/usr/bin/printf")?,
         &["printf".to_string(), "hello".to_string()],
@@ -444,7 +444,7 @@ async fn preapproved_additional_permissions_escalate_intercepted_exec() -> anyho
     )
     .await?;
 
-    let expected = codex_shell_escalation::EscalationDecision::Escalate(
+    let expected = crewon_shell_escalation::EscalationDecision::Escalate(
         EscalationExecution::Permissions(EscalationPermissions::ResolvedPermissionProfile(
             ResolvedPermissionProfile { permission_profile },
         )),
@@ -461,7 +461,7 @@ async fn preapproved_additional_permissions_escalate_intercepted_exec() -> anyho
 async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Result<()> {
     let (session, mut turn_context) = make_session_and_context().await;
     std::fs::create_dir_all(&turn_context.config.codex_home)
-        .context("recreate codex home for hook fixtures")?;
+        .context("recreate crewon home for hook fixtures")?;
     let script_path = turn_context
         .config
         .codex_home
@@ -508,8 +508,8 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     let config_toml_path = turn_context
         .config
         .codex_home
-        .join(codex_config::CONFIG_TOML_FILE);
-    let hook_list = codex_hooks::list_hooks(HooksConfig {
+        .join(crewon_config::CONFIG_TOML_FILE);
+    let hook_list = crewon_hooks::list_hooks(HooksConfig {
         feature_enabled: true,
         config_layer_stack: Some(turn_context.config.config_layer_stack.clone()),
         ..HooksConfig::default()
@@ -554,10 +554,12 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     let target = std::env::temp_dir().join("execve-hook-short-circuit.txt");
     let target_str = target.display().to_string();
     let command = vec!["touch".to_string(), target_str.clone()];
-    let expected_hook_command =
-        codex_shell_command::parse_command::shlex_join(&["/usr/bin/touch".to_string(), target_str]);
+    let expected_hook_command = crewon_shell_command::parse_command::shlex_join(&[
+        "/usr/bin/touch".to_string(),
+        target_str,
+    ]);
     let provider = CoreShellActionProvider {
-        policy: std::sync::Arc::new(RwLock::new(codex_execpolicy::Policy::empty())),
+        policy: std::sync::Arc::new(RwLock::new(crewon_execpolicy::Policy::empty())),
         session: std::sync::Arc::new(session),
         turn: std::sync::Arc::new(turn_context),
         call_id: "execve-hook-call".to_string(),
@@ -568,12 +570,12 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
         sandbox_permissions: SandboxPermissions::RequireEscalated,
         approval_sandbox_permissions: SandboxPermissions::RequireEscalated,
         prompt_permissions: None,
-        stopwatch: codex_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
+        stopwatch: crewon_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
     };
 
     let action = tokio::time::timeout(
         Duration::from_secs(5),
-        codex_shell_escalation::EscalationPolicy::determine_action(
+        crewon_shell_escalation::EscalationPolicy::determine_action(
             &provider,
             &AbsolutePathBuf::from_absolute_path("/usr/bin/touch")
                 .context("build touch absolute path")?,
@@ -585,8 +587,8 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     .context("timed out waiting for execve permission hook decision")??;
     assert!(matches!(
         action,
-        codex_shell_escalation::EscalationDecision::Escalate(
-            codex_shell_escalation::EscalationExecution::Unsandboxed
+        crewon_shell_escalation::EscalationDecision::Escalate(
+            crewon_shell_escalation::EscalationExecution::Unsandboxed
         )
     ));
 
@@ -778,10 +780,10 @@ prefix_rule(pattern = ["{cat_path_literal}"], decision = "allow")
         sandbox_permissions: SandboxPermissions::UseDefault,
         approval_sandbox_permissions: SandboxPermissions::UseDefault,
         prompt_permissions: None,
-        stopwatch: codex_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
+        stopwatch: crewon_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
     };
 
-    let action = codex_shell_escalation::EscalationPolicy::determine_action(
+    let action = crewon_shell_escalation::EscalationPolicy::determine_action(
         &provider,
         &AbsolutePathBuf::try_from(cat_path).unwrap(),
         &["cat".to_string(), "/tmp/visible.txt".to_string()],
@@ -789,7 +791,7 @@ prefix_rule(pattern = ["{cat_path_literal}"], decision = "allow")
     )
     .await?;
 
-    assert_eq!(action, codex_shell_escalation::EscalationDecision::Run);
+    assert_eq!(action, crewon_shell_escalation::EscalationDecision::Run);
     Ok(())
 }
 
@@ -820,10 +822,10 @@ async fn denied_reads_keep_granular_sandbox_rejection_for_escalation() -> anyhow
         sandbox_permissions: SandboxPermissions::RequireEscalated,
         approval_sandbox_permissions: SandboxPermissions::RequireEscalated,
         prompt_permissions: None,
-        stopwatch: codex_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
+        stopwatch: crewon_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
     };
 
-    let action = codex_shell_escalation::EscalationPolicy::determine_action(
+    let action = crewon_shell_escalation::EscalationPolicy::determine_action(
         &provider,
         &AbsolutePathBuf::try_from(host_absolute_path(&["usr", "bin", "printf"])).unwrap(),
         &["printf".to_string(), "hello".to_string()],
@@ -833,7 +835,7 @@ async fn denied_reads_keep_granular_sandbox_rejection_for_escalation() -> anyhow
 
     assert_eq!(
         action,
-        codex_shell_escalation::EscalationDecision::Deny {
+        crewon_shell_escalation::EscalationDecision::Deny {
             reason: Some("Execution forbidden by policy".to_string())
         }
     );

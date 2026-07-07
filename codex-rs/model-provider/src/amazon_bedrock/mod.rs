@@ -5,18 +5,18 @@ mod mantle;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use codex_api::Provider;
-use codex_api::SharedAuthProvider;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID;
-use codex_model_provider_info::ModelProviderAwsAuthInfo;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_models_manager::manager::SharedModelsManager;
-use codex_models_manager::manager::StaticModelsManager;
-use codex_protocol::account::ProviderAccount;
-use codex_protocol::error::Result;
-use codex_protocol::openai_models::ModelsResponse;
+use crewon_api::Provider;
+use crewon_api::SharedAuthProvider;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID;
+use crewon_model_provider_info::ModelProviderAwsAuthInfo;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_models_manager::manager::SharedModelsManager;
+use crewon_models_manager::manager::StaticModelsManager;
+use crewon_protocol::account::ProviderAccount;
+use crewon_protocol::error::Result;
+use crewon_protocol::openai_models::ModelsResponse;
 
 use crate::provider::ModelProvider;
 use crate::provider::ProviderAccountResult;
@@ -27,7 +27,7 @@ pub(crate) use catalog::static_model_catalog;
 use catalog::with_default_only_service_tier;
 use mantle::runtime_base_url;
 
-/// Runtime provider for Amazon Bedrock's OpenAI-compatible Mantle endpoint.
+/// Runtime provider for Amazon Bedrock's Responses-compatible Mantle endpoint.
 #[derive(Clone, Debug)]
 pub(crate) struct AmazonBedrockModelProvider {
     pub(crate) info: ModelProviderInfo,
@@ -80,7 +80,7 @@ impl ModelProvider for AmazonBedrockModelProvider {
         None
     }
 
-    async fn auth(&self) -> Option<CodexAuth> {
+    async fn auth(&self) -> Option<CrewonAuth> {
         None
     }
 
@@ -107,7 +107,7 @@ impl ModelProvider for AmazonBedrockModelProvider {
 
     fn models_manager(
         &self,
-        _codex_home: PathBuf,
+        _crewon_home: PathBuf,
         config_model_catalog: Option<ModelsResponse>,
     ) -> SharedModelsManager {
         Arc::new(StaticModelsManager::new(

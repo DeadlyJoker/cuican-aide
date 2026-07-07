@@ -10,33 +10,33 @@ use app_test_support::write_chatgpt_auth;
 use app_test_support::write_models_cache;
 use chrono::Duration as ChronoDuration;
 use chrono::Utc;
-use codex_app_server_protocol::Account;
-use codex_app_server_protocol::AuthMode;
-use codex_app_server_protocol::CancelLoginAccountParams;
-use codex_app_server_protocol::CancelLoginAccountResponse;
-use codex_app_server_protocol::CancelLoginAccountStatus;
-use codex_app_server_protocol::ChatgptAuthTokensRefreshReason;
-use codex_app_server_protocol::ChatgptAuthTokensRefreshResponse;
-use codex_app_server_protocol::GetAccountParams;
-use codex_app_server_protocol::GetAccountResponse;
-use codex_app_server_protocol::GetAuthStatusParams;
-use codex_app_server_protocol::GetAuthStatusResponse;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::LoginAccountResponse;
-use codex_app_server_protocol::LogoutAccountResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::TurnCompletedNotification;
-use codex_app_server_protocol::TurnStatus;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_login::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
-use codex_login::login_with_api_key;
-use codex_protocol::account::PlanType as AccountPlanType;
 use core_test_support::responses;
+use crewon_app_server_protocol::Account;
+use crewon_app_server_protocol::AuthMode;
+use crewon_app_server_protocol::CancelLoginAccountParams;
+use crewon_app_server_protocol::CancelLoginAccountResponse;
+use crewon_app_server_protocol::CancelLoginAccountStatus;
+use crewon_app_server_protocol::ChatgptAuthTokensRefreshReason;
+use crewon_app_server_protocol::ChatgptAuthTokensRefreshResponse;
+use crewon_app_server_protocol::GetAccountParams;
+use crewon_app_server_protocol::GetAccountResponse;
+use crewon_app_server_protocol::GetAuthStatusParams;
+use crewon_app_server_protocol::GetAuthStatusResponse;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::LoginAccountResponse;
+use crewon_app_server_protocol::LogoutAccountResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::TurnCompletedNotification;
+use crewon_app_server_protocol::TurnStatus;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_login::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
+use crewon_login::login_with_api_key;
+use crewon_protocol::account::PlanType as AccountPlanType;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use serial_test::serial;
@@ -52,7 +52,7 @@ use wiremock::matchers::method;
 use wiremock::matchers::path;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
-const LOGIN_ISSUER_ENV_VAR: &str = "CODEX_APP_SERVER_LOGIN_ISSUER";
+const LOGIN_ISSUER_ENV_VAR: &str = "CREWON_APP_SERVER_LOGIN_ISSUER";
 const WORKSPACE_ID_ALLOWED: &str = "123e4567-e89b-42d3-a456-426614174000";
 const WORKSPACE_ID_SECOND_ALLOWED: &str = "123e4567-e89b-42d3-a456-426614174001";
 const WORKSPACE_ID_DISALLOWED: &str = "123e4567-e89b-42d3-a456-426614174002";
@@ -495,7 +495,7 @@ async fn external_auth_refreshes_on_unauthorized() -> Result<()> {
     .await??;
 
     let thread_req = mcp
-        .send_thread_start_request(codex_app_server_protocol::ThreadStartParams {
+        .send_thread_start_request(crewon_app_server_protocol::ThreadStartParams {
             model: Some("mock-model".to_string()),
             ..Default::default()
         })
@@ -505,13 +505,13 @@ async fn external_auth_refreshes_on_unauthorized() -> Result<()> {
         mcp.read_stream_until_response_message(RequestId::Integer(thread_req)),
     )
     .await??;
-    let thread = to_response::<codex_app_server_protocol::ThreadStartResponse>(thread_resp)?;
+    let thread = to_response::<crewon_app_server_protocol::ThreadStartResponse>(thread_resp)?;
 
     let turn_req = mcp
-        .send_turn_start_request(codex_app_server_protocol::TurnStartParams {
+        .send_turn_start_request(crewon_app_server_protocol::TurnStartParams {
             thread_id: thread.thread.id,
             client_user_message_id: None,
-            input: vec![codex_app_server_protocol::UserInput::Text {
+            input: vec![crewon_app_server_protocol::UserInput::Text {
                 text: "Hello".to_string(),
                 text_elements: Vec::new(),
             }],
@@ -603,7 +603,7 @@ async fn external_auth_refresh_error_fails_turn() -> Result<()> {
     .await??;
 
     let thread_req = mcp
-        .send_thread_start_request(codex_app_server_protocol::ThreadStartParams {
+        .send_thread_start_request(crewon_app_server_protocol::ThreadStartParams {
             model: Some("mock-model".to_string()),
             ..Default::default()
         })
@@ -613,13 +613,13 @@ async fn external_auth_refresh_error_fails_turn() -> Result<()> {
         mcp.read_stream_until_response_message(RequestId::Integer(thread_req)),
     )
     .await??;
-    let thread = to_response::<codex_app_server_protocol::ThreadStartResponse>(thread_resp)?;
+    let thread = to_response::<crewon_app_server_protocol::ThreadStartResponse>(thread_resp)?;
 
     let turn_req = mcp
-        .send_turn_start_request(codex_app_server_protocol::TurnStartParams {
+        .send_turn_start_request(crewon_app_server_protocol::TurnStartParams {
             thread_id: thread.thread.id.clone(),
             client_user_message_id: None,
-            input: vec![codex_app_server_protocol::UserInput::Text {
+            input: vec![crewon_app_server_protocol::UserInput::Text {
                 text: "Hello".to_string(),
                 text_elements: Vec::new(),
             }],
@@ -727,7 +727,7 @@ async fn external_auth_refresh_mismatched_workspace_fails_turn() -> Result<()> {
     .await??;
 
     let thread_req = mcp
-        .send_thread_start_request(codex_app_server_protocol::ThreadStartParams {
+        .send_thread_start_request(crewon_app_server_protocol::ThreadStartParams {
             model: Some("mock-model".to_string()),
             ..Default::default()
         })
@@ -737,13 +737,13 @@ async fn external_auth_refresh_mismatched_workspace_fails_turn() -> Result<()> {
         mcp.read_stream_until_response_message(RequestId::Integer(thread_req)),
     )
     .await??;
-    let thread = to_response::<codex_app_server_protocol::ThreadStartResponse>(thread_resp)?;
+    let thread = to_response::<crewon_app_server_protocol::ThreadStartResponse>(thread_resp)?;
 
     let turn_req = mcp
-        .send_turn_start_request(codex_app_server_protocol::TurnStartParams {
+        .send_turn_start_request(crewon_app_server_protocol::TurnStartParams {
             thread_id: thread.thread.id.clone(),
             client_user_message_id: None,
-            input: vec![codex_app_server_protocol::UserInput::Text {
+            input: vec![crewon_app_server_protocol::UserInput::Text {
                 text: "Hello".to_string(),
                 text_elements: Vec::new(),
             }],
@@ -844,7 +844,7 @@ async fn external_auth_refresh_invalid_access_token_fails_turn() -> Result<()> {
     .await??;
 
     let thread_req = mcp
-        .send_thread_start_request(codex_app_server_protocol::ThreadStartParams {
+        .send_thread_start_request(crewon_app_server_protocol::ThreadStartParams {
             model: Some("mock-model".to_string()),
             ..Default::default()
         })
@@ -854,13 +854,13 @@ async fn external_auth_refresh_invalid_access_token_fails_turn() -> Result<()> {
         mcp.read_stream_until_response_message(RequestId::Integer(thread_req)),
     )
     .await??;
-    let thread = to_response::<codex_app_server_protocol::ThreadStartResponse>(thread_resp)?;
+    let thread = to_response::<crewon_app_server_protocol::ThreadStartResponse>(thread_resp)?;
 
     let turn_req = mcp
-        .send_turn_start_request(codex_app_server_protocol::TurnStartParams {
+        .send_turn_start_request(crewon_app_server_protocol::TurnStartParams {
             thread_id: thread.thread.id.clone(),
             client_user_message_id: None,
-            input: vec![codex_app_server_protocol::UserInput::Text {
+            input: vec![crewon_app_server_protocol::UserInput::Text {
                 text: "Hello".to_string(),
                 text_elements: Vec::new(),
             }],

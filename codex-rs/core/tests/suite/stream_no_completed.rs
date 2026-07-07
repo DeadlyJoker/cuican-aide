@@ -1,18 +1,18 @@
 //! Verifies that the agent retries when the SSE stream terminates before
 //! delivering a `response.completed` event.
 
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::WireApi;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
 use core_test_support::streaming_sse::StreamingSseChunk;
 use core_test_support::streaming_sse::start_streaming_sse_server;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::WireApi;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 
 fn sse_incomplete() -> String {
     responses::sse(vec![serde_json::json!({
@@ -66,7 +66,7 @@ async fn retries_on_early_close() {
         supports_websockets: false,
     };
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config.model_provider = model_provider;
         })

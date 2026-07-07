@@ -1,12 +1,11 @@
 use super::*;
-use codex_config::types::AppToolApproval;
-use codex_config::types::McpServerOAuthConfig;
-use codex_config::types::McpServerToolConfig;
-use codex_config::types::McpServerTransportConfig;
-use codex_config::types::SessionPickerViewMode;
-use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::openai_models::ReasoningEffort;
+use crewon_config::types::AppToolApproval;
+use crewon_config::types::McpServerOAuthConfig;
+use crewon_config::types::McpServerToolConfig;
+use crewon_config::types::McpServerTransportConfig;
+use crewon_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use std::os::unix::fs::symlink;
@@ -94,188 +93,6 @@ fn builder_with_edits_applies_custom_paths() {
 }
 
 #[test]
-fn session_picker_view_edit_writes_root_tui_setting() {
-    let tmp = tempdir().expect("tmpdir");
-    let codex_home = tmp.path();
-
-    ConfigEditsBuilder::new(codex_home)
-        .with_edits([session_picker_view_edit(SessionPickerViewMode::Dense)])
-        .apply_blocking()
-        .expect("persist");
-
-    let contents = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
-    let expected = r#"[tui]
-session_picker_view = "dense"
-"#;
-    assert_eq!(contents, expected);
-}
-
-#[test]
-fn keymap_binding_edit_writes_root_action_binding() {
-    let tmp = tempdir().expect("tmpdir");
-    let codex_home = tmp.path();
-
-    ConfigEditsBuilder::new(codex_home)
-        .with_edits([keymap_binding_edit("composer", "submit", "ctrl-enter")])
-        .apply_blocking()
-        .expect("persist");
-
-    let contents = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
-    let expected = r#"[tui.keymap.composer]
-submit = "ctrl-enter"
-"#;
-    assert_eq!(contents, expected);
-}
-
-#[test]
-fn keymap_bindings_edit_writes_single_binding_as_string() {
-    let tmp = tempdir().expect("tmpdir");
-    let codex_home = tmp.path();
-
-    ConfigEditsBuilder::new(codex_home)
-        .with_edits([keymap_bindings_edit(
-            "composer",
-            "submit",
-            &["ctrl-enter".to_string()],
-        )])
-        .apply_blocking()
-        .expect("persist");
-
-    let contents = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
-    let expected = r#"[tui.keymap.composer]
-submit = "ctrl-enter"
-"#;
-    assert_eq!(contents, expected);
-}
-
-#[test]
-fn keymap_bindings_edit_writes_multiple_bindings_as_array() {
-    let tmp = tempdir().expect("tmpdir");
-    let codex_home = tmp.path();
-
-    ConfigEditsBuilder::new(codex_home)
-        .with_edits([keymap_bindings_edit(
-            "composer",
-            "submit",
-            &["enter".to_string(), "ctrl-enter".to_string()],
-        )])
-        .apply_blocking()
-        .expect("persist");
-
-    let raw = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
-    let value: TomlValue = toml::from_str(&raw).expect("parse config");
-
-    assert_eq!(
-        value
-            .get("tui")
-            .and_then(|value| value.get("keymap"))
-            .and_then(|value| value.get("composer"))
-            .and_then(|value| value.get("submit"))
-            .and_then(TomlValue::as_array)
-            .map(|values| {
-                values
-                    .iter()
-                    .filter_map(TomlValue::as_str)
-                    .collect::<Vec<_>>()
-            }),
-        Some(vec!["enter", "ctrl-enter"])
-    );
-}
-
-#[test]
-fn keymap_binding_edit_replaces_existing_binding_without_touching_profile() {
-    let tmp = tempdir().expect("tmpdir");
-    let codex_home = tmp.path();
-    std::fs::write(
-        codex_home.join(CONFIG_TOML_FILE),
-        r#"profile = "team"
-
-[tui.keymap.composer]
-submit = "enter"
-
-[profiles.team.tui.keymap.composer]
-submit = "shift-enter"
-"#,
-    )
-    .expect("seed config");
-
-    ConfigEditsBuilder::new(codex_home)
-        .with_edits([keymap_binding_edit("composer", "submit", "ctrl-enter")])
-        .apply_blocking()
-        .expect("persist");
-
-    let raw = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
-    let value: TomlValue = toml::from_str(&raw).expect("parse config");
-
-    assert_eq!(
-        value
-            .get("tui")
-            .and_then(|value| value.get("keymap"))
-            .and_then(|value| value.get("composer"))
-            .and_then(|value| value.get("submit"))
-            .and_then(TomlValue::as_str),
-        Some("ctrl-enter")
-    );
-    assert_eq!(
-        value
-            .get("profiles")
-            .and_then(|value| value.get("team"))
-            .and_then(|value| value.get("tui"))
-            .and_then(|value| value.get("keymap"))
-            .and_then(|value| value.get("composer"))
-            .and_then(|value| value.get("submit"))
-            .and_then(TomlValue::as_str),
-        Some("shift-enter")
-    );
-}
-
-#[test]
-fn keymap_binding_clear_edit_removes_root_action_binding_without_touching_profile() {
-    let tmp = tempdir().expect("tmpdir");
-    let codex_home = tmp.path();
-    std::fs::write(
-        codex_home.join(CONFIG_TOML_FILE),
-        r#"profile = "team"
-
-[tui.keymap.composer]
-submit = "enter"
-
-[profiles.team.tui.keymap.composer]
-submit = "shift-enter"
-"#,
-    )
-    .expect("seed config");
-
-    ConfigEditsBuilder::new(codex_home)
-        .with_edits([keymap_binding_clear_edit("composer", "submit")])
-        .apply_blocking()
-        .expect("persist");
-
-    let raw = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
-    let value: TomlValue = toml::from_str(&raw).expect("parse config");
-
-    assert_eq!(
-        value
-            .get("tui")
-            .and_then(|value| value.get("keymap"))
-            .and_then(|value| value.get("composer"))
-            .and_then(|value| value.get("submit")),
-        None
-    );
-    assert_eq!(
-        value
-            .get("profiles")
-            .and_then(|value| value.get("team"))
-            .and_then(|value| value.get("tui"))
-            .and_then(|value| value.get("keymap"))
-            .and_then(|value| value.get("composer"))
-            .and_then(|value| value.get("submit"))
-            .and_then(TomlValue::as_str),
-        Some("shift-enter")
-    );
-}
-
-#[test]
 fn set_model_availability_nux_count_writes_shown_count() {
     let tmp = tempdir().expect("tmpdir");
     let codex_home = tmp.path();
@@ -287,7 +104,7 @@ fn set_model_availability_nux_count_writes_shown_count() {
         .expect("persist");
 
     let contents = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
-    let expected = r#"[tui.model_availability_nux]
+    let expected = r#"[client.model_availability_nux]
 gpt-foo = 4
 "#;
     assert_eq!(contents, expected);
@@ -887,7 +704,7 @@ fn blocking_replace_mcp_servers_round_trips() {
                 env_vars: vec!["FOO".into()],
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: true,
@@ -917,7 +734,7 @@ fn blocking_replace_mcp_servers_round_trips() {
                 ),
                 env_http_headers: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: false,
             required: false,
             supports_parallel_tool_calls: false,
@@ -988,7 +805,7 @@ fn blocking_replace_mcp_servers_serializes_tool_approval_overrides() {
                 env_vars: Vec::new(),
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -1048,7 +865,7 @@ foo = { command = "cmd" }
                 env_vars: Vec::new(),
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -1098,7 +915,7 @@ foo = { command = "cmd" } # keep me
                 env_vars: Vec::new(),
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: false,
             required: false,
             supports_parallel_tool_calls: false,
@@ -1147,7 +964,7 @@ foo = { command = "cmd", args = ["--flag"] } # keep me
                 env_vars: Vec::new(),
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -1197,7 +1014,7 @@ foo = { command = "cmd" }
                 env_vars: Vec::new(),
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: false,
             required: false,
             supports_parallel_tool_calls: false,
@@ -1252,7 +1069,7 @@ fn blocking_set_path_updates_notifications() {
     apply_blocking(
         codex_home,
         &[ConfigEdit::SetPath {
-            segments: vec!["tui".to_string(), "notifications".to_string()],
+            segments: vec!["client".to_string(), "notifications".to_string()],
             value: item,
         }],
     )
@@ -1261,7 +1078,7 @@ fn blocking_set_path_updates_notifications() {
     let raw = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
     let config: TomlValue = toml::from_str(&raw).expect("parse config");
     let notifications = config
-        .get("tui")
+        .get("client")
         .and_then(|item| item.as_table())
         .and_then(|tbl| tbl.get("notifications"))
         .and_then(toml::Value::as_bool);

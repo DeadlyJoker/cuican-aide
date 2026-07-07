@@ -24,15 +24,15 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result;
-use codex_protocol::permissions::is_protected_metadata_name;
-use codex_protocol::protocol::FileSystemAccessMode;
-use codex_protocol::protocol::FileSystemPath;
-use codex_protocol::protocol::FileSystemSandboxPolicy;
-use codex_protocol::protocol::FileSystemSpecialPath;
-use codex_protocol::protocol::WritableRoot;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result;
+use crewon_protocol::permissions::is_protected_metadata_name;
+use crewon_protocol::protocol::FileSystemAccessMode;
+use crewon_protocol::protocol::FileSystemPath;
+use crewon_protocol::protocol::FileSystemSandboxPolicy;
+use crewon_protocol::protocol::FileSystemSpecialPath;
+use crewon_protocol::protocol::WritableRoot;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use globset::GlobBuilder;
 use globset::GlobSet;
 use globset::GlobSetBuilder;
@@ -1328,12 +1328,12 @@ fn find_first_non_existent_component(target_path: &Path) -> Option<PathBuf> {
 mod tests {
     use super::*;
 
-    use codex_protocol::protocol::FileSystemAccessMode;
-    use codex_protocol::protocol::FileSystemPath;
-    use codex_protocol::protocol::FileSystemSandboxEntry;
-    use codex_protocol::protocol::FileSystemSandboxPolicy;
-    use codex_protocol::protocol::FileSystemSpecialPath;
-    use codex_utils_absolute_path::AbsolutePathBuf;
+    use crewon_protocol::protocol::FileSystemAccessMode;
+    use crewon_protocol::protocol::FileSystemPath;
+    use crewon_protocol::protocol::FileSystemSandboxEntry;
+    use crewon_protocol::protocol::FileSystemSandboxPolicy;
+    use crewon_protocol::protocol::FileSystemSpecialPath;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
 
@@ -1583,7 +1583,7 @@ mod tests {
         std::fs::create_dir_all(&logical_home).expect("create logical home");
         std::fs::create_dir_all(&real_memories).expect("create memories dir");
         std::os::unix::fs::symlink(&real_codex, &logical_codex)
-            .expect("create symlinked codex home");
+            .expect("create symlinked crewon home");
 
         let logical_memories_root =
             AbsolutePathBuf::from_absolute_path(&logical_memories).expect("absolute memories");

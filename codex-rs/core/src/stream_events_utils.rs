@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use codex_extension_api::ExtensionData;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::items::ImageGenerationItem;
-use codex_protocol::items::TurnItem;
-use codex_utils_stream_parser::strip_citations;
+use crewon_extension_api::ExtensionData;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::items::ImageGenerationItem;
+use crewon_protocol::items::TurnItem;
+use crewon_utils_stream_parser::strip_citations;
 use tokio_util::sync::CancellationToken;
 
 use crate::context::ContextualUserFragment;
@@ -18,19 +18,19 @@ use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::parallel::ToolCallRuntime;
 use crate::tools::router::ToolRouter;
-use codex_memories_read::citations::parse_memory_citation;
-use codex_memories_read::citations::thread_ids_from_memory_citation;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result;
-use codex_protocol::memory_citation::MemoryCitation;
-use codex_protocol::models::FunctionCallOutputBody;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::MessagePhase;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::models::ResponseItem;
-use codex_rollout::state_db;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_stream_parser::strip_proposed_plan_blocks;
+use crewon_memories_read::citations::parse_memory_citation;
+use crewon_memories_read::citations::thread_ids_from_memory_citation;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result;
+use crewon_protocol::memory_citation::MemoryCitation;
+use crewon_protocol::models::FunctionCallOutputBody;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::MessagePhase;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_rollout::state_db;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_stream_parser::strip_proposed_plan_blocks;
 use futures::Future;
 use tracing::debug;
 use tracing::instrument;
@@ -81,7 +81,7 @@ fn strip_hidden_assistant_markup_and_parse_memory_citation(
     plan_mode: bool,
 ) -> (
     String,
-    Option<codex_protocol::memory_citation::MemoryCitation>,
+    Option<crewon_protocol::memory_citation::MemoryCitation>,
 ) {
     let (without_citations, citations) = strip_citations(text);
     let visible_text = if plan_mode {
@@ -99,7 +99,7 @@ pub(crate) fn raw_assistant_output_text_from_item(item: &ResponseItem) -> Option
         let combined = content
             .iter()
             .filter_map(|ci| match ci {
-                codex_protocol::models::ContentItem::OutputText { text } => Some(text.as_str()),
+                crewon_protocol::models::ContentItem::OutputText { text } => Some(text.as_str()),
                 _ => None,
             })
             .collect::<String>();
@@ -371,7 +371,7 @@ pub(crate) async fn finalize_non_tool_response_item(
                     .content
                     .iter()
                     .map(|entry| match entry {
-                        codex_protocol::items::AgentMessageContent::Text { text } => text.as_str(),
+                        crewon_protocol::items::AgentMessageContent::Text { text } => text.as_str(),
                     })
                     .collect::<String>();
                 let last_agent_message = if combined.trim().is_empty() {
@@ -567,13 +567,13 @@ pub(crate) async fn finalize_turn_item(
             .content
             .iter()
             .map(|entry| match entry {
-                codex_protocol::items::AgentMessageContent::Text { text } => text.as_str(),
+                crewon_protocol::items::AgentMessageContent::Text { text } => text.as_str(),
             })
             .collect::<String>();
         let (stripped, memory_citation) =
             strip_hidden_assistant_markup_and_parse_memory_citation(&combined, plan_mode);
         agent_message.content =
-            vec![codex_protocol::items::AgentMessageContent::Text { text: stripped }];
+            vec![crewon_protocol::items::AgentMessageContent::Text { text: stripped }];
         if agent_message.memory_citation.is_none() {
             agent_message.memory_citation = memory_citation;
         }

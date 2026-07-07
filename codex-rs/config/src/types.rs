@@ -1,4 +1,4 @@
-//! Types used to define loaded and effective Codex configuration values.
+//! Types used to define loaded and effective Crewon configuration values.
 
 // Note this file should generally be restricted to simple struct/enum
 // definitions that do not contain business logic.
@@ -11,16 +11,15 @@ pub use crate::mcp_types::McpServerOAuthConfig;
 pub use crate::mcp_types::McpServerToolConfig;
 pub use crate::mcp_types::McpServerTransportConfig;
 pub use crate::mcp_types::RawMcpServerConfig;
-pub use codex_protocol::config_types::AltScreenMode;
-pub use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::config_types::EnvironmentVariablePattern;
-pub use codex_protocol::config_types::ModeKind;
-pub use codex_protocol::config_types::Personality;
-pub use codex_protocol::config_types::ServiceTier;
-use codex_protocol::config_types::ShellEnvironmentPolicy;
-use codex_protocol::config_types::ShellEnvironmentPolicyInherit;
-pub use codex_protocol::config_types::WebSearchMode;
-use codex_utils_absolute_path::AbsolutePathBuf;
+pub use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::config_types::EnvironmentVariablePattern;
+pub use crewon_protocol::config_types::ModeKind;
+pub use crewon_protocol::config_types::Personality;
+pub use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::config_types::ShellEnvironmentPolicy;
+use crewon_protocol::config_types::ShellEnvironmentPolicyInherit;
+pub use crewon_protocol::config_types::WebSearchMode;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
@@ -28,20 +27,6 @@ use std::fmt;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-
-pub use crate::tui_keymap::KeybindingSpec;
-pub use crate::tui_keymap::KeybindingsSpec;
-pub use crate::tui_keymap::MAX_FUNCTION_KEY;
-pub use crate::tui_keymap::TuiApprovalKeymap;
-pub use crate::tui_keymap::TuiChatKeymap;
-pub use crate::tui_keymap::TuiComposerKeymap;
-pub use crate::tui_keymap::TuiEditorKeymap;
-pub use crate::tui_keymap::TuiGlobalKeymap;
-pub use crate::tui_keymap::TuiKeymap;
-pub use crate::tui_keymap::TuiListKeymap;
-pub use crate::tui_keymap::TuiPagerKeymap;
-pub use crate::tui_keymap::TuiVimNormalKeymap;
-pub use crate::tui_keymap::TuiVimOperatorKeymap;
 
 pub const DEFAULT_OTEL_ENVIRONMENT: &str = "dev";
 pub const DEFAULT_MEMORIES_MAX_ROLLOUTS_PER_STARTUP: usize = 2;
@@ -59,55 +44,31 @@ const fn default_enabled() -> bool {
     true
 }
 
-/// Preferred layout for the resume/fork session picker.
-#[derive(Serialize, Deserialize, Debug, Default, Copy, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "kebab-case")]
-pub enum SessionPickerViewMode {
-    Comfortable,
-    #[default]
-    Dense,
-}
-
-impl SessionPickerViewMode {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Comfortable => "comfortable",
-            Self::Dense => "dense",
-        }
-    }
-}
-
-impl fmt::Display for SessionPickerViewMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-/// Determine where Codex should store CLI auth credentials.
+/// Determine where Crewon should store auth credentials.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthCredentialsStoreMode {
     #[default]
-    /// Persist credentials in CODEX_HOME/auth.json.
+    /// Persist credentials in the legacy `CODEX_HOME/auth.json` file.
     File,
     /// Persist credentials in the keyring. Fail if unavailable.
     Keyring,
-    /// Use keyring when available; otherwise, fall back to a file in CODEX_HOME.
+    /// Use keyring when available; otherwise, fall back to the legacy CODEX_HOME file.
     Auto,
     /// Store credentials in memory only for the current process.
     Ephemeral,
 }
 
-/// Determine where Codex should store and read MCP credentials.
+/// Determine where Crewon should store and read MCP credentials.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum OAuthCredentialsStoreMode {
     /// `Keyring` when available; otherwise, `File`.
-    /// Credentials stored in the keyring will only be readable by Codex unless the user explicitly grants access via OS-level keyring access.
+    /// Credentials stored in the keyring will only be readable by Crewon unless the user explicitly grants access via OS-level keyring access.
     #[default]
     Auto,
-    /// CODEX_HOME/.credentials.json
-    /// This file will be readable to Codex and other applications running as the same user.
+    /// Legacy `CODEX_HOME/.credentials.json`.
+    /// This file will be readable to Crewon and other applications running as the same user.
     File,
     /// Keyring when available, otherwise fail.
     Keyring,
@@ -160,7 +121,7 @@ impl UriBasedFileOpener {
     }
 }
 
-/// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
+/// Settings that govern if and what will be written to the legacy history file.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[serde(default)]
 #[schemars(deny_unknown_fields)]
@@ -189,14 +150,14 @@ pub enum HistoryPersistence {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct AnalyticsConfigToml {
-    /// When `false`, disables analytics across Codex product surfaces in this profile.
+    /// When `false`, disables analytics across Crewon product surfaces in this profile.
     pub enabled: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct FeedbackConfigToml {
-    /// When `false`, disables the feedback flow across Codex product surfaces.
+    /// When `false`, disables the feedback flow across Crewon product surfaces.
     pub enabled: Option<bool>,
 }
 
@@ -281,7 +242,7 @@ pub struct MemoriesToml {
     pub max_rollouts_per_startup: Option<usize>,
     /// Minimum idle time between last thread activity and memory creation (hours). > 12h recommended.
     pub min_rollout_idle_hours: Option<i64>,
-    /// Minimum remaining percentage required in Codex rate-limit windows before memory startup runs.
+    /// Minimum remaining percentage required in Crewon rate-limit windows before memory startup runs.
     #[schemars(range(min = 0, max = 100))]
     pub min_rate_limit_remaining_percent: Option<i64>,
     /// Model used for thread summarisation.
@@ -421,7 +382,7 @@ pub struct AppToolsConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct AppConfig {
-    /// When `false`, Codex does not surface this app.
+    /// When `false`, Crewon does not surface this app.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
@@ -594,10 +555,10 @@ impl fmt::Display for NotificationMethod {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum NotificationCondition {
-    /// Emit TUI notifications only while the terminal is unfocused.
+    /// Emit client notifications only while the active surface is unfocused.
     #[default]
     Unfocused,
-    /// Emit TUI notifications regardless of terminal focus.
+    /// Emit client notifications regardless of focus.
     Always,
 }
 
@@ -610,20 +571,10 @@ impl fmt::Display for NotificationCondition {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, Default)]
-#[serde(rename_all = "kebab-case")]
-pub enum TuiPetAnchor {
-    /// Anchor the pet to the bottom of the current TUI composer viewport.
-    #[default]
-    Composer,
-    /// Anchor the pet to the physical bottom of the terminal screen.
-    ScreenBottom,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
-pub struct TuiNotificationSettings {
-    /// Enable desktop notifications from the TUI.
+pub struct ClientNotificationSettings {
+    /// Enable desktop notifications from interactive clients.
     /// Defaults to `true`.
     #[serde(default, rename = "notifications")]
     pub notifications: Notifications,
@@ -633,7 +584,7 @@ pub struct TuiNotificationSettings {
     #[serde(default, rename = "notification_method")]
     pub method: NotificationMethod,
 
-    /// Controls whether TUI notifications are delivered only when the terminal is unfocused or
+    /// Controls whether client notifications are delivered only when the active surface is unfocused or
     /// regardless of focus. Defaults to `unfocused`.
     #[serde(default, rename = "notification_condition")]
     pub condition: NotificationCondition,
@@ -647,113 +598,30 @@ pub struct ModelAvailabilityNuxConfig {
     pub shown_count: HashMap<String, u32>,
 }
 
-/// Fallback resize-reflow row cap when Codex cannot identify a terminal-specific scrollback size.
+/// Fallback resize-reflow row cap when Crewon cannot identify a terminal-specific scrollback size.
 pub const DEFAULT_TERMINAL_RESIZE_REFLOW_FALLBACK_MAX_ROWS: usize = 1_000;
 
-/// Collection of settings that are specific to the TUI.
+/// Collection of settings that are specific to interactive clients.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
-pub struct Tui {
+pub struct Client {
     #[serde(default, flatten)]
-    pub notification_settings: TuiNotificationSettings,
+    pub notification_settings: ClientNotificationSettings,
 
-    /// Enable animations (welcome screen, shimmer effects, spinners).
-    /// Defaults to `true`.
-    #[serde(default = "default_true")]
-    pub animations: bool,
-
-    /// Show startup tooltips in the TUI welcome screen.
-    /// Defaults to `true`.
-    #[serde(default = "default_true")]
-    pub show_tooltips: bool,
-
-    /// Start the composer in Vim mode (`Normal`) by default.
-    /// Defaults to `false`.
-    #[serde(default)]
-    pub vim_mode_default: bool,
-
-    /// Start the TUI in raw scrollback mode for copy-friendly transcript output.
-    /// Defaults to `false`.
-    #[serde(default)]
-    pub raw_output_mode: bool,
-
-    /// Controls whether the TUI uses the terminal's alternate screen buffer.
-    ///
-    /// - `auto` (default): Use alternate screen.
-    /// - `always`: Always use alternate screen.
-    /// - `never`: Never use alternate screen (inline mode only, preserves scrollback).
-    #[serde(default)]
-    pub alternate_screen: AltScreenMode,
-
-    /// Ordered list of status line item identifiers.
-    ///
-    /// When set, the TUI renders the selected items as the status line.
-    /// When unset, the TUI defaults to: `model-with-reasoning` and `current-dir`.
-    #[serde(default)]
-    pub status_line: Option<Vec<String>>,
-
-    /// Color status line items with colors derived from the active syntax theme.
-    /// Defaults to `true`.
-    #[serde(default = "default_true")]
-    pub status_line_use_colors: bool,
-
-    /// Ordered list of terminal title item identifiers.
-    ///
-    /// When set, the TUI renders the selected items into the terminal window/tab title.
-    /// When unset, the TUI defaults to: `activity` and `project`.
-    /// The `activity` item spins while working and shows an action-required
-    /// message when blocked on the user.
-    #[serde(default)]
-    pub terminal_title: Option<Vec<String>>,
-
-    /// Syntax highlighting theme name (kebab-case).
-    ///
-    /// When set, overrides automatic light/dark theme detection.
-    /// Use `/theme` in the TUI or see `$CODEX_HOME/themes` for custom themes.
-    #[serde(default)]
-    pub theme: Option<String>,
-
-    /// Pet id to preselect in the terminal pet picker.
-    ///
-    /// Custom pet ids resolve against CODEX_HOME/pets/<pet-id>/pet.json.
-    #[serde(default)]
-    pub pet: Option<String>,
-
-    /// Where the terminal pet should anchor vertically.
-    ///
-    /// Defaults to `composer`, which follows the current TUI composer viewport.
-    #[serde(default)]
-    pub pet_anchor: TuiPetAnchor,
-
-    /// Preferred layout for resume/fork session picker results.
-    #[serde(default)]
-    pub session_picker_view: Option<SessionPickerViewMode>,
-
-    /// Keybinding overrides for the TUI.
-    ///
-    /// This supports rebinding selected actions globally and by context.
-    /// Context bindings take precedence over `global` bindings.
-    #[serde(default)]
-    pub keymap: TuiKeymap,
-
-    /// Startup tooltip availability NUX state persisted by the TUI.
+    /// Startup availability NUX state persisted by interactive clients.
     #[serde(default)]
     pub model_availability_nux: ModelAvailabilityNuxConfig,
 
     /// Trim terminal resize-reflow replay to the most recent rendered terminal rows when the
-    /// transcript exceeds this cap. Omit to use Codex's terminal-specific default. Set to `0` to
+    /// transcript exceeds this cap. Omit to use Crewon's terminal-specific default. Set to `0` to
     /// keep all rendered rows.
     #[serde(default)]
     #[schemars(range(min = 0))]
     pub terminal_resize_reflow_max_rows: Option<usize>,
 }
 
-const fn default_true() -> bool {
-    true
-}
-
-/// Settings for notices we display to users via the tui and app-server clients
-/// (primarily the Codex IDE extension). NOTE: these are different from
+/// Settings for notices we display to users via interactive clients
+/// (primarily the Crewon IDE extension). NOTE: these are different from
 /// notifications - notices are warnings, NUX screens, acknowledgements, etc.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -777,7 +645,7 @@ pub struct Notice {
     pub hide_full_access_warning: Option<bool>,
     /// Tracks whether the user has acknowledged the Windows world-writable directories warning.
     pub hide_world_writable_warning: Option<bool>,
-    /// Tracks whether the user opted out of Codex-managed fast defaults.
+    /// Tracks whether the user opted out of Crewon-managed fast defaults.
     pub fast_default_opt_out: Option<bool>,
     /// Tracks whether the user opted out of the rate limit model switch reminder.
     pub hide_rate_limit_model_nudge: Option<bool>,
@@ -816,7 +684,7 @@ pub struct PluginConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct PluginMcpServerConfig {
-    /// When `false`, Codex skips initializing this plugin MCP server.
+    /// When `false`, Crewon skips initializing this plugin MCP server.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
@@ -852,10 +720,10 @@ impl Default for PluginMcpServerConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct MarketplaceConfig {
-    /// Last time Codex successfully added or refreshed this marketplace.
+    /// Last time Crewon successfully added or refreshed this marketplace.
     #[serde(default)]
     pub last_updated: Option<String>,
-    /// Git revision Codex last successfully activated for this marketplace.
+    /// Git revision Crewon last successfully activated for this marketplace.
     #[serde(default)]
     pub last_revision: Option<String>,
     /// Source kind used to install this marketplace.
@@ -892,7 +760,7 @@ pub struct SandboxWorkspaceWrite {
     pub exclude_slash_tmp: bool,
 }
 
-impl From<SandboxWorkspaceWrite> for codex_app_server_protocol::SandboxSettings {
+impl From<SandboxWorkspaceWrite> for crewon_app_server_protocol::SandboxSettings {
     fn from(sandbox_workspace_write: SandboxWorkspaceWrite) -> Self {
         Self {
             writable_roots: sandbox_workspace_write.writable_roots,

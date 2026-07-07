@@ -21,7 +21,7 @@ use crate::state::validate_policy_against_constraints;
 use anyhow::Context;
 use anyhow::Result;
 use async_trait::async_trait;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use globset::GlobSet;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -42,7 +42,7 @@ use tracing::warn;
 
 const MAX_BLOCKED_EVENTS: usize = 200;
 const DNS_LOOKUP_TIMEOUT: Duration = Duration::from_secs(2);
-const NETWORK_POLICY_VIOLATION_PREFIX: &str = "CODEX_NETWORK_POLICY_VIOLATION";
+const NETWORK_POLICY_VIOLATION_PREFIX: &str = "CREWON_NETWORK_POLICY_VIOLATION";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NetworkProxyAuditMetadata {
@@ -292,7 +292,7 @@ impl NetworkProxyState {
 
     pub async fn current_cfg(&self) -> Result<NetworkProxyConfig> {
         // Callers treat `NetworkProxyState` as a live view of policy. We reload-on-demand so edits to
-        // `config.toml` (including Codex-managed writes) take effect without a restart.
+        // `config.toml` (including Crewon-managed writes) take effect without a restart.
         self.reload_if_needed().await?;
         let guard = self.state.read().await;
         Ok(guard.config.clone())
@@ -962,7 +962,10 @@ mod tests {
 
     #[tokio::test]
     async fn host_blocked_requires_allowlist_match() {
-        let state = network_proxy_state_for_policy(network_settings(&["example.com"], &[]));
+        let state = network_proxy_state_for_policy(NetworkProxySettings {
+            allow_local_binding: true,
+            ..network_settings(&["example.com"], &[])
+        });
 
         assert_eq!(
             state
@@ -981,7 +984,10 @@ mod tests {
 
     #[tokio::test]
     async fn add_allowed_domain_removes_matching_deny_entry() {
-        let state = network_proxy_state_for_policy(network_settings(&[], &["example.com"]));
+        let state = network_proxy_state_for_policy(NetworkProxySettings {
+            allow_local_binding: true,
+            ..network_settings(&[], &["example.com"])
+        });
 
         state.add_allowed_domain("ExAmPlE.CoM").await.unwrap();
 
@@ -1210,30 +1216,39 @@ mod tests {
 
         assert_eq!(
             blocked_request_violation_log_line(&entry),
-            r#"CODEX_NETWORK_POLICY_VIOLATION {"host":"google.com","reason":"not_allowed","client":"127.0.0.1","method":"GET","mode":"full","protocol":"http","decision":"ask","source":"decider","port":80,"timestamp":1735689600}"#
+            r#"CREWON_NETWORK_POLICY_VIOLATION {"host":"google.com","reason":"not_allowed","client":"127.0.0.1","method":"GET","mode":"full","protocol":"http","decision":"ask","source":"decider","port":80,"timestamp":1735689600}"#
         );
     }
 
     #[tokio::test]
     async fn host_blocked_subdomain_wildcards_exclude_apex() {
-        let state = network_proxy_state_for_policy(network_settings(&["*.openai.com"], &[]));
+        let state = network_proxy_state_for_policy(NetworkProxySettings {
+            allow_local_binding: true,
+            ..network_settings(&["*.example.com"], &[])
+        });
 
         assert_eq!(
             state
-                .host_blocked("api.openai.com", /*port*/ 80)
+                .host_blocked("api.example.com", /*port*/ 80)
                 .await
                 .unwrap(),
             HostBlockDecision::Allowed
         );
         assert_eq!(
-            state.host_blocked("openai.com", /*port*/ 80).await.unwrap(),
+            state
+                .host_blocked("example.com", /*port*/ 80)
+                .await
+                .unwrap(),
             HostBlockDecision::Blocked(HostBlockReason::NotAllowed)
         );
     }
 
     #[tokio::test]
     async fn host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist() {
-        let state = network_proxy_state_for_policy(network_settings(&["*"], &["evil.example"]));
+        let state = network_proxy_state_for_policy(NetworkProxySettings {
+            allow_local_binding: true,
+            ..network_settings(&["*"], &["evil.example"])
+        });
 
         assert_eq!(
             state
@@ -1244,7 +1259,7 @@ mod tests {
         );
         assert_eq!(
             state
-                .host_blocked("api.openai.com", /*port*/ 443)
+                .host_blocked("api.example.com", /*port*/ 443)
                 .await
                 .unwrap(),
             HostBlockDecision::Allowed
@@ -1502,7 +1517,7 @@ mod tests {
 
         let config = NetworkProxyConfig {
             network: {
-                let mut network = network_settings(&["example.com", "api.openai.com"], &[]);
+                let mut network = network_settings(&["example.com", "api.example.com"], &[]);
                 network.enabled = true;
                 network
             },
@@ -1773,20 +1788,20 @@ mod tests {
 
     #[test]
     fn compile_globset_excludes_apex_for_subdomain_patterns() {
-        let patterns = vec!["*.openai.com".to_string()];
+        let patterns = vec!["*.example.com".to_string()];
         let set = compile_denylist_globset(&patterns).unwrap();
-        assert!(set.is_match("api.openai.com"));
-        assert!(!set.is_match("openai.com"));
-        assert!(!set.is_match("evilopenai.com"));
+        assert!(set.is_match("api.example.com"));
+        assert!(!set.is_match("example.com"));
+        assert!(!set.is_match("evilexample.com"));
     }
 
     #[test]
     fn compile_globset_includes_apex_for_double_wildcard_patterns() {
-        let patterns = vec!["**.openai.com".to_string()];
+        let patterns = vec!["**.example.com".to_string()];
         let set = compile_denylist_globset(&patterns).unwrap();
-        assert!(set.is_match("openai.com"));
-        assert!(set.is_match("api.openai.com"));
-        assert!(!set.is_match("evilopenai.com"));
+        assert!(set.is_match("example.com"));
+        assert!(set.is_match("api.example.com"));
+        assert!(!set.is_match("evilexample.com"));
     }
 
     #[test]
@@ -1800,7 +1815,7 @@ mod tests {
         let patterns = vec!["*".to_string()];
         let set = compile_allowlist_globset(&patterns).unwrap();
         assert!(set.is_match("example.com"));
-        assert!(set.is_match("api.openai.com"));
+        assert!(set.is_match("api.example.com"));
         assert!(set.is_match("localhost"));
     }
 

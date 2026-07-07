@@ -1,11 +1,11 @@
 [package]
-name = "codex-network-proxy"
+name = "crewon-network-proxy"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 
 [lib]
-name = "codex_network_proxy"
+name = "crewon_network_proxy"
 path = "src/lib.rs"
 doctest = false
 
@@ -18,9 +18,9 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 chrono = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
-codex-utils-home-dir = { workspace = true }
-codex-utils-rustls-provider = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
+crewon-utils-home-dir = { workspace = true }
+crewon-utils-rustls-provider = { workspace = true }
 globset = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

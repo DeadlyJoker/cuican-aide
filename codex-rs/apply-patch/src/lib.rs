@@ -11,11 +11,11 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use anyhow::Result;
-use codex_exec_server::CreateDirectoryOptions;
-use codex_exec_server::ExecutorFileSystem;
-use codex_exec_server::FileSystemSandboxContext;
-use codex_exec_server::RemoveOptions;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_exec_server::CreateDirectoryOptions;
+use crewon_exec_server::ExecutorFileSystem;
+use crewon_exec_server::FileSystemSandboxContext;
+use crewon_exec_server::RemoveOptions;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 pub use parser::Hunk;
 pub use parser::ParseError;
 use parser::ParseError::*;
@@ -31,14 +31,14 @@ pub use standalone_executable::main;
 
 use crate::invocation::ExtractHeredocError;
 
-/// Special argv[1] flag used when the Codex executable self-invokes to run the
+/// Special argv[1] flag used when the Crewon executable self-invokes to run the
 /// internal `apply_patch` path.
 ///
-/// Although this constant lives in `codex-apply-patch` (to avoid forcing
-/// `codex-arg0` to depend on `codex-core`), it remains part of the "codex core"
+/// Although this constant lives in `crewon-apply-patch` (to avoid forcing
+/// `crewon-arg0` to depend on `crewon-core`), it remains part of the Crewon core
 /// process-invocation contract for the standalone `apply_patch` command
 /// surface.
-pub const CODEX_CORE_APPLY_PATCH_ARG1: &str = "--codex-run-as-apply-patch";
+pub const CREWON_CORE_APPLY_PATCH_ARG1: &str = "--crewon-run-as-apply-patch";
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ApplyPatchError {
@@ -865,8 +865,8 @@ pub fn print_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_exec_server::LOCAL_FS;
-    use codex_utils_absolute_path::test_support::PathExt;
+    use crewon_exec_server::LOCAL_FS;
+    use crewon_utils_absolute_path::test_support::PathExt;
     use pretty_assertions::assert_eq;
     use std::fs;
     use std::string::ToString;

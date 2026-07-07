@@ -23,29 +23,29 @@ use crate::sandboxing::SandboxPermissions;
 use crate::spawn::SpawnChildRequest;
 use crate::spawn::StdioPolicy;
 use crate::spawn::spawn_child_async;
-use codex_network_proxy::NetworkProxy;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result;
-use codex_protocol::error::SandboxErr;
-use codex_protocol::exec_output::ExecToolCallOutput;
-use codex_protocol::exec_output::StreamOutput;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ExecCommandOutputDeltaEvent;
-use codex_protocol::protocol::ExecOutputStream;
-use codex_sandboxing::SandboxCommand;
-use codex_sandboxing::SandboxManager;
-use codex_sandboxing::SandboxTransformRequest;
-use codex_sandboxing::SandboxType;
-use codex_sandboxing::SandboxablePreference;
-use codex_sandboxing::compatibility_sandbox_policy_for_permission_profile;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_pty::DEFAULT_OUTPUT_BYTES_CAP;
-use codex_utils_pty::process_group::kill_child_process_group;
+use crewon_network_proxy::NetworkProxy;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result;
+use crewon_protocol::error::SandboxErr;
+use crewon_protocol::exec_output::ExecToolCallOutput;
+use crewon_protocol::exec_output::StreamOutput;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ExecCommandOutputDeltaEvent;
+use crewon_protocol::protocol::ExecOutputStream;
+use crewon_sandboxing::SandboxCommand;
+use crewon_sandboxing::SandboxManager;
+use crewon_sandboxing::SandboxTransformRequest;
+use crewon_sandboxing::SandboxType;
+use crewon_sandboxing::SandboxablePreference;
+use crewon_sandboxing::compatibility_sandbox_policy_for_permission_profile;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_pty::DEFAULT_OUTPUT_BYTES_CAP;
+use crewon_utils_pty::process_group::kill_child_process_group;
 
 pub const DEFAULT_EXEC_COMMAND_TIMEOUT_MS: u64 = 10_000;
 
@@ -89,7 +89,7 @@ pub struct ExecParams {
     pub env: HashMap<String, String>,
     pub network: Option<NetworkProxy>,
     pub sandbox_permissions: SandboxPermissions,
-    pub windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel,
+    pub windows_sandbox_level: crewon_protocol::config_types::WindowsSandboxLevel,
     pub windows_sandbox_private_desktop: bool,
     pub justification: Option<String>,
     pub arg0: Option<String>,
@@ -136,7 +136,7 @@ pub enum ExecCapturePolicy {
 fn select_process_exec_tool_sandbox_type(
     file_system_sandbox_policy: &FileSystemSandboxPolicy,
     network_sandbox_policy: NetworkSandboxPolicy,
-    windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel,
+    windows_sandbox_level: crewon_protocol::config_types::WindowsSandboxLevel,
     enforce_managed_network: bool,
 ) -> SandboxType {
     SandboxManager::new().select_initial(
@@ -308,7 +308,7 @@ pub async fn process_exec_tool_call(
     permission_profile: &PermissionProfile,
     sandbox_cwd: &AbsolutePathBuf,
     windows_sandbox_workspace_roots: &[AbsolutePathBuf],
-    codex_linux_sandbox_exe: &Option<PathBuf>,
+    crewon_linux_sandbox_exe: &Option<PathBuf>,
     use_legacy_landlock: bool,
     stdout_stream: Option<StdoutStream>,
 ) -> Result<ExecToolCallOutput> {
@@ -317,7 +317,7 @@ pub async fn process_exec_tool_call(
         permission_profile,
         sandbox_cwd,
         windows_sandbox_workspace_roots,
-        codex_linux_sandbox_exe,
+        crewon_linux_sandbox_exe,
         use_legacy_landlock,
     )?;
 
@@ -332,7 +332,7 @@ pub fn build_exec_request(
     permission_profile: &PermissionProfile,
     sandbox_cwd: &AbsolutePathBuf,
     windows_sandbox_workspace_roots: &[AbsolutePathBuf],
-    codex_linux_sandbox_exe: &Option<PathBuf>,
+    crewon_linux_sandbox_exe: &Option<PathBuf>,
     use_legacy_landlock: bool,
 ) -> Result<ExecRequest> {
     let ExecParams {
@@ -393,7 +393,7 @@ pub fn build_exec_request(
             enforce_managed_network,
             network: network.as_ref(),
             sandbox_policy_cwd: sandbox_cwd,
-            codex_linux_sandbox_exe: codex_linux_sandbox_exe.as_deref(),
+            crewon_linux_sandbox_exe: crewon_linux_sandbox_exe.as_deref(),
             use_legacy_landlock,
             windows_sandbox_level,
             windows_sandbox_private_desktop,
@@ -554,7 +554,7 @@ fn windowsapps_path_kind(path: &str) -> &'static str {
 #[cfg(target_os = "windows")]
 fn record_windows_sandbox_spawn_failure(
     command_path: Option<&str>,
-    windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel,
+    windows_sandbox_level: crewon_protocol::config_types::WindowsSandboxLevel,
     err: &str,
 ) {
     let Some(error_code) = extract_create_process_as_user_error_code(err) else {
@@ -569,15 +569,15 @@ fn record_windows_sandbox_spawn_failure(
     let path_kind = windowsapps_path_kind(path);
     let level = if matches!(
         windows_sandbox_level,
-        codex_protocol::config_types::WindowsSandboxLevel::Elevated
+        crewon_protocol::config_types::WindowsSandboxLevel::Elevated
     ) {
         "elevated"
     } else {
         "legacy"
     };
-    if let Some(metrics) = codex_otel::global() {
+    if let Some(metrics) = crewon_otel::global() {
         let _ = metrics.counter(
-            "codex.windows_sandbox.createprocessasuserw_failed",
+            "crewon.windows_sandbox.createprocessasuserw_failed",
             /*inc*/ 1,
             &[
                 ("error_code", error_code.as_str()),
@@ -597,9 +597,9 @@ async fn exec_windows_sandbox(
     windows_sandbox_workspace_roots: &[AbsolutePathBuf],
     windows_sandbox_filesystem_overrides: Option<&WindowsSandboxFilesystemOverrides>,
 ) -> Result<RawExecToolCallOutput> {
-    use crate::config::find_codex_home;
-    use codex_windows_sandbox::run_windows_sandbox_capture_for_permission_profile_elevated;
-    use codex_windows_sandbox::run_windows_sandbox_capture_with_filesystem_overrides;
+    use crate::config::find_crewon_home;
+    use crewon_windows_sandbox::run_windows_sandbox_capture_for_permission_profile_elevated;
+    use crewon_windows_sandbox::run_windows_sandbox_capture_with_filesystem_overrides;
 
     let ExecParams {
         command,
@@ -619,7 +619,7 @@ async fn exec_windows_sandbox(
     // Windows sandbox capture still receives timeout and cancellation separately.
     let (cancellation, timeout_ms) = if capture_policy.uses_expiration() {
         let cancellation = expiration.cancellation_token().map(|token| {
-            codex_windows_sandbox::WindowsSandboxCancellationToken::new(move || {
+            crewon_windows_sandbox::WindowsSandboxCancellationToken::new(move || {
                 token.is_cancelled()
             })
         });
@@ -634,9 +634,9 @@ async fn exec_windows_sandbox(
         windows_sandbox_workspace_roots.to_vec()
     };
     let permission_profile = permission_profile.clone();
-    let codex_home = find_codex_home().map_err(|err| {
+    let codex_home = find_crewon_home().map_err(|err| {
         CodexErr::Io(io::Error::other(format!(
-            "windows sandbox: failed to resolve codex_home: {err}"
+            "windows sandbox: failed to resolve crewon_home: {err}"
         )))
     })?;
     let command_path = command.first().cloned();
@@ -658,7 +658,7 @@ async fn exec_windows_sandbox(
     let spawn_res = tokio::task::spawn_blocking(move || {
         if use_elevated {
             run_windows_sandbox_capture_for_permission_profile_elevated(
-                codex_windows_sandbox::ElevatedSandboxProfileCaptureRequest {
+                crewon_windows_sandbox::ElevatedSandboxProfileCaptureRequest {
                     permission_profile: &permission_profile,
                     workspace_roots: workspace_roots.as_slice(),
                     codex_home: codex_home.as_ref(),
@@ -1078,7 +1078,7 @@ pub(crate) fn resolve_windows_restricted_token_filesystem_overrides(
         );
     }
 
-    let additional_deny_read_paths = codex_windows_sandbox::resolve_windows_deny_read_paths(
+    let additional_deny_read_paths = crewon_windows_sandbox::resolve_windows_deny_read_paths(
         &file_system_sandbox_policy,
         sandbox_policy_cwd,
     )?;
@@ -1208,7 +1208,7 @@ pub(crate) fn resolve_windows_elevated_filesystem_overrides(
         ));
     }
 
-    let additional_deny_read_paths = codex_windows_sandbox::resolve_windows_deny_read_paths(
+    let additional_deny_read_paths = crewon_windows_sandbox::resolve_windows_deny_read_paths(
         &file_system_sandbox_policy,
         sandbox_policy_cwd,
     )?;
@@ -1237,7 +1237,7 @@ pub(crate) fn resolve_windows_elevated_filesystem_overrides(
     let split_readable_roots: Vec<PathBuf> = file_system_sandbox_policy
         .get_readable_roots_with_cwd(sandbox_policy_cwd)
         .into_iter()
-        .map(codex_utils_absolute_path::AbsolutePathBuf::into_path_buf)
+        .map(crewon_utils_absolute_path::AbsolutePathBuf::into_path_buf)
         .map(&normalize_path)
         .collect();
     let split_root_paths: Vec<PathBuf> = split_writable_roots
@@ -1325,7 +1325,7 @@ fn permission_profile_display_name(permission_profile: &PermissionProfile) -> &'
 }
 
 fn has_reopened_writable_descendant(
-    writable_roots: &[codex_protocol::protocol::WritableRoot],
+    writable_roots: &[crewon_protocol::protocol::WritableRoot],
 ) -> bool {
     writable_roots.iter().any(|writable_root| {
         writable_root
@@ -1408,7 +1408,7 @@ async fn consume_output(
                     // remaining members of the original process group.
                     let process_group_id = child.id();
                     let should_escalate = if let Some(process_group_id) = process_group_id {
-                        codex_utils_pty::process_group::terminate_process_group(process_group_id)?
+                        crewon_utils_pty::process_group::terminate_process_group(process_group_id)?
                     } else {
                         false
                     };
@@ -1423,7 +1423,7 @@ async fn consume_output(
                             if should_escalate
                                 && let Some(process_group_id) = process_group_id
                             {
-                                codex_utils_pty::process_group::kill_process_group(
+                                crewon_utils_pty::process_group::kill_process_group(
                                     process_group_id,
                                 )?;
                             }

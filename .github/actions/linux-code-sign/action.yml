@@ -9,7 +9,7 @@ inputs:
     required: true
   binaries:
     description: Space-delimited binary basenames to sign.
-    default: "codex codex-responses-api-proxy"
+    default: ""
 
 runs:
   using: composite
@@ -33,6 +33,11 @@ runs:
         if [[ ! -d "$dest" ]]; then
           echo "Destination $dest does not exist"
           exit 1
+        fi
+
+        if [[ -z "${BINARIES// }" ]]; then
+          echo "No Linux binaries requested for signing"
+          exit 0
         fi
 
         for binary in ${BINARIES}; do

@@ -5,10 +5,10 @@ use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use codex_analytics::TurnProfile;
-use codex_otel::TURN_TTFM_DURATION_METRIC;
-use codex_protocol::items::TurnItem;
-use codex_protocol::models::ResponseItem;
+use crewon_analytics::TurnProfile;
+use crewon_otel::TURN_TTFM_DURATION_METRIC;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::models::ResponseItem;
 use tokio::sync::Mutex;
 
 use crate::ResponseEvent;
@@ -357,13 +357,13 @@ fn response_item_records_turn_ttft(item: &ResponseItem) -> bool {
             summary, content, ..
         } => {
             summary.iter().any(|entry| match entry {
-                codex_protocol::models::ReasoningItemReasoningSummary::SummaryText { text } => {
+                crewon_protocol::models::ReasoningItemReasoningSummary::SummaryText { text } => {
                     !text.is_empty()
                 }
             }) || content.as_ref().is_some_and(|entries| {
                 entries.iter().any(|entry| match entry {
-                    codex_protocol::models::ReasoningItemContent::ReasoningText { text }
-                    | codex_protocol::models::ReasoningItemContent::Text { text } => {
+                    crewon_protocol::models::ReasoningItemContent::ReasoningText { text }
+                    | crewon_protocol::models::ReasoningItemContent::Text { text } => {
                         !text.is_empty()
                     }
                 })

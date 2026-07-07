@@ -2,7 +2,7 @@ use std::io::ErrorKind;
 use std::path::Path;
 
 use crate::rollout::SESSIONS_SUBDIR;
-use codex_protocol::error::CodexErr;
+use crewon_protocol::error::CodexErr;
 
 pub(crate) fn map_session_init_error(err: &anyhow::Error, codex_home: &Path) -> CodexErr {
     if let Some(mapped) = err
@@ -20,16 +20,16 @@ fn map_rollout_io_error(io_err: &std::io::Error, codex_home: &Path) -> Option<Co
     let sessions_dir = codex_home.join(SESSIONS_SUBDIR);
     let hint = match io_err.kind() {
         ErrorKind::PermissionDenied => format!(
-            "Codex cannot access session files at {} (permission denied). If sessions were created using sudo, fix ownership: sudo chown -R $(whoami) {}",
+            "Crewon cannot access session files at {} (permission denied). If sessions were created using sudo, fix ownership: sudo chown -R $(whoami) {}",
             sessions_dir.display(),
             codex_home.display()
         ),
         ErrorKind::NotFound => format!(
-            "Session storage missing at {}. Create the directory or choose a different Codex home.",
+            "Session storage missing at {}. Create the directory or choose a different Crewon home.",
             sessions_dir.display()
         ),
         ErrorKind::AlreadyExists => format!(
-            "Session storage path {} is blocked by an existing file. Remove or rename it so Codex can create sessions.",
+            "Session storage path {} is blocked by an existing file. Remove or rename it so Crewon can create sessions.",
             sessions_dir.display()
         ),
         ErrorKind::InvalidData | ErrorKind::InvalidInput => format!(
@@ -37,7 +37,7 @@ fn map_rollout_io_error(io_err: &std::io::Error, codex_home: &Path) -> Option<Co
             sessions_dir.display()
         ),
         ErrorKind::IsADirectory | ErrorKind::NotADirectory => format!(
-            "Session storage path {} has an unexpected type. Ensure it is a directory Codex can use for session files.",
+            "Session storage path {} has an unexpected type. Ensure it is a directory Crewon can use for session files.",
             sessions_dir.display()
         ),
         _ => return None,

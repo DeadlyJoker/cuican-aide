@@ -1,12 +1,12 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-model-provider"
+name = "crewon-model-provider"
 version.workspace = true
 
 [lib]
 doctest = false
-name = "codex_model_provider"
+name = "crewon_model_provider"
 path = "src/lib.rs"
 
 [lints]
@@ -14,17 +14,17 @@ workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-codex-api = { workspace = true }
-codex-agent-identity = { workspace = true }
-codex-aws-auth = { workspace = true }
-codex-client = { workspace = true }
-codex-feedback = { workspace = true }
-codex-login = { workspace = true }
-codex-model-provider-info = { workspace = true }
-codex-models-manager = { workspace = true }
-codex-otel = { workspace = true }
-codex-protocol = { workspace = true }
-codex-response-debug-context = { workspace = true }
+crewon-api = { workspace = true }
+crewon-agent-identity = { workspace = true }
+crewon-aws-auth = { workspace = true }
+crewon-client = { workspace = true }
+crewon-feedback = { workspace = true }
+crewon-login = { workspace = true }
+crewon-model-provider-info = { workspace = true }
+crewon-models-manager = { workspace = true }
+crewon-otel = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-response-debug-context = { workspace = true }
 http = { workspace = true }
 tokio = { workspace = true, features = ["sync", "time"] }
 tracing = { workspace = true, features = ["log"] }

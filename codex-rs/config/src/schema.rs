@@ -1,7 +1,7 @@
 use crate::config_toml::ConfigToml;
 use crate::types::RawMcpServerConfig;
-use codex_features::FEATURES;
-use codex_features::legacy_feature_keys;
+use crewon_features::FEATURES;
+use crewon_features::legacy_feature_keys;
 use schemars::r#gen::SchemaGenerator;
 use schemars::r#gen::SchemaSettings;
 use schemars::schema::InstanceType;
@@ -23,39 +23,39 @@ pub fn features_schema(schema_gen: &mut SchemaGenerator) -> Schema {
 
     let mut validation = ObjectValidation::default();
     for feature in FEATURES {
-        if feature.id == codex_features::Feature::Artifact {
+        if feature.id == crewon_features::Feature::Artifact {
             continue;
         }
-        if feature.id == codex_features::Feature::CodeMode {
+        if feature.id == crewon_features::Feature::CodeMode {
             validation.properties.insert(
                 feature.key.to_string(),
-                schema_gen.subschema_for::<codex_features::FeatureToml<
-                    codex_features::CodeModeConfigToml,
+                schema_gen.subschema_for::<crewon_features::FeatureToml<
+                    crewon_features::CodeModeConfigToml,
                 >>(),
             );
             continue;
         }
-        if feature.id == codex_features::Feature::MultiAgentV2 {
+        if feature.id == crewon_features::Feature::MultiAgentV2 {
             validation.properties.insert(
                 feature.key.to_string(),
-                schema_gen.subschema_for::<codex_features::FeatureToml<
-                    codex_features::MultiAgentV2ConfigToml,
+                schema_gen.subschema_for::<crewon_features::FeatureToml<
+                    crewon_features::MultiAgentV2ConfigToml,
                 >>(),
             );
             continue;
         }
-        if feature.id == codex_features::Feature::AppsMcpPathOverride {
+        if feature.id == crewon_features::Feature::AppsMcpPathOverride {
             validation.properties.insert(
                 feature.key.to_string(),
                 removed_apps_mcp_path_override_schema(schema_gen),
             );
             continue;
         }
-        if feature.id == codex_features::Feature::NetworkProxy {
+        if feature.id == crewon_features::Feature::NetworkProxy {
             validation.properties.insert(
                 feature.key.to_string(),
-                schema_gen.subschema_for::<codex_features::FeatureToml<
-                    codex_features::NetworkProxyConfigToml,
+                schema_gen.subschema_for::<crewon_features::FeatureToml<
+                    crewon_features::NetworkProxyConfigToml,
                 >>(),
             );
             continue;

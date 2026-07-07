@@ -4,11 +4,11 @@ use super::TransportEvent;
 use super::acquire_app_server_startup_lock;
 use super::app_server_control_socket_path;
 use super::start_control_socket_acceptor;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_core::config::find_codex_home;
-use codex_uds::UnixStream;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_core::config::find_crewon_home;
+use crewon_uds::UnixStream;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use futures::SinkExt;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
@@ -195,7 +195,7 @@ fn absolute_path(path: &str) -> AbsolutePathBuf {
 }
 
 fn default_control_socket_path() -> AbsolutePathBuf {
-    let codex_home = find_codex_home().expect("codex home");
+    let codex_home = find_crewon_home().expect("crewon home");
     app_server_control_socket_path(&codex_home).expect("default control socket path")
 }
 

@@ -1,10 +1,10 @@
 use super::*;
-use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::openai_models::ModelServiceTier;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::openai_models::ReasoningEffortPreset;
-use codex_tools::JsonSchemaPrimitiveType;
-use codex_tools::JsonSchemaType;
+use crewon_protocol::openai_models::ModelPreset;
+use crewon_protocol::openai_models::ModelServiceTier;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::openai_models::ReasoningEffortPreset;
+use crewon_tools::JsonSchemaPrimitiveType;
+use crewon_tools::JsonSchemaType;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 

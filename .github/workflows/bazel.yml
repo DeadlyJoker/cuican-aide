@@ -16,6 +16,9 @@ concurrency:
   group: concurrency-group::${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}${{ github.ref_name == 'main' && format('::{0}', github.run_id) || ''}}
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
+env:
+  CREWON_TRUSTED_UPSTREAM_REPOSITORY: ${{ github.repository }}
+
 jobs:
   test:
     # PRs use the sharded Windows cross-compiled test jobs below. Post-merge
@@ -99,7 +102,6 @@ jobs:
             # legs; authenticated Windows-cross shards below exercise the
             # source-built gnullvm V8 path.
             -//codex-rs/code-mode:code-mode-unit-tests
-            -//codex-rs/v8-poc:v8-poc-unit-tests
           )
 
           bazel_wrapper_args=(
@@ -302,7 +304,6 @@ jobs:
             # Keep this job broad and cheap; authenticated Windows-cross jobs
             # add source-built V8-backed code-mode coverage.
             -//codex-rs/code-mode:code-mode-unit-tests
-            -//codex-rs/v8-poc:v8-poc-unit-tests
           )
 
           bazel_test_args=(

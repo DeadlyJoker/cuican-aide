@@ -2,10 +2,10 @@ use super::CodexErrorInfo;
 use super::ThreadItem;
 use super::ThreadStatus;
 use super::TurnStatus;
-use codex_protocol::protocol::SessionSource as CoreSessionSource;
-use codex_protocol::protocol::SubAgentSource as CoreSubAgentSource;
-use codex_protocol::protocol::ThreadSource as CoreThreadSource;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::protocol::SessionSource as CoreSessionSource;
+use crewon_protocol::protocol::SubAgentSource as CoreSubAgentSource;
+use crewon_protocol::protocol::ThreadSource as CoreThreadSource;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::schema::Schema;
@@ -20,7 +20,10 @@ use ts_rs::TS;
 #[ts(rename_all = "camelCase", export_to = "v2/")]
 #[derive(Default)]
 pub enum SessionSource {
-    Cli,
+    /// Legacy source value for threads created before terminal CLI removal.
+    #[serde(rename = "cli")]
+    #[ts(rename = "cli")]
+    LegacyCli,
     #[serde(rename = "vscode")]
     #[ts(rename = "vscode")]
     #[default]
@@ -36,7 +39,7 @@ pub enum SessionSource {
 impl From<CoreSessionSource> for SessionSource {
     fn from(value: CoreSessionSource) -> Self {
         match value {
-            CoreSessionSource::Cli => SessionSource::Cli,
+            CoreSessionSource::LegacyCli => SessionSource::LegacyCli,
             CoreSessionSource::VSCode => SessionSource::VsCode,
             CoreSessionSource::Exec => SessionSource::Exec,
             CoreSessionSource::Mcp => SessionSource::AppServer,
@@ -52,7 +55,7 @@ impl From<CoreSessionSource> for SessionSource {
 impl From<SessionSource> for CoreSessionSource {
     fn from(value: SessionSource) -> Self {
         match value {
-            SessionSource::Cli => CoreSessionSource::Cli,
+            SessionSource::LegacyCli => CoreSessionSource::LegacyCli,
             SessionSource::VsCode => CoreSessionSource::VSCode,
             SessionSource::Exec => CoreSessionSource::Exec,
             SessionSource::AppServer => CoreSessionSource::Mcp,
@@ -158,9 +161,10 @@ pub struct Thread {
     pub path: Option<PathBuf>,
     /// Working directory captured for the thread.
     pub cwd: AbsolutePathBuf,
-    /// Version of the CLI that created the thread.
-    pub cli_version: String,
-    /// Origin of the thread (CLI, VSCode, codex exec, codex app-server, etc.).
+    /// Version of the client/runtime that created the thread.
+    #[serde(alias = "cliVersion")]
+    pub client_version: String,
+    /// Origin of the thread (legacy CLI, VSCode, Crewon app-server, etc.).
     pub source: SessionSource,
     /// Optional analytics source classification for this thread.
     pub thread_source: Option<ThreadSource>,

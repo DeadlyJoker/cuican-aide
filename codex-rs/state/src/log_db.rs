@@ -8,10 +8,10 @@
 //! ## Usage
 //!
 //! ```no_run
-//! use codex_state::log_db;
+//! use crewon_state::log_db;
 //! use tracing_subscriber::prelude::*;
 //!
-//! # async fn example(state_db: std::sync::Arc<codex_state::StateRuntime>) {
+//! # async fn example(state_db: std::sync::Arc<crewon_state::StateRuntime>) {
 //! let layer = log_db::start(state_db);
 //! let _ = tracing_subscriber::registry()
 //!     .with(layer)
@@ -190,7 +190,7 @@ where
     fn on_event(&self, event: &Event<'_>, ctx: tracing_subscriber::layer::Context<'_, S>) {
         let metadata = event.metadata();
         // The SDK emits DEBUG timer meta-events every second per process; these
-        // were over 30% of retained logs in measured high-fanout Codex environments.
+        // were over 30% of retained logs in measured high-fanout Crewon environments.
         if metadata.target() == "opentelemetry_sdk"
             && matches!(
                 *metadata.level(),
@@ -481,7 +481,7 @@ mod tests {
     use super::*;
 
     fn temp_codex_home() -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("codex-state-log-db-{}", Uuid::new_v4()))
+        std::env::temp_dir().join(format!("crewon-state-log-db-{}", Uuid::new_v4()))
     }
 
     async fn wait_for_log_count(runtime: &StateRuntime, expected: usize) -> Vec<crate::LogRow> {

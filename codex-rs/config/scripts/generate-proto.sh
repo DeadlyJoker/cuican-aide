@@ -15,7 +15,7 @@ trap cleanup EXIT
 (
     cd "$repo_root/codex-rs"
     CARGO_TARGET_DIR="$tmpdir/target" cargo run \
-        -p codex-config \
+        -p crewon-config \
         --example generate-proto \
         -- "$proto_dir"
 )

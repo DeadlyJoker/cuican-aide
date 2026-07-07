@@ -729,7 +729,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::Mutex;
 
-    // Managed MITM CA files live under the shared test CODEX_HOME, so MITM-enabled config state
+    // Managed MITM CA files live under the shared test CREWON_HOME, so MITM-enabled config state
     // must be materialized one test at a time.
     static MITM_CONFIG_STATE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -813,6 +813,7 @@ mod tests {
             enabled: true,
             mode: NetworkMode::Limited,
             mitm: true,
+            allow_local_binding: true,
             ..NetworkProxySettings::default()
         };
         settings.set_allowed_domains(vec!["example.com".to_string()]);
@@ -837,6 +838,7 @@ mod tests {
         let mut settings = NetworkProxySettings {
             enabled: true,
             mode: NetworkMode::Limited,
+            allow_local_binding: true,
             ..NetworkProxySettings::default()
         };
         settings.set_allowed_domains(vec!["example.com".to_string()]);
@@ -883,6 +885,7 @@ mod tests {
         let mut settings = NetworkProxySettings {
             enabled: true,
             mode: NetworkMode::Limited,
+            allow_local_binding: true,
             ..NetworkProxySettings::default()
         };
         settings.set_allowed_domains(vec!["example.com".to_string()]);
@@ -911,11 +914,12 @@ mod tests {
             enabled: true,
             mode: NetworkMode::Full,
             mitm: true,
+            allow_local_binding: true,
             mitm_hooks: vec![MitmHookConfig {
                 host: "api.github.com".to_string(),
                 matcher: MitmHookMatchConfig {
                     methods: vec!["POST".to_string()],
-                    path_prefixes: vec!["/repos/openai/".to_string()],
+                    path_prefixes: vec!["/repos/crewon/".to_string()],
                     ..MitmHookMatchConfig::default()
                 },
                 ..MitmHookConfig::default()
@@ -945,11 +949,12 @@ mod tests {
             enabled: true,
             mode: NetworkMode::Full,
             mitm: true,
+            allow_local_binding: true,
             mitm_hooks: vec![MitmHookConfig {
                 host: "api.github.com".to_string(),
                 matcher: MitmHookMatchConfig {
                     methods: vec!["POST".to_string()],
-                    path_prefixes: vec!["/repos/openai/".to_string()],
+                    path_prefixes: vec!["/repos/crewon/".to_string()],
                     ..MitmHookMatchConfig::default()
                 },
                 ..MitmHookConfig::default()

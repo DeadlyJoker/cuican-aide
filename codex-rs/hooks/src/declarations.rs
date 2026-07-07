@@ -1,5 +1,5 @@
-use codex_plugin::PluginHookSource;
-use codex_protocol::protocol::HookEventName;
+use crewon_plugin::PluginHookSource;
+use crewon_protocol::protocol::HookEventName;
 
 /// Minimal declaration metadata for one bundled plugin hook handler.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,12 +38,12 @@ pub(crate) fn plugin_hook_key_source(plugin_id: &str, source_relative_path: &str
 
 #[cfg(test)]
 mod tests {
-    use codex_config::HookEventsToml;
-    use codex_config::HookHandlerConfig;
-    use codex_config::MatcherGroup;
-    use codex_plugin::PluginId;
-    use codex_utils_absolute_path::test_support::PathBufExt;
-    use codex_utils_absolute_path::test_support::test_path_buf;
+    use crewon_config::HookEventsToml;
+    use crewon_config::HookHandlerConfig;
+    use crewon_config::MatcherGroup;
+    use crewon_plugin::PluginId;
+    use crewon_utils_absolute_path::test_support::PathBufExt;
+    use crewon_utils_absolute_path::test_support::test_path_buf;
     use pretty_assertions::assert_eq;
 
     use super::*;

@@ -1,21 +1,21 @@
 use super::*;
-use codex_mcp::ElicitationReviewRequest;
-use codex_mcp::ElicitationReviewer;
-use codex_mcp::ElicitationReviewerHandle;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::mcp_approval_meta::APPROVAL_KIND_KEY as MCP_ELICITATION_APPROVAL_KIND_KEY;
-use codex_protocol::mcp_approval_meta::APPROVAL_KIND_MCP_TOOL_CALL as MCP_ELICITATION_APPROVAL_KIND_MCP_TOOL_CALL;
-use codex_protocol::mcp_approval_meta::APPROVAL_KIND_TOOL_SUGGESTION as MCP_ELICITATION_APPROVAL_KIND_TOOL_SUGGESTION;
-use codex_protocol::mcp_approval_meta::APPROVALS_REVIEWER_KEY as MCP_ELICITATION_APPROVALS_REVIEWER_KEY;
-use codex_protocol::mcp_approval_meta::CONNECTOR_DESCRIPTION_KEY as MCP_ELICITATION_CONNECTOR_DESCRIPTION_KEY;
-use codex_protocol::mcp_approval_meta::CONNECTOR_ID_KEY as MCP_ELICITATION_CONNECTOR_ID_KEY;
-use codex_protocol::mcp_approval_meta::CONNECTOR_NAME_KEY as MCP_ELICITATION_CONNECTOR_NAME_KEY;
-use codex_protocol::mcp_approval_meta::REQUEST_TYPE_APPROVAL_REQUEST as MCP_ELICITATION_REQUEST_TYPE_APPROVAL_REQUEST;
-use codex_protocol::mcp_approval_meta::REQUEST_TYPE_KEY as MCP_ELICITATION_REQUEST_TYPE_KEY;
-use codex_protocol::mcp_approval_meta::TOOL_DESCRIPTION_KEY as MCP_ELICITATION_TOOL_DESCRIPTION_KEY;
-use codex_protocol::mcp_approval_meta::TOOL_NAME_KEY as MCP_ELICITATION_TOOL_NAME_KEY;
-use codex_protocol::mcp_approval_meta::TOOL_PARAMS_KEY as MCP_ELICITATION_TOOL_PARAMS_KEY;
-use codex_protocol::mcp_approval_meta::TOOL_TITLE_KEY as MCP_ELICITATION_TOOL_TITLE_KEY;
+use crewon_mcp::ElicitationReviewRequest;
+use crewon_mcp::ElicitationReviewer;
+use crewon_mcp::ElicitationReviewerHandle;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::mcp_approval_meta::APPROVAL_KIND_KEY as MCP_ELICITATION_APPROVAL_KIND_KEY;
+use crewon_protocol::mcp_approval_meta::APPROVAL_KIND_MCP_TOOL_CALL as MCP_ELICITATION_APPROVAL_KIND_MCP_TOOL_CALL;
+use crewon_protocol::mcp_approval_meta::APPROVAL_KIND_TOOL_SUGGESTION as MCP_ELICITATION_APPROVAL_KIND_TOOL_SUGGESTION;
+use crewon_protocol::mcp_approval_meta::APPROVALS_REVIEWER_KEY as MCP_ELICITATION_APPROVALS_REVIEWER_KEY;
+use crewon_protocol::mcp_approval_meta::CONNECTOR_DESCRIPTION_KEY as MCP_ELICITATION_CONNECTOR_DESCRIPTION_KEY;
+use crewon_protocol::mcp_approval_meta::CONNECTOR_ID_KEY as MCP_ELICITATION_CONNECTOR_ID_KEY;
+use crewon_protocol::mcp_approval_meta::CONNECTOR_NAME_KEY as MCP_ELICITATION_CONNECTOR_NAME_KEY;
+use crewon_protocol::mcp_approval_meta::REQUEST_TYPE_APPROVAL_REQUEST as MCP_ELICITATION_REQUEST_TYPE_APPROVAL_REQUEST;
+use crewon_protocol::mcp_approval_meta::REQUEST_TYPE_KEY as MCP_ELICITATION_REQUEST_TYPE_KEY;
+use crewon_protocol::mcp_approval_meta::TOOL_DESCRIPTION_KEY as MCP_ELICITATION_TOOL_DESCRIPTION_KEY;
+use crewon_protocol::mcp_approval_meta::TOOL_NAME_KEY as MCP_ELICITATION_TOOL_NAME_KEY;
+use crewon_protocol::mcp_approval_meta::TOOL_PARAMS_KEY as MCP_ELICITATION_TOOL_PARAMS_KEY;
+use crewon_protocol::mcp_approval_meta::TOOL_TITLE_KEY as MCP_ELICITATION_TOOL_TITLE_KEY;
 use rmcp::model::CreateElicitationRequestParams;
 use rmcp::model::ElicitationAction;
 use rmcp::model::Meta;
@@ -96,7 +96,7 @@ impl Session {
         {
             return McpServerElicitationOutcome {
                 response: Some(ElicitationResponse {
-                    action: codex_rmcp_client::ElicitationAction::Accept,
+                    action: crewon_rmcp_client::ElicitationAction::Accept,
                     content: Some(serde_json::json!({})),
                     meta: None,
                 }),
@@ -123,7 +123,7 @@ impl Session {
                         };
                     }
                 };
-                codex_protocol::approvals::ElicitationRequest::Form {
+                crewon_protocol::approvals::ElicitationRequest::Form {
                     meta,
                     message,
                     requested_schema,
@@ -134,7 +134,7 @@ impl Session {
                 message,
                 url,
                 elicitation_id,
-            } => codex_protocol::approvals::ElicitationRequest::Url {
+            } => crewon_protocol::approvals::ElicitationRequest::Url {
                 meta,
                 message,
                 url,
@@ -164,10 +164,10 @@ impl Session {
         }
         let id = match request_id {
             rmcp::model::NumberOrString::String(value) => {
-                codex_protocol::mcp::RequestId::String(value.to_string())
+                crewon_protocol::mcp::RequestId::String(value.to_string())
             }
             rmcp::model::NumberOrString::Number(value) => {
-                codex_protocol::mcp::RequestId::Integer(value)
+                crewon_protocol::mcp::RequestId::Integer(value)
             }
         };
         let event = EventMsg::ElicitationRequest(ElicitationRequestEvent {
@@ -301,8 +301,8 @@ impl Session {
             .await;
         let mcp_servers =
             effective_mcp_servers_from_configured(mcp_servers, &mcp_config, auth.as_ref());
-        let host_owned_codex_apps_enabled =
-            host_owned_codex_apps_enabled(&mcp_config, auth.as_ref());
+        let host_owned_crewon_apps_enabled =
+            host_owned_crewon_apps_enabled(&mcp_config, auth.as_ref());
         let auth_statuses =
             compute_auth_statuses(mcp_servers.iter(), store_mode, auth.as_ref()).await;
         let mcp_runtime_context = match turn_context.environments.primary() {
@@ -334,8 +334,8 @@ impl Session {
             turn_context.permission_profile(),
             mcp_runtime_context,
             config.codex_home.to_path_buf(),
-            codex_apps_tools_cache_key(auth.as_ref()),
-            host_owned_codex_apps_enabled,
+            crewon_apps_tools_cache_key(auth.as_ref()),
+            host_owned_crewon_apps_enabled,
             mcp_config.prefix_mcp_tool_names,
             mcp_config.client_elicitation_capability,
             tool_plugin_provenance,
@@ -580,7 +580,7 @@ fn plugin_install_elicitation_telemetry_metadata(
     let EventMsg::ElicitationRequest(ElicitationRequestEvent { request, .. }) = event else {
         return None;
     };
-    let codex_protocol::approvals::ElicitationRequest::Form {
+    let crewon_protocol::approvals::ElicitationRequest::Form {
         meta: Some(Value::Object(meta)),
         ..
     } = request

@@ -1,6 +1,6 @@
 //! Session- and turn-scoped helpers for talking to model provider APIs.
 //!
-//! `ModelClient` is intended to live for the lifetime of a Codex session and holds the stable
+//! `ModelClient` is intended to live for the lifetime of a Crewon session and holds the stable
 //! configuration and state needed to talk to a provider (auth, provider selection, conversation id,
 //! and transport fallback state).
 //!
@@ -30,61 +30,61 @@ use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
-use codex_api::ApiError;
-use codex_api::AuthProvider;
-use codex_api::CompactClient as ApiCompactClient;
-use codex_api::CompactionInput as ApiCompactionInput;
-use codex_api::Compression;
-use codex_api::MemoriesClient as ApiMemoriesClient;
-use codex_api::MemorySummarizeInput as ApiMemorySummarizeInput;
-use codex_api::MemorySummarizeOutput as ApiMemorySummarizeOutput;
-use codex_api::Provider as ApiProvider;
-use codex_api::RawMemory as ApiRawMemory;
-use codex_api::RealtimeCallClient as ApiRealtimeCallClient;
-use codex_api::RealtimeSessionConfig as ApiRealtimeSessionConfig;
-use codex_api::Reasoning;
-use codex_api::ReasoningContext;
-use codex_api::RequestTelemetry;
-use codex_api::ReqwestTransport;
-use codex_api::ResponseCreateWsRequest;
-use codex_api::ResponsesApiRequest;
-use codex_api::ResponsesClient as ApiResponsesClient;
-use codex_api::ResponsesOptions as ApiResponsesOptions;
-use codex_api::ResponsesWebsocketClient as ApiWebSocketResponsesClient;
-use codex_api::ResponsesWebsocketConnection as ApiWebSocketConnection;
-use codex_api::ResponsesWsRequest;
-use codex_api::SharedAuthProvider;
-use codex_api::SseTelemetry;
-use codex_api::TransportError;
-use codex_api::WebsocketTelemetry;
-use codex_api::auth_header_telemetry;
-use codex_api::build_session_headers;
-use codex_api::create_text_param_for_request;
-use codex_api::response_create_client_metadata;
-use codex_app_server_protocol::AuthMode;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::RefreshTokenError;
-use codex_login::UnauthorizedRecovery;
-use codex_login::default_client::build_reqwest_client;
-use codex_otel::SessionTelemetry;
-use codex_otel::current_span_w3c_trace_context;
+use crewon_api::ApiError;
+use crewon_api::AuthProvider;
+use crewon_api::CompactClient as ApiCompactClient;
+use crewon_api::CompactionInput as ApiCompactionInput;
+use crewon_api::Compression;
+use crewon_api::MemoriesClient as ApiMemoriesClient;
+use crewon_api::MemorySummarizeInput as ApiMemorySummarizeInput;
+use crewon_api::MemorySummarizeOutput as ApiMemorySummarizeOutput;
+use crewon_api::Provider as ApiProvider;
+use crewon_api::RawMemory as ApiRawMemory;
+use crewon_api::RealtimeCallClient as ApiRealtimeCallClient;
+use crewon_api::RealtimeSessionConfig as ApiRealtimeSessionConfig;
+use crewon_api::Reasoning;
+use crewon_api::ReasoningContext;
+use crewon_api::RequestTelemetry;
+use crewon_api::ReqwestTransport;
+use crewon_api::ResponseCreateWsRequest;
+use crewon_api::ResponsesApiRequest;
+use crewon_api::ResponsesClient as ApiResponsesClient;
+use crewon_api::ResponsesOptions as ApiResponsesOptions;
+use crewon_api::ResponsesWebsocketClient as ApiWebSocketResponsesClient;
+use crewon_api::ResponsesWebsocketConnection as ApiWebSocketConnection;
+use crewon_api::ResponsesWsRequest;
+use crewon_api::SharedAuthProvider;
+use crewon_api::SseTelemetry;
+use crewon_api::TransportError;
+use crewon_api::WebsocketTelemetry;
+use crewon_api::auth_header_telemetry;
+use crewon_api::build_session_headers;
+use crewon_api::create_text_param_for_request;
+use crewon_api::response_create_client_metadata;
+use crewon_app_server_protocol::AuthMode;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_login::RefreshTokenError;
+use crewon_login::UnauthorizedRecovery;
+use crewon_login::default_client::build_reqwest_client;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::current_span_w3c_trace_context;
 
-use codex_protocol::SessionId;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
-use codex_protocol::config_types::Verbosity as VerbosityConfig;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
-use codex_protocol::protocol::InternalSessionSource;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::W3cTraceContext;
-use codex_rollout_trace::CompactionTraceContext;
-use codex_rollout_trace::InferenceTraceAttempt;
-use codex_rollout_trace::InferenceTraceContext;
-use codex_tools::create_tools_json_for_responses_api;
+use crewon_protocol::SessionId;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
+use crewon_protocol::config_types::Verbosity as VerbosityConfig;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use crewon_protocol::protocol::InternalSessionSource;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::W3cTraceContext;
+use crewon_rollout_trace::CompactionTraceContext;
+use crewon_rollout_trace::InferenceTraceAttempt;
+use crewon_rollout_trace::InferenceTraceContext;
+use crewon_tools::create_tools_json_for_responses_api;
 use eventsource_stream::Event;
 use eventsource_stream::EventStreamError;
 use futures::StreamExt;
@@ -112,23 +112,23 @@ use crate::client_common::ResponseEvent;
 use crate::client_common::ResponseStream;
 use crate::feedback_tags;
 use crate::util::emit_feedback_auth_recovery_tags;
-use codex_api::map_api_error;
-use codex_feedback::FeedbackRequestTags;
-use codex_feedback::emit_feedback_request_tags_with_auth_env;
-use codex_login::auth_env_telemetry::AuthEnvTelemetry;
-use codex_login::auth_env_telemetry::collect_auth_env_telemetry;
-use codex_model_provider::SharedModelProvider;
-use codex_model_provider::create_model_provider;
+use crewon_api::map_api_error;
+use crewon_feedback::FeedbackRequestTags;
+use crewon_feedback::emit_feedback_request_tags_with_auth_env;
+use crewon_login::auth_env_telemetry::AuthEnvTelemetry;
+use crewon_login::auth_env_telemetry::collect_auth_env_telemetry;
+use crewon_model_provider::SharedModelProvider;
+use crewon_model_provider::create_model_provider;
 #[cfg(test)]
-use codex_model_provider_info::DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::WireApi;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result;
-use codex_response_debug_context::extract_response_debug_context;
-use codex_response_debug_context::extract_response_debug_context_from_api_error;
-use codex_response_debug_context::telemetry_api_error_message;
-use codex_response_debug_context::telemetry_transport_error_message;
+use crewon_model_provider_info::DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::WireApi;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result;
+use crewon_response_debug_context::extract_response_debug_context;
+use crewon_response_debug_context::extract_response_debug_context_from_api_error;
+use crewon_response_debug_context::telemetry_api_error_message;
+use crewon_response_debug_context::telemetry_transport_error_message;
 
 pub const OPENAI_BETA_HEADER: &str = "OpenAI-Beta";
 pub const X_CODEX_INSTALLATION_ID_HEADER: &str = "x-codex-installation-id";
@@ -191,7 +191,7 @@ struct ModelClientState {
 /// Keeping this as a single bundle ensures prewarm and normal request paths
 /// share the same auth/provider setup flow.
 struct CurrentClientSetup {
-    auth: Option<CodexAuth>,
+    auth: Option<CrewonAuth>,
     api_provider: ApiProvider,
     api_auth: SharedAuthProvider,
 }
@@ -209,7 +209,7 @@ impl RequestRouteTelemetry {
 
 /// A session-scoped client for model-provider API calls.
 ///
-/// This holds configuration and state that should be shared across turns within a Codex session
+/// This holds configuration and state that should be shared across turns within a Crewon session
 /// (auth, provider selection, thread id, and transport fallback state).
 ///
 /// WebSocket fallback is session-scoped: once a turn activates the HTTP fallback, subsequent turns
@@ -234,7 +234,7 @@ pub struct ModelClient {
 /// - The `x-codex-turn-state` sticky-routing token, which must be replayed for all requests within
 ///   the same turn.
 ///
-/// Create a fresh `ModelClientSession` for each Codex turn. Reusing it across turns would replay
+/// Create a fresh `ModelClientSession` for each Crewon turn. Reusing it across turns would replay
 /// the previous turn's sticky-routing token into the next turn, which violates the client/server
 /// contract and can cause routing bugs.
 pub struct ModelClientSession {
@@ -315,7 +315,7 @@ impl ModelClient {
     #[allow(clippy::too_many_arguments)]
     /// Creates a new session-scoped `ModelClient`.
     ///
-    /// All arguments are expected to be stable for the lifetime of a Codex session. Per-turn values
+    /// All arguments are expected to be stable for the lifetime of a Crewon session. Per-turn values
     /// are passed to [`ModelClientSession::stream`] (and other turn-scoped methods) explicitly.
     pub fn new(
         auth_manager: Option<Arc<AuthManager>>,
@@ -419,7 +419,7 @@ impl ModelClient {
         if activated {
             warn!("falling back to HTTP");
             session_telemetry.counter(
-                "codex.transport.fallback_to_http",
+                "crewon.transport.fallback_to_http",
                 /*inc*/ 1,
                 &[("from_wire_api", "responses_websocket")],
             );
@@ -455,7 +455,7 @@ impl ModelClient {
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
             AuthRequestTelemetryContext::new(
-                client_setup.auth.as_ref().map(CodexAuth::auth_mode),
+                client_setup.auth.as_ref().map(CrewonAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
                 PendingUnauthorizedRetry::default(),
             ),
@@ -580,7 +580,7 @@ impl ModelClient {
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
             AuthRequestTelemetryContext::new(
-                client_setup.auth.as_ref().map(CodexAuth::auth_mode),
+                client_setup.auth.as_ref().map(CrewonAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
                 PendingUnauthorizedRetry::default(),
             ),
@@ -737,7 +737,7 @@ impl ModelClient {
     #[allow(clippy::too_many_arguments)]
     fn build_responses_request(
         &self,
-        provider: &codex_api::Provider,
+        provider: &crewon_api::Provider,
         prompt: &Prompt,
         model_info: &ModelInfo,
         effort: Option<ReasoningEffortConfig>,
@@ -833,7 +833,7 @@ impl ModelClient {
     async fn connect_websocket(
         &self,
         session_telemetry: &SessionTelemetry,
-        api_provider: codex_api::Provider,
+        api_provider: crewon_api::Provider,
         api_auth: SharedAuthProvider,
         turn_state: Option<Arc<OnceLock<String>>>,
         turn_metadata_header: Option<&str>,
@@ -855,7 +855,7 @@ impl ModelClient {
             websocket_connect_timeout,
             ApiWebSocketResponsesClient::new(api_provider, api_auth).connect(
                 headers,
-                codex_login::default_client::default_headers(),
+                crewon_login::default_client::default_headers(),
                 turn_state,
                 Some(websocket_telemetry),
             ),
@@ -1114,7 +1114,7 @@ impl ModelClientSession {
             ))
         })?;
         let auth_context = AuthRequestTelemetryContext::new(
-            client_setup.auth.as_ref().map(CodexAuth::auth_mode),
+            client_setup.auth.as_ref().map(CrewonAuth::auth_mode),
             client_setup.api_auth.as_ref(),
             PendingUnauthorizedRetry::default(),
         );
@@ -1211,9 +1211,9 @@ impl ModelClientSession {
             ))
     }
 
-    fn responses_request_compression(&self, auth: Option<&CodexAuth>) -> Compression {
+    fn responses_request_compression(&self, auth: Option<&CrewonAuth>) -> Compression {
         if self.client.state.enable_request_compression
-            && auth.is_some_and(CodexAuth::uses_codex_backend)
+            && auth.is_some_and(CrewonAuth::uses_crewon_backend)
             && self.client.state.provider.info().is_openai()
         {
             Compression::Zstd
@@ -1260,7 +1260,7 @@ impl ModelClientSession {
             let client_setup = self.client.current_client_setup().await?;
             let transport = ReqwestTransport::new(build_reqwest_client());
             let request_auth_context = AuthRequestTelemetryContext::new(
-                client_setup.auth.as_ref().map(CodexAuth::auth_mode),
+                client_setup.auth.as_ref().map(CrewonAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
                 pending_retry,
             );
@@ -1382,7 +1382,7 @@ impl ModelClientSession {
         loop {
             let client_setup = self.client.current_client_setup().await?;
             let request_auth_context = AuthRequestTelemetryContext::new(
-                client_setup.auth.as_ref().map(CodexAuth::auth_mode),
+                client_setup.auth.as_ref().map(CrewonAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
                 pending_retry,
             );
@@ -1661,7 +1661,7 @@ impl ModelClientSession {
         }
     }
 
-    /// Permanently disables WebSockets for this Codex session and resets WebSocket state.
+    /// Permanently disables WebSockets for this Crewon session and resets WebSocket state.
     ///
     /// This is used after exhausting the provider retry budget, to force subsequent requests onto
     /// the HTTP transport.
@@ -1705,7 +1705,7 @@ fn stamp_ws_stream_request_start_ms(request: &mut ResponsesWsRequest) {
 
 /// Builds the extra headers attached to Responses API requests.
 ///
-/// These headers implement Codex-specific conventions:
+/// These headers implement Crewon-specific conventions:
 ///
 /// - `x-codex-beta-features`: comma-separated beta feature keys enabled for the session.
 /// - `x-codex-turn-state`: sticky routing token captured earlier in the turn.
@@ -1755,7 +1755,7 @@ fn subagent_header_value(session_source: &SessionSource) -> Option<String> {
         SessionSource::Internal(InternalSessionSource::MemoryConsolidation) => {
             Some("memory_consolidation".to_string())
         }
-        SessionSource::Cli
+        SessionSource::LegacyCli
         | SessionSource::VSCode
         | SessionSource::Exec
         | SessionSource::Mcp
@@ -1772,15 +1772,15 @@ const RESPONSE_STREAM_CHANNEL_CAPACITY: usize = 1600;
 const STREAM_DROPPED_REASON: &str = "response stream dropped before provider terminal event";
 
 fn map_response_stream(
-    api_stream: codex_api::ResponseStream,
+    api_stream: crewon_api::ResponseStream,
     session_telemetry: SessionTelemetry,
     inference_trace_attempt: InferenceTraceAttempt,
 ) -> (ResponseStream, oneshot::Receiver<LastResponse>) {
-    let codex_api::ResponseStream {
+    let crewon_api::ResponseStream {
         rx_event,
         upstream_request_id,
     } = api_stream;
-    let api_stream = codex_api::ResponseStream {
+    let api_stream = crewon_api::ResponseStream {
         rx_event,
         upstream_request_id: None,
     };
@@ -2002,7 +2002,7 @@ impl AuthRequestTelemetryContext {
 
 struct WebsocketConnectParams<'a> {
     session_telemetry: &'a SessionTelemetry,
-    api_provider: codex_api::Provider,
+    api_provider: crewon_api::Provider,
     api_auth: SharedAuthProvider,
     turn_metadata_header: Option<&'a str>,
     options: &'a ApiResponsesOptions,

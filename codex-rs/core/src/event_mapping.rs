@@ -1,23 +1,23 @@
-use codex_protocol::items::AgentMessageContent;
-use codex_protocol::items::AgentMessageItem;
-use codex_protocol::items::ReasoningItem;
-use codex_protocol::items::TurnItem;
-use codex_protocol::items::UserMessageItem;
-use codex_protocol::items::WebSearchItem;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::MessagePhase;
-use codex_protocol::models::ReasoningItemContent;
-use codex_protocol::models::ReasoningItemReasoningSummary;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::models::WebSearchAction;
-use codex_protocol::models::is_image_close_tag_text;
-use codex_protocol::models::is_image_open_tag_text;
-use codex_protocol::models::is_local_image_close_tag_text;
-use codex_protocol::models::is_local_image_open_tag_text;
-use codex_protocol::protocol::COLLABORATION_MODE_OPEN_TAG;
-use codex_protocol::protocol::REALTIME_CONVERSATION_OPEN_TAG;
-use codex_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
-use codex_protocol::user_input::UserInput;
+use crewon_protocol::items::AgentMessageContent;
+use crewon_protocol::items::AgentMessageItem;
+use crewon_protocol::items::ReasoningItem;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::items::UserMessageItem;
+use crewon_protocol::items::WebSearchItem;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::MessagePhase;
+use crewon_protocol::models::ReasoningItemContent;
+use crewon_protocol::models::ReasoningItemReasoningSummary;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::models::WebSearchAction;
+use crewon_protocol::models::is_image_close_tag_text;
+use crewon_protocol::models::is_image_open_tag_text;
+use crewon_protocol::models::is_local_image_close_tag_text;
+use crewon_protocol::models::is_local_image_open_tag_text;
+use crewon_protocol::protocol::COLLABORATION_MODE_OPEN_TAG;
+use crewon_protocol::protocol::REALTIME_CONVERSATION_OPEN_TAG;
+use crewon_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
+use crewon_protocol::user_input::UserInput;
 use tracing::warn;
 use uuid::Uuid;
 
@@ -200,7 +200,7 @@ pub fn parse_turn_item(item: &ResponseItem) -> Option<TurnItem> {
             revised_prompt,
             result,
         } => Some(TurnItem::ImageGeneration(
-            codex_protocol::items::ImageGenerationItem {
+            crewon_protocol::items::ImageGenerationItem {
                 id: id.clone(),
                 status: status.clone(),
                 revised_prompt: revised_prompt.clone(),

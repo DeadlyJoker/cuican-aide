@@ -34,6 +34,59 @@
       ],
       "type": "string"
     },
+    "AgentCreateParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AgentDeleteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
+    "AgentListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
     "AgentMessageInputContent": {
       "oneOf": [
         {
@@ -57,6 +110,108 @@
           "type": "object"
         }
       ]
+    },
+    "AgentReadParams": {
+      "properties": {
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AgentRecruitableListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "existingAgentIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "existingNames": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AgentSaveParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AgentUpdateParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
     },
     "ApprovalsReviewer": {
       "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
@@ -150,6 +305,259 @@
         }
       ]
     },
+    "AutomationCreateParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "executionAgent": true,
+        "prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetOffice": true,
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "title"
+      ],
+      "type": "object"
+    },
+    "AutomationDeleteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
+    "AutomationListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AutomationReadParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AutomationRunParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AutomationRunStartParams": {
+      "properties": {
+        "clientUserMessageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AutomationRunUpdateParams": {
+      "properties": {
+        "completedAt": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath",
+        "status"
+      ],
+      "type": "object"
+    },
+    "AutomationRunsListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AutomationSaveParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "AutomationUpdateParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
     "ByteRange": {
       "properties": {
         "end": {
@@ -231,8 +639,192 @@
       ],
       "type": "object"
     },
+    "CodexErrorInfo": {
+      "description": "This translation layer makes sure that we expose Crewon error codes in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
+      "oneOf": [
+        {
+          "enum": [
+            "contextWindowExceeded",
+            "usageLimitExceeded",
+            "serverOverloaded",
+            "cyberPolicy",
+            "internalServerError",
+            "unauthorized",
+            "badRequest",
+            "threadRollbackFailed",
+            "sandboxError",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "httpConnectionFailed": {
+              "properties": {
+                "httpStatusCode": {
+                  "format": "uint16",
+                  "minimum": 0.0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "httpConnectionFailed"
+          ],
+          "title": "HttpConnectionFailedCodexErrorInfo",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Failed to connect to the response SSE stream.",
+          "properties": {
+            "responseStreamConnectionFailed": {
+              "properties": {
+                "httpStatusCode": {
+                  "format": "uint16",
+                  "minimum": 0.0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "responseStreamConnectionFailed"
+          ],
+          "title": "ResponseStreamConnectionFailedCodexErrorInfo",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The response SSE stream disconnected in the middle of a turn before completion.",
+          "properties": {
+            "responseStreamDisconnected": {
+              "properties": {
+                "httpStatusCode": {
+                  "format": "uint16",
+                  "minimum": 0.0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "responseStreamDisconnected"
+          ],
+          "title": "ResponseStreamDisconnectedCodexErrorInfo",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Reached the retry limit for responses.",
+          "properties": {
+            "responseTooManyFailedAttempts": {
+              "properties": {
+                "httpStatusCode": {
+                  "format": "uint16",
+                  "minimum": 0.0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "responseTooManyFailedAttempts"
+          ],
+          "title": "ResponseTooManyFailedAttemptsCodexErrorInfo",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Returned when `turn/start` or `turn/steer` is submitted while the current active turn cannot accept same-turn steering, for example `/review` or manual `/compact`.",
+          "properties": {
+            "activeTurnNotSteerable": {
+              "properties": {
+                "turnKind": {
+                  "$ref": "#/definitions/NonSteerableTurnKind"
+                }
+              },
+              "required": [
+                "turnKind"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "activeTurnNotSteerable"
+          ],
+          "title": "ActiveTurnNotSteerableCodexErrorInfo",
+          "type": "object"
+        }
+      ]
+    },
+    "CollabAgentState": {
+      "properties": {
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/CollabAgentStatus"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "type": "object"
+    },
+    "CollabAgentStatus": {
+      "enum": [
+        "pendingInit",
+        "running",
+        "interrupted",
+        "completed",
+        "errored",
+        "shutdown",
+        "notFound"
+      ],
+      "type": "string"
+    },
+    "CollabAgentTool": {
+      "enum": [
+        "spawnAgent",
+        "sendInput",
+        "resumeAgent",
+        "wait",
+        "closeAgent"
+      ],
+      "type": "string"
+    },
+    "CollabAgentToolCallStatus": {
+      "enum": [
+        "inProgress",
+        "completed",
+        "failed"
+      ],
+      "type": "string"
+    },
     "CollaborationMode": {
-      "description": "Collaboration mode for a Codex session.",
+      "description": "Collaboration mode for a Crewon session.",
       "properties": {
         "mode": {
           "$ref": "#/definitions/ModeKind"
@@ -246,6 +838,116 @@
         "settings"
       ],
       "type": "object"
+    },
+    "CommandAction": {
+      "oneOf": [
+        {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "$ref": "#/definitions/AbsolutePathBuf"
+            },
+            "type": {
+              "enum": [
+                "read"
+              ],
+              "title": "ReadCommandActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "command",
+            "name",
+            "path",
+            "type"
+          ],
+          "title": "ReadCommandAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "listFiles"
+              ],
+              "title": "ListFilesCommandActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "command",
+            "type"
+          ],
+          "title": "ListFilesCommandAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "query": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "search"
+              ],
+              "title": "SearchCommandActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "command",
+            "type"
+          ],
+          "title": "SearchCommandAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "unknown"
+              ],
+              "title": "UnknownCommandActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "command",
+            "type"
+          ],
+          "title": "UnknownCommandAction",
+          "type": "object"
+        }
+      ]
     },
     "CommandExecParams": {
       "description": "Run a standalone command (argv vector) in the server sandbox without creating a thread or turn.\n\nThe final `command/exec` response is deferred until the process exits and is sent only after all `command/exec/outputDelta` notifications for that connection have been emitted.",
@@ -430,6 +1132,24 @@
       ],
       "type": "object"
     },
+    "CommandExecutionSource": {
+      "enum": [
+        "agent",
+        "userShell",
+        "unifiedExecStartup",
+        "unifiedExecInteraction"
+      ],
+      "type": "string"
+    },
+    "CommandExecutionStatus": {
+      "enum": [
+        "inProgress",
+        "completed",
+        "failed",
+        "declined"
+      ],
+      "type": "string"
+    },
     "CommandMigration": {
       "properties": {
         "name": {
@@ -607,6 +1327,58 @@
           "type": "object"
         }
       ]
+    },
+    "DynamicToolCallOutputContentItem": {
+      "oneOf": [
+        {
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "inputText"
+              ],
+              "title": "InputTextDynamicToolCallOutputContentItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "type"
+          ],
+          "title": "InputTextDynamicToolCallOutputContentItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "imageUrl": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "inputImage"
+              ],
+              "title": "InputImageDynamicToolCallOutputContentItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "imageUrl",
+            "type"
+          ],
+          "title": "InputImageDynamicToolCallOutputContentItem",
+          "type": "object"
+        }
+      ]
+    },
+    "DynamicToolCallStatus": {
+      "enum": [
+        "inProgress",
+        "completed",
+        "failed"
+      ],
+      "type": "string"
     },
     "DynamicToolSpec": {
       "properties": {
@@ -797,6 +1569,25 @@
       },
       "required": [
         "classification"
+      ],
+      "type": "object"
+    },
+    "FileUpdateChange": {
+      "properties": {
+        "diff": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/PatchChangeKind"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "diff",
+        "kind",
+        "path"
       ],
       "type": "object"
     },
@@ -1125,6 +1916,21 @@
       ],
       "type": "object"
     },
+    "HookPromptFragment": {
+      "properties": {
+        "hookRunId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "hookRunId",
+        "text"
+      ],
+      "type": "object"
+    },
     "HooksListParams": {
       "properties": {
         "cwds": {
@@ -1190,6 +1996,54 @@
       },
       "required": [
         "clientInfo"
+      ],
+      "type": "object"
+    },
+    "KnowledgeListParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "KnowledgeMemoryWriteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
       ],
       "type": "object"
     },
@@ -1353,7 +2207,7 @@
           "type": "object"
         },
         {
-          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.",
+          "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Crewon-managed ChatGPT auth tokens have.",
           "properties": {
             "accessToken": {
               "description": "Access token (JWT) supplied by the client. This token is used for backend API requests and email extraction.",
@@ -1364,7 +2218,7 @@
               "type": "string"
             },
             "chatgptPlanType": {
-              "description": "Optional plan type supplied by the client.\n\nWhen `null`, Codex attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
+              "description": "Optional plan type supplied by the client.\n\nWhen `null`, Crewon attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
               "type": [
                 "string",
                 "null"
@@ -1457,6 +2311,90 @@
       ],
       "type": "object"
     },
+    "McpServerConfigDeleteParams": {
+      "properties": {
+        "expectedVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "reload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "McpServerConfigListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "McpServerConfigReadParams": {
+      "properties": {
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "McpServerConfigSaveParams": {
+      "properties": {
+        "config": true,
+        "expectedVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "reload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "config",
+        "name"
+      ],
+      "type": "object"
+    },
     "McpServerMigration": {
       "properties": {
         "name": {
@@ -1520,6 +2458,87 @@
         "server",
         "threadId",
         "tool"
+      ],
+      "type": "object"
+    },
+    "McpToolCallError": {
+      "properties": {
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "McpToolCallResult": {
+      "properties": {
+        "_meta": true,
+        "content": {
+          "items": true,
+          "type": "array"
+        },
+        "structuredContent": true
+      },
+      "required": [
+        "content"
+      ],
+      "type": "object"
+    },
+    "McpToolCallStatus": {
+      "enum": [
+        "inProgress",
+        "completed",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "MemoryCitation": {
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/definitions/MemoryCitationEntry"
+          },
+          "type": "array"
+        },
+        "threadIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "entries",
+        "threadIds"
+      ],
+      "type": "object"
+    },
+    "MemoryCitationEntry": {
+      "properties": {
+        "lineEnd": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "lineStart": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "lineEnd",
+        "lineStart",
+        "note",
+        "path"
       ],
       "type": "object"
     },
@@ -1597,7 +2616,7 @@
       "type": "object"
     },
     "ModeKind": {
-      "description": "Initial collaboration mode to use when the TUI starts.",
+      "description": "Initial collaboration mode to use when a client starts.",
       "enum": [
         "plan",
         "default"
@@ -1641,6 +2660,766 @@
         "enabled"
       ],
       "type": "string"
+    },
+    "NonSteerableTurnKind": {
+      "enum": [
+        "review",
+        "compact"
+      ],
+      "type": "string"
+    },
+    "OfficeApprovalDecideParams": {
+      "properties": {
+        "approvalId": {
+          "type": "string"
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/OfficeApprovalDecision"
+        },
+        "message": true
+      },
+      "required": [
+        "approvalId",
+        "config",
+        "cwd",
+        "decision"
+      ],
+      "type": "object"
+    },
+    "OfficeApprovalDecision": {
+      "enum": [
+        "approved",
+        "denied"
+      ],
+      "type": "string"
+    },
+    "OfficeArtifactUpsertParams": {
+      "properties": {
+        "artifact": true,
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "message": true
+      },
+      "required": [
+        "artifact",
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "OfficeCreateParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "goal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subtitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "title"
+      ],
+      "type": "object"
+    },
+    "OfficeDelegationCancelParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "delegationId": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "delegationId",
+        "runId"
+      ],
+      "type": "object"
+    },
+    "OfficeDelegationDispatchNextParams": {
+      "properties": {
+        "clientUserMessageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "dispatchPolicy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "runId"
+      ],
+      "type": "object"
+    },
+    "OfficeDelegationDispatchParams": {
+      "properties": {
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "clientUserMessageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "member": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        },
+        "task": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "runId",
+        "task"
+      ],
+      "type": "object"
+    },
+    "OfficeDelegationRetryParams": {
+      "properties": {
+        "clientUserMessageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "delegationId": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "delegationId",
+        "runId"
+      ],
+      "type": "object"
+    },
+    "OfficeDeleteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
+    "OfficeListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "OfficeMemberAddParams": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "member": true
+      },
+      "required": [
+        "agentId",
+        "config",
+        "cwd",
+        "member"
+      ],
+      "type": "object"
+    },
+    "OfficeMemberContextPreviewParams": {
+      "properties": {
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "member": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        },
+        "task": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "runId"
+      ],
+      "type": "object"
+    },
+    "OfficeMemoryDecideParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "memoryId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "memoryId",
+        "status"
+      ],
+      "type": "object"
+    },
+    "OfficeMemoryListParams": {
+      "properties": {
+        "config": true,
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "OfficeMessageSendParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": true,
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace": true
+      },
+      "required": [
+        "config",
+        "cwd",
+        "message"
+      ],
+      "type": "object"
+    },
+    "OfficeReadParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "OfficeRunCancelParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "runId"
+      ],
+      "type": "object"
+    },
+    "OfficeRunParams": {
+      "properties": {
+        "clientUserMessageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": true,
+        "text": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "message",
+        "text"
+      ],
+      "type": "object"
+    },
+    "OfficeRunRetryParams": {
+      "properties": {
+        "clientUserMessageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": true,
+        "runId": {
+          "type": "string"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "runId"
+      ],
+      "type": "object"
+    },
+    "OfficeRunSyncParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turn": {
+          "$ref": "#/definitions/Turn"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "turn"
+      ],
+      "type": "object"
+    },
+    "OfficeSaveParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "OfficeVerificationCancelParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turnId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verificationCheckId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "runId",
+        "verificationCheckId"
+      ],
+      "type": "object"
+    },
+    "OfficeVerificationDispatchNextParams": {
+      "properties": {
+        "clientUserMessageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "runId"
+      ],
+      "type": "object"
+    },
+    "OfficeVerificationRetryParams": {
+      "properties": {
+        "clientUserMessageId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "type": "string"
+        },
+        "verificationCheckId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "runId",
+        "verificationCheckId"
+      ],
+      "type": "object"
+    },
+    "PatchApplyStatus": {
+      "enum": [
+        "inProgress",
+        "completed",
+        "failed",
+        "declined"
+      ],
+      "type": "string"
+    },
+    "PatchChangeKind": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "add"
+              ],
+              "title": "AddPatchChangeKindType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "AddPatchChangeKind",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "delete"
+              ],
+              "title": "DeletePatchChangeKindType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "DeletePatchChangeKind",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "move_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "update"
+              ],
+              "title": "UpdatePatchChangeKindType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "UpdatePatchChangeKind",
+          "type": "object"
+        }
+      ]
     },
     "PermissionProfileListParams": {
       "properties": {
@@ -3095,6 +4874,29 @@
       ],
       "type": "object"
     },
+    "SkillsCreateParams": {
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "cwd": {
+          "$ref": "#/definitions/AbsolutePathBuf"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "body",
+        "cwd",
+        "description",
+        "name"
+      ],
+      "type": "object"
+    },
     "SkillsExtraRootsSetParams": {
       "properties": {
         "extraRoots": {
@@ -3129,6 +4931,14 @@
       "enum": [
         "asc",
         "desc"
+      ],
+      "type": "string"
+    },
+    "SubAgentActivityKind": {
+      "enum": [
+        "started",
+        "interacted",
+        "interrupted"
       ],
       "type": "string"
     },
@@ -3169,7 +4979,7 @@
     "ThreadApproveGuardianDeniedActionParams": {
       "properties": {
         "event": {
-          "description": "Serialized `codex_protocol::protocol::GuardianAssessmentEvent`."
+          "description": "Serialized `crewon_protocol::protocol::GuardianAssessmentEvent`."
         },
         "threadId": {
           "type": "string"
@@ -3399,6 +5209,710 @@
       ],
       "type": "object"
     },
+    "ThreadItem": {
+      "oneOf": [
+        {
+          "properties": {
+            "clientId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "content": {
+              "items": {
+                "$ref": "#/definitions/UserInput"
+              },
+              "type": "array"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "userMessage"
+              ],
+              "title": "UserMessageThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "id",
+            "type"
+          ],
+          "title": "UserMessageThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "fragments": {
+              "items": {
+                "$ref": "#/definitions/HookPromptFragment"
+              },
+              "type": "array"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "hookPrompt"
+              ],
+              "title": "HookPromptThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "fragments",
+            "id",
+            "type"
+          ],
+          "title": "HookPromptThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "memoryCitation": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MemoryCitation"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MessagePhase"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "agentMessage"
+              ],
+              "title": "AgentMessageThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "text",
+            "type"
+          ],
+          "title": "AgentMessageThreadItem",
+          "type": "object"
+        },
+        {
+          "description": "EXPERIMENTAL - proposed plan item content. The completed plan item is authoritative and may not match the concatenation of `PlanDelta` text.",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "plan"
+              ],
+              "title": "PlanThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "text",
+            "type"
+          ],
+          "title": "PlanThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "content": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "id": {
+              "type": "string"
+            },
+            "summary": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "enum": [
+                "reasoning"
+              ],
+              "title": "ReasoningThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "type"
+          ],
+          "title": "ReasoningThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "aggregatedOutput": {
+              "description": "The command's output, aggregated from stdout and stderr.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "command": {
+              "description": "The command to be executed.",
+              "type": "string"
+            },
+            "commandActions": {
+              "description": "A best-effort parsing of the command to understand the action(s) it will perform. This returns a list of CommandAction objects because a single shell command may be composed of many commands piped together.",
+              "items": {
+                "$ref": "#/definitions/CommandAction"
+              },
+              "type": "array"
+            },
+            "cwd": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/AbsolutePathBuf"
+                }
+              ],
+              "description": "The command's working directory."
+            },
+            "durationMs": {
+              "description": "The duration of the command execution in milliseconds.",
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "exitCode": {
+              "description": "The command's exit code.",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "processId": {
+              "description": "Identifier for the underlying PTY process (when available).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CommandExecutionSource"
+                }
+              ],
+              "default": "agent"
+            },
+            "status": {
+              "$ref": "#/definitions/CommandExecutionStatus"
+            },
+            "type": {
+              "enum": [
+                "commandExecution"
+              ],
+              "title": "CommandExecutionThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "command",
+            "commandActions",
+            "cwd",
+            "id",
+            "status",
+            "type"
+          ],
+          "title": "CommandExecutionThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "changes": {
+              "items": {
+                "$ref": "#/definitions/FileUpdateChange"
+              },
+              "type": "array"
+            },
+            "id": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/definitions/PatchApplyStatus"
+            },
+            "type": {
+              "enum": [
+                "fileChange"
+              ],
+              "title": "FileChangeThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "changes",
+            "id",
+            "status",
+            "type"
+          ],
+          "title": "FileChangeThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "arguments": true,
+            "durationMs": {
+              "description": "The duration of the MCP tool call in milliseconds.",
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/McpToolCallError"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "mcpAppResourceUri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pluginId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/McpToolCallResult"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "server": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/definitions/McpToolCallStatus"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "mcpToolCall"
+              ],
+              "title": "McpToolCallThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "arguments",
+            "id",
+            "server",
+            "status",
+            "tool",
+            "type"
+          ],
+          "title": "McpToolCallThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "arguments": true,
+            "contentItems": {
+              "items": {
+                "$ref": "#/definitions/DynamicToolCallOutputContentItem"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "durationMs": {
+              "description": "The duration of the dynamic tool call in milliseconds.",
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "$ref": "#/definitions/DynamicToolCallStatus"
+            },
+            "success": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "tool": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "dynamicToolCall"
+              ],
+              "title": "DynamicToolCallThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "arguments",
+            "id",
+            "status",
+            "tool",
+            "type"
+          ],
+          "title": "DynamicToolCallThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "agentsStates": {
+              "additionalProperties": {
+                "$ref": "#/definitions/CollabAgentState"
+              },
+              "description": "Last known status of the target agents, when available.",
+              "type": "object"
+            },
+            "id": {
+              "description": "Unique identifier for this collab tool call.",
+              "type": "string"
+            },
+            "model": {
+              "description": "Model requested for the spawned agent, when applicable.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "prompt": {
+              "description": "Prompt text sent as part of the collab tool call, when available.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reasoningEffort": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ReasoningEffort"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Reasoning effort requested for the spawned agent, when applicable."
+            },
+            "receiverThreadIds": {
+              "description": "Thread ID of the receiving agent, when applicable. In case of spawn operation, this corresponds to the newly spawned agent.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "senderThreadId": {
+              "description": "Thread ID of the agent issuing the collab request.",
+              "type": "string"
+            },
+            "status": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CollabAgentToolCallStatus"
+                }
+              ],
+              "description": "Current status of the collab tool call."
+            },
+            "tool": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CollabAgentTool"
+                }
+              ],
+              "description": "Name of the collab tool that was invoked."
+            },
+            "type": {
+              "enum": [
+                "collabAgentToolCall"
+              ],
+              "title": "CollabAgentToolCallThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agentsStates",
+            "id",
+            "receiverThreadIds",
+            "senderThreadId",
+            "status",
+            "tool",
+            "type"
+          ],
+          "title": "CollabAgentToolCallThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "agentPath": {
+              "type": "string"
+            },
+            "agentThreadId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/SubAgentActivityKind"
+            },
+            "type": {
+              "enum": [
+                "subAgentActivity"
+              ],
+              "title": "SubAgentActivityThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agentPath",
+            "agentThreadId",
+            "id",
+            "kind",
+            "type"
+          ],
+          "title": "SubAgentActivityThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "action": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/WebSearchAction"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "query": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "webSearch"
+              ],
+              "title": "WebSearchThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "query",
+            "type"
+          ],
+          "title": "WebSearchThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "path": {
+              "$ref": "#/definitions/AbsolutePathBuf"
+            },
+            "type": {
+              "enum": [
+                "imageView"
+              ],
+              "title": "ImageViewThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "path",
+            "type"
+          ],
+          "title": "ImageViewThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "result": {
+              "type": "string"
+            },
+            "revisedPrompt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "savedPath": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AbsolutePathBuf"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "imageGeneration"
+              ],
+              "title": "ImageGenerationThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "result",
+            "status",
+            "type"
+          ],
+          "title": "ImageGenerationThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "review": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "enteredReviewMode"
+              ],
+              "title": "EnteredReviewModeThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "review",
+            "type"
+          ],
+          "title": "EnteredReviewModeThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "review": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "exitedReviewMode"
+              ],
+              "title": "ExitedReviewModeThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "review",
+            "type"
+          ],
+          "title": "ExitedReviewModeThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "contextCompaction"
+              ],
+              "title": "ContextCompactionThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "type"
+          ],
+          "title": "ContextCompactionThreadItem",
+          "type": "object"
+        }
+      ]
+    },
     "ThreadListCwdFilter": {
       "anyOf": [
         {
@@ -3488,7 +6002,7 @@
           "description": "Optional sort key; defaults to created_at."
         },
         "sourceKinds": {
-          "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to interactive sources.",
+          "description": "Optional source filter; when set, only sessions from these source kinds are returned. When omitted or empty, defaults to client sessions.",
           "items": {
             "$ref": "#/definitions/ThreadSourceKind"
           },
@@ -3868,19 +6382,29 @@
       "type": "string"
     },
     "ThreadSourceKind": {
-      "enum": [
-        "cli",
-        "vscode",
-        "exec",
-        "appServer",
-        "subAgent",
-        "subAgentReview",
-        "subAgentCompact",
-        "subAgentThreadSpawn",
-        "subAgentOther",
-        "unknown"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "enum": [
+            "vscode",
+            "exec",
+            "appServer",
+            "subAgent",
+            "subAgentReview",
+            "subAgentCompact",
+            "subAgentThreadSpawn",
+            "subAgentOther",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Legacy source value for threads created before terminal CLI removal.",
+          "enum": [
+            "cli"
+          ],
+          "type": "string"
+        }
+      ]
     },
     "ThreadStartParams": {
       "properties": {
@@ -4033,6 +6557,175 @@
       ],
       "type": "object"
     },
+    "ToolConfigKind": {
+      "enum": [
+        "mcp",
+        "skill"
+      ],
+      "type": "string"
+    },
+    "ToolDeleteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
+    "ToolListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ToolConfigKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "ToolReadParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
+    "ToolSaveParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "ToolUpdateParams": {
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
+    "Turn": {
+      "properties": {
+        "completedAt": {
+          "description": "Unix timestamp (in seconds) when the turn completed.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "durationMs": {
+          "description": "Duration between turn start and completion in milliseconds, if known.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TurnError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only populated when the Turn's status is failed."
+        },
+        "id": {
+          "type": "string"
+        },
+        "items": {
+          "description": "Thread items currently included in this turn payload.",
+          "items": {
+            "$ref": "#/definitions/ThreadItem"
+          },
+          "type": "array"
+        },
+        "itemsView": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TurnItemsView"
+            }
+          ],
+          "default": "full",
+          "description": "Describes how much of `items` has been loaded for this turn."
+        },
+        "startedAt": {
+          "description": "Unix timestamp (in seconds) when the turn started.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/TurnStatus"
+        }
+      },
+      "required": [
+        "id",
+        "items",
+        "status"
+      ],
+      "type": "object"
+    },
     "TurnEnvironmentParams": {
       "properties": {
         "cwd": {
@@ -4045,6 +6738,34 @@
       "required": [
         "cwd",
         "environmentId"
+      ],
+      "type": "object"
+    },
+    "TurnError": {
+      "properties": {
+        "additionalDetails": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "codexErrorInfo": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CodexErrorInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
       ],
       "type": "object"
     },
@@ -4201,6 +6922,15 @@
         "threadId"
       ],
       "type": "object"
+    },
+    "TurnStatus": {
+      "enum": [
+        "completed",
+        "interrupted",
+        "failed",
+        "inProgress"
+      ],
+      "type": "string"
     },
     "TurnSteerParams": {
       "properties": {
@@ -4369,6 +7099,107 @@
             "type"
           ],
           "title": "MentionUserInput",
+          "type": "object"
+        }
+      ]
+    },
+    "WebSearchAction": {
+      "oneOf": [
+        {
+          "properties": {
+            "queries": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "query": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "search"
+              ],
+              "title": "SearchWebSearchActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "SearchWebSearchAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "openPage"
+              ],
+              "title": "OpenPageWebSearchActionType",
+              "type": "string"
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "OpenPageWebSearchAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "pattern": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "findInPage"
+              ],
+              "title": "FindInPageWebSearchActionType",
+              "type": "string"
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "FindInPageWebSearchAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "other"
+              ],
+              "title": "OtherWebSearchActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "OtherWebSearchAction",
           "type": "object"
         }
       ]
@@ -4941,6 +7772,30 @@
         },
         "method": {
           "enum": [
+            "skills/create"
+          ],
+          "title": "Skills/createRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/SkillsCreateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Skills/createRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
             "skills/extraRoots/set"
           ],
           "title": "Skills/extraRoots/setRequestMethod",
@@ -5292,6 +8147,1134 @@
         "params"
       ],
       "title": "App/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/list"
+          ],
+          "title": "Agent/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/save"
+          ],
+          "title": "Agent/saveRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentSaveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/create"
+          ],
+          "title": "Agent/createRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentCreateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/createRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/update"
+          ],
+          "title": "Agent/updateRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentUpdateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/updateRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/read"
+          ],
+          "title": "Agent/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/recruitable/list"
+          ],
+          "title": "Agent/recruitable/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentRecruitableListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/recruitable/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agent/delete"
+          ],
+          "title": "Agent/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Agent/deleteRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/list"
+          ],
+          "title": "Office/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/save"
+          ],
+          "title": "Office/saveRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeSaveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/create"
+          ],
+          "title": "Office/createRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeCreateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/createRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/read"
+          ],
+          "title": "Office/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/message/send"
+          ],
+          "title": "Office/message/sendRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeMessageSendParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/message/sendRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/run"
+          ],
+          "title": "Office/runRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeRunParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/runRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/run/sync"
+          ],
+          "title": "Office/run/syncRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeRunSyncParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/run/syncRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/run/cancel"
+          ],
+          "title": "Office/run/cancelRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeRunCancelParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/run/cancelRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/delegation/cancel"
+          ],
+          "title": "Office/delegation/cancelRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeDelegationCancelParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/delegation/cancelRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/delegation/retry"
+          ],
+          "title": "Office/delegation/retryRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeDelegationRetryParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/delegation/retryRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/verification/cancel"
+          ],
+          "title": "Office/verification/cancelRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeVerificationCancelParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/verification/cancelRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/verification/retry"
+          ],
+          "title": "Office/verification/retryRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeVerificationRetryParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/verification/retryRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/run/retry"
+          ],
+          "title": "Office/run/retryRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeRunRetryParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/run/retryRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/delegation/dispatch"
+          ],
+          "title": "Office/delegation/dispatchRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeDelegationDispatchParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/delegation/dispatchRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/delegation/dispatch/next"
+          ],
+          "title": "Office/delegation/dispatch/nextRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeDelegationDispatchNextParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/delegation/dispatch/nextRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/verification/dispatch/next"
+          ],
+          "title": "Office/verification/dispatch/nextRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeVerificationDispatchNextParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/verification/dispatch/nextRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/member/context/preview"
+          ],
+          "title": "Office/member/context/previewRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeMemberContextPreviewParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/member/context/previewRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/member/add"
+          ],
+          "title": "Office/member/addRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeMemberAddParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/member/addRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/approval/decide"
+          ],
+          "title": "Office/approval/decideRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeApprovalDecideParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/approval/decideRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/artifact/upsert"
+          ],
+          "title": "Office/artifact/upsertRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeArtifactUpsertParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/artifact/upsertRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/memory/list"
+          ],
+          "title": "Office/memory/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeMemoryListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/memory/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/memory/decide"
+          ],
+          "title": "Office/memory/decideRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeMemoryDecideParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/memory/decideRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/delete"
+          ],
+          "title": "Office/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/deleteRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/list"
+          ],
+          "title": "Automation/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/save"
+          ],
+          "title": "Automation/saveRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationSaveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/create"
+          ],
+          "title": "Automation/createRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationCreateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/createRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/read"
+          ],
+          "title": "Automation/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/update"
+          ],
+          "title": "Automation/updateRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationUpdateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/updateRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/run"
+          ],
+          "title": "Automation/runRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationRunParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/runRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/run/start"
+          ],
+          "title": "Automation/run/startRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationRunStartParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/run/startRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/run/update"
+          ],
+          "title": "Automation/run/updateRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationRunUpdateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/run/updateRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/runs/list"
+          ],
+          "title": "Automation/runs/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationRunsListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/runs/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "automation/delete"
+          ],
+          "title": "Automation/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AutomationDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Automation/deleteRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "knowledge/list"
+          ],
+          "title": "Knowledge/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/KnowledgeListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Knowledge/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "knowledge/memory/write"
+          ],
+          "title": "Knowledge/memory/writeRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/KnowledgeMemoryWriteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Knowledge/memory/writeRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "tool/list"
+          ],
+          "title": "Tool/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ToolListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Tool/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "tool/read"
+          ],
+          "title": "Tool/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ToolReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Tool/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "tool/save"
+          ],
+          "title": "Tool/saveRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ToolSaveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Tool/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "tool/update"
+          ],
+          "title": "Tool/updateRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ToolUpdateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Tool/updateRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "tool/delete"
+          ],
+          "title": "Tool/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ToolDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Tool/deleteRequest",
       "type": "object"
     },
     {
@@ -5867,6 +9850,102 @@
         "params"
       ],
       "title": "McpServerStatus/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "mcpServerConfig/list"
+          ],
+          "title": "McpServerConfig/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/McpServerConfigListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "McpServerConfig/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "mcpServerConfig/read"
+          ],
+          "title": "McpServerConfig/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/McpServerConfigReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "McpServerConfig/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "mcpServerConfig/save"
+          ],
+          "title": "McpServerConfig/saveRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/McpServerConfigSaveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "McpServerConfig/saveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "mcpServerConfig/delete"
+          ],
+          "title": "McpServerConfig/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/McpServerConfigDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "McpServerConfig/deleteRequest",
       "type": "object"
     },
     {

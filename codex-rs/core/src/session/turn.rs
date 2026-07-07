@@ -32,6 +32,7 @@ use crate::mcp_tool_exposure::build_mcp_tool_exposure;
 use crate::mentions::build_connector_slug_counts;
 use crate::mentions::build_skill_name_counts;
 use crate::mentions::collect_explicit_app_ids;
+use crate::mentions::collect_explicit_mcp_server_names;
 use crate::mentions::collect_explicit_plugin_mentions;
 use crate::mentions::collect_tool_mentions_from_messages;
 use crate::plugins::build_plugin_injections;
@@ -62,49 +63,49 @@ use crate::tools::spec_plan::tool_suggest_enabled;
 use crate::turn_diff_tracker::TurnDiffTracker;
 use crate::turn_timing::record_turn_ttft_metric;
 use crate::util::error_or_panic;
-use codex_analytics::AppInvocation;
-use codex_analytics::CompactionPhase;
-use codex_analytics::CompactionReason;
-use codex_analytics::InvocationType;
-use codex_analytics::TurnResolvedConfigFact;
-use codex_analytics::build_track_events_context;
-use codex_async_utils::OrCancelExt;
-use codex_core_skills::injection::InjectedHostSkillPrompts;
-use codex_extension_api::TurnInputContext;
-use codex_extension_api::TurnInputEnvironment;
-use codex_features::Feature;
-use codex_git_utils::get_git_repo_root_with_fs;
-use codex_protocol::config_types::AutoCompactTokenLimitScope;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::items::PlanItem;
-use codex_protocol::items::TurnItem;
-use codex_protocol::items::build_hook_prompt_message;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::MessagePhase;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::AgentMessageContentDeltaEvent;
-use codex_protocol::protocol::AgentReasoningSectionBreakEvent;
-use codex_protocol::protocol::CodexErrorInfo;
-use codex_protocol::protocol::ErrorEvent;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::PlanDeltaEvent;
-use codex_protocol::protocol::ReasoningContentDeltaEvent;
-use codex_protocol::protocol::ReasoningRawContentDeltaEvent;
-use codex_protocol::protocol::TurnDiffEvent;
-use codex_protocol::protocol::WarningEvent;
-use codex_protocol::user_input::UserInput;
-use codex_tools::ToolName;
-use codex_tools::filter_request_plugin_install_discoverable_tools_for_client;
-use codex_utils_stream_parser::AssistantTextChunk;
-use codex_utils_stream_parser::AssistantTextStreamParser;
-use codex_utils_stream_parser::ProposedPlanSegment;
-use codex_utils_stream_parser::extract_proposed_plan_text;
-use codex_utils_stream_parser::strip_citations;
+use crewon_analytics::AppInvocation;
+use crewon_analytics::CompactionPhase;
+use crewon_analytics::CompactionReason;
+use crewon_analytics::InvocationType;
+use crewon_analytics::TurnResolvedConfigFact;
+use crewon_analytics::build_track_events_context;
+use crewon_async_utils::OrCancelExt;
+use crewon_core_skills::injection::InjectedHostSkillPrompts;
+use crewon_extension_api::TurnInputContext;
+use crewon_extension_api::TurnInputEnvironment;
+use crewon_features::Feature;
+use crewon_git_utils::get_git_repo_root_with_fs;
+use crewon_protocol::config_types::AutoCompactTokenLimitScope;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
+use crewon_protocol::items::PlanItem;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::items::build_hook_prompt_message;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::MessagePhase;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::AgentMessageContentDeltaEvent;
+use crewon_protocol::protocol::AgentReasoningSectionBreakEvent;
+use crewon_protocol::protocol::CodexErrorInfo;
+use crewon_protocol::protocol::ErrorEvent;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::PlanDeltaEvent;
+use crewon_protocol::protocol::ReasoningContentDeltaEvent;
+use crewon_protocol::protocol::ReasoningRawContentDeltaEvent;
+use crewon_protocol::protocol::TurnDiffEvent;
+use crewon_protocol::protocol::WarningEvent;
+use crewon_protocol::user_input::UserInput;
+use crewon_tools::ToolName;
+use crewon_tools::filter_request_plugin_install_discoverable_tools_for_client;
+use crewon_utils_stream_parser::AssistantTextChunk;
+use crewon_utils_stream_parser::AssistantTextStreamParser;
+use crewon_utils_stream_parser::ProposedPlanSegment;
+use crewon_utils_stream_parser::extract_proposed_plan_text;
+use crewon_utils_stream_parser::strip_citations;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesOrdered;
@@ -117,6 +118,9 @@ use tracing::instrument;
 use tracing::trace;
 use tracing::trace_span;
 use tracing::warn;
+
+#[derive(Debug)]
+struct ExplicitMcpServerMentions(HashSet<String>);
 
 /// Takes initial turn input and runs a loop where, at each sampling request,
 /// the model replies with either:
@@ -135,7 +139,7 @@ use tracing::warn;
 pub(crate) async fn run_turn(
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
-    turn_extension_data: Arc<codex_extension_api::ExtensionData>,
+    turn_extension_data: Arc<crewon_extension_api::ExtensionData>,
     input: Vec<TurnInput>,
     prewarmed_client_session: Option<ModelClientSession>,
     cancellation_token: CancellationToken,
@@ -157,8 +161,11 @@ pub(crate) async fn run_turn(
     sess.record_context_updates_and_set_reference_context_item(turn_context.as_ref())
         .await;
 
-    let (injection_items, explicitly_enabled_connectors) =
+    let (injection_items, explicitly_enabled_connectors, explicit_mcp_server_names) =
         build_skills_and_plugins(&sess, turn_context.as_ref(), &input, &cancellation_token).await?;
+    turn_context
+        .extension_data
+        .insert(ExplicitMcpServerMentions(explicit_mcp_server_names));
 
     if run_pending_session_start_hooks(&sess, &turn_context).await {
         return None;
@@ -185,7 +192,7 @@ pub(crate) async fn run_turn(
 
     let mut last_agent_message: Option<String> = None;
     let mut stop_hook_active = false;
-    // Although from the perspective of codex.rs, TurnDiffTracker has the lifecycle of a Task which contains
+    // Although from the perspective of crewon.rs, TurnDiffTracker has the lifecycle of a Task which contains
     // many turns, from the perspective of the user, it is a single turn.
     let display_roots = turn_diff_display_roots(turn_context.as_ref()).await;
     let turn_diff_tracker = Arc::new(tokio::sync::Mutex::new(
@@ -378,7 +385,7 @@ pub(crate) async fn run_turn(
                     }
                 }
 
-                sess.track_turn_codex_error(turn_context.as_ref(), &codex_error);
+                sess.track_turn_crewon_error(turn_context.as_ref(), &codex_error);
                 let error = CodexErrorInfo::BadRequest;
                 sess.emit_turn_error_lifecycle(turn_context.as_ref(), error.clone())
                     .await;
@@ -395,7 +402,7 @@ pub(crate) async fn run_turn(
                 let error = e.to_codex_protocol_error();
                 sess.emit_turn_error_lifecycle(turn_context.as_ref(), error.clone())
                     .await;
-                sess.track_turn_codex_error(turn_context.as_ref(), &e);
+                sess.track_turn_crewon_error(turn_context.as_ref(), &e);
                 let event = EventMsg::Error(e.to_error_event(/*message_prefix*/ None));
                 sess.send_event(&turn_context, event).await;
                 // let the user continue the conversation
@@ -458,7 +465,7 @@ async fn build_skills_and_plugins(
     turn_context: &TurnContext,
     input: &[TurnInput],
     cancellation_token: &CancellationToken,
-) -> Option<(Vec<ResponseItem>, HashSet<String>)> {
+) -> Option<(Vec<ResponseItem>, HashSet<String>, HashSet<String>)> {
     let user_input = input
         .iter()
         .filter_map(|item| match item {
@@ -502,7 +509,7 @@ async fn build_skills_and_plugins(
         Vec::new()
     };
     let available_connectors = if turn_context.apps_enabled() {
-        let connectors = codex_connectors::merge::merge_plugin_connectors_with_accessible(
+        let connectors = crewon_connectors::merge::merge_plugin_connectors_with_accessible(
             loaded_plugins
                 .effective_apps()
                 .into_iter()
@@ -567,6 +574,7 @@ async fn build_skills_and_plugins(
     let plugin_items =
         build_plugin_injections(&mentioned_plugins, &mcp_tools, &available_connectors);
     let mut explicitly_enabled_connectors = collect_explicit_app_ids(&user_input);
+    let explicit_mcp_server_names = collect_explicit_mcp_server_names(&user_input);
     explicitly_enabled_connectors.extend(skill_connector_ids);
     let connector_names_by_id = available_connectors
         .iter()
@@ -606,7 +614,11 @@ async fn build_skills_and_plugins(
     };
     injection_items.extend(plugin_items);
     injection_items.extend(extension_injection_items);
-    Some((injection_items, explicitly_enabled_connectors))
+    Some((
+        injection_items,
+        explicitly_enabled_connectors,
+        explicit_mcp_server_names,
+    ))
 }
 
 async fn build_extension_turn_input_items(
@@ -781,7 +793,7 @@ async fn run_pre_sampling_compact(
     sess: &Arc<Session>,
     turn_context: &Arc<TurnContext>,
     client_session: &mut ModelClientSession,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     maybe_run_previous_model_inline_compact(sess, turn_context, client_session).await?;
     let token_status = auto_compact_token_status(sess.as_ref(), turn_context.as_ref()).await;
     // Compact if the configured auto-compaction budget or usable context window is exhausted.
@@ -815,7 +827,7 @@ async fn maybe_run_previous_model_inline_compact(
     sess: &Arc<Session>,
     turn_context: &Arc<TurnContext>,
     client_session: &mut ModelClientSession,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let Some(previous_turn_settings) = sess.previous_turn_settings().await else {
         return Ok(());
     };
@@ -892,7 +904,7 @@ async fn run_auto_compact(
     initial_context_injection: InitialContextInjection,
     reason: CompactionReason,
     phase: CompactionPhase,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     if should_use_remote_compact_task(turn_context.provider.info()) {
         if turn_context.features.enabled(Feature::RemoteCompactionV2) {
             emit_compact_metric(
@@ -982,7 +994,7 @@ pub(super) fn collect_explicit_app_ids_from_skill_items(
 
     let connector_slug_counts = build_connector_slug_counts(connectors);
     for connector in connectors {
-        let slug = codex_connectors::metadata::connector_mention_slug(connector);
+        let slug = crewon_connectors::metadata::connector_mention_slug(connector);
         let connector_count = connector_slug_counts.get(&slug).copied().unwrap_or(0);
         let skill_count = skill_name_counts_lower.get(&slug).copied().unwrap_or(0);
         if connector_count == 1 && skill_count == 0 && mention_names_lower.contains(&slug) {
@@ -1026,14 +1038,14 @@ pub(crate) fn build_prompt(
 async fn run_sampling_request(
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
-    turn_store: Arc<codex_extension_api::ExtensionData>,
+    turn_store: Arc<crewon_extension_api::ExtensionData>,
     turn_diff_tracker: SharedTurnDiffTracker,
     client_session: &mut ModelClientSession,
     window_id: &str,
     turn_metadata_header: Option<&str>,
     input: Vec<ResponseItem>,
     cancellation_token: CancellationToken,
-) -> CodexResult<SamplingRequestResult> {
+) -> CrewonResult<SamplingRequestResult> {
     let router = built_tools(sess.as_ref(), turn_context.as_ref(), &cancellation_token).await?;
 
     let base_instructions = sess.get_base_instructions().await;
@@ -1128,7 +1140,7 @@ pub(crate) async fn built_tools(
     sess: &Session,
     turn_context: &TurnContext,
     cancellation_token: &CancellationToken,
-) -> CodexResult<Arc<ToolRouter>> {
+) -> CrewonResult<Arc<ToolRouter>> {
     let mcp_connection_manager = sess.services.mcp_connection_manager.load_full();
     let has_mcp_servers = mcp_connection_manager.has_servers();
     let all_mcp_tools = mcp_connection_manager
@@ -1150,7 +1162,7 @@ pub(crate) async fn built_tools(
             connectors::with_app_enabled_state(connectors.clone(), &turn_context.config)
         });
     let connectors = if apps_enabled {
-        let connectors = codex_connectors::merge::merge_plugin_connectors_with_accessible(
+        let connectors = crewon_connectors::merge::merge_plugin_connectors_with_accessible(
             loaded_plugins
                 .effective_apps()
                 .into_iter()
@@ -1204,11 +1216,20 @@ pub(crate) async fn built_tools(
     .instrument(trace_span!("built_tools.load_discoverable_tools"))
     .await;
 
+    let explicit_mcp_server_mentions = turn_context
+        .extension_data
+        .get::<ExplicitMcpServerMentions>();
+    let empty_mcp_server_names = HashSet::new();
+    let explicit_mcp_server_names = explicit_mcp_server_mentions
+        .as_deref()
+        .map(|mentions| &mentions.0)
+        .unwrap_or(&empty_mcp_server_names);
     let mcp_tool_exposure = build_mcp_tool_exposure(
         &all_mcp_tools,
         connectors.as_deref(),
         &turn_context.config,
         search_tool_enabled(turn_context),
+        explicit_mcp_server_names,
     );
     let mcp_tools = has_mcp_servers.then_some(mcp_tool_exposure.direct_tools);
     let deferred_mcp_tools = mcp_tool_exposure.deferred_tools;
@@ -1392,11 +1413,11 @@ async fn maybe_emit_pending_agent_message_start(
 }
 
 /// Agent messages are text-only today; concatenate all text entries.
-fn agent_message_text(item: &codex_protocol::items::AgentMessageItem) -> String {
+fn agent_message_text(item: &crewon_protocol::items::AgentMessageItem) -> String {
     item.content
         .iter()
         .map(|entry| match entry {
-            codex_protocol::items::AgentMessageContent::Text { text } => text.as_str(),
+            crewon_protocol::items::AgentMessageContent::Text { text } => text.as_str(),
         })
         .collect()
 }
@@ -1649,7 +1670,7 @@ async fn maybe_complete_plan_item_from_message(
 async fn emit_agent_message_in_plan_mode(
     sess: &Session,
     turn_context: &TurnContext,
-    agent_message: codex_protocol::items::AgentMessageItem,
+    agent_message: crewon_protocol::items::AgentMessageItem,
     state: &mut PlanModeStreamState,
 ) {
     let agent_message_id = agent_message.id.clone();
@@ -1670,7 +1691,7 @@ async fn emit_agent_message_in_plan_mode(
             .pending_agent_message_items
             .remove(&agent_message_id)
             .unwrap_or_else(|| {
-                TurnItem::AgentMessage(codex_protocol::items::AgentMessageItem {
+                TurnItem::AgentMessage(crewon_protocol::items::AgentMessageItem {
                     id: agent_message_id.clone(),
                     content: Vec::new(),
                     phase: None,
@@ -1713,7 +1734,7 @@ async fn emit_turn_item_in_plan_mode(
 async fn handle_assistant_item_done_in_plan_mode(
     sess: &Session,
     turn_context: &TurnContext,
-    turn_store: &codex_extension_api::ExtensionData,
+    turn_store: &crewon_extension_api::ExtensionData,
     item: &ResponseItem,
     state: &mut PlanModeStreamState,
     previously_active_item: Option<&TurnItem>,
@@ -1764,10 +1785,10 @@ async fn handle_assistant_item_done_in_plan_mode(
 }
 
 async fn drain_in_flight(
-    in_flight: &mut FuturesOrdered<BoxFuture<'static, CodexResult<ResponseInputItem>>>,
+    in_flight: &mut FuturesOrdered<BoxFuture<'static, CrewonResult<ResponseInputItem>>>,
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     while let Some(res) = in_flight.next().await {
         match res {
             Ok(response_input) => {
@@ -1801,14 +1822,14 @@ async fn try_run_sampling_request(
     tool_runtime: ToolCallRuntime,
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
-    turn_store: Arc<codex_extension_api::ExtensionData>,
+    turn_store: Arc<crewon_extension_api::ExtensionData>,
     client_session: &mut ModelClientSession,
     window_id: &str,
     turn_metadata_header: Option<&str>,
     turn_diff_tracker: SharedTurnDiffTracker,
     prompt: &Prompt,
     cancellation_token: CancellationToken,
-) -> CodexResult<SamplingRequestResult> {
+) -> CrewonResult<SamplingRequestResult> {
     feedback_tags!(
         model = turn_context.model_info.slug.clone(),
         approval_policy = turn_context.approval_policy.value(),
@@ -1838,7 +1859,7 @@ async fn try_run_sampling_request(
         .instrument(trace_span!("stream_request"))
         .or_cancel(&cancellation_token)
         .await??;
-    let mut in_flight: FuturesOrdered<BoxFuture<'static, CodexResult<ResponseInputItem>>> =
+    let mut in_flight: FuturesOrdered<BoxFuture<'static, CrewonResult<ResponseInputItem>>> =
         FuturesOrdered::new();
     let mut needs_follow_up = false;
     let mut last_agent_message: Option<String> = None;
@@ -1857,19 +1878,19 @@ async fn try_run_sampling_request(
         !sess.services.extensions.turn_item_contributors().is_empty();
     let mut active_item_is_streaming_to_client = false;
     let receiving_span = trace_span!("receiving_stream");
-    let outcome: CodexResult<SamplingRequestResult> = loop {
+    let outcome: CrewonResult<SamplingRequestResult> = loop {
         let handle_responses = trace_span!(
             parent: &receiving_span,
             "handle_responses",
             otel.name = field::Empty,
             tool_name = field::Empty,
             from = field::Empty,
-            codex.request.reasoning_effort = %reasoning_effort,
+            crewon.request.reasoning_effort = %reasoning_effort,
             gen_ai.usage.input_tokens = field::Empty,
             gen_ai.usage.cache_read.input_tokens = field::Empty,
             gen_ai.usage.output_tokens = field::Empty,
-            codex.usage.reasoning_output_tokens = field::Empty,
-            codex.usage.total_tokens = field::Empty,
+            crewon.usage.reasoning_output_tokens = field::Empty,
+            crewon.usage.total_tokens = field::Empty,
         );
 
         let event = match stream
@@ -1879,7 +1900,7 @@ async fn try_run_sampling_request(
             .await
         {
             Ok(event) => event,
-            Err(codex_async_utils::CancelErr::Cancelled) => break Err(CodexErr::TurnAborted),
+            Err(crewon_async_utils::CancelErr::Cancelled) => break Err(CodexErr::TurnAborted),
         };
 
         let event = match event {
@@ -2024,7 +2045,7 @@ async fn try_run_sampling_request(
                             assistant_message_stream_parsers.seed_item_text(&item_id, &raw_text);
                         if let TurnItem::AgentMessage(agent_message) = &mut turn_item {
                             agent_message.content =
-                                vec![codex_protocol::items::AgentMessageContent::Text {
+                                vec![crewon_protocol::items::AgentMessageContent::Text {
                                     text: if plan_mode {
                                         String::new()
                                     } else {

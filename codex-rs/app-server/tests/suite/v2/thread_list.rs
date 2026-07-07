@@ -10,32 +10,32 @@ use app_test_support::test_absolute_path;
 use app_test_support::to_response;
 use chrono::DateTime;
 use chrono::Utc;
-use codex_app_server_protocol::GitInfo as ApiGitInfo;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::SessionSource;
-use codex_app_server_protocol::SortDirection;
-use codex_app_server_protocol::ThreadListCwdFilter;
-use codex_app_server_protocol::ThreadListResponse;
-use codex_app_server_protocol::ThreadSearchResponse;
-use codex_app_server_protocol::ThreadSortKey;
-use codex_app_server_protocol::ThreadSourceKind;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::ThreadStatus;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::UserInput;
-use codex_core::ARCHIVED_SESSIONS_SUBDIR;
-use codex_git_utils::GitSha;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::GitInfo as CoreGitInfo;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionSource as CoreSessionSource;
-use codex_protocol::protocol::SubAgentSource;
 use core_test_support::responses;
+use crewon_app_server_protocol::GitInfo as ApiGitInfo;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::SessionSource;
+use crewon_app_server_protocol::SortDirection;
+use crewon_app_server_protocol::ThreadListCwdFilter;
+use crewon_app_server_protocol::ThreadListResponse;
+use crewon_app_server_protocol::ThreadSearchResponse;
+use crewon_app_server_protocol::ThreadSortKey;
+use crewon_app_server_protocol::ThreadSourceKind;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::ThreadStatus;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::UserInput;
+use crewon_core::ARCHIVED_SESSIONS_SUBDIR;
+use crewon_git_utils::GitSha;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::GitInfo as CoreGitInfo;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionSource as CoreSessionSource;
+use crewon_protocol::protocol::SubAgentSource;
 use pretty_assertions::assert_eq;
 use std::cmp::Reverse;
 use std::fs;
@@ -84,7 +84,7 @@ async fn list_threads_with_sort(
     archived: Option<bool>,
 ) -> Result<ThreadListResponse> {
     let request_id = mcp
-        .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+        .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {
             cursor,
             limit,
             sort_key,
@@ -278,7 +278,7 @@ async fn thread_list_reports_system_error_idle_flag_after_failed_turn() -> Resul
         Some(vec!["mock_provider".to_string()]),
         Some(vec![
             ThreadSourceKind::AppServer,
-            ThreadSourceKind::Cli,
+            ThreadSourceKind::LegacyCli,
             ThreadSourceKind::VsCode,
         ]),
         /*archived*/ None,
@@ -382,8 +382,8 @@ async fn thread_list_pagination_next_cursor_none_on_last_page() -> Result<()> {
         assert!(thread.created_at > 0);
         assert_eq!(thread.updated_at, thread.created_at);
         assert_eq!(thread.cwd, test_absolute_path("/"));
-        assert_eq!(thread.cli_version, "0.0.0");
-        assert_eq!(thread.source, SessionSource::Cli);
+        assert_eq!(thread.client_version, "0.0.0");
+        assert_eq!(thread.source, SessionSource::LegacyCli);
         assert_eq!(thread.git_info, None);
         assert_eq!(thread.status, ThreadStatus::NotLoaded);
     }
@@ -410,8 +410,8 @@ async fn thread_list_pagination_next_cursor_none_on_last_page() -> Result<()> {
         assert!(thread.created_at > 0);
         assert_eq!(thread.updated_at, thread.created_at);
         assert_eq!(thread.cwd, test_absolute_path("/"));
-        assert_eq!(thread.cli_version, "0.0.0");
-        assert_eq!(thread.source, SessionSource::Cli);
+        assert_eq!(thread.client_version, "0.0.0");
+        assert_eq!(thread.source, SessionSource::LegacyCli);
         assert_eq!(thread.git_info, None);
         assert_eq!(thread.status, ThreadStatus::NotLoaded);
     }
@@ -466,8 +466,8 @@ async fn thread_list_respects_provider_filter() -> Result<()> {
     assert_eq!(thread.created_at, expected_ts);
     assert_eq!(thread.updated_at, expected_ts);
     assert_eq!(thread.cwd, test_absolute_path("/"));
-    assert_eq!(thread.cli_version, "0.0.0");
-    assert_eq!(thread.source, SessionSource::Cli);
+    assert_eq!(thread.client_version, "0.0.0");
+    assert_eq!(thread.source, SessionSource::LegacyCli);
     assert_eq!(thread.git_info, None);
 
     Ok(())
@@ -523,7 +523,7 @@ async fn thread_list_respects_cwd_filters() -> Result<()> {
 
     let mut mcp = init_mcp(codex_home.path()).await?;
     let request_id = mcp
-        .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+        .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {
             cursor: None,
             limit: Some(10),
             sort_key: None,
@@ -605,25 +605,25 @@ sqlite = true
     // rollouts manually, so mark the DB backfill complete and then run an unsearched
     // list large enough to repair every rollout the searched list should find.
     let state_db =
-        codex_state::StateRuntime::init(codex_home.path().to_path_buf(), "mock_provider".into())
+        crewon_state::StateRuntime::init(codex_home.path().to_path_buf(), "mock_provider".into())
             .await?;
     state_db
         .mark_backfill_complete(/*last_watermark*/ None)
         .await?;
-    let rollout_config = codex_rollout::RolloutConfig {
+    let rollout_config = crewon_rollout::RolloutConfig {
         codex_home: codex_home.path().to_path_buf(),
         sqlite_home: codex_home.path().to_path_buf(),
         cwd: codex_home.path().to_path_buf(),
         model_provider_id: "mock_provider".to_string(),
         generate_memories: false,
     };
-    let repaired_page = codex_core::RolloutRecorder::list_threads(
+    let repaired_page = crewon_core::RolloutRecorder::list_threads(
         Some(state_db.clone()),
         &rollout_config,
         /*page_size*/ 10,
         /*cursor*/ None,
-        codex_core::ThreadSortKey::CreatedAt,
-        codex_core::SortDirection::Desc,
+        crewon_core::ThreadSortKey::CreatedAt,
+        crewon_core::SortDirection::Desc,
         &[],
         /*model_providers*/ None,
         /*cwd_filters*/ None,
@@ -635,7 +635,7 @@ sqlite = true
 
     let mut mcp = init_mcp(codex_home.path()).await?;
     let request_id = mcp
-        .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+        .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {
             cursor: None,
             limit: Some(10),
             sort_key: None,
@@ -696,7 +696,7 @@ async fn thread_search_returns_content_matches() -> Result<()> {
 
     let mut mcp = init_mcp(codex_home.path()).await?;
     let request_id = mcp
-        .send_thread_search_request(codex_app_server_protocol::ThreadSearchParams {
+        .send_thread_search_request(crewon_app_server_protocol::ThreadSearchParams {
             cursor: None,
             limit: Some(10),
             sort_key: None,
@@ -743,7 +743,7 @@ async fn thread_search_matches_json_escaped_content() -> Result<()> {
 
     let mut mcp = init_mcp(codex_home.path()).await?;
     let request_id = mcp
-        .send_thread_search_request(codex_app_server_protocol::ThreadSearchParams {
+        .send_thread_search_request(crewon_app_server_protocol::ThreadSearchParams {
             cursor: None,
             limit: Some(10),
             sort_key: None,
@@ -792,7 +792,7 @@ async fn thread_search_filters_by_source_kind() -> Result<()> {
 
     let mut mcp = init_mcp(codex_home.path()).await?;
     let request_id = mcp
-        .send_thread_search_request(codex_app_server_protocol::ThreadSearchParams {
+        .send_thread_search_request(crewon_app_server_protocol::ThreadSearchParams {
             cursor: None,
             limit: Some(10),
             sort_key: None,
@@ -843,7 +843,7 @@ sqlite = true
         /*git_info*/ None,
     )?;
     let state_db =
-        codex_state::StateRuntime::init(codex_home.path().to_path_buf(), "mock_provider".into())
+        crewon_state::StateRuntime::init(codex_home.path().to_path_buf(), "mock_provider".into())
             .await?;
     state_db
         .mark_backfill_complete(/*last_watermark*/ None)
@@ -851,7 +851,7 @@ sqlite = true
     let mut mcp = init_mcp(codex_home.path()).await?;
 
     let request_id = mcp
-        .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+        .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {
             cursor: None,
             limit: Some(10),
             sort_key: None,
@@ -887,7 +887,7 @@ sqlite = true
     state_db.upsert_thread(&metadata).await?;
 
     let request_id = mcp
-        .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+        .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {
             cursor: None,
             limit: Some(10),
             sort_key: None,
@@ -916,7 +916,7 @@ sqlite = true
     assert_eq!(ids, vec![thread_id.as_str()]);
 
     let request_id = mcp
-        .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+        .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {
             cursor: None,
             limit: Some(10),
             sort_key: None,
@@ -983,7 +983,7 @@ async fn thread_list_empty_source_kinds_defaults_to_interactive_only() -> Result
     let ids: Vec<_> = data.iter().map(|thread| thread.id.as_str()).collect();
     assert_eq!(ids, vec![cli_id.as_str()]);
     assert_ne!(cli_id, exec_id);
-    assert_eq!(data[0].source, SessionSource::Cli);
+    assert_eq!(data[0].source, SessionSource::LegacyCli);
 
     Ok(())
 }
@@ -1377,9 +1377,9 @@ async fn thread_list_includes_git_info() -> Result<()> {
         origin_url: Some("https://example.com/repo.git".to_string()),
     };
     assert_eq!(thread.git_info, Some(expected_git));
-    assert_eq!(thread.source, SessionSource::Cli);
+    assert_eq!(thread.source, SessionSource::LegacyCli);
     assert_eq!(thread.cwd, test_absolute_path("/"));
-    assert_eq!(thread.cli_version, "0.0.0");
+    assert_eq!(thread.client_version, "0.0.0");
 
     Ok(())
 }
@@ -1618,7 +1618,7 @@ async fn thread_list_backwards_cursor_can_seed_forward_delta_sync() -> Result<()
         ..
     } = {
         let request_id = mcp
-            .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+            .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {
                 cursor: None,
                 limit: Some(1),
                 sort_key: Some(ThreadSortKey::UpdatedAt),
@@ -1660,7 +1660,7 @@ async fn thread_list_backwards_cursor_can_seed_forward_delta_sync() -> Result<()
         data: delta_page, ..
     } = {
         let request_id = mcp
-            .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+            .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {
                 cursor: Some(backwards_cursor),
                 limit: Some(10),
                 sort_key: Some(ThreadSortKey::UpdatedAt),
@@ -1898,7 +1898,7 @@ async fn thread_list_invalid_cursor_returns_error() -> Result<()> {
     let mut mcp = init_mcp(codex_home.path()).await?;
 
     let request_id = mcp
-        .send_thread_list_request(codex_app_server_protocol::ThreadListParams {
+        .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {
             cursor: Some("not-a-cursor".to_string()),
             limit: Some(2),
             sort_key: None,

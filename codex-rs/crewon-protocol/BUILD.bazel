@@ -1,0 +1,7 @@
+load("//:defs.bzl", "crewon_rust_crate")
+
+crewon_rust_crate(
+    name = "protocol",
+    crate_name = "crewon_protocol",
+    compile_data = glob(["src/prompts/**/*.md"]),
+)

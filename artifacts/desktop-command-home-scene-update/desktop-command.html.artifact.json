@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "desktop-command.html",
+  "entry": "desktop-command.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-07-04T12:19:33.831Z",
+  "updatedAt": "2026-07-05T10:00:53.310Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

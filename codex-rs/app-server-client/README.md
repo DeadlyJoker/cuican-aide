@@ -1,14 +1,11 @@
-# codex-app-server-client
+# crewon-app-server-client
 
-Shared in-process app-server client used by conversational CLI surfaces:
-
-- `codex-exec`
-- `codex-tui`
+Shared in-process app-server client used by first-party Crewon clients.
 
 ## Purpose
 
 This crate centralizes startup and lifecycle management for an in-process
-`codex-app-server` runtime, so CLI clients do not need to duplicate:
+`crewon-app-server` runtime, so rich clients do not need to duplicate:
 
 - app-server bootstrap and initialize handshake
 - in-memory request/event transport wiring
@@ -21,7 +18,7 @@ Callers pass both the app-server `SessionSource` and the initialize
 `client_info.name` explicitly when starting the facade.
 
 That keeps thread metadata (for example in `thread/list` and `thread/read`)
-aligned with the originating runtime without baking TUI/exec-specific policy
+aligned with the originating runtime without baking surface-specific policy
 into the shared client layer.
 
 ## Transport model
@@ -52,8 +49,8 @@ thread bootstrap still follows normal app-server flow:
 - richer session metadata may arrive later as a `SessionConfigured`
   legacy event
 
-Surfaces such as TUI and exec may therefore need a short bootstrap
-phase where they reconcile startup response data with later events.
+Client surfaces may therefore need a short bootstrap phase where they reconcile
+startup response data with later events.
 
 ## Backpressure and shutdown
 

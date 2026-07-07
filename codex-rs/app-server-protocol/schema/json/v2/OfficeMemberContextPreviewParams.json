@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "agentId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "config": true,
+    "cwd": {
+      "type": "string"
+    },
+    "locale": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "member": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runId": {
+      "type": "string"
+    },
+    "task": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "config",
+    "cwd",
+    "runId"
+  ],
+  "title": "OfficeMemberContextPreviewParams",
+  "type": "object"
+}

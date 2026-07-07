@@ -2,7 +2,7 @@
 Module: sandboxing
 
 Core-owned adapter types for exec/runtime plumbing. Policy selection and
-command transformation live in the codex-sandboxing crate; this module keeps
+command transformation live in the crewon-sandboxing crate; this module keeps
 the exec-only metadata and translates transformed sandbox commands back into
 ExecRequest for execution.
 */
@@ -15,16 +15,16 @@ use crate::exec::execute_exec_request;
 #[cfg(target_os = "macos")]
 use crate::spawn::CODEX_SANDBOX_ENV_VAR;
 use crate::spawn::CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR;
-use codex_network_proxy::NetworkProxy;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::exec_output::ExecToolCallOutput;
-use codex_protocol::models::PermissionProfile;
-pub use codex_protocol::models::SandboxPermissions;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_sandboxing::SandboxExecRequest;
-use codex_sandboxing::SandboxType;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_network_proxy::NetworkProxy;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::exec_output::ExecToolCallOutput;
+use crewon_protocol::models::PermissionProfile;
+pub use crewon_protocol::models::SandboxPermissions;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_sandboxing::SandboxExecRequest;
+use crewon_sandboxing::SandboxType;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -35,7 +35,7 @@ pub(crate) struct ExecOptions {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ExecServerEnvConfig {
-    pub(crate) policy: codex_exec_server::ExecEnvPolicy,
+    pub(crate) policy: crewon_exec_server::ExecEnvPolicy,
     pub(crate) local_policy_env: HashMap<String, String>,
 }
 
@@ -158,7 +158,7 @@ impl ExecRequest {
 pub async fn execute_env(
     exec_request: ExecRequest,
     stdout_stream: Option<StdoutStream>,
-) -> codex_protocol::error::Result<ExecToolCallOutput> {
+) -> crewon_protocol::error::Result<ExecToolCallOutput> {
     execute_exec_request(exec_request, stdout_stream, /*after_spawn*/ None).await
 }
 
@@ -166,6 +166,6 @@ pub async fn execute_exec_request_with_after_spawn(
     exec_request: ExecRequest,
     stdout_stream: Option<StdoutStream>,
     after_spawn: Option<Box<dyn FnOnce() + Send>>,
-) -> codex_protocol::error::Result<ExecToolCallOutput> {
+) -> crewon_protocol::error::Result<ExecToolCallOutput> {
     execute_exec_request(exec_request, stdout_stream, after_spawn).await
 }

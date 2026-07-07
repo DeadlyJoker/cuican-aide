@@ -28,7 +28,7 @@ pub enum AppToolApproval {
 /// Human-readable reason a configured MCP server was disabled after requirements
 /// were applied.
 ///
-/// `Display` is intentionally implemented for CLI/TUI status output; avoid
+/// `Display` is intentionally implemented for client status output; avoid
 /// relying on `Debug` because enum variant syntax is not part of the user-facing
 /// message contract.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,7 +117,7 @@ impl AsRef<str> for McpServerEnvVar {
     }
 }
 
-/// OAuth client settings used when Codex launches an MCP OAuth flow.
+/// OAuth client settings used when Crewon launches an MCP OAuth flow.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct McpServerOAuthConfig {
@@ -131,14 +131,14 @@ pub struct McpServerConfig {
     #[serde(flatten)]
     pub transport: McpServerTransportConfig,
 
-    /// Effective environment id for where Codex should start this MCP server.
+    /// Effective environment id for where Crewon should start this MCP server.
     pub environment_id: String,
 
-    /// When `false`, Codex skips initializing this MCP server.
+    /// When `false`, Crewon skips initializing this MCP server.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
-    /// When `true`, `codex exec` exits with an error if this MCP server fails to initialize.
+    /// When `true`, Crewon fails startup if this MCP server fails to initialize.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub required: bool,
 

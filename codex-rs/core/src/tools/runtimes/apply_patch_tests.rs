@@ -1,23 +1,23 @@
 use super::*;
 use crate::tools::sandboxing::SandboxAttempt;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::models::FileSystemPermissions;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::GranularApprovalConfig;
-use codex_sandboxing::SandboxManager;
-use codex_sandboxing::SandboxType;
-use codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
-use codex_sandboxing::policy_transforms::effective_network_sandbox_policy;
 use core_test_support::PathBufExt;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::models::FileSystemPermissions;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::GranularApprovalConfig;
+use crewon_sandboxing::SandboxManager;
+use crewon_sandboxing::SandboxType;
+use crewon_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
+use crewon_sandboxing::policy_transforms::effective_network_sandbox_policy;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 fn test_turn_environment(environment_id: &str) -> crate::session::turn_context::TurnEnvironment {
     crate::session::turn_context::TurnEnvironment {
         environment_id: environment_id.to_string(),
-        environment: std::sync::Arc::new(codex_exec_server::Environment::default_for_tests()),
+        environment: std::sync::Arc::new(crewon_exec_server::Environment::default_for_tests()),
         cwd: std::env::temp_dir().abs(),
         shell: None,
     }
@@ -56,7 +56,7 @@ async fn guardian_review_request_includes_patch_context() {
     let expected_cwd = action.cwd.clone();
     let expected_patch = action.patch.clone();
     let request = ApplyPatchRequest {
-        turn_environment: test_turn_environment(codex_exec_server::LOCAL_ENVIRONMENT_ID),
+        turn_environment: test_turn_environment(crewon_exec_server::LOCAL_ENVIRONMENT_ID),
         action,
         file_paths: vec![path.clone()],
         changes: HashMap::from([(
@@ -95,7 +95,7 @@ async fn permission_request_payload_uses_apply_patch_hook_name_and_aliases() {
     let action = ApplyPatchAction::new_add_for_test(&path, "hello".to_string());
     let expected_patch = action.patch.clone();
     let req = ApplyPatchRequest {
-        turn_environment: test_turn_environment(codex_exec_server::LOCAL_ENVIRONMENT_ID),
+        turn_environment: test_turn_environment(crewon_exec_server::LOCAL_ENVIRONMENT_ID),
         action,
         file_paths: vec![path],
         changes: HashMap::new(),
@@ -161,7 +161,7 @@ async fn sandbox_cwd_uses_patch_action_cwd() {
         .join("apply-patch-runtime-sandbox-cwd.txt")
         .abs();
     let req = ApplyPatchRequest {
-        turn_environment: test_turn_environment(codex_exec_server::LOCAL_ENVIRONMENT_ID),
+        turn_environment: test_turn_environment(crewon_exec_server::LOCAL_ENVIRONMENT_ID),
         action: ApplyPatchAction::new_add_for_test(&path, "hello".to_string()),
         file_paths: vec![path.clone()],
         changes: HashMap::new(),
@@ -189,7 +189,7 @@ async fn file_system_sandbox_context_uses_active_attempt() {
         )),
     };
     let req = ApplyPatchRequest {
-        turn_environment: test_turn_environment(codex_exec_server::LOCAL_ENVIRONMENT_ID),
+        turn_environment: test_turn_environment(crewon_exec_server::LOCAL_ENVIRONMENT_ID),
         action: ApplyPatchAction::new_add_for_test(&path, "hello".to_string()),
         file_paths: vec![path.clone()],
         changes: HashMap::new(),
@@ -213,7 +213,7 @@ async fn file_system_sandbox_context_uses_active_attempt() {
         manager: &manager,
         sandbox_cwd: &path,
         workspace_roots: std::slice::from_ref(&path),
-        codex_linux_sandbox_exe: None,
+        crewon_linux_sandbox_exe: None,
         use_legacy_landlock: true,
         windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
         windows_sandbox_private_desktop: true,
@@ -247,7 +247,7 @@ async fn no_sandbox_attempt_has_no_file_system_context() {
         .join("apply-patch-runtime-none.txt")
         .abs();
     let req = ApplyPatchRequest {
-        turn_environment: test_turn_environment(codex_exec_server::LOCAL_ENVIRONMENT_ID),
+        turn_environment: test_turn_environment(crewon_exec_server::LOCAL_ENVIRONMENT_ID),
         action: ApplyPatchAction::new_add_for_test(&path, "hello".to_string()),
         file_paths: vec![path.clone()],
         changes: HashMap::new(),
@@ -267,7 +267,7 @@ async fn no_sandbox_attempt_has_no_file_system_context() {
         manager: &manager,
         sandbox_cwd: &path,
         workspace_roots: std::slice::from_ref(&path),
-        codex_linux_sandbox_exe: None,
+        crewon_linux_sandbox_exe: None,
         use_legacy_landlock: false,
         windows_sandbox_level: WindowsSandboxLevel::Disabled,
         windows_sandbox_private_desktop: false,

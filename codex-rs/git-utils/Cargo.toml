@@ -1,5 +1,5 @@
 [package]
-name = "codex-git-utils"
+name = "crewon-git-utils"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,9 +11,9 @@ workspace = true
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
-codex-file-system = { workspace = true }
-codex-protocol = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
+crewon-file-system = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
 futures = { workspace = true, features = ["alloc"] }
 gix = { workspace = true }
 once_cell = { workspace = true }

@@ -5,18 +5,18 @@ use super::SandboxType;
 use super::SandboxablePreference;
 use super::get_platform_sandbox;
 use super::with_managed_mitm_ca_readable_root;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::models::FileSystemPermissions;
-use codex_protocol::models::NetworkPermissions;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::models::FileSystemPermissions;
+use crewon_protocol::models::NetworkPermissions;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use dunce::canonicalize;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
@@ -92,7 +92,7 @@ fn transform_preserves_unrestricted_file_system_policy_for_restricted_network() 
             enforce_managed_network: false,
             network: None,
             sandbox_policy_cwd: cwd.as_path(),
-            codex_linux_sandbox_exe: None,
+            crewon_linux_sandbox_exe: None,
             use_legacy_landlock: false,
             windows_sandbox_level: WindowsSandboxLevel::Disabled,
             windows_sandbox_private_desktop: false,
@@ -143,7 +143,7 @@ fn transform_additional_permissions_enable_network_for_external_sandbox() {
             enforce_managed_network: false,
             network: None,
             sandbox_policy_cwd: cwd.as_path(),
-            codex_linux_sandbox_exe: None,
+            crewon_linux_sandbox_exe: None,
             use_legacy_landlock: false,
             windows_sandbox_level: WindowsSandboxLevel::Disabled,
             windows_sandbox_private_desktop: false,
@@ -211,7 +211,7 @@ fn transform_additional_permissions_preserves_denied_entries() {
             enforce_managed_network: false,
             network: None,
             sandbox_policy_cwd: cwd.as_path(),
-            codex_linux_sandbox_exe: None,
+            crewon_linux_sandbox_exe: None,
             use_legacy_landlock: false,
             windows_sandbox_level: WindowsSandboxLevel::Disabled,
             windows_sandbox_private_desktop: false,
@@ -287,7 +287,7 @@ fn managed_mitm_ca_bundle_becomes_readable_for_restricted_sandbox() {
 
 #[cfg(target_os = "linux")]
 fn transform_linux_seccomp_request(
-    codex_linux_sandbox_exe: &std::path::Path,
+    crewon_linux_sandbox_exe: &std::path::Path,
 ) -> super::SandboxExecRequest {
     let manager = SandboxManager::new();
     let cwd = AbsolutePathBuf::current_dir().expect("current dir");
@@ -306,7 +306,7 @@ fn transform_linux_seccomp_request(
             enforce_managed_network: false,
             network: None,
             sandbox_policy_cwd: cwd.as_path(),
-            codex_linux_sandbox_exe: Some(codex_linux_sandbox_exe),
+            crewon_linux_sandbox_exe: Some(crewon_linux_sandbox_exe),
             use_legacy_landlock: false,
             windows_sandbox_level: WindowsSandboxLevel::Disabled,
             windows_sandbox_private_desktop: false,
@@ -386,20 +386,20 @@ fn wsl1_allows_non_bubblewrap_linux_paths() {
 #[cfg(target_os = "linux")]
 #[test]
 fn transform_linux_seccomp_preserves_helper_path_in_arg0_when_available() {
-    let codex_linux_sandbox_exe = std::path::PathBuf::from("/tmp/codex-linux-sandbox");
-    let exec_request = transform_linux_seccomp_request(&codex_linux_sandbox_exe);
+    let crewon_linux_sandbox_exe = std::path::PathBuf::from("/tmp/crewon-linux-sandbox");
+    let exec_request = transform_linux_seccomp_request(&crewon_linux_sandbox_exe);
 
     assert_eq!(
         exec_request.arg0,
-        Some(codex_linux_sandbox_exe.to_string_lossy().into_owned())
+        Some(crewon_linux_sandbox_exe.to_string_lossy().into_owned())
     );
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn transform_linux_seccomp_uses_helper_alias_when_launcher_is_not_helper_path() {
-    let codex_linux_sandbox_exe = std::path::PathBuf::from("/tmp/codex");
-    let exec_request = transform_linux_seccomp_request(&codex_linux_sandbox_exe);
+    let crewon_linux_sandbox_exe = std::path::PathBuf::from("/tmp/crewon");
+    let exec_request = transform_linux_seccomp_request(&crewon_linux_sandbox_exe);
 
-    assert_eq!(exec_request.arg0, Some("codex-linux-sandbox".to_string()));
+    assert_eq!(exec_request.arg0, Some("crewon-linux-sandbox".to_string()));
 }

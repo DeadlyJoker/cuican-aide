@@ -1,9 +1,9 @@
 use super::*;
-use codex_app_server_protocol::PluginAuthPolicy;
-use codex_app_server_protocol::PluginInstallPolicy;
-use codex_app_server_protocol::PluginInterface;
-use codex_login::CodexAuth;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::PluginAuthPolicy;
+use crewon_app_server_protocol::PluginInstallPolicy;
+use crewon_app_server_protocol::PluginInterface;
+use crewon_login::CrewonAuth;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -28,8 +28,8 @@ fn test_config(server: &MockServer) -> RemotePluginServiceConfig {
     }
 }
 
-fn test_auth() -> CodexAuth {
-    CodexAuth::create_dummy_chatgpt_auth_for_testing()
+fn test_auth() -> CrewonAuth {
+    CrewonAuth::create_dummy_chatgpt_auth_for_testing()
 }
 
 fn write_file(path: &Path, contents: &str) {
@@ -40,7 +40,7 @@ fn write_file(path: &Path, contents: &str) {
 fn write_test_plugin(root: &Path, plugin_name: &str) -> PathBuf {
     let plugin_path = root.join(plugin_name);
     write_file(
-        &plugin_path.join(".codex-plugin/plugin.json"),
+        &plugin_path.join(".crewon-plugin/plugin.json"),
         &format!(r#"{{"name":"{plugin_name}"}}"#),
     );
     write_file(
@@ -267,7 +267,7 @@ async fn save_remote_plugin_share_creates_workspace_plugin() {
     let archive_files = archive_file_entries(&upload_request.body);
     assert_eq!(
         archive_files
-            .get(".codex-plugin/plugin.json")
+            .get(".crewon-plugin/plugin.json")
             .map(Vec::as_slice),
         Some(br#"{"name":"demo-plugin"}"#.as_slice())
     );
@@ -308,13 +308,13 @@ fn archive_plugin_for_upload_places_manifest_at_archive_root() {
     assert_eq!(
         archive_files.keys().cloned().collect::<Vec<_>>(),
         vec![
-            ".codex-plugin/plugin.json".to_string(),
+            ".crewon-plugin/plugin.json".to_string(),
             "skills/example/SKILL.md".to_string()
         ]
     );
     assert_eq!(
         archive_files
-            .get(".codex-plugin/plugin.json")
+            .get(".crewon-plugin/plugin.json")
             .map(Vec::as_slice),
         Some(br#"{"name":"demo-plugin"}"#.as_slice())
     );
@@ -345,7 +345,7 @@ fn archive_plugin_for_upload_round_trips_through_plugin_bundle_archive_with_long
     .expect("extract shared plugin archive");
 
     assert_eq!(
-        fs::read_to_string(destination.path().join(".codex-plugin/plugin.json")).unwrap(),
+        fs::read_to_string(destination.path().join(".crewon-plugin/plugin.json")).unwrap(),
         r#"{"name":"demo-plugin"}"#
     );
     assert_eq!(

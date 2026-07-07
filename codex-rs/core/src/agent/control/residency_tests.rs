@@ -1,20 +1,20 @@
 use crate::ThreadManager;
 use crate::agent::AgentControl;
-use crate::codex_thread::CodexThread;
 use crate::config::Config;
 use crate::config::test_config;
+use crate::crewon_thread::CrewonThread;
 use crate::thread_manager::ThreadManagerState;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_protocol::ThreadId;
-use codex_protocol::error::CodexErr;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::ThreadSource;
-use codex_protocol::protocol::TurnAbortReason;
-use codex_protocol::protocol::TurnAbortedEvent;
-use codex_protocol::protocol::TurnCompleteEvent;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_protocol::ThreadId;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_protocol::protocol::TurnAbortReason;
+use crewon_protocol::protocol::TurnAbortedEvent;
+use crewon_protocol::protocol::TurnCompleteEvent;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
@@ -27,10 +27,10 @@ async fn residency_slot_reservation_unloads_oldest_idle_v2_agent() {
     config.codex_home = temp_home.path().to_path_buf().try_into().unwrap();
     config.cwd = temp_home.path().to_path_buf().try_into().unwrap();
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
     );
     let root = manager
         .start_thread(config.clone())
@@ -73,10 +73,10 @@ async fn interrupted_v2_agent_is_lost_after_residency_eviction() {
     config.codex_home = temp_home.path().to_path_buf().try_into().unwrap();
     config.cwd = temp_home.path().to_path_buf().try_into().unwrap();
     let manager = ThreadManager::with_models_provider_and_home_for_tests(
-        CodexAuth::from_api_key("dummy"),
+        CrewonAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
     );
     let root = manager
         .start_thread(config.clone())
@@ -150,10 +150,10 @@ async fn spawn_v2_subagent(
         .expect("spawn v2 subagent")
 }
 
-async fn mark_thread_completed(thread: &CodexThread) {
-    let turn = thread.codex.session.new_default_turn().await;
+async fn mark_thread_completed(thread: &CrewonThread) {
+    let turn = thread.engine.session.new_default_turn().await;
     thread
-        .codex
+        .engine
         .session
         .send_event(
             turn.as_ref(),
@@ -169,10 +169,10 @@ async fn mark_thread_completed(thread: &CodexThread) {
     clear_active_turn(thread).await;
 }
 
-async fn mark_thread_interrupted(thread: &CodexThread) {
-    let turn = thread.codex.session.new_default_turn().await;
+async fn mark_thread_interrupted(thread: &CrewonThread) {
+    let turn = thread.engine.session.new_default_turn().await;
     thread
-        .codex
+        .engine
         .session
         .send_event(
             turn.as_ref(),
@@ -187,7 +187,7 @@ async fn mark_thread_interrupted(thread: &CodexThread) {
     clear_active_turn(thread).await;
 }
 
-async fn clear_active_turn(thread: &CodexThread) {
+async fn clear_active_turn(thread: &CrewonThread) {
     // The fixture has no task runner to clear the turn after the terminal event.
-    *thread.codex.session.active_turn.lock().await = None;
+    *thread.engine.session.active_turn.lock().await = None;
 }

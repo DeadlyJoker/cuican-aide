@@ -10,42 +10,42 @@ use async_channel::Sender;
 use async_channel::TrySendError;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use codex_api::ApiError;
-use codex_api::Provider as ApiProvider;
-use codex_api::RealtimeAudioFrame;
-use codex_api::RealtimeEvent;
-use codex_api::RealtimeEventParser;
-use codex_api::RealtimeSessionConfig;
-use codex_api::RealtimeSessionMode;
-use codex_api::RealtimeWebsocketClient;
-use codex_api::RealtimeWebsocketEvents;
-use codex_api::RealtimeWebsocketWriter;
-use codex_api::map_api_error;
-use codex_app_server_protocol::AuthMode;
-use codex_config::config_toml::RealtimeWsMode;
-use codex_config::config_toml::RealtimeWsVersion;
-use codex_login::CodexAuth;
-use codex_login::default_client::default_headers;
-use codex_login::read_openai_api_key_from_env;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::protocol::CodexErrorInfo;
-use codex_protocol::protocol::ConversationAudioParams;
-use codex_protocol::protocol::ConversationStartParams;
-use codex_protocol::protocol::ConversationStartTransport;
-use codex_protocol::protocol::ConversationTextParams;
-use codex_protocol::protocol::ErrorEvent;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RealtimeConversationClosedEvent;
-use codex_protocol::protocol::RealtimeConversationRealtimeEvent;
-use codex_protocol::protocol::RealtimeConversationSdpEvent;
-use codex_protocol::protocol::RealtimeConversationStartedEvent;
-use codex_protocol::protocol::RealtimeHandoffRequested;
-use codex_protocol::protocol::RealtimeOutputModality;
-use codex_protocol::protocol::RealtimeVoice;
-use codex_protocol::protocol::RealtimeVoicesList;
+use crewon_api::ApiError;
+use crewon_api::Provider as ApiProvider;
+use crewon_api::RealtimeAudioFrame;
+use crewon_api::RealtimeEvent;
+use crewon_api::RealtimeEventParser;
+use crewon_api::RealtimeSessionConfig;
+use crewon_api::RealtimeSessionMode;
+use crewon_api::RealtimeWebsocketClient;
+use crewon_api::RealtimeWebsocketEvents;
+use crewon_api::RealtimeWebsocketWriter;
+use crewon_api::map_api_error;
+use crewon_app_server_protocol::AuthMode;
+use crewon_config::config_toml::RealtimeWsMode;
+use crewon_config::config_toml::RealtimeWsVersion;
+use crewon_login::CrewonAuth;
+use crewon_login::default_client::default_headers;
+use crewon_login::read_openai_api_key_from_env;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
+use crewon_protocol::protocol::CodexErrorInfo;
+use crewon_protocol::protocol::ConversationAudioParams;
+use crewon_protocol::protocol::ConversationStartParams;
+use crewon_protocol::protocol::ConversationStartTransport;
+use crewon_protocol::protocol::ConversationTextParams;
+use crewon_protocol::protocol::ErrorEvent;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::RealtimeConversationClosedEvent;
+use crewon_protocol::protocol::RealtimeConversationRealtimeEvent;
+use crewon_protocol::protocol::RealtimeConversationSdpEvent;
+use crewon_protocol::protocol::RealtimeConversationStartedEvent;
+use crewon_protocol::protocol::RealtimeHandoffRequested;
+use crewon_protocol::protocol::RealtimeOutputModality;
+use crewon_protocol::protocol::RealtimeVoice;
+use crewon_protocol::protocol::RealtimeVoicesList;
 use http::HeaderMap;
 use http::HeaderValue;
 use http::header::AUTHORIZATION;
@@ -269,7 +269,7 @@ impl RealtimeConversationManager {
         )
     }
 
-    async fn start(&self, start: RealtimeStart) -> CodexResult<RealtimeStartOutput> {
+    async fn start(&self, start: RealtimeStart) -> CrewonResult<RealtimeStartOutput> {
         let previous_state = {
             let mut guard = self.state.lock().await;
             guard.take()
@@ -281,7 +281,7 @@ impl RealtimeConversationManager {
         self.start_inner(start).await
     }
 
-    async fn start_inner(&self, start: RealtimeStart) -> CodexResult<RealtimeStartOutput> {
+    async fn start_inner(&self, start: RealtimeStart) -> CrewonResult<RealtimeStartOutput> {
         let RealtimeStart {
             api_provider,
             extra_headers,
@@ -409,7 +409,7 @@ impl RealtimeConversationManager {
         }
     }
 
-    pub(crate) async fn audio_in(&self, frame: RealtimeAudioFrame) -> CodexResult<()> {
+    pub(crate) async fn audio_in(&self, frame: RealtimeAudioFrame) -> CrewonResult<()> {
         let sender = {
             let guard = self.state.lock().await;
             guard.as_ref().map(|state| state.audio_tx.clone())
@@ -433,7 +433,7 @@ impl RealtimeConversationManager {
         }
     }
 
-    pub(crate) async fn text_in(&self, text: String) -> CodexResult<()> {
+    pub(crate) async fn text_in(&self, text: String) -> CrewonResult<()> {
         let sender = {
             let guard = self.state.lock().await;
             guard
@@ -455,7 +455,7 @@ impl RealtimeConversationManager {
         Ok(())
     }
 
-    pub(crate) async fn handoff_out(&self, output_text: String) -> CodexResult<()> {
+    pub(crate) async fn handoff_out(&self, output_text: String) -> CrewonResult<()> {
         let handoff = {
             let guard = self.state.lock().await;
             let Some(state) = guard.as_ref() else {
@@ -503,7 +503,7 @@ impl RealtimeConversationManager {
         Ok(())
     }
 
-    pub(crate) async fn handoff_complete(&self) -> CodexResult<()> {
+    pub(crate) async fn handoff_complete(&self) -> CrewonResult<()> {
         let handoff = {
             let guard = self.state.lock().await;
             guard.as_ref().map(|state| state.handoff.clone())
@@ -544,7 +544,7 @@ impl RealtimeConversationManager {
         }
     }
 
-    pub(crate) async fn shutdown(&self) -> CodexResult<()> {
+    pub(crate) async fn shutdown(&self) -> CrewonResult<()> {
         let state = {
             let mut guard = self.state.lock().await;
             guard.take()
@@ -580,7 +580,7 @@ pub(crate) async fn handle_start(
     sess: &Arc<Session>,
     sub_id: String,
     params: ConversationStartParams,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let prepared_start = match prepare_realtime_start(sess, params).await {
         Ok(prepared_start) => prepared_start,
         Err(err) => {
@@ -623,7 +623,7 @@ struct PreparedRealtimeConversationStart {
 async fn prepare_realtime_start(
     sess: &Arc<Session>,
     params: ConversationStartParams,
-) -> CodexResult<PreparedRealtimeConversationStart> {
+) -> CrewonResult<PreparedRealtimeConversationStart> {
     let provider = sess.provider().await;
     let auth_manager = sess
         .services
@@ -686,7 +686,7 @@ pub(crate) async fn build_realtime_session_config(
     output_modality: RealtimeOutputModality,
     version: RealtimeWsVersion,
     voice: Option<RealtimeVoice>,
-) -> CodexResult<RealtimeSessionConfig> {
+) -> CrewonResult<RealtimeSessionConfig> {
     let config = sess.get_config().await;
     let prompt = prepare_realtime_backend_prompt(
         prompt,
@@ -754,7 +754,7 @@ fn prefix_realtime_text(text: String, prefix: &str, session_kind: RealtimeSessio
     format!("{prefix}{text}")
 }
 
-fn validate_realtime_voice(version: RealtimeWsVersion, voice: RealtimeVoice) -> CodexResult<()> {
+fn validate_realtime_voice(version: RealtimeWsVersion, voice: RealtimeVoice) -> CrewonResult<()> {
     let voices = RealtimeVoicesList::builtin();
     let allowed = match version {
         RealtimeWsVersion::V1 => &voices.v1,
@@ -783,7 +783,7 @@ async fn handle_start_inner(
     sess: &Arc<Session>,
     sub_id: &str,
     prepared_start: PreparedRealtimeConversationStart,
-) -> CodexResult<()> {
+) -> CrewonResult<()> {
     let PreparedRealtimeConversationStart {
         api_provider,
         extra_headers,
@@ -957,7 +957,10 @@ fn escape_xml_text(input: &str) -> String {
         .replace('>', "&gt;")
 }
 
-fn realtime_api_key(auth: Option<&CodexAuth>, provider: &ModelProviderInfo) -> CodexResult<String> {
+fn realtime_api_key(
+    auth: Option<&CrewonAuth>,
+    provider: &ModelProviderInfo,
+) -> CrewonResult<String> {
     if let Some(api_key) = provider.api_key()? {
         return Ok(api_key);
     }
@@ -966,7 +969,7 @@ fn realtime_api_key(auth: Option<&CodexAuth>, provider: &ModelProviderInfo) -> C
         return Ok(token);
     }
 
-    if let Some(api_key) = auth.and_then(CodexAuth::api_key) {
+    if let Some(api_key) = auth.and_then(CrewonAuth::api_key) {
         return Ok(api_key.to_string());
     }
 
@@ -987,7 +990,7 @@ fn realtime_request_headers(
     realtime_session_id: Option<&str>,
     api_key: Option<&str>,
     version: RealtimeWsVersion,
-) -> CodexResult<Option<HeaderMap>> {
+) -> CrewonResult<Option<HeaderMap>> {
     let mut headers = HeaderMap::new();
 
     if version == RealtimeWsVersion::V1 {

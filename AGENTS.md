@@ -1,8 +1,9 @@
-# Rust/codex-rs
+# Rust/crewon
 
-In the codex-rs folder where the rust code lives:
+In the `codex-rs` folder where the Rust backend code currently lives:
 
-- Crate names are prefixed with `codex-`. For example, the `core` folder's crate is named `codex-core`
+- New crate names are prefixed with `crewon-`. Legacy `codex-*` crate names should be migrated
+  opportunistically when the compatibility and review footprint are clear.
 - When using format! and you can inline variables into {}, always do that.
 - Install any commands the repo relies on (for example `just`, `rg`, or `cargo-insta`) if they aren't already available before running instructions here.
 - Never add or modify any code related to `CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR` or `CODEX_SANDBOX_ENV_VAR`.
@@ -28,10 +29,10 @@ In the codex-rs folder where the rust code lives:
 - When writing tests, prefer comparing the equality of entire objects over fields one by one.
 - Do not add tests for values that are statically defined.
 - Do not add negative tests for logic that was removed.
-- Do not add general product or user-facing documentation to the `docs/` folder. The official Codex documentation lives elsewhere. The exception is app-server API documentation, which is covered by the app-server guidance below.
+- Do not add general product or user-facing documentation to the `docs/` folder. The exception is app-server API documentation, which is covered by the app-server guidance below.
 - Prefer private modules and explicitly exported public crate API.
 - If you change `ConfigToml` or nested config types, run `just write-config-schema` to update `codex-rs/core/config.schema.json`.
-- When working with MCP tool calls, prefer using `codex-rs/codex-mcp/src/mcp_connection_manager.rs` to handle mutation of tools and tool calls. Aim to minimize the footprint of changes and leverage existing abstractions rather than plumbing code through multiple levels of function calls.
+- When working with MCP tool calls, prefer using `codex-rs/crewon-mcp/src/connection_manager.rs` to handle mutation of tools and tool calls. Aim to minimize the footprint of changes and leverage existing abstractions rather than plumbing code through multiple levels of function calls.
 - Do not call `reset_client_session` unnecessarily; let the incremental check logic decide whether to reuse the previous request.
 - If you change Rust dependencies (`Cargo.toml` or `Cargo.lock`), run `just bazel-lock-update` from the
   repo root to refresh `MODULE.bazel.lock`, and include that lockfile update in the same change.
@@ -48,41 +49,40 @@ In the codex-rs folder where the rust code lives:
   - If a file exceeds roughly 800 LoC, add new functionality in a new module instead of extending
     the existing file unless there is a strong documented reason not to.
   - This rule applies especially to high-touch files that already attract unrelated changes, such
-    as `codex-rs/tui/src/app.rs`, `codex-rs/tui/src/bottom_pane/chat_composer.rs`,
-    `codex-rs/tui/src/bottom_pane/footer.rs`, `codex-rs/tui/src/chatwidget.rs`,
-    `codex-rs/tui/src/bottom_pane/mod.rs`, and similarly central orchestration modules.
+    as central app-server request processors, core session orchestration, and similarly broad
+    coordination modules.
   - When extracting code from a large module, move the related tests and module/type docs toward
     the new implementation so the invariants stay close to the code that owns them.
-  - Avoid adding new standalone methods to `codex-rs/tui/src/chatwidget.rs` unless the change is
-    trivial; prefer new modules/files and keep `chatwidget.rs` focused on orchestration.
+  - Avoid adding new standalone methods to large orchestration modules unless the change is
+    trivial; prefer new modules/files and keep orchestration focused on coordination.
 - When running Rust commands (e.g. `just fix` or `just test`) be patient with the command and never try to kill them using the PID. Rust lock can make the execution slow, this is expected.
 
 Run `just fmt` (in the `codex-rs` directory) automatically after you have finished making code changes anywhere in this repository; do not ask for approval to run it. Additionally, run the tests:
 
 1. Do not run `cargo test` directly. Use `just test` so test execution follows the repo defaults.
-2. Run the test for the specific project that was changed. For example, if changes were made in `codex-rs/tui`, run `just test -p codex-tui`.
+2. Run the test for the specific project that was changed. For example, if changes were made in `codex-rs/app-server`, run `just test -p crewon-app-server`.
 3. Once those pass, if any changes were made in common, core, or protocol, run the complete test suite with `just test`. Avoid `--all-features` for routine local runs because it expands the build matrix and can significantly increase `target/` disk usage; use it only when you specifically need full feature coverage. project-specific or individual tests can be run without asking the user, but do ask the user before running the complete test suite.
 
 Before finalizing a large change to `codex-rs`, run `just fix -p <project>` (in `codex-rs` directory) to fix any linter issues in the code. Prefer scoping with `-p` to avoid slow workspace‑wide Clippy builds; only run `just fix` without `-p` if you changed shared crates. Do not re-run tests after running `fix` or `fmt`.
 
-## The `codex-core` crate
+## The `crewon-core` crate
 
-Over time, the `codex-core` crate (defined in `codex-rs/core/`) has become bloated because it is the largest crate, so it is often easier to add something new to `codex-core` rather than refactor out the library code you need so your new code neither takes a dependency on, nor contributes to the size of, `codex-core`.
+Over time, the core crate (defined in `codex-rs/core/`) has become bloated because it is the largest crate, so it is often easier to add something new there rather than refactor out the library code you need so your new code neither takes a dependency on, nor contributes to the size of, `crewon-core`.
 
-To that end: **resist adding code to codex-core**!
+To that end: **resist adding code to crewon-core**!
 
-Particularly when introducing a new concept/feature/API, before adding to `codex-core`, consider whether:
+Particularly when introducing a new concept/feature/API, before adding to `crewon-core`, consider whether:
 
-- There is an existing crate other than `codex-core` that is an appropriate place for your new code to live.
+- There is an existing crate other than `crewon-core` that is an appropriate place for your new code to live.
 - It is time to introduce a new crate to the Cargo workspace for your new functionality. Refactor existing code as necessary to make this happen.
 
-Likewise, when reviewing code, do not hesitate to push back on PRs that would unnecessarily add code to `codex-core`.
+Likewise, when reviewing code, do not hesitate to push back on PRs that would unnecessarily add code to `crewon-core`.
 
 ## Code Review Rules
 
 ### Model visible context
 
-Codex maintains a context (history of messages) that is sent to the model in inference requests.
+Crewon maintains a context (history of messages) that is sent to the model in inference requests.
 
 1. No history rewrite - the context must be built up incrementally.
 2. Avoid frequent changes to context that cause cache misses.
@@ -96,13 +96,13 @@ Codex maintains a context (history of messages) that is sent to the model in inf
 Search for breaking changes in external integration surfaces:
 
 - app-server APIs
-- CLI parameters
+- command-line helper parameters
 - configuration loading
 - resuming sessions from existing rollouts
 
 ### Test authoring guidance
 
-For agent changes prefer integration tests over unit tests. Integration tests are under `core/suite` and use `test_codex` to set up a test instance of codex.
+For agent changes prefer integration tests over unit tests. Integration tests are under `core/suite` and use the existing test helpers to set up a test instance.
 
 Features that change the agent logic MUST add an integration test:
 
@@ -121,37 +121,11 @@ For complex logic changes the size should be under 500 lines.
 If the change is larger, explore whether it can be split into reviewable stages and identify the smallest coherent stage to land first.
 Base the staging suggestion on the actual diff, dependencies, and affected call sites.
 
-## TUI style conventions
+## Client UI conventions
 
-See `codex-rs/tui/styles.md`.
-
-## TUI code conventions
-
-- Use concise styling helpers from ratatui’s Stylize trait.
-  - Basic spans: use "text".into()
-  - Styled spans: use "text".red(), "text".green(), "text".magenta(), "text".dim(), etc.
-  - Prefer these over constructing styles with `Span::styled` and `Style` directly.
-  - Example: patch summary file lines
-    - Desired: vec!["  └ ".into(), "M".red(), " ".dim(), "tui/src/app.rs".dim()]
-
-### TUI Styling (ratatui)
-
-- Prefer Stylize helpers: use "text".dim(), .bold(), .cyan(), .italic(), .underlined() instead of manual Style where possible.
-- Prefer simple conversions: use "text".into() for spans and vec![…].into() for lines; when inference is ambiguous (e.g., Paragraph::new/Cell::from), use Line::from(spans) or Span::from(text).
-- Computed styles: if the Style is computed at runtime, using `Span::styled` is OK (`Span::from(text).set_style(style)` is also acceptable).
-- Avoid hardcoded white: do not use `.white()`; prefer the default foreground (no color).
-- Chaining: combine helpers by chaining for readability (e.g., url.cyan().underlined()).
-- Single items: prefer "text".into(); use Line::from(text) or Span::from(text) only when the target type isn’t obvious from context, or when using .into() would require extra type annotations.
-- Building lines: use vec![…].into() to construct a Line when the target type is obvious and no extra type annotations are needed; otherwise use Line::from(vec![…]).
-- Avoid churn: don’t refactor between equivalent forms (Span::styled ↔ set_style, Line::from ↔ .into()) without a clear readability or functional gain; follow file‑local conventions and do not introduce type annotations solely to satisfy .into().
-- Compactness: prefer the form that stays on one line after rustfmt; if only one of Line::from(vec![…]) or vec![…].into() avoids wrapping, choose that. If both wrap, pick the one with fewer wrapped lines.
-
-### Text wrapping
-
-- Always use textwrap::wrap to wrap plain strings.
-- If you have a ratatui Line and you want to wrap it, use the helpers in tui/src/wrapping.rs, e.g. word_wrap_lines / word_wrap_line.
-- If you need to indent wrapped lines, use the initial_indent / subsequent_indent options from RtOptions if you can, rather than writing custom logic.
-- If you have a list of lines and you need to prefix them all with some prefix (optionally different on the first vs subsequent lines), use the `prefix_lines` helper from line_utils.
+The active product UI surfaces are PC, web, and mobile clients. Keep UI-specific styling and
+interaction logic in client packages such as `apps/crewon-ui`; keep `codex-rs/core` and
+`codex-rs/app-server` UI-agnostic except for protocol fields/events that clients need to render.
 
 ## Tests
 
@@ -170,23 +144,17 @@ See `codex-rs/tui/styles.md`.
 
 ### Snapshot tests
 
-This repo uses snapshot tests (via `insta`), especially in `codex-rs/tui`, to validate rendered output.
+This repo uses snapshot tests (via `insta`) where they are already established to validate rendered
+or serialized output.
 
 **Requirement:** any change that affects user-visible UI (including adding new UI) must include
 corresponding `insta` snapshot coverage (add a new snapshot test if one doesn't exist yet, or
 update the existing snapshot). Review and accept snapshot updates as part of the PR so UI impact
 is easy to review and future diffs stay visual.
 
-When UI or text output changes intentionally, update the snapshots as follows:
-
-- Run tests to generate any updated snapshots:
-  - `just test -p codex-tui`
-- Check what’s pending:
-  - `cargo insta pending-snapshots -p codex-tui`
-- Review changes by reading the generated `*.snap.new` files directly in the repo, or preview a specific file:
-  - `cargo insta show -p codex-tui path/to/file.snap.new`
-- Only if you intend to accept all new snapshots in this crate, run:
-  - `cargo insta accept -p codex-tui`
+When UI or text output changes intentionally, update the relevant crate or app snapshots using that
+component's existing test workflow. Review generated `*.snap.new` files directly before accepting
+them.
 
 If you don’t have the tool:
 
@@ -212,7 +180,7 @@ Use `just bench-smoke` to dry-run the benchmark for a single iteration to ensure
 
 ### Integration tests (core)
 
-- Prefer the utilities in `core_test_support::responses` when writing end-to-end Codex tests.
+- Prefer the utilities in `core_test_support::responses` when writing end-to-end Crewon tests.
 
 - All `mount_sse*` helpers return a `ResponseMock`; hold onto it so you can assert against outbound `/responses` POST bodies.
 - Use `ResponseMock::single_request()` when a test should only issue one POST, or `ResponseMock::requests()` to inspect every captured `ResponsesRequest`.
@@ -230,7 +198,7 @@ Use `just bench-smoke` to dry-run the benchmark for a single iteration to ensure
       responses::ev_completed("resp-1"),
   ])).await;
 
-  codex.submit(Op::UserTurn { ... }).await?;
+  crewon.submit(Op::UserTurn { ... }).await?;
 
   // Assert request body if needed.
   let request = mock.single_request();
@@ -280,7 +248,7 @@ These guidelines apply to app-server protocol work in `codex-rs`, especially:
 - Regenerate schema fixtures when API shapes change:
   `just write-app-server-schema`
   (and `just write-app-server-schema --experimental` when experimental API fixtures are affected).
-- Validate with `just test -p codex-app-server-protocol`.
+- Validate with `just test -p crewon-app-server-protocol`.
 - Avoid boilerplate tests that only assert experimental field markers for individual
   request fields in `common.rs`; rely on schema generation/tests and behavioral coverage instead.
 

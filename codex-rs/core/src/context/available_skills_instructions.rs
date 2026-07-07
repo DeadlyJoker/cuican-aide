@@ -1,11 +1,11 @@
-use codex_core_skills::AvailableSkills;
-use codex_core_skills::render_available_skills_body;
-use codex_protocol::protocol::SKILLS_INSTRUCTIONS_CLOSE_TAG;
-use codex_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
+use crewon_core_skills::AvailableSkills;
+use crewon_core_skills::render_available_skills_body;
+use crewon_protocol::protocol::SKILLS_INSTRUCTIONS_CLOSE_TAG;
+use crewon_protocol::protocol::SKILLS_INSTRUCTIONS_OPEN_TAG;
 
 use super::ContextualUserFragment;
 
-/// Model-context fragment describing the skills available to Codex.
+/// Model-context fragment describing the skills available to Crewon.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AvailableSkillsInstructions {
     skill_root_lines: Vec<String>,

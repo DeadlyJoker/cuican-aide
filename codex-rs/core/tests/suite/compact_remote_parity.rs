@@ -5,22 +5,22 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use codex_core::LoadedAgentsMd;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::user_input::UserInput;
 use core_test_support::hooks::trust_discovered_hooks;
 use core_test_support::responses;
 use core_test_support::responses::ResponseMock;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodexHarness;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewonHarness;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_core::LoadedAgentsMd;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -43,10 +43,10 @@ enum AuthCase {
 }
 
 impl AuthCase {
-    fn build(self) -> CodexAuth {
+    fn build(self) -> CrewonAuth {
         match self {
-            AuthCase::ChatGpt => CodexAuth::create_dummy_chatgpt_auth_for_testing(),
-            AuthCase::ApiKey => CodexAuth::from_api_key("dummy"),
+            AuthCase::ChatGpt => CrewonAuth::create_dummy_chatgpt_auth_for_testing(),
+            AuthCase::ApiKey => CrewonAuth::from_api_key("dummy"),
         }
     }
 }
@@ -305,7 +305,7 @@ async fn run_manual_session(
 
     let harness = build_harness(mode, settings, /*hooks*/ false).await?;
     let rollout_path = rollout_path(&harness);
-    let codex = harness.test().codex.clone();
+    let codex = harness.test().crewon.clone();
 
     let responses_mock = responses::mount_sse_sequence(harness.server(), response_bodies).await;
     let compact_mock = mount_legacy_compact_if_needed(&harness, mode).await;
@@ -363,7 +363,7 @@ async fn run_pre_turn_auto_session(mode: Mode) -> Result<Capture> {
     };
     let harness = build_auto_harness(mode).await?;
     let rollout_path = rollout_path(&harness);
-    let codex = harness.test().codex.clone();
+    let codex = harness.test().crewon.clone();
     let responses_mock = responses::mount_sse_sequence(harness.server(), response_bodies).await;
     let compact_mock = mount_legacy_compact_if_needed(&harness, mode).await;
 
@@ -421,7 +421,7 @@ async fn run_mid_turn_auto_session(mode: Mode) -> Result<Capture> {
     };
     let harness = build_auto_harness(mode).await?;
     let rollout_path = rollout_path(&harness);
-    let codex = harness.test().codex.clone();
+    let codex = harness.test().crewon.clone();
     let responses_mock = responses::mount_sse_sequence(harness.server(), response_bodies).await;
     let compact_mock = mount_legacy_compact_if_needed(&harness, mode).await;
 
@@ -460,7 +460,7 @@ async fn run_manual_hook_session(mode: Mode) -> Result<Value> {
         ],
     };
     let harness = build_harness(mode, RunSettings::default(), /*hooks*/ true).await?;
-    let codex = harness.test().codex.clone();
+    let codex = harness.test().crewon.clone();
     responses::mount_sse_sequence(harness.server(), response_bodies).await;
     let compact_mock = mount_legacy_compact_if_needed(&harness, mode).await;
 
@@ -488,7 +488,7 @@ async fn run_manual_hook_session(mode: Mode) -> Result<Value> {
     }))
 }
 
-async fn build_auto_harness(mode: Mode) -> Result<TestCodexHarness> {
+async fn build_auto_harness(mode: Mode) -> Result<TestCrewonHarness> {
     build_harness_inner(
         mode,
         RunSettings::default(),
@@ -498,7 +498,11 @@ async fn build_auto_harness(mode: Mode) -> Result<TestCodexHarness> {
     .await
 }
 
-async fn build_harness(mode: Mode, settings: RunSettings, hooks: bool) -> Result<TestCodexHarness> {
+async fn build_harness(
+    mode: Mode,
+    settings: RunSettings,
+    hooks: bool,
+) -> Result<TestCrewonHarness> {
     build_harness_inner(mode, settings, hooks, /*auto_compact_limit*/ None).await
 }
 
@@ -507,16 +511,16 @@ async fn build_harness_inner(
     settings: RunSettings,
     hooks: bool,
     auto_compact_limit: Option<i64>,
-) -> Result<TestCodexHarness> {
+) -> Result<TestCrewonHarness> {
     fs::create_dir_all(FIXED_CWD)?;
-    let mut builder = test_codex().with_auth(settings.auth.build());
+    let mut builder = test_crewon().with_auth(settings.auth.build());
     if hooks {
         builder = builder.with_pre_build_hook(write_manual_compact_hooks);
     }
-    TestCodexHarness::with_builder(builder.with_config(move |config| {
-        config.cwd = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(PathBuf::from(
-            FIXED_CWD,
-        ))
+    TestCrewonHarness::with_builder(builder.with_config(move |config| {
+        config.cwd = crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
+            PathBuf::from(FIXED_CWD),
+        )
         .expect("fixed cwd should be absolute");
         config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing(
             "PARITY_USER_INSTRUCTIONS",
@@ -536,7 +540,7 @@ async fn build_harness_inner(
     .await
 }
 
-fn rollout_path(harness: &TestCodexHarness) -> PathBuf {
+fn rollout_path(harness: &TestCrewonHarness) -> PathBuf {
     harness
         .test()
         .session_configured
@@ -546,7 +550,7 @@ fn rollout_path(harness: &TestCodexHarness) -> PathBuf {
 }
 
 async fn mount_legacy_compact_if_needed(
-    harness: &TestCodexHarness,
+    harness: &TestCrewonHarness,
     mode: Mode,
 ) -> Option<ResponseMock> {
     match mode {
@@ -564,7 +568,7 @@ fn follow_up_index(request_count: usize) -> usize {
 
 async fn capture_from_requests(
     mode: Mode,
-    codex: &codex_core::CodexThread,
+    codex: &crewon_core::CrewonThread,
     rollout_path: &Path,
     responses_mock: &ResponseMock,
     compact_mock: Option<&ResponseMock>,
@@ -602,7 +606,7 @@ async fn capture_from_requests(
     })
 }
 
-async fn submit_user_input(codex: &codex_core::CodexThread, items: Vec<UserInput>) -> Result<()> {
+async fn submit_user_input(codex: &crewon_core::CrewonThread, items: Vec<UserInput>) -> Result<()> {
     codex
         .submit(Op::UserInput {
             items,
@@ -616,7 +620,7 @@ async fn submit_user_input(codex: &codex_core::CodexThread, items: Vec<UserInput
     Ok(())
 }
 
-async fn wait_for_turn_complete(codex: &codex_core::CodexThread) {
+async fn wait_for_turn_complete(codex: &crewon_core::CrewonThread) {
     wait_for_event(codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 }
 

@@ -24,21 +24,21 @@ use crate::tools::lifecycle::notify_tool_finish;
 use crate::tools::lifecycle::notify_tool_start;
 use crate::tools::tool_dispatch_trace::ToolDispatchTrace;
 use crate::util::error_or_panic;
-use codex_extension_api::ToolCallOutcome;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::protocol::EventMsg;
-use codex_rollout::state_db;
-use codex_tools::ToolName;
-use codex_tools::ToolSearchInfo;
-use codex_tools::ToolSpec;
+use crewon_extension_api::ToolCallOutcome;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::protocol::EventMsg;
+use crewon_rollout::state_db;
+use crewon_tools::ToolName;
+use crewon_tools::ToolSearchInfo;
+use crewon_tools::ToolSpec;
 use futures::future::BoxFuture;
 use serde_json::Value;
 
 pub(crate) type ToolTelemetryTags = Vec<(&'static str, String)>;
 
-pub use codex_tools::ToolExecutor;
-pub use codex_tools::ToolExposure;
+pub use crewon_tools::ToolExecutor;
+pub use crewon_tools::ToolExposure;
 
 /// Typed runtime contract for locally executed tools.
 ///
@@ -271,7 +271,7 @@ impl ToolExecutor<ToolInvocation> for ExposureOverride {
         self.handler.search_info()
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle(&self, invocation: ToolInvocation) -> crewon_tools::ToolExecutorFuture<'_> {
         self.handler.handle(invocation)
     }
 }

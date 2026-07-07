@@ -1,8 +1,8 @@
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::PermissionProfile;
-use codex_sandboxing::SandboxType;
-use codex_sandboxing::get_platform_sandbox;
-use codex_sandboxing::policy_transforms::should_require_platform_sandbox;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::PermissionProfile;
+use crewon_sandboxing::SandboxType;
+use crewon_sandboxing::get_platform_sandbox;
+use crewon_sandboxing::policy_transforms::should_require_platform_sandbox;
 use std::path::Path;
 
 pub(crate) fn permission_profile_sandbox_tag(

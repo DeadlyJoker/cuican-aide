@@ -1,15 +1,15 @@
 use super::*;
-use codex_config::CONFIG_TOML_FILE;
-use codex_config::ConfigLayerEntry;
-use codex_config::ConfigLayerStack;
-use codex_config::ConfigRequirements;
-use codex_config::ConfigRequirementsToml;
-use codex_exec_server::LOCAL_FS;
-use codex_protocol::protocol::Product;
-use codex_protocol::protocol::SkillScope;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_absolute_path::test_support::PathBufExt;
-use codex_utils_absolute_path::test_support::PathExt;
+use crewon_config::CONFIG_TOML_FILE;
+use crewon_config::ConfigLayerEntry;
+use crewon_config::ConfigLayerStack;
+use crewon_config::ConfigRequirements;
+use crewon_config::ConfigRequirementsToml;
+use crewon_exec_server::LOCAL_FS;
+use crewon_protocol::protocol::Product;
+use crewon_protocol::protocol::SkillScope;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::test_support::PathBufExt;
+use crewon_utils_absolute_path::test_support::PathExt;
 use dunce::canonicalize as canonicalize_path;
 use pretty_assertions::assert_eq;
 use std::fs;
@@ -20,6 +20,8 @@ use tempfile::TempDir;
 use toml::Value as TomlValue;
 
 const REPO_ROOT_CONFIG_DIR_NAME: &str = ".codex";
+const CREWON_DIR_NAME: &str = ".crewon";
+const CREWON_SKILL_DIR_NAME: &str = "skill";
 
 struct TestConfig {
     cwd: AbsolutePathBuf,
@@ -136,6 +138,10 @@ fn mark_as_git_repo(dir: &Path) {
     // Config/project-root discovery only checks for the presence of `.git` (file or dir),
     // so we can avoid shelling out to `git init` in tests.
     fs::write(dir.join(".git"), "gitdir: fake\n").unwrap();
+}
+
+fn repo_crewon_skill_root(dir: &Path) -> PathBuf {
+    dir.join(CREWON_DIR_NAME).join(CREWON_SKILL_DIR_NAME)
 }
 
 fn normalized(path: &Path) -> AbsolutePathBuf {
@@ -262,7 +268,6 @@ async fn skill_roots_from_layer_stack_includes_disabled_project_layers() -> anyh
     assert_eq!(
         got,
         vec![
-            (SkillScope::Repo, dot_codex.join("skills")),
             (SkillScope::User, user_folder.join("skills")),
             (
                 SkillScope::User,
@@ -337,6 +342,42 @@ async fn loads_skills_from_home_agents_dir_for_user_scope() -> anyhow::Result<()
     );
 
     Ok(())
+}
+
+#[tokio::test]
+async fn loads_repo_skills_from_crewon_skill_dir() {
+    let codex_home = tempfile::tempdir().expect("tempdir");
+    let repo_dir = tempfile::tempdir().expect("tempdir");
+    mark_as_git_repo(repo_dir.path());
+
+    let skill_path = write_skill_at(
+        &repo_crewon_skill_root(repo_dir.path()),
+        "repo",
+        "repo-skill",
+        "from crewon skill root",
+    );
+
+    let cfg = make_config_for_cwd(&codex_home, repo_dir.path().to_path_buf()).await;
+    let outcome = load_skills_for_test(&cfg).await;
+    assert!(
+        outcome.errors.is_empty(),
+        "unexpected errors: {:?}",
+        outcome.errors
+    );
+    assert_eq!(
+        outcome.skills,
+        vec![SkillMetadata {
+            name: "repo-skill".to_string(),
+            description: "from crewon skill root".to_string(),
+            short_description: None,
+            interface: None,
+            dependencies: None,
+            policy: None,
+            path_to_skills_md: normalized(&skill_path),
+            scope: SkillScope::Repo,
+            plugin_id: None,
+        }]
+    );
 }
 
 fn write_skill(codex_home: &TempDir, dir: &str, name: &str, description: &str) -> PathBuf {
@@ -629,7 +670,7 @@ policy:
         outcome.skills[0].policy,
         Some(SkillPolicy {
             allow_implicit_invocation: None,
-            products: vec![Product::Codex, Product::Chatgpt, Product::Atlas],
+            products: vec![Product::Crewon, Product::Chatgpt, Product::Atlas],
         })
     );
 }
@@ -1087,10 +1128,7 @@ async fn loads_skills_via_symlinked_subdir_for_repo_scope() {
     let shared = tempfile::tempdir().expect("tempdir");
 
     let linked_skill_path = write_skill_at(shared.path(), "demo", "repo-linked-skill", "from link");
-    let repo_skills_root = repo_dir
-        .path()
-        .join(REPO_ROOT_CONFIG_DIR_NAME)
-        .join(SKILLS_DIR_NAME);
+    let repo_skills_root = repo_crewon_skill_root(repo_dir.path());
     fs::create_dir_all(&repo_skills_root).unwrap();
     symlink_dir(shared.path(), &repo_skills_root.join("shared"));
 
@@ -1264,9 +1302,9 @@ async fn namespaces_plugin_skills_using_plugin_name() {
         "sample-search",
         "description: search sample data",
     );
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )
     .unwrap();
@@ -1309,9 +1347,9 @@ async fn plugin_skill_name_length_limit_allows_max_qualified_name() {
     let plugin_root = root.path().join("plugins").join(&plugin_name);
     let frontmatter = format!("name: {skill_name}\ndescription: search sample data");
     let skill_path = write_raw_skill_at(&plugin_root.join("skills"), "sample-search", &frontmatter);
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         format!(r#"{{"name":"{plugin_name}"}}"#),
     )
     .unwrap();
@@ -1354,9 +1392,9 @@ async fn plugin_skill_name_length_limit_rejects_overlong_qualified_name() {
     let plugin_root = root.path().join("plugins").join(&plugin_name);
     let frontmatter = format!("name: {skill_name}\ndescription: search sample data");
     write_raw_skill_at(&plugin_root.join("skills"), "sample-search", &frontmatter);
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         format!(r#"{{"name":"{plugin_name}"}}"#),
     )
     .unwrap();
@@ -1495,10 +1533,7 @@ async fn loads_skills_from_repo_root() {
     let repo_dir = tempfile::tempdir().expect("tempdir");
     mark_as_git_repo(repo_dir.path());
 
-    let skills_root = repo_dir
-        .path()
-        .join(REPO_ROOT_CONFIG_DIR_NAME)
-        .join(SKILLS_DIR_NAME);
+    let skills_root = repo_crewon_skill_root(repo_dir.path());
     let skill_path = write_skill_at(&skills_root, "repo", "repo-skill", "from repo");
     let cfg = make_config_for_cwd(&codex_home, repo_dir.path().to_path_buf()).await;
 
@@ -1561,7 +1596,7 @@ async fn loads_skills_from_agents_dir_without_codex_dir() {
 }
 
 #[tokio::test]
-async fn loads_skills_from_all_codex_dirs_under_project_root() {
+async fn loads_skills_from_all_crewon_skill_dirs_under_project_root() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let repo_dir = tempfile::tempdir().expect("tempdir");
     mark_as_git_repo(repo_dir.path());
@@ -1570,20 +1605,13 @@ async fn loads_skills_from_all_codex_dirs_under_project_root() {
     fs::create_dir_all(&nested_dir).unwrap();
 
     let root_skill_path = write_skill_at(
-        &repo_dir
-            .path()
-            .join(REPO_ROOT_CONFIG_DIR_NAME)
-            .join(SKILLS_DIR_NAME),
+        &repo_crewon_skill_root(repo_dir.path()),
         "root",
         "root-skill",
         "from root",
     );
     let nested_skill_path = write_skill_at(
-        &repo_dir
-            .path()
-            .join("nested")
-            .join(REPO_ROOT_CONFIG_DIR_NAME)
-            .join(SKILLS_DIR_NAME),
+        &repo_crewon_skill_root(&repo_dir.path().join("nested")),
         "nested",
         "nested-skill",
         "from nested",
@@ -1627,15 +1655,12 @@ async fn loads_skills_from_all_codex_dirs_under_project_root() {
 }
 
 #[tokio::test]
-async fn loads_skills_from_codex_dir_when_not_git_repo() {
+async fn loads_skills_from_crewon_skill_dir_when_not_git_repo() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let work_dir = tempfile::tempdir().expect("tempdir");
 
     let skill_path = write_skill_at(
-        &work_dir
-            .path()
-            .join(REPO_ROOT_CONFIG_DIR_NAME)
-            .join(SKILLS_DIR_NAME),
+        &repo_crewon_skill_root(work_dir.path()),
         "local",
         "local-skill",
         "from cwd",
@@ -1718,10 +1743,7 @@ async fn keeps_duplicate_names_from_repo_and_user() {
 
     let user_skill_path = write_skill(&codex_home, "user", "dupe-skill", "from user");
     let repo_skill_path = write_skill_at(
-        &repo_dir
-            .path()
-            .join(REPO_ROOT_CONFIG_DIR_NAME)
-            .join(SKILLS_DIR_NAME),
+        &repo_crewon_skill_root(repo_dir.path()),
         "repo",
         "dupe-skill",
         "from repo",
@@ -1765,7 +1787,7 @@ async fn keeps_duplicate_names_from_repo_and_user() {
 }
 
 #[tokio::test]
-async fn keeps_duplicate_names_from_nested_codex_dirs() {
+async fn keeps_duplicate_names_from_nested_crewon_skill_dirs() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let repo_dir = tempfile::tempdir().expect("tempdir");
     mark_as_git_repo(repo_dir.path());
@@ -1774,20 +1796,13 @@ async fn keeps_duplicate_names_from_nested_codex_dirs() {
     fs::create_dir_all(&nested_dir).unwrap();
 
     let root_skill_path = write_skill_at(
-        &repo_dir
-            .path()
-            .join(REPO_ROOT_CONFIG_DIR_NAME)
-            .join(SKILLS_DIR_NAME),
+        &repo_crewon_skill_root(repo_dir.path()),
         "root",
         "dupe-skill",
         "from root",
     );
     let nested_skill_path = write_skill_at(
-        &repo_dir
-            .path()
-            .join("nested")
-            .join(REPO_ROOT_CONFIG_DIR_NAME)
-            .join(SKILLS_DIR_NAME),
+        &repo_crewon_skill_root(&repo_dir.path().join("nested")),
         "nested",
         "dupe-skill",
         "from nested",
@@ -1846,10 +1861,7 @@ async fn repo_skills_search_does_not_escape_repo_root() {
     fs::create_dir_all(&repo_dir).unwrap();
 
     let _skill_path = write_skill_at(
-        &outer_dir
-            .path()
-            .join(REPO_ROOT_CONFIG_DIR_NAME)
-            .join(SKILLS_DIR_NAME),
+        &repo_crewon_skill_root(outer_dir.path()),
         "outer",
         "outer-skill",
         "from outer",
@@ -1874,10 +1886,7 @@ async fn loads_skills_when_cwd_is_file_in_repo() {
     mark_as_git_repo(repo_dir.path());
 
     let skill_path = write_skill_at(
-        &repo_dir
-            .path()
-            .join(REPO_ROOT_CONFIG_DIR_NAME)
-            .join(SKILLS_DIR_NAME),
+        &repo_crewon_skill_root(repo_dir.path()),
         "repo",
         "repo-skill",
         "from repo",
@@ -1917,10 +1926,7 @@ async fn non_git_repo_skills_search_does_not_walk_parents() {
     fs::create_dir_all(&nested_dir).unwrap();
 
     write_skill_at(
-        &outer_dir
-            .path()
-            .join(REPO_ROOT_CONFIG_DIR_NAME)
-            .join(SKILLS_DIR_NAME),
+        &repo_crewon_skill_root(outer_dir.path()),
         "outer",
         "outer-skill",
         "from outer",

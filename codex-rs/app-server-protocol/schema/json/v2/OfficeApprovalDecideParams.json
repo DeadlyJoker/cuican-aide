@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "OfficeApprovalDecision": {
+      "enum": [
+        "approved",
+        "denied"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "approvalId": {
+      "type": "string"
+    },
+    "config": true,
+    "cwd": {
+      "type": "string"
+    },
+    "decision": {
+      "$ref": "#/definitions/OfficeApprovalDecision"
+    },
+    "message": true
+  },
+  "required": [
+    "approvalId",
+    "config",
+    "cwd",
+    "decision"
+  ],
+  "title": "OfficeApprovalDecideParams",
+  "type": "object"
+}

@@ -1,5 +1,5 @@
-use codex_features::Feature;
-use codex_protocol::models::ShellCommandToolCallParams;
+use crewon_features::Feature;
+use crewon_protocol::models::ShellCommandToolCallParams;
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -23,9 +23,9 @@ use crate::tools::runtimes::shell::ShellRequest;
 use crate::tools::runtimes::shell::ShellRuntime;
 use crate::tools::runtimes::shell::ShellRuntimeBackend;
 use crate::tools::sandboxing::ToolCtx;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::protocol::ExecCommandSource;
-use codex_tools::ToolName;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::protocol::ExecCommandSource;
+use crewon_tools::ToolName;
 
 mod shell_command;
 
@@ -124,7 +124,7 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
         && !effective_additional_permissions.permissions_preapproved
         && !matches!(
             turn.approval_policy.value(),
-            codex_protocol::protocol::AskForApproval::OnRequest
+            crewon_protocol::protocol::AskForApproval::OnRequest
         )
     {
         let approval_policy = turn.approval_policy.value();
@@ -169,7 +169,7 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
             permission_profile: turn.permission_profile(),
             windows_sandbox_level: turn.windows_sandbox_level,
             sandbox_permissions: if effective_additional_permissions.permissions_preapproved {
-                codex_protocol::models::SandboxPermissions::UseDefault
+                crewon_protocol::models::SandboxPermissions::UseDefault
             } else {
                 effective_additional_permissions.sandbox_permissions
             },
@@ -229,7 +229,7 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
         .await?;
     Ok(FunctionToolOutput {
         body: vec![
-            codex_protocol::models::FunctionCallOutputContentItem::InputText { text: content },
+            crewon_protocol::models::FunctionCallOutputContentItem::InputText { text: content },
         ],
         success: Some(true),
         post_tool_use_response,

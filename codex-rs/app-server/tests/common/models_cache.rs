@@ -1,14 +1,14 @@
 use chrono::DateTime;
 use chrono::Utc;
-use codex_core::test_support::all_model_presets;
-use codex_models_manager::client_version_to_whole;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::TruncationPolicyConfig;
-use codex_protocol::openai_models::default_input_modalities;
+use crewon_core::test_support::all_model_presets;
+use crewon_models_manager::client_version_to_whole;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelPreset;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::TruncationPolicyConfig;
+use crewon_protocol::openai_models::default_input_modalities;
 use serde_json::json;
 use std::path::Path;
 
@@ -60,7 +60,7 @@ fn preset_to_info(preset: &ModelPreset, priority: i32) -> ModelInfo {
     }
 }
 
-/// Write a models_cache.json file to the codex home directory.
+/// Write a models_cache.json file to the crewon home directory.
 /// This prevents ModelsManager from making network requests to refresh models.
 /// The cache will be treated as fresh (within TTL) and used instead of fetching from the network.
 /// Uses bundled-catalog-derived presets, converted to ModelInfo format.

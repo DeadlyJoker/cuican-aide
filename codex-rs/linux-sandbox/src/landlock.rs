@@ -5,12 +5,12 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result;
-use codex_protocol::error::SandboxErr;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::NetworkSandboxPolicy;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result;
+use crewon_protocol::error::SandboxErr;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::NetworkSandboxPolicy;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 use landlock::ABI;
 #[allow(unused_imports)]
@@ -32,7 +32,7 @@ use seccompiler::TargetArch;
 use seccompiler::apply_filter;
 
 /// Apply sandbox policies inside this thread so only the child inherits
-/// them, not the entire CLI process.
+/// them, not the entire parent process.
 ///
 /// This function is responsible for:
 /// - enabling `PR_SET_NO_NEW_PRIVS` when restrictions apply, and
@@ -272,7 +272,7 @@ mod tests {
     use super::NetworkSeccompMode;
     use super::network_seccomp_mode;
     use super::should_install_network_seccomp;
-    use codex_protocol::protocol::NetworkSandboxPolicy;
+    use crewon_protocol::protocol::NetworkSandboxPolicy;
     use pretty_assertions::assert_eq;
 
     #[test]

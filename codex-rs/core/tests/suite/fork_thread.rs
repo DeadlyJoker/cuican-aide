@@ -1,20 +1,20 @@
-use codex_core::ForkSnapshot;
-use codex_core::NewThread;
-use codex_core::parse_turn_item;
-use codex_protocol::items::TurnItem;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::ResumedHistory;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::sse;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_core::ForkSnapshot;
+use crewon_core::NewThread;
+use crewon_core::parse_turn_item;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::ResumedHistory;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::user_input::UserInput;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
@@ -40,9 +40,9 @@ async fn fork_thread_twice_drops_to_first_message() {
         .mount(&server)
         .await;
 
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build(&server).await.expect("create conversation");
-    let codex = test.codex.clone();
+    let codex = test.crewon.clone();
     let thread_manager = test.thread_manager.clone();
     let config_for_fork = test.config.clone();
 
@@ -165,9 +165,9 @@ async fn fork_thread_from_history_does_not_require_source_rollout_path() {
         .mount(&server)
         .await;
 
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build(&server).await.expect("create conversation");
-    let codex = test.codex.clone();
+    let codex = test.crewon.clone();
     let thread_manager = test.thread_manager.clone();
 
     codex

@@ -5,7 +5,7 @@ const LOGIN_CHATGPT_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const ACCOUNT_TOKEN_USAGE_FETCH_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 10);
 // The override is intentionally available only in debug builds, matching the login path below.
 #[cfg(debug_assertions)]
-const LOGIN_ISSUER_OVERRIDE_ENV_VAR: &str = "CODEX_APP_SERVER_LOGIN_ISSUER";
+const LOGIN_ISSUER_OVERRIDE_ENV_VAR: &str = "CREWON_APP_SERVER_LOGIN_ISSUER";
 
 enum ActiveLogin {
     Browser {
@@ -166,19 +166,19 @@ impl AccountRequestProcessor {
     fn current_account_updated_notification(&self) -> AccountUpdatedNotification {
         let auth = self.auth_manager.auth_cached();
         AccountUpdatedNotification {
-            auth_mode: auth.as_ref().map(CodexAuth::api_auth_mode),
-            plan_type: auth.as_ref().and_then(CodexAuth::account_plan_type),
+            auth_mode: auth.as_ref().map(CrewonAuth::api_auth_mode),
+            plan_type: auth.as_ref().and_then(CrewonAuth::account_plan_type),
         }
     }
 
     async fn maybe_refresh_remote_installed_plugins_cache_for_current_config(
         config_manager: &ConfigManager,
         thread_manager: &Arc<ThreadManager>,
-        auth: Option<CodexAuth>,
+        auth: Option<CrewonAuth>,
     ) {
         thread_manager
             .plugins_manager()
-            .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
+            .set_auth_mode(auth.as_ref().map(CrewonAuth::api_auth_mode));
 
         match config_manager
             .load_latest_config(/*fallback_cwd*/ None)
@@ -292,7 +292,7 @@ impl AccountRequestProcessor {
         match login_with_api_key(
             &self.config.codex_home,
             &params.api_key,
-            self.config.cli_auth_credentials_store_mode,
+            self.config.auth_credentials_store_mode,
         ) {
             Ok(()) => {
                 self.auth_manager.reload().await;
@@ -340,7 +340,7 @@ impl AccountRequestProcessor {
                 config.codex_home.to_path_buf(),
                 CLIENT_ID.to_string(),
                 config.forced_chatgpt_workspace_id.clone(),
-                config.cli_auth_credentials_store_mode,
+                config.auth_credentials_store_mode,
             )
         };
         #[cfg(debug_assertions)]
@@ -674,8 +674,8 @@ impl AccountRequestProcessor {
             )
             .await;
             let payload_v2 = AccountUpdatedNotification {
-                auth_mode: auth.as_ref().map(CodexAuth::api_auth_mode),
-                plan_type: auth.as_ref().and_then(CodexAuth::account_plan_type),
+                auth_mode: auth.as_ref().map(CrewonAuth::api_auth_mode),
+                plan_type: auth.as_ref().and_then(CrewonAuth::account_plan_type),
             };
             outgoing
                 .send_server_notification(ServerNotification::AccountUpdated(payload_v2))
@@ -711,7 +711,7 @@ impl AccountRequestProcessor {
             .auth_manager
             .auth_cached()
             .as_ref()
-            .map(CodexAuth::api_auth_mode))
+            .map(CrewonAuth::api_auth_mode))
     }
 
     async fn logout_v2(&self, request_id: ConnectionRequestId) -> Result<(), JSONRPCErrorError> {
@@ -785,7 +785,7 @@ impl AccountRequestProcessor {
                     let auth_mode = auth.api_auth_mode();
                     let (reported_auth_method, token_opt) = if matches!(
                         auth,
-                        CodexAuth::AgentIdentity(_) | CodexAuth::PersonalAccessToken(_)
+                        CrewonAuth::AgentIdentity(_) | CrewonAuth::PersonalAccessToken(_)
                     ) || include_token
                         && permanent_refresh_failure
                     {
@@ -873,7 +873,7 @@ impl AccountRequestProcessor {
             ));
         };
 
-        if !auth.uses_codex_backend() {
+        if !auth.uses_crewon_backend() {
             return Err(invalid_request(
                 "chatgpt authentication required to read token usage",
             ));
@@ -932,7 +932,7 @@ impl AccountRequestProcessor {
             ));
         };
 
-        if !auth.uses_codex_backend() {
+        if !auth.uses_crewon_backend() {
             return Err(invalid_request(
                 "chatgpt authentication required to notify workspace owner",
             ));
@@ -977,7 +977,7 @@ impl AccountRequestProcessor {
             ));
         };
 
-        if !auth.uses_codex_backend() {
+        if !auth.uses_crewon_backend() {
             return Err(invalid_request(
                 "chatgpt authentication required to read rate limits",
             ));
@@ -1021,8 +1021,8 @@ impl AccountRequestProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_backend_client::TokenUsageProfileDailyBucket;
-    use codex_backend_client::TokenUsageProfileStats;
+    use crewon_backend_client::TokenUsageProfileDailyBucket;
+    use crewon_backend_client::TokenUsageProfileStats;
     use pretty_assertions::assert_eq;
 
     #[test]

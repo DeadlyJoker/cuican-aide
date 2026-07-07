@@ -32,8 +32,8 @@ use crate::telemetry::DbKind;
 use crate::telemetry::DbTelemetry;
 use chrono::DateTime;
 use chrono::Utc;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::RolloutItem;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::RolloutItem;
 use log::LevelFilter;
 use serde_json::Value;
 use sqlx::ConnectOptions;
@@ -158,7 +158,7 @@ pub struct StateRuntime {
 }
 
 impl StateRuntime {
-    /// Initialize the state runtime using the provided Codex home and default provider.
+    /// Initialize the state runtime using the provided Crewon home and default provider.
     ///
     /// This opens (and migrates) the SQLite databases under `codex_home`,
     /// keeping logs in a dedicated file to reduce lock contention with the
@@ -301,7 +301,7 @@ impl StateRuntime {
         Ok(runtime)
     }
 
-    /// Return the configured Codex home directory for this runtime.
+    /// Return the configured Crewon home directory for this runtime.
     pub fn codex_home(&self) -> &Path {
         self.codex_home.as_path()
     }
@@ -604,7 +604,7 @@ mod tests {
         let codex_home = unique_temp_dir();
         tokio::fs::create_dir_all(&codex_home)
             .await
-            .expect("create codex home");
+            .expect("create crewon home");
         let path = state_db_path(codex_home.as_path());
         let pool = SqlitePool::connect_with(
             SqliteConnectOptions::new()
@@ -632,7 +632,7 @@ mod tests {
         let codex_home = unique_temp_dir();
         tokio::fs::create_dir_all(&codex_home)
             .await
-            .expect("create codex home");
+            .expect("create crewon home");
         let state_path = state_db_path(codex_home.as_path());
         let pool = SqlitePool::connect_with(
             SqliteConnectOptions::new()

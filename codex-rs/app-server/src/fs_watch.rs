@@ -1,18 +1,18 @@
 use crate::error_code::invalid_request;
 use crate::outgoing_message::ConnectionId;
 use crate::outgoing_message::OutgoingMessageSender;
-use codex_app_server_protocol::FsChangedNotification;
-use codex_app_server_protocol::FsUnwatchParams;
-use codex_app_server_protocol::FsUnwatchResponse;
-use codex_app_server_protocol::FsWatchParams;
-use codex_app_server_protocol::FsWatchResponse;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::ServerNotification;
-use codex_file_watcher::DebouncedWatchReceiver;
-use codex_file_watcher::FileWatcher;
-use codex_file_watcher::FileWatcherSubscriber;
-use codex_file_watcher::WatchPath;
-use codex_file_watcher::WatchRegistration;
+use crewon_app_server_protocol::FsChangedNotification;
+use crewon_app_server_protocol::FsUnwatchParams;
+use crewon_app_server_protocol::FsUnwatchResponse;
+use crewon_app_server_protocol::FsWatchParams;
+use crewon_app_server_protocol::FsWatchResponse;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_file_watcher::DebouncedWatchReceiver;
+use crewon_file_watcher::FileWatcher;
+use crewon_file_watcher::FileWatcherSubscriber;
+use crewon_file_watcher::WatchPath;
+use crewon_file_watcher::WatchRegistration;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::hash::Hash;
@@ -175,7 +175,7 @@ impl FsWatchManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_utils_absolute_path::AbsolutePathBuf;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
     use std::path::PathBuf;
@@ -196,7 +196,7 @@ mod tests {
         FsWatchManager::new_with_file_watcher(
             Arc::new(OutgoingMessageSender::new(
                 tx,
-                codex_analytics::AnalyticsEventsClient::disabled(),
+                crewon_analytics::AnalyticsEventsClient::disabled(),
             )),
             Arc::new(FileWatcher::noop()),
         )

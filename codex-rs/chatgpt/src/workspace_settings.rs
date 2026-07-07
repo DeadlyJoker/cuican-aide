@@ -3,15 +3,15 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 
-use codex_core::config::Config;
-use codex_login::CodexAuth;
+use crewon_core::config::Config;
+use crewon_login::CrewonAuth;
 use serde::Deserialize;
 
 use crate::chatgpt_client::chatgpt_get_request_with_timeout;
 
 const WORKSPACE_SETTINGS_TIMEOUT: Duration = Duration::from_secs(10);
 const WORKSPACE_SETTINGS_CACHE_TTL: Duration = Duration::from_secs(15 * 60);
-const CODEX_PLUGINS_BETA_SETTING: &str = "enable_plugins";
+const CREWON_PLUGINS_BETA_SETTING: &str = "enable_plugins";
 
 #[derive(Debug, Deserialize)]
 struct WorkspaceSettingsResponse {
@@ -34,11 +34,11 @@ struct WorkspaceSettingsCacheKey {
 struct CachedWorkspaceSettings {
     key: WorkspaceSettingsCacheKey,
     expires_at: Instant,
-    codex_plugins_enabled: bool,
+    crewon_plugins_enabled: bool,
 }
 
 impl WorkspaceSettingsCache {
-    fn get_codex_plugins_enabled(&self, key: &WorkspaceSettingsCacheKey) -> Option<bool> {
+    fn get_crewon_plugins_enabled(&self, key: &WorkspaceSettingsCacheKey) -> Option<bool> {
         {
             let entry = match self.entry.read() {
                 Ok(entry) => entry,
@@ -49,7 +49,7 @@ impl WorkspaceSettingsCache {
                 && now < cached.expires_at
                 && cached.key == *key
             {
-                return Some(cached.codex_plugins_enabled);
+                return Some(cached.crewon_plugins_enabled);
             }
         }
 
@@ -67,7 +67,7 @@ impl WorkspaceSettingsCache {
         None
     }
 
-    fn set_codex_plugins_enabled(&self, key: WorkspaceSettingsCacheKey, enabled: bool) {
+    fn set_crewon_plugins_enabled(&self, key: WorkspaceSettingsCacheKey, enabled: bool) {
         let mut entry = match self.entry.write() {
             Ok(entry) => entry,
             Err(err) => err.into_inner(),
@@ -75,14 +75,14 @@ impl WorkspaceSettingsCache {
         *entry = Some(CachedWorkspaceSettings {
             key,
             expires_at: Instant::now() + WORKSPACE_SETTINGS_CACHE_TTL,
-            codex_plugins_enabled: enabled,
+            crewon_plugins_enabled: enabled,
         });
     }
 }
 
-pub async fn codex_plugins_enabled_for_workspace(
+pub async fn crewon_plugins_enabled_for_workspace(
     config: &Config,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     cache: Option<&WorkspaceSettingsCache>,
 ) -> anyhow::Result<bool> {
     let Some(auth) = auth else {
@@ -105,7 +105,7 @@ pub async fn codex_plugins_enabled_for_workspace(
         account_id: account_id.clone(),
     };
     if let Some(cache) = cache
-        && let Some(enabled) = cache.get_codex_plugins_enabled(&cache_key)
+        && let Some(enabled) = cache.get_crewon_plugins_enabled(&cache_key)
     {
         return Ok(enabled);
     }
@@ -118,17 +118,17 @@ pub async fn codex_plugins_enabled_for_workspace(
     )
     .await?;
 
-    let codex_plugins_enabled = settings
+    let crewon_plugins_enabled = settings
         .beta_settings
-        .get(CODEX_PLUGINS_BETA_SETTING)
+        .get(CREWON_PLUGINS_BETA_SETTING)
         .copied()
         .unwrap_or(true);
 
     if let Some(cache) = cache {
-        cache.set_codex_plugins_enabled(cache_key, codex_plugins_enabled);
+        cache.set_crewon_plugins_enabled(cache_key, crewon_plugins_enabled);
     }
 
-    Ok(codex_plugins_enabled)
+    Ok(crewon_plugins_enabled)
 }
 
 fn encode_path_segment(value: &str) -> String {

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use codex_connectors::metadata::connector_mention_slug;
-use codex_protocol::user_input::UserInput;
+use crewon_connectors::metadata::connector_mention_slug;
+use crewon_protocol::user_input::UserInput;
 
 use crate::connectors;
 use crate::injection::ToolMentionKind;
@@ -57,6 +57,36 @@ pub(crate) fn collect_explicit_app_ids(input: &[UserInput]) -> HashSet<String> {
         .filter(|path| tool_kind_for_path(path.as_str()) == ToolMentionKind::App)
         .filter_map(|path| app_id_from_path(path.as_str()).map(str::to_string))
         .collect()
+}
+
+pub(crate) fn collect_explicit_mcp_server_names(input: &[UserInput]) -> HashSet<String> {
+    let messages = input
+        .iter()
+        .filter_map(|item| match item {
+            UserInput::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect::<Vec<String>>();
+
+    input
+        .iter()
+        .filter_map(|item| match item {
+            UserInput::Mention { path, .. } => Some(path.clone()),
+            _ => None,
+        })
+        .chain(collect_tool_mentions_from_messages(&messages).paths)
+        .filter_map(|path| mcp_server_name_from_path(path.as_str()).map(str::to_string))
+        .collect()
+}
+
+fn mcp_server_name_from_path(path: &str) -> Option<&str> {
+    if tool_kind_for_path(path) != ToolMentionKind::Mcp {
+        return None;
+    }
+
+    path.strip_prefix("mcp://")
+        .and_then(|value| value.split('/').next())
+        .filter(|value| !value.is_empty())
 }
 
 /// Collect explicit structured or linked `plugin://...` mentions.

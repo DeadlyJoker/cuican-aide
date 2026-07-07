@@ -21,15 +21,15 @@ use crate::events::stop::StopRequest;
 use crate::events::user_prompt_submit::UserPromptSubmitOutcome;
 use crate::events::user_prompt_submit::UserPromptSubmitRequest;
 use crate::output_spill::HookOutputSpiller;
-use codex_config::ConfigLayerStack;
-use codex_plugin::PluginHookSource;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::HookEventName;
-use codex_protocol::protocol::HookHandlerType;
-use codex_protocol::protocol::HookRunSummary;
-use codex_protocol::protocol::HookSource;
-use codex_protocol::protocol::HookTrustStatus;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_config::ConfigLayerStack;
+use crewon_plugin::PluginHookSource;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::HookEventName;
+use crewon_protocol::protocol::HookHandlerType;
+use crewon_protocol::protocol::HookRunSummary;
+use crewon_protocol::protocol::HookSource;
+use crewon_protocol::protocol::HookTrustStatus;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -40,7 +40,7 @@ pub(crate) struct CommandShell {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ConfiguredHandler {
-    pub event_name: codex_protocol::protocol::HookEventName,
+    pub event_name: crewon_protocol::protocol::HookEventName,
     pub matcher: Option<String>,
     pub command: String,
     pub timeout_sec: u64,
@@ -63,16 +63,16 @@ impl ConfiguredHandler {
 
     fn event_name_label(&self) -> &'static str {
         match self.event_name {
-            codex_protocol::protocol::HookEventName::PreToolUse => "pre-tool-use",
-            codex_protocol::protocol::HookEventName::PermissionRequest => "permission-request",
-            codex_protocol::protocol::HookEventName::PostToolUse => "post-tool-use",
-            codex_protocol::protocol::HookEventName::PreCompact => "pre-compact",
-            codex_protocol::protocol::HookEventName::PostCompact => "post-compact",
-            codex_protocol::protocol::HookEventName::SessionStart => "session-start",
-            codex_protocol::protocol::HookEventName::UserPromptSubmit => "user-prompt-submit",
-            codex_protocol::protocol::HookEventName::SubagentStart => "subagent-start",
-            codex_protocol::protocol::HookEventName::SubagentStop => "subagent-stop",
-            codex_protocol::protocol::HookEventName::Stop => "stop",
+            crewon_protocol::protocol::HookEventName::PreToolUse => "pre-tool-use",
+            crewon_protocol::protocol::HookEventName::PermissionRequest => "permission-request",
+            crewon_protocol::protocol::HookEventName::PostToolUse => "post-tool-use",
+            crewon_protocol::protocol::HookEventName::PreCompact => "pre-compact",
+            crewon_protocol::protocol::HookEventName::PostCompact => "post-compact",
+            crewon_protocol::protocol::HookEventName::SessionStart => "session-start",
+            crewon_protocol::protocol::HookEventName::UserPromptSubmit => "user-prompt-submit",
+            crewon_protocol::protocol::HookEventName::SubagentStart => "subagent-start",
+            crewon_protocol::protocol::HookEventName::SubagentStop => "subagent-stop",
+            crewon_protocol::protocol::HookEventName::Stop => "stop",
         }
     }
 }
@@ -97,14 +97,14 @@ pub struct HookListEntry {
 }
 
 #[derive(Clone)]
-pub(crate) struct ClaudeHooksEngine {
+pub(crate) struct HooksEngine {
     handlers: Vec<ConfiguredHandler>,
     warnings: Vec<String>,
     shell: CommandShell,
     output_spiller: HookOutputSpiller,
 }
 
-impl ClaudeHooksEngine {
+impl HooksEngine {
     pub(crate) fn new(
         enabled: bool,
         bypass_hook_trust: bool,
@@ -281,8 +281,8 @@ impl ClaudeHooksEngine {
     async fn maybe_spill_prompt_fragments(
         &self,
         session_id: ThreadId,
-        fragments: Vec<codex_protocol::items::HookPromptFragment>,
-    ) -> Vec<codex_protocol::items::HookPromptFragment> {
+        fragments: Vec<crewon_protocol::items::HookPromptFragment>,
+    ) -> Vec<crewon_protocol::items::HookPromptFragment> {
         self.output_spiller
             .maybe_spill_prompt_fragments(session_id, fragments)
             .await

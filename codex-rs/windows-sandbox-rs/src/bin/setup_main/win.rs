@@ -5,32 +5,32 @@ use anyhow::Context;
 use anyhow::Result;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use codex_otel::StatsigMetricsSettings;
-use codex_windows_sandbox::SETUP_VERSION;
-use codex_windows_sandbox::SetupErrorCode;
-use codex_windows_sandbox::SetupErrorReport;
-use codex_windows_sandbox::SetupFailure;
-use codex_windows_sandbox::add_deny_write_ace;
-use codex_windows_sandbox::canonicalize_path;
-use codex_windows_sandbox::convert_string_sid_to_sid;
-use codex_windows_sandbox::ensure_allow_mask_aces_with_inheritance;
-use codex_windows_sandbox::ensure_allow_write_aces;
-use codex_windows_sandbox::extract_setup_failure;
-use codex_windows_sandbox::hide_newly_created_users;
-use codex_windows_sandbox::install_wfp_filters;
-use codex_windows_sandbox::is_command_cwd_root;
-use codex_windows_sandbox::log_note;
-use codex_windows_sandbox::log_writer;
-use codex_windows_sandbox::path_mask_allows;
-use codex_windows_sandbox::sandbox_bin_dir;
-use codex_windows_sandbox::sandbox_dir;
-use codex_windows_sandbox::sandbox_secrets_dir;
-use codex_windows_sandbox::string_from_sid_bytes;
-use codex_windows_sandbox::sync_persistent_deny_read_acls;
-use codex_windows_sandbox::to_wide;
-use codex_windows_sandbox::workspace_write_cap_sid_for_root;
-use codex_windows_sandbox::workspace_write_root_overlaps_path;
-use codex_windows_sandbox::write_setup_error_report;
+use crewon_otel::StatsigMetricsSettings;
+use crewon_windows_sandbox::SETUP_VERSION;
+use crewon_windows_sandbox::SetupErrorCode;
+use crewon_windows_sandbox::SetupErrorReport;
+use crewon_windows_sandbox::SetupFailure;
+use crewon_windows_sandbox::add_deny_write_ace;
+use crewon_windows_sandbox::canonicalize_path;
+use crewon_windows_sandbox::convert_string_sid_to_sid;
+use crewon_windows_sandbox::ensure_allow_mask_aces_with_inheritance;
+use crewon_windows_sandbox::ensure_allow_write_aces;
+use crewon_windows_sandbox::extract_setup_failure;
+use crewon_windows_sandbox::hide_newly_created_users;
+use crewon_windows_sandbox::install_wfp_filters;
+use crewon_windows_sandbox::is_command_cwd_root;
+use crewon_windows_sandbox::log_note;
+use crewon_windows_sandbox::log_writer;
+use crewon_windows_sandbox::path_mask_allows;
+use crewon_windows_sandbox::sandbox_bin_dir;
+use crewon_windows_sandbox::sandbox_dir;
+use crewon_windows_sandbox::sandbox_secrets_dir;
+use crewon_windows_sandbox::string_from_sid_bytes;
+use crewon_windows_sandbox::sync_persistent_deny_read_acls;
+use crewon_windows_sandbox::to_wide;
+use crewon_windows_sandbox::workspace_write_cap_sid_for_root;
+use crewon_windows_sandbox::workspace_write_root_overlaps_path;
+use crewon_windows_sandbox::write_setup_error_report;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -819,7 +819,7 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
     }
 
     if refresh_only {
-        setup_runtime_bin::ensure_codex_app_runtime_bin_readable(
+        setup_runtime_bin::ensure_crewon_app_runtime_bin_readable(
             sandbox_group_psid,
             &mut refresh_errors,
             log,
@@ -1037,9 +1037,9 @@ mod tests {
     use super::Payload;
     use super::SETUP_VERSION;
     use super::workspace_write_cap_sids_for_path;
-    use codex_otel::StatsigMetricsSettings;
-    use codex_windows_sandbox::load_or_create_cap_sids;
-    use codex_windows_sandbox::workspace_write_cap_sid_for_root;
+    use crewon_otel::StatsigMetricsSettings;
+    use crewon_windows_sandbox::load_or_create_cap_sids;
+    use crewon_windows_sandbox::workspace_write_cap_sid_for_root;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use std::fs;
@@ -1047,9 +1047,9 @@ mod tests {
     fn payload_json() -> serde_json::Value {
         json!({
             "version": SETUP_VERSION,
-            "offline_username": "CodexSandboxOffline",
-            "online_username": "CodexSandboxOnline",
-            "codex_home": "C:\\codex-home",
+            "offline_username": "CrewonSandboxOffline",
+            "online_username": "CrewonSandboxOnline",
+            "codex_home": "C:\\crewon-home",
             "command_cwd": "C:\\workspace",
             "read_roots": [],
             "write_roots": [],
@@ -1093,12 +1093,12 @@ mod tests {
     #[test]
     fn deny_path_under_active_root_uses_only_matching_root_sid() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let codex_home = temp.path().join("codex-home");
+        let codex_home = temp.path().join("crewon-home");
         let workspace = temp.path().join("workspace");
         let active_root = temp.path().join("active-root");
         let stale_root = temp.path().join("stale-root");
         let deny_path = active_root.join("protected");
-        fs::create_dir_all(&codex_home).expect("create codex home");
+        fs::create_dir_all(&codex_home).expect("create crewon home");
         fs::create_dir_all(&workspace).expect("create workspace");
         fs::create_dir_all(&active_root).expect("create active root");
         fs::create_dir_all(&stale_root).expect("create stale root");
@@ -1129,12 +1129,12 @@ mod tests {
     #[test]
     fn deny_path_outside_active_roots_falls_back_to_all_active_root_sids() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let codex_home = temp.path().join("codex-home");
+        let codex_home = temp.path().join("crewon-home");
         let workspace = temp.path().join("workspace");
         let active_root = temp.path().join("active-root");
         let stale_root = temp.path().join("stale-root");
         let deny_path = temp.path().join("outside-deny");
-        fs::create_dir_all(&codex_home).expect("create codex home");
+        fs::create_dir_all(&codex_home).expect("create crewon home");
         fs::create_dir_all(&workspace).expect("create workspace");
         fs::create_dir_all(&active_root).expect("create active root");
         fs::create_dir_all(&stale_root).expect("create stale root");
@@ -1166,11 +1166,11 @@ mod tests {
     #[test]
     fn deny_path_includes_nested_active_root_sid() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let codex_home = temp.path().join("codex-home");
+        let codex_home = temp.path().join("crewon-home");
         let workspace = temp.path().join("workspace");
         let protected_dir = workspace.join(".codex");
         let nested_root = protected_dir.join("nested-root");
-        fs::create_dir_all(&codex_home).expect("create codex home");
+        fs::create_dir_all(&codex_home).expect("create crewon home");
         fs::create_dir_all(&workspace).expect("create workspace");
         fs::create_dir_all(&nested_root).expect("create nested root");
 

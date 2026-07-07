@@ -3,12 +3,12 @@ use crate::outgoing_message::OutgoingEnvelope;
 #[cfg(test)]
 use crate::outgoing_message::OutgoingMessage;
 use crate::outgoing_message::OutgoingMessageSender;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::Thread;
-use codex_app_server_protocol::ThreadActiveFlag;
-use codex_app_server_protocol::ThreadStatus;
-use codex_app_server_protocol::ThreadStatusChangedNotification;
-use codex_protocol::ThreadId;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::Thread;
+use crewon_app_server_protocol::ThreadActiveFlag;
+use crewon_app_server_protocol::ThreadStatus;
+use crewon_app_server_protocol::ThreadStatusChangedNotification;
+use crewon_protocol::ThreadId;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -453,8 +453,8 @@ fn loaded_thread_status(runtime: &RuntimeFacts) -> ThreadStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_utils_absolute_path::test_support::PathBufExt;
-    use codex_utils_absolute_path::test_support::test_path_buf;
+    use crewon_utils_absolute_path::test_support::PathBufExt;
+    use crewon_utils_absolute_path::test_support::test_path_buf;
     use pretty_assertions::assert_eq;
     use tokio::time::Duration;
     use tokio::time::timeout;
@@ -480,7 +480,7 @@ mod tests {
         manager
             .upsert_thread(test_thread(
                 NON_INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::AppServer,
+                crewon_app_server_protocol::SessionSource::AppServer,
             ))
             .await;
 
@@ -502,7 +502,7 @@ mod tests {
         manager
             .upsert_thread(test_thread(
                 INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::Cli,
+                crewon_app_server_protocol::SessionSource::LegacyCli,
             ))
             .await;
 
@@ -615,7 +615,7 @@ mod tests {
         manager
             .upsert_thread(test_thread(
                 INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::Cli,
+                crewon_app_server_protocol::SessionSource::LegacyCli,
             ))
             .await;
 
@@ -646,7 +646,7 @@ mod tests {
         manager
             .upsert_thread(test_thread(
                 INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::Cli,
+                crewon_app_server_protocol::SessionSource::LegacyCli,
             ))
             .await;
 
@@ -667,7 +667,7 @@ mod tests {
         manager
             .upsert_thread(test_thread(
                 INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::Cli,
+                crewon_app_server_protocol::SessionSource::LegacyCli,
             ))
             .await;
         manager.note_turn_started(INTERACTIVE_THREAD_ID).await;
@@ -697,7 +697,7 @@ mod tests {
         manager
             .upsert_thread(test_thread(
                 INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::Cli,
+                crewon_app_server_protocol::SessionSource::LegacyCli,
             ))
             .await;
 
@@ -722,13 +722,13 @@ mod tests {
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel(8);
         let manager = ThreadWatchManager::new_with_outgoing(Arc::new(OutgoingMessageSender::new(
             outgoing_tx,
-            codex_analytics::AnalyticsEventsClient::disabled(),
+            crewon_analytics::AnalyticsEventsClient::disabled(),
         )));
 
         manager
             .upsert_thread(test_thread(
                 INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::Cli,
+                crewon_app_server_protocol::SessionSource::LegacyCli,
             ))
             .await;
         assert_eq!(
@@ -765,13 +765,13 @@ mod tests {
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel(8);
         let manager = ThreadWatchManager::new_with_outgoing(Arc::new(OutgoingMessageSender::new(
             outgoing_tx,
-            codex_analytics::AnalyticsEventsClient::disabled(),
+            crewon_analytics::AnalyticsEventsClient::disabled(),
         )));
 
         manager
             .upsert_thread_silently(test_thread(
                 INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::Cli,
+                crewon_app_server_protocol::SessionSource::LegacyCli,
             ))
             .await;
 
@@ -806,13 +806,13 @@ mod tests {
         manager
             .upsert_thread(test_thread(
                 INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::Cli,
+                crewon_app_server_protocol::SessionSource::LegacyCli,
             ))
             .await;
         manager
             .upsert_thread(test_thread(
                 NON_INTERACTIVE_THREAD_ID,
-                codex_app_server_protocol::SessionSource::AppServer,
+                crewon_app_server_protocol::SessionSource::AppServer,
             ))
             .await;
         let interactive_thread_id = ThreadId::from_string(INTERACTIVE_THREAD_ID)
@@ -886,7 +886,7 @@ mod tests {
         notification
     }
 
-    fn test_thread(thread_id: &str, source: codex_app_server_protocol::SessionSource) -> Thread {
+    fn test_thread(thread_id: &str, source: crewon_app_server_protocol::SessionSource) -> Thread {
         Thread {
             id: thread_id.to_string(),
             session_id: thread_id.to_string(),
@@ -900,7 +900,7 @@ mod tests {
             status: ThreadStatus::NotLoaded,
             path: None,
             cwd: test_path_buf("/tmp").abs(),
-            cli_version: "test".to_string(),
+            client_version: "test".to_string(),
             agent_nickname: None,
             agent_role: None,
             source,

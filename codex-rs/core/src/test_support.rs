@@ -7,19 +7,19 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use codex_exec_server::EnvironmentManager;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_model_provider::create_model_provider;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_models_manager::bundled_models_response;
-use codex_models_manager::collaboration_mode_presets;
-use codex_models_manager::manager::SharedModelsManager;
-use codex_models_manager::test_support::construct_model_info_offline_for_tests;
-use codex_models_manager::test_support::get_model_offline_for_tests;
-use codex_protocol::config_types::CollaborationModeMask;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelPreset;
+use crewon_exec_server::EnvironmentManager;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_model_provider::create_model_provider;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_models_manager::bundled_models_response;
+use crewon_models_manager::collaboration_mode_presets;
+use crewon_models_manager::manager::SharedModelsManager;
+use crewon_models_manager::test_support::construct_model_info_offline_for_tests;
+use crewon_models_manager::test_support::get_model_offline_for_tests;
+use crewon_protocol::config_types::CollaborationModeMask;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelPreset;
 use once_cell::sync::Lazy;
 
 use crate::ThreadManager;
@@ -44,23 +44,23 @@ pub fn set_deterministic_process_ids(enabled: bool) {
     unified_exec::set_deterministic_process_ids_for_tests(enabled);
 }
 
-pub fn auth_manager_from_auth(auth: CodexAuth) -> Arc<AuthManager> {
+pub fn auth_manager_from_auth(auth: CrewonAuth) -> Arc<AuthManager> {
     AuthManager::from_auth_for_testing(auth)
 }
 
-pub fn auth_manager_from_auth_with_home(auth: CodexAuth, codex_home: PathBuf) -> Arc<AuthManager> {
+pub fn auth_manager_from_auth_with_home(auth: CrewonAuth, codex_home: PathBuf) -> Arc<AuthManager> {
     AuthManager::from_auth_for_testing_with_home(auth, codex_home)
 }
 
 pub fn thread_manager_with_models_provider(
-    auth: CodexAuth,
+    auth: CrewonAuth,
     provider: ModelProviderInfo,
 ) -> ThreadManager {
     ThreadManager::with_models_provider_for_tests(auth, provider)
 }
 
 pub fn thread_manager_with_models_provider_and_home(
-    auth: CodexAuth,
+    auth: CrewonAuth,
     provider: ModelProviderInfo,
     codex_home: PathBuf,
     environment_manager: Arc<EnvironmentManager>,
@@ -74,7 +74,7 @@ pub fn thread_manager_with_models_provider_and_home(
 }
 
 pub fn thread_manager_with_models_provider_home_and_state(
-    auth: CodexAuth,
+    auth: CrewonAuth,
     provider: ModelProviderInfo,
     codex_home: PathBuf,
     environment_manager: Arc<EnvironmentManager>,
@@ -93,7 +93,7 @@ pub async fn start_thread_with_user_shell_override(
     thread_manager: &ThreadManager,
     config: Config,
     user_shell_override: crate::shell::Shell,
-) -> codex_protocol::error::Result<crate::NewThread> {
+) -> crewon_protocol::error::Result<crate::NewThread> {
     thread_manager
         .start_thread_with_user_shell_override_for_tests(config, user_shell_override)
         .await
@@ -105,7 +105,7 @@ pub async fn resume_thread_from_rollout_with_user_shell_override(
     rollout_path: PathBuf,
     auth_manager: Arc<AuthManager>,
     user_shell_override: crate::shell::Shell,
-) -> codex_protocol::error::Result<crate::NewThread> {
+) -> crewon_protocol::error::Result<crate::NewThread> {
     thread_manager
         .resume_thread_from_rollout_with_user_shell_override_for_tests(
             config,

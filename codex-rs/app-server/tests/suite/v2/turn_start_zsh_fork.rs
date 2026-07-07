@@ -13,27 +13,27 @@ use app_test_support::create_mock_responses_server_sequence;
 use app_test_support::create_mock_responses_server_sequence_unchecked;
 use app_test_support::create_shell_command_sse_response;
 use app_test_support::to_response;
-use codex_app_server_protocol::CommandAction;
-use codex_app_server_protocol::CommandExecutionApprovalDecision;
-use codex_app_server_protocol::CommandExecutionRequestApprovalResponse;
-use codex_app_server_protocol::CommandExecutionStatus;
-use codex_app_server_protocol::ItemCompletedNotification;
-use codex_app_server_protocol::ItemStartedNotification;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnCompletedNotification;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::TurnStatus;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_features::FEATURES;
-use codex_features::Feature;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
+use crewon_app_server_protocol::CommandAction;
+use crewon_app_server_protocol::CommandExecutionApprovalDecision;
+use crewon_app_server_protocol::CommandExecutionRequestApprovalResponse;
+use crewon_app_server_protocol::CommandExecutionStatus;
+use crewon_app_server_protocol::ItemCompletedNotification;
+use crewon_app_server_protocol::ItemStartedNotification;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ThreadItem;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnCompletedNotification;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::TurnStatus;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_features::FEATURES;
+use crewon_features::Feature;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -123,11 +123,11 @@ async fn turn_start_shell_zsh_fork_executes_command_v2() -> Result<()> {
                 text_elements: Vec::new(),
             }],
             cwd: Some(workspace.clone()),
-            approval_policy: Some(codex_app_server_protocol::AskForApproval::Never),
-            sandbox_policy: Some(codex_app_server_protocol::SandboxPolicy::DangerFullAccess),
+            approval_policy: Some(crewon_app_server_protocol::AskForApproval::Never),
+            sandbox_policy: Some(crewon_app_server_protocol::SandboxPolicy::DangerFullAccess),
             model: Some("mock-model".to_string()),
-            effort: Some(codex_protocol::openai_models::ReasoningEffort::Medium),
-            summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
+            effort: Some(crewon_protocol::openai_models::ReasoningEffort::Medium),
+            summary: Some(crewon_protocol::config_types::ReasoningSummary::Auto),
             ..Default::default()
         })
         .await?;
@@ -534,15 +534,15 @@ async fn turn_start_shell_zsh_fork_subcommand_decline_marks_parent_declined_v2()
                 text_elements: Vec::new(),
             }],
             cwd: Some(workspace.clone()),
-            approval_policy: Some(codex_app_server_protocol::AskForApproval::UnlessTrusted),
+            approval_policy: Some(crewon_app_server_protocol::AskForApproval::UnlessTrusted),
             // This test is about execve-intercept approval propagation, not
             // workspace sandboxing. Using full access avoids macOS sandbox
             // setup failures that can terminate the parent shell before the
             // second subcommand approval is observed.
-            sandbox_policy: Some(codex_app_server_protocol::SandboxPolicy::DangerFullAccess),
+            sandbox_policy: Some(crewon_app_server_protocol::SandboxPolicy::DangerFullAccess),
             model: Some("mock-model".to_string()),
-            effort: Some(codex_protocol::openai_models::ReasoningEffort::Medium),
-            summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
+            effort: Some(crewon_protocol::openai_models::ReasoningEffort::Medium),
+            summary: Some(crewon_protocol::config_types::ReasoningSummary::Auto),
             ..Default::default()
         })
         .await?;
@@ -763,11 +763,11 @@ fn create_test_package_app_server(codex_home: &Path, zsh_path: &Path) -> Result<
     };
     std::fs::create_dir_all(&bin_dir)?;
     std::fs::create_dir_all(zsh_bin_dir)?;
-    std::fs::write(package_dir.join("codex-package.json"), "{}")?;
+    std::fs::write(package_dir.join("crewon-package.json"), "{}")?;
 
-    let app_server = bin_dir.join("codex-app-server");
+    let app_server = bin_dir.join("crewon-app-server");
     copy_with_permissions(
-        &codex_utils_cargo_bin::cargo_bin("codex-app-server")?,
+        &crewon_utils_cargo_bin::cargo_bin("crewon-app-server")?,
         &app_server,
     )?;
     copy_with_permissions(zsh_path, &package_zsh_path)?;
@@ -777,7 +777,7 @@ fn create_test_package_app_server(codex_home: &Path, zsh_path: &Path) -> Result<
 fn packaged_zsh_path(codex_home: &Path) -> PathBuf {
     codex_home
         .join("test-package")
-        .join("codex-resources")
+        .join("crewon-resources")
         .join("zsh")
         .join("bin")
         .join("zsh")
@@ -841,7 +841,7 @@ stream_max_retries = 0
 }
 
 fn find_test_zsh_path() -> Result<Option<std::path::PathBuf>> {
-    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let repo_root = crewon_utils_cargo_bin::repo_root()?;
     let dotslash_zsh = repo_root.join("codex-rs/app-server/tests/suite/zsh");
     if !dotslash_zsh.is_file() {
         eprintln!(

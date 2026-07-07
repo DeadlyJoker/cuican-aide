@@ -5,9 +5,9 @@ use super::realtime_request_headers;
 use super::realtime_text_from_handoff_request;
 use super::wrap_realtime_delegation_input;
 use async_channel::bounded;
-use codex_config::config_toml::RealtimeWsVersion;
-use codex_protocol::protocol::RealtimeHandoffRequested;
-use codex_protocol::protocol::RealtimeTranscriptEntry;
+use crewon_config::config_toml::RealtimeWsVersion;
+use crewon_protocol::protocol::RealtimeHandoffRequested;
+use crewon_protocol::protocol::RealtimeTranscriptEntry;
 use pretty_assertions::assert_eq;
 
 #[test]

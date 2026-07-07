@@ -1,6 +1,13 @@
 use super::ConnectionSessionState;
 use super::MessageProcessor;
 use super::MessageProcessorArgs;
+use super::OfficeHistoryRecoveryOutcome;
+use super::OfficeSchedulerRecoveryOutcome;
+use super::bounded_unique_office_recovery_cwds;
+use super::office_recovery_turn_refs;
+use super::office_scheduler_recovery_should_keep_polling;
+use super::office_scheduler_replan_source_thread_ids;
+use super::office_scheduler_turn_refs;
 use crate::analytics_utils::analytics_events_client_from_config;
 use crate::config_manager::ConfigManager;
 use crate::outgoing_message::ConnectionId;
@@ -9,29 +16,30 @@ use crate::transport::AppServerTransport;
 use anyhow::Result;
 use app_test_support::create_mock_responses_server_repeating_assistant;
 use app_test_support::write_mock_responses_config_toml;
-use codex_analytics::AppServerRpcTransport;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::InitializeCapabilities;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::InitializeResponse;
-use codex_app_server_protocol::JSONRPCRequest;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::UserInput;
-use codex_arg0::Arg0DispatchPaths;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::LoaderOverrides;
-use codex_core::config::Config;
-use codex_core::config::ConfigBuilder;
-use codex_exec_server::EnvironmentManager;
-use codex_feedback::CodexFeedback;
-use codex_login::AuthManager;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::W3cTraceContext;
+use crewon_analytics::AppServerRpcTransport;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::CrewonDomainConfigRecord;
+use crewon_app_server_protocol::InitializeCapabilities;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::InitializeResponse;
+use crewon_app_server_protocol::JSONRPCRequest;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::UserInput;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::LoaderOverrides;
+use crewon_core::config::Config;
+use crewon_core::config::ConfigBuilder;
+use crewon_exec_server::EnvironmentManager;
+use crewon_feedback::CrewonFeedback;
+use crewon_login::AuthManager;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::W3cTraceContext;
 use opentelemetry::global;
 use opentelemetry::trace::SpanId;
 use opentelemetry::trace::SpanKind;
@@ -42,6 +50,7 @@ use opentelemetry_sdk::trace::InMemorySpanExporter;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::trace::SpanData;
 use pretty_assertions::assert_eq;
+use serde_json::json;
 use serial_test::serial;
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -90,7 +99,7 @@ fn init_test_tracing() -> &'static TestTracing {
         let provider = SdkTracerProvider::builder()
             .with_simple_exporter(exporter.clone())
             .build();
-        let tracer = provider.tracer("codex-app-server-message-processor-tests");
+        let tracer = provider.tracer("crewon-app-server-message-processor-tests");
         global::set_text_map_propagator(TraceContextPropagator::new());
         let subscriber =
             tracing_subscriber::registry().with(tracing_opentelemetry::layer().with_tracer(tracer));
@@ -138,7 +147,7 @@ impl TracingHarness {
                     request_id: RequestId::Integer(1),
                     params: InitializeParams {
                         client_info: ClientInfo {
-                            name: "codex-app-server-tests".to_string(),
+                            name: "crewon-app-server-tests".to_string(),
                             title: None,
                             version: "0.1.0".to_string(),
                         },
@@ -209,6 +218,330 @@ impl TracingHarness {
     }
 }
 
+#[test]
+fn office_recovery_turn_refs_include_running_verification_checks() {
+    let records = vec![office_record(json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "activity": {
+                "runs": [
+                    {
+                        "id": "office-run-1",
+                        "status": "completed",
+                        "turnId": "manager-turn-1",
+                        "verificationChecks": [
+                            {
+                                "itemId": "verification-smoke",
+                                "status": "pending",
+                                "dispatchStatus": "running",
+                                "automationId": "Nightly QA",
+                                "automationThreadId": "automation-thread-123456789",
+                                "automationTurnId": "automation-turn-1"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }))];
+
+    let refs = office_recovery_turn_refs(&records);
+
+    assert_eq!(refs.len(), 1);
+    assert_eq!(refs[0].thread_id, "automation-thread-123456789");
+    assert_eq!(refs[0].turn_id, "automation-turn-1");
+}
+
+#[test]
+fn office_scheduler_turn_refs_include_verification_sources() {
+    let records = vec![
+        office_record(json!({
+            "title": "Platform Office",
+            "workspace": {
+                "threadId": "office-thread-123456789",
+                "activity": {
+                    "runs": [
+                        {
+                            "id": "office-run-1",
+                            "status": "completed",
+                            "turnId": "manager-turn-1",
+                            "verificationChecks": [
+                                {
+                                    "itemId": "verification-regression",
+                                    "status": "pending",
+                                    "automationId": "Nightly QA"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        })),
+        office_record(json!({
+            "title": "Platform Office",
+            "workspace": {
+                "threadId": "office-thread-123456789",
+                "activity": {
+                    "runs": [
+                        {
+                            "id": "office-run-2",
+                            "status": "completed",
+                            "turnId": "manager-turn-2",
+                            "verificationChecks": [
+                                {
+                                    "itemId": "verification-smoke",
+                                    "status": "passed",
+                                    "dispatchStatus": "completed",
+                                    "automationId": "Nightly QA",
+                                    "automationThreadId": "automation-thread-123456789",
+                                    "automationTurnId": "automation-turn-1"
+                                },
+                                {
+                                    "itemId": "verification-regression",
+                                    "status": "pending",
+                                    "automationId": "Nightly QA"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        })),
+        office_record(json!({
+            "title": "Platform Office",
+            "workspace": {
+                "threadId": "office-thread-123456789",
+                "activity": {
+                    "runs": [
+                        {
+                            "id": "office-run-3",
+                            "status": "completed",
+                            "turnId": "manager-turn-3",
+                            "verificationChecks": [
+                                {
+                                    "itemId": "verification-manual",
+                                    "status": "pending",
+                                    "manualDispatch": true,
+                                    "automationId": "Nightly QA"
+                                },
+                                {
+                                    "itemId": "verification-risky",
+                                    "status": "pending",
+                                    "riskSeverity": "high",
+                                    "automationId": "Nightly QA"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        })),
+    ];
+
+    let refs = office_scheduler_turn_refs(&records);
+
+    assert_eq!(refs.len(), 3);
+    assert_eq!(refs[0].thread_id, "office-thread-123456789");
+    assert_eq!(refs[0].turn_id, "manager-turn-1");
+    assert_eq!(refs[1].thread_id, "office-thread-123456789");
+    assert_eq!(refs[1].turn_id, "manager-turn-2");
+    assert_eq!(refs[2].thread_id, "automation-thread-123456789");
+    assert_eq!(refs[2].turn_id, "automation-turn-1");
+}
+
+#[test]
+fn office_scheduler_turn_refs_include_auto_replan_sources() {
+    let records = vec![office_record(json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "activity": {
+                "runs": [
+                    {
+                        "id": "office-run-replan",
+                        "status": "completed",
+                        "turnId": "manager-turn-1",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "blocked",
+                                "nextAction": "repairFailedCriteria",
+                                "risks": { "openHigh": 0 }
+                            }
+                        }
+                    },
+                    {
+                        "id": "office-run-frame",
+                        "status": "completed",
+                        "turnId": "manager-turn-2",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "incomplete",
+                                "nextAction": "frameAcceptanceCriteria"
+                            }
+                        }
+                    },
+                    {
+                        "id": "office-run-risk",
+                        "status": "completed",
+                        "turnId": "manager-turn-3",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "needsReview",
+                                "nextAction": "collectVerificationEvidence",
+                                "risks": { "openHigh": 1 }
+                            }
+                        }
+                    },
+                    {
+                        "id": "office-run-retry",
+                        "status": "completed",
+                        "turnId": "manager-turn-4",
+                        "retryOf": "office-run-replan",
+                        "loop": {
+                            "iteration": 2,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "passed",
+                                "nextAction": "readyToSummarize"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    }))];
+
+    let refs = office_scheduler_turn_refs(&records);
+    let source_threads = office_scheduler_replan_source_thread_ids(&records);
+
+    assert_eq!(refs.len(), 0);
+    assert_eq!(source_threads, Vec::<String>::new());
+
+    let records = vec![office_record(json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "activity": {
+                "runs": [
+                    {
+                        "id": "office-run-replan",
+                        "status": "completed",
+                        "turnId": "manager-turn-1",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "blocked",
+                                "nextAction": "repairFailedCriteria",
+                                "risks": { "openHigh": 0 }
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    }))];
+
+    let refs = office_scheduler_turn_refs(&records);
+    let source_threads = office_scheduler_replan_source_thread_ids(&records);
+
+    assert_eq!(refs.len(), 1);
+    assert_eq!(refs[0].thread_id, "office-thread-123456789");
+    assert_eq!(refs[0].turn_id, "manager-turn-1");
+    assert_eq!(source_threads, vec!["office-thread-123456789".to_string()]);
+}
+
+#[test]
+fn office_scheduler_recovery_keeps_polling_when_scheduler_work_is_waiting() {
+    let records = vec![office_record(json!({
+        "title": "Platform Office",
+        "workspace": {
+            "threadId": "office-thread-123456789",
+            "activity": {
+                "runs": [
+                    {
+                        "id": "office-run-replan",
+                        "status": "completed",
+                        "turnId": "manager-turn-1",
+                        "loop": {
+                            "iteration": 1,
+                            "maxIterations": 4,
+                            "review": {
+                                "status": "blocked",
+                                "nextAction": "repairFailedCriteria",
+                                "risks": { "openHigh": 0 }
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    }))];
+
+    assert!(office_recovery_turn_refs(&records).is_empty());
+    assert!(office_scheduler_recovery_should_keep_polling(
+        OfficeHistoryRecoveryOutcome::Idle,
+        OfficeSchedulerRecoveryOutcome::Waiting
+    ));
+    assert!(office_scheduler_recovery_should_keep_polling(
+        OfficeHistoryRecoveryOutcome::Waiting,
+        OfficeSchedulerRecoveryOutcome::Idle
+    ));
+    assert!(!office_scheduler_recovery_should_keep_polling(
+        OfficeHistoryRecoveryOutcome::Idle,
+        OfficeSchedulerRecoveryOutcome::Idle
+    ));
+}
+
+#[test]
+fn office_thread_cwd_recovery_is_bounded_and_deduplicated() {
+    let cwds = vec![
+        "/workspace/a",
+        "/workspace/b",
+        "/workspace/a",
+        "/workspace/c",
+        "/workspace/d",
+        "/workspace/e",
+        "/workspace/f",
+        "/workspace/g",
+        "/workspace/h",
+        "/workspace/i",
+    ]
+    .into_iter()
+    .map(str::to_string);
+
+    let got = bounded_unique_office_recovery_cwds(cwds);
+
+    assert_eq!(
+        got,
+        vec![
+            "/workspace/a".to_string(),
+            "/workspace/b".to_string(),
+            "/workspace/c".to_string(),
+            "/workspace/d".to_string(),
+            "/workspace/e".to_string(),
+            "/workspace/f".to_string(),
+            "/workspace/g".to_string(),
+            "/workspace/h".to_string(),
+        ]
+    );
+}
+
+fn office_record(config: serde_json::Value) -> CrewonDomainConfigRecord {
+    CrewonDomainConfigRecord {
+        file_path: "/workspace/.crewon/offices/platform-office.json".to_string(),
+        saved_at: "2026-06-20T00:00:00Z".to_string(),
+        config,
+    }
+}
+
 async fn build_test_config(codex_home: &Path, server_uri: &str) -> Result<Config> {
     write_mock_responses_config_toml(
         codex_home,
@@ -242,7 +575,7 @@ async fn build_test_processor(
         /*strict_config*/ false,
         CloudConfigBundleLoader::default(),
         Arg0DispatchPaths::default(),
-        Arc::new(codex_config::NoopThreadConfigLoader),
+        Arc::new(crewon_config::NoopThreadConfigLoader),
     );
     let analytics_events_client =
         analytics_events_client_from_config(Arc::clone(&auth_manager), config.as_ref());
@@ -257,7 +590,7 @@ async fn build_test_processor(
         config,
         config_manager,
         environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
-        feedback: CodexFeedback::new(),
+        feedback: CrewonFeedback::new(),
         log_db: None,
         state_db: None,
         config_warnings: Vec::new(),
@@ -478,7 +811,7 @@ async fn read_thread_started_notification(
                 };
                 if matches!(
                     notification,
-                    codex_app_server_protocol::ServerNotification::ThreadStarted(_)
+                    crewon_app_server_protocol::ServerNotification::ThreadStarted(_)
                 ) {
                     return;
                 }
@@ -491,7 +824,7 @@ async fn read_thread_started_notification(
                 };
                 if matches!(
                     notification,
-                    codex_app_server_protocol::ServerNotification::ThreadStarted(_)
+                    crewon_app_server_protocol::ServerNotification::ThreadStarted(_)
                 ) {
                     return;
                 }
@@ -684,7 +1017,7 @@ async fn turn_start_jsonrpc_span_parents_core_turn_spans() -> Result<()> {
                 && span_attr(span, "rpc.method") == Some("turn/start")
                 && span.span_context.trace_id() == remote_trace_id
         }) && spans.iter().any(|span| {
-            span_attr(span, "codex.op") == Some("user_input")
+            span_attr(span, "crewon.op") == Some("user_input")
                 && span.span_context.trace_id() == remote_trace_id
         })
     })
@@ -693,8 +1026,8 @@ async fn turn_start_jsonrpc_span_parents_core_turn_spans() -> Result<()> {
     let server_request_span =
         find_rpc_span_with_trace(&spans, SpanKind::Server, "turn/start", remote_trace_id);
     let core_turn_span =
-        find_span_with_trace(&spans, remote_trace_id, "codex.op=user_input", |span| {
-            span_attr(span, "codex.op") == Some("user_input")
+        find_span_with_trace(&spans, remote_trace_id, "crewon.op=user_input", |span| {
+            span_attr(span, "crewon.op") == Some("user_input")
         });
 
     assert_eq!(server_request_span.parent_span_id, remote_parent_span_id);

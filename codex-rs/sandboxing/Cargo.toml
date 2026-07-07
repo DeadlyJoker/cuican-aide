@@ -1,11 +1,11 @@
 [package]
-name = "codex-sandboxing"
+name = "crewon-sandboxing"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "codex_sandboxing"
+name = "crewon_sandboxing"
 path = "src/lib.rs"
 doctest = false
 
@@ -13,9 +13,9 @@ doctest = false
 workspace = true
 
 [dependencies]
-codex-network-proxy = { workspace = true }
-codex-protocol = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
+crewon-network-proxy = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
 dunce = { workspace = true }
 libc = { workspace = true }
 serde_json = { workspace = true }

@@ -1,32 +1,32 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use codex_features::Feature;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_mcp::ToolInfo;
-use codex_model_provider::create_model_provider;
-use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::openai_models::ApplyPatchToolType;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::ToolMode;
-use codex_protocol::openai_models::WebSearchToolType;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_tools::DiscoverablePluginInfo;
-use codex_tools::DiscoverableTool;
-use codex_tools::ResponsesApiNamespaceTool;
-use codex_tools::ResponsesApiTool;
-use codex_tools::ToolCall as ExtensionToolCall;
-use codex_tools::ToolExecutor;
-use codex_tools::ToolExposure;
-use codex_tools::ToolName;
-use codex_tools::ToolOutput;
-use codex_tools::ToolSpec;
+use crewon_features::Feature;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_mcp::ToolInfo;
+use crewon_model_provider::create_model_provider;
+use crewon_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::dynamic_tools::DynamicToolSpec;
+use crewon_protocol::openai_models::ApplyPatchToolType;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::InputModality;
+use crewon_protocol::openai_models::ToolMode;
+use crewon_protocol::openai_models::WebSearchToolType;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_tools::DiscoverablePluginInfo;
+use crewon_tools::DiscoverableTool;
+use crewon_tools::ResponsesApiNamespaceTool;
+use crewon_tools::ResponsesApiTool;
+use crewon_tools::ToolCall as ExtensionToolCall;
+use crewon_tools::ToolExecutor;
+use crewon_tools::ToolExposure;
+use crewon_tools::ToolName;
+use crewon_tools::ToolOutput;
+use crewon_tools::ToolSpec;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
@@ -234,8 +234,8 @@ fn set_features(turn: &mut TurnContext, features: &[Feature]) {
     }
 }
 
-fn zsh_fork_config_for_spec_plan_tests() -> codex_tools::ZshForkConfig {
-    let placeholder_exe = codex_utils_absolute_path::AbsolutePathBuf::try_from(
+fn zsh_fork_config_for_spec_plan_tests() -> crewon_tools::ZshForkConfig {
+    let placeholder_exe = crewon_utils_absolute_path::AbsolutePathBuf::try_from(
         std::env::current_exe().expect("current exe path"),
     )
     .expect("current exe should be absolute");
@@ -243,7 +243,7 @@ fn zsh_fork_config_for_spec_plan_tests() -> codex_tools::ZshForkConfig {
     // Spec planning only checks whether the shell mode is ZshFork. These paths
     // are never executed, so use a stable absolute placeholder instead of
     // depending on packaged zsh-fork artifacts in schema tests.
-    codex_tools::ZshForkConfig {
+    crewon_tools::ZshForkConfig {
         shell_zsh_path: placeholder_exe.clone(),
         main_execve_wrapper_exe: placeholder_exe,
     }
@@ -266,7 +266,7 @@ fn set_web_search_mode(turn: &mut TurnContext, mode: WebSearchMode) {
 
 fn use_chatgpt_auth(turn: &mut TurnContext) {
     turn.auth_manager = Some(AuthManager::from_auth_for_testing(
-        CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+        CrewonAuth::create_dummy_chatgpt_auth_for_testing(),
     ));
     turn.provider = create_model_provider(
         turn.config.model_provider.clone(),
@@ -291,7 +291,7 @@ impl ToolExecutor<ExtensionToolCall> for WebRunExtensionTool {
     }
 
     fn spec(&self) -> ToolSpec {
-        ToolSpec::Namespace(codex_tools::ResponsesApiNamespace {
+        ToolSpec::Namespace(crewon_tools::ResponsesApiNamespace {
             name: "web".to_string(),
             description: "Test web namespace.".to_string(),
             tools: vec![ResponsesApiNamespaceTool::Function(ResponsesApiTool {
@@ -299,15 +299,15 @@ impl ToolExecutor<ExtensionToolCall> for WebRunExtensionTool {
                 description: "Test standalone web search tool.".to_string(),
                 strict: false,
                 defer_loading: None,
-                parameters: codex_tools::JsonSchema::default(),
+                parameters: crewon_tools::JsonSchema::default(),
                 output_schema: None,
             })],
         })
     }
 
-    fn handle(&self, _call: ExtensionToolCall) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle(&self, _call: ExtensionToolCall) -> crewon_tools::ToolExecutorFuture<'_> {
         Box::pin(async {
-            Ok(Box::new(codex_tools::JsonToolOutput::new(json!({}))) as Box<dyn ToolOutput>)
+            Ok(Box::new(crewon_tools::JsonToolOutput::new(json!({}))) as Box<dyn ToolOutput>)
         })
     }
 }
@@ -325,10 +325,10 @@ impl ToolExecutor<ExtensionToolCall> for DeferredExtensionTool {
             description: "Echoes arguments through an extension tool.".to_string(),
             strict: true,
             defer_loading: None,
-            parameters: codex_tools::JsonSchema::object(
+            parameters: crewon_tools::JsonSchema::object(
                 BTreeMap::from([(
                     "message".to_string(),
-                    codex_tools::JsonSchema::string(/*description*/ None),
+                    crewon_tools::JsonSchema::string(/*description*/ None),
                 )]),
                 Some(vec!["message".to_string()]),
                 Some(false.into()),
@@ -341,7 +341,7 @@ impl ToolExecutor<ExtensionToolCall> for DeferredExtensionTool {
         ToolExposure::Deferred
     }
 
-    fn handle(&self, _call: ExtensionToolCall) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle(&self, _call: ExtensionToolCall) -> crewon_tools::ToolExecutorFuture<'_> {
         Box::pin(async { panic!("spec planning should not execute extension tools") })
     }
 }
@@ -487,7 +487,7 @@ async fn shell_zsh_fork_stays_standalone_until_unified_exec_composition_is_enabl
     })
     .await;
 
-    if codex_utils_pty::conpty_supported() {
+    if crewon_utils_pty::conpty_supported() {
         composed.assert_visible_contains(&["exec_command", "write_stdin"]);
         composed.assert_visible_lacks(&["shell_command"]);
         composed.assert_registered_contains(&["exec_command", "write_stdin", "shell_command"]);
@@ -500,7 +500,7 @@ async fn shell_zsh_fork_stays_standalone_until_unified_exec_composition_is_enabl
 
 #[tokio::test]
 async fn zsh_fork_unified_exec_hides_shell_parameter() {
-    if !codex_utils_pty::conpty_supported() {
+    if !crewon_utils_pty::conpty_supported() {
         return;
     }
 
@@ -515,7 +515,7 @@ async fn zsh_fork_unified_exec_hides_shell_parameter() {
             ],
         );
         turn.unified_exec_shell_mode =
-            codex_tools::UnifiedExecShellMode::ZshFork(zsh_fork_config_for_spec_plan_tests());
+            crewon_tools::UnifiedExecShellMode::ZshFork(zsh_fork_config_for_spec_plan_tests());
     })
     .await;
 
@@ -525,7 +525,7 @@ async fn zsh_fork_unified_exec_hides_shell_parameter() {
 
 #[tokio::test]
 async fn zsh_fork_unified_exec_keeps_shell_parameter_when_remote_environment_available() {
-    if !codex_utils_pty::conpty_supported() {
+    if !crewon_utils_pty::conpty_supported() {
         return;
     }
 
@@ -540,7 +540,7 @@ async fn zsh_fork_unified_exec_keeps_shell_parameter_when_remote_environment_ava
             ],
         );
         turn.unified_exec_shell_mode =
-            codex_tools::UnifiedExecShellMode::ZshFork(zsh_fork_config_for_spec_plan_tests());
+            crewon_tools::UnifiedExecShellMode::ZshFork(zsh_fork_config_for_spec_plan_tests());
         let remote_cwd = turn
             .environments
             .primary()
@@ -552,7 +552,7 @@ async fn zsh_fork_unified_exec_keeps_shell_parameter_when_remote_environment_ava
             .push(crate::session::turn_context::TurnEnvironment {
                 environment_id: "remote".to_string(),
                 environment: Arc::new(
-                    codex_exec_server::Environment::create_for_tests(Some(
+                    crewon_exec_server::Environment::create_for_tests(Some(
                         "ws://127.0.0.1:1/remote-exec-server".to_string(),
                     ))
                     .expect("remote test environment"),
@@ -864,7 +864,7 @@ async fn request_plugin_install_description_defers_inventory_to_list_tool() {
 async fn code_mode_only_exposes_code_executor_and_hides_nested_tools() {
     let input = ToolPlanInputs {
         dynamic_tools: vec![dynamic_tool(
-            Some("codex_app"),
+            Some("crewon_app"),
             "lookup",
             /*defer_loading*/ false,
         )],
@@ -872,12 +872,12 @@ async fn code_mode_only_exposes_code_executor_and_hides_nested_tools() {
     };
     let plain = probe_with(|_| {}, input).await;
     assert_eq!(
-        plain.namespace_function_names("codex_app"),
+        plain.namespace_function_names("crewon_app"),
         &["lookup".to_string()]
     );
     plain.assert_visible_lacks(&[
-        codex_code_mode::PUBLIC_TOOL_NAME,
-        codex_code_mode::WAIT_TOOL_NAME,
+        crewon_code_mode::PUBLIC_TOOL_NAME,
+        crewon_code_mode::WAIT_TOOL_NAME,
     ]);
 
     let code_mode_only = probe_with(
@@ -886,7 +886,7 @@ async fn code_mode_only_exposes_code_executor_and_hides_nested_tools() {
         },
         ToolPlanInputs {
             dynamic_tools: vec![dynamic_tool(
-                Some("codex_app"),
+                Some("crewon_app"),
                 "lookup",
                 /*defer_loading*/ false,
             )],
@@ -895,11 +895,11 @@ async fn code_mode_only_exposes_code_executor_and_hides_nested_tools() {
     )
     .await;
     code_mode_only.assert_visible_contains(&[
-        codex_code_mode::PUBLIC_TOOL_NAME,
-        codex_code_mode::WAIT_TOOL_NAME,
+        crewon_code_mode::PUBLIC_TOOL_NAME,
+        crewon_code_mode::WAIT_TOOL_NAME,
     ]);
     assert_eq!(
-        code_mode_only.namespace_function_names("codex_app"),
+        code_mode_only.namespace_function_names("crewon_app"),
         Vec::<String>::new().as_slice()
     );
 }
@@ -926,7 +926,7 @@ async fn excluded_deferred_namespaces_do_not_enable_nested_tool_guidance() {
     )
     .await;
 
-    let ToolSpec::Freeform(exec) = plan.visible_spec(codex_code_mode::PUBLIC_TOOL_NAME) else {
+    let ToolSpec::Freeform(exec) = plan.visible_spec(crewon_code_mode::PUBLIC_TOOL_NAME) else {
         panic!("expected code mode exec tool");
     };
     assert!(
@@ -1071,8 +1071,8 @@ async fn tool_mode_selector_overrides_feature_flags() {
     })
     .await;
     direct.assert_visible_lacks(&[
-        codex_code_mode::PUBLIC_TOOL_NAME,
-        codex_code_mode::WAIT_TOOL_NAME,
+        crewon_code_mode::PUBLIC_TOOL_NAME,
+        crewon_code_mode::WAIT_TOOL_NAME,
     ]);
 }
 
@@ -1307,8 +1307,8 @@ async fn hosted_tools_follow_provider_auth_model_and_config_gates() {
         code_mode_only.visible_names,
         vec![
             // Code-mode entrypoints.
-            codex_code_mode::PUBLIC_TOOL_NAME,
-            codex_code_mode::WAIT_TOOL_NAME,
+            crewon_code_mode::PUBLIC_TOOL_NAME,
+            crewon_code_mode::WAIT_TOOL_NAME,
             // Multi-agent v2 tools.
             "spawn_agent",
             "send_message",

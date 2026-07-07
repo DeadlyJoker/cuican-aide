@@ -7,10 +7,10 @@ use super::key_aliases::normalized_with_key_aliases;
 use super::merge::merge_toml_values;
 use crate::CloudConfigBundleLoader;
 use crate::ProfileV2Name;
-use codex_app_server_protocol::ConfigLayer;
-use codex_app_server_protocol::ConfigLayerMetadata;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::ConfigLayer;
+use crewon_app_server_protocol::ConfigLayerMetadata;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::path::Path;
@@ -57,7 +57,7 @@ impl LoaderOverrides {
     ///
     /// This is intended for tests that should load only repo-controlled config fixtures.
     pub fn without_managed_config_for_tests() -> Self {
-        let base = std::env::temp_dir().join("codex-config-tests");
+        let base = std::env::temp_dir().join("crewon-config-tests");
         Self {
             user_config_path: None,
             user_config_profile: None,
@@ -241,7 +241,7 @@ pub struct ConfigLayerStack {
     /// Index into [layers] of the active user config layer, if any.
     ///
     /// When profile config is active, there can be more than one user layer:
-    /// the base `$CODEX_HOME/config.toml` layer followed by the profile override
+    /// the base Crewon home `config.toml` layer followed by the profile override
     /// layer. This index points at the highest-precedence user layer because that
     /// is the writable layer for profile-aware edits.
     user_layer_index: Option<usize>,
@@ -307,7 +307,7 @@ impl ConfigLayerStack {
     ///
     /// This does not merge other config layers or apply any requirements. When
     /// a profile-v2 layer is active, this returns that profile layer rather than
-    /// the base `$CODEX_HOME/config.toml` layer because the active layer is the
+    /// the base Crewon home `config.toml` layer because the active layer is the
     /// writable target for profile-aware edits.
     pub fn get_active_user_layer(&self) -> Option<&ConfigLayerEntry> {
         self.user_layer_index

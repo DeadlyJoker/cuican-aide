@@ -5,27 +5,27 @@ use app_test_support::TestAppServer;
 use app_test_support::create_final_assistant_message_sse_response;
 use app_test_support::create_mock_responses_server_sequence_unchecked;
 use app_test_support::to_response;
-use codex_app_server_protocol::ConfigBatchWriteParams;
-use codex_app_server_protocol::ConfigEdit;
-use codex_app_server_protocol::HookEventName;
-use codex_app_server_protocol::HookHandlerType;
-use codex_app_server_protocol::HookMetadata;
-use codex_app_server_protocol::HookSource;
-use codex_app_server_protocol::HookTrustStatus;
-use codex_app_server_protocol::HooksListEntry;
-use codex_app_server_protocol::HooksListParams;
-use codex_app_server_protocol::HooksListResponse;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::MergeStrategy;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_core::config::set_project_trust_level;
-use codex_protocol::config_types::TrustLevel;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::skip_if_windows;
+use crewon_app_server_protocol::ConfigBatchWriteParams;
+use crewon_app_server_protocol::ConfigEdit;
+use crewon_app_server_protocol::HookEventName;
+use crewon_app_server_protocol::HookHandlerType;
+use crewon_app_server_protocol::HookMetadata;
+use crewon_app_server_protocol::HookSource;
+use crewon_app_server_protocol::HookTrustStatus;
+use crewon_app_server_protocol::HooksListEntry;
+use crewon_app_server_protocol::HooksListParams;
+use crewon_app_server_protocol::HooksListResponse;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::MergeStrategy;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_core::config::set_project_trust_level;
+use crewon_protocol::config_types::TrustLevel;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde::Serialize;
 use tempfile::TempDir;
@@ -37,7 +37,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 struct NormalizedHookIdentity {
     event_name: &'static str,
     #[serde(flatten)]
-    group: codex_config::MatcherGroup,
+    group: crewon_config::MatcherGroup,
 }
 
 fn command_hook_hash(
@@ -49,9 +49,9 @@ fn command_hook_hash(
 ) -> String {
     let identity = NormalizedHookIdentity {
         event_name,
-        group: codex_config::MatcherGroup {
+        group: crewon_config::MatcherGroup {
             matcher: matcher.map(ToOwned::to_owned),
-            hooks: vec![codex_config::HookHandlerConfig::Command {
+            hooks: vec![crewon_config::HookHandlerConfig::Command {
                 command: command.to_string(),
                 command_windows: None,
                 timeout_sec: Some(timeout_sec),
@@ -60,10 +60,10 @@ fn command_hook_hash(
             }],
         },
     };
-    let Ok(value) = codex_config::TomlValue::try_from(identity) else {
+    let Ok(value) = crewon_config::TomlValue::try_from(identity) else {
         unreachable!("normalized hook identity should serialize to TOML");
     };
-    codex_config::version_for_toml(&value)
+    crewon_config::version_for_toml(&value)
 }
 
 fn write_user_hook_config(codex_home: &std::path::Path) -> Result<()> {
@@ -86,10 +86,10 @@ statusMessage = "running listed hook"
 
 fn write_plugin_hook_config(codex_home: &std::path::Path, hooks_json: &str) -> Result<()> {
     let plugin_root = codex_home.join("plugins/cache/test/demo/local");
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::create_dir_all(plugin_root.join("hooks"))?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"demo"}"#,
     )?;
     std::fs::write(plugin_root.join("hooks/hooks.json"), hooks_json)?;
@@ -532,7 +532,7 @@ async fn hooks_list_uses_root_repo_hooks_for_linked_worktrees() -> Result<()> {
         mcp.read_stream_until_response_message(RequestId::Integer(write_id)),
     )
     .await??;
-    let _: codex_app_server_protocol::ConfigWriteResponse = to_response(response)?;
+    let _: crewon_app_server_protocol::ConfigWriteResponse = to_response(response)?;
 
     let list_id = mcp
         .send_hooks_list_request(HooksListParams {
@@ -594,7 +594,7 @@ async fn config_batch_write_toggles_user_hook() -> Result<()> {
         mcp.read_stream_until_response_message(RequestId::Integer(write_id)),
     )
     .await??;
-    let _: codex_app_server_protocol::ConfigWriteResponse = to_response(response)?;
+    let _: crewon_app_server_protocol::ConfigWriteResponse = to_response(response)?;
 
     let request_id = mcp
         .send_hooks_list_request(HooksListParams {
@@ -632,7 +632,7 @@ async fn config_batch_write_toggles_user_hook() -> Result<()> {
         mcp.read_stream_until_response_message(RequestId::Integer(write_id)),
     )
     .await??;
-    let _: codex_app_server_protocol::ConfigWriteResponse = to_response(response)?;
+    let _: crewon_app_server_protocol::ConfigWriteResponse = to_response(response)?;
 
     let request_id = mcp
         .send_hooks_list_request(HooksListParams {
@@ -781,7 +781,7 @@ command = "python3 {hook_script_path}"
         mcp.read_stream_until_response_message(RequestId::Integer(write_id)),
     )
     .await??;
-    let _: codex_app_server_protocol::ConfigWriteResponse = to_response(response)?;
+    let _: crewon_app_server_protocol::ConfigWriteResponse = to_response(response)?;
 
     let hook_list_id = mcp
         .send_hooks_list_request(HooksListParams {
@@ -851,7 +851,7 @@ command = "python3 {hook_script_path}"
         mcp.read_stream_until_response_message(RequestId::Integer(write_id)),
     )
     .await??;
-    let _: codex_app_server_protocol::ConfigWriteResponse = to_response(response)?;
+    let _: crewon_app_server_protocol::ConfigWriteResponse = to_response(response)?;
 
     let hook_list_id = mcp
         .send_hooks_list_request(HooksListParams {
@@ -995,7 +995,7 @@ command = "python3 {hook_script_path}"
         mcp.read_stream_until_response_message(RequestId::Integer(write_id)),
     )
     .await??;
-    let _: codex_app_server_protocol::ConfigWriteResponse = to_response(response)?;
+    let _: crewon_app_server_protocol::ConfigWriteResponse = to_response(response)?;
 
     let thread_start_id = mcp
         .send_thread_start_request(ThreadStartParams {
@@ -1060,7 +1060,7 @@ command = "python3 {hook_script_path}"
         mcp.read_stream_until_response_message(RequestId::Integer(write_id)),
     )
     .await??;
-    let _: codex_app_server_protocol::ConfigWriteResponse = to_response(response)?;
+    let _: crewon_app_server_protocol::ConfigWriteResponse = to_response(response)?;
 
     let second_turn_id = mcp
         .send_turn_start_request(TurnStartParams {

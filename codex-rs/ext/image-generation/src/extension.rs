@@ -1,19 +1,19 @@
 use std::sync::Arc;
 
-use codex_core::config::Config;
-use codex_extension_api::ConfigContributor;
-use codex_extension_api::ExtensionData;
-use codex_extension_api::ExtensionFuture;
-use codex_extension_api::ExtensionRegistryBuilder;
-use codex_extension_api::ThreadLifecycleContributor;
-use codex_extension_api::ThreadStartInput;
-use codex_extension_api::ToolCall;
-use codex_extension_api::ToolContributor;
-use codex_extension_api::ToolExecutor;
-use codex_login::AuthManager;
-use codex_model_provider::create_model_provider;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_core::config::Config;
+use crewon_extension_api::ConfigContributor;
+use crewon_extension_api::ExtensionData;
+use crewon_extension_api::ExtensionFuture;
+use crewon_extension_api::ExtensionRegistryBuilder;
+use crewon_extension_api::ThreadLifecycleContributor;
+use crewon_extension_api::ThreadStartInput;
+use crewon_extension_api::ToolCall;
+use crewon_extension_api::ToolContributor;
+use crewon_extension_api::ToolExecutor;
+use crewon_login::AuthManager;
+use crewon_model_provider::create_model_provider;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 use crate::backend::CodexImagesBackend;
 use crate::tool::ImageGenerationTool;
@@ -79,7 +79,7 @@ impl ToolContributor for ImageGenerationExtension {
         let Some(config) = thread_store.get::<ImageGenerationExtensionConfig>() else {
             return Vec::new();
         };
-        if !config.available || !self.auth_manager.current_auth_uses_codex_backend() {
+        if !config.available || !self.auth_manager.current_auth_uses_crewon_backend() {
             return Vec::new();
         }
 

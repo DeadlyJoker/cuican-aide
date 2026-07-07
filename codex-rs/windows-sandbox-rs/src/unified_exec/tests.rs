@@ -6,9 +6,9 @@ use crate::ipc_framed::Message;
 use crate::ipc_framed::decode_bytes;
 use crate::ipc_framed::read_frame;
 use crate::run_windows_sandbox_capture;
-use codex_protocol::models::PermissionProfile;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_pty::ProcessDriver;
+use crewon_protocol::models::PermissionProfile;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_pty::ProcessDriver;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::fs;
@@ -67,7 +67,7 @@ fn sandbox_cwd() -> PathBuf {
 
 fn sandbox_home(name: &str) -> TempDir {
     let id = TEST_HOME_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!("codex-windows-sandbox-{name}-{id}"));
+    let path = std::env::temp_dir().join(format!("crewon-windows-sandbox-{name}-{id}"));
     let _ = fs::remove_dir_all(&path);
     fs::create_dir_all(&path).expect("create sandbox home");
     tempfile::TempDir::new_in(&path).expect("create sandbox home tempdir")
@@ -116,11 +116,11 @@ fn wait_for_frame_count(frames_path: &Path, expected_frames: usize) -> Vec<Messa
 }
 
 async fn collect_stdout_and_exit(
-    spawned: codex_utils_pty::SpawnedProcess,
+    spawned: crewon_utils_pty::SpawnedProcess,
     codex_home: &Path,
     timeout_duration: Duration,
 ) -> (Vec<u8>, i32) {
-    let codex_utils_pty::SpawnedProcess {
+    let crewon_utils_pty::SpawnedProcess {
         session: _session,
         mut stdout_rx,
         stderr_rx: _stderr_rx,
@@ -398,7 +398,7 @@ fn runner_resizer_sends_resize_frame() {
         let outbound_tx = super::start_runner_pipe_writer(file);
         let mut resizer = super::make_runner_resizer(outbound_tx);
 
-        resizer(codex_utils_pty::TerminalSize {
+        resizer(crewon_utils_pty::TerminalSize {
             rows: 45,
             cols: 132,
         })

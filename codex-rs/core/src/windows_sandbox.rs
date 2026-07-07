@@ -1,15 +1,15 @@
 use crate::config::Config;
 use crate::config::edit::ConfigEditsBuilder;
-use codex_config::config_toml::ConfigToml;
-use codex_config::types::WindowsSandboxModeToml;
-use codex_features::Feature;
-use codex_features::Features;
-use codex_features::FeaturesToml;
-use codex_login::default_client::originator;
-use codex_otel::sanitize_metric_tag_value;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::PermissionProfile;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_config::config_toml::ConfigToml;
+use crewon_config::types::WindowsSandboxModeToml;
+use crewon_features::Feature;
+use crewon_features::Features;
+use crewon_features::FeaturesToml;
+use crewon_login::default_client::originator;
+use crewon_otel::sanitize_metric_tag_value;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::PermissionProfile;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
@@ -104,7 +104,7 @@ pub fn legacy_windows_sandbox_mode_from_entries(
 
 #[cfg(target_os = "windows")]
 pub fn sandbox_setup_is_complete(codex_home: &Path) -> bool {
-    codex_windows_sandbox::sandbox_setup_is_complete(codex_home)
+    crewon_windows_sandbox::sandbox_setup_is_complete(codex_home)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -114,9 +114,9 @@ pub fn sandbox_setup_is_complete(_codex_home: &Path) -> bool {
 
 #[cfg(target_os = "windows")]
 pub fn elevated_setup_failure_details(err: &anyhow::Error) -> Option<(String, String)> {
-    let failure = codex_windows_sandbox::extract_setup_failure(err)?;
+    let failure = crewon_windows_sandbox::extract_setup_failure(err)?;
     let code = failure.code.as_str().to_string();
-    let message = codex_windows_sandbox::sanitize_setup_metric_tag_value(&failure.message);
+    let message = crewon_windows_sandbox::sanitize_setup_metric_tag_value(&failure.message);
     Some((code, message))
 }
 
@@ -127,15 +127,15 @@ pub fn elevated_setup_failure_details(_err: &anyhow::Error) -> Option<(String, S
 
 #[cfg(target_os = "windows")]
 pub fn elevated_setup_failure_metric_name(err: &anyhow::Error) -> &'static str {
-    if codex_windows_sandbox::extract_setup_failure(err).is_some_and(|failure| {
+    if crewon_windows_sandbox::extract_setup_failure(err).is_some_and(|failure| {
         matches!(
             failure.code,
-            codex_windows_sandbox::SetupErrorCode::OrchestratorHelperLaunchCanceled
+            crewon_windows_sandbox::SetupErrorCode::OrchestratorHelperLaunchCanceled
         )
     }) {
-        "codex.windows_sandbox.elevated_setup_canceled"
+        "crewon.windows_sandbox.elevated_setup_canceled"
     } else {
-        "codex.windows_sandbox.elevated_setup_failure"
+        "crewon.windows_sandbox.elevated_setup_failure"
     }
 }
 
@@ -153,25 +153,25 @@ pub fn run_elevated_setup(
     codex_home: &Path,
 ) -> anyhow::Result<()> {
     let permissions =
-        codex_windows_sandbox::ResolvedWindowsSandboxPermissions::try_from_permission_profile_for_workspace_roots(
+        crewon_windows_sandbox::ResolvedWindowsSandboxPermissions::try_from_permission_profile_for_workspace_roots(
             permission_profile,
             workspace_roots,
         )?;
-    codex_windows_sandbox::run_elevated_setup(
-        codex_windows_sandbox::SandboxSetupRequest {
+    crewon_windows_sandbox::run_elevated_setup(
+        crewon_windows_sandbox::SandboxSetupRequest {
             permissions: &permissions,
             command_cwd,
             env_map,
             codex_home,
             proxy_enforced: false,
         },
-        codex_windows_sandbox::SetupRootOverrides::default(),
+        crewon_windows_sandbox::SetupRootOverrides::default(),
     )
 }
 
 #[cfg(target_os = "windows")]
 pub fn run_elevated_provisioning_setup(codex_home: &Path, real_user: &str) -> anyhow::Result<()> {
-    codex_windows_sandbox::run_elevated_provisioning_setup(codex_home, real_user)
+    crewon_windows_sandbox::run_elevated_provisioning_setup(codex_home, real_user)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -198,7 +198,7 @@ pub fn run_legacy_setup_preflight(
     env_map: &HashMap<String, String>,
     codex_home: &Path,
 ) -> anyhow::Result<()> {
-    codex_windows_sandbox::run_windows_sandbox_legacy_preflight(
+    crewon_windows_sandbox::run_windows_sandbox_legacy_preflight(
         permission_profile,
         workspace_roots,
         codex_home,
@@ -216,7 +216,7 @@ pub fn run_setup_refresh_with_extra_read_roots(
     codex_home: &Path,
     extra_read_roots: Vec<PathBuf>,
 ) -> anyhow::Result<()> {
-    codex_windows_sandbox::run_setup_refresh_with_extra_read_roots(
+    crewon_windows_sandbox::run_setup_refresh_with_extra_read_roots(
         permission_profile,
         workspace_roots,
         command_cwd,
@@ -347,12 +347,12 @@ fn emit_windows_sandbox_setup_success_metrics(
     originator_tag: &str,
     duration: std::time::Duration,
 ) {
-    let Some(metrics) = codex_otel::global() else {
+    let Some(metrics) = crewon_otel::global() else {
         return;
     };
     let mode_tag = windows_sandbox_setup_mode_tag(mode);
     let _ = metrics.record_duration(
-        "codex.windows_sandbox.setup_duration_ms",
+        "crewon.windows_sandbox.setup_duration_ms",
         duration,
         &[
             ("result", "success"),
@@ -361,7 +361,7 @@ fn emit_windows_sandbox_setup_success_metrics(
         ],
     );
     let _ = metrics.counter(
-        "codex.windows_sandbox.setup_success",
+        "crewon.windows_sandbox.setup_success",
         /*inc*/ 1,
         &[("originator", originator_tag), ("mode", mode_tag)],
     );
@@ -373,12 +373,12 @@ fn emit_windows_sandbox_setup_failure_metrics(
     duration: std::time::Duration,
     _err: &anyhow::Error,
 ) {
-    let Some(metrics) = codex_otel::global() else {
+    let Some(metrics) = crewon_otel::global() else {
         return;
     };
     let mode_tag = windows_sandbox_setup_mode_tag(mode);
     let _ = metrics.record_duration(
-        "codex.windows_sandbox.setup_duration_ms",
+        "crewon.windows_sandbox.setup_duration_ms",
         duration,
         &[
             ("result", "failure"),
@@ -387,7 +387,7 @@ fn emit_windows_sandbox_setup_failure_metrics(
         ],
     );
     let _ = metrics.counter(
-        "codex.windows_sandbox.setup_failure",
+        "crewon.windows_sandbox.setup_failure",
         /*inc*/ 1,
         &[("originator", originator_tag), ("mode", mode_tag)],
     );
@@ -416,7 +416,7 @@ fn emit_windows_sandbox_setup_failure_metrics(
         }
     } else {
         let _ = metrics.counter(
-            "codex.windows_sandbox.legacy_setup_preflight_failed",
+            "crewon.windows_sandbox.legacy_setup_preflight_failed",
             /*inc*/ 1,
             &[("originator", originator_tag)],
         );

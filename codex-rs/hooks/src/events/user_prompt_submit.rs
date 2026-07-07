@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::HookCompletedEvent;
-use codex_protocol::protocol::HookEventName;
-use codex_protocol::protocol::HookOutputEntry;
-use codex_protocol::protocol::HookOutputEntryKind;
-use codex_protocol::protocol::HookRunStatus;
-use codex_protocol::protocol::HookRunSummary;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::HookCompletedEvent;
+use crewon_protocol::protocol::HookEventName;
+use crewon_protocol::protocol::HookOutputEntry;
+use crewon_protocol::protocol::HookOutputEntryKind;
+use crewon_protocol::protocol::HookRunStatus;
+use crewon_protocol::protocol::HookRunSummary;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 use super::common;
 use crate::engine::CommandShell;
@@ -275,12 +275,12 @@ fn serialization_failure_outcome(hook_events: Vec<HookCompletedEvent>) -> UserPr
 
 #[cfg(test)]
 mod tests {
-    use codex_protocol::protocol::HookEventName;
-    use codex_protocol::protocol::HookOutputEntry;
-    use codex_protocol::protocol::HookOutputEntryKind;
-    use codex_protocol::protocol::HookRunStatus;
-    use codex_utils_absolute_path::test_support::PathBufExt;
-    use codex_utils_absolute_path::test_support::test_path_buf;
+    use crewon_protocol::protocol::HookEventName;
+    use crewon_protocol::protocol::HookOutputEntry;
+    use crewon_protocol::protocol::HookOutputEntryKind;
+    use crewon_protocol::protocol::HookRunStatus;
+    use crewon_utils_absolute_path::test_support::PathBufExt;
+    use crewon_utils_absolute_path::test_support::test_path_buf;
     use pretty_assertions::assert_eq;
 
     use super::UserPromptSubmitHandlerData;
@@ -325,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_block_decision_blocks_processing() {
+    fn compatibility_block_decision_blocks_processing() {
         let parsed = parse_completed(
             &handler(),
             run_result(
@@ -361,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_block_decision_requires_reason() {
+    fn compatibility_block_decision_requires_reason() {
         let parsed = parse_completed(
             &handler(),
             run_result(
@@ -425,7 +425,7 @@ mod tests {
             timeout_sec: 5,
             status_message: None,
             source_path: test_path_buf("/tmp/hooks.json").abs(),
-            source: codex_protocol::protocol::HookSource::User,
+            source: crewon_protocol::protocol::HookSource::User,
             display_order: 0,
             env: std::collections::HashMap::new(),
         }

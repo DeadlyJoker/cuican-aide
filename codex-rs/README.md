@@ -1,3 +1,3 @@
-# Codex CLI
+# Crewon Backend
 
-[**Codex CLI Documentation**](https://developers.openai.com/codex/cli)
+Rust backend crates for the Crewon PC, web, and mobile clients.

@@ -2,30 +2,30 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
-use codex_core::config::Config;
-use codex_extension_api::ExtensionRegistry;
-use codex_extension_api::ExtensionRegistryBuilder;
-use codex_features::Feature;
-use codex_image_generation_extension::install as install_image_generation_extension;
-use codex_login::CodexAuth;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::models::ImageDetail;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
-use codex_web_search_extension::install as install_web_search_extension;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_core::config::Config;
+use crewon_extension_api::ExtensionRegistry;
+use crewon_extension_api::ExtensionRegistryBuilder;
+use crewon_features::Feature;
+use crewon_image_generation_extension::install as install_image_generation_extension;
+use crewon_login::CrewonAuth;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::models::ImageDetail;
+use crewon_protocol::openai_models::InputModality;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
+use crewon_web_search_extension::install as install_web_search_extension;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 
 const RESPONSES_LITE_HEADER: &str = "x-openai-internal-codex-responses-lite";
 
-fn responses_extensions(auth: &CodexAuth) -> Arc<ExtensionRegistry<Config>> {
-    let auth_manager = codex_core::test_support::auth_manager_from_auth(auth.clone());
+fn responses_extensions(auth: &CrewonAuth) -> Arc<ExtensionRegistry<Config>> {
+    let auth_manager = crewon_core::test_support::auth_manager_from_auth(auth.clone());
     let mut extension_builder = ExtensionRegistryBuilder::<Config>::new();
     install_web_search_extension(&mut extension_builder, Arc::clone(&auth_manager));
     install_image_generation_extension(&mut extension_builder, auth_manager);
@@ -44,7 +44,7 @@ fn configure_responses_tools(config: &mut Config) {
     assert!(config.features.disable(Feature::ImageGenExt).is_ok());
 }
 
-fn configure_image_capable_model(model_info: &mut codex_protocol::openai_models::ModelInfo) {
+fn configure_image_capable_model(model_info: &mut crewon_protocol::openai_models::ModelInfo) {
     model_info.input_modalities = vec![InputModality::Text, InputModality::Image];
 }
 
@@ -68,13 +68,13 @@ async fn responses_lite_strips_data_image_detail_without_resize_all_images() -> 
     )
     .await;
     let image_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
-    let mut builder = test_codex().with_model_info_override("gpt-5.4", |model_info| {
+    let mut builder = test_crewon().with_model_info_override("gpt-5.4", |model_info| {
         model_info.use_responses_lite = true;
         configure_image_capable_model(model_info);
     });
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Image {
                 image_url: image_url.to_string(),
@@ -86,7 +86,7 @@ async fn responses_lite_strips_data_image_detail_without_resize_all_images() -> 
             thread_settings: Default::default(),
         })
         .await?;
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -124,10 +124,10 @@ async fn responses_lite_uses_standalone_web_search_and_image_generation() -> Res
     )
     .await;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let extensions = responses_extensions(&auth);
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_auth(auth)
         .with_extensions(extensions)
         .with_model_info_override("gpt-5.4", |model_info| {
@@ -177,7 +177,7 @@ async fn responses_lite_compact_request_uses_lite_transport_contract() -> Result
     let compact_mock =
         responses::mount_compact_json_once(&server, serde_json::json!({ "output": [] })).await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model_info_override("gpt-5.4", |model_info| {
             model_info.use_responses_lite = true;
             model_info.supports_parallel_tool_calls = true;
@@ -188,8 +188,8 @@ async fn responses_lite_compact_request_uses_lite_transport_contract() -> Result
     let test = builder.build(&server).await?;
 
     test.submit_turn("Compact this conversation").await?;
-    test.codex.submit(Op::Compact).await?;
-    wait_for_event(&test.codex, |event| {
+    test.crewon.submit(Op::Compact).await?;
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -230,8 +230,8 @@ async fn responses_lite_omits_hosted_tools_without_standalone_extensions() -> Re
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model_info_override("gpt-5.4", |model_info| {
             model_info.use_responses_lite = true;
             configure_image_capable_model(model_info);
@@ -265,9 +265,9 @@ async fn non_lite_uses_hosted_tools_when_standalone_features_are_disabled() -> R
     )
     .await;
 
-    let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+    let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
     let extensions = responses_extensions(&auth);
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_auth(auth)
         .with_extensions(extensions)
         .with_model_info_override("gpt-5.4", configure_image_capable_model)

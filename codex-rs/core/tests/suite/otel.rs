@@ -1,16 +1,3 @@
-use codex_core::config::Constrained;
-use codex_features::Feature;
-use codex_otel::SessionTelemetry;
-use codex_otel::TelemetryAuthMode;
-use codex_protocol::ThreadId;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_custom_tool_call;
@@ -27,9 +14,22 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_core::config::Constrained;
+use crewon_features::Feature;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::TelemetryAuthMode;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::user_input::UserInput;
 use std::sync::Mutex;
 use std::time::Duration;
 use tracing::Level;
@@ -91,7 +91,7 @@ fn touch_command(path: &str) -> String {
 
 #[test]
 fn extract_log_field_handles_empty_bare_values() {
-    let line = "event.name=\"codex.tool_result\" mcp_server= mcp_server_origin=";
+    let line = "event.name=\"crewon.tool_result\" mcp_server= mcp_server_origin=";
     assert_eq!(extract_log_field(line, "mcp_server"), Some(String::new()));
     assert_eq!(
         extract_log_field(line, "mcp_server_origin"),
@@ -101,7 +101,7 @@ fn extract_log_field_handles_empty_bare_values() {
 
 #[test]
 fn extract_log_field_does_not_confuse_similar_keys() {
-    let line = "event.name=\"codex.tool_result\" mcp_server_origin=stdio";
+    let line = "event.name=\"crewon.tool_result\" mcp_server_origin=stdio";
     assert_eq!(extract_log_field(line, "mcp_server"), None);
     assert_eq!(
         extract_log_field(line, "mcp_server_origin"),
@@ -116,7 +116,7 @@ async fn responses_api_emits_api_request_event() {
 
     mount_sse_once(&server, sse(vec![ev_completed("done")])).await;
 
-    let TestCodex { codex, .. } = test_codex().build(&server).await.unwrap();
+    let TestCrewon { crewon: codex, .. } = test_crewon().build(&server).await.unwrap();
 
     codex
         .submit(Op::UserInput {
@@ -137,17 +137,17 @@ async fn responses_api_emits_api_request_event() {
     logs_assert(|lines: &[&str]| {
         lines
             .iter()
-            .find(|line| line.contains("codex.api_request"))
+            .find(|line| line.contains("crewon.api_request"))
             .map(|_| Ok(()))
-            .unwrap_or_else(|| Err("expected codex.api_request event".to_string()))
+            .unwrap_or_else(|| Err("expected crewon.api_request event".to_string()))
     });
 
     logs_assert(|lines: &[&str]| {
         lines
             .iter()
-            .find(|line| line.contains("codex.conversation_starts"))
+            .find(|line| line.contains("crewon.conversation_starts"))
             .map(|_| Ok(()))
-            .unwrap_or_else(|| Err("expected codex.conversation_starts event".to_string()))
+            .unwrap_or_else(|| Err("expected crewon.conversation_starts event".to_string()))
     });
 }
 
@@ -162,7 +162,7 @@ async fn process_sse_emits_tracing_for_output_item() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex().build(&server).await.unwrap();
+    let TestCrewon { crewon: codex, .. } = test_crewon().build(&server).await.unwrap();
 
     codex
         .submit(Op::UserInput {
@@ -184,7 +184,7 @@ async fn process_sse_emits_tracing_for_output_item() {
         lines
             .iter()
             .find(|line| {
-                line.contains("codex.sse_event")
+                line.contains("crewon.sse_event")
                     && line.contains("event.kind=response.output_item.done")
             })
             .map(|_| Ok(()))
@@ -199,7 +199,7 @@ async fn process_sse_emits_failed_event_on_parse_error() {
 
     mount_sse_once(&server, "data: not-json\n\n".to_string()).await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config
                 .features
@@ -230,12 +230,12 @@ async fn process_sse_emits_failed_event_on_parse_error() {
         lines
             .iter()
             .find(|line| {
-                line.contains("codex.sse_event")
+                line.contains("crewon.sse_event")
                     && line.contains("error.message")
                     && line.contains("expected ident at line 1 column 2")
             })
             .map(|_| Ok(()))
-            .unwrap_or(Err("missing codex.sse_event".to_string()))
+            .unwrap_or(Err("missing crewon.sse_event".to_string()))
     });
 }
 
@@ -246,7 +246,7 @@ async fn process_sse_records_failed_event_when_stream_closes_without_completed()
 
     mount_sse_once(&server, sse(vec![ev_assistant_message("id", "hi")])).await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config
                 .features
@@ -277,12 +277,12 @@ async fn process_sse_records_failed_event_when_stream_closes_without_completed()
         lines
             .iter()
             .find(|line| {
-                line.contains("codex.sse_event")
+                line.contains("crewon.sse_event")
                     && line.contains("error.message")
                     && line.contains("stream closed before response.completed")
             })
             .map(|_| Ok(()))
-            .unwrap_or(Err("missing codex.sse_event".to_string()))
+            .unwrap_or(Err("missing crewon.sse_event".to_string()))
     });
 }
 
@@ -313,7 +313,7 @@ async fn process_sse_failed_event_records_response_error_message() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config
                 .features
@@ -344,13 +344,13 @@ async fn process_sse_failed_event_records_response_error_message() {
         lines
             .iter()
             .find(|line| {
-                line.contains("codex.sse_event")
+                line.contains("crewon.sse_event")
                     && line.contains("event.kind=response.failed")
                     && line.contains("error.message")
                     && line.contains("boom")
             })
             .map(|_| Ok(()))
-            .unwrap_or(Err("missing codex.sse_event".to_string()))
+            .unwrap_or(Err("missing crewon.sse_event".to_string()))
     });
 }
 
@@ -378,7 +378,7 @@ async fn process_sse_failed_event_logs_parse_error() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config
                 .features
@@ -409,10 +409,10 @@ async fn process_sse_failed_event_logs_parse_error() {
         lines
             .iter()
             .find(|line| {
-                line.contains("codex.sse_event") && line.contains("event.kind=response.failed")
+                line.contains("crewon.sse_event") && line.contains("event.kind=response.failed")
             })
             .map(|_| Ok(()))
-            .unwrap_or(Err("missing codex.sse_event".to_string()))
+            .unwrap_or(Err("missing crewon.sse_event".to_string()))
     });
 }
 
@@ -430,7 +430,7 @@ async fn process_sse_failed_event_logs_missing_error() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config
                 .features
@@ -461,10 +461,10 @@ async fn process_sse_failed_event_logs_missing_error() {
         lines
             .iter()
             .find(|line| {
-                line.contains("codex.sse_event") && line.contains("event.kind=response.failed")
+                line.contains("crewon.sse_event") && line.contains("event.kind=response.failed")
             })
             .map(|_| Ok(()))
-            .unwrap_or(Err("missing codex.sse_event".to_string()))
+            .unwrap_or(Err("missing crewon.sse_event".to_string()))
     });
 }
 
@@ -491,7 +491,7 @@ async fn process_sse_failed_event_logs_response_completed_parse_error() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config
                 .features
@@ -522,13 +522,13 @@ async fn process_sse_failed_event_logs_response_completed_parse_error() {
         lines
             .iter()
             .find(|line| {
-                line.contains("codex.sse_event")
+                line.contains("crewon.sse_event")
                     && line.contains("event.kind=response.completed")
                     && line.contains("error.message")
                     && line.contains("failed to parse ResponseCompleted")
             })
             .map(|_| Ok(()))
-            .unwrap_or(Err("missing codex.sse_event".to_string()))
+            .unwrap_or(Err("missing crewon.sse_event".to_string()))
     });
 }
 
@@ -555,7 +555,7 @@ async fn process_sse_emits_completed_telemetry() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex().build(&server).await.unwrap();
+    let TestCrewon { crewon: codex, .. } = test_crewon().build(&server).await.unwrap();
 
     codex
         .submit(Op::UserInput {
@@ -577,7 +577,7 @@ async fn process_sse_emits_completed_telemetry() {
         lines
             .iter()
             .find(|line| {
-                line.contains("codex.sse_event")
+                line.contains("crewon.sse_event")
                     && line.contains("event.kind=response.completed")
                     && line.contains("input_token_count=3")
                     && line.contains("output_token_count=5")
@@ -622,7 +622,7 @@ async fn turn_and_completed_response_spans_record_token_usage() {
     )
     .await;
 
-    let test = test_codex()
+    let test = test_crewon()
         .with_config(|config| {
             config.model_reasoning_effort = Some(ReasoningEffort::High);
             config
@@ -634,7 +634,7 @@ async fn turn_and_completed_response_spans_record_token_usage() {
         .await
         .unwrap();
 
-    let TestCodex { codex, .. } = test;
+    let TestCrewon { crewon: codex, .. } = test;
 
     codex
         .submit(Op::UserInput {
@@ -658,25 +658,25 @@ async fn turn_and_completed_response_spans_record_token_usage() {
         logs.lines().any(|line| {
             line.contains("handle_responses{")
                 && line.contains("otel.name=\"completed\"")
-                && line.contains("codex.request.reasoning_effort=high")
+                && line.contains("crewon.request.reasoning_effort=high")
                 && line.contains("gen_ai.usage.input_tokens=3")
                 && line.contains("gen_ai.usage.cache_read.input_tokens=1")
                 && line.contains("gen_ai.usage.output_tokens=5")
-                && line.contains("codex.usage.reasoning_output_tokens=2")
-                && line.contains("codex.usage.total_tokens=9")
+                && line.contains("crewon.usage.reasoning_output_tokens=2")
+                && line.contains("crewon.usage.total_tokens=9")
         }),
         "missing completed response span token usage\nlogs:\n{logs}"
     );
     assert!(
         logs.lines().any(|line| {
             line.contains("turn{otel.name=\"session_task.turn\"")
-                && line.contains("codex.turn.reasoning_effort=high")
-                && line.contains("codex.turn.token_usage.input_tokens=3")
-                && line.contains("codex.turn.token_usage.cached_input_tokens=1")
-                && line.contains("codex.turn.token_usage.non_cached_input_tokens=2")
-                && line.contains("codex.turn.token_usage.output_tokens=5")
-                && line.contains("codex.turn.token_usage.reasoning_output_tokens=2")
-                && line.contains("codex.turn.token_usage.total_tokens=9")
+                && line.contains("crewon.turn.reasoning_effort=high")
+                && line.contains("crewon.turn.token_usage.input_tokens=3")
+                && line.contains("crewon.turn.token_usage.cached_input_tokens=1")
+                && line.contains("crewon.turn.token_usage.non_cached_input_tokens=2")
+                && line.contains("crewon.turn.token_usage.output_tokens=5")
+                && line.contains("crewon.turn.token_usage.reasoning_output_tokens=2")
+                && line.contains("crewon.turn.token_usage.total_tokens=9")
         }),
         "missing regular turn span token usage\nlogs:\n{logs}"
     );
@@ -713,7 +713,7 @@ async fn handle_responses_span_records_response_kind_and_tool_name() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config
                 .features
@@ -805,7 +805,7 @@ async fn record_responses_sets_span_fields_for_response_events() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_model("gpt-5.4")
         .with_config(|config| {
             config.model_reasoning_effort = Some(ReasoningEffort::High);
@@ -857,7 +857,7 @@ async fn record_responses_sets_span_fields_for_response_events() {
             logs.lines().any(|line| {
                 line.contains("handle_responses{")
                     && line.contains(&otel_name)
-                    && line.contains("codex.request.reasoning_effort=high")
+                    && line.contains("crewon.request.reasoning_effort=high")
                     && from_field
                         .as_ref()
                         .is_none_or(|from_field| line.contains(from_field))
@@ -896,7 +896,7 @@ async fn handle_response_item_records_tool_result_for_custom_tool_call() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config
                 .features
@@ -927,9 +927,9 @@ async fn handle_response_item_records_tool_result_for_custom_tool_call() {
         let line = lines
             .iter()
             .find(|line| {
-                line.contains("codex.tool_result") && line.contains("call_id=custom-tool-call")
+                line.contains("crewon.tool_result") && line.contains("call_id=custom-tool-call")
             })
-            .ok_or_else(|| "missing codex.tool_result event".to_string())?;
+            .ok_or_else(|| "missing crewon.tool_result event".to_string())?;
 
         if !line.contains("tool_name=unsupported_tool") {
             return Err("missing tool_name field".to_string());
@@ -972,7 +972,7 @@ async fn handle_response_item_records_tool_result_for_function_call() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config
                 .features
@@ -1003,9 +1003,9 @@ async fn handle_response_item_records_tool_result_for_function_call() {
         let line = lines
             .iter()
             .find(|line| {
-                line.contains("codex.tool_result") && line.contains("call_id=function-call")
+                line.contains("crewon.tool_result") && line.contains("call_id=function-call")
             })
-            .ok_or_else(|| "missing codex.tool_result event".to_string())?;
+            .ok_or_else(|| "missing crewon.tool_result event".to_string())?;
 
         if !line.contains("tool_name=nonexistent") {
             return Err("missing tool_name field".to_string());
@@ -1048,7 +1048,7 @@ async fn handle_response_item_records_tool_result_for_shell_command_call() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(move |config| {
             config
                 .features
@@ -1079,8 +1079,8 @@ async fn handle_response_item_records_tool_result_for_shell_command_call() {
     logs_assert(|lines: &[&str]| {
         let line = lines
             .iter()
-            .find(|line| line.contains("codex.tool_result") && line.contains("call_id=shell-call"))
-            .ok_or_else(|| "missing codex.tool_result event".to_string())?;
+            .find(|line| line.contains("crewon.tool_result") && line.contains("call_id=shell-call"))
+            .ok_or_else(|| "missing crewon.tool_result event".to_string())?;
 
         if !line.contains("tool_name=shell_command") {
             return Err("missing tool_name field".to_string());
@@ -1116,9 +1116,10 @@ fn tool_decision_assertion<'a>(
         let line = lines
             .iter()
             .find(|line| {
-                line.contains("codex.tool_decision") && line.contains(&format!("call_id={call_id}"))
+                line.contains("crewon.tool_decision")
+                    && line.contains(&format!("call_id={call_id}"))
             })
-            .ok_or_else(|| format!("missing codex.tool_decision event for {call_id}"))?;
+            .ok_or_else(|| format!("missing crewon.tool_decision event for {call_id}"))?;
 
         let lower = line.to_lowercase();
         if !lower.contains("tool_name=shell_command") {
@@ -1146,10 +1147,10 @@ fn sandbox_outcome_assertion<'a>(
         let line = lines
             .iter()
             .find(|line| {
-                line.contains("codex.sandbox_outcome")
+                line.contains("crewon.sandbox_outcome")
                     && line.contains(&format!("call_id={call_id}"))
             })
-            .ok_or_else(|| format!("missing codex.sandbox_outcome event for {call_id}"))?;
+            .ok_or_else(|| format!("missing crewon.sandbox_outcome event for {call_id}"))?;
 
         let lower = line.to_lowercase();
         if !lower.contains("tool_name=shell_command") {
@@ -1179,10 +1180,10 @@ fn sandbox_outcome_event_records_outcome() {
         /*account_id*/ None,
         /*account_email*/ None,
         Some(TelemetryAuthMode::ApiKey),
-        "Codex_Desktop".to_string(),
+        "Crewon_Desktop".to_string(),
         /*log_user_prompts*/ false,
         "tty".to_string(),
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
 
     telemetry.sandbox_outcome(
@@ -1221,7 +1222,7 @@ async fn handle_shell_command_autoapprove_from_config_records_tool_decision() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
             config
@@ -1260,7 +1261,7 @@ async fn handle_shell_command_autoapprove_from_config_records_tool_decision() {
 #[traced_test]
 async fn handle_shell_command_user_approved_records_tool_decision() {
     let server = start_mock_server().await;
-    let command = touch_command("codex-otel-approval-test");
+    let command = touch_command("crewon-otel-approval-test");
     mount_sse_once(
         &server,
         sse(vec![
@@ -1279,7 +1280,7 @@ async fn handle_shell_command_user_approved_records_tool_decision() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.permissions.approval_policy =
                 Constrained::allow_any(AskForApproval::UnlessTrusted);
@@ -1330,7 +1331,7 @@ async fn handle_shell_command_user_approved_records_tool_decision() {
 #[traced_test]
 async fn handle_shell_command_user_approved_for_session_records_tool_decision() {
     let server = start_mock_server().await;
-    let command = touch_command("codex-otel-approval-test");
+    let command = touch_command("crewon-otel-approval-test");
 
     mount_sse_once(
         &server,
@@ -1349,7 +1350,7 @@ async fn handle_shell_command_user_approved_for_session_records_tool_decision() 
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.permissions.approval_policy =
                 Constrained::allow_any(AskForApproval::UnlessTrusted);
@@ -1400,7 +1401,7 @@ async fn handle_shell_command_user_approved_for_session_records_tool_decision() 
 #[traced_test]
 async fn handle_sandbox_error_user_approves_retry_records_tool_decision() {
     let server = start_mock_server().await;
-    let command = touch_command("codex-otel-approval-test");
+    let command = touch_command("crewon-otel-approval-test");
 
     mount_sse_once(
         &server,
@@ -1419,7 +1420,7 @@ async fn handle_sandbox_error_user_approves_retry_records_tool_decision() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.permissions.approval_policy =
                 Constrained::allow_any(AskForApproval::UnlessTrusted);
@@ -1470,7 +1471,7 @@ async fn handle_sandbox_error_user_approves_retry_records_tool_decision() {
 #[traced_test]
 async fn handle_shell_command_user_denies_records_tool_decision() {
     let server = start_mock_server().await;
-    let command = touch_command("codex-otel-approval-test");
+    let command = touch_command("crewon-otel-approval-test");
 
     mount_sse_once(
         &server,
@@ -1489,7 +1490,7 @@ async fn handle_shell_command_user_denies_records_tool_decision() {
         ]),
     )
     .await;
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.permissions.approval_policy =
                 Constrained::allow_any(AskForApproval::UnlessTrusted);
@@ -1540,7 +1541,7 @@ async fn handle_shell_command_user_denies_records_tool_decision() {
 #[traced_test]
 async fn handle_sandbox_error_user_approves_for_session_records_tool_decision() {
     let server = start_mock_server().await;
-    let command = touch_command("codex-otel-approval-test");
+    let command = touch_command("crewon-otel-approval-test");
 
     mount_sse_once(
         &server,
@@ -1559,7 +1560,7 @@ async fn handle_sandbox_error_user_approves_for_session_records_tool_decision() 
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.permissions.approval_policy =
                 Constrained::allow_any(AskForApproval::UnlessTrusted);
@@ -1610,7 +1611,7 @@ async fn handle_sandbox_error_user_approves_for_session_records_tool_decision() 
 #[traced_test]
 async fn handle_sandbox_error_user_denies_records_tool_decision() {
     let server = start_mock_server().await;
-    let command = touch_command("codex-otel-approval-test");
+    let command = touch_command("crewon-otel-approval-test");
 
     mount_sse_once(
         &server,
@@ -1630,7 +1631,7 @@ async fn handle_sandbox_error_user_denies_records_tool_decision() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.permissions.approval_policy =
                 Constrained::allow_any(AskForApproval::UnlessTrusted);

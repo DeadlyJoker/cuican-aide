@@ -1,8 +1,8 @@
-use codex_protocol::AgentPath;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::SubAgentActivityEvent;
-use codex_protocol::protocol::SubAgentActivityKind;
+use crewon_protocol::AgentPath;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::SubAgentActivityEvent;
+use crewon_protocol::protocol::SubAgentActivityKind;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 

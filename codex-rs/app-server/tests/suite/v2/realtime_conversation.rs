@@ -5,47 +5,6 @@ use app_test_support::create_final_assistant_message_sse_response;
 use app_test_support::create_mock_responses_server_sequence_unchecked;
 use app_test_support::create_shell_command_sse_response;
 use app_test_support::to_response;
-use codex_app_server_protocol::CommandExecutionStatus;
-use codex_app_server_protocol::ItemCompletedNotification;
-use codex_app_server_protocol::ItemStartedNotification;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::LoginAccountResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::ThreadRealtimeAppendAudioParams;
-use codex_app_server_protocol::ThreadRealtimeAppendAudioResponse;
-use codex_app_server_protocol::ThreadRealtimeAppendTextParams;
-use codex_app_server_protocol::ThreadRealtimeAppendTextResponse;
-use codex_app_server_protocol::ThreadRealtimeAudioChunk;
-use codex_app_server_protocol::ThreadRealtimeClosedNotification;
-use codex_app_server_protocol::ThreadRealtimeErrorNotification;
-use codex_app_server_protocol::ThreadRealtimeItemAddedNotification;
-use codex_app_server_protocol::ThreadRealtimeListVoicesParams;
-use codex_app_server_protocol::ThreadRealtimeListVoicesResponse;
-use codex_app_server_protocol::ThreadRealtimeOutputAudioDeltaNotification;
-use codex_app_server_protocol::ThreadRealtimeSdpNotification;
-use codex_app_server_protocol::ThreadRealtimeStartParams;
-use codex_app_server_protocol::ThreadRealtimeStartResponse;
-use codex_app_server_protocol::ThreadRealtimeStartTransport;
-use codex_app_server_protocol::ThreadRealtimeStartedNotification;
-use codex_app_server_protocol::ThreadRealtimeStopParams;
-use codex_app_server_protocol::ThreadRealtimeStopResponse;
-use codex_app_server_protocol::ThreadRealtimeTranscriptDeltaNotification;
-use codex_app_server_protocol::ThreadRealtimeTranscriptDoneNotification;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnCompletedNotification;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::TurnStartedNotification;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_features::FEATURES;
-use codex_features::Feature;
-use codex_protocol::protocol::RealtimeConversationVersion;
-use codex_protocol::protocol::RealtimeOutputModality;
-use codex_protocol::protocol::RealtimeVoice;
-use codex_protocol::protocol::RealtimeVoicesList;
 use core_test_support::responses;
 use core_test_support::responses::WebSocketConnectionConfig;
 use core_test_support::responses::WebSocketRequest;
@@ -53,6 +12,47 @@ use core_test_support::responses::WebSocketTestServer;
 use core_test_support::responses::start_websocket_server;
 use core_test_support::responses::start_websocket_server_with_headers;
 use core_test_support::skip_if_no_network;
+use crewon_app_server_protocol::CommandExecutionStatus;
+use crewon_app_server_protocol::ItemCompletedNotification;
+use crewon_app_server_protocol::ItemStartedNotification;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::LoginAccountResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ThreadItem;
+use crewon_app_server_protocol::ThreadRealtimeAppendAudioParams;
+use crewon_app_server_protocol::ThreadRealtimeAppendAudioResponse;
+use crewon_app_server_protocol::ThreadRealtimeAppendTextParams;
+use crewon_app_server_protocol::ThreadRealtimeAppendTextResponse;
+use crewon_app_server_protocol::ThreadRealtimeAudioChunk;
+use crewon_app_server_protocol::ThreadRealtimeClosedNotification;
+use crewon_app_server_protocol::ThreadRealtimeErrorNotification;
+use crewon_app_server_protocol::ThreadRealtimeItemAddedNotification;
+use crewon_app_server_protocol::ThreadRealtimeListVoicesParams;
+use crewon_app_server_protocol::ThreadRealtimeListVoicesResponse;
+use crewon_app_server_protocol::ThreadRealtimeOutputAudioDeltaNotification;
+use crewon_app_server_protocol::ThreadRealtimeSdpNotification;
+use crewon_app_server_protocol::ThreadRealtimeStartParams;
+use crewon_app_server_protocol::ThreadRealtimeStartResponse;
+use crewon_app_server_protocol::ThreadRealtimeStartTransport;
+use crewon_app_server_protocol::ThreadRealtimeStartedNotification;
+use crewon_app_server_protocol::ThreadRealtimeStopParams;
+use crewon_app_server_protocol::ThreadRealtimeStopResponse;
+use crewon_app_server_protocol::ThreadRealtimeTranscriptDeltaNotification;
+use crewon_app_server_protocol::ThreadRealtimeTranscriptDoneNotification;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnCompletedNotification;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::TurnStartedNotification;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_features::FEATURES;
+use crewon_features::Feature;
+use crewon_protocol::protocol::RealtimeConversationVersion;
+use crewon_protocol::protocol::RealtimeOutputModality;
+use crewon_protocol::protocol::RealtimeVoice;
+use crewon_protocol::protocol::RealtimeVoicesList;
 use pretty_assertions::assert_eq;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -76,7 +76,7 @@ use wiremock::matchers::path_regex;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const DELEGATED_SHELL_TOOL_TIMEOUT_MS: u64 = 30_000;
-const STARTUP_CONTEXT_HEADER: &str = "Startup context from Codex.";
+const STARTUP_CONTEXT_HEADER: &str = "Startup context from Crewon.";
 const V2_STEERING_ACKNOWLEDGEMENT: &str =
     "This was sent to steer the previous background agent task.";
 const V2_HANDOFF_COMPLETE_ACKNOWLEDGEMENT: &str =
@@ -1175,7 +1175,7 @@ async fn realtime_webrtc_start_emits_sdp_notification() -> Result<()> {
             .headers
             .get("content-type")
             .and_then(|value| value.to_str().ok()),
-        Some("multipart/form-data; boundary=codex-realtime-call-boundary")
+        Some("multipart/form-data; boundary=crewon-realtime-call-boundary")
     );
     let body = String::from_utf8(request.body).context("multipart body should be utf-8")?;
     let session = r#"{"tool_choice":"auto","type":"realtime","model":"gpt-realtime-1.5","instructions":"backend prompt\n\nstartup context","output_modalities":["audio"],"audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"noise_reduction":{"type":"near_field"},"transcription":{"model":"gpt-4o-mini-transcribe"},"turn_detection":{"type":"server_vad","interrupt_response":true,"create_response":true,"silence_duration_ms":500}},"output":{"format":{"type":"audio/pcm","rate":24000},"voice":"marin"}},"tools":[{"type":"function","name":"background_agent","description":"Send a user request to the background agent. Use this as the default action. Do not rephrase the user's ask or rewrite it in your own words; pass along the user's own words. If the background agent is idle, this starts a new task and returns the final result to the user. If the background agent is already working on a task, this sends the request as guidance to steer that previous task. If the user asks to do something next, later, after this, or once current work finishes, call this tool so the work is actually queued instead of merely promising to do it later.","parameters":{"type":"object","properties":{"prompt":{"type":"string","description":"The user request to delegate to the background agent."}},"required":["prompt"],"additionalProperties":false}},{"type":"function","name":"remain_silent","description":"Call this when the best response is to say nothing. Use it instead of speaking after hidden system/control messages, after background agent updates in silent modes, or whenever acknowledging aloud would be distracting. This tool has no user-visible effect.","parameters":{"type":"object","properties":{},"additionalProperties":false}}]}"#;
@@ -1183,18 +1183,18 @@ async fn realtime_webrtc_start_emits_sdp_notification() -> Result<()> {
     assert_eq!(
         body,
         format!(
-            "--codex-realtime-call-boundary\r\n\
+            "--crewon-realtime-call-boundary\r\n\
              Content-Disposition: form-data; name=\"sdp\"\r\n\
              Content-Type: application/sdp\r\n\
              \r\n\
              v=offer\r\n\
              \r\n\
-             --codex-realtime-call-boundary\r\n\
+             --crewon-realtime-call-boundary\r\n\
              Content-Disposition: form-data; name=\"session\"\r\n\
              Content-Type: application/json\r\n\
              \r\n\
              {session}\r\n\
-             --codex-realtime-call-boundary--\r\n"
+             --crewon-realtime-call-boundary--\r\n"
         )
     );
 
@@ -1861,7 +1861,7 @@ async fn webrtc_v2_background_agent_steering_ack_requests_response_create() -> R
     // acknowledgement so it can surface that acknowledgement to the user.
     assert_v2_response_create(&harness.sideband_outbound_request(/*request_index*/ 2).await);
 
-    // Phase 4: release the gated delegated turn. Codex should then continue
+    // Phase 4: release the gated delegated turn. Crewon should then continue
     // the same run with the steering text included in the follow-up Responses
     // request, proving realtime did not merely acknowledge and drop it.
     let _ = gate_completed_tx.send(());
@@ -2443,24 +2443,24 @@ fn assert_call_create_multipart(
             .headers
             .get("content-type")
             .and_then(|value| value.to_str().ok()),
-        Some("multipart/form-data; boundary=codex-realtime-call-boundary")
+        Some("multipart/form-data; boundary=crewon-realtime-call-boundary")
     );
     let body = String::from_utf8(request.body).context("multipart body should be utf-8")?;
     let session = normalized_json_string(session)?;
     assert_eq!(
         body,
         format!(
-            "--codex-realtime-call-boundary\r\n\
+            "--crewon-realtime-call-boundary\r\n\
              Content-Disposition: form-data; name=\"sdp\"\r\n\
              Content-Type: application/sdp\r\n\
              \r\n\
              {offer_sdp}\r\n\
-             --codex-realtime-call-boundary\r\n\
+             --crewon-realtime-call-boundary\r\n\
              Content-Disposition: form-data; name=\"session\"\r\n\
              Content-Type: application/json\r\n\
              \r\n\
              {session}\r\n\
-             --codex-realtime-call-boundary--\r\n"
+             --crewon-realtime-call-boundary--\r\n"
         )
     );
     Ok(())

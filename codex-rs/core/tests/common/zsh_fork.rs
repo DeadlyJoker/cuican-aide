@@ -2,15 +2,15 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use codex_core::config::Config;
-use codex_core::config::Constrained;
-use codex_features::Feature;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
+use crewon_core::config::Config;
+use crewon_core::config::Constrained;
+use crewon_features::Feature;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
 
-use crate::test_codex::TestCodex;
-use crate::test_codex::test_codex;
+use crate::test_crewon::TestCrewon;
+use crate::test_crewon::test_crewon;
 
 #[derive(Clone)]
 pub struct ZshForkRuntime {
@@ -64,9 +64,9 @@ pub fn zsh_fork_runtime(test_name: &str) -> Result<Option<ZshForkRuntime>> {
         );
         return Ok(None);
     }
-    let Ok(main_execve_wrapper_exe) = codex_utils_cargo_bin::cargo_bin("codex-execve-wrapper")
+    let Ok(main_execve_wrapper_exe) = crewon_utils_cargo_bin::cargo_bin("crewon-execve-wrapper")
     else {
-        eprintln!("skipping {test_name}: unable to resolve `codex-execve-wrapper` binary");
+        eprintln!("skipping {test_name}: unable to resolve `crewon-execve-wrapper` binary");
         return Ok(None);
     };
 
@@ -82,11 +82,11 @@ pub async fn build_zsh_fork_test<F>(
     approval_policy: AskForApproval,
     permission_profile: PermissionProfile,
     pre_build_hook: F,
-) -> Result<TestCodex>
+) -> Result<TestCrewon>
 where
     F: FnOnce(&Path) + Send + 'static,
 {
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(pre_build_hook)
         .with_config(move |config| {
             runtime.apply_to_config(config, approval_policy, permission_profile);
@@ -100,11 +100,11 @@ pub async fn build_unified_exec_zsh_fork_test<F>(
     approval_policy: AskForApproval,
     permission_profile: PermissionProfile,
     pre_build_hook: F,
-) -> Result<TestCodex>
+) -> Result<TestCrewon>
 where
     F: FnOnce(&Path) + Send + 'static,
 {
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(pre_build_hook)
         .with_config(move |config| {
             runtime.apply_to_config(config, approval_policy, permission_profile);
@@ -122,7 +122,7 @@ where
 }
 
 fn find_test_zsh_path() -> Result<Option<PathBuf>> {
-    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let repo_root = crewon_utils_cargo_bin::repo_root()?;
     let dotslash_zsh = repo_root.join("codex-rs/app-server/tests/suite/zsh");
     if !dotslash_zsh.is_file() {
         eprintln!(

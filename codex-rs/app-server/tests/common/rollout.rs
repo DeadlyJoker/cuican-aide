@@ -1,13 +1,13 @@
 use anyhow::Result;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::GitInfo;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::TokenCountEvent;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::protocol::TokenUsageInfo;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::GitInfo;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::TokenCountEvent;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::protocol::TokenUsageInfo;
 use serde_json::json;
 use std::fs;
 use std::fs::FileTimes;
@@ -50,7 +50,7 @@ pub fn create_fake_rollout(
         preview,
         model_provider,
         git_info,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     )
 }
 
@@ -184,7 +184,7 @@ fn create_fake_rollout_with_source_and_parent_thread_id(
         timestamp: meta_rfc3339.to_string(),
         cwd: PathBuf::from("/"),
         originator: "codex".to_string(),
-        cli_version: "0.0.0".to_string(),
+        client_version: "0.0.0".to_string(),
         source,
         thread_source: None,
         agent_path: None,
@@ -270,8 +270,8 @@ pub fn create_fake_rollout_with_text_elements(
         timestamp: meta_rfc3339.to_string(),
         cwd: PathBuf::from("/"),
         originator: "codex".to_string(),
-        cli_version: "0.0.0".to_string(),
-        source: SessionSource::Cli,
+        client_version: "0.0.0".to_string(),
+        source: SessionSource::LegacyCli,
         thread_source: None,
         agent_path: None,
         agent_nickname: None,

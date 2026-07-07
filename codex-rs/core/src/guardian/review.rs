@@ -1,23 +1,23 @@
-use codex_analytics::GuardianApprovalRequestSource;
-use codex_analytics::GuardianReviewAnalyticsResult;
-use codex_analytics::GuardianReviewDecision;
-use codex_analytics::GuardianReviewFailureReason;
-use codex_analytics::GuardianReviewTerminalStatus;
-use codex_analytics::GuardianReviewTrackContext;
-use codex_analytics::GuardianReviewedAction;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::CodexErrorInfo;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::GuardianAssessmentDecisionSource;
-use codex_protocol::protocol::GuardianAssessmentEvent;
-use codex_protocol::protocol::GuardianAssessmentStatus;
-use codex_protocol::protocol::GuardianRiskLevel;
-use codex_protocol::protocol::GuardianUserAuthorization;
-use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::TurnAbortReason;
-use codex_protocol::protocol::WarningEvent;
+use crewon_analytics::GuardianApprovalRequestSource;
+use crewon_analytics::GuardianReviewAnalyticsResult;
+use crewon_analytics::GuardianReviewDecision;
+use crewon_analytics::GuardianReviewFailureReason;
+use crewon_analytics::GuardianReviewTerminalStatus;
+use crewon_analytics::GuardianReviewTrackContext;
+use crewon_analytics::GuardianReviewedAction;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::CodexErrorInfo;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::GuardianAssessmentDecisionSource;
+use crewon_protocol::protocol::GuardianAssessmentEvent;
+use crewon_protocol::protocol::GuardianAssessmentStatus;
+use crewon_protocol::protocol::GuardianRiskLevel;
+use crewon_protocol::protocol::GuardianUserAuthorization;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::TurnAbortReason;
+use crewon_protocol::protocol::WarningEvent;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use tokio::time::Instant;
@@ -181,11 +181,11 @@ pub(crate) fn routes_approval_to_guardian_with_reviewer(
 }
 
 pub(crate) fn is_guardian_reviewer_source(
-    session_source: &codex_protocol::protocol::SessionSource,
+    session_source: &crewon_protocol::protocol::SessionSource,
 ) -> bool {
     matches!(
         session_source,
-        codex_protocol::protocol::SessionSource::SubAgent(SubAgentSource::Other(label))
+        crewon_protocol::protocol::SessionSource::SubAgent(SubAgentSource::Other(label))
             if label == GUARDIAN_REVIEWER_NAME
     )
 }
@@ -704,11 +704,11 @@ async fn run_guardian_review_session_before_deadline(
     let available_models = session
         .services
         .models_manager
-        .list_models(codex_models_manager::manager::RefreshStrategy::Offline)
+        .list_models(crewon_models_manager::manager::RefreshStrategy::Offline)
         .await;
     let preferred_reasoning_effort = |supports_low: bool, fallback| {
         if supports_low {
-            Some(codex_protocol::openai_models::ReasoningEffort::Low)
+            Some(crewon_protocol::openai_models::ReasoningEffort::Low)
         } else {
             fallback
         }
@@ -721,10 +721,9 @@ async fn run_guardian_review_session_before_deadline(
         .find(|preset| preset.model == review_model_id);
     let (guardian_model, guardian_reasoning_effort) = if let Some(preset) = review_model {
         let reasoning_effort = preferred_reasoning_effort(
-            preset
-                .supported_reasoning_efforts
-                .iter()
-                .any(|effort| effort.effort == codex_protocol::openai_models::ReasoningEffort::Low),
+            preset.supported_reasoning_efforts.iter().any(|effort| {
+                effort.effort == crewon_protocol::openai_models::ReasoningEffort::Low
+            }),
             Some(preset.default_reasoning_effort.clone()),
         );
         (review_model_id.to_string(), reasoning_effort)
@@ -733,7 +732,9 @@ async fn run_guardian_review_session_before_deadline(
             turn.model_info
                 .supported_reasoning_levels
                 .iter()
-                .any(|preset| preset.effort == codex_protocol::openai_models::ReasoningEffort::Low),
+                .any(|preset| {
+                    preset.effort == crewon_protocol::openai_models::ReasoningEffort::Low
+                }),
             turn.reasoning_effort
                 .clone()
                 .or_else(|| turn.model_info.default_reasoning_level.clone()),

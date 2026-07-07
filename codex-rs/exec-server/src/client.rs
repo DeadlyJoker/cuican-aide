@@ -7,7 +7,7 @@ use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
-use codex_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCNotification;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use serde_json::Value;
@@ -104,7 +104,7 @@ const PROCESS_EVENT_RETAINED_BYTES: usize = 1024 * 1024;
 impl Default for ExecServerClientConnectOptions {
     fn default() -> Self {
         Self {
-            client_name: "codex-core".to_string(),
+            client_name: "crewon-core".to_string(),
             initialize_timeout: INITIALIZE_TIMEOUT,
             resume_session_id: None,
         }
@@ -973,9 +973,9 @@ async fn handle_server_notification(
 
 #[cfg(test)]
 mod tests {
-    use codex_app_server_protocol::JSONRPCMessage;
-    use codex_app_server_protocol::JSONRPCNotification;
-    use codex_app_server_protocol::JSONRPCResponse;
+    use crewon_app_server_protocol::JSONRPCMessage;
+    use crewon_app_server_protocol::JSONRPCNotification;
+    use crewon_app_server_protocol::JSONRPCResponse;
     use futures::SinkExt;
     use futures::StreamExt;
     use pretty_assertions::assert_eq;

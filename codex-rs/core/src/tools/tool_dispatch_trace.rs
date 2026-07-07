@@ -1,6 +1,6 @@
 //! Adapter between core tool dispatch objects and rollout-trace events.
 //!
-//! `codex-rollout-trace` owns the event schema and writer behavior. This module
+//! `crewon-rollout-trace` owns the event schema and writer behavior. This module
 //! keeps the core-specific mapping from registry invocations/results out of the
 //! registry control flow.
 
@@ -9,12 +9,12 @@ use crate::tools::context::ToolCallSource;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolOutput;
 use crate::tools::context::ToolPayload;
-use codex_rollout_trace::ExecutionStatus;
-use codex_rollout_trace::ToolDispatchInvocation;
-use codex_rollout_trace::ToolDispatchPayload;
-use codex_rollout_trace::ToolDispatchRequester;
-use codex_rollout_trace::ToolDispatchResult;
-use codex_rollout_trace::ToolDispatchTraceContext;
+use crewon_rollout_trace::ExecutionStatus;
+use crewon_rollout_trace::ToolDispatchInvocation;
+use crewon_rollout_trace::ToolDispatchPayload;
+use crewon_rollout_trace::ToolDispatchRequester;
+use crewon_rollout_trace::ToolDispatchResult;
+use crewon_rollout_trace::ToolDispatchTraceContext;
 
 /// Keeps registry early-return paths paired with trace end events.
 pub(crate) struct ToolDispatchTrace {

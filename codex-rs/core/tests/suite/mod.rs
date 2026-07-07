@@ -1,26 +1,26 @@
 // Aggregates all former standalone integration tests as modules.
-use codex_apply_patch::CODEX_CORE_APPLY_PATCH_ARG1;
-use codex_exec_server::CODEX_FS_HELPER_ARG1;
-use codex_sandboxing::landlock::CODEX_LINUX_SANDBOX_ARG0;
-use codex_test_binary_support::TestBinaryDispatchGuard;
-use codex_test_binary_support::TestBinaryDispatchMode;
-use codex_test_binary_support::configure_test_binary_dispatch;
+use crewon_apply_patch::CREWON_CORE_APPLY_PATCH_ARG1;
+use crewon_exec_server::CREWON_FS_HELPER_ARG1;
+use crewon_sandboxing::landlock::CREWON_LINUX_SANDBOX_ARG0;
+use crewon_test_binary_support::TestBinaryDispatchGuard;
+use crewon_test_binary_support::TestBinaryDispatchMode;
+use crewon_test_binary_support::configure_test_binary_dispatch;
 use ctor::ctor;
 
 // This code runs before any other tests are run.
-// It allows the test binary to behave like codex and dispatch to apply_patch and codex-linux-sandbox
+// It allows the test binary to behave like codex and dispatch to apply_patch and crewon-linux-sandbox
 // based on the arg0.
 // NOTE: this doesn't work on ARM
 #[ctor]
 pub static CODEX_ALIASES_TEMP_DIR: Option<TestBinaryDispatchGuard> = {
-    configure_test_binary_dispatch("codex-core-tests", |exe_name, argv1| {
-        if argv1 == Some(CODEX_CORE_APPLY_PATCH_ARG1) {
+    configure_test_binary_dispatch("crewon-core-tests", |exe_name, argv1| {
+        if argv1 == Some(CREWON_CORE_APPLY_PATCH_ARG1) {
             return TestBinaryDispatchMode::DispatchArg0Only;
         }
-        if argv1 == Some(CODEX_FS_HELPER_ARG1) {
+        if argv1 == Some(CREWON_FS_HELPER_ARG1) {
             return TestBinaryDispatchMode::DispatchArg0Only;
         }
-        if exe_name == CODEX_LINUX_SANDBOX_ARG0 {
+        if exe_name == CREWON_LINUX_SANDBOX_ARG0 {
             return TestBinaryDispatchMode::DispatchArg0Only;
         }
         TestBinaryDispatchMode::InstallAliases
@@ -34,20 +34,19 @@ mod agent_execution;
 mod agent_jobs;
 mod agent_websocket;
 mod agents_md;
-mod apply_patch_cli;
+mod apply_patch_helper;
 #[cfg(not(target_os = "windows"))]
 mod approvals;
 mod auto_review;
-mod cli_stream;
 mod client;
 mod client_websockets;
 mod code_mode;
-mod codex_delegate;
 mod collaboration_instructions;
 mod compact;
 mod compact_remote;
 mod compact_remote_parity;
 mod compact_resume_fork;
+mod crewon_delegate;
 mod deprecation_notice;
 mod exec;
 mod exec_policy;
@@ -62,7 +61,6 @@ mod hooks_mcp;
 mod image_rollout;
 mod items;
 mod json_result;
-mod live_cli;
 mod mcp_turn_metadata;
 mod model_overrides;
 mod model_runtime_selectors;

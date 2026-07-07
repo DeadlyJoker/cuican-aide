@@ -1,26 +1,26 @@
 use std::collections::HashSet;
 
-use codex_app_server_protocol::AppInfo;
-use codex_config::types::ToolSuggestDisabledTool;
-use codex_core_plugins::remote::REMOTE_GLOBAL_MARKETPLACE_NAME;
-use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
-use codex_rmcp_client::ElicitationAction;
-use codex_rmcp_client::ElicitationResponse;
-use codex_tools::DiscoverableTool;
-use codex_tools::DiscoverableToolAction;
-use codex_tools::DiscoverableToolType;
-use codex_tools::LIST_AVAILABLE_PLUGINS_TO_INSTALL_TOOL_NAME;
-use codex_tools::REQUEST_PLUGIN_INSTALL_PERSIST_ALWAYS_VALUE;
-use codex_tools::REQUEST_PLUGIN_INSTALL_PERSIST_KEY;
-use codex_tools::REQUEST_PLUGIN_INSTALL_TOOL_NAME;
-use codex_tools::RequestPluginInstallArgs;
-use codex_tools::RequestPluginInstallResult;
-use codex_tools::ToolName;
-use codex_tools::ToolSpec;
-use codex_tools::all_requested_connectors_picked_up;
-use codex_tools::build_request_plugin_install_elicitation_request;
-use codex_tools::filter_request_plugin_install_discoverable_tools_for_client;
-use codex_tools::verified_connector_install_completed;
+use crewon_app_server_protocol::AppInfo;
+use crewon_config::types::ToolSuggestDisabledTool;
+use crewon_core_plugins::remote::REMOTE_GLOBAL_MARKETPLACE_NAME;
+use crewon_mcp::CREWON_APPS_MCP_SERVER_NAME;
+use crewon_rmcp_client::ElicitationAction;
+use crewon_rmcp_client::ElicitationResponse;
+use crewon_tools::DiscoverableTool;
+use crewon_tools::DiscoverableToolAction;
+use crewon_tools::DiscoverableToolType;
+use crewon_tools::LIST_AVAILABLE_PLUGINS_TO_INSTALL_TOOL_NAME;
+use crewon_tools::REQUEST_PLUGIN_INSTALL_PERSIST_ALWAYS_VALUE;
+use crewon_tools::REQUEST_PLUGIN_INSTALL_PERSIST_KEY;
+use crewon_tools::REQUEST_PLUGIN_INSTALL_TOOL_NAME;
+use crewon_tools::RequestPluginInstallArgs;
+use crewon_tools::RequestPluginInstallResult;
+use crewon_tools::ToolName;
+use crewon_tools::ToolSpec;
+use crewon_tools::all_requested_connectors_picked_up;
+use crewon_tools::build_request_plugin_install_elicitation_request;
+use crewon_tools::filter_request_plugin_install_discoverable_tools_for_client;
+use crewon_tools::verified_connector_install_completed;
 use rmcp::model::RequestId;
 use serde_json::Value;
 use tracing::warn;
@@ -61,7 +61,7 @@ impl ToolExecutor<ToolInvocation> for RequestPluginInstallHandler {
         true
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle(&self, invocation: ToolInvocation) -> crewon_tools::ToolExecutorFuture<'_> {
         Box::pin(self.handle_call(invocation))
     }
 }
@@ -102,10 +102,10 @@ impl RequestPluginInstallHandler {
             ));
         }
         if args.tool_type == DiscoverableToolType::Plugin
-            && turn.app_server_client_name.as_deref() == Some("codex-tui")
+            && turn.app_server_client_name.as_deref() == Some("crewon-web")
         {
             return Err(FunctionCallError::RespondToModel(
-                "plugin install requests are not available in codex-tui yet".to_string(),
+                "plugin install requests are not available in crewon-web yet".to_string(),
             ));
         }
 
@@ -125,7 +125,7 @@ impl RequestPluginInstallHandler {
 
         let request_id = RequestId::String(format!("request_plugin_install_{call_id}").into());
         let params = build_request_plugin_install_elicitation_request(
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             session.thread_id.to_string(),
             turn.sub_id.clone(),
             &args,
@@ -240,7 +240,7 @@ fn request_plugin_install_response_requests_persistent_disable(
 }
 
 async fn persist_disabled_install_request(
-    codex_home: &codex_utils_absolute_path::AbsolutePathBuf,
+    codex_home: &crewon_utils_absolute_path::AbsolutePathBuf,
     tool: &DiscoverableTool,
 ) -> anyhow::Result<()> {
     ConfigEditsBuilder::new(codex_home)
@@ -264,7 +264,7 @@ async fn verify_request_plugin_install_completed(
     session: &crate::session::session::Session,
     turn: &crate::session::turn_context::TurnContext,
     tool: &DiscoverableTool,
-    auth: Option<&codex_login::CodexAuth>,
+    auth: Option<&crewon_login::CrewonAuth>,
 ) -> bool {
     match tool {
         DiscoverableTool::Connector(connector) => refresh_missing_requested_connectors(
@@ -312,7 +312,7 @@ fn is_remote_plugin_install_suggestion(plugin_id: &str) -> bool {
 async fn refresh_missing_requested_connectors(
     session: &crate::session::session::Session,
     turn: &crate::session::turn_context::TurnContext,
-    auth: Option<&codex_login::CodexAuth>,
+    auth: Option<&crewon_login::CrewonAuth>,
     expected_connector_ids: &[String],
     tool_id: &str,
 ) -> Option<Vec<AppInfo>> {
@@ -330,7 +330,7 @@ async fn refresh_missing_requested_connectors(
         return Some(accessible_connectors);
     }
 
-    match manager.hard_refresh_codex_apps_tools_cache().await {
+    match manager.hard_refresh_crewon_apps_tools_cache().await {
         Ok(mcp_tools) => {
             let accessible_connectors = connectors::with_app_enabled_state(
                 connectors::accessible_connectors_from_mcp_tools(&mcp_tools),
@@ -345,7 +345,7 @@ async fn refresh_missing_requested_connectors(
         }
         Err(err) => {
             warn!(
-                "failed to refresh codex apps tools cache after plugin install request for {tool_id}: {err:#}"
+                "failed to refresh Crewon apps tools cache after plugin install request for {tool_id}: {err:#}"
             );
             None
         }
@@ -355,7 +355,7 @@ async fn refresh_missing_requested_connectors(
 fn verified_plugin_install_completed(
     tool_id: &str,
     config: &crate::config::Config,
-    plugins_manager: &codex_core_plugins::PluginsManager,
+    plugins_manager: &crewon_core_plugins::PluginsManager,
 ) -> bool {
     let plugins_input = config.plugins_config_input();
     plugins_manager

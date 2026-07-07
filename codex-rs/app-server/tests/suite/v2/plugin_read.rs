@@ -5,25 +5,25 @@ use app_test_support::ChatGptAuthFixture;
 use app_test_support::TestAppServer;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
-use codex_app_server_protocol::AppTemplateSummary;
-use codex_app_server_protocol::AppTemplateUnavailableReason;
-use codex_app_server_protocol::HookEventName;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::PluginAuthPolicy;
-use codex_app_server_protocol::PluginInstallPolicy;
-use codex_app_server_protocol::PluginReadParams;
-use codex_app_server_protocol::PluginReadResponse;
-use codex_app_server_protocol::PluginShareDiscoverability;
-use codex_app_server_protocol::PluginSharePrincipal;
-use codex_app_server_protocol::PluginSharePrincipalRole;
-use codex_app_server_protocol::PluginSharePrincipalType;
-use codex_app_server_protocol::PluginSkillReadParams;
-use codex_app_server_protocol::PluginSkillReadResponse;
-use codex_app_server_protocol::PluginSource;
-use codex_app_server_protocol::RequestId;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::AppTemplateSummary;
+use crewon_app_server_protocol::AppTemplateUnavailableReason;
+use crewon_app_server_protocol::HookEventName;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::PluginAuthPolicy;
+use crewon_app_server_protocol::PluginInstallPolicy;
+use crewon_app_server_protocol::PluginReadParams;
+use crewon_app_server_protocol::PluginReadResponse;
+use crewon_app_server_protocol::PluginShareDiscoverability;
+use crewon_app_server_protocol::PluginSharePrincipal;
+use crewon_app_server_protocol::PluginSharePrincipalRole;
+use crewon_app_server_protocol::PluginSharePrincipalType;
+use crewon_app_server_protocol::PluginSkillReadParams;
+use crewon_app_server_protocol::PluginSkillReadResponse;
+use crewon_app_server_protocol::PluginSource;
+use crewon_app_server_protocol::RequestId;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use tempfile::TempDir;
@@ -799,11 +799,11 @@ async fn plugin_read_returns_canonical_openai_curated_marketplace_name() -> Resu
         "demo-plugin",
         "./demo-plugin",
     )?;
-    std::fs::create_dir_all(repo_root.path().join("demo-plugin/.codex-plugin"))?;
+    std::fs::create_dir_all(repo_root.path().join("demo-plugin/.crewon-plugin"))?;
     std::fs::write(
         repo_root
             .path()
-            .join("demo-plugin/.codex-plugin/plugin.json"),
+            .join("demo-plugin/.crewon-plugin/plugin.json"),
         r#"{
   "name": "demo-plugin",
   "description": "OpenAI curated plugin"
@@ -866,15 +866,15 @@ async fn plugin_read_returns_share_context_for_shared_local_plugin() -> Result<(
     )?;
     write_plugin_marketplace(
         repo_root.path(),
-        "codex-curated",
+        "crewon-curated",
         "demo-plugin",
         "./demo-plugin",
     )?;
-    std::fs::create_dir_all(repo_root.path().join("demo-plugin/.codex-plugin"))?;
+    std::fs::create_dir_all(repo_root.path().join("demo-plugin/.crewon-plugin"))?;
     std::fs::write(
         repo_root
             .path()
-            .join("demo-plugin/.codex-plugin/plugin.json"),
+            .join("demo-plugin/.crewon-plugin/plugin.json"),
         r#"{"name":"demo-plugin","version":"1.2.3"}"#,
     )?;
     let plugin_path = AbsolutePathBuf::try_from(repo_root.path().join("demo-plugin"))?;
@@ -1005,15 +1005,15 @@ async fn plugin_read_keeps_remote_version_when_share_principals_are_missing() ->
     )?;
     write_plugin_marketplace(
         repo_root.path(),
-        "codex-curated",
+        "crewon-curated",
         "demo-plugin",
         "./demo-plugin",
     )?;
-    std::fs::create_dir_all(repo_root.path().join("demo-plugin/.codex-plugin"))?;
+    std::fs::create_dir_all(repo_root.path().join("demo-plugin/.crewon-plugin"))?;
     std::fs::write(
         repo_root
             .path()
-            .join("demo-plugin/.codex-plugin/plugin.json"),
+            .join("demo-plugin/.crewon-plugin/plugin.json"),
         r#"{"name":"demo-plugin","version":"1.2.3"}"#,
     )?;
     let plugin_path = AbsolutePathBuf::try_from(repo_root.path().join("demo-plugin"))?;
@@ -1094,7 +1094,7 @@ async fn plugin_read_falls_back_to_local_share_context_without_remote_auth() -> 
     write_plugins_enabled_config(&codex_home)?;
     write_plugin_marketplace(
         repo_root.path(),
-        "codex-curated",
+        "crewon-curated",
         "demo-plugin",
         "./demo-plugin",
     )?;
@@ -1147,7 +1147,7 @@ async fn plugin_read_fails_on_malformed_share_mapping() -> Result<()> {
     write_plugins_enabled_config(&codex_home)?;
     write_plugin_marketplace(
         repo_root.path(),
-        "codex-curated",
+        "crewon-curated",
         "demo-plugin",
         "./demo-plugin",
     )?;
@@ -1196,14 +1196,14 @@ async fn plugin_read_returns_plugin_details_with_bundle_contents() -> Result<()>
     let plugin_root = repo_root.path().join("plugins/demo-plugin");
     std::fs::create_dir_all(repo_root.path().join(".git"))?;
     std::fs::create_dir_all(repo_root.path().join(".agents/plugins"))?;
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::create_dir_all(plugin_root.join("hooks"))?;
     std::fs::create_dir_all(plugin_root.join("skills/thread-summarizer"))?;
     std::fs::create_dir_all(plugin_root.join("skills/chatgpt-only"))?;
     std::fs::write(
         repo_root.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -1221,7 +1221,7 @@ async fn plugin_read_returns_plugin_details_with_bundle_contents() -> Result<()>
 }"#,
     )?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r##"{
   "name": "demo-plugin",
   "description": "Longer manifest description",
@@ -1343,14 +1343,14 @@ plugins = true
 name = "demo-plugin:thread-summarizer"
 enabled = false
 
-[plugins."demo-plugin@codex-curated"]
+[plugins."demo-plugin@crewon-curated"]
 enabled = true
 
-[hooks.state."demo-plugin@codex-curated:hooks/hooks.json:pre_tool_use:0:0"]
+[hooks.state."demo-plugin@crewon-curated:hooks/hooks.json:pre_tool_use:0:0"]
 enabled = false
 "#,
     )?;
-    write_installed_plugin(&codex_home, "codex-curated", "demo-plugin")?;
+    write_installed_plugin(&codex_home, "crewon-curated", "demo-plugin")?;
 
     let mut mcp = TestAppServer::new(codex_home.path()).await?;
     timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
@@ -1372,9 +1372,9 @@ enabled = false
     .await??;
     let response: PluginReadResponse = to_response(response)?;
 
-    assert_eq!(response.plugin.marketplace_name, "codex-curated");
+    assert_eq!(response.plugin.marketplace_name, "crewon-curated");
     assert_eq!(response.plugin.marketplace_path, Some(marketplace_path));
-    assert_eq!(response.plugin.summary.id, "demo-plugin@codex-curated");
+    assert_eq!(response.plugin.summary.id, "demo-plugin@crewon-curated");
     assert_eq!(response.plugin.summary.name, "demo-plugin");
     assert_eq!(
         response.plugin.description.as_deref(),
@@ -1437,16 +1437,16 @@ enabled = false
     assert_eq!(
         response.plugin.hooks,
         vec![
-            codex_app_server_protocol::PluginHookSummary {
-                key: "demo-plugin@codex-curated:hooks/hooks.json:pre_tool_use:0:0".to_string(),
+            crewon_app_server_protocol::PluginHookSummary {
+                key: "demo-plugin@crewon-curated:hooks/hooks.json:pre_tool_use:0:0".to_string(),
                 event_name: HookEventName::PreToolUse,
             },
-            codex_app_server_protocol::PluginHookSummary {
-                key: "demo-plugin@codex-curated:hooks/hooks.json:pre_tool_use:0:1".to_string(),
+            crewon_app_server_protocol::PluginHookSummary {
+                key: "demo-plugin@crewon-curated:hooks/hooks.json:pre_tool_use:0:1".to_string(),
                 event_name: HookEventName::PreToolUse,
             },
-            codex_app_server_protocol::PluginHookSummary {
-                key: "demo-plugin@codex-curated:hooks/hooks.json:session_start:0:0".to_string(),
+            crewon_app_server_protocol::PluginHookSummary {
+                key: "demo-plugin@crewon-curated:hooks/hooks.json:session_start:0:0".to_string(),
                 event_name: HookEventName::SessionStart,
             },
         ]
@@ -1470,11 +1470,11 @@ async fn plugin_read_accepts_legacy_string_default_prompt() -> Result<()> {
     let plugin_root = repo_root.path().join("plugins/demo-plugin");
     std::fs::create_dir_all(repo_root.path().join(".git"))?;
     std::fs::create_dir_all(repo_root.path().join(".agents/plugins"))?;
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
         repo_root.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -1487,7 +1487,7 @@ async fn plugin_read_accepts_legacy_string_default_prompt() -> Result<()> {
 }"#,
     )?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r##"{
   "name": "demo-plugin",
   "interface": {
@@ -1608,7 +1608,7 @@ async fn plugin_read_returns_invalid_request_when_plugin_is_missing() -> Result<
     std::fs::write(
         repo_root.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -1661,7 +1661,7 @@ async fn plugin_read_returns_invalid_request_when_plugin_manifest_is_missing() -
     std::fs::write(
         repo_root.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -1709,7 +1709,7 @@ fn write_installed_plugin(
         .join("plugins/cache")
         .join(marketplace_name)
         .join(plugin_name)
-        .join("local/.codex-plugin");
+        .join("local/.crewon-plugin");
     std::fs::create_dir_all(&plugin_root)?;
     std::fs::write(
         plugin_root.join("plugin.json"),
@@ -1779,9 +1779,9 @@ fn write_plugin_source(
     app_ids: &[&str],
 ) -> Result<()> {
     let plugin_root = repo_root.join(plugin_name);
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         format!(r#"{{"name":"{plugin_name}"}}"#),
     )?;
 

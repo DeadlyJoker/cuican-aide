@@ -1,0 +1,366 @@
+import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
+import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import { describe, expect, it, vi } from "vitest";
+
+import type { AccountStatus } from "./appStatusTypes";
+import type { LibraryPanel } from "../domain/crewonDomain";
+import {
+  refreshAccountFromClientAction,
+  refreshSelectedThreadGoalFromClientAction,
+  refreshThreadFromClientAction,
+  refreshVisibleLibraryAction,
+  refreshVisibleSettingsAction,
+  reloadThreadsFromClientAction,
+  runSelectedThreadGoalEffectAction,
+  runSelectedThreadSummaryEffectAction,
+} from "./appNotificationRefreshActions";
+
+function thread(id: string, name = id): Thread {
+  return {
+    id,
+    sessionId: `${id}-session`,
+    forkedFromId: null,
+    parentThreadId: null,
+    preview: name,
+    ephemeral: false,
+    modelProvider: "openai",
+    createdAt: 1,
+    updatedAt: 1,
+    status: { type: "notLoaded" },
+    path: null,
+    cwd: "/tmp/project",
+    clientVersion: "0.1.0",
+    source: "appServer",
+    threadSource: "app_server",
+    agentNickname: null,
+    agentRole: null,
+    gitInfo: null,
+    name,
+    turns: [],
+  };
+}
+
+function conversationSummary(): ConversationSummary {
+  return {
+    cliVersion: "test",
+    conversationId: "thread-1",
+    cwd: "/repo",
+    gitInfo: null,
+    modelProvider: "openai",
+    path: "/thread",
+    preview: "Summary",
+    source: "unknown",
+    timestamp: null,
+    updatedAt: null,
+  };
+}
+
+function threadGoal(): ThreadGoal {
+  return {
+    threadId: "thread-1",
+    objective: "Ship",
+    status: "active",
+    tokenBudget: null,
+    tokensUsed: 0,
+    timeUsedSeconds: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
+async function settlePromises() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+describe("app notification refresh actions", () => {
+  it("refreshes account status from the client", async () => {
+    const accountStatus: AccountStatus = {
+      account: null,
+      requiresOpenaiAuth: true,
+    };
+    let refreshedAccount: AccountStatus | null = null;
+
+    refreshAccountFromClientAction({
+      client: {
+        async getAccount() {
+          return accountStatus;
+        },
+      },
+      setAccountStatus: (status) => {
+        refreshedAccount = status;
+      },
+    });
+    await settlePromises();
+
+    expect(refreshedAccount).toEqual(accountStatus);
+  });
+
+  it("upserts a refreshed thread", async () => {
+    let threads = [thread("thread-1", "Old"), thread("thread-2", "Other")];
+
+    refreshThreadFromClientAction({
+      client: {
+        async readThread() {
+          return thread("thread-1", "New");
+        },
+      },
+      setThreads: (updater) => {
+        threads = updater(threads);
+      },
+      threadId: "thread-1",
+    });
+    await settlePromises();
+
+    expect(threads).toEqual([thread("thread-1", "New"), thread("thread-2", "Other")]);
+  });
+
+  it("reloads threads with the archived flag", async () => {
+    const listThreads = vi.fn(async () => [thread("archived")]);
+    let threads: Thread[] = [];
+
+    reloadThreadsFromClientAction({
+      archived: true,
+      client: { listThreads },
+      setThreads: (nextThreads) => {
+        threads = nextThreads;
+      },
+    });
+    await settlePromises();
+
+    expect(listThreads).toHaveBeenCalledWith(true);
+    expect(threads).toEqual([thread("archived")]);
+  });
+
+  it("refreshes the selected thread goal", async () => {
+    const goal = threadGoal();
+    let refreshedGoal: ThreadGoal | null = null;
+
+    refreshSelectedThreadGoalFromClientAction({
+      client: {
+        async getThreadGoal() {
+          return { goal };
+        },
+      },
+      setThreadGoal: (nextGoal) => {
+        refreshedGoal = nextGoal;
+      },
+      threadId: "thread-1",
+    });
+    await settlePromises();
+
+    expect(refreshedGoal).toEqual(goal);
+  });
+
+  it("clears selected thread summary when there is no backend thread", () => {
+    let summary: ConversationSummary | null = conversationSummary();
+
+    const cleanup = runSelectedThreadSummaryEffectAction({
+      client: null,
+      isConnected: false,
+      isDemo: false,
+      isDemoThreadSelected: false,
+      selectedThreadId: "thread-1",
+      setConversationSummary: (nextSummary) => {
+        summary = nextSummary;
+      },
+    });
+
+    expect(cleanup).toBeUndefined();
+    expect(summary).toBeNull();
+  });
+
+  it("preserves selected thread summary while showing demo state", () => {
+    let summary: ConversationSummary | null = conversationSummary();
+
+    const cleanup = runSelectedThreadSummaryEffectAction({
+      client: null,
+      isConnected: false,
+      isDemo: true,
+      isDemoThreadSelected: true,
+      selectedThreadId: "demo-thread",
+      setConversationSummary: (nextSummary) => {
+        summary = nextSummary;
+      },
+    });
+
+    expect(cleanup).toBeUndefined();
+    expect(summary).toEqual(conversationSummary());
+  });
+
+  it("refreshes selected thread summary from the client", async () => {
+    const summary = conversationSummary();
+    let refreshedSummary: ConversationSummary | null = null;
+
+    runSelectedThreadSummaryEffectAction({
+      client: {
+        async getConversationSummary(threadId) {
+          expect(threadId).toBe("thread-1");
+          return { summary };
+        },
+      },
+      isConnected: true,
+      isDemo: false,
+      isDemoThreadSelected: false,
+      selectedThreadId: "thread-1",
+      setConversationSummary: (nextSummary) => {
+        refreshedSummary = nextSummary;
+      },
+    });
+    await settlePromises();
+
+    expect(refreshedSummary).toEqual(summary);
+  });
+
+  it("clears selected thread summary on refresh failure", async () => {
+    let summary: ConversationSummary | null = conversationSummary();
+
+    runSelectedThreadSummaryEffectAction({
+      client: {
+        async getConversationSummary() {
+          throw new Error("offline");
+        },
+      },
+      isConnected: true,
+      isDemo: false,
+      isDemoThreadSelected: false,
+      selectedThreadId: "thread-1",
+      setConversationSummary: (nextSummary) => {
+        summary = nextSummary;
+      },
+    });
+    await settlePromises();
+
+    expect(summary).toBeNull();
+  });
+
+  it("ignores selected thread summary refreshes after cleanup", async () => {
+    let resolveSummary: (summary: { summary: ConversationSummary | null }) => void =
+      () => {};
+    let summary: ConversationSummary | null = null;
+
+    const cleanup = runSelectedThreadSummaryEffectAction({
+      client: {
+        getConversationSummary() {
+          return new Promise<{ summary: ConversationSummary | null }>((resolve) => {
+            resolveSummary = resolve;
+          });
+        },
+      },
+      isConnected: true,
+      isDemo: false,
+      isDemoThreadSelected: false,
+      selectedThreadId: "thread-1",
+      setConversationSummary: (nextSummary) => {
+        summary = nextSummary;
+      },
+    });
+
+    cleanup?.();
+    resolveSummary({ summary: conversationSummary() });
+    await settlePromises();
+
+    expect(summary).toBeNull();
+  });
+
+  it("refreshes selected thread goal from the client", async () => {
+    const goal = threadGoal();
+    let refreshedGoal: ThreadGoal | null = null;
+
+    runSelectedThreadGoalEffectAction({
+      client: {
+        async getThreadGoal(threadId) {
+          expect(threadId).toBe("thread-1");
+          return { goal };
+        },
+      },
+      isConnected: true,
+      isDemo: false,
+      isDemoThreadSelected: false,
+      selectedThreadId: "thread-1",
+      setThreadGoal: (nextGoal) => {
+        refreshedGoal = nextGoal;
+      },
+    });
+    await settlePromises();
+
+    expect(refreshedGoal).toEqual(goal);
+  });
+
+  it("clears selected thread goal when there is no backend thread", () => {
+    let goal: ThreadGoal | null = threadGoal();
+
+    const cleanup = runSelectedThreadGoalEffectAction({
+      client: null,
+      isConnected: false,
+      isDemo: false,
+      isDemoThreadSelected: false,
+      selectedThreadId: "thread-1",
+      setThreadGoal: (nextGoal) => {
+        goal = nextGoal;
+      },
+    });
+
+    expect(cleanup).toBeUndefined();
+    expect(goal).toBeNull();
+  });
+
+  it("refreshes only the visible matching library", () => {
+    const openLibrary = vi.fn();
+    const panel: LibraryPanel = {
+      kind: "agents",
+      title: "Agents",
+      subtitle: "Library",
+      items: [],
+    };
+
+    refreshVisibleLibraryAction({
+      appView: "library",
+      kind: "agents",
+      libraryPanel: panel,
+      openLibrary,
+    });
+    refreshVisibleLibraryAction({
+      appView: "settings",
+      kind: "agents",
+      libraryPanel: panel,
+      openLibrary,
+    });
+    refreshVisibleLibraryAction({
+      appView: "library",
+      kind: "tools",
+      libraryPanel: panel,
+      openLibrary,
+    });
+
+    expect(openLibrary).toHaveBeenCalledTimes(1);
+    expect(openLibrary).toHaveBeenCalledWith("agents");
+  });
+
+  it("refreshes only visible matching settings sections", () => {
+    const refreshSettingsSection = vi.fn();
+
+    refreshVisibleSettingsAction({
+      appView: "settings",
+      refreshSettingsSection,
+      sections: ["browser", "connections"],
+      settingsSection: "browser",
+    });
+    refreshVisibleSettingsAction({
+      appView: "library",
+      refreshSettingsSection,
+      sections: ["browser"],
+      settingsSection: "browser",
+    });
+    refreshVisibleSettingsAction({
+      appView: "settings",
+      refreshSettingsSection,
+      sections: ["computer-control"],
+      settingsSection: "browser",
+    });
+
+    expect(refreshSettingsSection).toHaveBeenCalledTimes(1);
+    expect(refreshSettingsSection).toHaveBeenCalledWith("browser");
+  });
+});

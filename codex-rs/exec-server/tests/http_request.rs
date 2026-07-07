@@ -6,18 +6,18 @@ use std::collections::BTreeMap;
 use std::io::ErrorKind;
 use std::time::Duration;
 
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_exec_server::HttpHeader;
-use codex_exec_server::HttpRequestBodyDeltaNotification;
-use codex_exec_server::HttpRequestParams;
-use codex_exec_server::HttpRequestResponse;
-use codex_exec_server::InitializeParams;
 use common::exec_server::ExecServerHarness;
 use common::exec_server::exec_server;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_exec_server::HttpHeader;
+use crewon_exec_server::HttpRequestBodyDeltaNotification;
+use crewon_exec_server::HttpRequestParams;
+use crewon_exec_server::HttpRequestResponse;
+use crewon_exec_server::InitializeParams;
 use pretty_assertions::assert_eq;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -392,7 +392,7 @@ where
 async fn wait_for_error_response(
     server: &mut ExecServerHarness,
     request_id: RequestId,
-) -> anyhow::Result<codex_app_server_protocol::JSONRPCErrorError> {
+) -> anyhow::Result<crewon_app_server_protocol::JSONRPCErrorError> {
     let response = server
         .wait_for_event(|event| {
             matches!(

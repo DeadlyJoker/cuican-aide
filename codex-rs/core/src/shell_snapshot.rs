@@ -14,9 +14,9 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
-use codex_otel::SessionTelemetry;
-use codex_protocol::ThreadId;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_otel::SessionTelemetry;
+use crewon_protocol::ThreadId;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use tokio::fs;
 use tokio::process::Command;
 use tokio::sync::watch;
@@ -30,7 +30,7 @@ pub struct ShellSnapshot {
     pub cwd: AbsolutePathBuf,
 }
 
-const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(10);
+const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(30);
 const SNAPSHOT_RETENTION: Duration = Duration::from_secs(60 * 60 * 24 * 3); // 3 days retention.
 const SNAPSHOT_DIR: &str = "shell_snapshots";
 const EXCLUDED_EXPORT_VARS: &[&str] = &["PWD", "OLDPWD"];
@@ -92,7 +92,7 @@ impl ShellSnapshot {
         let snapshot_span = info_span!("shell_snapshot", thread_id = %session_id);
         tokio::spawn(
             async move {
-                let timer = session_telemetry.start_timer("codex.shell_snapshot.duration_ms", &[]);
+                let timer = session_telemetry.start_timer("crewon.shell_snapshot.duration_ms", &[]);
                 let snapshot = ShellSnapshot::try_new(
                     &codex_home,
                     session_id,
@@ -109,7 +109,7 @@ impl ShellSnapshot {
                 if let Some(failure_reason) = snapshot.as_ref().err() {
                     counter_tags.push(("failure_reason", *failure_reason));
                 }
-                session_telemetry.counter("codex.shell_snapshot", /*inc*/ 1, &counter_tags);
+                session_telemetry.counter("crewon.shell_snapshot", /*inc*/ 1, &counter_tags);
                 let _ = shell_snapshot_tx.send(snapshot.ok());
             }
             .instrument(snapshot_span),
@@ -290,7 +290,7 @@ async fn run_script_with_timeout(
     #[cfg(unix)]
     unsafe {
         handler.pre_exec(|| {
-            codex_utils_pty::process_group::detach_from_tty()?;
+            crewon_utils_pty::process_group::detach_from_tty()?;
             Ok(())
         });
     }

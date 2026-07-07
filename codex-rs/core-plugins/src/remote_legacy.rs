@@ -1,7 +1,7 @@
 use crate::remote::RemotePluginServiceConfig;
-use codex_login::CodexAuth;
-use codex_login::default_client::build_reqwest_client;
-use codex_protocol::protocol::Product;
+use crewon_login::CrewonAuth;
+use crewon_login::default_client::build_reqwest_client;
+use crewon_protocol::protocol::Product;
 use serde::Deserialize;
 use std::time::Duration;
 use url::Url;
@@ -97,7 +97,7 @@ pub enum RemotePluginFetchError {
 
 pub async fn fetch_remote_featured_plugin_ids(
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     product: Option<Product>,
 ) -> Result<Vec<String>, RemotePluginFetchError> {
     let base_url = config.chatgpt_base_url.trim_end_matches('/');
@@ -107,13 +107,13 @@ pub async fn fetch_remote_featured_plugin_ids(
         .get(&url)
         .query(&[(
             "platform",
-            product.unwrap_or(Product::Codex).to_app_platform(),
+            product.unwrap_or(Product::Crewon).to_app_platform(),
         )])
         .timeout(REMOTE_FEATURED_PLUGIN_FETCH_TIMEOUT);
 
-    if let Some(auth) = auth.filter(|auth| auth.uses_codex_backend()) {
+    if let Some(auth) = auth.filter(|auth| auth.uses_crewon_backend()) {
         request =
-            request.headers(codex_model_provider::auth_provider_from_auth(auth).to_auth_headers());
+            request.headers(crewon_model_provider::auth_provider_from_auth(auth).to_auth_headers());
     }
 
     let response = request
@@ -137,7 +137,7 @@ pub async fn fetch_remote_featured_plugin_ids(
 
 pub async fn enable_remote_plugin(
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     plugin_id: &str,
 ) -> Result<(), RemotePluginMutationError> {
     post_remote_plugin_mutation(config, auth, plugin_id, "enable").await?;
@@ -146,7 +146,7 @@ pub async fn enable_remote_plugin(
 
 pub async fn uninstall_remote_plugin(
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     plugin_id: &str,
 ) -> Result<(), RemotePluginMutationError> {
     post_remote_plugin_mutation(config, auth, plugin_id, "uninstall").await?;
@@ -154,12 +154,12 @@ pub async fn uninstall_remote_plugin(
 }
 
 fn ensure_codex_backend_auth(
-    auth: Option<&CodexAuth>,
-) -> Result<&CodexAuth, RemotePluginMutationError> {
+    auth: Option<&CrewonAuth>,
+) -> Result<&CrewonAuth, RemotePluginMutationError> {
     let Some(auth) = auth else {
         return Err(RemotePluginMutationError::AuthRequired);
     };
-    if !auth.uses_codex_backend() {
+    if !auth.uses_crewon_backend() {
         return Err(RemotePluginMutationError::UnsupportedAuthMode);
     }
     Ok(auth)
@@ -167,7 +167,7 @@ fn ensure_codex_backend_auth(
 
 async fn post_remote_plugin_mutation(
     config: &RemotePluginServiceConfig,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     plugin_id: &str,
     action: &str,
 ) -> Result<RemotePluginMutationResponse, RemotePluginMutationError> {
@@ -177,7 +177,7 @@ async fn post_remote_plugin_mutation(
     let request = client
         .post(url.clone())
         .timeout(REMOTE_PLUGIN_MUTATION_TIMEOUT)
-        .headers(codex_model_provider::auth_provider_from_auth(auth).to_auth_headers());
+        .headers(crewon_model_provider::auth_provider_from_auth(auth).to_auth_headers());
 
     let response = request
         .send()

@@ -1,9 +1,9 @@
 use super::*;
-use codex_protocol::protocol::AdditionalContextEntry as CoreAdditionalContextEntry;
-use codex_protocol::protocol::AdditionalContextKind as CoreAdditionalContextKind;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::AdditionalContextEntry as CoreAdditionalContextEntry;
+use crewon_protocol::protocol::AdditionalContextKind as CoreAdditionalContextKind;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
 
 const DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR: &str =
     "direct app-server input is not allowed for multi-agent v2 sub-agents";
@@ -51,9 +51,9 @@ struct ThreadSettingsBuildParams {
     method: &'static str,
     environments: Option<TurnEnvironmentSelections>,
     runtime_workspace_roots: Option<Vec<AbsolutePathBuf>>,
-    approval_policy: Option<codex_app_server_protocol::AskForApproval>,
-    approvals_reviewer: Option<codex_app_server_protocol::ApprovalsReviewer>,
-    sandbox_policy: Option<codex_app_server_protocol::SandboxPolicy>,
+    approval_policy: Option<crewon_app_server_protocol::AskForApproval>,
+    approvals_reviewer: Option<crewon_app_server_protocol::ApprovalsReviewer>,
+    sandbox_policy: Option<crewon_app_server_protocol::SandboxPolicy>,
     permissions: Option<String>,
     model: Option<String>,
     service_tier: Option<Option<String>>,
@@ -102,7 +102,7 @@ impl TurnRequestProcessor {
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        self.turn_start_inner(
+        self.turn_start_response(
             request_id,
             params,
             app_server_client_name,
@@ -110,6 +110,22 @@ impl TurnRequestProcessor {
         )
         .await
         .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn turn_start_response(
+        &self,
+        request_id: ConnectionRequestId,
+        params: TurnStartParams,
+        app_server_client_name: Option<String>,
+        app_server_client_version: Option<String>,
+    ) -> Result<TurnStartResponse, JSONRPCErrorError> {
+        self.turn_start_inner(
+            request_id,
+            params,
+            app_server_client_name,
+            app_server_client_version,
+        )
+        .await
     }
 
     pub(crate) async fn thread_inject_items(
@@ -149,6 +165,15 @@ impl TurnRequestProcessor {
         self.turn_interrupt_inner(request_id, params)
             .await
             .map(|response| response.map(Into::into))
+    }
+
+    pub(crate) async fn turn_interrupt_without_response(
+        &self,
+        request_id: &ConnectionRequestId,
+        params: TurnInterruptParams,
+    ) -> Result<(), JSONRPCErrorError> {
+        self.turn_interrupt_without_response_inner(request_id, params)
+            .await
     }
 
     pub(crate) async fn thread_realtime_start(
@@ -229,7 +254,7 @@ impl TurnRequestProcessor {
     async fn load_thread(
         &self,
         thread_id: &str,
-    ) -> Result<(ThreadId, Arc<CodexThread>), JSONRPCErrorError> {
+    ) -> Result<(ThreadId, Arc<CrewonThread>), JSONRPCErrorError> {
         // Resolve the core conversation handle from a v2 thread id string.
         let thread_id = ThreadId::from_string(thread_id)
             .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
@@ -246,7 +271,7 @@ impl TurnRequestProcessor {
     async fn ensure_direct_input_allowed(
         &self,
         request_id: &ConnectionRequestId,
-        thread: &CodexThread,
+        thread: &CrewonThread,
     ) -> Result<(), JSONRPCErrorError> {
         if thread.multi_agent_version() == Some(MultiAgentVersion::V2)
             && matches!(
@@ -321,7 +346,7 @@ impl TurnRequestProcessor {
             ApiReviewTarget::Custom { instructions } => CoreReviewTarget::Custom { instructions },
         };
 
-        let hint = codex_core::review_prompts::user_facing_hint(&core_target);
+        let hint = crewon_core::review_prompts::user_facing_hint(&core_target);
         let review_request = ReviewRequest {
             target: core_target,
             user_facing_hint: Some(hint.clone()),
@@ -354,16 +379,16 @@ impl TurnRequestProcessor {
     async fn request_trace_context(
         &self,
         request_id: &ConnectionRequestId,
-    ) -> Option<codex_protocol::protocol::W3cTraceContext> {
+    ) -> Option<crewon_protocol::protocol::W3cTraceContext> {
         self.outgoing.request_trace_context(request_id).await
     }
 
     async fn submit_core_op(
         &self,
         request_id: &ConnectionRequestId,
-        thread: &CodexThread,
+        thread: &CrewonThread,
         op: Op,
-    ) -> CodexResult<String> {
+    ) -> CrewonResult<String> {
         thread
             .submit_with_trace(op, self.request_trace_context(request_id).await)
             .await
@@ -480,7 +505,7 @@ impl TurnRequestProcessor {
 
         if turn_has_input {
             let config_snapshot = thread.config_snapshot().await;
-            codex_memories_write::start_memories_startup_task(
+            crewon_memories_write::start_memories_startup_task(
                 Arc::clone(&self.thread_manager),
                 Arc::clone(&self.auth_manager),
                 thread_id,
@@ -508,7 +533,7 @@ impl TurnRequestProcessor {
     }
 
     async fn build_environment_override(
-        thread: &CodexThread,
+        thread: &CrewonThread,
         cwd: Option<AbsolutePathBuf>,
         environment_selections: Option<Vec<TurnEnvironmentSelection>>,
     ) -> Option<TurnEnvironmentSelections> {
@@ -534,9 +559,9 @@ impl TurnRequestProcessor {
 
     async fn build_thread_settings_overrides(
         &self,
-        thread: &CodexThread,
+        thread: &CrewonThread,
         params: ThreadSettingsBuildParams,
-    ) -> Result<codex_protocol::protocol::ThreadSettingsOverrides, JSONRPCErrorError> {
+    ) -> Result<crewon_protocol::protocol::ThreadSettingsOverrides, JSONRPCErrorError> {
         let ThreadSettingsBuildParams {
             method,
             environments,
@@ -588,9 +613,9 @@ impl TurnRequestProcessor {
         let runtime_workspace_roots =
             runtime_workspace_roots_request.map(resolve_runtime_workspace_roots);
         let approval_policy =
-            approval_policy.map(codex_app_server_protocol::AskForApproval::to_core);
+            approval_policy.map(crewon_app_server_protocol::AskForApproval::to_core);
         let approvals_reviewer =
-            approvals_reviewer.map(codex_app_server_protocol::ApprovalsReviewer::to_core);
+            approvals_reviewer.map(crewon_app_server_protocol::ApprovalsReviewer::to_core);
         let sandbox_policy = sandbox_policy.map(|policy| policy.to_core());
         let (permission_profile, active_permission_profile, profile_workspace_roots) =
             if let Some(permissions) = permissions {
@@ -609,7 +634,7 @@ impl TurnRequestProcessor {
                             .unwrap_or_else(|| snapshot.workspace_roots.clone()),
                     ),
                     default_permissions: Some(permissions),
-                    codex_linux_sandbox_exe: self.arg0_paths.codex_linux_sandbox_exe.clone(),
+                    crewon_linux_sandbox_exe: self.arg0_paths.crewon_linux_sandbox_exe.clone(),
                     main_execve_wrapper_exe: self.arg0_paths.main_execve_wrapper_exe.clone(),
                     ..Default::default()
                 };
@@ -644,7 +669,7 @@ impl TurnRequestProcessor {
 
         if has_any_overrides {
             thread
-                .preview_thread_settings_overrides(CodexThreadSettingsOverrides {
+                .preview_thread_settings_overrides(CrewonThreadSettingsOverrides {
                     environments: environments.clone(),
                     workspace_roots: runtime_workspace_roots.clone(),
                     approval_policy,
@@ -667,7 +692,7 @@ impl TurnRequestProcessor {
                 })?;
         }
 
-        Ok(codex_protocol::protocol::ThreadSettingsOverrides {
+        Ok(crewon_protocol::protocol::ThreadSettingsOverrides {
             environments,
             workspace_roots: runtime_workspace_roots,
             profile_workspace_roots,
@@ -720,7 +745,7 @@ impl TurnRequestProcessor {
             )
             .await?;
 
-        if thread_settings != codex_protocol::protocol::ThreadSettingsOverrides::default() {
+        if thread_settings != crewon_protocol::protocol::ThreadSettingsOverrides::default() {
             self.submit_core_op(
                 request_id,
                 thread.as_ref(),
@@ -761,7 +786,7 @@ impl TurnRequestProcessor {
     }
 
     async fn set_app_server_client_info(
-        thread: &CodexThread,
+        thread: &CrewonThread,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<(), JSONRPCErrorError> {
@@ -842,11 +867,11 @@ impl TurnRequestProcessor {
                     ),
                     SteerInputError::ActiveTurnNotSteerable { turn_kind } => {
                         let (message, turn_steer_error) = match turn_kind {
-                            codex_protocol::protocol::NonSteerableTurnKind::Review => (
+                            crewon_protocol::protocol::NonSteerableTurnKind::Review => (
                                 "cannot steer a review turn".to_string(),
                                 TurnSteerRequestError::NonSteerableReview,
                             ),
-                            codex_protocol::protocol::NonSteerableTurnKind::Compact => (
+                            crewon_protocol::protocol::NonSteerableTurnKind::Compact => (
                                 "cannot steer a compact turn".to_string(),
                                 TurnSteerRequestError::NonSteerableCompact,
                             ),
@@ -892,7 +917,7 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         thread_id: &str,
-    ) -> Result<Option<(ThreadId, Arc<CodexThread>)>, JSONRPCErrorError> {
+    ) -> Result<Option<(ThreadId, Arc<CrewonThread>)>, JSONRPCErrorError> {
         let (thread_id, thread) = self.load_thread(thread_id).await?;
 
         match self
@@ -1071,7 +1096,7 @@ impl TurnRequestProcessor {
     async fn start_inline_review(
         &self,
         request_id: &ConnectionRequestId,
-        parent_thread: Arc<CodexThread>,
+        parent_thread: Arc<CrewonThread>,
         review_request: ReviewRequest,
         display_text: &str,
         parent_thread_id: String,
@@ -1094,7 +1119,7 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         parent_thread_id: ThreadId,
-        parent_thread: Arc<CodexThread>,
+        parent_thread: Arc<CrewonThread>,
         review_request: ReviewRequest,
         display_text: &str,
     ) -> std::result::Result<(), JSONRPCErrorError> {
@@ -1304,6 +1329,41 @@ impl TurnRequestProcessor {
         }
     }
 
+    async fn turn_interrupt_without_response_inner(
+        &self,
+        request_id: &ConnectionRequestId,
+        params: TurnInterruptParams,
+    ) -> Result<(), JSONRPCErrorError> {
+        let TurnInterruptParams { thread_id, turn_id } = params;
+        if turn_id.is_empty() {
+            return Err(invalid_request("turnId must not be empty"));
+        }
+
+        let (thread_uuid, thread) = self.load_thread(&thread_id).await?;
+        let thread_state = self.thread_state_manager.thread_state(thread_uuid).await;
+        let is_running = matches!(thread.agent_status().await, AgentStatus::Running);
+        {
+            let thread_state = thread_state.lock().await;
+            if let Some(active_turn) = thread_state.active_turn_snapshot() {
+                if active_turn.id != turn_id {
+                    return Err(invalid_request(format!(
+                        "expected active turn id {turn_id} but found {}",
+                        active_turn.id
+                    )));
+                }
+            } else if thread_state.last_terminal_turn_id.as_deref() == Some(turn_id.as_str())
+                || !is_running
+            {
+                return Err(invalid_request("no active turn to interrupt"));
+            }
+        }
+
+        self.submit_core_op(request_id, thread.as_ref(), Op::Interrupt)
+            .await
+            .map(|_| ())
+            .map_err(|err| internal_error(format!("failed to interrupt turn: {err}")))
+    }
+
     fn listener_task_context(&self) -> ListenerTaskContext {
         ListenerTaskContext {
             thread_manager: Arc::clone(&self.thread_manager),
@@ -1315,6 +1375,13 @@ impl TurnRequestProcessor {
             fallback_model_provider: self.config.model_provider_id.clone(),
             codex_home: self.config.codex_home.to_path_buf(),
             skills_watcher: Arc::clone(&self.skills_watcher),
+            office_auto_dispatch: Some(OfficeAutoDispatchContext {
+                domain_processor: Arc::new(CrewonDomainRequestProcessor::new()),
+                outgoing: Arc::clone(&self.outgoing),
+                thread_manager: Arc::clone(&self.thread_manager),
+                turn_processor: self.clone(),
+                completion_monitors: Arc::new(Mutex::new(HashSet::new())),
+            }),
         }
     }
 

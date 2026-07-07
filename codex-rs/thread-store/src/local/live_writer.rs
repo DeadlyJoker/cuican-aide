@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::ThreadMemoryMode;
-use codex_rollout::RolloutConfig;
-use codex_rollout::RolloutRecorder;
-use codex_rollout::RolloutRecorderParams;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::ThreadMemoryMode;
+use crewon_rollout::RolloutConfig;
+use crewon_rollout::RolloutRecorder;
+use crewon_rollout::RolloutRecorderParams;
 use tracing::warn;
 
 use super::LocalThreadStore;
@@ -156,7 +156,7 @@ async fn sync_materialized_rollout_path(
     thread_id: ThreadId,
 ) -> ThreadStoreResult<()> {
     let rollout_path = rollout_path(store, thread_id).await?;
-    if codex_rollout::existing_rollout_path(rollout_path.as_path())
+    if crewon_rollout::existing_rollout_path(rollout_path.as_path())
         .await
         .is_none()
     {

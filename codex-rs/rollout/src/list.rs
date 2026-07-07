@@ -1,7 +1,7 @@
 #![allow(warnings, clippy::all)]
 
 use async_trait::async_trait;
-use codex_utils_path as path_utils;
+use crewon_utils_path as path_utils;
 use std::cmp::Reverse;
 use std::ffi::OsStr;
 use std::io;
@@ -21,13 +21,13 @@ use super::SESSIONS_SUBDIR;
 use super::compression;
 use crate::protocol::EventMsg;
 use crate::state_db;
-use codex_file_search as file_search;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::USER_MESSAGE_BEGIN;
+use crewon_file_search as file_search;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::USER_MESSAGE_BEGIN;
 
 /// Returned page of thread (thread) summaries.
 #[derive(Debug, Default, PartialEq)]
@@ -71,7 +71,7 @@ pub struct ThreadItem {
     pub agent_role: Option<String>,
     /// Model provider from session metadata.
     pub model_provider: Option<String>,
-    /// CLI version from session metadata.
+    /// Client/runtime version from session metadata.
     pub cli_version: Option<String>,
     /// RFC3339 timestamp string for when the session was created, if available.
     /// created_at comes from the filename timestamp with second precision.
@@ -305,8 +305,8 @@ impl<'de> serde::Deserialize<'de> for Cursor {
     }
 }
 
-impl From<codex_state::Anchor> for Cursor {
-    fn from(anchor: codex_state::Anchor) -> Self {
+impl From<crewon_state::Anchor> for Cursor {
+    fn from(anchor: crewon_state::Anchor) -> Self {
         let ts = anchor
             .ts
             .timestamp_nanos_opt()
@@ -400,7 +400,7 @@ pub async fn get_threads_in_root(
 
 /// Load thread file paths from disk using directory traversal.
 ///
-/// Directory layout: `~/.codex/sessions/YYYY/MM/DD/rollout-YYYY-MM-DDThh-mm-ss-<uuid>.jsonl`
+/// Directory layout: `~/.crewon/sessions/YYYY/MM/DD/rollout-YYYY-MM-DDThh-mm-ss-<uuid>.jsonl`
 /// Returned newest (based on sort key) first.
 async fn traverse_directories_for_paths(
     root: PathBuf,
@@ -1116,7 +1116,7 @@ async fn read_head_summary(path: &Path, head_limit: usize) -> io::Result<HeadTai
                         .git
                         .as_ref()
                         .and_then(|git| git.repository_url.clone());
-                    summary.cli_version = Some(session_meta_line.meta.cli_version);
+                    summary.cli_version = Some(session_meta_line.meta.client_version);
                     summary.created_at = Some(session_meta_line.meta.timestamp.clone());
                     summary.saw_session_meta = true;
                 }
@@ -1263,7 +1263,7 @@ async fn find_thread_path_by_id_str_in_subdir(
     codex_home: &Path,
     subdir: &str,
     id_str: &str,
-    state_db_ctx: Option<&codex_state::StateRuntime>,
+    state_db_ctx: Option<&crewon_state::StateRuntime>,
 ) -> io::Result<Option<PathBuf>> {
     // Validate UUID format early.
     if Uuid::parse_str(id_str).is_err() {
@@ -1304,7 +1304,7 @@ async fn find_thread_path_by_id_str_in_subdir(
                             tracing::warn!(
                                 "state db discrepancy during find_thread_path_by_id_str_in_subdir: mismatched_db_path"
                             );
-                            codex_state::record_fallback(
+                            crewon_state::record_fallback(
                                 "find_thread_path",
                                 "mismatch",
                                 /*telemetry_override*/ None,
@@ -1326,7 +1326,7 @@ async fn find_thread_path_by_id_str_in_subdir(
                     tracing::warn!(
                         "state db discrepancy during find_thread_path_by_id_str_in_subdir: stale_db_path"
                     );
-                    codex_state::record_fallback(
+                    crewon_state::record_fallback(
                         "find_thread_path",
                         "stale_path",
                         /*telemetry_override*/ None,
@@ -1405,7 +1405,7 @@ async fn find_thread_path_by_id_str_in_subdir(
             "state db discrepancy during find_thread_path_by_id_str_in_subdir: falling_back"
         );
         if let Some(reason) = fallback_reason {
-            codex_state::record_fallback(
+            crewon_state::record_fallback(
                 "find_thread_path",
                 reason,
                 /*telemetry_override*/ None,
@@ -1469,7 +1469,7 @@ async fn find_rollout_path_by_id_from_filenames(
 pub async fn find_thread_path_by_id_str(
     codex_home: &Path,
     id_str: &str,
-    state_db_ctx: Option<&codex_state::StateRuntime>,
+    state_db_ctx: Option<&crewon_state::StateRuntime>,
 ) -> io::Result<Option<PathBuf>> {
     find_thread_path_by_id_str_in_subdir(codex_home, SESSIONS_SUBDIR, id_str, state_db_ctx).await
 }
@@ -1478,7 +1478,7 @@ pub async fn find_thread_path_by_id_str(
 pub async fn find_archived_thread_path_by_id_str(
     codex_home: &Path,
     id_str: &str,
-    state_db_ctx: Option<&codex_state::StateRuntime>,
+    state_db_ctx: Option<&crewon_state::StateRuntime>,
 ) -> io::Result<Option<PathBuf>> {
     find_thread_path_by_id_str_in_subdir(codex_home, ARCHIVED_SESSIONS_SUBDIR, id_str, state_db_ctx)
         .await

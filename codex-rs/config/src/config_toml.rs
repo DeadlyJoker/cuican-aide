@@ -1,4 +1,4 @@
-//! Schema-heavy configuration TOML types used by Codex.
+//! Schema-heavy configuration TOML types used by Crewon.
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -11,6 +11,7 @@ use crate::types::AnalyticsConfigToml;
 use crate::types::ApprovalsReviewer;
 use crate::types::AppsConfigToml;
 use crate::types::AuthCredentialsStoreMode;
+use crate::types::Client;
 use crate::types::FeedbackConfigToml;
 use crate::types::History;
 use crate::types::MarketplaceConfig;
@@ -24,33 +25,32 @@ use crate::types::SandboxWorkspaceWrite;
 use crate::types::ShellEnvironmentPolicyToml;
 use crate::types::SkillsConfig;
 use crate::types::ToolSuggestConfig;
-use crate::types::Tui;
 use crate::types::UriBasedFileOpener;
 use crate::types::WindowsToml;
-use codex_features::FeaturesToml;
-use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
-use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
-use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
-use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_protocol::config_types::AutoCompactTokenLimitScope;
-use codex_protocol::config_types::ForcedLoginMethod;
-use codex_protocol::config_types::Personality;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::SandboxMode;
-use codex_protocol::config_types::TrustLevel;
-use codex_protocol::config_types::Verbosity;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::config_types::WebSearchToolConfig;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_path::normalize_for_path_comparison;
+use crewon_features::FeaturesToml;
+use crewon_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
+use crewon_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
+use crewon_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
+use crewon_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
+use crewon_model_provider_info::OPENAI_PROVIDER_ID;
+use crewon_protocol::config_types::AutoCompactTokenLimitScope;
+use crewon_protocol::config_types::ForcedLoginMethod;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::SandboxMode;
+use crewon_protocol::config_types::TrustLevel;
+use crewon_protocol::config_types::Verbosity;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::config_types::WebSearchToolConfig;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_path::normalize_for_path_comparison;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Deserializer;
@@ -133,7 +133,10 @@ of strings; comma-separated strings are not supported. Use \
     }
 }
 
-/// Base config deserialized from ~/.codex/config.toml.
+/// Base config deserialized from the Crewon user config file.
+///
+/// The default storage path is `~/.crewon/config.toml`. Existing `~/.codex/config.toml`
+/// installations are still read through the home-directory compatibility fallback.
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ConfigToml {
@@ -222,7 +225,7 @@ pub struct ConfigToml {
     /// Optional path to a file containing model instructions that will override
     /// the built-in instructions for the selected model. Users are STRONGLY
     /// DISCOURAGED from using this field, as deviating from the instructions
-    /// sanctioned by Codex will likely degrade model performance.
+    /// sanctioned by Crewon will likely degrade model performance.
     pub model_instructions_file: Option<AbsolutePathBuf>,
 
     /// Compact prompt used for history compaction.
@@ -236,14 +239,14 @@ pub struct ConfigToml {
     #[serde(default)]
     pub forced_login_method: Option<ForcedLoginMethod>,
 
-    /// Preferred backend for storing CLI auth credentials.
-    /// file (default): Use a file in the Codex home directory.
+    /// Preferred backend for storing auth credentials.
+    /// file (default): Use a file in the Crewon home directory.
     /// keyring: Use an OS-specific keyring service.
     /// auto: Use the keyring if available, otherwise use a file.
-    #[serde(default)]
-    pub cli_auth_credentials_store: Option<AuthCredentialsStoreMode>,
+    #[serde(default, alias = "cli_auth_credentials_store")]
+    pub auth_credentials_store: Option<AuthCredentialsStoreMode>,
 
-    /// Definition for MCP servers that Codex can reach out to for tool calls.
+    /// Definition for MCP servers that Crewon can reach out to for tool calls.
     #[serde(default)]
     // Uses the raw MCP input shape (custom deserialization) rather than `McpServerConfig`.
     #[schemars(schema_with = "crate::schema::mcp_servers_schema")]
@@ -251,14 +254,13 @@ pub struct ConfigToml {
 
     /// Preferred backend for storing MCP OAuth credentials.
     /// keyring: Use an OS-specific keyring service.
-    ///          https://github.com/openai/codex/blob/main/codex-rs/rmcp-client/src/oauth.rs#L2
-    /// file: Use a file in the Codex home directory.
+    /// file: Use a file in the Crewon home directory.
     /// auto (default): Use the OS-specific keyring service if available, otherwise use a file.
     #[serde(default)]
     pub mcp_oauth_credentials_store: Option<OAuthCredentialsStoreMode>,
 
     /// Optional fixed port for the local HTTP callback server used during MCP OAuth login.
-    /// When unset, Codex will bind to an ephemeral port chosen by the OS.
+    /// When unset, Crewon will bind to an ephemeral port chosen by the OS.
     pub mcp_oauth_callback_port: Option<u16>,
 
     /// Optional redirect URI to use during MCP OAuth login.
@@ -302,17 +304,17 @@ pub struct ConfigToml {
     #[serde(default)]
     pub profiles: HashMap<String, ConfigProfile>,
 
-    /// Settings that govern if and what will be written to `~/.codex/history.jsonl`.
+    /// Settings that govern if and what will be written to the legacy history file.
     #[serde(default = "default_history")]
     pub history: Option<History>,
 
-    /// Directory where Codex stores the SQLite state DB.
-    /// Defaults to `$CODEX_SQLITE_HOME` when set. Otherwise uses `$CODEX_HOME`.
+    /// Directory where Crewon stores the SQLite state DB.
+    /// Defaults to `$CODEX_SQLITE_HOME` when set. Otherwise uses the resolved Crewon home
+    /// (`CREWON_HOME`, or the legacy `CODEX_HOME` fallback).
     pub sqlite_home: Option<AbsolutePathBuf>,
 
-    /// Directory where Codex writes log files. Setting this value explicitly
-    /// also enables the TUI text log in this directory.
-    /// Defaults to `$CODEX_HOME/log`.
+    /// Directory where Crewon writes log files.
+    /// Defaults to `log` under the resolved Crewon home.
     pub log_dir: Option<AbsolutePathBuf>,
 
     /// Debugging and reproducibility settings.
@@ -322,8 +324,9 @@ pub struct ConfigToml {
     /// output will be hyperlinked using the specified URI scheme.
     pub file_opener: Option<UriBasedFileOpener>,
 
-    /// Collection of settings that are specific to the TUI.
-    pub tui: Option<Tui>,
+    /// Collection of settings that are specific to interactive clients.
+    #[serde(alias = "tui")]
+    pub client: Option<Client>,
 
     /// When set to `true`, `AgentReasoning` events will be hidden from the
     /// UI/output. Defaults to `false`.
@@ -357,7 +360,7 @@ pub struct ConfigToml {
     /// Base URL for requests to ChatGPT (as opposed to the OpenAI API).
     pub chatgpt_base_url: Option<String>,
 
-    /// Optional product SKU forwarded on host-owned Codex Apps MCP requests.
+    /// Optional product SKU forwarded on host-owned Crewon Apps MCP requests.
     pub apps_mcp_product_sku: Option<String>,
 
     /// Base URL override for the built-in `openai` model provider.
@@ -453,8 +456,8 @@ pub struct ConfigToml {
     #[serde(default)]
     pub project_root_markers: Option<Vec<String>>,
 
-    /// When `true`, checks for Codex updates on startup and surfaces update prompts.
-    /// Set to `false` only if your Codex updates are centrally managed.
+    /// When `true`, checks for Crewon updates on startup and surfaces update prompts.
+    /// Set to `false` only if your Crewon updates are centrally managed.
     /// Defaults to `true`.
     pub check_for_update_on_startup: Option<bool>,
 
@@ -463,11 +466,11 @@ pub struct ConfigToml {
     /// or placeholder replacement will occur for fast keypress bursts.
     pub disable_paste_burst: Option<bool>,
 
-    /// When `false`, disables analytics across Codex product surfaces in this machine.
+    /// When `false`, disables analytics across Crewon product surfaces in this machine.
     /// Defaults to `true`.
     pub analytics: Option<AnalyticsConfigToml>,
 
-    /// When `false`, disables feedback collection across Codex product surfaces.
+    /// When `false`, disables feedback collection across Crewon product surfaces.
     /// Defaults to `true`.
     pub feedback: Option<FeedbackConfigToml>,
 
@@ -515,13 +518,13 @@ pub struct DebugToml {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct DebugConfigLockToml {
-    /// Directory where Codex writes effective session config lock files.
+    /// Directory where Crewon writes effective session config lock files.
     pub export_dir: Option<AbsolutePathBuf>,
 
     /// Lockfile to replay as the authoritative effective config.
     pub load_path: Option<AbsolutePathBuf>,
 
-    /// Allow replaying a lock generated by a different Codex version.
+    /// Allow replaying a lock generated by a different Crewon version.
     pub allow_codex_version_mismatch: Option<bool>,
 
     /// Save fields resolved from the model catalog/session configuration.
@@ -583,8 +586,8 @@ pub enum RealtimeTransport {
     Websocket,
 }
 
-pub use codex_protocol::protocol::RealtimeConversationVersion as RealtimeWsVersion;
-pub use codex_protocol::protocol::RealtimeVoice;
+pub use crewon_protocol::protocol::RealtimeConversationVersion as RealtimeWsVersion;
+pub use crewon_protocol::protocol::RealtimeVoice;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema)]
 #[schemars(deny_unknown_fields)]

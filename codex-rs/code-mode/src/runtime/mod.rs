@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 use std::sync::mpsc as std_mpsc;
 use std::thread;
 
-use codex_protocol::ToolName;
+use crewon_protocol::ToolName;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use tokio::sync::mpsc;
@@ -24,7 +24,7 @@ use crate::service::CellId;
 pub const DEFAULT_EXEC_YIELD_TIME_MS: u64 = 10_000;
 pub const DEFAULT_WAIT_YIELD_TIME_MS: u64 = 10_000;
 pub const DEFAULT_MAX_OUTPUT_TOKENS_PER_EXEC_CALL: usize = 10_000;
-const EXIT_SENTINEL: &str = "__codex_code_mode_exit__";
+const EXIT_SENTINEL: &str = "__crewon_code_mode_exit__";
 
 #[derive(Clone, Debug)]
 pub struct ExecuteRequest {
@@ -326,12 +326,9 @@ fn run_runtime(
     }
 
     let mut pending_promise = pending_promise;
-    loop {
-        let Some(command) = next_runtime_command(&event_tx, &command_rx, &control_rx, pending_mode)
-        else {
-            break;
-        };
-
+    while let Some(command) =
+        next_runtime_command(&event_tx, &command_rx, &control_rx, pending_mode)
+    {
         match command {
             RuntimeCommand::Terminate => break,
             RuntimeCommand::ToolResponse { id, result } => {

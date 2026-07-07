@@ -1,26 +1,26 @@
-use codex_config::types::PluginConfig;
-use codex_core::config::Config;
-use codex_core::config::ConfigBuilder;
-use codex_core_plugins::PluginInstallRequest;
-use codex_core_plugins::PluginsManager;
-use codex_core_plugins::marketplace::MarketplacePluginInstallPolicy;
-use codex_core_plugins::marketplace::find_marketplace_manifest_path;
-use codex_core_plugins::marketplace_add::MarketplaceAddRequest;
-use codex_core_plugins::marketplace_add::add_marketplace;
-use codex_core_plugins::marketplace_add::is_local_marketplace_source;
-use codex_external_agent_migration::build_mcp_config_from_external;
-use codex_external_agent_migration::count_missing_commands;
-use codex_external_agent_migration::count_missing_subagents;
-use codex_external_agent_migration::hook_migration_event_names;
-use codex_external_agent_migration::import_commands;
-use codex_external_agent_migration::import_hooks;
-use codex_external_agent_migration::import_subagents;
-use codex_external_agent_migration::missing_command_names;
-use codex_external_agent_migration::missing_subagent_names;
-use codex_external_agent_sessions::ExternalAgentSessionMigration;
-use codex_external_agent_sessions::detect_recent_sessions;
-use codex_plugin::PluginId;
-use codex_protocol::protocol::Product;
+use crewon_config::types::PluginConfig;
+use crewon_core::config::Config;
+use crewon_core::config::ConfigBuilder;
+use crewon_core_plugins::PluginInstallRequest;
+use crewon_core_plugins::PluginsManager;
+use crewon_core_plugins::marketplace::MarketplacePluginInstallPolicy;
+use crewon_core_plugins::marketplace::find_marketplace_manifest_path;
+use crewon_core_plugins::marketplace_add::MarketplaceAddRequest;
+use crewon_core_plugins::marketplace_add::add_marketplace;
+use crewon_core_plugins::marketplace_add::is_local_marketplace_source;
+use crewon_external_agent_migration::build_mcp_config_from_external;
+use crewon_external_agent_migration::count_missing_commands;
+use crewon_external_agent_migration::count_missing_subagents;
+use crewon_external_agent_migration::hook_migration_event_names;
+use crewon_external_agent_migration::import_commands;
+use crewon_external_agent_migration::import_hooks;
+use crewon_external_agent_migration::import_subagents;
+use crewon_external_agent_migration::missing_command_names;
+use crewon_external_agent_migration::missing_subagent_names;
+use crewon_external_agent_sessions::ExternalAgentSessionMigration;
+use crewon_external_agent_sessions::detect_recent_sessions;
+use crewon_plugin::PluginId;
+use crewon_protocol::protocol::Product;
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -1153,21 +1153,20 @@ fn configured_marketplace_plugins(
         })?;
     let mut marketplace_plugins = BTreeMap::new();
     for marketplace in marketplaces.marketplaces {
-        let plugins = marketplace
-            .plugins
-            .into_iter()
-            .filter(|plugin| {
-                plugin.policy.installation != MarketplacePluginInstallPolicy::NotAvailable
-            })
-            .filter(|plugin| {
-                plugin
-                    .policy
-                    .products
-                    .as_deref()
-                    .is_none_or(|products| Product::Codex.matches_product_restriction(products))
-            })
-            .map(|plugin| plugin.name)
-            .collect::<HashSet<_>>();
+        let plugins =
+            marketplace
+                .plugins
+                .into_iter()
+                .filter(|plugin| {
+                    plugin.policy.installation != MarketplacePluginInstallPolicy::NotAvailable
+                })
+                .filter(|plugin| {
+                    plugin.policy.products.as_deref().is_none_or(|products| {
+                        Product::Crewon.matches_product_restriction(products)
+                    })
+                })
+                .map(|plugin| plugin.name)
+                .collect::<HashSet<_>>();
         marketplace_plugins.insert(marketplace.name, plugins);
     }
     Ok(marketplace_plugins)
@@ -1398,7 +1397,7 @@ fn rewrite_external_agent_terms(content: &str) -> String {
         "claudecode",
         "claude",
     ] {
-        rewritten = replace_case_insensitive_with_boundaries(&rewritten, from, "Codex");
+        rewritten = replace_case_insensitive_with_boundaries(&rewritten, from, "Crewon");
     }
     rewritten
 }
@@ -1643,7 +1642,7 @@ fn emit_migration_metric(
     item_type: ExternalAgentConfigMigrationItemType,
     skills_count: Option<usize>,
 ) {
-    let Some(metrics) = codex_otel::global() else {
+    let Some(metrics) = crewon_otel::global() else {
         return;
     };
     let tags = migration_metric_tags(item_type, skills_count);

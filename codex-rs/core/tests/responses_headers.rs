@@ -1,23 +1,23 @@
 use std::process::Command;
 use std::sync::Arc;
 
-use codex_core::ModelClient;
-use codex_core::Prompt;
-use codex_core::ResponseEvent;
-use codex_login::CodexAuth;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::WireApi;
-use codex_otel::SessionTelemetry;
-use codex_otel::TelemetryAuthMode;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
 use core_test_support::load_default_config_for_test;
 use core_test_support::responses;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
+use crewon_core::ModelClient;
+use crewon_core::Prompt;
+use crewon_core::ResponseEvent;
+use crewon_login::CrewonAuth;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::WireApi;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::TelemetryAuthMode;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
@@ -76,7 +76,7 @@ async fn responses_stream_includes_subagent_header_on_review() {
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort.clone();
     let summary = config.model_reasoning_summary;
-    let model = codex_core::test_support::get_model_offline(config.model.as_deref());
+    let model = crewon_core::test_support::get_model_offline(config.model.as_deref());
     config.model = Some(model.clone());
     let config = Arc::new(config);
 
@@ -84,7 +84,7 @@ async fn responses_stream_includes_subagent_header_on_review() {
     let auth_mode = TelemetryAuthMode::Chatgpt;
     let session_source = SessionSource::SubAgent(SubAgentSource::Review);
     let model_info =
-        codex_core::test_support::construct_model_info_offline(model.as_str(), &config);
+        crewon_core::test_support::construct_model_info_offline(model.as_str(), &config);
     let expected_window_id = format!("{thread_id}:0");
     let session_telemetry = SessionTelemetry::new(
         thread_id,
@@ -135,7 +135,7 @@ async fn responses_stream_includes_subagent_header_on_review() {
             summary.unwrap_or(model_info.default_reasoning_summary),
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("stream failed");
@@ -209,7 +209,7 @@ async fn responses_stream_includes_subagent_header_on_other() {
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort.clone();
     let summary = config.model_reasoning_summary;
-    let model = codex_core::test_support::get_model_offline(config.model.as_deref());
+    let model = crewon_core::test_support::get_model_offline(config.model.as_deref());
     config.model = Some(model.clone());
     let config = Arc::new(config);
 
@@ -217,7 +217,7 @@ async fn responses_stream_includes_subagent_header_on_other() {
     let auth_mode = TelemetryAuthMode::Chatgpt;
     let session_source = SessionSource::SubAgent(SubAgentSource::Other("my-task".to_string()));
     let model_info =
-        codex_core::test_support::construct_model_info_offline(model.as_str(), &config);
+        crewon_core::test_support::construct_model_info_offline(model.as_str(), &config);
     let window_id = format!("{thread_id}:0");
 
     let session_telemetry = SessionTelemetry::new(
@@ -269,7 +269,7 @@ async fn responses_stream_includes_subagent_header_on_other() {
             summary.unwrap_or(model_info.default_reasoning_summary),
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("stream failed");
@@ -332,13 +332,13 @@ async fn responses_respects_model_info_overrides_from_config() {
 
     let thread_id = ThreadId::new();
     let auth_mode =
-        codex_core::test_support::auth_manager_from_auth(CodexAuth::from_api_key("Test API Key"))
+        crewon_core::test_support::auth_manager_from_auth(CrewonAuth::from_api_key("Test API Key"))
             .auth_mode()
             .map(TelemetryAuthMode::from);
     let session_source =
         SessionSource::SubAgent(SubAgentSource::Other("override-check".to_string()));
     let model_info =
-        codex_core::test_support::construct_model_info_offline(model.as_str(), &config);
+        crewon_core::test_support::construct_model_info_offline(model.as_str(), &config);
     let window_id = format!("{thread_id}:0");
     let session_telemetry = SessionTelemetry::new(
         thread_id,
@@ -389,7 +389,7 @@ async fn responses_respects_model_info_overrides_from_config() {
             summary.unwrap_or(model_info.default_reasoning_summary),
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("stream failed");
@@ -430,7 +430,10 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
         responses::ev_completed("resp-1"),
     ]);
 
-    let test = test_codex().build(&server).await.expect("build test codex");
+    let test = test_crewon()
+        .build(&server)
+        .await
+        .expect("build test codex");
     let cwd = test.cwd_path();
 
     let first_request = responses::mount_sse_once(&server, response_body.clone()).await;

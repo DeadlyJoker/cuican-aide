@@ -11,8 +11,8 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::SessionMetaLine;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::SessionMetaLine;
 use serde::Deserialize;
 use serde::Serialize;
 use tokio::io::AsyncBufReadExt;
@@ -157,7 +157,7 @@ pub async fn find_thread_names_by_ids(
 pub async fn find_thread_meta_by_name_str(
     codex_home: &Path,
     name: &str,
-    state_db_ctx: Option<&codex_state::StateRuntime>,
+    state_db_ctx: Option<&crewon_state::StateRuntime>,
 ) -> std::io::Result<Option<(PathBuf, SessionMetaLine)>> {
     if name.trim().is_empty() {
         return Ok(None);

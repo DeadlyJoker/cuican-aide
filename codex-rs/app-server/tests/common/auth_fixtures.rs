@@ -6,12 +6,12 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::DateTime;
 use chrono::Utc;
-use codex_app_server_protocol::AuthMode;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_login::AuthDotJson;
-use codex_login::save_auth;
-use codex_login::token_data::TokenData;
-use codex_login::token_data::parse_chatgpt_jwt_claims;
+use crewon_app_server_protocol::AuthMode;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_login::AuthDotJson;
+use crewon_login::save_auth;
+use crewon_login::token_data::TokenData;
+use crewon_login::token_data::parse_chatgpt_jwt_claims;
 use serde_json::json;
 
 /// Builder for writing a fake ChatGPT auth.json in tests.
@@ -145,7 +145,7 @@ pub fn encode_id_token(claims: &ChatGptIdTokenClaims) -> Result<String> {
 pub fn write_chatgpt_auth(
     codex_home: &Path,
     fixture: ChatGptAuthFixture,
-    cli_auth_credentials_store_mode: AuthCredentialsStoreMode,
+    auth_credentials_store_mode: AuthCredentialsStoreMode,
 ) -> Result<()> {
     let id_token_raw = encode_id_token(&fixture.claims)?;
     let id_token = parse_chatgpt_jwt_claims(&id_token_raw).context("parse id token")?;
@@ -168,5 +168,5 @@ pub fn write_chatgpt_auth(
         bedrock_api_key: None,
     };
 
-    save_auth(codex_home, &auth, cli_auth_credentials_store_mode).context("write auth.json")
+    save_auth(codex_home, &auth, auth_credentials_store_mode).context("write auth.json")
 }

@@ -1,28 +1,28 @@
-//! Mapping from Codex protocol events into raw rollout-trace events.
+//! Mapping from Crewon protocol events into raw rollout-trace events.
 //!
 //! The session layer already emits protocol events for turn lifecycle, terminal
 //! sessions, patch application, MCP calls, and collaboration tools. Rollout
 //! tracing reuses those observations instead of adding another set of hooks in
-//! `codex-core`: this module translates the protocol surface into the smaller
-//! trace vocabulary and keeps the mapping isolated inside `codex-rollout-trace`.
+//! `crewon-core`: this module translates the protocol surface into the smaller
+//! trace vocabulary and keeps the mapping isolated inside `crewon-rollout-trace`.
 //!
 //! The long explicit `EventMsg` matches are intentional. Most protocol events
 //! are not trace runtime boundaries, but spelling them out makes new protocol
 //! variants a compile-time prompt to decide whether the trace should capture
 //! them.
 
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ExecCommandBeginEvent;
-use codex_protocol::protocol::ExecCommandEndEvent;
-use codex_protocol::protocol::ExecCommandSource;
-use codex_protocol::protocol::ExecCommandStatus;
-use codex_protocol::protocol::McpToolCallBeginEvent;
-use codex_protocol::protocol::McpToolCallEndEvent;
-use codex_protocol::protocol::PatchApplyBeginEvent;
-use codex_protocol::protocol::PatchApplyEndEvent;
-use codex_protocol::protocol::PatchApplyStatus;
-use codex_protocol::protocol::SubAgentActivityEvent;
-use codex_protocol::protocol::TurnAbortReason;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ExecCommandBeginEvent;
+use crewon_protocol::protocol::ExecCommandEndEvent;
+use crewon_protocol::protocol::ExecCommandSource;
+use crewon_protocol::protocol::ExecCommandStatus;
+use crewon_protocol::protocol::McpToolCallBeginEvent;
+use crewon_protocol::protocol::McpToolCallEndEvent;
+use crewon_protocol::protocol::PatchApplyBeginEvent;
+use crewon_protocol::protocol::PatchApplyEndEvent;
+use crewon_protocol::protocol::PatchApplyStatus;
+use crewon_protocol::protocol::SubAgentActivityEvent;
+use crewon_protocol::protocol::TurnAbortReason;
 use serde::Serialize;
 
 use crate::AgentThreadId;
@@ -35,7 +35,7 @@ pub(crate) struct CodexTurnTraceEvent {
     pub payload: RawTraceEventPayload,
 }
 
-pub(crate) fn codex_turn_trace_event(
+pub(crate) fn crewon_turn_trace_event(
     thread_id: AgentThreadId,
     default_turn_id: &str,
     event: &EventMsg,
@@ -103,14 +103,14 @@ pub(crate) enum ToolRuntimePayload<'a> {
     PatchApplyEnd(&'a PatchApplyEndEvent),
     McpToolCallBegin(&'a McpToolCallBeginEvent),
     McpToolCallEnd(&'a McpToolCallEndEvent),
-    CollabAgentSpawnBegin(&'a codex_protocol::protocol::CollabAgentSpawnBeginEvent),
-    CollabAgentSpawnEnd(&'a codex_protocol::protocol::CollabAgentSpawnEndEvent),
-    CollabAgentInteractionBegin(&'a codex_protocol::protocol::CollabAgentInteractionBeginEvent),
-    CollabAgentInteractionEnd(&'a codex_protocol::protocol::CollabAgentInteractionEndEvent),
-    CollabWaitingBegin(&'a codex_protocol::protocol::CollabWaitingBeginEvent),
-    CollabWaitingEnd(&'a codex_protocol::protocol::CollabWaitingEndEvent),
-    CollabCloseBegin(&'a codex_protocol::protocol::CollabCloseBeginEvent),
-    CollabCloseEnd(&'a codex_protocol::protocol::CollabCloseEndEvent),
+    CollabAgentSpawnBegin(&'a crewon_protocol::protocol::CollabAgentSpawnBeginEvent),
+    CollabAgentSpawnEnd(&'a crewon_protocol::protocol::CollabAgentSpawnEndEvent),
+    CollabAgentInteractionBegin(&'a crewon_protocol::protocol::CollabAgentInteractionBeginEvent),
+    CollabAgentInteractionEnd(&'a crewon_protocol::protocol::CollabAgentInteractionEndEvent),
+    CollabWaitingBegin(&'a crewon_protocol::protocol::CollabWaitingBeginEvent),
+    CollabWaitingEnd(&'a crewon_protocol::protocol::CollabWaitingEndEvent),
+    CollabCloseBegin(&'a crewon_protocol::protocol::CollabCloseBeginEvent),
+    CollabCloseEnd(&'a crewon_protocol::protocol::CollabCloseEndEvent),
     SubAgentActivity(&'a SubAgentActivityEvent),
 }
 

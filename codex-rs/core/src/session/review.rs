@@ -1,6 +1,6 @@
 use super::*;
-use codex_core_skills::HostLoadedSkills;
-use codex_protocol::openai_models::ToolMode;
+use crewon_core_skills::HostLoadedSkills;
+use crewon_protocol::openai_models::ToolMode;
 use std::sync::atomic::AtomicBool;
 
 /// Spawn a review thread using the given prompt.
@@ -32,7 +32,7 @@ pub(super) async fn spawn_review_thread(
         .list_models(RefreshStrategy::OnlineIfUncached)
         .await;
     let unified_exec_shell_mode = UnifiedExecShellMode::for_session(
-        codex_tools::unified_exec_feature_mode_for_features(review_features.get()),
+        crewon_tools::unified_exec_feature_mode_for_features(review_features.get()),
         crate::tools::tool_user_shell_type(sess.services.user_shell.as_ref()),
         sess.services.shell_zsh_path.as_ref(),
         sess.services.main_execve_wrapper_exe.as_ref(),
@@ -100,7 +100,7 @@ pub(super) async fn spawn_review_thread(
         parent_turn_context.network.is_some(),
     ));
 
-    let extension_data = Arc::new(codex_extension_api::ExtensionData::new(
+    let extension_data = Arc::new(crewon_extension_api::ExtensionData::new(
         review_turn_id.clone(),
     ));
     extension_data.insert(HostLoadedSkills::new(
@@ -146,7 +146,7 @@ pub(super) async fn spawn_review_thread(
         cwd: parent_turn_context.cwd.clone(),
         final_output_json_schema: None,
         codex_self_exe: parent_turn_context.codex_self_exe.clone(),
-        codex_linux_sandbox_exe: parent_turn_context.codex_linux_sandbox_exe.clone(),
+        crewon_linux_sandbox_exe: parent_turn_context.crewon_linux_sandbox_exe.clone(),
         dynamic_tools: parent_turn_context.dynamic_tools.clone(),
         truncation_policy: model_info.truncation_policy.into(),
         turn_metadata_state,

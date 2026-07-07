@@ -18,24 +18,24 @@ use axum::http::StatusCode;
 use axum::http::Uri;
 use axum::http::header::AUTHORIZATION;
 use axum::routing::get;
-use codex_app_server_protocol::AppBranding;
-use codex_app_server_protocol::AppInfo;
-use codex_app_server_protocol::AppListUpdatedNotification;
-use codex_app_server_protocol::AppMetadata;
-use codex_app_server_protocol::AppReview;
-use codex_app_server_protocol::AppScreenshot;
-use codex_app_server_protocol::AppsListParams;
-use codex_app_server_protocol::AppsListResponse;
-use codex_app_server_protocol::AuthMode;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_login::AuthDotJson;
-use codex_login::save_auth;
+use crewon_app_server_protocol::AppBranding;
+use crewon_app_server_protocol::AppInfo;
+use crewon_app_server_protocol::AppListUpdatedNotification;
+use crewon_app_server_protocol::AppMetadata;
+use crewon_app_server_protocol::AppReview;
+use crewon_app_server_protocol::AppScreenshot;
+use crewon_app_server_protocol::AppsListParams;
+use crewon_app_server_protocol::AppsListResponse;
+use crewon_app_server_protocol::AuthMode;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_login::AuthDotJson;
+use crewon_login::save_auth;
 use pretty_assertions::assert_eq;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::JsonObject;
@@ -152,7 +152,7 @@ async fn list_apps_returns_empty_with_api_key_auth() -> Result<()> {
 }
 
 #[tokio::test]
-async fn list_apps_returns_empty_when_workspace_codex_plugins_disabled() -> Result<()> {
+async fn list_apps_returns_empty_when_workspace_crewon_plugins_disabled() -> Result<()> {
     let connectors = vec![AppInfo {
         id: "beta".to_string(),
         name: "Beta".to_string(),

@@ -1,54 +1,3 @@
-use codex_config::ConfigLayerStack;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_core::LoadedAgentsMd;
-use codex_core::ModelClient;
-use codex_core::NewThread;
-use codex_core::Prompt;
-use codex_core::ResponseEvent;
-use codex_core::ThreadManager;
-use codex_core::resolve_installation_id;
-use codex_core::thread_store_from_config;
-use codex_extension_api::empty_extension_registry;
-use codex_features::Feature;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::default_client::originator;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::WireApi;
-use codex_model_provider_info::built_in_model_providers;
-use codex_models_manager::bundled_models_response;
-use codex_otel::SessionTelemetry;
-use codex_otel::TelemetryAuthMode;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::ModelProviderAuthInfo;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::Settings;
-use codex_protocol::config_types::Verbosity;
-use codex_protocol::error::CodexErr;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
-use codex_protocol::models::FunctionCallOutputContentItem;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ImageDetail;
-use codex_protocol::models::LocalShellAction;
-use codex_protocol::models::LocalShellExecAction;
-use codex_protocol::models::LocalShellStatus;
-use codex_protocol::models::MessagePhase;
-use codex_protocol::models::ReasoningItemContent;
-use codex_protocol::models::ReasoningItemReasoningSummary;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::models::WebSearchAction;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::user_input::UserInput;
 use core_test_support::PathBufExt;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::load_default_config_for_test;
@@ -65,10 +14,61 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_failed;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_config::ConfigLayerStack;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_core::LoadedAgentsMd;
+use crewon_core::ModelClient;
+use crewon_core::NewThread;
+use crewon_core::Prompt;
+use crewon_core::ResponseEvent;
+use crewon_core::ThreadManager;
+use crewon_core::resolve_installation_id;
+use crewon_core::thread_store_from_config;
+use crewon_extension_api::empty_extension_registry;
+use crewon_features::Feature;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_login::default_client::originator;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::WireApi;
+use crewon_model_provider_info::built_in_model_providers;
+use crewon_models_manager::bundled_models_response;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::TelemetryAuthMode;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::ModelProviderAuthInfo;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::Settings;
+use crewon_protocol::config_types::Verbosity;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::DEFAULT_IMAGE_DETAIL;
+use crewon_protocol::models::FunctionCallOutputContentItem;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::ImageDetail;
+use crewon_protocol::models::LocalShellAction;
+use crewon_protocol::models::LocalShellExecAction;
+use crewon_protocol::models::LocalShellStatus;
+use crewon_protocol::models::MessagePhase;
+use crewon_protocol::models::ReasoningItemContent;
+use crewon_protocol::models::ReasoningItemReasoningSummary;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::models::WebSearchAction;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::user_input::UserInput;
 use dunce::canonicalize as normalize_path;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
@@ -246,7 +246,7 @@ move /y tokens.next tokens.txt >nul
             // Match the model-provider default to avoid brittle shell-startup timing in CI.
             timeout_ms: non_zero_u64(/*value*/ 5_000),
             refresh_interval_ms: 60_000,
-            cwd: match codex_utils_absolute_path::AbsolutePathBuf::try_from(self.tempdir.path()) {
+            cwd: match crewon_utils_absolute_path::AbsolutePathBuf::try_from(self.tempdir.path()) {
                 Ok(cwd) => cwd,
                 Err(err) => panic!("tempdir should be absolute: {err}"),
             },
@@ -290,10 +290,10 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
     .unwrap();
 
     // Prior item: user message (should be delivered)
-    let prior_user = codex_protocol::models::ResponseItem::Message {
+    let prior_user = crewon_protocol::models::ResponseItem::Message {
         id: None,
         role: "user".to_string(),
-        content: vec![codex_protocol::models::ContentItem::InputText {
+        content: vec![crewon_protocol::models::ContentItem::InputText {
             text: "resumed user message".to_string(),
         }],
         phase: None,
@@ -311,10 +311,10 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
     .unwrap();
 
     // Prior item: system message (excluded from API history)
-    let prior_system = codex_protocol::models::ResponseItem::Message {
+    let prior_system = crewon_protocol::models::ResponseItem::Message {
         id: None,
         role: "system".to_string(),
-        content: vec![codex_protocol::models::ContentItem::OutputText {
+        content: vec![crewon_protocol::models::ContentItem::OutputText {
             text: "resumed system instruction".to_string(),
         }],
         phase: None,
@@ -332,10 +332,10 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
     .unwrap();
 
     // Prior item: assistant message
-    let prior_item = codex_protocol::models::ResponseItem::Message {
+    let prior_item = crewon_protocol::models::ResponseItem::Message {
         id: None,
         role: "assistant".to_string(),
-        content: vec![codex_protocol::models::ContentItem::OutputText {
+        content: vec![crewon_protocol::models::ContentItem::OutputText {
             text: "resumed assistant message".to_string(),
         }],
         phase: Some(MessagePhase::Commentary),
@@ -361,9 +361,9 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
     )
     .await;
 
-    // Configure Codex to resume from our file
+    // Configure Crewon to resume from our file
     let codex_home = Arc::new(TempDir::new().unwrap());
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(codex_home.clone())
         .with_config(|config| {
             // Ensure user instructions are NOT delivered on resume.
@@ -373,7 +373,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         .resume(&server, codex_home, session_path.clone())
         .await
         .expect("resume conversation");
-    let codex = test.codex.clone();
+    let codex = test.crewon.clone();
     let session_configured = test.session_configured;
 
     // 1) Assert initial_messages only includes existing EventMsg entries; response items are not converted
@@ -494,7 +494,7 @@ async fn resume_replays_legacy_js_repl_image_rollout_shapes() {
                     timestamp: "2024-01-01T00:00:00Z".to_string(),
                     cwd: ".".into(),
                     originator: "test_originator".to_string(),
-                    cli_version: "test_version".to_string(),
+                    client_version: "test_version".to_string(),
                     model_provider: Some("test-provider".to_string()),
                     ..Default::default()
                 },
@@ -544,7 +544,7 @@ async fn resume_replays_legacy_js_repl_image_rollout_shapes() {
     .await;
 
     let codex_home = Arc::new(TempDir::new().unwrap());
-    let mut builder = test_codex().with_model("gpt-5.4");
+    let mut builder = test_crewon().with_model("gpt-5.4");
     let test = builder
         .resume(&server, codex_home, session_path.clone())
         .await
@@ -625,7 +625,7 @@ async fn resume_replays_image_tool_outputs_with_detail() {
                     timestamp: "2024-01-01T00:00:00Z".to_string(),
                     cwd: ".".into(),
                     originator: "test_originator".to_string(),
-                    cli_version: "test_version".to_string(),
+                    client_version: "test_version".to_string(),
                     model_provider: Some("test-provider".to_string()),
                     ..Default::default()
                 },
@@ -696,7 +696,7 @@ async fn resume_replays_image_tool_outputs_with_detail() {
     .await;
 
     let codex_home = Arc::new(TempDir::new().unwrap());
-    let mut builder = test_codex().with_model("gpt-5.4");
+    let mut builder = test_crewon().with_model("gpt-5.4");
     let test = builder
         .resume(&server, codex_home, session_path.clone())
         .await
@@ -745,12 +745,12 @@ async fn includes_session_id_thread_id_and_model_headers_in_request() {
     )
     .await;
 
-    let mut builder = test_codex().with_auth(CodexAuth::from_api_key("Test API Key"));
+    let mut builder = test_crewon().with_auth(CrewonAuth::from_api_key("Test API Key"));
     let test = builder
         .build(&server)
         .await
         .expect("create new conversation");
-    let codex = test.codex.clone();
+    let codex = test.crewon.clone();
     let expected_session_id = test.session_configured.session_id;
     let expected_thread_id = test.session_configured.thread_id;
 
@@ -878,11 +878,11 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort.clone();
     let summary = config.model_reasoning_summary;
-    let model = codex_core::test_support::get_model_offline(config.model.as_deref());
+    let model = crewon_core::test_support::get_model_offline(config.model.as_deref());
     config.model = Some(model.clone());
     let config = Arc::new(config);
     let model_info =
-        codex_core::test_support::construct_model_info_offline(model.as_str(), &config);
+        crewon_core::test_support::construct_model_info_offline(model.as_str(), &config);
     let thread_id = ThreadId::new();
     let session_telemetry = SessionTelemetry::new(
         thread_id,
@@ -897,9 +897,9 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
         SessionSource::Exec,
     );
     let client = ModelClient::new(
-        Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
-            "unused-api-key",
-        ))),
+        Some(AuthManager::from_auth_for_testing(
+            CrewonAuth::from_api_key("unused-api-key"),
+        )),
         thread_id.into(),
         thread_id,
         /*installation_id*/ "11111111-1111-4111-8111-111111111111".to_string(),
@@ -933,7 +933,7 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
             summary.unwrap_or(ReasoningSummary::Auto),
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("responses stream to start");
@@ -956,8 +956,8 @@ async fn includes_base_instructions_override_in_request() {
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::from_api_key("Test API Key"))
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::from_api_key("Test API Key"))
         .with_config(|config| {
             config.base_instructions = Some("test instructions".to_string());
         });
@@ -965,7 +965,7 @@ async fn includes_base_instructions_override_in_request() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1011,7 +1011,7 @@ async fn chatgpt_auth_sends_correct_request() {
         built_in_model_providers(/* openai_base_url */ /*openai_base_url*/ None)["openai"].clone();
     model_provider.base_url = Some(format!("{}/api/codex", server.uri()));
     model_provider.supports_websockets = false;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_auth(create_dummy_codex_auth())
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -1020,7 +1020,7 @@ async fn chatgpt_auth_sends_correct_request() {
         .build(&server)
         .await
         .expect("create new conversation");
-    let codex = test.codex.clone();
+    let codex = test.crewon.clone();
     let expected_session_id = test.session_configured.session_id;
     let expected_thread_id = test.session_configured.thread_id;
 
@@ -1117,16 +1117,16 @@ async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
     let mut config = load_default_config_for_test(&codex_home).await;
     config.model_provider = model_provider;
 
-    let auth_manager = match CodexAuth::from_auth_storage(
+    let auth_manager = match CrewonAuth::from_auth_storage(
         codex_home.path(),
         AuthCredentialsStoreMode::File,
         /*chatgpt_base_url*/ None,
     )
     .await
     {
-        Ok(Some(auth)) => codex_core::test_support::auth_manager_from_auth(auth),
-        Ok(None) => panic!("No CodexAuth found in codex_home"),
-        Err(e) => panic!("Failed to load CodexAuth: {e}"),
+        Ok(Some(auth)) => crewon_core::test_support::auth_manager_from_auth(auth),
+        Ok(None) => panic!("No CrewonAuth found in codex_home"),
+        Err(e) => panic!("Failed to load CrewonAuth: {e}"),
     };
     let installation_id = resolve_installation_id(&config.codex_home)
         .await
@@ -1135,7 +1135,7 @@ async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
         &config,
         auth_manager,
         SessionSource::Exec,
-        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        Arc::new(crewon_exec_server::EnvironmentManager::default_for_tests()),
         empty_extension_registry(),
         /*analytics_events_client*/ None,
         thread_store_from_config(&config, /*state_db*/ None),
@@ -1176,8 +1176,8 @@ async fn includes_user_instructions_message_in_request() {
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::from_api_key("Test API Key"))
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::from_api_key("Test API Key"))
         .with_config(|config| {
             config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing("be nice"));
         });
@@ -1185,7 +1185,7 @@ async fn includes_user_instructions_message_in_request() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1260,7 +1260,7 @@ async fn includes_apps_guidance_as_developer_message_for_chatgpt_auth() {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_auth(create_dummy_codex_auth())
         .with_config(move |config| {
             config
@@ -1273,7 +1273,7 @@ async fn includes_apps_guidance_as_developer_message_for_chatgpt_auth() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1323,8 +1323,8 @@ async fn omits_apps_guidance_for_api_key_auth_even_when_feature_enabled() {
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::from_api_key("Test API Key"))
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::from_api_key("Test API Key"))
         .with_config(move |config| {
             config
                 .features
@@ -1336,7 +1336,7 @@ async fn omits_apps_guidance_for_api_key_auth_even_when_feature_enabled() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1381,7 +1381,7 @@ async fn omits_apps_guidance_when_configured_off() {
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_auth(create_dummy_codex_auth())
         .with_config(move |config| {
             config
@@ -1395,7 +1395,7 @@ async fn omits_apps_guidance_when_configured_off() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1430,14 +1430,14 @@ async fn omits_environment_context_when_configured_off() {
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config.include_environment_context = false;
     });
     let codex = builder
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1484,9 +1484,9 @@ async fn skills_append_to_developer_message() {
     .expect("write skill");
 
     let codex_home_path = codex_home.path().to_path_buf();
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(codex_home.clone())
-        .with_auth(CodexAuth::from_api_key("Test API Key"))
+        .with_auth(CrewonAuth::from_api_key("Test API Key"))
         .with_config(move |config| {
             config.cwd = codex_home_path.abs();
         });
@@ -1494,7 +1494,7 @@ async fn skills_append_to_developer_message() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1546,7 +1546,7 @@ async fn skills_use_aliases_in_developer_message_under_budget_pressure() {
     let codex_home_parent = TempDir::new().unwrap();
     let long_home_parent = codex_home_parent
         .path()
-        .join("codex-home-with-long-shared-prefix-for-skill-alias-budget-test");
+        .join("crewon-home-with-long-shared-prefix-for-skill-alias-budget-test");
     std::fs::create_dir_all(&long_home_parent).expect("create long home parent");
     let codex_home = Arc::new(TempDir::new_in(long_home_parent).unwrap());
     let skill_root = codex_home.path().join("skills");
@@ -1561,9 +1561,9 @@ async fn skills_use_aliases_in_developer_message_under_budget_pressure() {
     }
 
     let codex_home_path = codex_home.path().to_path_buf();
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(codex_home.clone())
-        .with_auth(CodexAuth::from_api_key("Test API Key"))
+        .with_auth(CrewonAuth::from_api_key("Test API Key"))
         .with_config(move |config| {
             config.cwd = codex_home_path.abs();
             let user_config_path = codex_home_path.join("config.toml").abs();
@@ -1577,7 +1577,7 @@ async fn skills_use_aliases_in_developer_message_under_budget_pressure() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1632,7 +1632,7 @@ async fn includes_configured_effort_in_request() -> anyhow::Result<()> {
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_model("gpt-5.4")
         .with_config(|config| {
             config.model_reasoning_effort = Some(ReasoningEffort::Medium);
@@ -1680,7 +1680,8 @@ async fn includes_no_effort_in_request() -> anyhow::Result<()> {
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let TestCodex { codex, .. } = test_codex().with_model("gpt-5.4").build(&server).await?;
+    let TestCrewon { crewon: codex, .. } =
+        test_crewon().with_model("gpt-5.4").build(&server).await?;
 
     codex
         .submit(Op::UserInput {
@@ -1723,7 +1724,8 @@ async fn includes_default_reasoning_effort_in_request_when_defined_by_model_info
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let TestCodex { codex, .. } = test_codex().with_model("gpt-5.4").build(&server).await?;
+    let TestCrewon { crewon: codex, .. } =
+        test_crewon().with_model("gpt-5.4").build(&server).await?;
 
     codex
         .submit(Op::UserInput {
@@ -1765,7 +1767,11 @@ async fn user_turn_collaboration_mode_overrides_model_and_effort() -> anyhow::Re
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let TestCodex { codex, config, .. } = test_codex().with_model("gpt-5.4").build(&server).await?;
+    let TestCrewon {
+        crewon: codex,
+        config,
+        ..
+    } = test_crewon().with_model("gpt-5.4").build(&server).await?;
 
     let collaboration_mode = CollaborationMode {
         mode: ModeKind::Default,
@@ -1785,7 +1791,7 @@ async fn user_turn_collaboration_mode_overrides_model_and_effort() -> anyhow::Re
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(config.cwd.clone())),
                 approval_policy: Some(config.permissions.approval_policy.value()),
                 sandbox_policy: Some(config.legacy_sandbox_policy()),
@@ -1825,7 +1831,7 @@ async fn configured_reasoning_summary_is_sent() -> anyhow::Result<()> {
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.model_reasoning_summary = Some(ReasoningSummary::Concise);
         })
@@ -1880,7 +1886,7 @@ async fn responses_lite_sets_all_turns_context_and_disables_parallel_tool_calls(
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_model_info_override("gpt-5.4", |model_info| {
             model_info.use_responses_lite = true;
             model_info.supports_parallel_tool_calls = true;
@@ -1938,12 +1944,12 @@ async fn user_turn_explicit_reasoning_summary_overrides_model_catalog_default() 
     model.supports_reasoning_summaries = true;
     model.default_reasoning_summary = ReasoningSummary::Detailed;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         config,
         session_configured,
         ..
-    } = test_codex()
+    } = test_crewon()
         .with_model("gpt-5.4")
         .with_config(move |config| {
             config.model_catalog = Some(model_catalog);
@@ -1960,14 +1966,14 @@ async fn user_turn_explicit_reasoning_summary_overrides_model_catalog_default() 
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(config.cwd.clone())),
                 approval_policy: Some(config.permissions.approval_policy.value()),
                 sandbox_policy: Some(config.legacy_sandbox_policy()),
                 summary: Some(ReasoningSummary::Concise),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: session_configured.model,
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -2004,7 +2010,7 @@ async fn reasoning_summary_is_omitted_when_disabled() -> anyhow::Result<()> {
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.model_reasoning_summary = Some(ReasoningSummary::None);
         })
@@ -2061,7 +2067,7 @@ async fn reasoning_summary_none_overrides_model_catalog_default() -> anyhow::Res
     model.supports_reasoning_summaries = true;
     model.default_reasoning_summary = ReasoningSummary::Detailed;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_model("gpt-5.4")
         .with_config(move |config| {
             config.model_reasoning_summary = Some(ReasoningSummary::None);
@@ -2107,7 +2113,8 @@ async fn includes_default_verbosity_in_request() -> anyhow::Result<()> {
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let TestCodex { codex, .. } = test_codex().with_model("gpt-5.4").build(&server).await?;
+    let TestCrewon { crewon: codex, .. } =
+        test_crewon().with_model("gpt-5.4").build(&server).await?;
 
     codex
         .submit(Op::UserInput {
@@ -2149,7 +2156,7 @@ async fn configured_verbosity_not_sent_for_models_without_support() -> anyhow::R
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_model("test-no-verbosity")
         .with_config(|config| {
             config.model_verbosity = Some(Verbosity::High);
@@ -2196,7 +2203,7 @@ async fn configured_verbosity_is_sent() -> anyhow::Result<()> {
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_model("gpt-5.4")
         .with_config(|config| {
             config.model_verbosity = Some(Verbosity::High);
@@ -2244,8 +2251,8 @@ async fn includes_developer_instructions_message_in_request() {
         sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
     )
     .await;
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::from_api_key("Test API Key"))
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::from_api_key("Test API Key"))
         .with_config(|config| {
             config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing("be nice"));
             config.developer_instructions = Some("be useful".to_string());
@@ -2254,7 +2261,7 @@ async fn includes_developer_instructions_message_in_request() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -2367,14 +2374,14 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort.clone();
     let summary = config.model_reasoning_summary;
-    let model = codex_core::test_support::get_model_offline(config.model.as_deref());
+    let model = crewon_core::test_support::get_model_offline(config.model.as_deref());
     config.model = Some(model.clone());
     let config = Arc::new(config);
     let model_info =
-        codex_core::test_support::construct_model_info_offline(model.as_str(), &config);
+        crewon_core::test_support::construct_model_info_offline(model.as_str(), &config);
     let thread_id = ThreadId::new();
     let auth_manager =
-        codex_core::test_support::auth_manager_from_auth(CodexAuth::from_api_key("Test API Key"));
+        crewon_core::test_support::auth_manager_from_auth(CrewonAuth::from_api_key("Test API Key"));
     let session_telemetry = SessionTelemetry::new(
         thread_id,
         model.as_str(),
@@ -2477,7 +2484,7 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
             summary.unwrap_or(ReasoningSummary::Auto),
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("responses stream to start");
@@ -2543,8 +2550,8 @@ async fn token_count_includes_rate_limits_snapshot() {
     provider.base_url = Some(format!("{}/v1", server.uri()));
     provider.supports_websockets = false;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::from_api_key("test"))
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::from_api_key("test"))
         .with_config(move |config| {
             config.model_provider = provider;
         });
@@ -2552,7 +2559,7 @@ async fn token_count_includes_rate_limits_snapshot() {
         .build(&server)
         .await
         .expect("create conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -2672,9 +2679,9 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
         .mount(&server)
         .await;
 
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let codex_fixture = builder.build(&server).await?;
-    let codex = codex_fixture.codex.clone();
+    let codex = codex_fixture.crewon.clone();
 
     let expected_limits = json!({
         "limit_id": "codex",
@@ -2764,7 +2771,7 @@ async fn context_window_error_sets_total_tokens_to_model_window() -> anyhow::Res
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.model = Some("gpt-5.4".to_string());
             config.model_context_window = Some(272_000);
@@ -2866,7 +2873,7 @@ async fn incomplete_response_emits_content_filter_error_message() -> anyhow::Res
 
     let responses_mock = mount_sse_once(&server, incomplete_response).await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.model_provider.stream_max_retries = Some(0);
         })
@@ -2972,7 +2979,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
     };
 
     // Init session
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_auth(create_dummy_codex_auth())
         .with_config(move |config| {
             config.model_provider = provider;
@@ -2981,7 +2988,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -3061,7 +3068,7 @@ async fn env_var_overrides_loaded_auth() {
     };
 
     // Init session
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_auth(create_dummy_codex_auth())
         .with_config(move |config| {
             config.model_provider = provider;
@@ -3070,7 +3077,7 @@ async fn env_var_overrides_loaded_auth() {
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -3089,8 +3096,8 @@ async fn env_var_overrides_loaded_auth() {
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 }
 
-fn create_dummy_codex_auth() -> CodexAuth {
-    CodexAuth::create_dummy_chatgpt_auth_for_testing()
+fn create_dummy_codex_auth() -> CrewonAuth {
+    CrewonAuth::create_dummy_chatgpt_auth_for_testing()
 }
 
 /// Scenario:
@@ -3101,7 +3108,7 @@ fn create_dummy_codex_auth() -> CodexAuth {
 /// We assert that the `input` sent on each turn contains the expected conversation history
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn history_dedupes_streamed_and_final_messages_across_turns() {
-    // Skip under Codex sandbox network restrictions (mirrors other tests).
+    // Skip under Crewon sandbox network restrictions (mirrors other tests).
     skip_if_no_network!();
 
     // Mock server that will receive three sequential requests and return the same SSE stream
@@ -3121,12 +3128,12 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
 
     let request_log = mount_sse_sequence(&server, vec![sse1.clone(), sse1.clone(), sse1]).await;
 
-    let mut builder = test_codex().with_auth(CodexAuth::from_api_key("Test API Key"));
+    let mut builder = test_crewon().with_auth(CrewonAuth::from_api_key("Test API Key"));
     let codex = builder
         .build(&server)
         .await
         .expect("create new conversation")
-        .codex;
+        .crewon;
 
     // Turn 1: user sends U1; wait for completion.
     codex

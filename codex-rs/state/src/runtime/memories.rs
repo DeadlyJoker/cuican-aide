@@ -1669,7 +1669,7 @@ mod tests {
     use crate::model::Stage1StartupClaimParams;
     use chrono::Duration;
     use chrono::Utc;
-    use codex_protocol::ThreadId;
+    use crewon_protocol::ThreadId;
     use pretty_assertions::assert_eq;
     use sqlx::Row;
     use std::sync::Arc;
@@ -2020,7 +2020,7 @@ mod tests {
         old.updated_at = old_at;
         runtime.upsert_thread(&old).await.expect("upsert old");
 
-        let allowed_sources = vec!["cli".to_string()];
+        let allowed_sources = vec!["app-server".to_string()];
         let claims = runtime
             .claim_stage1_jobs_for_startup(
                 current_thread_id,
@@ -2120,7 +2120,7 @@ mod tests {
             .await
             .expect("upsert stale thread");
 
-        let allowed_sources = vec!["cli".to_string()];
+        let allowed_sources = vec!["app-server".to_string()];
         let claims_with_one_scanned_thread = runtime
             .claim_stage1_jobs_for_startup(
                 current_thread_id,
@@ -2206,7 +2206,7 @@ mod tests {
             .await
             .expect("upsert enabled thread");
 
-        let allowed_sources = vec!["cli".to_string()];
+        let allowed_sources = vec!["app-server".to_string()];
         let claims = runtime
             .claim_stage1_jobs_for_startup(
                 current_thread_id,
@@ -2410,7 +2410,7 @@ INSERT INTO jobs (
             }
         }
 
-        let allowed_sources = vec!["cli".to_string()];
+        let allowed_sources = vec!["app-server".to_string()];
         let claims = runtime
             .claim_stage1_jobs_for_startup(
                 current_thread_id,
@@ -2498,7 +2498,7 @@ WHERE kind = 'memory_stage1'
                 .expect("upsert eligible thread");
         }
 
-        let allowed_sources = vec!["cli".to_string()];
+        let allowed_sources = vec!["app-server".to_string()];
         let first_claims = runtime
             .claim_stage1_jobs_for_startup(
                 current_thread_id,

@@ -1,16 +1,16 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use codex_core_skills::SkillMetadata;
-use codex_core_skills::filter_skill_load_outcome_for_product;
-use codex_core_skills::loader::SkillRoot;
-use codex_core_skills::loader::load_skills_from_roots;
-use codex_exec_server::EnvironmentManager;
-use codex_exec_server::EnvironmentPathRef;
-use codex_protocol::capabilities::CapabilityRootLocation;
-use codex_protocol::protocol::Product;
-use codex_protocol::protocol::SkillScope;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_core_skills::SkillMetadata;
+use crewon_core_skills::filter_skill_load_outcome_for_product;
+use crewon_core_skills::loader::SkillRoot;
+use crewon_core_skills::loader::load_skills_from_roots;
+use crewon_exec_server::EnvironmentManager;
+use crewon_exec_server::EnvironmentPathRef;
+use crewon_protocol::capabilities::CapabilityRootLocation;
+use crewon_protocol::protocol::Product;
+use crewon_protocol::protocol::SkillScope;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 use crate::catalog::SkillAuthority;
 use crate::catalog::SkillCatalog;
@@ -153,7 +153,7 @@ fn catalog_entry_from_skill(
     enabled: bool,
     authority: SkillAuthority,
     selected_root_id: &str,
-    file_system: Arc<dyn codex_exec_server::ExecutorFileSystem>,
+    file_system: Arc<dyn crewon_exec_server::ExecutorFileSystem>,
 ) -> SkillCatalogEntry {
     let skill_path = skill.path_to_skills_md.to_string_lossy().into_owned();
     let normalized_path = skill_path.replace('\\', "/");

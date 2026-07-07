@@ -1,11 +1,11 @@
 use super::*;
 use crate::shell::ShellType;
 use crate::shell::default_user_shell;
-use codex_exec_server::Environment;
-use codex_tools::UnifiedExecShellMode;
-use codex_tools::ZshForkConfig;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_output_truncation::TruncationPolicy;
+use crewon_exec_server::Environment;
+use crewon_tools::UnifiedExecShellMode;
+use crewon_tools::ZshForkConfig;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_output_truncation::TruncationPolicy;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
@@ -33,7 +33,7 @@ async fn invocation_for_payload(
         cancellation_token: tokio_util::sync::CancellationToken::new(),
         tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
         call_id: call_id.to_string(),
-        tool_name: codex_tools::ToolName::plain(tool_name),
+        tool_name: crewon_tools::ToolName::plain(tool_name),
         source: ToolCallSource::Direct,
         payload,
     }
@@ -177,9 +177,9 @@ fn test_get_command_rejects_explicit_shell_in_zsh_fork_mode() -> anyhow::Result<
     let shell_mode = UnifiedExecShellMode::ZshFork(ZshForkConfig {
         shell_zsh_path,
         main_execve_wrapper_exe: AbsolutePathBuf::from_absolute_path(if cfg!(windows) {
-            r"C:\opt\codex\codex-execve-wrapper"
+            r"C:\opt\codex\crewon-execve-wrapper"
         } else {
-            "/opt/codex/codex-execve-wrapper"
+            "/opt/codex/crewon-execve-wrapper"
         })?,
     });
 
@@ -209,9 +209,9 @@ async fn shell_mode_for_environment_uses_direct_mode_for_remote_environments() -
     let shell_mode = UnifiedExecShellMode::ZshFork(ZshForkConfig {
         shell_zsh_path,
         main_execve_wrapper_exe: AbsolutePathBuf::from_absolute_path(if cfg!(windows) {
-            r"C:\opt\codex\codex-execve-wrapper"
+            r"C:\opt\codex\crewon-execve-wrapper"
         } else {
-            "/opt/codex/codex-execve-wrapper"
+            "/opt/codex/crewon-execve-wrapper"
         })?,
     });
     let local_environment = Environment::default_for_tests();
@@ -245,7 +245,7 @@ async fn exec_command_pre_tool_use_payload_uses_raw_command() {
             cancellation_token: tokio_util::sync::CancellationToken::new(),
             tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
             call_id: "call-43".to_string(),
-            tool_name: codex_tools::ToolName::plain("exec_command"),
+            tool_name: crewon_tools::ToolName::plain("exec_command"),
             source: crate::tools::context::ToolCallSource::Direct,
             payload,
         }),
@@ -271,7 +271,7 @@ async fn exec_command_pre_tool_use_payload_skips_write_stdin() {
             cancellation_token: tokio_util::sync::CancellationToken::new(),
             tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
             call_id: "call-44".to_string(),
-            tool_name: codex_tools::ToolName::plain("write_stdin"),
+            tool_name: crewon_tools::ToolName::plain("write_stdin"),
             source: crate::tools::context::ToolCallSource::Direct,
             payload,
         }),
