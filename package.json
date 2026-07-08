@@ -3,9 +3,11 @@
   "private": true,
   "description": "Tools for repo-wide maintenance.",
   "scripts": {
-    "ui:dev": "pnpm --filter @crewon/ui dev",
+    "ui:dev": "bash scripts/crewon-dev.sh",
+    "ui:dev:frontend": "pnpm --filter @crewon/ui dev",
     "ui:build": "pnpm --filter @crewon/ui build",
     "ui:desktop": "pnpm --filter @crewon/ui desktop",
+    "crewon:dev": "bash scripts/crewon-dev.sh",
     "crewon:app-server": "bash scripts/crewon-app-server.sh",
     "format": "prettier --check *.json *.md docs/*.md .github/workflows/*.yml **/*.js",
     "format:fix": "prettier --write *.json *.md docs/*.md .github/workflows/*.yml **/*.js",

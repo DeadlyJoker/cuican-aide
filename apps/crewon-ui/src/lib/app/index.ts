@@ -18,6 +18,7 @@ export {
   shouldAutoCloseInspector,
   shouldAutoCloseSidebar,
 } from "./appUiState";
+export { isCommandShellHash } from "./appRouting";
 export { createAppDomainActionCoordinator } from "./appDomainActionCoordinator";
 export { createAppDomainBackendCoordinator } from "./appDomainBackendCoordinator";
 export { createAppLibraryOpenCoordinator } from "./appLibraryOpenCoordinator";
@@ -25,6 +26,7 @@ export { createAppLibraryPanelDispatchCoordinator } from "./appLibraryPanelDispa
 export { createAppOfficeRuntimeCoordinator } from "./appOfficeRuntimeCoordinator";
 export { createAppSettingsCoordinator } from "./appSettingsCoordinator";
 export { useAppChromeState } from "./useAppChromeState";
+export { useAppCommandShellRoute } from "./useAppCommandShellRoute";
 export { useAppComposerState } from "./useAppComposerState";
 export { useAppConfirmDialog } from "./useAppConfirmDialog";
 export { useAppConnectionHandlerSet } from "./useAppConnectionHandlerSet";

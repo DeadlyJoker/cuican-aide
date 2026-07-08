@@ -106,10 +106,22 @@ type RequestOptions = {
 };
 
 const DEFAULT_BASE_URL = "/agent-platform-api";
+const PLATFORM_AVAILABILITY_PROBE_PATH =
+  "/api/v1/mcp/tools?page=1&page_size=1";
 const TOKEN_STORAGE_KEY = "crewon-agent-platform-token";
+const UNAVAILABLE_RETRY_MS = 30_000;
 
 let cachedToken: string | null = null;
 let cachedTokenPromise: Promise<string | null> | null = null;
+let availabilityProbePromise: Promise<void> | null = null;
+let unavailableRetryAt = 0;
+
+class AgentPlatformUnavailableError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = "AgentPlatformUnavailableError";
+  }
+}
 
 function envValue(key: string): string | undefined {
   const value = import.meta.env[key];
@@ -122,6 +134,50 @@ export function agentPlatformBaseUrl(): string {
     envValue("VITE_AGENT_PLATFORM_API_BASE_URL") ??
     DEFAULT_BASE_URL
   ).replace(/\/+$/, "");
+}
+
+function isUnavailableStatus(status: number): boolean {
+  return status === 502 || status === 503 || status === 504;
+}
+
+function markAgentPlatformUnavailable(cause?: unknown): AgentPlatformUnavailableError {
+  unavailableRetryAt = Date.now() + UNAVAILABLE_RETRY_MS;
+  return new AgentPlatformUnavailableError("agent-platform unavailable", cause);
+}
+
+async function ensureAgentPlatformAvailable(): Promise<void> {
+  if (Date.now() < unavailableRetryAt) {
+    throw new AgentPlatformUnavailableError("agent-platform unavailable");
+  }
+
+  if (availabilityProbePromise) {
+    return availabilityProbePromise;
+  }
+
+  availabilityProbePromise = probeAgentPlatformAvailability().finally(() => {
+    availabilityProbePromise = null;
+  });
+  return availabilityProbePromise;
+}
+
+async function probeAgentPlatformAvailability(): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${agentPlatformBaseUrl()}${PLATFORM_AVAILABILITY_PROBE_PATH}`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+  } catch (error) {
+    throw markAgentPlatformUnavailable(error);
+  }
+
+  if (isUnavailableStatus(response.status)) {
+    throw markAgentPlatformUnavailable(response.status);
+  }
 }
 
 async function request<T>(
@@ -202,6 +258,8 @@ async function listPage<T>(
 }
 
 export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot> {
+  await ensureAgentPlatformAvailable();
+
   const [agents, knowledgeBases, skills, mcpServers, mcpTools, workflows] =
     await Promise.all([
       listPage<PlatformAgent>("/api/v1/agents/?page=1&page_size=100", {

@@ -49,6 +49,7 @@ export type AppThreadRuntimeHandlers = {
   renameThread: (thread: Thread) => Promise<void>;
   selectThread: (threadId: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
+  sendMessageInNewThread: (text: string) => Promise<void>;
   startDraftThread: () => void;
   startReview: () => Promise<void>;
   startSideChat: () => Promise<void>;
@@ -138,6 +139,39 @@ export function createAppThreadRuntimeHandlers(
       threadSource,
     });
 
+  const sendMessageWithThreadContext = (
+    text: string,
+    threadContext: {
+      activeTurnId: string | null;
+      selectedThread: Thread | null;
+      selectedThreadId: string | null;
+    },
+  ) =>
+    sendMessageAction({
+      activeTurnId: threadContext.activeTurnId,
+      client: params.client,
+      createThread: (initialPrompt) => createThread(initialPrompt),
+      demoResponse: params.demoResponse,
+      isConnected: params.isConnected,
+      isDemoPreview: params.isDemoPreview,
+      isSending: params.isSending,
+      locale: params.locale,
+      pendingComposerMentions: params.pendingComposerMentions,
+      preserveThreadsAfterConnectionLoss:
+        params.preserveThreadsAfterConnectionLoss,
+      selectedThread: threadContext.selectedThread,
+      selectedThreadId: threadContext.selectedThreadId,
+      setActiveTurnByThread: params.setActiveTurnByThread,
+      setComposerFocusSignal: params.setComposerFocusSignal,
+      setComposerValue: params.setComposerValue,
+      setIsSending: params.setIsSending,
+      setNotice: params.setNotice,
+      setPendingComposerMentions: params.setPendingComposerMentions,
+      setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
+      setThreads: params.setThreads,
+      text,
+    });
+
   return {
     archiveThread: (thread) =>
       archiveThreadAction({
@@ -205,29 +239,16 @@ export function createAppThreadRuntimeHandlers(
         threadId,
       }),
     sendMessage: (text) =>
-      sendMessageAction({
+      sendMessageWithThreadContext(text, {
         activeTurnId,
-        client: params.client,
-        createThread: (initialPrompt) => createThread(initialPrompt),
-        demoResponse: params.demoResponse,
-        isConnected: params.isConnected,
-        isDemoPreview: params.isDemoPreview,
-        isSending: params.isSending,
-        locale: params.locale,
-        pendingComposerMentions: params.pendingComposerMentions,
-        preserveThreadsAfterConnectionLoss:
-          params.preserveThreadsAfterConnectionLoss,
         selectedThread: params.selectedThread,
         selectedThreadId: params.selectedThreadId,
-        setActiveTurnByThread: params.setActiveTurnByThread,
-        setComposerFocusSignal: params.setComposerFocusSignal,
-        setComposerValue: params.setComposerValue,
-        setIsSending: params.setIsSending,
-        setNotice: params.setNotice,
-        setPendingComposerMentions: params.setPendingComposerMentions,
-        setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
-        setThreads: params.setThreads,
-        text,
+      }),
+    sendMessageInNewThread: (text) =>
+      sendMessageWithThreadContext(text, {
+        activeTurnId: null,
+        selectedThread: null,
+        selectedThreadId: null,
       }),
     startDraftThread: () => {
       startDraftThreadAction({

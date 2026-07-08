@@ -70,12 +70,15 @@ export function AppWorkspaceConversationContent({
         connectionState={connectionState}
         cwd={cwd}
         isSending={isSending}
+        locale={locale}
+        slashCommands={slashCommands}
         workMode={workMode}
         onAttachContext={onAttachContext}
         onChangeComposerValue={onChangeComposerValue}
         onModeChange={onModeChange}
         onRetryConnection={onRetryConnection}
         onSend={onSend}
+        onSlashCommandSelect={onSlashCommandSelect}
       />
     );
   }

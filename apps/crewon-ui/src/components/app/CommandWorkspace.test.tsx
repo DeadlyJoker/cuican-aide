@@ -1,17 +1,19 @@
-import { afterEach, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   activateDesignPanelTab,
   applyDesignCardVisibility,
   cleanSlotTitle,
   CommandWorkspace,
+  insertTokenIntoComposerValue,
   selectCommandHomeSlots,
   setDefaultTeamOfficePreview,
   setActiveFilter,
   syncDesignFilterState,
 } from "./CommandWorkspace";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
+import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 
 function snapshot(): AgentPlatformSnapshot {
   return {
@@ -169,6 +171,23 @@ describe("CommandWorkspace", () => {
     return renderToStaticMarkup(commandWorkspaceElement());
   }
 
+  it("inserts slash command tokens without losing mention syntax", () => {
+    expect(
+      insertTokenIntoComposerValue({
+        prefix: "/",
+        token: "$review",
+        value: "检查主页",
+      }),
+    ).toBe("检查主页 $review ");
+    expect(
+      insertTokenIntoComposerValue({
+        prefix: "@",
+        token: "Agent 小队交付空间",
+        value: "",
+      }),
+    ).toBe("@Agent 小队交付空间 ");
+  });
+
   it("renders the original desktop command shell and clean Chinese copy", () => {
     const markup = renderCommandWorkspace();
 
@@ -243,6 +262,42 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('id="schedule-arrangement-modal"');
     expect(markup).toContain("创建任务安排");
     expect(markup).toContain("小队执行安排");
+  });
+
+  it("renders real slash commands as homepage palette candidates", () => {
+    const command: ComposerSlashCommand = {
+      id: "skill:review",
+      kind: "skill",
+      label: "Review Skill",
+      meta: "Skill",
+      description: "Review the page",
+      token: "$review",
+      mention: {
+        kind: "skill",
+        name: "Review Skill",
+        path: "skills/review",
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        slashCommands={[command]}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+        onSlashCommandSelect={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-slash-item=""');
+    expect(markup).toContain('data-label="Review Skill"');
+    expect(markup).toContain("Review the page");
   });
 
   it("filters schedule cards like the original design runtime", () => {

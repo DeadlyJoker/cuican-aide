@@ -11,7 +11,7 @@ import {
   useAppPendingServerRequests, useAppChromeState, useAppThreadState, useAppStateRefsEffect, useAppRunTrackingRefs,
   useAppComposerState, useAppSlashCommands, useAppWorkspaceStatusState, useAppShellRuntimeState, useAppTerminalState,
   useAppThreadSelection, useAppServerEventHandlerSet, useAppThreadListEffects, useAppThreadMetadataEffects,
-  useAppViewSyncEffects, useAppModelResponseTimeoutEffect,
+  useAppViewSyncEffects, useAppModelResponseTimeoutEffect, useAppCommandShellRoute,
 } from "./lib/app";
 import type { ComposerSlashCommand } from "./lib/composer/composerSlashCommands";
 import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
@@ -133,6 +133,8 @@ export function App() {
   const t = translate(locale);
   const { confirmRequest, requestConfirm, resolveConfirm } =
     useAppConfirmDialog();
+  const { closeCommandShellRoute, commandShellRouteActive } =
+    useAppCommandShellRoute();
 
   const {
     activeTurnId,
@@ -182,7 +184,7 @@ export function App() {
     setLocale,
     setTheme,
     theme,
-    thread: selectedThread,
+    thread: commandShellRouteActive ? null : selectedThread,
     untitledThreadLabel: t.untitledThread,
   });
 
@@ -516,6 +518,7 @@ export function App() {
     renameThread,
     selectThread,
     sendMessage,
+    sendMessageInNewThread,
     startDraftThread,
     startReview,
     startSideChat,
@@ -562,17 +565,9 @@ export function App() {
     untitledThreadLabel: t.untitledThread,
   });
 
-  useAppKeyboardShortcutEffects({
-    isSending,
-    startDraftThread,
-  });
+  useAppKeyboardShortcutEffects({ isSending, startDraftThread });
 
-  const {
-    attachWorkspaceContext,
-    loadBrowserApps,
-    readWorkspaceFiles,
-    runTerminalStatus,
-  } = createAppWorkspaceCapabilityHandlers({
+  const { attachWorkspaceContext, loadBrowserApps, readWorkspaceFiles, runTerminalStatus } = createAppWorkspaceCapabilityHandlers({
     busyToolId,
     client: clientRef.current,
     getTerminalProcessId: () => terminalProcessIdRef.current,
@@ -670,6 +665,11 @@ export function App() {
     }
     closeLibrary();
   };
+  const sendCommandShellMessage = (text: string) => {
+    setSelectedThreadId(null);
+    closeCommandShellRoute();
+    void sendMessageInNewThread(text);
+  };
 
   useAppCallbackRefsEffect({
     openLibrary,
@@ -739,9 +739,9 @@ export function App() {
     terminalProcessId: terminalProcessIdRef.current,
   });
 
-  if (appView === "chat" && !selectedThread) return (
+  if (appView === "chat" && (commandShellRouteActive || !selectedThread)) return (
     <>
-      <CommandWorkspace composerValue={composerValue} connectionState={connectionState} cwd={cwd} isSending={isSending} workMode={workMode} onAttachContext={attachWorkspaceContext} onChangeComposerValue={setComposerValue} onModeChange={setWorkMode} onRetryConnection={retryConnection} onSend={sendMessage} />
+      <CommandWorkspace composerValue={composerValue} connectionState={connectionState} cwd={cwd} isSending={isSending} locale={locale} slashCommands={slashCommands} workMode={workMode} onAttachContext={attachWorkspaceContext} onChangeComposerValue={setComposerValue} onModeChange={setWorkMode} onRetryConnection={retryConnection} onSend={commandShellRouteActive ? sendCommandShellMessage : sendMessage} onSlashCommandSelect={handleComposerSlashCommand} />
       <AppConfirmDialog locale={locale} request={confirmRequest} onCancel={() => resolveConfirm(false)} onConfirm={() => resolveConfirm(true)} />
     </>
   );
