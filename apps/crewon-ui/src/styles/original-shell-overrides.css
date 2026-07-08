@@ -636,6 +636,8 @@
   gap: 16px;
   min-height: 42px;
   padding: 0 0 10px; }
+.command-window.sidebar-collapsed .shell-page-view:not(.assistant-only-view) .catalog-market-header {
+  padding-left: 60px; }
 .shell-page-view .catalog-mode-tabs,
 .shell-page-view .catalog-header-actions,
 .shell-page-view .catalog-source-tabs {

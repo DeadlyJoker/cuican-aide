@@ -8986,6 +8986,13 @@ button.library-item:hover .library-card-chevron {
   padding: 0 0 10px;
 }
 
+.screen-shell.command-screen
+  .command-window.sidebar-collapsed
+  .shell-page-view:not(.assistant-only-view)
+  .catalog-market-header {
+  padding-left: 60px;
+}
+
 .screen-shell.command-screen .catalog-source-bar {
   display: flex;
   align-items: flex-end;
