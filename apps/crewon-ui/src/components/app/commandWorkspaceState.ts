@@ -1,12 +1,11 @@
-import type {
-  AgentPlatformSnapshot,
-} from "../../lib/agent-platform/agentPlatformClient";
+import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 
 export type CommandShellView =
   | "command"
   | "assist"
   | "projects"
   | "agents"
+  | "knowledge"
   | "schedule"
   | "team";
 
@@ -90,7 +89,9 @@ export function selectCommandHomeSlots(
           (item.mcp_servers?.length ?? 0) > 0 ||
           (item.knowledge_base_ids?.length ?? 0) > 0),
     ) ??
-    snapshot.agents.find((item) => item.is_active !== false && item.is_active !== 0) ??
+    snapshot.agents.find(
+      (item) => item.is_active !== false && item.is_active !== 0,
+    ) ??
     snapshot.agents[0];
   const workflow =
     findByKeyword(snapshot.workflows, [
@@ -110,7 +111,8 @@ export function selectCommandHomeSlots(
       "检查",
     ]) ?? snapshot.skills[0];
   const skillB =
-    snapshot.skills.find((item) => item.id !== skillA?.id) ?? snapshot.skills[1];
+    snapshot.skills.find((item) => item.id !== skillA?.id) ??
+    snapshot.skills[1];
   const mcpA =
     findByKeyword(snapshot.mcpServers, [
       "filesystem",
@@ -174,7 +176,10 @@ export function selectCommandHomeSlots(
         value: mcpB ? `mcp-${mcpB.id}` : "mcp-screenshot",
       },
     ],
-    model: agent?.model_info?.model_name || agent?.model_info?.name || "agent-platform local",
+    model:
+      agent?.model_info?.model_name ||
+      agent?.model_info?.name ||
+      "agent-platform local",
   };
 }
 
@@ -197,9 +202,9 @@ export function cleanSlotTitle(
     return fallback;
   }
   const technicalTitleMap: Record<string, string> = {
-    filesystem: "Filesystem MCP",
+    "filesystem": "Filesystem MCP",
     "file-system": "Filesystem MCP",
-    http: "HTTP Tools",
+    "http": "HTTP Tools",
     "http-tools": "HTTP Tools",
   };
   return technicalTitleMap[lower] ?? title;
@@ -216,7 +221,9 @@ function findByKeyword<T extends { name: string; description?: string | null }>(
 }
 
 function activeFilters(scope: HTMLElement) {
-  return Array.from(scope.querySelectorAll<HTMLElement>(".filter-chip[data-filter].active"))
+  return Array.from(
+    scope.querySelectorAll<HTMLElement>(".filter-chip[data-filter].active"),
+  )
     .map((chip) => chip.dataset.filter)
     .filter((filter): filter is string => Boolean(filter) && filter !== "all");
 }
@@ -225,14 +232,17 @@ export function applyDesignCardVisibility(scope: HTMLElement) {
   const filters = activeFilters(scope);
   const search = scope.querySelector<HTMLInputElement>(".catalog-search input");
   const query = (search?.value ?? "").trim().toLowerCase();
-  const cards = Array.from(scope.querySelectorAll<HTMLElement>("[data-card-filter]"));
+  const cards = Array.from(
+    scope.querySelectorAll<HTMLElement>("[data-card-filter]"),
+  );
   let visibleCount = 0;
 
   for (const card of cards) {
     const values = (card.dataset.cardFilter ?? "").split(/\s+/).filter(Boolean);
     const matchesFilter = filters.every((filter) => values.includes(filter));
     const matchesSearch =
-      !query || (card.innerText || card.textContent || "").toLowerCase().includes(query);
+      !query ||
+      (card.innerText || card.textContent || "").toLowerCase().includes(query);
     const visible = matchesFilter && matchesSearch;
     card.classList.toggle("hidden", !visible);
     card.hidden = !visible;
@@ -249,15 +259,23 @@ export function applyDesignCardVisibility(scope: HTMLElement) {
 }
 
 export function syncDesignFilterState(scope: HTMLElement) {
-  scope.querySelectorAll<HTMLElement>(".filter-chip[data-filter]").forEach((chip) => {
-    chip.setAttribute("aria-pressed", chip.classList.contains("active") ? "true" : "false");
-  });
-  scope.querySelectorAll<HTMLElement>("[data-team-action]").forEach((button) => {
-    const mode =
-      scope.querySelector<HTMLElement>('.filter-chip.active[data-filter-group="team-mode"]')
-        ?.dataset.filter ?? "office";
-    button.hidden = button.dataset.teamAction !== mode;
-  });
+  scope
+    .querySelectorAll<HTMLElement>(".filter-chip[data-filter]")
+    .forEach((chip) => {
+      chip.setAttribute(
+        "aria-pressed",
+        chip.classList.contains("active") ? "true" : "false",
+      );
+    });
+  scope
+    .querySelectorAll<HTMLElement>("[data-team-action]")
+    .forEach((button) => {
+      const mode =
+        scope.querySelector<HTMLElement>(
+          '.filter-chip.active[data-filter-group="team-mode"]',
+        )?.dataset.filter ?? "office";
+      button.hidden = button.dataset.teamAction !== mode;
+    });
   applyDesignCardVisibility(scope);
 }
 
@@ -269,7 +287,11 @@ function filterScopeFor(target: Element) {
   );
 }
 
-export function setActiveFilter(scope: HTMLElement, group: string, filter: string) {
+export function setActiveFilter(
+  scope: HTMLElement,
+  group: string,
+  filter: string,
+) {
   const selector =
     group === "default"
       ? ".filter-chip[data-filter]:not([data-filter-group])"
@@ -287,7 +309,9 @@ function closeTeamInlineRooms(view: HTMLElement) {
   const officeShell = view.querySelector<HTMLElement>("[data-office-shell]");
   const workflowRoom = view.querySelector<HTMLElement>("[data-workflow-room]");
   const workflowList = view.querySelector<HTMLElement>("[data-workflow-list]");
-  const workflowShell = view.querySelector<HTMLElement>("[data-workflow-shell]");
+  const workflowShell = view.querySelector<HTMLElement>(
+    "[data-workflow-shell]",
+  );
   if (officeRoom) {
     officeRoom.hidden = true;
   }
@@ -303,12 +327,20 @@ function closeTeamInlineRooms(view: HTMLElement) {
   officeShell?.classList.remove("is-room-open");
   workflowShell?.classList.remove("is-room-open");
   view.classList.remove("office-room-active", "workflow-room-active");
-  view.querySelectorAll<HTMLElement>("[data-office-drawer], [data-workflow-drawer]").forEach((drawer) => {
-    drawer.hidden = true;
-  });
-  view.querySelectorAll<HTMLElement>("[data-office-drawer-open], [data-workflow-drawer-open]").forEach((button) => {
-    button.setAttribute("aria-expanded", "false");
-  });
+  view
+    .querySelectorAll<HTMLElement>(
+      "[data-office-drawer], [data-workflow-drawer]",
+    )
+    .forEach((drawer) => {
+      drawer.hidden = true;
+    });
+  view
+    .querySelectorAll<HTMLElement>(
+      "[data-office-drawer-open], [data-workflow-drawer-open]",
+    )
+    .forEach((button) => {
+      button.setAttribute("aria-expanded", "false");
+    });
 }
 
 export function setDefaultTeamOfficePreview(view: HTMLElement) {
@@ -317,7 +349,10 @@ export function setDefaultTeamOfficePreview(view: HTMLElement) {
   closeTeamInlineRooms(view);
 }
 
-export function activateDesignPanelTab(panelTab: HTMLElement, root: HTMLElement) {
+export function activateDesignPanelTab(
+  panelTab: HTMLElement,
+  root: HTMLElement,
+) {
   const target = panelTab.dataset.tabTarget;
   if (!target) {
     return;

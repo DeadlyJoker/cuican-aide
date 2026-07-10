@@ -70,6 +70,7 @@ const viewIcons: Record<CommandShellView, ReactNode> = {
   assist: <Sparkles aria-hidden="true" />,
   projects: <FolderOpen aria-hidden="true" />,
   agents: <Bot aria-hidden="true" />,
+  knowledge: <BookOpen aria-hidden="true" />,
   schedule: <CalendarDays aria-hidden="true" />,
   team: <Users aria-hidden="true" />,
 };
@@ -157,7 +158,10 @@ export function CommandSidebar({
       title: thread.title,
     })),
   ].filter((item) =>
-    [item.kind, item.title, item.detail].join(" ").toLowerCase().includes(query.trim().toLowerCase()),
+    [item.kind, item.title, item.detail]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
   );
 
   function activateSearchResult(item: SidebarSearchResult) {
@@ -243,13 +247,19 @@ export function CommandSidebar({
           />
           <kbd>⌘K</kbd>
         </div>
-        <div className="sidebar-search-results" role="listbox" aria-label="搜索结果">
+        <div
+          className="sidebar-search-results"
+          role="listbox"
+          aria-label="搜索结果"
+        >
           {sidebarSearchResults.map((item) => (
             <button
               className="sidebar-search-result"
               data-search-action={item.action}
               data-search-result=""
-              data-thread-id={item.action === "thread" ? item.threadId : undefined}
+              data-thread-id={
+                item.action === "thread" ? item.threadId : undefined
+              }
               key={item.key}
               type="button"
               onClick={() => activateSearchResult(item)}
@@ -303,10 +313,12 @@ export function CommandSidebar({
           </button>
         ))}
         <button
+          aria-current={activeView === "knowledge" ? "page" : undefined}
+          className={classNames(activeView === "knowledge" && "active")}
           data-run-title-zh="知识库"
           data-run-title-en="Knowledge base"
           type="button"
-          onClick={() => onSwitchView("agents")}
+          onClick={() => onSwitchView("knowledge")}
         >
           <span className="nav-glyph" aria-hidden="true">
             <BookOpen aria-hidden="true" />
@@ -315,7 +327,11 @@ export function CommandSidebar({
         </button>
       </nav>
 
-      <section className="space-tree" data-od-id="desktop-workspace-tree" aria-label="工作空间">
+      <section
+        className="space-tree"
+        data-od-id="desktop-workspace-tree"
+        aria-label="工作空间"
+      >
         <div className="tree-head">
           <button type="button">空间</button>
           <button className="tree-add" type="button" aria-label="新建空间">

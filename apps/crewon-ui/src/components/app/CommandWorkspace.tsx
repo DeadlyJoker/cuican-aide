@@ -33,6 +33,7 @@ import { CommandThreadRoom } from "./CommandWorkspaceConversation";
 import {
   AgentsView,
   AssistView,
+  KnowledgeCatalogView,
   ProjectsView,
   ScheduleView,
   TeamView,
@@ -91,7 +92,6 @@ type CommandWorkspaceProps = {
   onStop?: () => void;
 };
 
-
 type PlatformLoadState = "loading" | "ready" | "fallback";
 type TeamMode = "office" | "workflow" | "experts";
 type PendingConversationThreadBinding = {
@@ -99,11 +99,7 @@ type PendingConversationThreadBinding = {
   previousThreadId: string | null;
 };
 export type CommandComposerKeyIntent =
-  | "closePalette"
-  | "openContext"
-  | "openSlash"
-  | "send"
-  | null;
+  "closePalette" | "openContext" | "openSlash" | "send" | null;
 export type CommandComposerKeyIntentInput = {
   altKey: boolean;
   composerValue: string;
@@ -120,10 +116,10 @@ const shellViewIds: CommandShellView[] = [
   "assist",
   "projects",
   "agents",
+  "knowledge",
   "schedule",
   "team",
 ];
-
 
 function isShellView(value: string): value is CommandShellView {
   return shellViewIds.includes(value as CommandShellView);
@@ -199,7 +195,10 @@ export function commandComposerKeyIntent({
   return null;
 }
 
-function contextItems(slots: CommandHomeSlots, cwd: string): PaletteItemWithCommand[] {
+function contextItems(
+  slots: CommandHomeSlots,
+  cwd: string,
+): PaletteItemWithCommand[] {
   return [
     {
       kind: "file",
@@ -238,14 +237,21 @@ function slashItems(
   slots: CommandHomeSlots,
   slashCommands: ComposerSlashCommand[],
 ): PaletteItemWithCommand[] {
-  const commandItems: PaletteItemWithCommand[] = slashCommands.map((command) => ({
-    command,
-    detail: command.description,
-    kind: command.kind === "mcp" ? "mcp" : command.kind === "skill" ? "skill" : "agent",
-    label: command.meta,
-    title: command.label,
-    token: command.token,
-  }));
+  const commandItems: PaletteItemWithCommand[] = slashCommands.map(
+    (command) => ({
+      command,
+      detail: command.description,
+      kind:
+        command.kind === "mcp"
+          ? "mcp"
+          : command.kind === "skill"
+            ? "skill"
+            : "agent",
+      label: command.meta,
+      title: command.label,
+      token: command.token,
+    }),
+  );
   const fallbackItems: PaletteItemWithCommand[] = [
     ...slots.skills.map((item) => ({
       detail: item.detail,
@@ -301,11 +307,13 @@ export function CommandWorkspace({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
-  const [activeLinkedThreadId, setActiveLinkedThreadId] = useState<string | null>(
-    selectedThreadId,
-  );
+  const [activeLinkedThreadId, setActiveLinkedThreadId] = useState<
+    string | null
+  >(selectedThreadId);
   const [conversationThreadBindings, setConversationThreadBindings] =
-    useState<ConversationThreadBindings>(() => readConversationThreadBindings());
+    useState<ConversationThreadBindings>(() =>
+      readConversationThreadBindings(),
+    );
   const [pendingConversationBinding, setPendingConversationBinding] =
     useState<PendingConversationThreadBinding | null>(null);
   const [armedConversationBinding, setArmedConversationBinding] =
@@ -329,9 +337,8 @@ export function CommandWorkspace({
   const [paletteQuery, setPaletteQuery] = useState("");
   const [platformState, setPlatformState] =
     useState<PlatformLoadState>("loading");
-  const [platformSnapshot, setPlatformSnapshot] = useState<AgentPlatformSnapshot>(
-    emptyAgentPlatformSnapshot,
-  );
+  const [platformSnapshot, setPlatformSnapshot] =
+    useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
   const [catalogFilter, setCatalogFilter] = useState("skill");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [scheduleMode, setScheduleMode] = useState("calendar");
@@ -400,10 +407,7 @@ export function CommandWorkspace({
     });
     setPendingConversationBinding(null);
     setArmedConversationBinding(null);
-  }, [
-    armedConversationBinding,
-    selectedThreadId,
-  ]);
+  }, [armedConversationBinding, selectedThreadId]);
 
   const slots = useMemo(
     () => selectCommandHomeSlots(platformSnapshot),
@@ -447,6 +451,17 @@ export function CommandWorkspace({
         : platformHasResources
           ? "Agent-platform 资源已同步。"
           : "Agent-platform 暂无资源，当前显示默认能力入口。";
+
+  async function reloadPlatformResources() {
+    setPlatformState("loading");
+    try {
+      setPlatformSnapshot(await readAgentPlatformSnapshot());
+      setPlatformState("ready");
+    } catch {
+      setPlatformSnapshot(emptyAgentPlatformSnapshot);
+      setPlatformState("fallback");
+    }
+  }
 
   function switchView(view: CommandShellView) {
     setActiveView(view);
@@ -612,13 +627,12 @@ export function CommandWorkspace({
   const activeOfficeRoom =
     officeRooms.find((room) => room.id === officeRoomId) ?? officeRooms[0];
   const activeWorkflowRoom =
-    workflowRooms.find((room) => room.id === workflowRoomId) ?? workflowRooms[0];
+    workflowRooms.find((room) => room.id === workflowRoomId) ??
+    workflowRooms[0];
   const showCommandThread = activeView === "command" && Boolean(selectedThread);
   const commandThreadRunning =
     Boolean(activeTurnId) ||
-    Boolean(
-      selectedThread?.turns.some((turn) => turn.status === "inProgress"),
-    );
+    Boolean(selectedThread?.turns.some((turn) => turn.status === "inProgress"));
   const composerRuntimeLabel = isSending
     ? "发送中"
     : commandThreadRunning && composerValue.trim()
@@ -672,7 +686,9 @@ export function CommandWorkspace({
           }}
           onQueryChange={setSidebarSearchQuery}
           onSwitchView={switchView}
-          onToggleCollapse={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          onToggleCollapse={() =>
+            setSidebarCollapsed((collapsed) => !collapsed)
+          }
           onToggleSearch={() => setSidebarSearchOpen((open) => !open)}
           onToggleSpace={toggleSpace}
         />
@@ -732,7 +748,10 @@ export function CommandWorkspace({
                     </h1>
                   </header>
 
-                  <div className="scene-tabs scene-pills" data-od-id="scene-tabs">
+                  <div
+                    className="scene-tabs scene-pills"
+                    data-od-id="scene-tabs"
+                  >
                     {sceneTabs.map((tab) => (
                       <button
                         className={classNames(scene === tab.key && "active")}
@@ -811,14 +830,19 @@ export function CommandWorkspace({
                 />
 
                 <div className="input-tools" data-od-id="composer-tools">
-                  <div className="composer-controls" data-od-id="composer-control-row">
+                  <div
+                    className="composer-controls"
+                    data-od-id="composer-control-row"
+                  >
                     <label className="control-select mode-dropdown">
                       <span className="visually-hidden">任务类型</span>
                       <select
                         aria-label="任务类型"
                         data-task-mode=""
                         value={composerMode}
-                        onChange={(event) => setComposerMode(event.target.value)}
+                        onChange={(event) =>
+                          setComposerMode(event.target.value)
+                        }
                       >
                         <option value="plan">计划</option>
                         <option value="goal">目标</option>
@@ -851,8 +875,12 @@ export function CommandWorkspace({
                         value={agent}
                         onChange={(event) => setAgent(event.target.value)}
                       >
-                        <option value="product-review">{slots.agent.title}</option>
-                        <option value="engineering-handoff">开发交付智能体</option>
+                        <option value="product-review">
+                          {slots.agent.title}
+                        </option>
+                        <option value="engineering-handoff">
+                          开发交付智能体
+                        </option>
                         <option value="visual-polish">视觉打磨智能体</option>
                         <option value="meeting-prep">会议准备智能体</option>
                       </select>
@@ -877,7 +905,10 @@ export function CommandWorkspace({
                     </label>
                   </div>
 
-                  <div className="composer-actions" data-od-id="composer-action-row">
+                  <div
+                    className="composer-actions"
+                    data-od-id="composer-action-row"
+                  >
                     <button
                       aria-label="优化提示词"
                       className="icon-action prompt-action"
@@ -956,7 +987,10 @@ export function CommandWorkspace({
                   data-od-id="composer-state-row"
                   id="composer-status"
                 >
-                  <label className="workspace-picker" data-od-id="workspace-picker">
+                  <label
+                    className="workspace-picker"
+                    data-od-id="workspace-picker"
+                  >
                     <span className="visually-hidden">工作空间</span>
                     <select
                       aria-label="工作空间"
@@ -974,7 +1008,11 @@ export function CommandWorkspace({
                   </label>
                   <span className="composer-state">{resourceStatus}</span>
                   {connectionState === "disconnected" ? (
-                    <button className="button compact" type="button" onClick={onRetryConnection}>
+                    <button
+                      className="button compact"
+                      type="button"
+                      onClick={onRetryConnection}
+                    >
                       重试 app-server
                     </button>
                   ) : null}
@@ -1005,8 +1043,15 @@ export function CommandWorkspace({
             catalogFilter={catalogFilter}
             catalogSearch={catalogSearch}
             slots={slots}
+            snapshot={platformSnapshot}
+            onReload={reloadPlatformResources}
             onCatalogFilterChange={setCatalogFilter}
             onCatalogSearchChange={setCatalogSearch}
+          />
+          <KnowledgeCatalogView
+            active={activeView === "knowledge"}
+            snapshot={platformSnapshot}
+            onReload={reloadPlatformResources}
           />
           <ScheduleView
             active={activeView === "schedule"}
