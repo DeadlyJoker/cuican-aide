@@ -4,6 +4,7 @@ import type { Turn } from "@crewon-protocol/v2/Turn";
 
 type ThreadUpdater = (thread: Thread) => Thread;
 type FileChangeChanges = Extract<ThreadItem, { type: "fileChange" }>["changes"];
+type McpToolCall = Extract<ThreadItem, { type: "mcpToolCall" }>;
 
 export function upsertThread(threads: Thread[], nextThread: Thread): Thread[] {
   const existingIndex = threads.findIndex(
@@ -262,6 +263,44 @@ export function appendCommandOutputDeltaInThread(
   );
 }
 
+export function appendMcpToolCallProgressInThread(
+  threads: Thread[],
+  threadId: string,
+  turnId: string,
+  itemId: string,
+  message: string,
+): Thread[] {
+  return updateItemInThread(threads, threadId, turnId, itemId, (item) =>
+    item.type === "mcpToolCall" ? appendMcpToolCallProgress(item, message) : item,
+  );
+}
+
+function appendMcpToolCallProgress(
+  item: McpToolCall,
+  message: string,
+): McpToolCall {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return item;
+  }
+
+  const existingContent = item.result?.content ?? [];
+  return {
+    ...item,
+    result: {
+      content: [
+        ...existingContent,
+        {
+          type: "text",
+          text: trimmed,
+        },
+      ],
+      structuredContent: item.result?.structuredContent ?? null,
+      _meta: item.result?._meta ?? null,
+    },
+  };
+}
+
 export function updateFileChangeItemChangesInThread(
   threads: Thread[],
   threadId: string,
@@ -283,6 +322,81 @@ export function appendPlanDeltaInThread(
 ): Thread[] {
   return updateItemInThread(threads, threadId, turnId, itemId, (item) =>
     item.type === "plan" ? { ...item, text: `${item.text}${delta}` } : item,
+  );
+}
+
+function appendIndexedText(
+  values: string[],
+  index: number,
+  delta: string,
+): string[] {
+  const next = [...values];
+  while (next.length <= index) {
+    next.push("");
+  }
+  next[index] = `${next[index] ?? ""}${delta}`;
+  return next;
+}
+
+function ensureIndexedText(values: string[], index: number): string[] {
+  const next = [...values];
+  while (next.length <= index) {
+    next.push("");
+  }
+  next[index] ??= "";
+  return next;
+}
+
+export function appendReasoningSummaryDeltaInThread(
+  threads: Thread[],
+  threadId: string,
+  turnId: string,
+  itemId: string,
+  summaryIndex: number,
+  delta: string,
+): Thread[] {
+  return updateItemInThread(threads, threadId, turnId, itemId, (item) =>
+    item.type === "reasoning"
+      ? {
+          ...item,
+          summary: appendIndexedText(item.summary, summaryIndex, delta),
+        }
+      : item,
+  );
+}
+
+export function appendReasoningContentDeltaInThread(
+  threads: Thread[],
+  threadId: string,
+  turnId: string,
+  itemId: string,
+  contentIndex: number,
+  delta: string,
+): Thread[] {
+  return updateItemInThread(threads, threadId, turnId, itemId, (item) =>
+    item.type === "reasoning"
+      ? {
+          ...item,
+          content: appendIndexedText(item.content, contentIndex, delta),
+        }
+      : item,
+  );
+}
+
+export function ensureReasoningSummaryPartInThread(
+  threads: Thread[],
+  threadId: string,
+  turnId: string,
+  itemId: string,
+  summaryIndex: number,
+): Thread[] {
+  return updateItemInThread(threads, threadId, turnId, itemId, (item) =>
+    item.type === "reasoning"
+      ? {
+          ...item,
+          summary: ensureIndexedText(item.summary, summaryIndex),
+        }
+      : item,
   );
 }
 

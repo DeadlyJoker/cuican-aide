@@ -138,6 +138,22 @@ describe("thread app notification handler", () => {
     expect(state.reloadedThreads).toBe(1);
   });
 
+  it("refreshes the full thread after live turn diff and plan updates", () => {
+    expect(
+      handleNotification({
+        method: "turn/diff/updated",
+        params: { threadId: "thread-diff" },
+      } as AppServerNotification).state.refreshedThreads,
+    ).toEqual(["thread-diff"]);
+
+    expect(
+      handleNotification({
+        method: "turn/plan/updated",
+        params: { threadId: "thread-plan" },
+      } as AppServerNotification).state.refreshedThreads,
+    ).toEqual(["thread-plan"]);
+  });
+
   it("leaves turn completed notifications for app-level sync handling", () => {
     const { handled } = handleNotification({
       method: "turn/completed",

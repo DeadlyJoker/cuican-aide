@@ -58,6 +58,7 @@ export type AppServerEventHandlers = {
 };
 
 export type AppServerEventHandlersParams = {
+  appendStreamingTextDelta: (threadId: string, delta: string) => void;
   automationRunsByTurn: () => Record<string, AutomationRunTurnRecord>;
   capabilityPanel: () => CapabilityPanel | null;
   client: () => AppServerClient | null;
@@ -110,6 +111,7 @@ export function createAppServerEventHandlers(
 
       if (
         handleLocalAppNotification({
+          appendStreamingTextDelta: params.appendStreamingTextDelta,
           locale,
           notification,
           selectedThreadId,

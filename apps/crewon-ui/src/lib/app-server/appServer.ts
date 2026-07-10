@@ -50,6 +50,7 @@ import type { McpResourceReadResponse } from "@crewon-protocol/v2/McpResourceRea
 import type { McpServerToolCallResponse } from "@crewon-protocol/v2/McpServerToolCallResponse";
 import type { McpServerStatusUpdatedNotification } from "@crewon-protocol/v2/McpServerStatusUpdatedNotification";
 import type { McpServerOauthLoginResponse } from "@crewon-protocol/v2/McpServerOauthLoginResponse";
+import type { McpToolCallProgressNotification } from "@crewon-protocol/v2/McpToolCallProgressNotification";
 import type { AgentCreateResponse } from "@crewon-protocol/v2/AgentCreateResponse";
 import type { AgentUpdateResponse } from "@crewon-protocol/v2/AgentUpdateResponse";
 import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
@@ -62,6 +63,9 @@ import type { PluginSkillReadResponse } from "@crewon-protocol/v2/PluginSkillRea
 import type { PlanDeltaNotification } from "@crewon-protocol/v2/PlanDeltaNotification";
 import type { OfficeRunUpdatedNotification } from "@crewon-protocol/v2/OfficeRunUpdatedNotification";
 import type { RemoteControlStatusChangedNotification } from "@crewon-protocol/v2/RemoteControlStatusChangedNotification";
+import type { ReasoningSummaryPartAddedNotification } from "@crewon-protocol/v2/ReasoningSummaryPartAddedNotification";
+import type { ReasoningSummaryTextDeltaNotification } from "@crewon-protocol/v2/ReasoningSummaryTextDeltaNotification";
+import type { ReasoningTextDeltaNotification } from "@crewon-protocol/v2/ReasoningTextDeltaNotification";
 import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
 import type { SandboxPolicy } from "@crewon-protocol/v2/SandboxPolicy";
 import type { ServerRequestResolvedNotification } from "@crewon-protocol/v2/ServerRequestResolvedNotification";
@@ -553,7 +557,23 @@ export type KnownAppServerNotification =
       params: FileChangePatchUpdatedNotification;
     }
   | { method: "item/plan/delta"; params: PlanDeltaNotification }
+  | {
+      method: "item/reasoning/summaryPartAdded";
+      params: ReasoningSummaryPartAddedNotification;
+    }
+  | {
+      method: "item/reasoning/summaryTextDelta";
+      params: ReasoningSummaryTextDeltaNotification;
+    }
+  | {
+      method: "item/reasoning/textDelta";
+      params: ReasoningTextDeltaNotification;
+    }
   | { method: "item/started"; params: ItemStartedNotification }
+  | {
+      method: "item/mcpToolCall/progress";
+      params: McpToolCallProgressNotification;
+    }
   | {
       method: "mcpServer/oauthLogin/completed";
       params: McpServerOauthLoginCompletedNotification;
@@ -605,6 +625,7 @@ const LONG_REQUEST_TIMEOUT_MS = 60000;
 
 export class AppServerClient {
   private socket: WebSocket | null = null;
+  private closedIntentionally = false;
   private nextId = 1;
   private pending = new Map<
     number | string,
@@ -625,6 +646,7 @@ export class AppServerClient {
   ) {}
 
   connect(): Promise<void> {
+    this.closedIntentionally = false;
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(this.url);
       this.socket = socket;
@@ -647,17 +669,24 @@ export class AppServerClient {
       });
 
       socket.addEventListener("close", () => {
+        const shouldNotifyClose = !this.closedIntentionally;
         for (const [, pending] of this.pending) {
           window.clearTimeout(pending.timeoutId);
           pending.reject(new Error("App-server connection closed"));
         }
         this.pending.clear();
-        this.onClose?.();
+        if (this.socket === socket) {
+          this.socket = null;
+        }
+        if (shouldNotifyClose) {
+          this.onClose?.();
+        }
       });
     });
   }
 
   close(): void {
+    this.closedIntentionally = true;
     this.socket?.close();
   }
 
@@ -2340,7 +2369,11 @@ function isKnownNotification(
     message.method === "item/commandExecution/outputDelta" ||
     message.method === "item/completed" ||
     message.method === "item/fileChange/patchUpdated" ||
+    message.method === "item/mcpToolCall/progress" ||
     message.method === "item/plan/delta" ||
+    message.method === "item/reasoning/summaryPartAdded" ||
+    message.method === "item/reasoning/summaryTextDelta" ||
+    message.method === "item/reasoning/textDelta" ||
     message.method === "item/started" ||
     message.method === "mcpServer/oauthLogin/completed" ||
     message.method === "mcpServer/startupStatus/updated" ||

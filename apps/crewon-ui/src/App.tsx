@@ -1,5 +1,4 @@
-import { AppConfirmDialog, AppShellChromeFrame, AppWorkspaceContent, AppWorkspaceNavigationPanel, AppWorkspaceSidePanels } from "./components/app";
-import { CommandWorkspace } from "./components/app/CommandWorkspace";
+import { AppCommandShellRoute, AppConfirmDialog, AppShellChromeFrame, AppWorkspaceContent, AppWorkspaceNavigationPanel, AppWorkspaceSidePanels } from "./components/app";
 import { isMissingThreadError, isUnsupportedRpcError } from "./lib/app-server/appServer";
 import {
   createAppCapabilityPanelHandlers, createAppDomainActionCoordinator, createAppDomainBackendCoordinator,
@@ -11,7 +10,7 @@ import {
   useAppPendingServerRequests, useAppChromeState, useAppThreadState, useAppStateRefsEffect, useAppRunTrackingRefs,
   useAppComposerState, useAppSlashCommands, useAppWorkspaceStatusState, useAppShellRuntimeState, useAppTerminalState,
   useAppThreadSelection, useAppServerEventHandlerSet, useAppThreadListEffects, useAppThreadMetadataEffects,
-  useAppViewSyncEffects, useAppModelResponseTimeoutEffect, useAppCommandShellRoute,
+  useAppViewSyncEffects, useAppModelResponseTimeoutEffect, shouldRenderCommandShellView, useAppCommandShellRoute, commandShellRuntimeState,
 } from "./lib/app";
 import type { ComposerSlashCommand } from "./lib/composer/composerSlashCommands";
 import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
@@ -64,8 +63,7 @@ export function App() {
     sidebarOpen,
   } = useAppChromeState();
   const {
-    isSearchingThreads,
-    loadedThreadIds,
+    appendStreamingTextDelta, isSearchingThreads, loadedThreadIds,
     setIsSearchingThreads,
     setLoadedThreadIds,
     setShowArchivedThreads,
@@ -98,8 +96,7 @@ export function App() {
     setThreadGoal,
     threadGoal,
   } = useAppWorkspaceStatusState();
-  const { automationRunByTurnRef, officeRunByTurnRef } =
-    useAppRunTrackingRefs();
+  const { automationRunByTurnRef, officeRunByTurnRef } = useAppRunTrackingRefs();
   const {
     pendingApprovalRequest,
     pendingDynamicToolRequest,
@@ -112,8 +109,7 @@ export function App() {
     setPendingMcpElicitationRequest,
     setPendingUserInputRequest,
   } = useAppPendingServerRequests();
-  const { setTerminalCommand, terminalCommand, terminalProcessIdRef } =
-    useAppTerminalState();
+  const { setTerminalCommand, terminalCommand, terminalProcessIdRef } = useAppTerminalState();
   const {
     composerFocusSignal,
     composerValue,
@@ -131,19 +127,11 @@ export function App() {
     workMode,
   } = useAppComposerState();
   const t = translate(locale);
-  const { confirmRequest, requestConfirm, resolveConfirm } =
-    useAppConfirmDialog();
-  const { closeCommandShellRoute, commandShellRouteActive } =
-    useAppCommandShellRoute();
+  const { confirmRequest, requestConfirm, resolveConfirm } = useAppConfirmDialog();
+  const { commandShellRouteActive } = useAppCommandShellRoute();
+  const renderCommandShell = shouldRenderCommandShellView(appView, commandShellRouteActive);
 
-  const {
-    activeTurnId,
-    cwd,
-    isConnected,
-    isDemo,
-    selectedThread,
-    titlebarTitle,
-  } = useAppThreadSelection({
+  const { activeTurnId, cwd, isConnected, isDemo, selectedThread, titlebarTitle } = useAppThreadSelection({
     activeTurnByThread,
     connectionState,
     newDraftThreadLabel: t.newDraftThread,
@@ -174,6 +162,7 @@ export function App() {
   };
   const conversationThreads = threads.filter(isSingleConversationThread);
   const sidebarSelectedThreadId = conversationThreads.some((thread) => thread.id === selectedThreadId) ? selectedThreadId : null;
+  const commandShellRuntime = commandShellRuntimeState({ activeTurnByThread, activeTurnId, renderCommandShell, selectedThread, selectedThreadId, streamingTextByThread, threads });
   useAppDocumentPreferenceEffects({
     client: clientRef.current,
     composerValue,
@@ -184,10 +173,9 @@ export function App() {
     setLocale,
     setTheme,
     theme,
-    thread: commandShellRouteActive ? null : selectedThread,
+    thread: renderCommandShell ? null : selectedThread,
     untitledThreadLabel: t.untitledThread,
   });
-
   useAppStateRefsEffect({
     appView,
     appViewRef,
@@ -434,8 +422,7 @@ export function App() {
     writeOfficeConfigFile,
   });
 
-  const { handleNotification, handleServerRequest } =
-    useAppServerEventHandlerSet({
+  const { handleNotification, handleServerRequest } = useAppServerEventHandlerSet({
       appViewRef,
       automationRunByTurnRef,
       capabilityPanelRef,
@@ -451,6 +438,7 @@ export function App() {
       },
       refreshSettingsSectionRef,
       selectedThreadIdRef,
+      appendStreamingTextDelta,
       setAccountStatus,
       setActiveFileWatch,
       setActiveTurnByThread,
@@ -667,8 +655,14 @@ export function App() {
   };
   const sendCommandShellMessage = (text: string) => {
     setSelectedThreadId(null);
-    closeCommandShellRoute();
     void sendMessageInNewThread(text);
+  };
+  const openCommandShellThread = (threadId: string | null) => {
+    if (!threadId) {
+      setSelectedThreadId(null);
+      return;
+    }
+    void selectThread(threadId);
   };
 
   useAppCallbackRefsEffect({
@@ -739,12 +733,18 @@ export function App() {
     terminalProcessId: terminalProcessIdRef.current,
   });
 
-  if (appView === "chat" && (commandShellRouteActive || !selectedThread)) return (
-    <>
-      <CommandWorkspace composerValue={composerValue} connectionState={connectionState} cwd={cwd} isSending={isSending} locale={locale} slashCommands={slashCommands} workMode={workMode} onAttachContext={attachWorkspaceContext} onChangeComposerValue={setComposerValue} onModeChange={setWorkMode} onRetryConnection={retryConnection} onSend={commandShellRouteActive ? sendCommandShellMessage : sendMessage} onSlashCommandSelect={handleComposerSlashCommand} />
-      <AppConfirmDialog locale={locale} request={confirmRequest} onCancel={() => resolveConfirm(false)} onConfirm={() => resolveConfirm(true)} />
-    </>
-  );
+  if (renderCommandShell)
+    return (
+      <AppCommandShellRoute
+        activeTurnId={commandShellRuntime.activeTurnId} composerValue={composerValue} connectionState={connectionState} cwd={cwd} isSending={isSending}
+        linkedThreads={conversationThreads} locale={locale} selectedThread={commandShellRuntime.selectedThread} selectedThreadId={commandShellRuntime.selectedThreadId} slashCommands={slashCommands}
+        streamingText={commandShellRuntime.streamingText} workMode={workMode}
+        confirmDialog={{ locale, request: confirmRequest, onCancel: () => resolveConfirm(false), onConfirm: () => resolveConfirm(true) }}
+        onAttachContext={attachWorkspaceContext} onChangeComposerValue={setComposerValue} onModeChange={setWorkMode} onRetryConnection={retryConnection}
+        onSelectLinkedThread={openCommandShellThread} onSend={!commandShellRuntime.selectedThread ? sendCommandShellMessage : sendMessage}
+        onSlashCommandSelect={handleComposerSlashCommand} onStop={interruptActiveTurn}
+      />
+    );
 
   return (
     <AppShellChromeFrame

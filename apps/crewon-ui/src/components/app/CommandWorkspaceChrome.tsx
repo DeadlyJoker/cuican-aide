@@ -12,6 +12,11 @@ import {
 import type { ReactNode } from "react";
 
 import { shellNavItems, workspaceNodes } from "./commandWorkspaceData";
+import {
+  conversationBindingKey,
+  findLinkedThreadForConversation,
+  type ConversationThreadBindings,
+} from "./commandWorkspaceThreadLinks";
 import type {
   CommandHomeSlots,
   CommandPaletteItem,
@@ -24,7 +29,41 @@ export type PaletteItemWithCommand = CommandPaletteItem & {
   command?: ComposerSlashCommand;
 };
 
+export type CommandLinkedThread = {
+  id: string;
+  preview: string;
+  title: string;
+  updatedLabel: string;
+};
+
 type PlatformLoadState = "loading" | "ready" | "fallback";
+
+type SidebarSearchResult =
+  | {
+      action: "conversation";
+      detail: string;
+      key: string;
+      kind: "Chat" | "Space";
+      spaceId: string;
+      title: string;
+      conversation: string;
+    }
+  | {
+      action: "thread";
+      detail: string;
+      key: string;
+      kind: "Thread";
+      threadId: string;
+      title: string;
+    }
+  | {
+      action: "view";
+      detail: string;
+      key: string;
+      kind: "Agent";
+      title: string;
+      view: CommandShellView;
+    };
 
 const viewIcons: Record<CommandShellView, ReactNode> = {
   command: <Plus aria-hidden="true" />,
@@ -40,10 +79,15 @@ export function CommandSidebar({
   activeSpaceId,
   activeView,
   collapsedSpaces,
+  conversationThreadBindings,
   isSearchOpen,
+  linkedThreads = [],
   query,
+  selectedLinkedThreadId,
   slots,
   onChooseConversation,
+  onOpenLinkedThread,
+  onCloseSearch,
   onQueryChange,
   onSwitchView,
   onToggleCollapse,
@@ -54,24 +98,80 @@ export function CommandSidebar({
   activeSpaceId: string;
   activeView: CommandShellView;
   collapsedSpaces: Set<string>;
+  conversationThreadBindings: ConversationThreadBindings;
   isSearchOpen: boolean;
+  linkedThreads: CommandLinkedThread[];
   query: string;
+  selectedLinkedThreadId: string | null;
   slots: CommandHomeSlots;
   onChooseConversation: (spaceId: string, conversation: string) => void;
+  onCloseSearch: () => void;
+  onOpenLinkedThread: (threadId: string) => void;
   onQueryChange: (query: string) => void;
   onSwitchView: (view: CommandShellView) => void;
   onToggleCollapse: () => void;
   onToggleSearch: () => void;
   onToggleSpace: (spaceId: string) => void;
 }) {
-  const sidebarSearchResults = [
-    ["Space", "Agent 小队交付空间", "当前空间"],
-    ["Chat", "小队创建草稿", "Agent 小队交付空间"],
-    ["Space", "Skill/MCP 能力空间", "Schema · Sandbox"],
-    ["Agent", slots.agent.title, "智能体配置"],
+  const recentLinkedThreads = linkedThreads.slice(0, 5);
+  const sidebarSearchResults: SidebarSearchResult[] = [
+    ...workspaceNodes.flatMap((node) => {
+      const firstConversation = node.conversations[0]?.title ?? node.title;
+      return [
+        {
+          action: "conversation" as const,
+          conversation: firstConversation,
+          detail: node.conversations
+            .map((conversation) => conversation.title)
+            .join(" · "),
+          key: `space-${node.id}`,
+          kind: "Space" as const,
+          spaceId: node.id,
+          title: node.title,
+        },
+        ...node.conversations.map((conversation) => ({
+          action: "conversation" as const,
+          conversation: conversation.title,
+          detail: [node.title, ...conversation.aliases].join(" · "),
+          key: `chat-${node.id}-${conversation.title}`,
+          kind: "Chat" as const,
+          spaceId: node.id,
+          title: conversation.title,
+        })),
+      ];
+    }),
+    {
+      action: "view" as const,
+      detail: "智能体配置",
+      key: "agent-platform-slot",
+      kind: "Agent" as const,
+      title: slots.agent.title,
+      view: "agents" as const,
+    },
+    ...linkedThreads.map((thread) => ({
+      action: "thread" as const,
+      detail: thread.preview || thread.updatedLabel,
+      key: `thread-${thread.id}`,
+      kind: "Thread" as const,
+      threadId: thread.id,
+      title: thread.title,
+    })),
   ].filter((item) =>
-    item.join(" ").toLowerCase().includes(query.trim().toLowerCase()),
+    [item.kind, item.title, item.detail].join(" ").toLowerCase().includes(query.trim().toLowerCase()),
   );
+
+  function activateSearchResult(item: SidebarSearchResult) {
+    if (item.action === "thread") {
+      onOpenLinkedThread(item.threadId);
+    } else if (item.action === "view") {
+      onSwitchView(item.view);
+    } else {
+      onSwitchView("command");
+      onChooseConversation(item.spaceId, item.conversation);
+    }
+    onQueryChange("");
+    onCloseSearch();
+  }
 
   return (
     <aside
@@ -131,22 +231,34 @@ export function CommandSidebar({
             type="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                onCloseSearch();
+              } else if (event.key === "Enter" && sidebarSearchResults[0]) {
+                event.preventDefault();
+                activateSearchResult(sidebarSearchResults[0]);
+              }
+            }}
           />
           <kbd>⌘K</kbd>
         </div>
         <div className="sidebar-search-results" role="listbox" aria-label="搜索结果">
-          {sidebarSearchResults.map(([kind, title, detail]) => (
+          {sidebarSearchResults.map((item) => (
             <button
               className="sidebar-search-result"
+              data-search-action={item.action}
               data-search-result=""
-              key={`${kind}-${title}`}
+              data-thread-id={item.action === "thread" ? item.threadId : undefined}
+              key={item.key}
               type="button"
+              onClick={() => activateSearchResult(item)}
             >
               <span>
-                <strong>{title}</strong>
-                <small>{detail}</small>
+                <strong>{item.title}</strong>
+                <small>{item.detail}</small>
               </span>
-              <em>{kind}</em>
+              <em>{item.kind}</em>
             </button>
           ))}
           <p
@@ -237,21 +349,64 @@ export function CommandSidebar({
                 )}
                 hidden={collapsed}
               >
-                {node.conversations.map((conversation) => (
-                  <button
-                    className={classNames(
-                      "conversation-item",
-                      activeSpaceId === node.id &&
-                        activeConversation === conversation &&
-                        "active",
-                    )}
-                    key={conversation}
-                    type="button"
-                    onClick={() => onChooseConversation(node.id, conversation)}
-                  >
-                    {conversation}
-                  </button>
-                ))}
+                {node.conversations.map((conversation) => {
+                  const bindingKey = conversationBindingKey(
+                    node.id,
+                    conversation.title,
+                  );
+                  const linkedThread = findLinkedThreadForConversation(
+                    linkedThreads,
+                    conversation.title,
+                    conversation.aliases,
+                    conversationThreadBindings[bindingKey],
+                  );
+                  return (
+                    <button
+                      className={classNames(
+                        "conversation-item",
+                        linkedThread && "is-linked",
+                        ((activeSpaceId === node.id &&
+                          activeConversation === conversation.title) ||
+                          selectedLinkedThreadId === linkedThread?.id) &&
+                          "active",
+                      )}
+                      data-linked-thread-id={linkedThread?.id}
+                      key={conversation.title}
+                      title={
+                        linkedThread
+                          ? `已连接后端会话：${linkedThread.title}`
+                          : undefined
+                      }
+                      type="button"
+                      onClick={() =>
+                        onChooseConversation(node.id, conversation.title)
+                      }
+                    >
+                      {conversation.title}
+                    </button>
+                  );
+                })}
+                {node.id === "product" && recentLinkedThreads.length > 0 ? (
+                  <div className="linked-conversation-group">
+                    <span className="linked-conversation-label">后端会话</span>
+                    {recentLinkedThreads.map((thread) => (
+                      <button
+                        className={classNames(
+                          "conversation-item linked-conversation-item",
+                          selectedLinkedThreadId === thread.id && "active",
+                        )}
+                        data-linked-thread-id={thread.id}
+                        key={thread.id}
+                        title={thread.preview}
+                        type="button"
+                        onClick={() => onOpenLinkedThread(thread.id)}
+                      >
+                        <span>{thread.title}</span>
+                        <em>{thread.updatedLabel}</em>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           );
@@ -314,6 +469,9 @@ export function Palette({
           if (event.key === "Escape") {
             event.preventDefault();
             onClose();
+          } else if (event.key === "Enter" && items[0]) {
+            event.preventDefault();
+            onSelect(items[0]);
           }
         }}
       />
@@ -367,7 +525,7 @@ export function ResourceDock({
           {platformState === "ready"
             ? "资源入口已就绪"
             : platformState === "fallback"
-              ? "资源服务未连接"
+              ? "可选资源服务未启动，对话后端可用"
               : "同步中"}
         </span>
       </header>

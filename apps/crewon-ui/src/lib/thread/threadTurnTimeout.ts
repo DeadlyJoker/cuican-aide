@@ -5,7 +5,7 @@ import type { Turn } from "@crewon-protocol/v2/Turn";
 import type { Locale } from "../i18n";
 import { updateThreadInList } from "./threadModel";
 
-export const MODEL_RESPONSE_TIMEOUT_MS = 15_000;
+export const MODEL_RESPONSE_TIMEOUT_MS = 120_000;
 
 function itemHasModelProgress(item: ThreadItem): boolean {
   switch (item.type) {

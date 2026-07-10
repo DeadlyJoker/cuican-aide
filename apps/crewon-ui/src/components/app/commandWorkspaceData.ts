@@ -15,7 +15,10 @@ export type SpaceNode = {
   id: string;
   icon: string;
   title: string;
-  conversations: string[];
+  conversations: Array<{
+    aliases: string[];
+    title: string;
+  }>;
 };
 
 export type SceneTab = {
@@ -51,19 +54,29 @@ export const workspaceNodes: SpaceNode[] = [
     id: "product",
     icon: "⌄",
     title: "Agent 小队交付空间",
-    conversations: ["小队创建草稿", "Workflow Gate", "交付验收清单"],
+    conversations: [
+      { aliases: ["Team setup draft"], title: "小队创建草稿" },
+      { aliases: ["Workflow Gate"], title: "Workflow Gate" },
+      { aliases: ["Delivery checklist"], title: "交付验收清单" },
+    ],
   },
   {
     id: "team",
     icon: "⌄",
     title: "办公室权限空间",
-    conversations: ["四层权限", "Channel 桥接"],
+    conversations: [
+      { aliases: ["Layered access"], title: "四层权限" },
+      { aliases: ["Channel bridge"], title: "Channel 桥接" },
+    ],
   },
   {
     id: "agents",
     icon: "⌄",
     title: "Skill/MCP 能力空间",
-    conversations: ["Schema 校验", "沙箱审计"],
+    conversations: [
+      { aliases: ["Schema validation"], title: "Schema 校验" },
+      { aliases: ["Sandbox audit"], title: "沙箱审计" },
+    ],
   },
 ];
 

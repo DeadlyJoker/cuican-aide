@@ -5,10 +5,15 @@ import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
 import type { Locale } from "../lib/i18n";
 import { itemPreview, userInputToText } from "../lib/shared/text";
 import { renderMarkdown } from "./TranscriptMarkdown";
+import { transcriptToolRoleLabel } from "./transcriptToolPresentation";
 import {
+  TranscriptCollabAgentToolCard,
   TranscriptCommandCard,
+  TranscriptDynamicToolCard,
   TranscriptFileChangeCard,
+  TranscriptMcpToolCard,
   TranscriptReasoningCard,
+  TranscriptSubAgentActivityCard,
 } from "./TranscriptToolCards";
 
 export type TranscriptItemLabels = {
@@ -19,6 +24,10 @@ export type TranscriptItemLabels = {
   reasoningLabel: string;
   youLabel: string;
 };
+
+type TranscriptMessageVariant = "message" | "process";
+
+type AgentMessageItem = Extract<ThreadItem, { type: "agentMessage" }>;
 
 function itemIcon(item: ThreadItem) {
   switch (item.type) {
@@ -39,11 +48,19 @@ function itemIcon(item: ThreadItem) {
   }
 }
 
-function itemRole(item: ThreadItem, labels: TranscriptItemLabels): string {
+function itemRole(
+  item: ThreadItem,
+  labels: TranscriptItemLabels,
+  locale: Locale,
+  variant: TranscriptMessageVariant,
+): string {
   switch (item.type) {
     case "userMessage":
       return labels.youLabel;
     case "agentMessage":
+      if (variant === "process") {
+        return locale === "zh" ? "进展说明" : "Progress note";
+      }
       return labels.crewonLabel;
     case "commandExecution":
       return labels.commandLabel;
@@ -54,15 +71,22 @@ function itemRole(item: ThreadItem, labels: TranscriptItemLabels): string {
     case "plan":
       return labels.planLabel;
     default:
-      return item.type;
+      return transcriptToolRoleLabel(item, locale) ?? item.type;
   }
 }
 
-function itemTypeLabel(item: ThreadItem, locale: Locale): string {
+function itemTypeLabel(
+  item: ThreadItem,
+  locale: Locale,
+  variant: TranscriptMessageVariant,
+): string {
   switch (item.type) {
     case "userMessage":
       return locale === "zh" ? "输入" : "Input";
     case "agentMessage":
+      if (variant === "process") {
+        return locale === "zh" ? "进展" : "Progress";
+      }
       return locale === "zh" ? "回复" : "Reply";
     case "commandExecution":
       return locale === "zh" ? "命令" : "Command";
@@ -73,8 +97,9 @@ function itemTypeLabel(item: ThreadItem, locale: Locale): string {
     case "plan":
       return locale === "zh" ? "计划" : "Plan";
     case "mcpToolCall":
+      return locale === "zh" ? "调用" : "Call";
     case "dynamicToolCall":
-      return locale === "zh" ? "工具" : "Tool";
+      return locale === "zh" ? "执行" : "Run";
     case "webSearch":
       return locale === "zh" ? "搜索" : "Search";
     case "imageView":
@@ -86,7 +111,7 @@ function itemTypeLabel(item: ThreadItem, locale: Locale): string {
     case "collabAgentToolCall":
       return locale === "zh" ? "协作" : "Collab";
     case "subAgentActivity":
-      return locale === "zh" ? "子代理" : "Subagent";
+      return locale === "zh" ? "活动" : "Activity";
     case "enteredReviewMode":
     case "exitedReviewMode":
       return locale === "zh" ? "审查" : "Review";
@@ -111,6 +136,14 @@ function renderMessageContent(item: ThreadItem, locale: Locale) {
       return <TranscriptFileChangeCard item={item} locale={locale} />;
     case "reasoning":
       return <TranscriptReasoningCard item={item} locale={locale} />;
+    case "mcpToolCall":
+      return <TranscriptMcpToolCard item={item} locale={locale} />;
+    case "dynamicToolCall":
+      return <TranscriptDynamicToolCard item={item} locale={locale} />;
+    case "collabAgentToolCall":
+      return <TranscriptCollabAgentToolCard item={item} locale={locale} />;
+    case "subAgentActivity":
+      return <TranscriptSubAgentActivityCard item={item} locale={locale} />;
     default:
       return renderMarkdown(renderItemText(item, locale));
   }
@@ -121,6 +154,14 @@ function itemStatus(item: ThreadItem): string | undefined {
     return item.status;
   }
 
+  if (
+    item.type === "mcpToolCall" ||
+    item.type === "dynamicToolCall" ||
+    item.type === "collabAgentToolCall"
+  ) {
+    return item.status;
+  }
+
   return undefined;
 }
 
@@ -128,33 +169,67 @@ export function TranscriptMessage({
   item,
   itemLabels,
   locale,
+  variant = "message",
 }: {
   item: ThreadItem;
   itemLabels: TranscriptItemLabels;
   locale: Locale;
+  variant?: TranscriptMessageVariant;
 }) {
-  const role = itemRole(item, itemLabels);
+  const role = itemRole(item, itemLabels, locale, variant);
   const icon = itemIcon(item);
   const status = itemStatus(item);
+  const isProcessAgentNote =
+    variant === "process" && item.type === "agentMessage";
 
   return (
     <article
       className="message"
       data-kind={item.type}
       data-has-icon={icon ? "true" : "false"}
+      data-process-note={isProcessAgentNote ? "true" : undefined}
       data-status={status}
+      data-transcript-variant={variant}
       aria-label={role}
     >
       {icon ? <div className="message-icon">{icon}</div> : null}
       <div className="message-body">
         <div className="message-header">
           <span className="message-role">{role}</span>
-          <span className="message-type">{itemTypeLabel(item, locale)}</span>
+          <span className="message-type">
+            {itemTypeLabel(item, locale, variant)}
+          </span>
         </div>
         {renderMessageContent(item, locale)}
       </div>
     </article>
   );
+}
+
+export function combineAgentMessages({
+  id,
+  messages,
+  phase,
+}: {
+  id: string;
+  messages: AgentMessageItem[];
+  phase: AgentMessageItem["phase"];
+}): AgentMessageItem {
+  if (messages.length === 1) {
+    return messages[0];
+  }
+
+  const lastMessage = messages[messages.length - 1];
+  return {
+    ...lastMessage,
+    id,
+    memoryCitation: lastMessage.memoryCitation,
+    phase,
+    text: messages
+      .map((message) => message.text.trim())
+      .filter(Boolean)
+      .join("\n\n"),
+  };
 }
 
 export function TranscriptStreamingMessage({

@@ -8,6 +8,30 @@ const AGENT_PLATFORM_UNAVAILABLE_BODY = JSON.stringify({
 });
 const AGENT_PLATFORM_REACHABILITY_TTL_MS = 2_000;
 const AGENT_PLATFORM_REACHABILITY_TIMEOUT_MS = 250;
+const MERMAID_CHUNK_PACKAGES = new Set([
+  "@braintree/sanitize-url",
+  "@iconify/utils",
+  "@mermaid-js/parser",
+  "@upsetjs/venn.js",
+  "cytoscape",
+  "cytoscape-cose-bilkent",
+  "cytoscape-fcose",
+  "d3",
+  "d3-sankey",
+  "dagre-d3-es",
+  "dayjs",
+  "dompurify",
+  "es-toolkit",
+  "katex",
+  "khroma",
+  "marked",
+  "mermaid",
+  "roughjs",
+  "stylis",
+  "ts-dedent",
+  "uuid",
+]);
+const REACT_CHUNK_PACKAGES = new Set(["react", "react-dom", "scheduler"]);
 
 type WebSocketProxy = {
   on(
@@ -113,6 +137,30 @@ function agentPlatformFallbackPlugin(target: string): Plugin {
   };
 }
 
+function nodeModulePackageName(id: string): string | null {
+  const normalized = id.replace(/\\/g, "/");
+  const marker = "/node_modules/";
+  const markerIndex = normalized.lastIndexOf(marker);
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  const parts = normalized.slice(markerIndex + marker.length).split("/");
+  if (parts[0]?.startsWith("@")) {
+    return parts[1] ? `${parts[0]}/${parts[1]}` : null;
+  }
+  return parts[0] ?? null;
+}
+
+function isMermaidChunkModule(id: string): boolean {
+  const packageName = nodeModulePackageName(id);
+  return Boolean(
+    packageName &&
+      (MERMAID_CHUNK_PACKAGES.has(packageName) ||
+        packageName.startsWith("d3-")),
+  );
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
   const appServerTarget = env.CREWON_APP_SERVER_TARGET ?? "ws://127.0.0.1:6176";
@@ -164,10 +212,14 @@ export default defineConfig(({ mode }) => {
             if (!id.includes("node_modules")) {
               return undefined;
             }
-            if (id.includes("lucide-react")) {
+            const packageName = nodeModulePackageName(id);
+            if (isMermaidChunkModule(id)) {
+              return "mermaid";
+            }
+            if (packageName === "lucide-react") {
               return "icons";
             }
-            if (id.includes("react")) {
+            if (packageName && REACT_CHUNK_PACKAGES.has(packageName)) {
               return "react";
             }
             return "vendor";

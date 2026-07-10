@@ -2,6 +2,9 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+app_server_host="127.0.0.1"
+app_server_port="6176"
+app_server_url="ws://${app_server_host}:${app_server_port}"
 
 port_listening() {
   python3 - "$1" "$2" <<'PY'
@@ -20,7 +23,11 @@ wait_for_port() {
   local host="$1"
   local port="$2"
   local pid="${3:-}"
-  local deadline=$((SECONDS + 90))
+  local timeout="${CREWON_DEV_BACKEND_READY_TIMEOUT:-360}"
+  if [[ ! "$timeout" =~ ^[0-9]+$ ]]; then
+    timeout="360"
+  fi
+  local deadline=$((SECONDS + timeout))
   while (( SECONDS < deadline )); do
     if port_listening "$host" "$port"; then
       return 0
@@ -33,7 +40,50 @@ wait_for_port() {
   return 1
 }
 
+listening_pids() {
+  lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true
+}
+
+pid_cwd() {
+  lsof -a -p "$1" -d cwd -Fn 2>/dev/null | awk 'substr($0, 1, 1) == "n" { print substr($0, 2); exit }'
+}
+
+is_repo_app_server_pid() {
+  local pid="$1"
+  local command
+  local cwd
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  cwd="$(pid_cwd "$pid")"
+
+  [[ "$cwd" == "$repo_root" && "$command" == *"crewon-app-server"* && "$command" == *"--listen ${app_server_url}"* ]]
+}
+
+stop_existing_app_server() {
+  local pids=("$@")
+
+  if (( ${#pids[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "Restarting existing crewon-app-server on ${app_server_url}: ${pids[*]}"
+  for pid in "${pids[@]}"; do
+    kill "$pid" 2>/dev/null || true
+  done
+
+  local deadline=$((SECONDS + 12))
+  while (( SECONDS < deadline )); do
+    if ! port_listening "$app_server_host" "$app_server_port"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "crewon-app-server did not stop cleanly on ${app_server_url}" >&2
+  return 1
+}
+
 app_server_pid=""
+app_server_owned="0"
 vite_pid=""
 monitor_pid=""
 
@@ -45,7 +95,7 @@ cleanup() {
     kill "$vite_pid" 2>/dev/null || true
     wait "$vite_pid" 2>/dev/null || true
   fi
-  if [[ -n "$app_server_pid" ]] && kill -0 "$app_server_pid" 2>/dev/null; then
+  if [[ "$app_server_owned" == "1" ]] && [[ -n "$app_server_pid" ]] && kill -0 "$app_server_pid" 2>/dev/null; then
     kill "$app_server_pid" 2>/dev/null || true
     wait "$app_server_pid" 2>/dev/null || true
   fi
@@ -54,24 +104,70 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 monitor_app_server() {
-  while kill -0 "$app_server_pid" 2>/dev/null; do
-    sleep 2
-  done
+  if [[ -n "$app_server_pid" ]]; then
+    while kill -0 "$app_server_pid" 2>/dev/null && port_listening "$app_server_host" "$app_server_port"; do
+      sleep 2
+    done
+  else
+    while port_listening "$app_server_host" "$app_server_port"; do
+      sleep 2
+    done
+  fi
 
   if [[ -n "$vite_pid" ]] && kill -0 "$vite_pid" 2>/dev/null; then
-    echo "crewon-app-server exited; stopping UI dev server." >&2
+    echo "crewon-app-server is no longer available on ${app_server_url}; stopping UI dev server." >&2
     kill "$vite_pid" 2>/dev/null || true
   fi
 }
 
-if port_listening 127.0.0.1 6176; then
-  echo "crewon-app-server already listening on ws://127.0.0.1:6176"
+remember_existing_app_server_pid() {
+  existing_app_server_pids=()
+  while IFS= read -r existing_pid; do
+    [[ -n "$existing_pid" ]] && existing_app_server_pids+=("$existing_pid")
+  done < <(listening_pids "$app_server_port")
+
+  if (( ${#existing_app_server_pids[@]} > 0 )); then
+    app_server_pid="${existing_app_server_pids[0]}"
+  fi
+}
+
+if port_listening "$app_server_host" "$app_server_port"; then
+  existing_app_server_pids=()
+  while IFS= read -r existing_pid; do
+    [[ -n "$existing_pid" ]] && existing_app_server_pids+=("$existing_pid")
+  done < <(listening_pids "$app_server_port")
+  if [[ "${CREWON_DEV_REUSE_BACKEND:-0}" == "1" ]]; then
+    if (( ${#existing_app_server_pids[@]} > 0 )); then
+      echo "Reusing existing crewon-app-server on ${app_server_url}: ${existing_app_server_pids[*]}"
+      app_server_pid="${existing_app_server_pids[0]}"
+    else
+      echo "Reusing existing crewon-app-server on ${app_server_url}: unknown pid"
+    fi
+  else
+    for existing_pid in "${existing_app_server_pids[@]}"; do
+      if ! is_repo_app_server_pid "$existing_pid"; then
+        echo "Port ${app_server_port} is already occupied by a non-CrewON dev process: pid ${existing_pid}" >&2
+        echo "Stop that process first, or set CREWON_DEV_REUSE_BACKEND=1 to reuse it intentionally." >&2
+        exit 1
+      fi
+    done
+    stop_existing_app_server "${existing_app_server_pids[@]}"
+  fi
+fi
+
+if port_listening "$app_server_host" "$app_server_port"; then
+  echo "crewon-app-server already listening on ${app_server_url}"
+  if [[ -z "$app_server_pid" ]]; then
+    remember_existing_app_server_pid
+  fi
 else
-  echo "Starting crewon-app-server on ws://127.0.0.1:6176"
+  echo "Starting crewon-app-server on ${app_server_url}"
   bash "$repo_root/scripts/crewon-app-server.sh" &
   app_server_pid="$!"
-  if ! wait_for_port 127.0.0.1 6176 "$app_server_pid"; then
-    echo "crewon-app-server did not become ready on ws://127.0.0.1:6176" >&2
+  app_server_owned="1"
+  echo "Waiting up to ${CREWON_DEV_BACKEND_READY_TIMEOUT:-360}s for crewon-app-server to become ready."
+  if ! wait_for_port "$app_server_host" "$app_server_port" "$app_server_pid"; then
+    echo "crewon-app-server did not become ready on ${app_server_url}" >&2
     exit 1
   fi
 fi
@@ -83,9 +179,7 @@ fi
 pnpm --filter @crewon/ui dev &
 vite_pid="$!"
 
-if [[ -n "$app_server_pid" ]]; then
-  monitor_app_server &
-  monitor_pid="$!"
-fi
+monitor_app_server &
+monitor_pid="$!"
 
 wait "$vite_pid"

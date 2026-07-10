@@ -4,6 +4,7 @@ import {
   appViewFromSearch,
   isCommandShellHash,
   libraryViewFromSearch,
+  shouldRenderCommandShellView,
   settingsSectionFromSearch,
 } from "./appRouting";
 
@@ -42,5 +43,13 @@ describe("app routing search parsing", () => {
     expect(isCommandShellHash("#view-agents")).toBe(true);
     expect(isCommandShellHash("#view-settings")).toBe(false);
     expect(isCommandShellHash("")).toBe(false);
+  });
+
+  it("uses the command shell for the default chat app view", () => {
+    expect(shouldRenderCommandShellView("chat")).toBe(true);
+    expect(shouldRenderCommandShellView("settings", true)).toBe(true);
+    expect(shouldRenderCommandShellView("library", true)).toBe(true);
+    expect(shouldRenderCommandShellView("settings")).toBe(false);
+    expect(shouldRenderCommandShellView("library")).toBe(false);
   });
 });

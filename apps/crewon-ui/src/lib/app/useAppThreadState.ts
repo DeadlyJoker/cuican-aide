@@ -1,5 +1,17 @@
-import { useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
+
+import {
+  createStreamingTextBuffer,
+  type StreamingTextByThread,
+} from "../thread/threadStreamingTextBuffer";
 
 export function useAppThreadState() {
   const [showArchivedThreads, setShowArchivedThreads] = useState(false);
@@ -14,12 +26,42 @@ export function useAppThreadState() {
   const [activeTurnByThread, setActiveTurnByThread] = useState<
     Record<string, string>
   >({});
-  const [streamingTextByThread, setStreamingTextByThread] = useState<
-    Record<string, string>
-  >({});
+  const [streamingTextByThread, setStreamingTextByThreadState] =
+    useState<StreamingTextByThread>({});
+  const streamingTextBufferRef = useRef<ReturnType<
+    typeof createStreamingTextBuffer
+  > | null>(null);
+
+  if (streamingTextBufferRef.current === null) {
+    streamingTextBufferRef.current = createStreamingTextBuffer(
+      setStreamingTextByThreadState,
+    );
+  }
+
+  const setStreamingTextByThread: Dispatch<
+    SetStateAction<StreamingTextByThread>
+  > = useCallback((next) => {
+    streamingTextBufferRef.current?.clearPending();
+    setStreamingTextByThreadState(next);
+  }, []);
+
+  const appendStreamingTextDelta = useCallback(
+    (threadId: string, delta: string) => {
+      streamingTextBufferRef.current?.append(threadId, delta);
+    },
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      streamingTextBufferRef.current?.dispose();
+    },
+    [],
+  );
 
   return {
     activeTurnByThread,
+    appendStreamingTextDelta,
     isSearchingThreads,
     loadedThreadIds,
     selectedThreadId,

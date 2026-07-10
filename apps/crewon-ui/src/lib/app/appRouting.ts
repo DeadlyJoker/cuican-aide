@@ -18,6 +18,13 @@ export function isCommandShellHash(hash: string): boolean {
   return view !== hash && commandShellViews.has(view);
 }
 
+export function shouldRenderCommandShellView(
+  appView: AppView,
+  commandShellRouteActive = false,
+): boolean {
+  return appView === "chat" || commandShellRouteActive;
+}
+
 export function libraryViewFromSearch(search: string): LibraryKind | null {
   const view = new URLSearchParams(search).get("view");
 

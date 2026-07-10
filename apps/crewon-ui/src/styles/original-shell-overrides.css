@@ -205,6 +205,22 @@
   width: 19px;
   height: 19px;
   transform: rotate(180deg); }
+.screen-shell.command-screen {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
+  padding: 0;
+  place-items: stretch; }
+.screen-shell.command-screen .command-window {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
+  border-radius: 0;
+  box-shadow: none; }
 .sidebar-brand {
   position: absolute;
   top: 22px;
@@ -358,6 +374,47 @@
 .conversation-item.active {
   background: oklch(97% 0.018 215);
   color: oklch(36% 0.1 210); }
+.conversation-item.is-linked {
+  position: relative;
+  padding-right: 20px; }
+.conversation-item.is-linked::after {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: oklch(64% 0.13 210);
+  content: "";
+  transform: translateY(-50%); }
+.linked-conversation-group {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  padding-top: 5px;
+  border-top: 1px solid oklch(88% 0.012 235); }
+.linked-conversation-label {
+  padding: 0 8px 2px;
+  color: oklch(54% 0.018 235);
+  font-size: 10px;
+  font-weight: 720; }
+.linked-conversation-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  white-space: normal; }
+.linked-conversation-item span,
+.linked-conversation-item em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap; }
+.linked-conversation-item em {
+  color: oklch(57% 0.016 235);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 650; }
 .space-title:focus-visible,
 .conversation-item:focus-visible,
 .tree-head button:focus-visible {
@@ -407,6 +464,8 @@
 .shell-page-view:not(.assistant-only-view) {
   padding: 10px 18px 36px;
   background: oklch(99% 0.002 235); }
+.command-window.sidebar-collapsed .shell-page-view:not(.assistant-only-view) {
+  padding-left: 90px; }
 .shell-page-view:not(.assistant-only-view) .page-stack {
   gap: 0;
   width: 100%;
@@ -637,7 +696,9 @@
   min-height: 42px;
   padding: 0 0 10px; }
 .command-window.sidebar-collapsed .shell-page-view:not(.assistant-only-view) .catalog-market-header {
-  padding-left: 60px; }
+  padding-left: 0; }
+.command-window.sidebar-collapsed .shell-page-view:not(.assistant-only-view) .catalog-source-bar {
+  padding-left: 0; }
 .shell-page-view .catalog-mode-tabs,
 .shell-page-view .catalog-header-actions,
 .shell-page-view .catalog-source-tabs {

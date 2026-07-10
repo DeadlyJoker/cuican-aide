@@ -1,10 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
+import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import {
   activateDesignPanelTab,
   applyDesignCardVisibility,
   cleanSlotTitle,
+  commandComposerKeyIntent,
   CommandWorkspace,
   insertTokenIntoComposerValue,
   selectCommandHomeSlots,
@@ -12,6 +14,11 @@ import {
   setActiveFilter,
   syncDesignFilterState,
 } from "./CommandWorkspace";
+import {
+  conversationBindingKey,
+  findLinkedThreadForConversation,
+} from "./commandWorkspaceThreadLinks";
+import { ResourceDock } from "./CommandWorkspaceChrome";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 
@@ -188,6 +195,54 @@ describe("CommandWorkspace", () => {
     ).toBe("@Agent 小队交付空间 ");
   });
 
+  it("maps command composer keyboard shortcuts for chat-style sending", () => {
+    const baseEvent = {
+      altKey: false,
+      composerValue: "继续推进",
+      ctrlKey: false,
+      hasOpenPalette: false,
+      isComposing: false,
+      key: "Enter",
+      metaKey: false,
+      shiftKey: false,
+    };
+
+    expect(commandComposerKeyIntent(baseEvent)).toBe("send");
+    expect(commandComposerKeyIntent({ ...baseEvent, shiftKey: true })).toBeNull();
+    expect(commandComposerKeyIntent({ ...baseEvent, altKey: true })).toBeNull();
+    expect(commandComposerKeyIntent({ ...baseEvent, ctrlKey: true })).toBe(
+      "send",
+    );
+    expect(commandComposerKeyIntent({ ...baseEvent, isComposing: true })).toBeNull();
+    expect(
+      commandComposerKeyIntent({ ...baseEvent, hasOpenPalette: true }),
+    ).toBeNull();
+    expect(
+      commandComposerKeyIntent({
+        ...baseEvent,
+        hasOpenPalette: true,
+        key: "Escape",
+      }),
+    ).toBe("closePalette");
+    expect(commandComposerKeyIntent({ ...baseEvent, key: "@" })).toBe(
+      "openContext",
+    );
+    expect(
+      commandComposerKeyIntent({
+        ...baseEvent,
+        composerValue: "调用 ",
+        key: "/",
+      }),
+    ).toBe("openSlash");
+    expect(
+      commandComposerKeyIntent({
+        ...baseEvent,
+        composerValue: "http://example.com/",
+        key: "/",
+      }),
+    ).toBeNull();
+  });
+
   it("renders the original desktop command shell and clean Chinese copy", () => {
     const markup = renderCommandWorkspace();
 
@@ -251,6 +306,18 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("\u529e\u516c\u5ba4");
   });
 
+  it("labels agent-platform fallback without implying app-server is down", () => {
+    const markup = renderToStaticMarkup(
+      <ResourceDock
+        platformState="fallback"
+        slots={selectCommandHomeSlots(snapshot())}
+      />,
+    );
+
+    expect(markup).toContain("可选资源服务未启动，对话后端可用");
+    expect(markup).not.toContain("资源服务未连接");
+  });
+
   it("includes original schedule modal and filter landmarks", () => {
     const markup = renderCommandWorkspace();
 
@@ -298,6 +365,550 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('data-slash-item=""');
     expect(markup).toContain('data-label="Review Skill"');
     expect(markup).toContain("Review the page");
+  });
+
+  it("renders backend conversation links inside the command sidebar space tree", () => {
+    const backendThread = {
+      id: "thread-backend-1",
+      name: "Backend agent conversation",
+      preview: "Tool and MCP run streamed from app-server",
+      updatedAt: Math.floor(Date.now() / 1000),
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[backendThread]}
+        selectedThreadId="thread-backend-1"
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("后端会话");
+    expect(markup).toContain('data-linked-thread-id="thread-backend-1"');
+    expect(markup).toContain("Backend agent conversation");
+    expect(markup).toContain("Tool and MCP run streamed from app-server");
+  });
+
+  it("links static space conversations to matching backend threads", () => {
+    const workflowThread = {
+      id: "thread-workflow-gate",
+      preview: "Workflow Gate conversation is ready to continue.",
+      title: "Workflow Gate",
+    };
+    const reviewThread = {
+      id: "thread-review-checklist",
+      preview: "Ready for final acceptance review.",
+      title: "Delivery checklist",
+    };
+
+    expect(
+      findLinkedThreadForConversation(
+        [workflowThread, reviewThread],
+        "Workflow Gate",
+      )?.id,
+    ).toBe("thread-workflow-gate");
+    expect(
+      findLinkedThreadForConversation(
+        [workflowThread, reviewThread],
+        "交付验收清单",
+        ["Delivery checklist"],
+      )?.id,
+    ).toBe("thread-review-checklist");
+    expect(
+      findLinkedThreadForConversation(
+        [workflowThread, reviewThread],
+        "完全不同的标题",
+        [],
+        "thread-workflow-gate",
+      )?.id,
+    ).toBe("thread-workflow-gate");
+    expect(conversationBindingKey("agents", "Schema 校验")).toBe(
+      "agents:schema 校验",
+    );
+  });
+
+  it("keeps static space links connected even when the matched thread is outside the recent list", () => {
+    const staleRecentThreads = Array.from({ length: 5 }, (_, index) => ({
+      id: `thread-recent-${index}`,
+      name: `Recent backend thread ${index}`,
+      preview: `Recent preview ${index}`,
+      updatedAt: Math.floor(Date.now() / 1000) - index,
+    })) as unknown as Thread[];
+    const olderWorkflowThread = {
+      id: "thread-old-workflow-gate",
+      name: "Workflow Gate",
+      preview: "Older Workflow Gate transcript should still link the static space.",
+      updatedAt: Math.floor(Date.now() / 1000) - 100,
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[...staleRecentThreads, olderWorkflowThread]}
+        selectedThreadId="thread-old-workflow-gate"
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-linked-thread-id="thread-old-workflow-gate"');
+    expect(markup).toContain("已连接后端会话：Workflow Gate");
+    expect(markup).toContain('class="conversation-item is-linked active"');
+    expect(markup).toContain("Recent backend thread 4");
+  });
+
+  it("marks static space conversations when the backend thread uses the artifact English alias", () => {
+    const backendThread = {
+      id: "thread-delivery-checklist",
+      name: "Delivery checklist",
+      preview: "Acceptance criteria and release gates",
+      updatedAt: Math.floor(Date.now() / 1000),
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[backendThread]}
+        selectedThreadId="thread-delivery-checklist"
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("交付验收清单");
+    expect(markup).toContain('data-linked-thread-id="thread-delivery-checklist"');
+    expect(markup).toContain("已连接后端会话：Delivery checklist");
+    expect(markup).toContain('class="conversation-item is-linked active"');
+  });
+
+  it("marks matching static space conversations as real backend thread links", () => {
+    const backendThread = {
+      id: "thread-workflow-gate",
+      name: "Workflow Gate",
+      preview: "Continue the Workflow Gate app-server transcript",
+      updatedAt: Math.floor(Date.now() / 1000),
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[backendThread]}
+        selectedThreadId="thread-workflow-gate"
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-linked-thread-id="thread-workflow-gate"');
+    expect(markup).toContain("已连接后端会话：Workflow Gate");
+    expect(markup).toContain('class="conversation-item is-linked active"');
+  });
+
+  it("renders selected backend threads inside the command shell instead of leaving the shell", () => {
+    const selectedThread = {
+      id: "thread-command-room",
+      name: "Command room transcript",
+      preview: "Agent answered in the command shell",
+      updatedAt: Math.floor(Date.now() / 1000),
+      cwd: "/repo/frontend",
+      turns: [
+        {
+          id: "turn-command-room",
+          status: "completed",
+          durationMs: 1_000,
+          startedAt: 1,
+          completedAt: 2,
+          error: null,
+          itemsView: "full",
+          items: [
+            {
+              id: "item-user",
+              type: "userMessage",
+              clientId: null,
+              content: [{ type: "text", text: "Run inside command shell" }],
+            },
+            {
+              id: "item-agent",
+              type: "agentMessage",
+              text: "## Command response\n\n- [x] Stayed in shell",
+              phase: null,
+              memoryCitation: null,
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        activeTurnId={null}
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[selectedThread]}
+        selectedThread={selectedThread}
+        selectedThreadId="thread-command-room"
+        streamingText=""
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+        onStop={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-has-thread="true"');
+    expect(markup).toContain('data-od-id="command-thread-room"');
+    expect(markup).toContain('class="transcript"');
+    expect(markup).toContain('class="command-input thread-command-input"');
+    expect(markup).toContain("内容由 AI 生成，请核实重要信息");
+    expect(markup).toContain("Run inside command shell");
+    expect(markup).toContain("Command response");
+    expect(markup).toContain("task-list-item");
+    expect(markup).not.toContain('class="app-shell"');
+  });
+
+  it("keeps Command, MCP, Skill, Markdown, and Mermaid output inside the command shell transcript", () => {
+    const selectedThread = {
+      id: "thread-command-tools",
+      name: "Command tool transcript",
+      preview: "MCP and Skill output",
+      updatedAt: Math.floor(Date.now() / 1000),
+      cwd: "/repo/frontend",
+      turns: [
+        {
+          id: "turn-command-tools",
+          status: "completed",
+          durationMs: 1_000,
+          startedAt: 1,
+          completedAt: 2,
+          error: null,
+          itemsView: "full",
+          items: [
+            {
+              id: "item-user-tools",
+              type: "userMessage",
+              clientId: null,
+              content: [{ type: "text", text: "Run MCP and Skill checks" }],
+            },
+            {
+              id: "item-mcp-tools",
+              type: "mcpToolCall",
+              server: "filesystem",
+              tool: "read_file",
+              status: "completed",
+              arguments: { path: "README.md" },
+              pluginId: null,
+              result: {
+                content: [
+                  {
+                    type: "text",
+                    text: "## MCP result\n\n- [x] Read context",
+                  },
+                ],
+                structuredContent: { ok: true },
+                _meta: null,
+              },
+              error: null,
+              durationMs: 120,
+            },
+            {
+              id: "item-skill-tools",
+              type: "dynamicToolCall",
+              namespace: "skills",
+              tool: "delivery-check",
+              arguments: { target: "command-home" },
+              status: "completed",
+              contentItems: [
+                {
+                  type: "inputText",
+                  text: "| Gate | State |\n| --- | --- |\n| Command shell | Pass |",
+                },
+              ],
+              success: true,
+              durationMs: 240,
+            },
+            {
+              id: "item-command-tools",
+              type: "commandExecution",
+              command: "pnpm test -- CommandWorkspace",
+              cwd: "/repo/frontend",
+              processId: null,
+              source: "agent",
+              status: "completed",
+              commandActions: [],
+              aggregatedOutput: "Command workspace tests passed",
+              exitCode: 0,
+              durationMs: 1_200,
+            },
+            {
+              id: "item-agent-tools",
+              type: "agentMessage",
+              text: "```mermaid\ngraph LR\n  Agent --> Tool\n```",
+              phase: null,
+              memoryCitation: null,
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        activeTurnId={null}
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[selectedThread]}
+        selectedThread={selectedThread}
+        selectedThreadId="thread-command-tools"
+        streamingText=""
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+        onStop={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-od-id="command-thread-room"');
+    expect(markup).toContain('class="transcript"');
+    expect(markup).toContain("MCP 1");
+    expect(markup).toContain("Skill 1");
+    expect(markup).toContain("命令 1");
+    expect(markup).toContain("filesystem.read_file");
+    expect(markup).toContain("已读取 1 个文件");
+    expect(markup).toContain("README.md");
+    expect(markup).toContain("skills.delivery-check");
+    expect(markup).toContain("$ pnpm test -- CommandWorkspace");
+    expect(markup).toContain("Command workspace tests passed");
+    expect(markup).toContain("退出码 0");
+    expect(markup).toContain("<table>");
+    expect(markup).toContain("<td>Pass</td>");
+    expect(markup).toContain('data-renderer="mermaid"');
+    expect(markup).toContain("graph LR");
+    expect(markup).not.toContain('class="app-shell"');
+  });
+
+  it("labels command composer input as steer guidance while an agent turn is running", () => {
+    const runningThread = {
+      id: "thread-running-command-room",
+      name: "Running command room transcript",
+      preview: "Agent is still working",
+      updatedAt: Math.floor(Date.now() / 1000),
+      cwd: "/repo/frontend",
+      turns: [
+        {
+          id: "turn-running-command-room",
+          status: "inProgress",
+          durationMs: null,
+          startedAt: 1,
+          completedAt: null,
+          error: null,
+          itemsView: "full",
+          items: [
+            {
+              id: "item-user-running",
+              type: "userMessage",
+              clientId: null,
+              content: [{ type: "text", text: "Start a long task" }],
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        activeTurnId="turn-running-command-room"
+        composerValue="补充验收标准"
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[runningThread]}
+        selectedThread={runningThread}
+        selectedThreadId="thread-running-command-room"
+        streamingText=""
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+        onStop={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("Agent 正在执行");
+    expect(markup).toContain("继续补充指令");
+    expect(markup).toContain('aria-label="发送补充指令"');
+    expect(markup).toContain('title="发送补充指令"');
+  });
+
+  it("summarizes live backend agent work in the command transcript toolbar", () => {
+    const runningThread = {
+      id: "thread-live-agent-runtime",
+      name: "Live agent runtime",
+      preview: "MCP, Skill, command output, and streaming text",
+      updatedAt: Math.floor(Date.now() / 1000),
+      cwd: "/repo/frontend",
+      turns: [
+        {
+          id: "turn-live-agent-runtime",
+          status: "inProgress",
+          durationMs: null,
+          startedAt: 1,
+          completedAt: null,
+          error: null,
+          itemsView: "full",
+          items: [
+            {
+              id: "item-user-live",
+              type: "userMessage",
+              clientId: null,
+              content: [{ type: "text", text: "Run a live agent flow" }],
+            },
+            {
+              id: "item-mcp-live",
+              type: "mcpToolCall",
+              server: "filesystem",
+              tool: "read_file",
+              status: "completed",
+              arguments: { path: "README.md" },
+              pluginId: null,
+              result: { content: [{ type: "text", text: "## MCP result" }] },
+              error: null,
+              durationMs: 240,
+            },
+            {
+              id: "item-skill-live",
+              type: "dynamicToolCall",
+              namespace: "skill",
+              tool: "code-review-system",
+              arguments: { target: "homepage" },
+              status: "inProgress",
+              contentItems: null,
+              success: null,
+              durationMs: null,
+            },
+            {
+              id: "item-command-live",
+              type: "commandExecution",
+              command: "pnpm test",
+              cwd: "/repo/frontend",
+              processId: null,
+              source: "agent",
+              status: "completed",
+              commandActions: [],
+              aggregatedOutput: "ok",
+              exitCode: 0,
+              durationMs: 1_200,
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        activeTurnId="turn-live-agent-runtime"
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[runningThread]}
+        selectedThread={runningThread}
+        selectedThreadId="thread-live-agent-runtime"
+        streamingText="正在实时生成最终回复"
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+        onStop={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('class="command-thread-runtime"');
+    expect(markup).toContain('data-state="running"');
+    expect(markup).toContain("实时渲染中");
+    expect(markup).toContain("MCP 1");
+    expect(markup).toContain("Skill 1");
+    expect(markup).toContain("命令 1");
+    expect(markup).toContain("正在实时生成最终回复");
+  });
+
+  it("makes sidebar search results actionable for spaces and backend threads", () => {
+    const backendThread = {
+      id: "thread-search-1",
+      name: "Searchable backend thread",
+      preview: "Open this real app-server transcript",
+      updatedAt: Math.floor(Date.now() / 1000),
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[backendThread]}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-search-action="conversation"');
+    expect(markup).toContain('data-search-action="thread"');
+    expect(markup).toContain('data-search-action="view"');
+    expect(markup).toContain('data-thread-id="thread-search-1"');
+    expect(markup).toContain("Searchable backend thread");
+    expect(markup).toContain("Open this real app-server transcript");
   });
 
   it("filters schedule cards like the original design runtime", () => {

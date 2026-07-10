@@ -1,4 +1,5 @@
 import { ArrowUp, AtSign, CheckCircle2, Mic, Paperclip } from "lucide-react";
+import type { Thread } from "@crewon-protocol/v2/Thread";
 import {
   type KeyboardEvent,
   useEffect,
@@ -15,11 +16,20 @@ import {
   workflowRooms,
 } from "./commandWorkspaceData";
 import {
+  conversationBindingKey,
+  findLinkedThreadForConversation,
+  readConversationThreadBindings,
+  writeConversationThreadBindings,
+  type ConversationThreadBindings,
+} from "./commandWorkspaceThreadLinks";
+import {
   CommandSidebar,
   Palette,
   ResourceDock,
+  type CommandLinkedThread,
   type PaletteItemWithCommand,
 } from "./CommandWorkspaceChrome";
+import { CommandThreadRoom } from "./CommandWorkspaceConversation";
 import {
   AgentsView,
   AssistView,
@@ -43,7 +53,9 @@ import {
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
 import type { ConnectionState } from "../../lib/shared/connectionState";
+import { formatRelativeTime } from "../../lib/shared/text";
 import type { WorkMode } from "../../lib/workMode";
+import { sidebarThreadTitle } from "../SidebarPresentation";
 
 export {
   activateDesignPanelTab,
@@ -57,24 +69,51 @@ export {
 } from "./commandWorkspaceState";
 
 type CommandWorkspaceProps = {
+  activeTurnId?: string | null;
   composerValue: string;
   connectionState: ConnectionState;
   cwd: string;
   isSending: boolean;
+  linkedThreads?: Thread[];
   locale?: Locale;
+  selectedThread?: Thread | null;
+  selectedThreadId?: string | null;
   slashCommands?: ComposerSlashCommand[];
+  streamingText?: string;
   workMode: WorkMode;
   onAttachContext: () => void;
   onChangeComposerValue: (value: string) => void;
   onModeChange: (mode: WorkMode) => void;
   onRetryConnection: () => void;
   onSend: (text: string) => void;
+  onSelectLinkedThread?: (threadId: string | null) => void;
   onSlashCommandSelect?: (command: ComposerSlashCommand) => void;
+  onStop?: () => void;
 };
 
 
 type PlatformLoadState = "loading" | "ready" | "fallback";
 type TeamMode = "office" | "workflow" | "experts";
+type PendingConversationThreadBinding = {
+  key: string;
+  previousThreadId: string | null;
+};
+export type CommandComposerKeyIntent =
+  | "closePalette"
+  | "openContext"
+  | "openSlash"
+  | "send"
+  | null;
+export type CommandComposerKeyIntentInput = {
+  altKey: boolean;
+  composerValue: string;
+  ctrlKey: boolean;
+  hasOpenPalette: boolean;
+  isComposing: boolean;
+  key: string;
+  metaKey: boolean;
+  shiftKey: boolean;
+};
 
 const shellViewIds: CommandShellView[] = [
   "command",
@@ -115,6 +154,49 @@ function paletteFilter(items: PaletteItemWithCommand[], query: string) {
       .toLowerCase()
       .includes(normalized),
   );
+}
+
+export function commandComposerKeyIntent({
+  altKey,
+  composerValue,
+  ctrlKey,
+  hasOpenPalette,
+  isComposing,
+  key,
+  metaKey,
+  shiftKey,
+}: CommandComposerKeyIntentInput): CommandComposerKeyIntent {
+  if (isComposing) {
+    return null;
+  }
+
+  if (key === "Escape" && hasOpenPalette) {
+    return "closePalette";
+  }
+
+  if (key === "Enter") {
+    if (hasOpenPalette) {
+      return null;
+    }
+    if (metaKey || ctrlKey) {
+      return "send";
+    }
+    if (!shiftKey && !altKey) {
+      return "send";
+    }
+    return null;
+  }
+
+  if (!metaKey && !ctrlKey && !altKey) {
+    if (key === "@") {
+      return "openContext";
+    }
+    if (key === "/" && (!composerValue || /\s$/.test(composerValue))) {
+      return "openSlash";
+    }
+  }
+
+  return null;
 }
 
 function contextItems(slots: CommandHomeSlots, cwd: string): PaletteItemWithCommand[] {
@@ -191,19 +273,26 @@ function slashItems(
 }
 
 export function CommandWorkspace({
+  activeTurnId = null,
   composerValue,
   connectionState,
   cwd,
   isSending,
+  linkedThreads = [],
   locale = "zh",
+  selectedThread = null,
+  selectedThreadId = null,
   slashCommands = [],
+  streamingText = "",
   workMode,
   onAttachContext,
   onChangeComposerValue,
   onModeChange,
   onRetryConnection,
   onSend,
+  onSelectLinkedThread,
   onSlashCommandSelect,
+  onStop,
 }: CommandWorkspaceProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [activeView, setActiveView] = useState<CommandShellView>(() =>
@@ -212,6 +301,15 @@ export function CommandWorkspace({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
+  const [activeLinkedThreadId, setActiveLinkedThreadId] = useState<string | null>(
+    selectedThreadId,
+  );
+  const [conversationThreadBindings, setConversationThreadBindings] =
+    useState<ConversationThreadBindings>(() => readConversationThreadBindings());
+  const [pendingConversationBinding, setPendingConversationBinding] =
+    useState<PendingConversationThreadBinding | null>(null);
+  const [armedConversationBinding, setArmedConversationBinding] =
+    useState<PendingConversationThreadBinding | null>(null);
   const [collapsedSpaces, setCollapsedSpaces] = useState<Set<string>>(
     () => new Set(),
   );
@@ -276,6 +374,37 @@ export function CommandWorkspace({
     };
   }, []);
 
+  useEffect(() => {
+    setActiveLinkedThreadId(selectedThreadId);
+  }, [selectedThreadId]);
+
+  useEffect(() => {
+    if (
+      !armedConversationBinding ||
+      !selectedThreadId ||
+      selectedThreadId === armedConversationBinding.previousThreadId
+    ) {
+      return;
+    }
+
+    setConversationThreadBindings((current) => {
+      if (current[armedConversationBinding.key] === selectedThreadId) {
+        return current;
+      }
+      const next = {
+        ...current,
+        [armedConversationBinding.key]: selectedThreadId,
+      };
+      writeConversationThreadBindings(next);
+      return next;
+    });
+    setPendingConversationBinding(null);
+    setArmedConversationBinding(null);
+  }, [
+    armedConversationBinding,
+    selectedThreadId,
+  ]);
+
   const slots = useMemo(
     () => selectCommandHomeSlots(platformSnapshot),
     [platformSnapshot],
@@ -290,6 +419,19 @@ export function CommandWorkspace({
   );
   const visibleContextItems = paletteFilter(contextPaletteItems, paletteQuery);
   const visibleSlashItems = paletteFilter(slashPaletteItems, paletteQuery);
+  const commandLinkedThreads: CommandLinkedThread[] = useMemo(
+    () =>
+      linkedThreads.map((thread) => ({
+        id: thread.id,
+        preview: thread.preview,
+        title: sidebarThreadTitle(
+          thread,
+          locale === "zh" ? "未命名会话" : "Untitled thread",
+        ),
+        updatedLabel: formatRelativeTime(thread.updatedAt, locale),
+      })),
+    [linkedThreads, locale],
+  );
   const platformHasResources =
     platformSnapshot.agents.length +
       platformSnapshot.skills.length +
@@ -338,6 +480,9 @@ export function CommandWorkspace({
     if (isSending || !trimmed) {
       return;
     }
+    if (pendingConversationBinding) {
+      setArmedConversationBinding(pendingConversationBinding);
+    }
     onChangeComposerValue("");
     onSend(trimmed);
   }
@@ -380,27 +525,35 @@ export function CommandWorkspace({
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Escape" && openPalette) {
+    const intent = commandComposerKeyIntent({
+      altKey: event.altKey,
+      composerValue,
+      ctrlKey: event.ctrlKey,
+      hasOpenPalette: Boolean(openPalette),
+      isComposing: event.nativeEvent.isComposing,
+      key: event.key,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+    });
+
+    if (intent === "closePalette") {
       event.preventDefault();
       closeComposerPalette();
       return;
     }
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    if (intent === "send") {
       event.preventDefault();
       sendComposerValue();
       return;
     }
-    if (!event.metaKey && !event.ctrlKey && !event.altKey) {
-      if (event.key === "@") {
-        event.preventDefault();
-        openComposerPalette("context");
-      } else if (
-        event.key === "/" &&
-        (!composerValue || /\s$/.test(composerValue))
-      ) {
-        event.preventDefault();
-        openComposerPalette("slash");
-      }
+    if (intent === "openContext") {
+      event.preventDefault();
+      openComposerPalette("context");
+      return;
+    }
+    if (intent === "openSlash") {
+      event.preventDefault();
+      openComposerPalette("slash");
     }
   }
 
@@ -420,6 +573,37 @@ export function CommandWorkspace({
     setActiveSpaceId(spaceId);
     setActiveConversation(conversation);
     setWorkspace(spaceId);
+    const node = workspaceNodes.find((candidate) => candidate.id === spaceId);
+    const conversationAliases =
+      node?.conversations.find((candidate) => candidate.title === conversation)
+        ?.aliases ?? [];
+    const bindingKey = conversationBindingKey(spaceId, conversation);
+    const linkedThread = findLinkedThreadForConversation(
+      commandLinkedThreads,
+      conversation,
+      conversationAliases,
+      conversationThreadBindings[bindingKey],
+    );
+    if (linkedThread && onSelectLinkedThread) {
+      setPendingConversationBinding(null);
+      setArmedConversationBinding(null);
+      setActiveLinkedThreadId(linkedThread.id);
+      switchView("command");
+      onSelectLinkedThread(linkedThread.id);
+      return;
+    }
+
+    setPendingConversationBinding({
+      key: bindingKey,
+      previousThreadId: selectedThreadId,
+    });
+    setArmedConversationBinding(null);
+    setActiveLinkedThreadId(null);
+    onSelectLinkedThread?.(null);
+    if (!composerValue.trim()) {
+      onChangeComposerValue(`继续推进「${conversation}」：`);
+      textareaRef.current?.focus();
+    }
   }
 
   const currentWorkspace =
@@ -429,6 +613,26 @@ export function CommandWorkspace({
     officeRooms.find((room) => room.id === officeRoomId) ?? officeRooms[0];
   const activeWorkflowRoom =
     workflowRooms.find((room) => room.id === workflowRoomId) ?? workflowRooms[0];
+  const showCommandThread = activeView === "command" && Boolean(selectedThread);
+  const commandThreadRunning =
+    Boolean(activeTurnId) ||
+    Boolean(
+      selectedThread?.turns.some((turn) => turn.status === "inProgress"),
+    );
+  const composerRuntimeLabel = isSending
+    ? "发送中"
+    : commandThreadRunning && composerValue.trim()
+      ? "继续补充指令"
+      : commandThreadRunning
+        ? "Agent 正在执行，可继续输入补充指令"
+        : composerValue.trim()
+          ? "草稿未发送"
+          : connectionLabel(connectionState);
+  const composerStateLabel =
+    showCommandThread && !commandThreadRunning && !composerValue.trim()
+      ? "内容由 AI 生成，请核实重要信息"
+      : composerRuntimeLabel;
+  const composerSendLabel = commandThreadRunning ? "发送补充指令" : "发送任务";
 
   return (
     <section
@@ -449,9 +653,23 @@ export function CommandWorkspace({
           activeView={activeView}
           collapsedSpaces={collapsedSpaces}
           isSearchOpen={sidebarSearchOpen}
+          conversationThreadBindings={conversationThreadBindings}
+          linkedThreads={commandLinkedThreads}
           query={sidebarSearchQuery}
+          selectedLinkedThreadId={activeLinkedThreadId}
           slots={slots}
+          onCloseSearch={() => {
+            setSidebarSearchOpen(false);
+            setSidebarSearchQuery("");
+          }}
           onChooseConversation={chooseConversation}
+          onOpenLinkedThread={(threadId) => {
+            setPendingConversationBinding(null);
+            setArmedConversationBinding(null);
+            setActiveLinkedThreadId(threadId);
+            switchView("command");
+            onSelectLinkedThread?.(threadId);
+          }}
           onQueryChange={setSidebarSearchQuery}
           onSwitchView={switchView}
           onToggleCollapse={() => setSidebarCollapsed((collapsed) => !collapsed)}
@@ -464,11 +682,13 @@ export function CommandWorkspace({
             className={classNames(
               "shell-view command-home-view",
               activeView === "command" && "active",
+              showCommandThread && "has-command-thread",
             )}
             data-shell-view="command"
             data-shell-view-title-zh="新建任务"
             data-shell-view-title-en="New task"
             data-od-id="shell-view-command"
+            data-has-thread={showCommandThread ? "true" : "false"}
             hidden={activeView !== "command"}
           >
             <button
@@ -481,50 +701,80 @@ export function CommandWorkspace({
               <strong>{currentWorkspace} · 已同步</strong>
             </button>
 
-            <section className="hero-center" data-od-id="primary-work-area">
-              <header className="home-title" data-od-id="desktop-command-header">
-                <h1>
-                  <span>Crewon</span>
-                  <br />
-                  <span>创建可编排的 Agent 小队</span>
-                </h1>
-              </header>
-
-              <div className="scene-tabs scene-pills" data-od-id="scene-tabs">
-                {sceneTabs.map((tab) => (
-                  <button
-                    className={classNames(scene === tab.key && "active")}
-                    key={tab.key}
-                    type="button"
-                    aria-pressed={scene === tab.key}
-                    data-scene-target={tab.key}
-                    title={tab.description}
-                    onClick={() => switchScene(tab.key)}
+            <section
+              className={classNames(
+                "hero-center",
+                showCommandThread && "has-command-thread",
+              )}
+              data-od-id="primary-work-area"
+            >
+              {showCommandThread && selectedThread ? (
+                <CommandThreadRoom
+                  activeTurnId={activeTurnId}
+                  cwd={cwd}
+                  locale={locale}
+                  selectedThread={selectedThread}
+                  streamingText={streamingText}
+                  workMode={workMode}
+                  onModeChange={onModeChange}
+                  onStop={onStop}
+                />
+              ) : (
+                <>
+                  <header
+                    className="home-title"
+                    data-od-id="desktop-command-header"
                   >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+                    <h1>
+                      <span>Crewon</span>
+                      <br />
+                      <span>创建可编排的 Agent 小队</span>
+                    </h1>
+                  </header>
 
-              <div className="quick-row" data-od-id="quick-scenarios">
-                {quickScenarios.map((scenario) => (
-                  <button
-                    className={classNames(
-                      scenario.scene !== scene && "is-hidden",
-                    )}
-                    data-scene={scenario.scene}
-                    key={`${scenario.scene}-${scenario.label}`}
-                    type="button"
-                    onClick={() =>
-                      prefillScenario(scenario.prompt, scenario.scene)
-                    }
-                  >
-                    {scenario.label}
-                  </button>
-                ))}
-              </div>
+                  <div className="scene-tabs scene-pills" data-od-id="scene-tabs">
+                    {sceneTabs.map((tab) => (
+                      <button
+                        className={classNames(scene === tab.key && "active")}
+                        key={tab.key}
+                        type="button"
+                        aria-pressed={scene === tab.key}
+                        data-scene-target={tab.key}
+                        title={tab.description}
+                        onClick={() => switchScene(tab.key)}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
 
-              <section className="command-input" data-od-id="ai-composer">
+                  <div className="quick-row" data-od-id="quick-scenarios">
+                    {quickScenarios.map((scenario) => (
+                      <button
+                        className={classNames(
+                          scenario.scene !== scene && "is-hidden",
+                        )}
+                        data-scene={scenario.scene}
+                        key={`${scenario.scene}-${scenario.label}`}
+                        type="button"
+                        onClick={() =>
+                          prefillScenario(scenario.prompt, scenario.scene)
+                        }
+                      >
+                        {scenario.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <section
+                className={classNames(
+                  "command-input",
+                  showCommandThread && "thread-command-input",
+                )}
+                data-od-id="ai-composer"
+              >
                 <label className="visually-hidden" htmlFor="desktop-task-input">
                   任务输入
                 </label>
@@ -664,9 +914,10 @@ export function CommandWorkspace({
                     </button>
                     <button
                       aria-busy={isSending}
-                      aria-label="发送任务"
+                      aria-label={composerSendLabel}
                       className="send-button"
                       disabled={isSending || !composerValue.trim()}
+                      title={composerSendLabel}
                       type="button"
                       onClick={sendComposerValue}
                     >
@@ -729,11 +980,7 @@ export function CommandWorkspace({
                   ) : null}
                   <span className="composer-state connection-state">
                     <CheckCircle2 aria-hidden="true" />
-                    {isSending
-                      ? "发送中"
-                      : composerValue.trim()
-                        ? "草稿未发送"
-                        : connectionLabel(connectionState)}
+                    {composerStateLabel}
                   </span>
                 </div>
               </section>

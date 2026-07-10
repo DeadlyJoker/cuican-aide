@@ -18,9 +18,10 @@ export {
   shouldAutoCloseInspector,
   shouldAutoCloseSidebar,
 } from "./appUiState";
-export { isCommandShellHash } from "./appRouting";
+export { isCommandShellHash, shouldRenderCommandShellView } from "./appRouting";
 export { createAppDomainActionCoordinator } from "./appDomainActionCoordinator";
 export { createAppDomainBackendCoordinator } from "./appDomainBackendCoordinator";
+export { commandShellRuntimeState } from "./appCommandShellRuntime";
 export { createAppLibraryOpenCoordinator } from "./appLibraryOpenCoordinator";
 export { createAppLibraryPanelDispatchCoordinator } from "./appLibraryPanelDispatchCoordinator";
 export { createAppOfficeRuntimeCoordinator } from "./appOfficeRuntimeCoordinator";
