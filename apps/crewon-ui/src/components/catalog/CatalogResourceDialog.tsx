@@ -1,71 +1,442 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, LoaderCircle, Play, RefreshCw, X } from "lucide-react";
+import {
+  ChevronLeft,
+  Download,
+  FileCode2,
+  FileText,
+  Folder,
+  LoaderCircle,
+  RefreshCw,
+  X,
+} from "lucide-react";
 
+import { renderMarkdown } from "../TranscriptMarkdown";
 import {
   downloadCatalogResource,
-  invokeCatalogAgent,
-  invokeCatalogMcpTool,
-  invokeCatalogSkill,
   readCatalogResourceDetail,
-  searchCatalogKnowledge,
+  readCatalogSkillFile,
   type CatalogResourceDetail,
   type CatalogResourceSummary,
+  type CatalogSkillFile,
 } from "../../lib/agent-platform/agentPlatformCatalog";
 
-function jsonText(value: unknown): string {
-  return JSON.stringify(value ?? {}, null, 2);
+type JsonObject = Record<string, unknown>;
+
+function objectValue(value: unknown): JsonObject {
+  return value && !Array.isArray(value) && typeof value === "object"
+    ? (value as JsonObject)
+    : {};
 }
 
-function parseJsonObject(value: string, label: string): Record<string, unknown> {
-  const parsed = JSON.parse(value) as unknown;
-  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
-    throw new Error(`${label}必须是 JSON 对象`);
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function displayType(value: unknown): string {
+  if (Array.isArray(value)) return value.join(" | ");
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") return "object";
+  return "any";
+}
+
+function schemaRows(schemaValue: unknown) {
+  const schema = objectValue(schemaValue);
+  const properties = objectValue(schema.properties);
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter((item): item is string => typeof item === "string")
+    : [];
+  return Object.entries(properties).map(([name, definition]) => {
+    const field = objectValue(definition);
+    return {
+      name,
+      type: displayType(field.type),
+      required: required.includes(name),
+      description: stringValue(field.description),
+    };
+  });
+}
+
+function SchemaTable({ schema }: { schema: unknown }) {
+  const rows = schemaRows(schema);
+  if (rows.length === 0) {
+    return <p className="catalog-empty-copy">无额外字段</p>;
   }
-  return parsed as Record<string, unknown>;
-}
-
-function parseStringArray(value: string): string[] {
-  const parsed = JSON.parse(value) as unknown;
-  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
-    throw new Error("Skill 参数必须是字符串数组，例如 [\"--help\"]");
-  }
-  return parsed;
-}
-
-function scriptPaths(detail: CatalogResourceDetail): string[] {
-  const files = detail.files;
-  if (!files || typeof files !== "object" || Array.isArray(files)) return [];
-  const tree = (files as { file_tree?: unknown }).file_tree;
-  if (!Array.isArray(tree)) return [];
-  return tree.filter(
-    (path): path is string =>
-      typeof path === "string" && /(^|\/)scripts?\/.*\.(py|js|mjs|sh|ps1)$/i.test(path),
+  return (
+    <div className="catalog-schema-table" role="table">
+      <div className="catalog-schema-row catalog-schema-head" role="row">
+        <span>字段</span>
+        <span>类型</span>
+        <span>要求</span>
+        <span>说明</span>
+      </div>
+      {rows.map((row) => (
+        <div className="catalog-schema-row" key={row.name} role="row">
+          <code>{row.name}</code>
+          <span>{row.type}</span>
+          <span>{row.required ? "必填" : "可选"}</span>
+          <span>{row.description || "-"}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
-function resourceFacts(resource: CatalogResourceSummary): string[] {
-  if (resource.type === "agents") {
-    return [
-      resource.model || "未配置模型",
-      resource.api_enabled ? "API 已开放" : "目录调用",
-    ];
+function skillMarkdown(detail: CatalogResourceDetail): string {
+  if (typeof detail.skill_md === "string") return detail.skill_md;
+  const skillMd = objectValue(detail.skill_md);
+  return stringValue(skillMd.content);
+}
+
+function markdownBody(value: string): string {
+  const lines = value.replace(/\r\n/g, "\n").split("\n");
+  if (lines[0]?.trim() !== "---") return value;
+  const closingIndex = lines
+    .slice(1)
+    .findIndex((line) => line.trim() === "---");
+  return closingIndex < 0 ? value : lines.slice(closingIndex + 2).join("\n");
+}
+
+function documentTitle(document: JsonObject, index: number): string {
+  return (
+    stringValue(document.title) ||
+    stringValue(document.name) ||
+    stringValue(document.filename) ||
+    `文档 ${index + 1}`
+  );
+}
+
+function documentContent(document: JsonObject): string {
+  const direct =
+    stringValue(document.content) ||
+    stringValue(document.text) ||
+    stringValue(document.markdown) ||
+    stringValue(document.parsed_content);
+  if (direct) return direct;
+  const chunks = Array.isArray(document.chunks) ? document.chunks : [];
+  return chunks
+    .map((chunk) => {
+      const value = objectValue(chunk);
+      return stringValue(value.content) || stringValue(value.text);
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export function AgentDetail({
+  detail,
+  resourceId,
+}: {
+  detail: CatalogResourceDetail;
+  resourceId: number;
+}) {
+  const authenticated = objectValue(
+    objectValue(detail.invocation).authenticated,
+  );
+  const input = objectValue(authenticated.input);
+  const output = objectValue(authenticated.output);
+  return (
+    <div className="catalog-detail-document">
+      <section>
+        <h3>能力说明</h3>
+        <p>
+          {stringValue(detail.description) || "该 Agent 暂未提供补充说明。"}
+        </p>
+      </section>
+      <section>
+        <h3>访问方式</h3>
+        <dl className="catalog-contract-list">
+          <div>
+            <dt>请求</dt>
+            <dd>
+              <code>
+                POST /api/v1/crewon/catalog/resources/agents/{resourceId}/run
+              </code>
+            </dd>
+          </div>
+          <div>
+            <dt>鉴权</dt>
+            <dd>
+              <code>Authorization: Bearer &lt;CrewON access token&gt;</code>
+            </dd>
+          </div>
+          <div>
+            <dt>格式</dt>
+            <dd>
+              <code>application/json</code>
+            </dd>
+          </div>
+        </dl>
+      </section>
+      <section>
+        <h3>输入参数</h3>
+        <SchemaTable
+          schema={{
+            properties: {
+              inputs: {
+                type: "object",
+                description: "Agent 业务输入，例如 query",
+              },
+              subject: { type: "object", description: "可选的调用主体信息" },
+              channel: { type: "string", description: "调用来源，默认 crewon" },
+            },
+            required: ["inputs"],
+            ...input,
+          }}
+        />
+      </section>
+      <section>
+        <h3>输出结果</h3>
+        <SchemaTable
+          schema={{
+            properties: Object.fromEntries(
+              Object.entries(output).map(([name, value]) => [
+                name,
+                { type: displayType(value) },
+              ]),
+            ),
+          }}
+        />
+      </section>
+    </div>
+  );
+}
+
+export function SkillDetail({
+  detail,
+  resourceId,
+}: {
+  detail: CatalogResourceDetail;
+  resourceId: number;
+}) {
+  const [listing, setListing] = useState<CatalogSkillFile | null>(null);
+  const [selectedFile, setSelectedFile] = useState<CatalogSkillFile | null>(
+    null,
+  );
+  const [fileError, setFileError] = useState<string | null>(null);
+  const markdown = markdownBody(skillMarkdown(detail));
+
+  useEffect(() => {
+    let cancelled = false;
+    readCatalogSkillFile(resourceId).then(
+      (value) => !cancelled && setListing(value),
+      (reason: unknown) =>
+        !cancelled &&
+        setFileError(
+          reason instanceof Error ? reason.message : "文件目录读取失败",
+        ),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [resourceId]);
+
+  async function openPath(path: string, type: "directory" | "file") {
+    setFileError(null);
+    try {
+      const value = await readCatalogSkillFile(resourceId, path);
+      if (type === "directory") {
+        setListing(value);
+        setSelectedFile(null);
+      } else {
+        setSelectedFile(value);
+      }
+    } catch (reason) {
+      setFileError(reason instanceof Error ? reason.message : "文件读取失败");
+    }
   }
-  if (resource.type === "skills") {
-    return [
-      `${resource.file_count ?? 0} 个文件`,
-      resource.has_scripts ? "含脚本" : "声明式 Skill",
-    ];
-  }
-  if (resource.type === "mcp_servers") {
-    return [
-      `${resource.tool_count ?? 0} 个工具`,
-      resource.connected ? "已连接" : "可调用服务",
-    ];
-  }
-  return [
-    `${resource.document_count ?? 0} 篇文档`,
-    `${resource.chunk_count ?? 0} 个分块`,
-  ];
+
+  const parentPath = listing?.path.includes("/")
+    ? listing.path.split("/").slice(0, -1).join("/")
+    : "";
+  return (
+    <div className="catalog-skill-reader">
+      <aside className="catalog-file-browser">
+        <header>
+          <strong>文件</strong>
+          {listing?.path ? (
+            <button
+              type="button"
+              aria-label="返回上一级"
+              onClick={() => openPath(parentPath, "directory")}
+            >
+              <ChevronLeft aria-hidden="true" />
+            </button>
+          ) : null}
+        </header>
+        {fileError ? <p role="alert">{fileError}</p> : null}
+        <div>
+          {(listing?.items ?? []).map((item) => (
+            <button
+              key={item.path}
+              type="button"
+              onClick={() => openPath(item.path, item.type)}
+            >
+              {item.type === "directory" ? (
+                <Folder aria-hidden="true" />
+              ) : (
+                <FileCode2 aria-hidden="true" />
+              )}
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </div>
+      </aside>
+      <article className="catalog-reader-content">
+        {selectedFile?.type === "file" ? (
+          <>
+            <header>
+              <FileText aria-hidden="true" />
+              <strong>{selectedFile.path}</strong>
+            </header>
+            {/\.md$/i.test(selectedFile.path) ? (
+              renderMarkdown(selectedFile.content ?? "")
+            ) : (
+              <pre>
+                <code>{selectedFile.content ?? ""}</code>
+              </pre>
+            )}
+          </>
+        ) : markdown ? (
+          renderMarkdown(markdown)
+        ) : (
+          <p className="catalog-empty-copy">暂无 Skill 文档</p>
+        )}
+      </article>
+    </div>
+  );
+}
+
+export function McpDetail({ detail }: { detail: CatalogResourceDetail }) {
+  const tools = Array.isArray(detail.tools)
+    ? detail.tools.map(objectValue)
+    : [];
+  const endpoint =
+    stringValue(detail.endpoint) ||
+    stringValue(detail.url) ||
+    stringValue(objectValue(detail.invocation).url);
+  const upstreamUrl = stringValue(detail.url);
+  return (
+    <div className="catalog-detail-document">
+      <section>
+        <h3>服务说明</h3>
+        <p>
+          {stringValue(detail.description) || "该 MCP 服务暂未提供补充说明。"}
+        </p>
+      </section>
+      <section>
+        <h3>服务地址</h3>
+        {endpoint ? (
+          <dl className="catalog-contract-list">
+            <div>
+              <dt>Endpoint</dt>
+              <dd>
+                <code>{endpoint}</code>
+              </dd>
+            </div>
+            {upstreamUrl && upstreamUrl !== endpoint ? (
+              <div>
+                <dt>上游地址</dt>
+                <dd>
+                  <code>{upstreamUrl}</code>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : (
+          <p className="catalog-empty-copy">该 MCP 服务暂未提供访问地址</p>
+        )}
+      </section>
+      <section>
+        <h3>工具</h3>
+        <div className="catalog-tool-list">
+          {tools.map((tool, index) => (
+            <details
+              key={String(tool.id ?? tool.name ?? index)}
+              open={index === 0}
+            >
+              <summary>
+                <span>
+                  <strong>
+                    {stringValue(tool.alias) ||
+                      stringValue(tool.name) ||
+                      `工具 ${index + 1}`}
+                  </strong>
+                  <small>
+                    {stringValue(tool.description) || stringValue(tool.intro)}
+                  </small>
+                </span>
+                <span>查看参数</span>
+              </summary>
+              <div>
+                <h4>输入参数</h4>
+                <SchemaTable
+                  schema={
+                    tool.input_schema ??
+                    objectValue(tool.invocation).input ??
+                    tool.schema
+                  }
+                />
+                <h4>输出结构</h4>
+                <SchemaTable
+                  schema={
+                    tool.output_schema ?? objectValue(tool.invocation).output
+                  }
+                />
+              </div>
+            </details>
+          ))}
+          {tools.length === 0 ? (
+            <p className="catalog-empty-copy">暂无可展示工具</p>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function KnowledgeDetail({ detail }: { detail: CatalogResourceDetail }) {
+  const documents = useMemo(
+    () =>
+      Array.isArray(detail.documents) ? detail.documents.map(objectValue) : [],
+    [detail.documents],
+  );
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const selected = documents[selectedIndex];
+  const content = selected ? documentContent(selected) : "";
+  return (
+    <div className="catalog-knowledge-reader">
+      <aside>
+        <strong>文档</strong>
+        <div>
+          {documents.map((document, index) => (
+            <button
+              className={index === selectedIndex ? "active" : undefined}
+              key={String(document.id ?? index)}
+              type="button"
+              onClick={() => setSelectedIndex(index)}
+            >
+              <FileText aria-hidden="true" />
+              <span>{documentTitle(document, index)}</span>
+            </button>
+          ))}
+        </div>
+      </aside>
+      <article className="catalog-reader-content">
+        {selected ? (
+          <>
+            <h3>{documentTitle(selected, selectedIndex)}</h3>
+            {content ? (
+              renderMarkdown(content)
+            ) : (
+              <p className="catalog-empty-copy">该文档暂无可展示正文</p>
+            )}
+          </>
+        ) : (
+          <p className="catalog-empty-copy">知识库中暂无文档</p>
+        )}
+      </article>
+    </div>
+  );
 }
 
 export function CatalogResourceDialog({
@@ -79,17 +450,7 @@ export function CatalogResourceDialog({
 }) {
   const [detail, setDetail] = useState<CatalogResourceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [operation, setOperation] = useState<
-    "download" | "invoke" | "refresh" | null
-  >(null);
-  const [progress, setProgress] = useState(0);
-  const [query, setQuery] = useState("请介绍你的能力，并给出一个可执行示例。");
-  const [skillScript, setSkillScript] = useState("");
-  const [skillArgs, setSkillArgs] = useState("[]");
-  const [mcpToolId, setMcpToolId] = useState("");
-  const [mcpArguments, setMcpArguments] = useState("{}");
-  const [knowledgeTopK, setKnowledgeTopK] = useState(5);
-  const [result, setResult] = useState<unknown>(null);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     if (!resource) {
@@ -99,113 +460,33 @@ export function CatalogResourceDialog({
     let cancelled = false;
     setError(null);
     setDetail(null);
-    setResult(null);
     readCatalogResourceDetail(resource.type, resource.id).then(
-      (value) => {
-        if (!cancelled) {
-          setDetail(value);
-          const scripts = scriptPaths(value);
-          setSkillScript(scripts[0] ?? "");
-          setMcpToolId(String(value.tools?.[0]?.id ?? ""));
-        }
-      },
-      (reason: unknown) => {
-        if (!cancelled)
-          setError(reason instanceof Error ? reason.message : "详情加载失败");
-      },
+      (value) => !cancelled && setDetail(value),
+      (reason: unknown) =>
+        !cancelled &&
+        setError(reason instanceof Error ? reason.message : "详情加载失败"),
     );
     return () => {
       cancelled = true;
     };
   }, [resource]);
 
-  const facts = useMemo(
-    () => (resource ? resourceFacts(resource) : []),
-    [resource],
-  );
   if (!resource) return null;
   const activeResource = resource;
 
-  async function download() {
-    setOperation("download");
-    setProgress(2);
+  async function updateResource() {
+    setUpdating(true);
     setError(null);
     try {
-      const downloadResult = await downloadCatalogResource(
-        activeResource.type,
-        activeResource.id,
-        activeResource.name,
-        setProgress,
-      );
-      const url = URL.createObjectURL(downloadResult.blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = downloadResult.filename;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "下载失败");
-    } finally {
-      setOperation(null);
-    }
-  }
-
-  async function refresh() {
-    setOperation("refresh");
-    setProgress(35);
-    setError(null);
-    try {
+      await downloadCatalogResource(activeResource.type, activeResource.id);
       await onRefresh();
-      setProgress(100);
       setDetail(
         await readCatalogResourceDetail(activeResource.type, activeResource.id),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "更新失败");
+      setError(reason instanceof Error ? reason.message : "资源更新失败");
     } finally {
-      setOperation(null);
-    }
-  }
-
-  async function invoke() {
-    setOperation("invoke");
-    setProgress(45);
-    setError(null);
-    setResult(null);
-    try {
-      let response: unknown;
-      if (activeResource.type === "agents") {
-        if (!query.trim()) throw new Error("请输入 Agent 参数");
-        response = await invokeCatalogAgent(activeResource.id, query.trim());
-      } else if (activeResource.type === "skills") {
-        if (!skillScript.trim()) throw new Error("请选择或填写 Skill 脚本路径");
-        response = await invokeCatalogSkill(
-          activeResource.id,
-          skillScript.trim(),
-          parseStringArray(skillArgs),
-        );
-      } else if (activeResource.type === "mcp_servers") {
-        const toolId = Number(mcpToolId);
-        if (!Number.isInteger(toolId)) throw new Error("请选择 MCP Tool");
-        response = await invokeCatalogMcpTool(
-          activeResource.id,
-          toolId,
-          parseJsonObject(mcpArguments, "MCP 参数"),
-        );
-      } else {
-        if (!query.trim()) throw new Error("请输入知识库检索问题");
-        response = await searchCatalogKnowledge(
-          activeResource.id,
-          query.trim(),
-          knowledgeTopK,
-        );
-      }
-      setProgress(100);
-      setResult(response);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "资源调用失败");
-    } finally {
-      setOperation(null);
+      setUpdating(false);
     }
   }
 
@@ -225,258 +506,75 @@ export function CatalogResourceDialog({
         <header className="catalog-resource-dialog-head">
           <div>
             <span>
-              {resource.owner_username || "agent-platform"} · {resource.type}
+              {resource.type === "agents"
+                ? "Agent"
+                : resource.type === "skills"
+                  ? "Skill"
+                  : resource.type === "mcp_servers"
+                    ? "MCP"
+                    : "知识库"}
             </span>
             <h2 id="catalog-resource-title">{resource.name}</h2>
-            <p>{resource.description || "暂无描述"}</p>
+            {resource.description ? <p>{resource.description}</p> : null}
           </div>
-          <button
-            className="icon-action compact"
-            type="button"
-            aria-label="关闭详情"
-            onClick={onClose}
-          >
-            <X aria-hidden="true" />
-          </button>
+          <div>
+            {resource.update_available ? (
+              <button
+                className="button compact"
+                disabled={updating}
+                type="button"
+                onClick={updateResource}
+              >
+                {updating ? (
+                  <LoaderCircle className="spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw aria-hidden="true" />
+                )}
+                更新资源
+              </button>
+            ) : null}
+            <button
+              className="icon-action compact"
+              type="button"
+              aria-label="关闭详情"
+              onClick={onClose}
+            >
+              <X aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
-        <div className="catalog-resource-facts">
-          {facts.map((fact) => (
-            <span key={fact}>{fact}</span>
-          ))}
-        </div>
-
-        <div className="catalog-resource-actions">
-          <button
-            className="button"
-            disabled={Boolean(operation)}
-            type="button"
-            onClick={refresh}
-          >
-            <RefreshCw
-              className={operation === "refresh" ? "spin" : undefined}
-              aria-hidden="true"
-            />
-            更新
-          </button>
-          <button
-            className="button primary"
-            disabled={Boolean(operation)}
-            type="button"
-            onClick={download}
-          >
-            <Download aria-hidden="true" />
-            下载
-          </button>
-        </div>
-
-        {operation ? (
-          <div className="catalog-operation-progress" aria-live="polite">
-            <span>
-              <LoaderCircle className="spin" aria-hidden="true" />
-              {operation === "download"
-                ? "正在下载"
-                : operation === "refresh"
-                  ? "正在更新"
-                  : "正在调用"}
-            </span>
-            <progress max="100" value={progress} />
-          </div>
-        ) : null}
         {error ? (
           <p className="catalog-resource-error" role="alert">
             {error}
           </p>
         ) : null}
-
+        {!detail && !error ? (
+          <p className="catalog-resource-loading">
+            <LoaderCircle className="spin" aria-hidden="true" />
+            正在读取已下载内容…
+          </p>
+        ) : null}
         <div className="catalog-resource-detail-body">
-          {!detail && !error ? (
-            <p className="catalog-resource-loading">正在读取完整详情…</p>
+          {detail && resource.type === "agents" ? (
+            <AgentDetail detail={detail} resourceId={resource.id} />
           ) : null}
-
-          {resource.type === "agents" && detail ? (
-            <>
-              <section>
-                <h3>接口与出入参</h3>
-                <pre>{jsonText(detail.invocation)}</pre>
-              </section>
-              <section className="catalog-resource-runner">
-                <h3>调用 Agent</h3>
-                <textarea
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-                <button
-                  className="button primary"
-                  disabled={Boolean(operation)}
-                  type="button"
-                  onClick={invoke}
-                >
-                  <Play aria-hidden="true" />
-                  执行
-                </button>
-              </section>
-            </>
+          {detail && resource.type === "skills" ? (
+            <SkillDetail detail={detail} resourceId={resource.id} />
           ) : null}
-
-          {resource.type === "skills" && detail ? (
-            <>
-              <section>
-                <h3>SKILL.md</h3>
-                <pre>
-                  {typeof detail.skill_md === "string"
-                    ? detail.skill_md
-                    : jsonText(detail.skill_md)}
-                </pre>
-              </section>
-              <section>
-                <h3>文件结构</h3>
-                <pre>{jsonText(detail.files)}</pre>
-              </section>
-              <section className="catalog-resource-runner">
-                <h3>执行 Skill</h3>
-                <label>
-                  <span>脚本路径</span>
-                  <input
-                    list="catalog-skill-scripts"
-                    value={skillScript}
-                    onChange={(event) => setSkillScript(event.target.value)}
-                  />
-                  <datalist id="catalog-skill-scripts">
-                    {scriptPaths(detail).map((path) => (
-                      <option key={path} value={path} />
-                    ))}
-                  </datalist>
-                </label>
-                <label>
-                  <span>参数（JSON 字符串数组）</span>
-                  <textarea
-                    value={skillArgs}
-                    onChange={(event) => setSkillArgs(event.target.value)}
-                  />
-                </label>
-                <button
-                  className="button primary"
-                  disabled={Boolean(operation)}
-                  type="button"
-                  onClick={invoke}
-                >
-                  <Play aria-hidden="true" />
-                  执行 Skill
-                </button>
-              </section>
-            </>
+          {detail && resource.type === "mcp_servers" ? (
+            <McpDetail detail={detail} />
           ) : null}
-
-          {resource.type === "mcp_servers" && detail ? (
-            <>
-              <section>
-                <h3>MCP 工具与 Schema</h3>
-                <pre>{jsonText(detail.tools)}</pre>
-              </section>
-              <section className="catalog-resource-runner">
-                <h3>调用 MCP Tool</h3>
-                <label>
-                  <span>工具</span>
-                  <select
-                    value={mcpToolId}
-                    onChange={(event) => setMcpToolId(event.target.value)}
-                  >
-                    {(detail.tools ?? []).map((tool, index) => (
-                      <option
-                        key={String(tool.id ?? index)}
-                        value={String(tool.id ?? "")}
-                      >
-                        {String(tool.name ?? tool.alias ?? `Tool ${index + 1}`)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>调用参数（JSON）</span>
-                  <textarea
-                    value={mcpArguments}
-                    onChange={(event) => setMcpArguments(event.target.value)}
-                  />
-                </label>
-                <button
-                  className="button primary"
-                  disabled={Boolean(operation)}
-                  type="button"
-                  onClick={invoke}
-                >
-                  <Play aria-hidden="true" />
-                  调用 Tool
-                </button>
-              </section>
-            </>
-          ) : null}
-
-          {resource.type === "knowledge_bases" && detail ? (
-            <>
-              <section>
-                <h3>完整知识文档</h3>
-                <div className="catalog-document-list">
-                  {(detail.documents ?? []).map((document, index) => {
-                    const chunks = Array.isArray(document.chunks)
-                      ? document.chunks
-                      : [];
-                    return (
-                      <details key={String(document.id ?? index)}>
-                        <summary>
-                          <strong>
-                            {String(
-                              document.title ??
-                                document.name ??
-                                `文档 ${index + 1}`,
-                            )}
-                          </strong>
-                          <span>{chunks.length} 个分块</span>
-                        </summary>
-                        <pre>{jsonText(document)}</pre>
-                      </details>
-                    );
-                  })}
-                </div>
-              </section>
-              <section className="catalog-resource-runner">
-                <h3>检索知识库</h3>
-                <textarea
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-                <label>
-                  <span>返回条数</span>
-                  <input
-                    max={20}
-                    min={1}
-                    type="number"
-                    value={knowledgeTopK}
-                    onChange={(event) =>
-                      setKnowledgeTopK(Number(event.target.value))
-                    }
-                  />
-                </label>
-                <button
-                  className="button primary"
-                  disabled={Boolean(operation)}
-                  type="button"
-                  onClick={invoke}
-                >
-                  <Play aria-hidden="true" />
-                  开始检索
-                </button>
-              </section>
-            </>
-          ) : null}
-
-          {result ? (
-            <section>
-              <h3>调用结果</h3>
-              <pre>{jsonText(result)}</pre>
-            </section>
+          {detail && resource.type === "knowledge_bases" ? (
+            <KnowledgeDetail detail={detail} />
           ) : null}
         </div>
+        <footer className="catalog-resource-dialog-foot">
+          <span>
+            <Download aria-hidden="true" />
+            已保存到当前账号资源池
+          </span>
+        </footer>
       </section>
     </div>
   );

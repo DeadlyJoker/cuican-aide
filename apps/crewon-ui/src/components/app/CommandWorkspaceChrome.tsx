@@ -2,7 +2,10 @@ import {
   BookOpen,
   Bot,
   CalendarDays,
+  ChevronUp,
   FolderOpen,
+  KeyRound,
+  LogOut,
   PanelLeft,
   Plus,
   Search,
@@ -24,6 +27,10 @@ import type {
 } from "./commandWorkspaceState";
 import { classNames } from "./commandWorkspaceUtils";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
+import {
+  type AgentPlatformAccount,
+  useAgentPlatformAccount,
+} from "../auth/AgentPlatformAuthGate";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
   command?: ComposerSlashCommand;
@@ -35,8 +42,6 @@ export type CommandLinkedThread = {
   title: string;
   updatedLabel: string;
 };
-
-type PlatformLoadState = "loading" | "ready" | "fallback";
 
 type SidebarSearchResult =
   | {
@@ -74,6 +79,80 @@ const viewIcons: Record<CommandShellView, ReactNode> = {
   schedule: <CalendarDays aria-hidden="true" />,
   team: <Users aria-hidden="true" />,
 };
+
+export function SidebarAccount({ account }: { account: AgentPlatformAccount }) {
+  const displayName =
+    (account.user.nickname || account.user.username).trim() ||
+    account.user.username;
+  const initial = displayName.charAt(0).toUpperCase() || "U";
+
+  return (
+    <footer
+      aria-label="当前企业账号"
+      className="sidebar-account"
+      data-od-id="desktop-account-entry"
+    >
+      <details
+        className="sidebar-account-menu"
+        onBlur={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (
+            !(nextTarget instanceof Node) ||
+            !event.currentTarget.contains(nextTarget)
+          ) {
+            event.currentTarget.removeAttribute("open");
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.currentTarget.removeAttribute("open");
+            event.currentTarget.querySelector("summary")?.focus();
+          }
+        }}
+      >
+        <summary aria-label={`账号菜单：${displayName}`} title="账号菜单">
+          <span className="account-mark" aria-hidden="true">
+            {initial}
+          </span>
+          <span className="sidebar-account-copy">
+            <strong>{displayName}</strong>
+            <small>{account.providerLabel}</small>
+          </span>
+          <span className="sidebar-account-chevron" aria-hidden="true">
+            <ChevronUp />
+          </span>
+        </summary>
+        <div className="sidebar-account-popover" role="menu">
+          {account.needsPassword ? (
+            <button
+              role="menuitem"
+              type="button"
+              onClick={(event) => {
+                event.currentTarget.closest("details")?.removeAttribute("open");
+                account.onSetPassword();
+              }}
+            >
+              <KeyRound aria-hidden="true" />
+              <span>设置登录密码</span>
+            </button>
+          ) : null}
+          <button
+            className="danger"
+            role="menuitem"
+            type="button"
+            onClick={(event) => {
+              event.currentTarget.closest("details")?.removeAttribute("open");
+              account.onLogout();
+            }}
+          >
+            <LogOut aria-hidden="true" />
+            <span>退出登录</span>
+          </button>
+        </div>
+      </details>
+    </footer>
+  );
+}
 
 export function CommandSidebar({
   activeConversation,
@@ -114,6 +193,7 @@ export function CommandSidebar({
   onToggleSearch: () => void;
   onToggleSpace: (spaceId: string) => void;
 }) {
+  const account = useAgentPlatformAccount();
   const recentLinkedThreads = linkedThreads.slice(0, 5);
   const sidebarSearchResults: SidebarSearchResult[] = [
     ...workspaceNodes.flatMap((node) => {
@@ -429,17 +509,10 @@ export function CommandSidebar({
         })}
       </section>
 
-      <footer className="sidebar-account" data-od-id="desktop-account-entry">
-        <span className="account-mark">R</span>
-        <strong>Turning_Around</strong>
-        <button className="locale-toggle" type="button">
-          EN
-        </button>
-      </footer>
+      {account ? <SidebarAccount account={account} /> : null}
     </aside>
   );
 }
-
 export function Palette({
   id,
   inputId,
@@ -516,44 +589,5 @@ export function Palette({
         ) : null}
       </div>
     </div>
-  );
-}
-
-export function ResourceDock({
-  platformState,
-  slots,
-}: {
-  platformState: PlatformLoadState;
-  slots: CommandHomeSlots;
-}) {
-  const resources = [
-    slots.agent,
-    slots.skills[0],
-    slots.mcps[0],
-    slots.knowledge,
-    slots.workflow,
-  ];
-  return (
-    <section className="resource-dock" data-od-id="capability-dock">
-      <header>
-        <strong>Agent / Skill / MCP / Knowledge / Workflow</strong>
-        <span>
-          {platformState === "ready"
-            ? "资源入口已就绪"
-            : platformState === "fallback"
-              ? "可选资源服务未启动，对话后端可用"
-              : "同步中"}
-        </span>
-      </header>
-      <div className="resource-grid">
-        {resources.map((resource, index) => (
-          <article className="resource-card" key={`${resource.value}-${index}`}>
-            <span>{resource.label}</span>
-            <strong>{resource.title}</strong>
-            <p>{resource.detail}</p>
-          </article>
-        ))}
-      </div>
-    </section>
   );
 }

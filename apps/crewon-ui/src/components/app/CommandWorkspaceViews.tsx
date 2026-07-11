@@ -182,26 +182,34 @@ function CatalogCard({
           <span>{item.label}</span>
           <strong>{item.title}</strong>
         </div>
-        <p>{item.detail}</p>
-        <div className="catalog-meta">
-          {item.meta.map((meta) => (
-            <span
-              className={
-                meta.includes("来源") || meta.includes("队列")
-                  ? "source-badge"
-                  : undefined
-              }
-              key={meta}
-            >
-              {meta}
-            </span>
-          ))}
-        </div>
+        {item.detail ? <p>{item.detail}</p> : null}
+        {item.resource ? (
+          <span
+            className={classNames(
+              "catalog-download-status",
+              item.resource.update_available && "update",
+              item.resource.downloaded && "downloaded",
+            )}
+          >
+            {item.resource.update_available
+              ? "有更新"
+              : item.resource.downloaded
+                ? "已下载"
+                : "未下载"}
+          </span>
+        ) : (
+          <div className="catalog-meta">
+            {item.meta.map((meta) => (
+              <span key={meta}>{meta}</span>
+            ))}
+          </div>
+        )}
       </div>
       {item.resource ? (
         <div className="catalog-card-actions">
           <button
             className="button compact"
+            disabled={!item.resource.downloaded}
             type="button"
             onClick={() => onOpen?.(item.resource!)}
           >
@@ -209,10 +217,21 @@ function CatalogCard({
           </button>
           <button
             className="button compact"
+            disabled={
+              progress !== undefined ||
+              (Boolean(item.resource.downloaded) &&
+                !item.resource.update_available)
+            }
             type="button"
             onClick={() => onDownload?.(item.resource!)}
           >
-            下载
+            {progress !== undefined
+              ? "下载中…"
+              : item.resource.update_available
+                ? "更新"
+                : item.resource.downloaded
+                  ? "已下载"
+                  : "下载"}
           </button>
           {progress !== undefined ? (
             <progress max="100" value={progress} />
@@ -239,36 +258,32 @@ function CatalogCard({
   );
 }
 
-function sourceFilter(owner?: string | null): "personal" | "market" {
-  return owner && owner !== "admin" ? "market" : "personal";
-}
-
 function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
   const employees = snapshot.agents.map((agent): CatalogItem => {
     const resource: CatalogResourceSummary = {
       id: agent.id,
       type: "agents",
       name: agent.name,
-      description: agent.description || "Agent synced from agent-platform.",
+      description: agent.description || "",
       owner_username: agent.owner_username,
       model: agent.model_info?.model_name || agent.model_info?.name,
       api_enabled: Boolean(agent.api_enabled),
       invocation_url: agent.invocation_url,
       enabled: agent.is_active,
       download_available: true,
+      downloaded: agent.downloaded,
+      downloaded_at: agent.downloaded_at,
+      update_available: agent.update_available,
+      source_updated_at: agent.source_updated_at,
     };
     return {
       accent: "employee-card",
       detail: resource.description,
-      filter: `employee ${sourceFilter(resource.owner_username)}`,
+      filter: "employee",
       icon: "A",
       id: `catalog-agent-${agent.id}`,
       label: "员工",
-      meta: [
-        resource.owner_username || "agent-platform",
-        resource.model || "model",
-        "可调用",
-      ],
+      meta: [],
       resource,
       title: agent.name,
     };
@@ -278,7 +293,7 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
       id: skill.id,
       type: "skills",
       name: skill.name,
-      description: skill.description || "Skill synced from agent-platform.",
+      description: skill.description || "",
       owner_username: skill.owner_username,
       category: skill.category,
       tags: skill.tags ?? [],
@@ -286,19 +301,19 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
       file_count: skill.file_count ?? 0,
       has_scripts: Boolean(skill.has_scripts),
       download_available: true,
+      downloaded: skill.downloaded,
+      downloaded_at: skill.downloaded_at,
+      update_available: skill.update_available,
+      source_updated_at: skill.source_updated_at,
     };
     return {
       accent: "skill-card",
       detail: resource.description,
-      filter: `skill ${sourceFilter(resource.owner_username)}`,
+      filter: "skill",
       icon: "S",
       id: `catalog-skill-${skill.id}`,
       label: "技能",
-      meta: [
-        resource.owner_username || "agent-platform",
-        resource.category || "Skill",
-        `${resource.file_count} 文件`,
-      ],
+      meta: [],
       resource,
       title: skill.name,
     };
@@ -308,26 +323,26 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
       id: server.id,
       type: "mcp_servers",
       name: server.alias || server.name,
-      description: server.description || server.endpoint || "MCP service",
+      description: server.description || "",
       owner_username: server.owner_username,
       category: server.category,
       enabled: server.is_enabled,
       connected: Boolean(server.is_connected),
       tool_count: server.tool_count ?? 0,
       download_available: true,
+      downloaded: server.downloaded,
+      downloaded_at: server.downloaded_at,
+      update_available: server.update_available,
+      source_updated_at: server.source_updated_at,
     };
     return {
       accent: "service-card",
       detail: resource.description,
-      filter: `service ${sourceFilter(resource.owner_username)}`,
+      filter: "service",
       icon: "M",
       id: `catalog-mcp-${server.id}`,
       label: "服务",
-      meta: [
-        resource.owner_username || "agent-platform",
-        `${resource.tool_count} 工具`,
-        resource.connected ? "已连接" : "已同步",
-      ],
+      meta: [],
       resource,
       title: resource.name,
     };
@@ -956,10 +971,10 @@ export function AgentsView({
   onCatalogFilterChange: (filter: string) => void;
   onCatalogSearchChange: (query: string) => void;
 }) {
-  const [source, setSource] = useState("personal");
   const [selectedResource, setSelectedResource] =
     useState<CatalogResourceSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<
     Record<string, number>
   >({});
@@ -971,7 +986,6 @@ export function AgentsView({
   const visibleCards = cards.filter(
     (item) =>
       (catalogFilter === "all" || hasFilter(item, catalogFilter)) &&
-      hasFilter(item, source) &&
       includesQuery(item, catalogSearch),
   );
 
@@ -988,20 +1002,14 @@ export function AgentsView({
   async function download(resource: CatalogResourceSummary) {
     const key = `${resource.type}:${resource.id}`;
     setDownloadProgress((current) => ({ ...current, [key]: 1 }));
+    setDownloadError(null);
     try {
-      const result = await downloadCatalogResource(
-        resource.type,
-        resource.id,
-        resource.name,
-        (value) =>
-          setDownloadProgress((current) => ({ ...current, [key]: value })),
+      await downloadCatalogResource(resource.type, resource.id);
+      await onReload();
+    } catch (reason) {
+      setDownloadError(
+        reason instanceof Error ? reason.message : "资源下载失败",
       );
-      const url = URL.createObjectURL(result.blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = result.filename;
-      anchor.click();
-      URL.revokeObjectURL(url);
     } finally {
       setDownloadProgress((current) => {
         const next = { ...current };
@@ -1054,9 +1062,6 @@ export function AgentsView({
               value={catalogSearch}
               onChange={onCatalogSearchChange}
             />
-            <button className="button primary compact" type="button">
-              新建个人能力
-            </button>
             <button
               className="button compact"
               disabled={refreshing}
@@ -1068,22 +1073,11 @@ export function AgentsView({
           </div>
         </header>
 
-        <section
-          className="catalog-source-bar"
-          data-od-id="agent-filters-inline"
-        >
-          <SourceTabs
-            active={source}
-            group="source"
-            label="来源筛选"
-            options={[
-              { label: "个人能力", value: "personal" },
-              { label: "市场", value: "market" },
-            ]}
-            onChange={setSource}
-          />
-        </section>
-
+        {downloadError ? (
+          <p className="catalog-download-error" role="alert">
+            {downloadError}
+          </p>
+        ) : null}
         <section
           className="capability-catalog"
           data-od-id="agent-capability-catalog"
@@ -1134,6 +1128,7 @@ export function KnowledgeCatalogView({
   const [selectedResource, setSelectedResource] =
     useState<CatalogResourceSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<
     Record<string, number>
   >({});
@@ -1142,13 +1137,16 @@ export function KnowledgeCatalogView({
       id: knowledgeBase.id,
       type: "knowledge_bases",
       name: knowledgeBase.name,
-      description:
-        knowledgeBase.description || "完整知识库已从 agent-platform 同步。",
+      description: knowledgeBase.description || "",
       owner_username: knowledgeBase.owner_username,
       document_count: knowledgeBase.document_count ?? 0,
       chunk_count: knowledgeBase.chunk_count ?? 0,
       embedding_model: knowledgeBase.embedding_model,
       download_available: true,
+      downloaded: knowledgeBase.downloaded,
+      downloaded_at: knowledgeBase.downloaded_at,
+      update_available: knowledgeBase.update_available,
+      source_updated_at: knowledgeBase.source_updated_at,
     };
     return {
       accent: "knowledge-card",
@@ -1157,11 +1155,7 @@ export function KnowledgeCatalogView({
       icon: <BookOpen aria-hidden="true" />,
       id: `catalog-knowledge-${knowledgeBase.id}`,
       label: "知识库",
-      meta: [
-        resource.owner_username || "agent-platform",
-        `${resource.document_count} 文档`,
-        `${resource.chunk_count} 分块`,
-      ],
+      meta: [],
       resource,
       title: knowledgeBase.name,
     };
@@ -1181,20 +1175,14 @@ export function KnowledgeCatalogView({
   async function download(resource: CatalogResourceSummary) {
     const key = `${resource.type}:${resource.id}`;
     setDownloadProgress((current) => ({ ...current, [key]: 1 }));
+    setDownloadError(null);
     try {
-      const result = await downloadCatalogResource(
-        resource.type,
-        resource.id,
-        resource.name,
-        (value) =>
-          setDownloadProgress((current) => ({ ...current, [key]: value })),
+      await downloadCatalogResource(resource.type, resource.id);
+      await onReload();
+    } catch (reason) {
+      setDownloadError(
+        reason instanceof Error ? reason.message : "知识库下载失败",
       );
-      const url = URL.createObjectURL(result.blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = result.filename;
-      anchor.click();
-      URL.revokeObjectURL(url);
     } finally {
       setDownloadProgress((current) => {
         const next = { ...current };
@@ -1213,9 +1201,6 @@ export function KnowledgeCatalogView({
       <div className="page-stack">
         <header className="catalog-market-header">
           <div>
-            <span className="catalog-context-note">
-              完整同步 · 文档与分块可查看和下载
-            </span>
             <h2>知识库</h2>
           </div>
           <div className="catalog-header-actions">
@@ -1235,6 +1220,11 @@ export function KnowledgeCatalogView({
             </button>
           </div>
         </header>
+        {downloadError ? (
+          <p className="catalog-download-error" role="alert">
+            {downloadError}
+          </p>
+        ) : null}
         <section className="capability-catalog knowledge-catalog">
           {visibleCards.map((item) => (
             <CatalogCard

@@ -1,7 +1,10 @@
 import { agentPlatformAuthorizedFetch } from "./agentPlatformClient";
 
 export type CatalogResourceType =
-  "agents" | "skills" | "mcp_servers" | "knowledge_bases";
+  | "agents"
+  | "skills"
+  | "mcp_servers"
+  | "knowledge_bases";
 
 export type CatalogResourceSummary = {
   id: number;
@@ -27,6 +30,10 @@ export type CatalogResourceSummary = {
   document_count?: number;
   chunk_count?: number;
   embedding_model?: string | null;
+  downloaded?: boolean;
+  downloaded_at?: string | null;
+  update_available?: boolean;
+  source_updated_at?: string | null;
 };
 
 export type CatalogResourceDetail = Record<string, unknown> & {
@@ -39,9 +46,18 @@ export type CatalogResourceDetail = Record<string, unknown> & {
   tools?: Array<Record<string, unknown>>;
 };
 
-export type CatalogDownload = {
-  blob: Blob;
-  filename: string;
+export type CatalogDownloadState = {
+  downloaded: true;
+  downloaded_at: string;
+  source_updated_at?: string | null;
+  update_available: false;
+};
+
+export type CatalogSkillFile = {
+  path: string;
+  type: "directory" | "file";
+  content?: string;
+  items?: Array<{ name: string; path: string; type: "directory" | "file" }>;
 };
 
 async function checkedResponse(response: Response): Promise<Response> {
@@ -64,7 +80,7 @@ export async function readCatalogResourceDetail(
 ): Promise<CatalogResourceDetail> {
   const response = await checkedResponse(
     await agentPlatformAuthorizedFetch(
-      `/api/v1/crewon/catalog/resources/${type}/${id}`,
+      `/api/v1/crewon/catalog/resources/${type}/${id}/content`,
     ),
   );
   return (await response.json()) as CatalogResourceDetail;
@@ -78,55 +94,30 @@ export async function refreshAgentPlatformCatalog(): Promise<void> {
   );
 }
 
-function downloadFilename(response: Response, fallback: string): string {
-  const disposition = response.headers.get("Content-Disposition") ?? "";
-  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-  return encoded ? decodeURIComponent(encoded) : fallback;
-}
-
 export async function downloadCatalogResource(
   type: CatalogResourceType,
   id: number,
-  name: string,
-  onProgress: (progress: number) => void,
-): Promise<CatalogDownload> {
+): Promise<CatalogDownloadState> {
   const response = await checkedResponse(
     await agentPlatformAuthorizedFetch(
       `/api/v1/crewon/catalog/resources/${type}/${id}/download`,
+      { method: "POST" },
     ),
   );
-  const total = Number(response.headers.get("Content-Length") ?? 0);
-  const reader = response.body?.getReader();
-  if (!reader) {
-    onProgress(100);
-    return {
-      blob: await response.blob(),
-      filename: downloadFilename(response, `${name}.json`),
-    };
-  }
+  return (await response.json()) as CatalogDownloadState;
+}
 
-  const chunks: ArrayBuffer[] = [];
-  let received = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    const copy = new Uint8Array(value.byteLength);
-    copy.set(value);
-    chunks.push(copy.buffer);
-    received += value.length;
-    onProgress(
-      total > 0 ? Math.min(99, Math.round((received / total) * 100)) : 60,
-    );
-  }
-  onProgress(100);
-  return {
-    blob: new Blob(chunks, {
-      type: response.headers.get("Content-Type") ?? "application/octet-stream",
-    }),
-    filename: downloadFilename(response, `${name}.json`),
-  };
+export async function readCatalogSkillFile(
+  id: number,
+  path = "",
+): Promise<CatalogSkillFile> {
+  const query = path ? `?path=${encodeURIComponent(path)}` : "";
+  const response = await checkedResponse(
+    await agentPlatformAuthorizedFetch(
+      `/api/v1/crewon/catalog/resources/skills/${id}/files${query}`,
+    ),
+  );
+  return (await response.json()) as CatalogSkillFile;
 }
 
 export async function invokeCatalogAgent(

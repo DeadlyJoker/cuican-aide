@@ -13,6 +13,8 @@ export type AgentPlatformUser = {
   role: string;
   nickname?: string;
   approval_status?: string;
+  password_login_enabled?: boolean;
+  linked_providers?: string[];
 };
 
 export type AgentPlatformRegistration = AgentPlatformUser & {
@@ -34,10 +36,15 @@ async function responseError(
 ): Promise<Error> {
   try {
     const body = (await response.json()) as {
-      detail?: string;
+      detail?: string | Array<{ msg?: string }>;
       message?: string;
     };
-    return new Error(body.detail || body.message || fallback);
+    const detail = Array.isArray(body.detail)
+      ? [...new Set(body.detail.map((item) => item.msg).filter(Boolean))].join(
+          "；",
+        )
+      : body.detail;
+    return new Error(detail || body.message || fallback);
   } catch {
     return new Error(fallback);
   }
@@ -160,6 +167,22 @@ export async function completeWeComLogin(
     throw new Error("企业微信登录成功，但未能读取账号信息");
   }
   return user;
+}
+
+export async function setAgentPlatformPassword(
+  newPassword: string,
+): Promise<void> {
+  const response = await agentPlatformAuthorizedFetch(
+    "/api/v1/auth/set-password",
+    {
+      method: "POST",
+      body: JSON.stringify({ new_password: newPassword }),
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+  if (!response.ok) {
+    throw await responseError(response, "设置登录密码失败");
+  }
 }
 
 export function logoutAgentPlatform(): void {

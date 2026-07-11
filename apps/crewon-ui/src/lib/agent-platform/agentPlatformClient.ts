@@ -37,6 +37,10 @@ type PlatformAgent = {
   api_enabled?: boolean | number | null;
   owner_username?: string | null;
   invocation_url?: string | null;
+  downloaded?: boolean;
+  downloaded_at?: string | null;
+  update_available?: boolean;
+  source_updated_at?: string | null;
 };
 
 type PlatformKnowledgeBase = {
@@ -48,6 +52,10 @@ type PlatformKnowledgeBase = {
   chunk_size?: number | null;
   chunk_count?: number | null;
   owner_username?: string | null;
+  downloaded?: boolean;
+  downloaded_at?: string | null;
+  update_available?: boolean;
+  source_updated_at?: string | null;
 };
 
 type PlatformSkill = {
@@ -62,6 +70,10 @@ type PlatformSkill = {
   file_count?: number | null;
   has_scripts?: boolean | null;
   owner_username?: string | null;
+  downloaded?: boolean;
+  downloaded_at?: string | null;
+  update_available?: boolean;
+  source_updated_at?: string | null;
 };
 
 type PlatformMcpServer = {
@@ -76,6 +88,10 @@ type PlatformMcpServer = {
   call_count?: number | null;
   tool_count?: number | null;
   owner_username?: string | null;
+  downloaded?: boolean;
+  downloaded_at?: string | null;
+  update_available?: boolean;
+  source_updated_at?: string | null;
 };
 
 type PlatformMcpTool = {
@@ -498,28 +514,30 @@ export function platformToolsToLibraryItems(
     };
   });
 
-  const skillItems = snapshot.skills.map((skill, index): LibraryItem => ({
-    title: skill.name,
-    meta: `Skill · agent-platform local #${skill.id}`,
-    description:
-      promptPreview(skill.description || skill.skill_md_content || "") ||
-      "Skill synced from local agent-platform.",
-    glyph: SKILL_GLYPHS[index % SKILL_GLYPHS.length],
-    accent: capabilityAccents()[(index + 2) % capabilityAccents().length],
-    badge: { label: "synced", tone: "running" },
-    tags: [
-      skill.category ?? "Skill",
-      skill.version ? `v${skill.version}` : null,
-      ...(skill.tags ?? []).slice(0, 2),
-    ].filter((tag): tag is string => Boolean(tag)),
-    action: {
-      type: "skill-file",
-      skillName: skill.name,
-      path: skill.storage_path ?? `agent-platform://skills/${skill.id}`,
-      enabled: true,
-      configPath: `agent-platform://skills/${skill.id}`,
-    },
-  }));
+  const skillItems = snapshot.skills.map(
+    (skill, index): LibraryItem => ({
+      title: skill.name,
+      meta: `Skill · agent-platform local #${skill.id}`,
+      description:
+        promptPreview(skill.description || skill.skill_md_content || "") ||
+        "Skill synced from local agent-platform.",
+      glyph: SKILL_GLYPHS[index % SKILL_GLYPHS.length],
+      accent: capabilityAccents()[(index + 2) % capabilityAccents().length],
+      badge: { label: "synced", tone: "running" },
+      tags: [
+        skill.category ?? "Skill",
+        skill.version ? `v${skill.version}` : null,
+        ...(skill.tags ?? []).slice(0, 2),
+      ].filter((tag): tag is string => Boolean(tag)),
+      action: {
+        type: "skill-file",
+        skillName: skill.name,
+        path: skill.storage_path ?? `agent-platform://skills/${skill.id}`,
+        enabled: true,
+        configPath: `agent-platform://skills/${skill.id}`,
+      },
+    }),
+  );
 
   return [...serverItems, ...skillItems];
 }

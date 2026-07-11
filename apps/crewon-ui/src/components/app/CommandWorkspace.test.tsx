@@ -18,7 +18,6 @@ import {
   conversationBindingKey,
   findLinkedThreadForConversation,
 } from "./commandWorkspaceThreadLinks";
-import { ResourceDock } from "./CommandWorkspaceChrome";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 
@@ -30,6 +29,7 @@ function snapshot(): AgentPlatformSnapshot {
         name: "Plain Agent",
         model_info: { model_name: "qwen-lite" },
         is_active: true,
+        downloaded: true,
       },
       {
         id: 2,
@@ -40,6 +40,7 @@ function snapshot(): AgentPlatformSnapshot {
         skill_ids: [20],
         mcp_servers: ["filesystem"],
         is_active: true,
+        downloaded: true,
       },
     ],
     knowledgeBases: [
@@ -48,6 +49,7 @@ function snapshot(): AgentPlatformSnapshot {
         name: "Delivery Knowledge",
         document_count: 3,
         embedding_model: "text-embedding-v2",
+        downloaded: true,
       },
     ],
     skills: [
@@ -55,15 +57,18 @@ function snapshot(): AgentPlatformSnapshot {
         id: 20,
         name: "Schema 校验",
         description: "Validate schema.",
+        downloaded: true,
       },
       {
         id: 21,
         name: "交付检查 Skill",
         description: "Check delivery.",
+        downloaded: true,
       },
       {
         id: 22,
         name: "Unused Skill",
+        downloaded: true,
       },
     ],
     mcpServers: [
@@ -72,15 +77,18 @@ function snapshot(): AgentPlatformSnapshot {
         name: "filesystem",
         alias: "Filesystem MCP",
         description: "Read files.",
+        downloaded: true,
       },
       {
         id: 31,
         name: "http-tools",
         alias: "HTTP Tools",
+        downloaded: true,
       },
       {
         id: 32,
         name: "unused",
+        downloaded: true,
       },
     ],
     mcpTools: [],
@@ -125,15 +133,16 @@ describe("selectCommandHomeSlots", () => {
           name: "测试12333",
           model_info: { model_name: "qwen-plus" },
           is_active: true,
+          downloaded: true,
         },
       ],
       skills: [
-        { id: 20, name: "测试技能" },
-        { id: 21, name: "12345" },
+        { id: 20, name: "测试技能", downloaded: true },
+        { id: 21, name: "12345", downloaded: true },
       ],
       mcpServers: [
-        { id: 30, name: "test-mcp" },
-        { id: 31, name: "filesystem" },
+        { id: 30, name: "test-mcp", downloaded: true },
+        { id: 31, name: "filesystem", downloaded: true },
       ],
     });
 
@@ -304,18 +313,8 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("\u6280\u80fd\u00b7\u8fde\u63a5\u5668");
     expect(markup).toContain("\u8ba1\u5212\u00b7\u63d0\u9192");
     expect(markup).toContain("\u529e\u516c\u5ba4");
-  });
-
-  it("labels agent-platform fallback without implying app-server is down", () => {
-    const markup = renderToStaticMarkup(
-      <ResourceDock
-        platformState="fallback"
-        slots={selectCommandHomeSlots(snapshot())}
-      />,
-    );
-
-    expect(markup).toContain("可选资源服务未启动，对话后端可用");
-    expect(markup).not.toContain("资源服务未连接");
+    expect(markup).not.toContain("capability-dock");
+    expect(markup).not.toContain("\u8d44\u6e90\u5165\u53e3\u5df2\u5c31\u7eea");
   });
 
   it("includes original schedule modal and filter landmarks", () => {

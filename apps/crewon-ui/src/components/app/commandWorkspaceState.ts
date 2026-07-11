@@ -80,8 +80,16 @@ export function insertTokenIntoComposerValue({
 export function selectCommandHomeSlots(
   snapshot: AgentPlatformSnapshot,
 ): CommandHomeSlots {
+  const downloadedAgents = snapshot.agents.filter((item) => item.downloaded);
+  const downloadedKnowledge = snapshot.knowledgeBases.filter(
+    (item) => item.downloaded,
+  );
+  const downloadedSkills = snapshot.skills.filter((item) => item.downloaded);
+  const downloadedMcpServers = snapshot.mcpServers.filter(
+    (item) => item.downloaded,
+  );
   const agent =
-    snapshot.agents.find(
+    downloadedAgents.find(
       (item) =>
         item.is_active !== false &&
         item.is_active !== 0 &&
@@ -89,10 +97,10 @@ export function selectCommandHomeSlots(
           (item.mcp_servers?.length ?? 0) > 0 ||
           (item.knowledge_base_ids?.length ?? 0) > 0),
     ) ??
-    snapshot.agents.find(
+    downloadedAgents.find(
       (item) => item.is_active !== false && item.is_active !== 0,
     ) ??
-    snapshot.agents[0];
+    downloadedAgents[0];
   const workflow =
     findByKeyword(snapshot.workflows, [
       "gate",
@@ -101,29 +109,29 @@ export function selectCommandHomeSlots(
       "测试",
       "验收",
     ]) ?? snapshot.workflows[0];
-  const knowledge = snapshot.knowledgeBases[0];
+  const knowledge = downloadedKnowledge[0];
   const skillA =
-    findByKeyword(snapshot.skills, [
+    findByKeyword(downloadedSkills, [
       "schema",
       "校验",
       "审阅",
       "交付",
       "检查",
-    ]) ?? snapshot.skills[0];
+    ]) ?? downloadedSkills[0];
   const skillB =
-    snapshot.skills.find((item) => item.id !== skillA?.id) ??
-    snapshot.skills[1];
+    downloadedSkills.find((item) => item.id !== skillA?.id) ??
+    downloadedSkills[1];
   const mcpA =
-    findByKeyword(snapshot.mcpServers, [
+    findByKeyword(downloadedMcpServers, [
       "filesystem",
       "文件",
       "github",
       "screenshot",
       "browser",
-    ]) ?? snapshot.mcpServers[0];
+    ]) ?? downloadedMcpServers[0];
   const mcpB =
-    snapshot.mcpServers.find((item) => item.id !== mcpA?.id) ??
-    snapshot.mcpServers[1];
+    downloadedMcpServers.find((item) => item.id !== mcpA?.id) ??
+    downloadedMcpServers[1];
 
   return {
     agent: {

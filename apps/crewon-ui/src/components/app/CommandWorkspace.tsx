@@ -25,7 +25,6 @@ import {
 import {
   CommandSidebar,
   Palette,
-  ResourceDock,
   type CommandLinkedThread,
   type PaletteItemWithCommand,
 } from "./CommandWorkspaceChrome";
@@ -199,7 +198,7 @@ function contextItems(
   slots: CommandHomeSlots,
   cwd: string,
 ): PaletteItemWithCommand[] {
-  return [
+  const items: PaletteItemWithCommand[] = [
     {
       kind: "file",
       label: "文件",
@@ -218,19 +217,24 @@ function contextItems(
       title: slots.knowledge.title,
       detail: slots.knowledge.detail,
     },
-    {
+  ];
+  if (/^agent-\d+$/.test(slots.agent.value)) {
+    items.push({
       kind: "agent",
       label: "智能体",
       title: slots.agent.title,
       detail: slots.agent.detail,
-    },
-    {
+    });
+  }
+  if (/^knowledge-\d+$/.test(slots.knowledge.value)) {
+    items.push({
       kind: "knowledge",
       label: "知识库",
-      title: "Knowledge base",
-      detail: "团队文档、项目材料、长期记忆和可引用资源",
-    },
-  ];
+      title: slots.knowledge.title,
+      detail: slots.knowledge.detail,
+    });
+  }
+  return items;
 }
 
 function slashItems(
@@ -253,14 +257,14 @@ function slashItems(
     }),
   );
   const fallbackItems: PaletteItemWithCommand[] = [
-    ...slots.skills.map((item) => ({
+    ...slots.skills.filter((item) => /^skill-\d+$/.test(item.value)).map((item) => ({
       detail: item.detail,
       kind: "skill" as const,
       label: item.label,
       title: item.title,
       token: item.title,
     })),
-    ...slots.mcps.map((item) => ({
+    ...slots.mcps.filter((item) => /^mcp-\d+$/.test(item.value)).map((item) => ({
       detail: item.detail,
       kind: "mcp" as const,
       label: item.label,
@@ -1024,7 +1028,6 @@ export function CommandWorkspace({
               </section>
             </section>
 
-            <ResourceDock slots={slots} platformState={platformState} />
           </section>
 
           <AssistView

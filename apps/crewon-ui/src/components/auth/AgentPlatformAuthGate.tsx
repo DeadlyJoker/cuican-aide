@@ -1,5 +1,21 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowRight, Building2, LoaderCircle, ShieldCheck } from "lucide-react";
+import {
+  createContext,
+  useEffect,
+  useContext,
+  useState,
+  type FormEvent,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from "react";
+import {
+  ArrowRight,
+  Building2,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  LockKeyhole,
+  X,
+} from "lucide-react";
 
 import {
   beginWeComLogin,
@@ -9,11 +25,119 @@ import {
   readAgentPlatformCurrentUser,
   readWeComLoginConfig,
   registerAgentPlatform,
+  setAgentPlatformPassword,
   type AgentPlatformUser,
   type WeComLoginConfig,
 } from "../../lib/agent-platform/agentPlatformSession";
 
 type AuthMode = "login" | "register";
+
+export type AgentPlatformAccount = {
+  needsPassword: boolean;
+  providerLabel: string;
+  user: AgentPlatformUser;
+  onLogout: () => void;
+  onSetPassword: () => void;
+};
+
+const AgentPlatformAccountContext = createContext<AgentPlatformAccount | null>(
+  null,
+);
+
+export function useAgentPlatformAccount() {
+  return useContext(AgentPlatformAccountContext);
+}
+
+export function PasswordInput(
+  props: Omit<InputHTMLAttributes<HTMLInputElement>, "type">,
+) {
+  const [visible, setVisible] = useState(false);
+  const actionLabel = visible ? "隐藏密码" : "显示密码";
+  return (
+    <div className="crewon-auth-password-input">
+      <input {...props} type={visible ? "text" : "password"} />
+      <button
+        aria-label={actionLabel}
+        title={actionLabel}
+        type="button"
+        onClick={() => setVisible((current) => !current)}
+      >
+        {visible ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
+      </button>
+    </div>
+  );
+}
+
+export function clearWeComCallbackParams(params: URLSearchParams) {
+  params.delete("code");
+  params.delete("state");
+  const query = params.toString();
+  window.history.replaceState(
+    {},
+    "",
+    `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+  );
+}
+
+export function SetPasswordDialog({
+  busy,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  busy: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSubmit: (password: string) => void;
+}) {
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const password = String(data.get("newPassword") ?? "");
+    const confirmation = String(data.get("confirmPassword") ?? "");
+    onSubmit(password === confirmation ? password : "");
+  }
+
+  return (
+    <div className="crewon-password-backdrop" role="presentation">
+      <section
+        aria-labelledby="crewon-password-title"
+        aria-modal="true"
+        className="crewon-password-dialog"
+        role="dialog"
+      >
+        <header>
+          <span>
+            <LockKeyhole aria-hidden="true" />
+          </span>
+          <div>
+            <h2 id="crewon-password-title">设置登录密码</h2>
+            <p>设置后可使用用户名或企业邮箱登录</p>
+          </div>
+          <button aria-label="关闭" type="button" onClick={onClose}>
+            <X aria-hidden="true" />
+          </button>
+        </header>
+        <form onSubmit={submit}>
+          <label>
+            <span>新密码</span>
+            <PasswordInput name="newPassword" minLength={8} required />
+          </label>
+          <label>
+            <span>确认密码</span>
+            <PasswordInput name="confirmPassword" minLength={8} required />
+          </label>
+          <small>至少 8 位，包含大小写字母和数字</small>
+          {error ? <p role="alert">{error}</p> : null}
+          <button className="crewon-auth-submit" disabled={busy} type="submit">
+            {busy ? <LoaderCircle className="spin" aria-hidden="true" /> : null}
+            保存密码
+          </button>
+        </form>
+      </section>
+    </div>
+  );
+}
 
 export function AgentPlatformAuthScreen({
   busy,
@@ -41,37 +165,13 @@ export function AgentPlatformAuthScreen({
           <span className="crewon-auth-brand-mark">C</span>
           <span>
             <strong>CrewON</strong>
-            <small>Agent command workspace</small>
+            <small>Agent 协作工作台</small>
           </span>
         </a>
         <div className="crewon-auth-story-copy">
-          <span className="crewon-auth-kicker">YOUR AGENT TEAM, READY TO WORK</span>
-          <h1>今天，想让你的 Agent 小队完成什么？</h1>
-          <p>
-            像安排真实团队一样描述目标，CrewON 会组合员工、技能、服务和知识，
-            把任务推进到可交付结果。
-          </p>
-          <div className="crewon-auth-task-preview" aria-hidden="true">
-            <span>例如：分析本周项目风险，整理负责人和下一步，并沉淀到知识库</span>
-            <b>↑</b>
-          </div>
-          <div className="crewon-auth-scenarios" aria-hidden="true">
-            <span>整理今日事项</span>
-            <span>执行代码审查</span>
-            <span>生成交付方案</span>
-            <span>检索企业知识</span>
-          </div>
-          <div className="crewon-auth-proof">
-            <span>Agent 员工</span>
-            <span>Skill 技能</span>
-            <span>MCP 服务</span>
-            <span>完整知识库</span>
-          </div>
+          <h1>CrewON 智能协作工作台</h1>
+          <p>统一组织 Agent、Skill、MCP 与企业知识，协同推进任务交付。</p>
         </div>
-        <p className="crewon-auth-story-foot">
-          <ShieldCheck aria-hidden="true" />
-          账号、权限与资源目录统一来自 agent-platform
-        </p>
       </section>
 
       <section className="crewon-auth-panel" aria-label="账号登录注册">
@@ -113,7 +213,7 @@ export function AgentPlatformAuthScreen({
 
           <form className="crewon-auth-form" onSubmit={onSubmit}>
             <label>
-              <span>用户名</span>
+              <span>{mode === "login" ? "用户名或邮箱" : "用户名"}</span>
               <input
                 name="username"
                 autoComplete="username"
@@ -134,13 +234,12 @@ export function AgentPlatformAuthScreen({
             ) : null}
             <label>
               <span>密码</span>
-              <input
+              <PasswordInput
                 name="password"
                 autoComplete={
                   mode === "login" ? "current-password" : "new-password"
                 }
                 minLength={8}
-                type="password"
                 required
               />
               {mode === "register" ? (
@@ -150,10 +249,9 @@ export function AgentPlatformAuthScreen({
             {mode === "register" ? (
               <label>
                 <span>确认密码</span>
-                <input
+                <PasswordInput
                   name="confirmPassword"
                   autoComplete="new-password"
-                  type="password"
                   required
                 />
               </label>
@@ -221,6 +319,8 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AgentPlatformUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [wecomConfig, setWeComConfig] = useState<WeComLoginConfig>({
     enabled: false,
     provider: "wecom",
@@ -237,16 +337,12 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
         const code = params.get("code");
         const state = params.get("state");
         if (code && state) {
-          const currentUser = await completeWeComLogin(code, state);
-          params.delete("code");
-          params.delete("state");
-          const query = params.toString();
-          window.history.replaceState(
-            {},
-            "",
-            `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-          );
-          if (!cancelled) setUser(currentUser);
+          try {
+            const currentUser = await completeWeComLogin(code, state);
+            if (!cancelled) setUser(currentUser);
+          } finally {
+            clearWeComCallbackParams(params);
+          }
           return;
         }
         const currentUser = await readAgentPlatformCurrentUser();
@@ -313,6 +409,28 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
     }
   }
 
+  async function saveInitialPassword(password: string) {
+    if (!password) {
+      setPasswordError("两次输入的密码不一致");
+      return;
+    }
+    setBusy(true);
+    setPasswordError(null);
+    try {
+      await setAgentPlatformPassword(password);
+      setUser((current) =>
+        current ? { ...current, password_login_enabled: true } : current,
+      );
+      setPasswordDialogOpen(false);
+    } catch (reason) {
+      setPasswordError(
+        reason instanceof Error ? reason.message : "设置登录密码失败",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (checking) {
     return (
       <div className="crewon-auth-checking">
@@ -342,22 +460,54 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
     );
   }
 
+  const wecomLinked = user.linked_providers?.includes("wecom") ?? false;
+  const needsPassword = user.password_login_enabled === false;
+  const logout = () => {
+    logoutAgentPlatform();
+    setUser(null);
+  };
   return (
-    <>
+    <AgentPlatformAccountContext.Provider
+      value={{
+        needsPassword,
+        providerLabel: wecomLinked
+          ? "企业微信已绑定"
+          : user.role === "admin"
+            ? "管理员"
+            : "用户",
+        user,
+        onLogout: logout,
+        onSetPassword: () => setPasswordDialogOpen(true),
+      }}
+    >
       {children}
       <aside className="crewon-session-pill" aria-label="当前企业账号">
         <span>{user.nickname || user.username}</span>
-        <small>{user.role}</small>
-        <button
-          type="button"
-          onClick={() => {
-            logoutAgentPlatform();
-            setUser(null);
-          }}
-        >
+        <small>{wecomLinked ? "企业微信已绑定" : user.role}</small>
+        {needsPassword ? (
+          <button
+            className="security"
+            type="button"
+            onClick={() => setPasswordDialogOpen(true)}
+          >
+            设置密码
+          </button>
+        ) : null}
+        <button type="button" onClick={logout}>
           退出
         </button>
       </aside>
-    </>
+      {passwordDialogOpen ? (
+        <SetPasswordDialog
+          busy={busy}
+          error={passwordError}
+          onClose={() => {
+            setPasswordDialogOpen(false);
+            setPasswordError(null);
+          }}
+          onSubmit={(password) => void saveInitialPassword(password)}
+        />
+      ) : null}
+    </AgentPlatformAccountContext.Provider>
   );
 }
