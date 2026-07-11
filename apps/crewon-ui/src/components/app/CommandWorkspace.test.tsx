@@ -28,6 +28,7 @@ function snapshot(): AgentPlatformSnapshot {
         name: "Plain Agent",
         model_info: { model_name: "qwen-lite" },
         is_active: true,
+        downloaded: true,
       },
       {
         id: 2,
@@ -38,6 +39,7 @@ function snapshot(): AgentPlatformSnapshot {
         skill_ids: [20],
         mcp_servers: ["filesystem"],
         is_active: true,
+        downloaded: true,
       },
     ],
     knowledgeBases: [
@@ -46,6 +48,7 @@ function snapshot(): AgentPlatformSnapshot {
         name: "Delivery Knowledge",
         document_count: 3,
         embedding_model: "text-embedding-v2",
+        downloaded: true,
       },
     ],
     skills: [
@@ -53,15 +56,18 @@ function snapshot(): AgentPlatformSnapshot {
         id: 20,
         name: "Schema 校验",
         description: "Validate schema.",
+        downloaded: true,
       },
       {
         id: 21,
         name: "交付检查 Skill",
         description: "Check delivery.",
+        downloaded: true,
       },
       {
         id: 22,
         name: "Unused Skill",
+        downloaded: true,
       },
     ],
     mcpServers: [
@@ -70,15 +76,18 @@ function snapshot(): AgentPlatformSnapshot {
         name: "filesystem",
         alias: "Filesystem MCP",
         description: "Read files.",
+        downloaded: true,
       },
       {
         id: 31,
         name: "http-tools",
         alias: "HTTP Tools",
+        downloaded: true,
       },
       {
         id: 32,
         name: "unused",
+        downloaded: true,
       },
     ],
     mcpTools: [],
@@ -123,15 +132,16 @@ describe("selectCommandHomeSlots", () => {
           name: "测试12333",
           model_info: { model_name: "qwen-plus" },
           is_active: true,
+          downloaded: true,
         },
       ],
       skills: [
-        { id: 20, name: "测试技能" },
-        { id: 21, name: "12345" },
+        { id: 20, name: "测试技能", downloaded: true },
+        { id: 21, name: "12345", downloaded: true },
       ],
       mcpServers: [
-        { id: 30, name: "test-mcp" },
-        { id: 31, name: "filesystem" },
+        { id: 30, name: "test-mcp", downloaded: true },
+        { id: 31, name: "filesystem", downloaded: true },
       ],
     });
 

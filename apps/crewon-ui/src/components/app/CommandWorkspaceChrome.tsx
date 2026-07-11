@@ -3,8 +3,11 @@ import {
   Bot,
   CalendarDays,
   ChevronRight,
+  ChevronUp,
   Folder,
   FolderOpen,
+  KeyRound,
+  LogOut,
   MoreHorizontal,
   PanelLeft,
   Plus,
@@ -24,6 +27,10 @@ import type {
 } from "./commandWorkspaceState";
 import { classNames } from "./commandWorkspaceUtils";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
+import {
+  type AgentPlatformAccount,
+  useAgentPlatformAccount,
+} from "../auth/AgentPlatformAuthGate";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
   action?: "attach-files";
@@ -63,9 +70,84 @@ const viewIcons: Record<CommandShellView, ReactNode> = {
   assist: <Sparkles aria-hidden="true" />,
   projects: <FolderOpen aria-hidden="true" />,
   agents: <Bot aria-hidden="true" />,
+  knowledge: <BookOpen aria-hidden="true" />,
   schedule: <CalendarDays aria-hidden="true" />,
   team: <Users aria-hidden="true" />,
 };
+
+export function SidebarAccount({ account }: { account: AgentPlatformAccount }) {
+  const displayName =
+    (account.user.nickname || account.user.username).trim() ||
+    account.user.username;
+  const initial = displayName.charAt(0).toUpperCase() || "U";
+
+  return (
+    <footer
+      aria-label="当前企业账号"
+      className="sidebar-account"
+      data-od-id="desktop-account-entry"
+    >
+      <details
+        className="sidebar-account-menu"
+        onBlur={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (
+            !(nextTarget instanceof Node) ||
+            !event.currentTarget.contains(nextTarget)
+          ) {
+            event.currentTarget.removeAttribute("open");
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.currentTarget.removeAttribute("open");
+            event.currentTarget.querySelector("summary")?.focus();
+          }
+        }}
+      >
+        <summary aria-label={`账号菜单：${displayName}`} title="账号菜单">
+          <span className="account-mark" aria-hidden="true">
+            {initial}
+          </span>
+          <span className="sidebar-account-copy">
+            <strong>{displayName}</strong>
+            <small>{account.providerLabel}</small>
+          </span>
+          <span className="sidebar-account-chevron" aria-hidden="true">
+            <ChevronUp />
+          </span>
+        </summary>
+        <div className="sidebar-account-popover" role="menu">
+          {account.needsPassword ? (
+            <button
+              role="menuitem"
+              type="button"
+              onClick={(event) => {
+                event.currentTarget.closest("details")?.removeAttribute("open");
+                account.onSetPassword();
+              }}
+            >
+              <KeyRound aria-hidden="true" />
+              <span>设置登录密码</span>
+            </button>
+          ) : null}
+          <button
+            className="danger"
+            role="menuitem"
+            type="button"
+            onClick={(event) => {
+              event.currentTarget.closest("details")?.removeAttribute("open");
+              account.onLogout();
+            }}
+          >
+            <LogOut aria-hidden="true" />
+            <span>退出登录</span>
+          </button>
+        </div>
+      </details>
+    </footer>
+  );
+}
 
 function workspaceName(path: string, emptyLabel = "工作空间"): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -107,6 +189,7 @@ export function CommandSidebar({
   onToggleCollapse: () => void;
   onToggleSearch: () => void;
 }) {
+  const account = useAgentPlatformAccount();
   const [workspaceFormOpen, setWorkspaceFormOpen] = useState(false);
   const [workspaceDraft, setWorkspaceDraft] = useState(cwd);
   const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<
@@ -347,10 +430,12 @@ export function CommandSidebar({
           </button>
         ))}
         <button
+          aria-current={activeView === "knowledge" ? "page" : undefined}
+          className={classNames(activeView === "knowledge" && "active")}
           data-run-title-zh="知识库"
           data-run-title-en="Knowledge base"
           type="button"
-          onClick={() => onSwitchView("agents")}
+          onClick={() => onSwitchView("knowledge")}
         >
           <span className="nav-glyph" aria-hidden="true">
             <BookOpen aria-hidden="true" />
@@ -560,17 +645,10 @@ export function CommandSidebar({
         ) : null}
       </section>
 
-      <footer className="sidebar-account" data-od-id="desktop-account-entry">
-        <span className="account-mark">R</span>
-        <strong>Turning_Around</strong>
-        <button className="locale-toggle" type="button">
-          EN
-        </button>
-      </footer>
+      {account ? <SidebarAccount account={account} /> : null}
     </aside>
   );
 }
-
 export function Palette({
   id,
   inputId,

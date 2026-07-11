@@ -23,6 +23,7 @@ import { CommandSceneHeader } from "./CommandSceneHeader";
 import {
   AgentsView,
   AssistView,
+  KnowledgeCatalogView,
   ProjectsView,
   ScheduleView,
   TeamView,
@@ -138,6 +139,7 @@ const shellViewIds: CommandShellView[] = [
   "assist",
   "projects",
   "agents",
+  "knowledge",
   "schedule",
   "team",
 ];
@@ -585,12 +587,23 @@ export function CommandWorkspace({
     0;
   const resourceStatus =
     platformState === "loading"
-      ? "资源同步中，当前显示默认能力入口。"
+      ? "正在读取当前账号的资源。"
       : platformState === "fallback"
         ? "本地 agent-platform 未连接，对话后端不受影响。"
         : platformHasResources
           ? "Agent-platform 资源已同步。"
-          : "Agent-platform 暂无资源，当前显示默认能力入口。";
+          : "当前账号暂无已创建或已授权的资源。";
+
+  async function reloadPlatformResources() {
+    setPlatformState("loading");
+    try {
+      setPlatformSnapshot(await readAgentPlatformSnapshot());
+      setPlatformState("ready");
+    } catch {
+      setPlatformSnapshot(emptyAgentPlatformSnapshot);
+      setPlatformState("fallback");
+    }
+  }
 
   function switchView(view: CommandShellView) {
     setActiveView(view);
@@ -1114,9 +1127,17 @@ export function CommandWorkspace({
             active={activeView === "agents"}
             catalogFilter={catalogFilter}
             catalogSearch={catalogSearch}
-            slots={slots}
+            platformState={platformState}
+            snapshot={platformSnapshot}
+            onReload={reloadPlatformResources}
             onCatalogFilterChange={setCatalogFilter}
             onCatalogSearchChange={setCatalogSearch}
+          />
+          <KnowledgeCatalogView
+            active={activeView === "knowledge"}
+            platformState={platformState}
+            snapshot={platformSnapshot}
+            onReload={reloadPlatformResources}
           />
           <ScheduleView
             active={activeView === "schedule"}

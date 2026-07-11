@@ -7,7 +7,7 @@ const AGENT_PLATFORM_UNAVAILABLE_BODY = JSON.stringify({
     "Local agent-platform is not running. CrewON app-server conversations are still available.",
 });
 const AGENT_PLATFORM_REACHABILITY_TTL_MS = 2_000;
-const AGENT_PLATFORM_REACHABILITY_TIMEOUT_MS = 250;
+const AGENT_PLATFORM_REACHABILITY_TIMEOUT_MS = 8_000;
 const MERMAID_CHUNK_PACKAGES = new Set([
   "@braintree/sanitize-url",
   "@iconify/utils",
