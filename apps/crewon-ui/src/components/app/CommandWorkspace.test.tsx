@@ -14,10 +14,6 @@ import {
   setActiveFilter,
   syncDesignFilterState,
 } from "./CommandWorkspace";
-import {
-  conversationBindingKey,
-  findLinkedThreadForConversation,
-} from "./commandWorkspaceThreadLinks";
 import { ResourceDock } from "./CommandWorkspaceChrome";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
@@ -164,6 +160,10 @@ describe("CommandWorkspace", () => {
         connectionState="disconnected"
         cwd="C:\\Users\\admin\\Documents\\crewon"
         isSending={false}
+        modelOptions={[
+          { label: "gpt-5.6-sol", value: "gpt-5.6-sol" },
+          { detail: "GPT 5.5", label: "gpt-5.5", value: "gpt-5.5" },
+        ]}
         workMode="code"
         onAttachContext={() => undefined}
         onChangeComposerValue={() => undefined}
@@ -255,19 +255,19 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("????");
   });
 
-  it("keeps the original sidebar space tree instead of real data names", () => {
+  it("renders only real workspaces and conversations in the sidebar", () => {
     const markup = renderCommandWorkspace();
 
-    expect(markup).toContain("Agent \u5c0f\u961f\u4ea4\u4ed8\u7a7a\u95f4");
-    expect(markup).toContain("\u5c0f\u961f\u521b\u5efa\u8349\u7a3f");
-    expect(markup).toContain("Workflow Gate");
-    expect(markup).toContain("\u4ea4\u4ed8\u9a8c\u6536\u6e05\u5355");
-    expect(markup).toContain("\u529e\u516c\u5ba4\u6743\u9650\u7a7a\u95f4");
-    expect(markup).toContain("\u56db\u5c42\u6743\u9650");
-    expect(markup).toContain("Channel \u6865\u63a5");
-    expect(markup).toContain("Skill/MCP \u80fd\u529b\u7a7a\u95f4");
-    expect(markup).toContain("Schema \u6821\u9a8c");
-    expect(markup).toContain("\u6c99\u7bb1\u5ba1\u8ba1");
+    expect(markup).toContain("新建会话");
+    expect(markup).toContain("新增空间");
+    expect(markup).toContain("文件夹路径");
+    expect(markup).toContain("工作空间");
+    expect(markup).toContain('aria-controls="current-workspace-thread-list"');
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain('id="current-workspace-thread-list"');
+    expect(markup).toContain("crewon");
+    expect(markup).not.toContain("建议任务");
+    expect(markup).not.toContain('data-od-id="workspace-node-product"');
   });
 
   it("keeps only the original visible composer actions and hidden palette hooks", () => {
@@ -278,6 +278,11 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('class="send-button"');
     expect(markup).toContain('data-context-open=""');
     expect(markup).toContain('data-slash-open=""');
+    expect(markup).toContain("gpt-5.6-sol");
+    expect(markup).toContain("gpt-5.5");
+    expect(markup).toContain('data-value="gpt-5.6-sol"');
+    expect(markup).not.toContain("自动选择");
+    expect(markup).not.toContain("快速模型");
     expect(markup).not.toContain('class="icon-action context-trigger"');
     expect(markup).not.toContain('class="icon-action slash-trigger"');
   });
@@ -367,8 +372,9 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("Review the page");
   });
 
-  it("renders backend conversation links inside the command sidebar space tree", () => {
+  it("renders real conversation history in the workspace tree", () => {
     const backendThread = {
+      cwd: "/repo/frontend",
       id: "thread-backend-1",
       name: "Backend agent conversation",
       preview: "Tool and MCP run streamed from app-server",
@@ -392,92 +398,21 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain("后端会话");
+    expect(markup).toContain("工作空间");
+    expect(markup).toContain("frontend");
+    expect(markup).not.toContain("建议任务");
+    expect(markup).not.toContain("后端会话");
     expect(markup).toContain('data-linked-thread-id="thread-backend-1"');
     expect(markup).toContain("Backend agent conversation");
     expect(markup).toContain("Tool and MCP run streamed from app-server");
   });
 
-  it("links static space conversations to matching backend threads", () => {
-    const workflowThread = {
-      id: "thread-workflow-gate",
-      preview: "Workflow Gate conversation is ready to continue.",
-      title: "Workflow Gate",
-    };
-    const reviewThread = {
-      id: "thread-review-checklist",
-      preview: "Ready for final acceptance review.",
-      title: "Delivery checklist",
-    };
-
-    expect(
-      findLinkedThreadForConversation(
-        [workflowThread, reviewThread],
-        "Workflow Gate",
-      )?.id,
-    ).toBe("thread-workflow-gate");
-    expect(
-      findLinkedThreadForConversation(
-        [workflowThread, reviewThread],
-        "交付验收清单",
-        ["Delivery checklist"],
-      )?.id,
-    ).toBe("thread-review-checklist");
-    expect(
-      findLinkedThreadForConversation(
-        [workflowThread, reviewThread],
-        "完全不同的标题",
-        [],
-        "thread-workflow-gate",
-      )?.id,
-    ).toBe("thread-workflow-gate");
-    expect(conversationBindingKey("agents", "Schema 校验")).toBe(
-      "agents:schema 校验",
-    );
-  });
-
-  it("keeps static space links connected even when the matched thread is outside the recent list", () => {
-    const staleRecentThreads = Array.from({ length: 5 }, (_, index) => ({
-      id: `thread-recent-${index}`,
-      name: `Recent backend thread ${index}`,
-      preview: `Recent preview ${index}`,
-      updatedAt: Math.floor(Date.now() / 1000) - index,
-    })) as unknown as Thread[];
-    const olderWorkflowThread = {
-      id: "thread-old-workflow-gate",
-      name: "Workflow Gate",
-      preview: "Older Workflow Gate transcript should still link the static space.",
-      updatedAt: Math.floor(Date.now() / 1000) - 100,
-    } as unknown as Thread;
-    const markup = renderToStaticMarkup(
-      <CommandWorkspace
-        composerValue=""
-        connectionState="connected"
-        cwd="/repo/frontend"
-        isSending={false}
-        linkedThreads={[...staleRecentThreads, olderWorkflowThread]}
-        selectedThreadId="thread-old-workflow-gate"
-        workMode="code"
-        onAttachContext={() => undefined}
-        onChangeComposerValue={() => undefined}
-        onModeChange={() => undefined}
-        onRetryConnection={() => undefined}
-        onSelectLinkedThread={() => undefined}
-        onSend={() => undefined}
-      />,
-    );
-
-    expect(markup).toContain('data-linked-thread-id="thread-old-workflow-gate"');
-    expect(markup).toContain("已连接后端会话：Workflow Gate");
-    expect(markup).toContain('class="conversation-item is-linked active"');
-    expect(markup).toContain("Recent backend thread 4");
-  });
-
-  it("marks static space conversations when the backend thread uses the artifact English alias", () => {
-    const backendThread = {
-      id: "thread-delivery-checklist",
-      name: "Delivery checklist",
-      preview: "Acceptance criteria and release gates",
+  it("renders workspace-less conversations in their own sidebar group", () => {
+    const standaloneThread = {
+      cwd: null,
+      id: "thread-standalone-1",
+      name: "Standalone conversation",
+      preview: "No folder was attached to this chat",
       updatedAt: Math.floor(Date.now() / 1000),
     } as unknown as Thread;
     const markup = renderToStaticMarkup(
@@ -486,8 +421,8 @@ describe("CommandWorkspace", () => {
         connectionState="connected"
         cwd="/repo/frontend"
         isSending={false}
-        linkedThreads={[backendThread]}
-        selectedThreadId="thread-delivery-checklist"
+        linkedThreads={[standaloneThread]}
+        selectedThreadId="thread-standalone-1"
         workMode="code"
         onAttachContext={() => undefined}
         onChangeComposerValue={() => undefined}
@@ -498,43 +433,15 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain("交付验收清单");
-    expect(markup).toContain('data-linked-thread-id="thread-delivery-checklist"');
-    expect(markup).toContain("已连接后端会话：Delivery checklist");
-    expect(markup).toContain('class="conversation-item is-linked active"');
+    expect(markup).toContain("无工作空间");
+    expect(markup).toContain('aria-controls="standalone-workspace-thread-list"');
+    expect(markup).toContain('id="standalone-workspace-thread-list"');
+    expect(markup).toContain('data-linked-thread-id="thread-standalone-1"');
+    expect(markup).toContain("Standalone conversation");
+    expect(markup).toContain("No folder was attached to this chat");
   });
 
-  it("marks matching static space conversations as real backend thread links", () => {
-    const backendThread = {
-      id: "thread-workflow-gate",
-      name: "Workflow Gate",
-      preview: "Continue the Workflow Gate app-server transcript",
-      updatedAt: Math.floor(Date.now() / 1000),
-    } as unknown as Thread;
-    const markup = renderToStaticMarkup(
-      <CommandWorkspace
-        composerValue=""
-        connectionState="connected"
-        cwd="/repo/frontend"
-        isSending={false}
-        linkedThreads={[backendThread]}
-        selectedThreadId="thread-workflow-gate"
-        workMode="code"
-        onAttachContext={() => undefined}
-        onChangeComposerValue={() => undefined}
-        onModeChange={() => undefined}
-        onRetryConnection={() => undefined}
-        onSelectLinkedThread={() => undefined}
-        onSend={() => undefined}
-      />,
-    );
-
-    expect(markup).toContain('data-linked-thread-id="thread-workflow-gate"');
-    expect(markup).toContain("已连接后端会话：Workflow Gate");
-    expect(markup).toContain('class="conversation-item is-linked active"');
-  });
-
-  it("renders selected backend threads inside the command shell instead of leaving the shell", () => {
+  it("renders selected real conversations inside the command shell instead of leaving the shell", () => {
     const selectedThread = {
       id: "thread-command-room",
       name: "Command room transcript",
@@ -593,6 +500,10 @@ describe("CommandWorkspace", () => {
 
     expect(markup).toContain('data-has-thread="true"');
     expect(markup).toContain('data-od-id="command-thread-room"');
+    expect(markup).toContain('class="command-thread-identity"');
+    expect(markup).toContain("Agent 对话");
+    expect(markup).toContain(">工作空间 · frontend</em>");
+    expect(markup).toContain("Command room transcript");
     expect(markup).toContain('class="transcript"');
     expect(markup).toContain('class="command-input thread-command-input"');
     expect(markup).toContain("内容由 AI 生成，请核实重要信息");
@@ -879,10 +790,10 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("正在实时生成最终回复");
   });
 
-  it("makes sidebar search results actionable for spaces and backend threads", () => {
+  it("makes sidebar search results actionable for real conversations and views", () => {
     const backendThread = {
       id: "thread-search-1",
-      name: "Searchable backend thread",
+      name: "Searchable conversation",
       preview: "Open this real app-server transcript",
       updatedAt: Math.floor(Date.now() / 1000),
     } as unknown as Thread;
@@ -903,11 +814,11 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain('data-search-action="conversation"');
+    expect(markup).not.toContain('data-search-action="conversation"');
     expect(markup).toContain('data-search-action="thread"');
     expect(markup).toContain('data-search-action="view"');
     expect(markup).toContain('data-thread-id="thread-search-1"');
-    expect(markup).toContain("Searchable backend thread");
+    expect(markup).toContain("Searchable conversation");
     expect(markup).toContain("Open this real app-server transcript");
   });
 

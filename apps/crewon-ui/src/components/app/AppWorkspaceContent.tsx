@@ -7,6 +7,10 @@ import type { AppView } from "../../lib/shared/appView";
 import type { CapabilityPanel } from "../../lib/capability/capabilityPanelTypes";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type {
+  CommandModelOption,
+  ThreadRuntimeSettings,
+} from "../../lib/thread/threadRuntimeSettings";
+import type {
   AgentConfig,
   ArtifactItem,
   LibraryItem,
@@ -38,6 +42,7 @@ type AppWorkspaceContentProps = {
   isSending: boolean;
   libraryPanel: LibraryPanel | null;
   locale: Locale;
+  modelOptions?: CommandModelOption[];
   platform: PlatformKind;
   selectedThread: Thread | null;
   selectedThreadId: string | null;
@@ -96,7 +101,7 @@ type AppWorkspaceContentProps = {
   onPanelFieldChange: (fieldId: string, value: string) => void;
   onRetryConnection: () => void;
   onSaveAgentConfig: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
   onSlashCommandSelect: (command: ComposerSlashCommand) => void;
   onSendOfficeMessage: (text: string) => void | Promise<void>;
   onStop: () => void;
@@ -117,6 +122,7 @@ export function AppWorkspaceContent({
   isSending,
   libraryPanel,
   locale,
+  modelOptions,
   platform,
   selectedThread,
   selectedThreadId,
@@ -206,8 +212,9 @@ export function AppWorkspaceContent({
       connectionState={connectionState}
       cwd={cwd}
       isSending={isSending}
-      locale={locale}
-      platform={platform}
+        locale={locale}
+        modelOptions={modelOptions}
+        platform={platform}
       selectedThread={selectedThread}
       selectedThreadId={selectedThreadId}
       slashCommands={slashCommands}

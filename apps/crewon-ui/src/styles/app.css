@@ -3053,10 +3053,9 @@ textarea:focus-visible {
   width: 100%;
   border: 0;
   color: rgba(238, 238, 238, 0.48);
-  interpolate-size: allow-keywords;
 }
 
-.turn-process-details > summary {
+.turn-process-summary {
   display: inline-flex;
   width: fit-content;
   max-width: 100%;
@@ -3068,7 +3067,9 @@ textarea:focus-visible {
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: transparent;
+  color: inherit;
   cursor: pointer;
+  font: inherit;
   list-style: none;
   transition:
     background 160ms ease,
@@ -3077,11 +3078,7 @@ textarea:focus-visible {
     transform 180ms ease;
 }
 
-.turn-process-details > summary::-webkit-details-marker {
-  display: none;
-}
-
-.turn-process-details > summary::before {
+.turn-process-summary::before {
   width: 6px;
   height: 6px;
   border-right: 1.5px solid currentColor;
@@ -3093,13 +3090,13 @@ textarea:focus-visible {
   transition: transform 180ms ease;
 }
 
-.turn-process-details[open] > summary::before {
+.turn-process-details[data-state="expanded"] .turn-process-summary::before {
   transform: translateY(-2px) rotate(45deg);
 }
 
 .turn-process-summary-main,
-.turn-process-details > summary em,
-.turn-process-details > summary strong {
+.turn-process-summary em,
+.turn-process-summary strong {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3118,14 +3115,14 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-.turn-process-details > summary em {
+.turn-process-summary em {
   color: rgba(238, 238, 238, 0.34);
   font-size: 10.5px;
   font-style: normal;
   font-weight: 620;
 }
 
-.turn-process-details > summary strong {
+.turn-process-summary strong {
   min-width: 0;
   padding: 0;
   border: 0;
@@ -3135,43 +3132,55 @@ textarea:focus-visible {
   text-align: center;
 }
 
-.turn-process-details > summary:hover,
-.turn-process-details > summary:focus-visible {
+.turn-process-summary:hover,
+.turn-process-summary:focus-visible {
   border-color: rgba(255, 255, 255, 0.055);
   background: rgba(255, 255, 255, 0.035);
   outline: 0;
 }
 
-.turn-process-details[open] > summary {
+.turn-process-details[data-state="expanded"] .turn-process-summary,
+.turn-process-details[data-state="collapsing"] .turn-process-summary {
   margin-bottom: 4px;
 }
 
-.turn-process-details[data-auto-collapsed="true"]:not([open]) > summary {
+.turn-process-details[data-auto-collapsed="true"][data-state="collapsed"]
+  .turn-process-summary {
   color: rgba(238, 238, 238, 0.38);
   transform: translateY(-1px);
 }
 
-.turn-process-details::details-content {
-  block-size: 0;
-  overflow: hidden;
+.turn-process-items-shell {
+  display: grid;
+  grid-template-rows: 0fr;
   opacity: 0;
   transform: translateY(-4px);
   transition:
-    block-size 220ms ease,
-    content-visibility 220ms allow-discrete,
+    grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 180ms ease,
     transform 180ms ease;
 }
 
-.turn-process-details[open]::details-content {
-  block-size: auto;
+.turn-process-details[data-state="expanded"] .turn-process-items-shell {
+  grid-template-rows: 1fr;
   opacity: 1;
   transform: translateY(0);
+}
+
+.turn-process-details[data-state="collapsing"] .turn-process-items-shell {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.turn-process-items-shell[hidden] {
+  display: none;
 }
 
 .turn-process-items {
   display: grid;
   gap: 9px;
+  min-height: 0;
   padding: 6px 0 6px;
   overflow: hidden;
 }
@@ -3213,23 +3222,23 @@ textarea:focus-visible {
   color: #71717a;
 }
 
-:root:not([data-theme="dark"]) .turn-process-details > summary em {
+:root:not([data-theme="dark"]) .turn-process-summary em {
   color: #a1a1aa;
 }
 
-:root:not([data-theme="dark"]) .turn-process-details > summary strong {
+:root:not([data-theme="dark"]) .turn-process-summary strong {
   color: #8a8f98;
 }
 
-:root:not([data-theme="dark"]) .turn-process-details > summary:hover,
-:root:not([data-theme="dark"]) .turn-process-details > summary:focus-visible {
+:root:not([data-theme="dark"]) .turn-process-summary:hover,
+:root:not([data-theme="dark"]) .turn-process-summary:focus-visible {
   border-color: rgba(24, 24, 27, 0.055);
   background: rgba(24, 24, 27, 0.025);
 }
 
 :root:not([data-theme="dark"])
-  .turn-process-details[data-auto-collapsed="true"]:not([open])
-  > summary {
+  .turn-process-details[data-auto-collapsed="true"][data-state="collapsed"]
+  .turn-process-summary {
   color: #8a8f98;
 }
 
@@ -3498,6 +3507,91 @@ textarea:focus-visible {
   font-size: inherit;
 }
 
+.markdown-content .markdown-code-block {
+  display: grid;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid oklch(24% 0.012 235);
+  border-radius: 8px;
+  background: oklch(16% 0.012 235);
+  color: oklch(91% 0.012 235);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 12px 28px rgb(0 0 0 / 0.12);
+}
+
+.markdown-content .markdown-code-block figcaption {
+  display: flex;
+  min-width: 0;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  background: oklch(19% 0.012 235);
+  color: oklch(69% 0.012 235);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
+  line-height: 1;
+}
+
+.markdown-content .markdown-code-block figcaption span,
+.markdown-content .markdown-code-block figcaption em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-content .markdown-code-block figcaption em {
+  color: oklch(58% 0.012 235);
+  font-style: normal;
+}
+
+.markdown-content .markdown-code-block .markdown-code-pre {
+  max-width: 100%;
+  max-height: min(520px, 58vh);
+  margin: 0;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  font-size: 12.5px;
+  line-height: 1.58;
+  tab-size: 2;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: auto;
+  overflow-wrap: normal;
+}
+
+.markdown-content .markdown-code-block .markdown-code-pre code {
+  display: block;
+  min-width: max-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+
+.markdown-content .markdown-code-block .markdown-code-pre::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.markdown-content .markdown-code-block .markdown-code-pre::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.24);
+  background-clip: padding-box;
+}
+
 .markdown-content .mermaid-block {
   position: relative;
   display: grid;
@@ -3698,6 +3792,53 @@ body.mermaid-lightbox-open {
   color: #18181b;
 }
 
+:root:not([data-theme="dark"]) .markdown-content .markdown-code-block {
+  border-color: oklch(24% 0.012 235);
+  background: oklch(16% 0.012 235);
+  color: oklch(91% 0.012 235);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 12px 28px rgb(15 23 42 / 0.13);
+}
+
+:root:not([data-theme="dark"]) .markdown-content .markdown-code-block figcaption {
+  border-bottom-color: rgb(255 255 255 / 0.08);
+  background: oklch(19% 0.012 235);
+  color: oklch(69% 0.012 235);
+}
+
+:root:not([data-theme="dark"])
+  .markdown-content
+  .markdown-code-block
+  .markdown-code-pre {
+  max-width: 100%;
+  max-height: min(520px, 58vh);
+  margin: 0;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  font-size: 12.5px;
+  line-height: 1.58;
+  tab-size: 2;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: auto;
+  overflow-wrap: normal;
+}
+
+:root:not([data-theme="dark"])
+  .markdown-content
+  .markdown-code-block
+  .markdown-code-pre
+  code {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
 :root:not([data-theme="dark"]) .markdown-content a {
   color: #087c9b;
 }
@@ -3779,7 +3920,7 @@ body.mermaid-lightbox-open {
   text-align: left;
 }
 
-.message[data-kind="userMessage"] .markdown-content > :is(p, ul, ol, blockquote, pre, h1, h2, h3, h4, figure, table, hr),
+.message[data-kind="userMessage"] .markdown-content > :is(p, ul, ol, blockquote, pre, h1, h2, h3, h4, table, hr),
 .message[data-kind="userMessage"] .message-body p {
   max-width: none;
   padding: 0;
@@ -9488,11 +9629,12 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen .sidebar-nav a,
 .screen-shell.command-screen .sidebar-nav button {
   display: grid;
-  grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr);
+  grid-template-columns: 22px minmax(0, auto) minmax(0, 1fr);
   align-items: center;
+  column-gap: 4px;
   width: 100%;
   min-height: 30px;
-  padding: 0 10px;
+  padding: 0 10px 0 9px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -9513,7 +9655,7 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .nav-glyph {
   display: grid;
-  width: 18px;
+  width: 22px;
   height: 18px;
   place-items: center;
   color: oklch(43% 0.026 238);
@@ -9522,8 +9664,8 @@ button.library-item:hover .library-card-chevron {
 }
 
 .screen-shell.command-screen .nav-glyph svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   stroke-width: 1.65;
 }
 
@@ -10835,7 +10977,7 @@ button.library-item:hover .library-card-chevron {
   .command-thread-room
   .message[data-kind="userMessage"]
   .markdown-content
-  :is(p, ul, ol, blockquote, pre, h1, h2, h3, h4, figure, table, hr) {
+  > :is(p, ul, ol, blockquote, pre, h1, h2, h3, h4, table, hr) {
   padding: 0;
   border: 0;
   background: transparent;
@@ -10849,11 +10991,13 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen .command-thread-room .tool-call-section pre,
 .screen-shell.command-screen .command-thread-room .command-card pre {
   padding: 12px 13px;
-  border: 1px solid #d7dde5;
+  border: 1px solid oklch(24% 0.012 235);
   border-radius: 8px;
-  background: #f8fafc;
-  color: #1f2937;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.82);
+  background: oklch(16% 0.012 235);
+  color: oklch(91% 0.012 235);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 10px 24px rgb(15 23 42 / 0.12);
   font-size: 12.5px;
   line-height: 1.62;
   white-space: pre;
@@ -10863,7 +11007,9 @@ button.library-item:hover .library-card-chevron {
   .command-thread-room
   .markdown-content
   > pre
-  code {
+  code,
+.screen-shell.command-screen .command-thread-room .tool-call-section pre code,
+.screen-shell.command-screen .command-thread-room .command-card pre code {
   border: 0;
   background: transparent;
   color: inherit;
@@ -10946,7 +11092,7 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-details
-  > summary {
+  .turn-process-summary {
   min-height: 24px;
   border-color: transparent;
   background: transparent;
@@ -10963,7 +11109,7 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-details
-  > summary
+  .turn-process-summary
   em {
   color: oklch(58% 0.016 235);
 }
@@ -10971,7 +11117,7 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-details
-  > summary
+  .turn-process-summary
   strong {
   color: oklch(48% 0.018 235);
 }
@@ -10979,11 +11125,11 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-details
-  > summary:hover,
+  .turn-process-summary:hover,
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-details
-  > summary:focus-visible {
+  .turn-process-summary:focus-visible {
   border-color: oklch(89% 0.012 235);
   background: rgb(255 255 255 / 0.58);
 }
@@ -11158,7 +11304,7 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
-  :is(.command-card pre, .tool-call-body, .process-card-body) {
+  :is(.tool-call-body, .process-card-body) {
   margin-top: 3px;
   margin-left: 0;
   padding: 4px 0 4px 12px;
@@ -11173,8 +11319,8 @@ button.library-item:hover .library-card-chevron {
   .command-card
   pre {
   max-height: 170px;
-  border-radius: 0;
-  color: oklch(31% 0.012 235);
+  margin-top: 6px;
+  color: oklch(91% 0.012 235);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -11202,11 +11348,11 @@ button.library-item:hover .library-card-chevron {
   .turn-process-items
   .tool-call-section
   pre {
-  padding: 6px 8px;
-  border: 1px solid oklch(90% 0.01 235);
-  border-radius: 6px;
-  background: oklch(98% 0.004 235);
-  color: oklch(31% 0.012 235);
+  padding: 10px 12px;
+  border: 1px solid oklch(24% 0.012 235);
+  border-radius: 8px;
+  background: oklch(16% 0.012 235);
+  color: oklch(91% 0.012 235);
 }
 
 .screen-shell.command-screen
@@ -11532,6 +11678,21 @@ button.library-item:hover .library-card-chevron {
   padding: 0;
 }
 
+.screen-shell.command-screen .control-select[data-open="true"] {
+  z-index: 82;
+}
+
+.screen-shell.command-screen
+  .command-input:has(.control-select[data-open="true"]) {
+  z-index: 80;
+}
+
+.screen-shell.command-screen
+  .input-tools:has(.control-select[data-open="true"]) {
+  position: relative;
+  z-index: 81;
+}
+
 .screen-shell.command-screen .control-select::after,
 .screen-shell.command-screen .workspace-picker::after {
   content: "";
@@ -11624,7 +11785,12 @@ button.library-item:hover .library-card-chevron {
   z-index: 45;
   display: grid;
   gap: 2px;
-  min-width: max(168px, 100%);
+  min-width: max(190px, 100%);
+  max-width: min(320px, 78vw);
+  max-height: min(320px, calc(100vh - 120px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
   padding: 6px;
   border: 1px solid oklch(84% 0.016 238);
   border-radius: 12px;
@@ -11645,7 +11811,7 @@ button.library-item:hover .library-card-chevron {
   gap: 18px;
   min-height: 34px;
   width: 100%;
-  padding: 0 10px;
+  padding: 7px 10px;
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -11656,6 +11822,34 @@ button.library-item:hover .library-card-chevron {
   font-weight: 510;
   text-align: left;
   white-space: nowrap;
+}
+
+.screen-shell.command-screen .input-tools .select-menu .select-option:active {
+  transform: none;
+}
+
+.screen-shell.command-screen .select-menu .select-option > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.screen-shell.command-screen .select-menu .select-option strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 590;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+}
+
+.screen-shell.command-screen .select-menu .select-option em {
+  overflow: hidden;
+  color: oklch(52% 0.014 235);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 480;
+  line-height: 1.2;
+  text-overflow: ellipsis;
 }
 
 .screen-shell.command-screen .select-menu .select-option::after {
@@ -11680,6 +11874,10 @@ button.library-item:hover .library-card-chevron {
   font-weight: 590;
 }
 
+.screen-shell.command-screen .select-menu .select-option[data-tone="warning"] {
+  color: oklch(48% 0.12 70);
+}
+
 .screen-shell.command-screen .select-menu .select-option[aria-selected="true"]::after {
   opacity: 1;
 }
@@ -11697,7 +11895,7 @@ button.library-item:hover .library-card-chevron {
 }
 
 .screen-shell.command-screen .model-dropdown .select-trigger {
-  max-width: 112px;
+  max-width: 138px;
 }
 
 .screen-shell.command-screen .permission-dropdown select {
@@ -12080,6 +12278,532 @@ button.library-item:hover .library-card-chevron {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+.screen-shell.command-screen .space-tree {
+  gap: 8px;
+  padding: 6px 6px 14px;
+}
+
+.screen-shell.command-screen .tree-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 6px 2px;
+}
+
+.screen-shell.command-screen .tree-add {
+  display: none;
+}
+
+.screen-shell.command-screen .sidebar-empty-hint {
+  margin: 1px 8px 5px 0;
+  color: oklch(56% 0.016 235);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.screen-shell.command-screen .tree-head-action {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: oklch(48% 0.018 235);
+  cursor: pointer;
+  font-size: 0;
+  letter-spacing: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-2px);
+  transition: opacity 0.14s ease, transform 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.screen-shell.command-screen .tree-head:hover .tree-head-action,
+.screen-shell.command-screen .tree-head:focus-within .tree-head-action,
+.screen-shell.command-screen .tree-head:has(.tree-head-action[aria-expanded="true"]) .tree-head-action {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.screen-shell.command-screen .tree-head-action:hover,
+.screen-shell.command-screen .tree-head-action:focus-visible,
+.screen-shell.command-screen .tree-head-action[aria-expanded="true"] {
+  background: var(--command-sidebar-hover);
+  color: oklch(30% 0.02 235);
+  outline: 0;
+}
+
+.screen-shell.command-screen .tree-head-action svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}
+
+.screen-shell.command-screen .sidebar-workspace-form {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid oklch(88% 0.012 238);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.74);
+}
+
+.screen-shell.command-screen .sidebar-workspace-form[hidden] {
+  display: none !important;
+}
+
+.screen-shell.command-screen .sidebar-workspace-form label {
+  grid-column: 1 / -1;
+  color: oklch(47% 0.016 238);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.screen-shell.command-screen .sidebar-workspace-form input {
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid oklch(86% 0.012 238);
+  border-radius: 8px;
+  background: oklch(99% 0.003 238);
+  color: oklch(24% 0.02 238);
+  font-size: 12px;
+}
+
+.screen-shell.command-screen .sidebar-workspace-form button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.screen-shell.command-screen .sidebar-workspace-form button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.screen-shell.command-screen .workspace-empty-hint {
+  margin: 0 8px 6px;
+}
+
+.screen-shell.command-screen .recent-thread-list {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+
+.screen-shell.command-screen .real-workspace-node {
+  margin-bottom: 4px;
+}
+
+.screen-shell.command-screen .real-workspace-title {
+  cursor: default;
+}
+
+.screen-shell.command-screen .real-workspace-title,
+.screen-shell.command-screen .standalone-workspace-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.screen-shell.command-screen .workspace-title-toggle {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.screen-shell.command-screen .workspace-title-toggle:hover strong,
+.screen-shell.command-screen .workspace-title-toggle:focus-visible strong {
+  color: oklch(18% 0.022 235);
+}
+
+.screen-shell.command-screen .workspace-title-toggle:focus-visible {
+  outline: 0;
+}
+
+.screen-shell.command-screen .workspace-title-toggle svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: oklch(43% 0.018 235);
+  stroke-width: 1.9;
+}
+
+.screen-shell.command-screen .workspace-title-toggle strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.14s ease;
+}
+
+.screen-shell.command-screen .real-workspace-title .workspace-title-toggle strong {
+  color: oklch(23% 0.02 235);
+  font-weight: 700;
+}
+
+.screen-shell.command-screen .standalone-workspace-node {
+  margin-bottom: 5px;
+}
+
+.screen-shell.command-screen .standalone-workspace-title .workspace-title-toggle strong {
+  color: oklch(41% 0.016 235);
+}
+
+.screen-shell.command-screen .standalone-workspace-toggle svg {
+  transition: transform 0.16s ease;
+}
+
+.screen-shell.command-screen .standalone-workspace-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.screen-shell.command-screen .workspace-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-2px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.screen-shell.command-screen .workspace-row-actions button {
+  display: inline-grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: oklch(48% 0.014 235);
+  cursor: pointer;
+}
+
+.screen-shell.command-screen .space-title:hover .workspace-row-actions,
+.screen-shell.command-screen .space-title:focus-within .workspace-row-actions,
+.screen-shell.command-screen .space-title:has(.workspace-row-actions button[aria-expanded="true"]) .workspace-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.screen-shell.command-screen .workspace-row-actions button:hover,
+.screen-shell.command-screen .workspace-row-actions button:focus-visible,
+.screen-shell.command-screen .workspace-row-actions button[aria-expanded="true"] {
+  background: rgb(255 255 255 / 0.62);
+  color: oklch(24% 0.018 235);
+  outline: 0;
+}
+
+.screen-shell.command-screen .workspace-row-actions svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.9;
+}
+
+.screen-shell.command-screen .recent-thread-item {
+  min-height: 34px;
+  padding: 4px 8px;
+}
+
+.screen-shell.command-screen .recent-thread-item::before {
+  display: none;
+}
+
+.screen-shell.command-screen .space-node {
+  gap: 4px;
+  padding: 0;
+}
+
+.screen-shell.command-screen .space-node.current {
+  background: transparent;
+  box-shadow: none;
+}
+
+.screen-shell.command-screen .space-title {
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 9px;
+  color: oklch(39% 0.018 235);
+  font-size: 12px;
+}
+
+.screen-shell.command-screen .space-node.current .space-title {
+  background: transparent;
+  color: oklch(39% 0.018 235);
+}
+
+.screen-shell.command-screen .conversation-list {
+  gap: 3px;
+  margin: 0;
+  padding: 1px 0 2px 18px;
+  border-left: 0;
+}
+
+.screen-shell.command-screen .conversation-item {
+  position: relative;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 9px;
+  color: oklch(38% 0.018 235);
+}
+
+.screen-shell.command-screen .conversation-item::before {
+  position: absolute;
+  top: 50%;
+  left: -10px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: oklch(72% 0.014 235);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.screen-shell.command-screen .conversation-item:hover {
+  background: rgb(255 255 255 / 0.54);
+}
+
+.screen-shell.command-screen .conversation-item.active {
+  background: color-mix(in oklch, var(--accent) 8%, white);
+  color: oklch(30% 0.072 215);
+}
+
+.screen-shell.command-screen .conversation-item.active::before {
+  background: var(--accent);
+}
+
+.screen-shell.command-screen .linked-conversation-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top-color: oklch(88% 0.01 235);
+}
+
+.screen-shell.command-screen .command-home-view.has-command-thread > .workspace-pill {
+  display: none !important;
+}
+
+.screen-shell.command-screen .hero-center.has-command-thread {
+  top: 50%;
+  width: min(1180px, calc(100% - 88px));
+  height: calc(100% - 38px);
+  gap: 12px;
+}
+
+.screen-shell.command-screen .command-thread-room {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.screen-shell.command-screen .command-thread-toolbar {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 4px 12px;
+  border-bottom: 1px solid oklch(88.5% 0.009 235);
+  background: transparent;
+}
+
+.screen-shell.command-screen .command-thread-identity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.screen-shell.command-screen .command-thread-identity > span {
+  color: oklch(52% 0.018 235);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.screen-shell.command-screen .command-thread-identity > strong {
+  overflow: hidden;
+  color: oklch(20% 0.018 235);
+  font-size: 17px;
+  font-weight: 760;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .command-thread-cwd {
+  display: block;
+  max-width: min(620px, 52vw);
+  overflow: hidden;
+  color: oklch(53% 0.012 235);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 520;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .command-thread-runtime {
+  align-self: start;
+  margin-top: 2px;
+}
+
+.screen-shell.command-screen .command-thread-room .message-list {
+  gap: 24px;
+  padding: 24px 4px 30px;
+}
+
+.screen-shell.command-screen .command-thread-room .turn-group,
+.screen-shell.command-screen .command-thread-room .message-list > .message {
+  width: min(980px, 100%);
+  max-width: 980px;
+}
+
+.screen-shell.command-screen .command-thread-room .message[data-kind="userMessage"] .message-body {
+  max-width: min(620px, 72%);
+}
+
+.screen-shell.command-screen .command-input.thread-command-input {
+  width: min(980px, 100%);
+  margin-bottom: 16px;
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgb(18 26 38 / 0.055);
+}
+
+.screen-shell.command-screen .thread-command-input .composer-state-row {
+  top: calc(100% + 7px);
+}
+
+.screen-shell.command-screen .command-thread-room .message-list {
+  gap: 22px;
+  padding: 30px 10px 24px;
+}
+
+.screen-shell.command-screen .command-thread-room .turn-group,
+.screen-shell.command-screen .command-thread-room .message-list > .message {
+  width: min(920px, 100%);
+  max-width: 920px;
+}
+
+.screen-shell.command-screen .command-thread-room .message {
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 13px;
+}
+
+.screen-shell.command-screen .command-thread-room .message::before {
+  width: 28px;
+  height: 28px;
+  margin-top: 3px;
+  box-shadow: 0 7px 15px rgb(18 26 38 / 0.07);
+}
+
+.screen-shell.command-screen .command-thread-room .message-header {
+  min-height: 20px;
+  margin-bottom: 6px;
+}
+
+.screen-shell.command-screen .command-thread-room .message-role {
+  color: oklch(24% 0.018 235);
+  font-size: 13.5px;
+  font-weight: 760;
+}
+
+.screen-shell.command-screen .command-thread-room .message-type {
+  color: oklch(58% 0.012 235);
+  font-size: 11.5px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content,
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="plan"]
+  .markdown-content {
+  max-width: 820px;
+  color: oklch(27% 0.016 235);
+  font-size: 15.5px;
+  line-height: 1.78;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  > :is(p, ul, ol, blockquote, pre, figure, table) {
+  margin-top: 0;
+  margin-bottom: 14px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  > :last-child {
+  margin-bottom: 0;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .message-body {
+  max-width: min(640px, 76%);
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content {
+  padding: 10px 14px;
+  border: 1px solid oklch(88.5% 0.01 235);
+  border-radius: 17px 17px 5px 17px;
+  background: rgb(255 255 255 / 0.78);
+  color: oklch(25% 0.016 235);
+  box-shadow: 0 8px 22px rgb(18 26 38 / 0.045);
+  font-size: 14px;
+  line-height: 1.58;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-transcript-variant="process"] {
+  grid-template-columns: 10px minmax(0, 1fr);
+  column-gap: 9px;
+  opacity: 0.88;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-transcript-variant="process"]::before {
+  width: 5px;
+  height: 5px;
+  margin-top: 11px;
+  background: oklch(64% 0.035 220);
 }
 
 @media (max-width: 1180px) {

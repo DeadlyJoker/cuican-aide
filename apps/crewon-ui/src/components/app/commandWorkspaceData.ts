@@ -11,16 +11,6 @@ export type ShellNavItem = {
   meta?: string;
 };
 
-export type SpaceNode = {
-  id: string;
-  icon: string;
-  title: string;
-  conversations: Array<{
-    aliases: string[];
-    title: string;
-  }>;
-};
-
 export type SceneTab = {
   key: CommandScene;
   label: string;
@@ -47,37 +37,6 @@ export const shellNavItems: ShellNavItem[] = [
   { key: "agents", label: "智能体", en: "Agents", meta: "技能·连接器" },
   { key: "schedule", label: "日程安排", en: "Schedule", meta: "计划·提醒" },
   { key: "team", label: "团队", en: "Team" },
-];
-
-export const workspaceNodes: SpaceNode[] = [
-  {
-    id: "product",
-    icon: "⌄",
-    title: "Agent 小队交付空间",
-    conversations: [
-      { aliases: ["Team setup draft"], title: "小队创建草稿" },
-      { aliases: ["Workflow Gate"], title: "Workflow Gate" },
-      { aliases: ["Delivery checklist"], title: "交付验收清单" },
-    ],
-  },
-  {
-    id: "team",
-    icon: "⌄",
-    title: "办公室权限空间",
-    conversations: [
-      { aliases: ["Layered access"], title: "四层权限" },
-      { aliases: ["Channel bridge"], title: "Channel 桥接" },
-    ],
-  },
-  {
-    id: "agents",
-    icon: "⌄",
-    title: "Skill/MCP 能力空间",
-    conversations: [
-      { aliases: ["Schema validation"], title: "Schema 校验" },
-      { aliases: ["Sandbox audit"], title: "沙箱审计" },
-    ],
-  },
 ];
 
 export const sceneTabs: SceneTab[] = [

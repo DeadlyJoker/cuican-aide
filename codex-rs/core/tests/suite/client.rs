@@ -961,11 +961,12 @@ async fn includes_base_instructions_override_in_request() {
         .with_config(|config| {
             config.base_instructions = Some("test instructions".to_string());
         });
-    let codex = builder
+    let test = builder
         .build(&server)
         .await
-        .expect("create new conversation")
-        .crewon;
+        .expect("create new conversation");
+    let expected_model = test.session_configured.model.clone();
+    let codex = test.crewon;
 
     codex
         .submit(Op::UserInput {
@@ -986,12 +987,12 @@ async fn includes_base_instructions_override_in_request() {
     let request = resp_mock.single_request();
     let request_body = request.body_json();
 
-    assert!(
-        request_body["instructions"]
-            .as_str()
-            .unwrap()
-            .contains("test instructions")
-    );
+    let instructions = request_body["instructions"]
+        .as_str()
+        .expect("instructions should be text");
+    assert!(instructions.contains("test instructions"));
+    assert!(instructions.contains("<runtime_model_identity>"));
+    assert!(instructions.contains(&format!("`{expected_model}`")));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

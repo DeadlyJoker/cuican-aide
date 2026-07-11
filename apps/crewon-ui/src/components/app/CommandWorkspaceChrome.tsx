@@ -2,21 +2,25 @@ import {
   BookOpen,
   Bot,
   CalendarDays,
+  ChevronRight,
+  Folder,
   FolderOpen,
+  MoreHorizontal,
   PanelLeft,
   Plus,
+  SquarePen,
   Search,
   Sparkles,
   Users,
 } from "lucide-react";
-import type { ReactNode } from "react";
-
-import { shellNavItems, workspaceNodes } from "./commandWorkspaceData";
 import {
-  conversationBindingKey,
-  findLinkedThreadForConversation,
-  type ConversationThreadBindings,
-} from "./commandWorkspaceThreadLinks";
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "react";
+
+import { shellNavItems } from "./commandWorkspaceData";
 import type {
   CommandHomeSlots,
   CommandPaletteItem,
@@ -30,6 +34,7 @@ export type PaletteItemWithCommand = CommandPaletteItem & {
 };
 
 export type CommandLinkedThread = {
+  cwd: string | null;
   id: string;
   preview: string;
   title: string;
@@ -40,19 +45,10 @@ type PlatformLoadState = "loading" | "ready" | "fallback";
 
 type SidebarSearchResult =
   | {
-      action: "conversation";
-      detail: string;
-      key: string;
-      kind: "Chat" | "Space";
-      spaceId: string;
-      title: string;
-      conversation: string;
-    }
-  | {
       action: "thread";
       detail: string;
       key: string;
-      kind: "Thread";
+      kind: "对话";
       threadId: string;
       title: string;
     }
@@ -60,7 +56,7 @@ type SidebarSearchResult =
       action: "view";
       detail: string;
       key: string;
-      kind: "Agent";
+      kind: "功能";
       title: string;
       view: CommandShellView;
     };
@@ -74,85 +70,101 @@ const viewIcons: Record<CommandShellView, ReactNode> = {
   team: <Users aria-hidden="true" />,
 };
 
+function workspaceName(path: string, emptyLabel = "工作空间"): string {
+  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  return normalized.split("/").filter(Boolean).pop() || normalized || emptyLabel;
+}
+
 export function CommandSidebar({
-  activeConversation,
-  activeSpaceId,
   activeView,
-  collapsedSpaces,
-  conversationThreadBindings,
+  cwd,
   isSearchOpen,
   linkedThreads = [],
   query,
   selectedLinkedThreadId,
   slots,
-  onChooseConversation,
+  onCreateWorkspace,
+  onNewThread,
   onOpenLinkedThread,
   onCloseSearch,
   onQueryChange,
   onSwitchView,
   onToggleCollapse,
   onToggleSearch,
-  onToggleSpace,
 }: {
-  activeConversation: string;
-  activeSpaceId: string;
   activeView: CommandShellView;
-  collapsedSpaces: Set<string>;
-  conversationThreadBindings: ConversationThreadBindings;
+  cwd: string;
   isSearchOpen: boolean;
   linkedThreads: CommandLinkedThread[];
   query: string;
   selectedLinkedThreadId: string | null;
   slots: CommandHomeSlots;
-  onChooseConversation: (spaceId: string, conversation: string) => void;
   onCloseSearch: () => void;
+  onCreateWorkspace?: (cwd: string) => void;
+  onNewThread: () => void;
   onOpenLinkedThread: (threadId: string) => void;
   onQueryChange: (query: string) => void;
   onSwitchView: (view: CommandShellView) => void;
   onToggleCollapse: () => void;
   onToggleSearch: () => void;
-  onToggleSpace: (spaceId: string) => void;
 }) {
-  const recentLinkedThreads = linkedThreads.slice(0, 5);
+  const [workspaceFormOpen, setWorkspaceFormOpen] = useState(false);
+  const [workspaceDraft, setWorkspaceDraft] = useState(cwd);
+  const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const currentWorkspaceName = workspaceName(cwd, "无工作空间");
+  const currentWorkspaceThreads = linkedThreads
+    .filter((thread) => Boolean(cwd) && thread.cwd === cwd)
+    .slice(0, 5);
+  const standaloneThreads = linkedThreads
+    .filter((thread) => !thread.cwd)
+    .slice(0, 5);
+
+  useEffect(() => {
+    setWorkspaceDraft(cwd);
+  }, [cwd]);
+
+  function submitWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = workspaceDraft.trim();
+    if (!trimmed) {
+      return;
+    }
+    onCreateWorkspace?.(trimmed);
+    setWorkspaceFormOpen(false);
+  }
+
+  function toggleWorkspaceGroup(groupId: string) {
+    setCollapsedWorkspaceGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }
+
+  const currentWorkspaceCollapsed = Boolean(cwd) && collapsedWorkspaceGroups.has(cwd);
+  const standaloneWorkspaceCollapsed = collapsedWorkspaceGroups.has("standalone");
   const sidebarSearchResults: SidebarSearchResult[] = [
-    ...workspaceNodes.flatMap((node) => {
-      const firstConversation = node.conversations[0]?.title ?? node.title;
-      return [
-        {
-          action: "conversation" as const,
-          conversation: firstConversation,
-          detail: node.conversations
-            .map((conversation) => conversation.title)
-            .join(" · "),
-          key: `space-${node.id}`,
-          kind: "Space" as const,
-          spaceId: node.id,
-          title: node.title,
-        },
-        ...node.conversations.map((conversation) => ({
-          action: "conversation" as const,
-          conversation: conversation.title,
-          detail: [node.title, ...conversation.aliases].join(" · "),
-          key: `chat-${node.id}-${conversation.title}`,
-          kind: "Chat" as const,
-          spaceId: node.id,
-          title: conversation.title,
-        })),
-      ];
-    }),
     {
       action: "view" as const,
       detail: "智能体配置",
       key: "agent-platform-slot",
-      kind: "Agent" as const,
+      kind: "功能" as const,
       title: slots.agent.title,
       view: "agents" as const,
     },
     ...linkedThreads.map((thread) => ({
       action: "thread" as const,
-      detail: thread.preview || thread.updatedLabel,
+      detail: [workspaceName(thread.cwd ?? "", "无工作空间"), thread.preview || thread.updatedLabel]
+        .filter(Boolean)
+        .join(" · "),
       key: `thread-${thread.id}`,
-      kind: "Thread" as const,
+      kind: "对话" as const,
       threadId: thread.id,
       title: thread.title,
     })),
@@ -163,11 +175,8 @@ export function CommandSidebar({
   function activateSearchResult(item: SidebarSearchResult) {
     if (item.action === "thread") {
       onOpenLinkedThread(item.threadId);
-    } else if (item.action === "view") {
-      onSwitchView(item.view);
     } else {
-      onSwitchView("command");
-      onChooseConversation(item.spaceId, item.conversation);
+      onSwitchView(item.view);
     }
     onQueryChange("");
     onCloseSearch();
@@ -225,9 +234,9 @@ export function CommandSidebar({
         <div className="sidebar-search-field">
           <Search aria-hidden="true" />
           <input
-            aria-label="搜索空间、会话、能力和智能体"
+            aria-label="搜索对话和能力"
             data-sidebar-search-input=""
-            placeholder="搜索空间、会话、能力和智能体"
+            placeholder="搜索对话和能力"
             type="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
@@ -285,7 +294,7 @@ export function CommandSidebar({
       </a>
 
       <nav className="sidebar-nav" data-od-id="desktop-nav">
-        {shellNavItems.map((item) => (
+        {shellNavItems.filter((item) => item.key !== "command").map((item) => (
           <button
             aria-current={activeView === item.key ? "page" : undefined}
             className={classNames(activeView === item.key && "active")}
@@ -315,102 +324,151 @@ export function CommandSidebar({
         </button>
       </nav>
 
-      <section className="space-tree" data-od-id="desktop-workspace-tree" aria-label="工作空间">
+      <section className="space-tree" data-od-id="desktop-workspace-tree" aria-label="工作空间和对话">
         <div className="tree-head">
-          <button type="button">空间</button>
-          <button className="tree-add" type="button" aria-label="新建空间">
-            +
+          <button type="button">工作空间</button>
+          <button
+            aria-expanded={workspaceFormOpen}
+            aria-label="新增空间"
+            className="tree-head-action"
+            type="button"
+            onClick={() => setWorkspaceFormOpen((open) => !open)}
+          >
+            <Plus aria-hidden="true" />
           </button>
         </div>
-        {workspaceNodes.map((node) => {
-          const collapsed = collapsedSpaces.has(node.id);
-          return (
-            <div
-              className={classNames(
-                "space-node",
-                activeSpaceId === node.id && "current",
-                collapsed && "collapsed",
-              )}
-              data-od-id={`workspace-node-${node.id}`}
-              key={node.id}
-            >
+        <form
+          className="sidebar-workspace-form"
+          hidden={!workspaceFormOpen}
+          onSubmit={submitWorkspace}
+        >
+          <label htmlFor="command-workspace-path">文件夹路径</label>
+          <input
+            id="command-workspace-path"
+            placeholder="/Users/me/project"
+            value={workspaceDraft}
+            onChange={(event) => setWorkspaceDraft(event.target.value)}
+          />
+          <button type="submit" disabled={!workspaceDraft.trim() || !onCreateWorkspace}>
+            打开
+          </button>
+        </form>
+        {cwd ? (
+          <div
+            className={classNames(
+              "space-node current real-workspace-node",
+              currentWorkspaceCollapsed && "collapsed",
+            )}
+          >
+            <div className="space-title real-workspace-title">
               <button
-                className="space-title"
+                aria-controls="current-workspace-thread-list"
+                aria-expanded={!currentWorkspaceCollapsed}
+                className="workspace-title-toggle"
                 type="button"
-                onClick={() => onToggleSpace(node.id)}
+                onClick={() => toggleWorkspaceGroup(cwd)}
               >
-                <span aria-hidden="true">{collapsed ? "›" : node.icon}</span>
-                <strong>{node.title}</strong>
-              </button>
-              <div
-                className={classNames(
-                  "conversation-list",
-                  node.conversations.length < 3 && "compact",
+                {currentWorkspaceCollapsed ? (
+                  <Folder aria-hidden="true" />
+                ) : (
+                  <FolderOpen aria-hidden="true" />
                 )}
-                hidden={collapsed}
-              >
-                {node.conversations.map((conversation) => {
-                  const bindingKey = conversationBindingKey(
-                    node.id,
-                    conversation.title,
-                  );
-                  const linkedThread = findLinkedThreadForConversation(
-                    linkedThreads,
-                    conversation.title,
-                    conversation.aliases,
-                    conversationThreadBindings[bindingKey],
-                  );
-                  return (
-                    <button
-                      className={classNames(
-                        "conversation-item",
-                        linkedThread && "is-linked",
-                        ((activeSpaceId === node.id &&
-                          activeConversation === conversation.title) ||
-                          selectedLinkedThreadId === linkedThread?.id) &&
-                          "active",
-                      )}
-                      data-linked-thread-id={linkedThread?.id}
-                      key={conversation.title}
-                      title={
-                        linkedThread
-                          ? `已连接后端会话：${linkedThread.title}`
-                          : undefined
-                      }
-                      type="button"
-                      onClick={() =>
-                        onChooseConversation(node.id, conversation.title)
-                      }
-                    >
-                      {conversation.title}
-                    </button>
-                  );
-                })}
-                {node.id === "product" && recentLinkedThreads.length > 0 ? (
-                  <div className="linked-conversation-group">
-                    <span className="linked-conversation-label">后端会话</span>
-                    {recentLinkedThreads.map((thread) => (
-                      <button
-                        className={classNames(
-                          "conversation-item linked-conversation-item",
-                          selectedLinkedThreadId === thread.id && "active",
-                        )}
-                        data-linked-thread-id={thread.id}
-                        key={thread.id}
-                        title={thread.preview}
-                        type="button"
-                        onClick={() => onOpenLinkedThread(thread.id)}
-                      >
-                        <span>{thread.title}</span>
-                        <em>{thread.updatedLabel}</em>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+                <strong>{currentWorkspaceName}</strong>
+              </button>
+              <span className="workspace-row-actions">
+                <button
+                  aria-expanded={workspaceFormOpen}
+                  aria-label="新增空间"
+                  type="button"
+                  onClick={() => setWorkspaceFormOpen((open) => !open)}
+                >
+                  <MoreHorizontal aria-hidden="true" />
+                </button>
+                <button aria-label="新建会话" type="button" onClick={onNewThread}>
+                  <SquarePen aria-hidden="true" />
+                </button>
+              </span>
             </div>
-          );
-        })}
+            <div
+              className="conversation-list recent-thread-list"
+              hidden={currentWorkspaceCollapsed}
+              id="current-workspace-thread-list"
+            >
+              {currentWorkspaceThreads.length > 0 ? (
+                currentWorkspaceThreads.map((thread) => (
+                  <button
+                    className={classNames(
+                      "conversation-item linked-conversation-item recent-thread-item",
+                      selectedLinkedThreadId === thread.id && "active",
+                    )}
+                    data-linked-thread-id={thread.id}
+                    key={thread.id}
+                    title={thread.preview}
+                    type="button"
+                    onClick={() => onOpenLinkedThread(thread.id)}
+                  >
+                    <span>{thread.title}</span>
+                    <em>{thread.updatedLabel}</em>
+                  </button>
+                ))
+              ) : (
+                <p className="sidebar-empty-hint">开始一次任务后，会话会出现在这个工作空间下。</p>
+              )}
+            </div>
+          </div>
+        ) : standaloneThreads.length === 0 ? (
+          <p className="sidebar-empty-hint workspace-empty-hint">
+            当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。
+          </p>
+        ) : null}
+        {standaloneThreads.length > 0 ? (
+          <div
+            className={classNames(
+              "space-node standalone-workspace-node",
+              standaloneWorkspaceCollapsed && "collapsed",
+            )}
+          >
+            <div className="space-title standalone-workspace-title">
+              <button
+                aria-controls="standalone-workspace-thread-list"
+                aria-expanded={!standaloneWorkspaceCollapsed}
+                className="workspace-title-toggle standalone-workspace-toggle"
+                type="button"
+                onClick={() => toggleWorkspaceGroup("standalone")}
+              >
+                <ChevronRight aria-hidden="true" />
+                <strong>无工作空间</strong>
+              </button>
+              <span className="workspace-row-actions">
+                <button aria-label="新建无工作空间会话" type="button" onClick={onNewThread}>
+                  <SquarePen aria-hidden="true" />
+                </button>
+              </span>
+            </div>
+            <div
+              className="conversation-list recent-thread-list standalone-thread-list"
+              hidden={standaloneWorkspaceCollapsed}
+              id="standalone-workspace-thread-list"
+            >
+              {standaloneThreads.map((thread) => (
+                <button
+                  className={classNames(
+                    "conversation-item linked-conversation-item recent-thread-item",
+                    selectedLinkedThreadId === thread.id && "active",
+                  )}
+                  data-linked-thread-id={thread.id}
+                  key={thread.id}
+                  title={thread.preview}
+                  type="button"
+                  onClick={() => onOpenLinkedThread(thread.id)}
+                >
+                  <span>{thread.title}</span>
+                  <em>{thread.updatedLabel}</em>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <footer className="sidebar-account" data-od-id="desktop-account-entry">

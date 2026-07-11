@@ -327,7 +327,7 @@ describe("settings save payload helpers", () => {
       approvalPolicy: "on-request",
       model: "gpt-5",
       sandboxMode: "workspace-write",
-    };
+    } as const;
 
     expect(threadSettingsMissingSelectionPanel(panel, "en")).toEqual({
       title: "Session settings",

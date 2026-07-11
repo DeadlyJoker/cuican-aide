@@ -62,10 +62,9 @@ describe("AppWorkspaceContent", () => {
     expect(markup).toContain('data-od-id="context-search-panel"');
     expect(markup).toContain('data-od-id="slash-search-panel"');
     expect(markup).toContain("创建可编排的 Agent 小队");
-    expect(markup).toContain("Agent 小队交付空间");
-    expect(markup).toContain("办公室权限空间");
-    expect(markup).toContain("Skill/MCP 能力空间");
-    expect(markup).toContain("Schema 校验");
+    expect(markup).toContain("工作空间");
+    expect(markup).toContain("frontend");
+    expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain("agents0");
   });
 });

@@ -2,20 +2,45 @@ import { useMemo } from "react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import type { ConnectionState } from "./appRuntimeState";
+import {
+  isPlaceholderBackendCwd,
+  preferredBackendCwd,
+} from "../backend/backendWorkspace";
 import { threadTitle } from "../thread/threadModel";
 
 export type AppThreadSelectionParams = {
   activeTurnByThread: Record<string, string>;
   connectionState: ConnectionState;
+  draftWorkspaceCwd?: string | null;
   newDraftThreadLabel: string;
   selectedThreadId: string | null;
   threads: Thread[];
   untitledThreadLabel: string;
 };
 
+export function selectedThreadWorkspaceCwd({
+  draftWorkspaceCwd,
+  selectedThread,
+  threads,
+}: {
+  draftWorkspaceCwd?: string | null;
+  selectedThread: Thread | null;
+  threads: Thread[];
+}): string {
+  const selectedThreadCwd = selectedThread?.cwd?.trim() ?? "";
+  if (selectedThread) {
+    return selectedThreadCwd && !isPlaceholderBackendCwd(selectedThreadCwd)
+      ? selectedThreadCwd
+      : "";
+  }
+
+  return preferredBackendCwd(draftWorkspaceCwd, threads);
+}
+
 export function useAppThreadSelection({
   activeTurnByThread,
   connectionState,
+  draftWorkspaceCwd = null,
   newDraftThreadLabel,
   selectedThreadId,
   threads,
@@ -31,9 +56,15 @@ export function useAppThreadSelection({
       ? (activeTurnByThread[selectedThreadId] ?? inProgressTurnId)
       : null;
 
+    const cwd = selectedThreadWorkspaceCwd({
+      draftWorkspaceCwd,
+      selectedThread,
+      threads,
+    });
+
     return {
       activeTurnId,
-      cwd: selectedThread?.cwd ?? "",
+      cwd,
       isConnected: connectionState === "connected",
       isDemo: connectionState === "demo",
       selectedThread,
@@ -44,6 +75,7 @@ export function useAppThreadSelection({
   }, [
     activeTurnByThread,
     connectionState,
+    draftWorkspaceCwd,
     newDraftThreadLabel,
     selectedThreadId,
     threads,

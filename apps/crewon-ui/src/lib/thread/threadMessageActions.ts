@@ -24,6 +24,7 @@ import {
   threadInterruptRequestedNotice,
   threadSendFailureNotice,
 } from "./threadActionPresentation";
+import type { ThreadRuntimeSettings } from "./threadRuntimeSettings";
 import { promptPreview } from "../shared/text";
 
 type ThreadSource = string;
@@ -36,17 +37,26 @@ type ThreadMessageClient = {
   interruptTurn(threadId: string, turnId: string): Promise<unknown>;
   readThread?(threadId: string): Promise<Thread>;
   resumeThread(threadId: string): Promise<Thread>;
-  startThread(cwd?: string, threadSource?: ThreadSource): Promise<Thread>;
+  startThread(
+    cwd?: string,
+    threadSource?: ThreadSource,
+    settings?: ThreadRuntimeSettings,
+  ): Promise<Thread>;
   startTurn(
     threadId: string,
     text: string,
     mentions?: PendingComposerMention[],
+    settings?: ThreadRuntimeSettings,
   ): Promise<TurnStartResponse>;
   steerTurn(
     threadId: string,
     text: string,
     mentions?: PendingComposerMention[],
   ): Promise<{ turnId: string }>;
+  updateThreadSettings?(
+    threadId: string,
+    settings: ThreadRuntimeSettings,
+  ): Promise<void>;
 };
 
 export type CreateDemoThreadActionParams = {
@@ -74,6 +84,7 @@ export type CreateThreadActionParams = {
   setSidebarOpen: (open: boolean) => void;
   setThreads: ThreadListSetter;
   shouldAutoCloseSidebar: () => boolean;
+  threadSettings?: ThreadRuntimeSettings;
   threadSource?: ThreadSource;
 };
 
@@ -82,7 +93,11 @@ export type SendMessageActionParams = {
   client:
     | Pick<
         ThreadMessageClient,
-        "readThread" | "resumeThread" | "startTurn" | "steerTurn"
+        | "readThread"
+        | "resumeThread"
+        | "startTurn"
+        | "steerTurn"
+        | "updateThreadSettings"
       >
     | null
     | undefined;
@@ -105,6 +120,7 @@ export type SendMessageActionParams = {
   setSelectedThreadId: (threadId: string | null) => void;
   setThreads: ThreadListSetter;
   text: string;
+  threadSettings?: ThreadRuntimeSettings;
 };
 
 export type InterruptActiveTurnActionParams = {
@@ -179,6 +195,7 @@ export async function createThreadAction({
   setSidebarOpen,
   setThreads,
   shouldAutoCloseSidebar,
+  threadSettings,
   threadSource = "app_server",
 }: CreateThreadActionParams): Promise<Thread | null> {
   if (!isConnected) {
@@ -190,6 +207,7 @@ export async function createThreadAction({
     const thread = await client?.startThread(
       threadCwd || undefined,
       threadSource,
+      threadSettings,
     );
     if (thread) {
       setThreads((current) => upsertThread(current, thread));
@@ -230,6 +248,7 @@ export async function sendMessageAction({
   setSelectedThreadId,
   setThreads,
   text,
+  threadSettings,
 }: SendMessageActionParams): Promise<void> {
   if (isSending) {
     return;
@@ -242,6 +261,7 @@ export async function sendMessageAction({
   setIsSending(true);
   let thread = isDemoPreview ? null : selectedThread;
   let failedThreadId = selectedThreadId;
+  let createdThreadForMessage = false;
 
   try {
     if (activeTurnId && selectedThreadId && isConnected) {
@@ -266,6 +286,7 @@ export async function sendMessageAction({
 
     if (!thread) {
       thread = await createThread(text);
+      createdThreadForMessage = true;
     }
 
     if (!thread) {
@@ -301,10 +322,14 @@ export async function sendMessageAction({
 
     const turnThreadId = (resumedThread ?? activeThread).id;
     failedThreadId = turnThreadId;
+    if (threadSettings && !createdThreadForMessage) {
+      await client?.updateThreadSettings?.(turnThreadId, threadSettings);
+    }
     const response = await client?.startTurn(
       turnThreadId,
       text,
       visibleMentions,
+      threadSettings,
     );
     if (response) {
       setPendingComposerMentions([]);

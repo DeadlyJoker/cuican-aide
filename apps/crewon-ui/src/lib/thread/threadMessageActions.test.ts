@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
 import type { NoticeState } from "../shared/noticeState";
+import type { ThreadRuntimeSettings } from "./threadRuntimeSettings";
 import {
   createDemoThreadAction,
   createThreadAction,
@@ -215,12 +216,21 @@ describe("thread message actions", () => {
   it("starts a backend thread and selects it", async () => {
     const state = threadState([]);
     let sidebarOpen = true;
-    const starts: Array<{ cwd?: string; source?: string }> = [];
+    const threadSettings: ThreadRuntimeSettings = {
+      approvalPolicy: "on-failure",
+      model: "gpt-5.6-sol",
+      sandboxMode: "workspace-write",
+    };
+    const starts: Array<{
+      cwd?: string;
+      settings?: ThreadRuntimeSettings;
+      source?: string;
+    }> = [];
 
     const createdThread = await createThreadAction({
       client: {
-        async startThread(cwd, source) {
-          starts.push({ cwd, source });
+        async startThread(cwd, source, settings) {
+          starts.push({ cwd, settings, source });
           return thread({ id: "thread-created" });
         },
       },
@@ -237,10 +247,13 @@ describe("thread message actions", () => {
       },
       setThreads: state.setThreads,
       shouldAutoCloseSidebar: () => true,
+      threadSettings,
       threadSource: "agent",
     });
 
-    expect(starts).toEqual([{ cwd: "/repo", source: "agent" }]);
+    expect(starts).toEqual([
+      { cwd: "/repo", settings: threadSettings, source: "agent" },
+    ]);
     expect(createdThread?.id).toBe("thread-created");
     expect(state.threads.map((item) => item.id)).toEqual(["thread-created"]);
     expect(state.selectedThreadId).toBe("thread-created");
@@ -430,6 +443,51 @@ describe("thread message actions", () => {
     ]);
     expect(state.activeTurns).toEqual({ "thread-1": "turn-started" });
     expect(state.pendingMentions).toEqual([]);
+  });
+
+  it("updates existing thread runtime settings before starting a turn", async () => {
+    const state = threadState();
+    const threadSettings: ThreadRuntimeSettings = {
+      approvalPolicy: "never",
+      model: "gpt-5.5",
+      sandboxMode: "danger-full-access",
+    };
+    const calls: Array<{
+      method: "start" | "settings";
+      settings?: ThreadRuntimeSettings;
+      threadId: string;
+    }> = [];
+
+    await sendMessageAction(
+      baseSendParams({
+        client: {
+          async resumeThread(threadId) {
+            return thread({ id: threadId });
+          },
+          async startTurn(_threadId, _text, _mentions, settings) {
+            calls.push({ method: "start", settings, threadId: _threadId });
+            return turnStartResponse({ turn: turn({ id: "turn-started" }) });
+          },
+          async steerTurn() {
+            throw new Error("should not steer");
+          },
+          async updateThreadSettings(threadId, settings) {
+            calls.push({ method: "settings", settings, threadId });
+          },
+        },
+        setActiveTurnByThread: state.setActiveTurnByThread,
+        setIsSending: state.setIsSending,
+        setPendingComposerMentions: state.setPendingComposerMentions,
+        setSelectedThreadId: state.setSelectedThreadId,
+        setThreads: state.setThreads,
+        threadSettings,
+      }),
+    );
+
+    expect(calls).toEqual([
+      { method: "settings", settings: threadSettings, threadId: "thread-1" },
+      { method: "start", settings: threadSettings, threadId: "thread-1" },
+    ]);
   });
 
   it("filters removed slash mentions before starting a turn", async () => {

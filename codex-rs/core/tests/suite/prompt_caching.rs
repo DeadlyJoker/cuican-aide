@@ -201,17 +201,15 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
         [base_instructions, APPLY_PATCH_TOOL_INSTRUCTIONS.to_string()].join("\n")
     };
 
-    assert_eq!(
-        body0["instructions"],
-        serde_json::json!(expected_instructions),
-    );
+    let instructions0 = body0["instructions"]
+        .as_str()
+        .expect("instructions should be text");
+    assert!(instructions0.starts_with(&expected_instructions));
+    assert!(instructions0.contains("<runtime_model_identity>"));
     assert_tool_names(&body0, &expected_tools_names);
 
     let body1 = req2.single_request().body_json();
-    assert_eq!(
-        body1["instructions"],
-        serde_json::json!(expected_instructions),
-    );
+    assert_eq!(body1["instructions"], body0["instructions"]);
     assert_tool_names(&body1, &expected_tools_names);
 
     Ok(())

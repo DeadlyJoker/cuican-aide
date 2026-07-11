@@ -166,9 +166,9 @@ describe("thread settings actions", () => {
 
     expect(updates).toEqual([
       {
-        approvalPolicy: "",
+        approvalPolicy: null,
         model: "gpt-5",
-        sandboxMode: "",
+        sandboxMode: null,
       },
     ]);
     expect(busyStates).toEqual(["sidechat", null]);
