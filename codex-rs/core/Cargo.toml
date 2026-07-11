@@ -77,6 +77,7 @@ crewon-rollout = { workspace = true }
 crewon-rollout-trace = { workspace = true }
 crewon-rmcp-client = { workspace = true }
 crewon-sandboxing = { workspace = true }
+crewon-scene-runtime = { workspace = true }
 crewon-state = { workspace = true }
 crewon-terminal-detection = { workspace = true }
 crewon-thread-store = { workspace = true }

@@ -1,0 +1,6 @@
+load("//:defs.bzl", "crewon_rust_crate")
+
+crewon_rust_crate(
+    name = "scene-runtime",
+    crate_name = "crewon_scene_runtime",
+)

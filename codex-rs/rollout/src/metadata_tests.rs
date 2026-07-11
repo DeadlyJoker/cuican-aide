@@ -54,6 +54,7 @@ async fn extract_metadata_from_rollout_uses_session_meta() {
     let session_meta_line = SessionMetaLine {
         meta: session_meta,
         git: None,
+        scene_runtime: None,
     };
     let rollout_line = RolloutLine {
         timestamp: "2026-01-27T12:34:56Z".to_string(),
@@ -116,6 +117,7 @@ async fn extract_metadata_from_rollout_returns_latest_memory_mode() {
             item: RolloutItem::SessionMeta(SessionMetaLine {
                 meta: session_meta,
                 git: None,
+                scene_runtime: None,
             }),
         },
         RolloutLine {
@@ -123,6 +125,7 @@ async fn extract_metadata_from_rollout_returns_latest_memory_mode() {
             item: RolloutItem::SessionMeta(SessionMetaLine {
                 meta: polluted_meta,
                 git: None,
+                scene_runtime: None,
             }),
         },
     ];
@@ -372,6 +375,7 @@ fn write_rollout_in_sessions_with_cwd(
     let session_meta_line = SessionMetaLine {
         meta: session_meta,
         git,
+        scene_runtime: None,
     };
     let rollout_line = RolloutLine {
         timestamp: event_ts.to_string(),

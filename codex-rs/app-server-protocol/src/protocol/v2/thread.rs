@@ -159,6 +159,10 @@ pub struct ThreadStartParams {
     #[experimental("thread/start.selectedCapabilityRoots")]
     #[ts(optional = nullable)]
     pub selected_capability_roots: Option<Vec<SelectedCapabilityRoot>>,
+    /// Server-resolved scene and execution target for the new thread.
+    #[experimental("thread/start.scene")]
+    #[ts(optional = nullable)]
+    pub scene: Option<super::ThreadSceneSelectionParams>,
     /// Test-only experimental field used to validate experimental gating and
     /// schema filtering behavior in a stable way.
     #[experimental("thread/start.mockExperimentalField")]
@@ -218,6 +222,10 @@ pub struct ThreadStartResponse {
     #[serde(default)]
     pub active_permission_profile: Option<ActivePermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Server-resolved scene identity persisted with this thread.
+    #[experimental("thread/start.sceneRuntime")]
+    #[serde(default)]
+    pub scene_runtime: Option<super::ThreadSceneRuntime>,
 }
 
 #[derive(
@@ -432,6 +440,10 @@ pub struct ThreadResumeResponse {
     #[serde(default)]
     pub active_permission_profile: Option<ActivePermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Server-resolved scene identity restored with this thread.
+    #[experimental("thread/resume.sceneRuntime")]
+    #[serde(default)]
+    pub scene_runtime: Option<super::ThreadSceneRuntime>,
     /// `thread/turns/list` page returned when requested by `initialTurnsPage`.
     #[experimental("thread/resume.initialTurnsPage")]
     #[serde(default)]
@@ -580,6 +592,10 @@ pub struct ThreadForkResponse {
     #[serde(default)]
     pub active_permission_profile: Option<ActivePermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Server-resolved scene identity inherited by the fork.
+    #[experimental("thread/fork.sceneRuntime")]
+    #[serde(default)]
+    pub scene_runtime: Option<super::ThreadSceneRuntime>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

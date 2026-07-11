@@ -102,6 +102,7 @@ async fn state_db_init_backfills_before_returning() -> anyhow::Result<()> {
             multi_agent_version: None,
         },
         git: None,
+        scene_runtime: None,
     };
     let lines = [
         RolloutLine {

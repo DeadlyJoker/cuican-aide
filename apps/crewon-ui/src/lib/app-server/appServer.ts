@@ -511,6 +511,21 @@ function sandboxPolicyFromMode(mode: string): SandboxPolicy | null {
   return null;
 }
 
+function collaborationModeFromSettings(settings: ThreadRuntimeSettings) {
+  const model = settings.model?.trim();
+  if (!model) {
+    return undefined;
+  }
+  return {
+    mode: settings.executionIntent === "plan" ? "plan" : "default",
+    settings: {
+      model,
+      reasoning_effort: null,
+      developer_instructions: null,
+    },
+  };
+}
+
 function textToBase64(text: string): string {
   const bytes = new TextEncoder().encode(text);
   let binary = "";
@@ -915,6 +930,7 @@ export class AppServerClient {
       cwd: cwd || undefined,
       model: settings.model || undefined,
       sandbox: settings.sandboxMode ?? undefined,
+      scene: settings.scene,
       threadSource,
     });
     return response.thread;
@@ -987,11 +1003,7 @@ export class AppServerClient {
 
   async updateThreadSettings(
     threadId: string,
-    settings: {
-      model?: string | null;
-      approvalPolicy?: AskForApproval | null;
-      sandboxMode?: SandboxMode | null;
-    },
+    settings: ThreadRuntimeSettings,
   ): Promise<void> {
     const sandboxPolicy = settings.sandboxMode
       ? sandboxPolicyFromMode(settings.sandboxMode)
@@ -1001,6 +1013,7 @@ export class AppServerClient {
       model: settings.model || null,
       approvalPolicy: (settings.approvalPolicy ||
         null) as AskForApproval | null,
+      collaborationMode: collaborationModeFromSettings(settings),
       sandboxPolicy,
     });
   }
@@ -1057,6 +1070,7 @@ export class AppServerClient {
       "turn/start",
       {
         approvalPolicy: settings.approvalPolicy ?? undefined,
+        collaborationMode: collaborationModeFromSettings(settings),
         input: turnInputFromComposer(text, mentions),
         model: settings.model || undefined,
         sandboxPolicy: sandboxPolicy ?? undefined,

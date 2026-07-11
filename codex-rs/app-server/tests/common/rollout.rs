@@ -199,6 +199,7 @@ fn create_fake_rollout_with_source_and_parent_thread_id(
     let payload = serde_json::to_value(SessionMetaLine {
         meta,
         git: git_info,
+        scene_runtime: None,
     })?;
 
     let lines = [
@@ -285,6 +286,7 @@ pub fn create_fake_rollout_with_text_elements(
     let payload = serde_json::to_value(SessionMetaLine {
         meta,
         git: git_info,
+        scene_runtime: None,
     })?;
 
     let lines = [

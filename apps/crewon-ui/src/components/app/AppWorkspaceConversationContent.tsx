@@ -85,6 +85,7 @@ export function AppWorkspaceConversationContent({
         onModeChange={onModeChange}
         onRetryConnection={onRetryConnection}
         onSend={onSend}
+        onSendNewThread={onSend}
         onSlashCommandSelect={onSlashCommandSelect}
       />
     );

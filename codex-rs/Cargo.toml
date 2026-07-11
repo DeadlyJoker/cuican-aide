@@ -70,6 +70,7 @@ members = [
     "rollout-trace",
     "rmcp-client",
     "response-debug-context",
+    "scene-runtime",
     "sandboxing",
     "crewon-otel",
     "crewon-tools",
@@ -188,6 +189,7 @@ crewon-model-provider = { path = "model-provider" }
 crewon-process-hardening = { path = "process-hardening" }
 crewon-protocol = { path = "crewon-protocol" }
 crewon-realtime-webrtc = { path = "realtime-webrtc" }
+crewon-scene-runtime = { path = "scene-runtime" }
 crewon-prompts = { path = "prompts" }
 crewon-response-debug-context = { path = "response-debug-context" }
 crewon-rmcp-client = { path = "rmcp-client" }

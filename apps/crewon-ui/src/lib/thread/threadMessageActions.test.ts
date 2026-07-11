@@ -490,6 +490,72 @@ describe("thread message actions", () => {
     ]);
   });
 
+  it("sets a persistent goal before starting a goal turn", async () => {
+    const state = threadState();
+    const calls: string[] = [];
+
+    await sendMessageAction(
+      baseSendParams({
+        client: {
+          async resumeThread(threadId) {
+            return thread({ id: threadId });
+          },
+          async setThreadGoal(threadId, objective, tokenBudget) {
+            calls.push(`goal:${threadId}:${objective}:${tokenBudget}`);
+          },
+          async startTurn(threadId) {
+            calls.push(`start:${threadId}`);
+            return turnStartResponse({ turn: turn({ id: "turn-started" }) });
+          },
+          async steerTurn() {
+            throw new Error("should not steer");
+          },
+          async updateThreadSettings() {},
+        },
+        setActiveTurnByThread: state.setActiveTurnByThread,
+        setIsSending: state.setIsSending,
+        setPendingComposerMentions: state.setPendingComposerMentions,
+        setThreads: state.setThreads,
+        threadSettings: { executionIntent: "goal" },
+      }),
+    );
+
+    expect(calls).toEqual(["goal:thread-1:Hello:null", "start:thread-1"]);
+  });
+
+  it("clears an existing goal before starting a plan turn", async () => {
+    const state = threadState();
+    const calls: string[] = [];
+
+    await sendMessageAction(
+      baseSendParams({
+        client: {
+          async clearThreadGoal(threadId) {
+            calls.push(`clear:${threadId}`);
+          },
+          async resumeThread(threadId) {
+            return thread({ id: threadId });
+          },
+          async startTurn(threadId) {
+            calls.push(`start:${threadId}`);
+            return turnStartResponse({ turn: turn({ id: "turn-started" }) });
+          },
+          async steerTurn() {
+            throw new Error("should not steer");
+          },
+          async updateThreadSettings() {},
+        },
+        setActiveTurnByThread: state.setActiveTurnByThread,
+        setIsSending: state.setIsSending,
+        setPendingComposerMentions: state.setPendingComposerMentions,
+        setThreads: state.setThreads,
+        threadSettings: { executionIntent: "plan" },
+      }),
+    );
+
+    expect(calls).toEqual(["clear:thread-1", "start:thread-1"]);
+  });
+
   it("filters removed slash mentions before starting a turn", async () => {
     const state = threadState();
     const startCalls: Array<{
@@ -579,7 +645,9 @@ describe("thread message actions", () => {
       items: [
         {
           type: "userMessage",
-          content: [{ type: "text", text: "Keep this text", text_elements: [] }],
+          content: [
+            { type: "text", text: "Keep this text", text_elements: [] },
+          ],
         },
       ],
     });

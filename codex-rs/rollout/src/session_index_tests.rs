@@ -44,6 +44,7 @@ fn write_rollout_with_metadata(path: &Path, thread_id: ThreadId) -> std::io::Res
                 multi_agent_version: None,
             },
             git: None,
+            scene_runtime: None,
         }),
     };
     let body = serde_json::to_string(&line).map_err(std::io::Error::other)?;

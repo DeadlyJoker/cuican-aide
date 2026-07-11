@@ -25,6 +25,10 @@ pub(super) async fn create_thread(
         model_provider_id: params.metadata.model_provider.clone(),
         generate_memories: matches!(params.metadata.memory_mode, ThreadMemoryMode::Enabled),
     };
+    let scene_runtime = params
+        .extra_config
+        .as_ref()
+        .and_then(|extra| extra.scene_runtime.clone());
     let recorder = RolloutRecorder::new(
         &config,
         RolloutRecorderParams::new(
@@ -36,7 +40,8 @@ pub(super) async fn create_thread(
             params.base_instructions,
             params.dynamic_tools,
         )
-        .with_multi_agent_version(params.multi_agent_version),
+        .with_multi_agent_version(params.multi_agent_version)
+        .with_scene_runtime(scene_runtime),
     )
     .await
     .map_err(|err| ThreadStoreError::Internal {

@@ -9,12 +9,14 @@ import {
   commandComposerKeyIntent,
   CommandWorkspace,
   insertTokenIntoComposerValue,
+  nextExecutionIntent,
   selectCommandHomeSlots,
   setDefaultTeamOfficePreview,
   setActiveFilter,
+  shouldCloseComposerPalette,
   syncDesignFilterState,
 } from "./CommandWorkspace";
-import { ResourceDock } from "./CommandWorkspaceChrome";
+import { Palette, ResourceDock } from "./CommandWorkspaceChrome";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 
@@ -208,12 +210,16 @@ describe("CommandWorkspace", () => {
     };
 
     expect(commandComposerKeyIntent(baseEvent)).toBe("send");
-    expect(commandComposerKeyIntent({ ...baseEvent, shiftKey: true })).toBeNull();
+    expect(
+      commandComposerKeyIntent({ ...baseEvent, shiftKey: true }),
+    ).toBeNull();
     expect(commandComposerKeyIntent({ ...baseEvent, altKey: true })).toBeNull();
     expect(commandComposerKeyIntent({ ...baseEvent, ctrlKey: true })).toBe(
       "send",
     );
-    expect(commandComposerKeyIntent({ ...baseEvent, isComposing: true })).toBeNull();
+    expect(
+      commandComposerKeyIntent({ ...baseEvent, isComposing: true }),
+    ).toBeNull();
     expect(
       commandComposerKeyIntent({ ...baseEvent, hasOpenPalette: true }),
     ).toBeNull();
@@ -243,16 +249,48 @@ describe("CommandWorkspace", () => {
     ).toBeNull();
   });
 
-  it("renders the original desktop command shell and clean Chinese copy", () => {
+  it("renders the three-scene command shell and clean Chinese copy", () => {
     const markup = renderCommandWorkspace();
 
     expect(markup).toContain('class="desktop-window command-window"');
     expect(markup).toContain('class="command-sidebar"');
     expect(markup).toContain('class="command-canvas"');
     expect(markup).toContain('class="shell-view command-home-view active"');
-    expect(markup).toContain("\u521b\u5efa\u53ef\u7f16\u6392\u7684 Agent \u5c0f\u961f");
-    expect(markup).toContain("\u4f8b\u5982\uff1a\u6574\u7406\u4eca\u5929\u7684\u9879\u76ee\u4e8b\u9879");
+    expect(markup).toContain("让 CrewON 完成你的工作");
+    expect(markup).toContain("整理、撰写和推进你的工作");
+    expect(markup).toContain(
+      "例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库",
+    );
+    expect(markup).toContain(">CrewON</strong>");
+    expect(markup).toContain("本地自动");
+    expect(markup).toContain('aria-label="执行主体"');
+    expect(markup).not.toContain("执行主体：");
+    expect(markup).not.toContain('data-od-id="workspace-pill"');
+    expect(markup).not.toContain("任务方式");
+    expect(markup).not.toContain("核心上下文");
+    expect(markup).not.toContain("默认交付");
+    expect(markup).toContain("暂无可选智能体或小队");
+    expect(markup).not.toContain("创建可编排的 Agent 小队");
     expect(markup).not.toContain("????");
+  });
+
+  it("snapshots the default command-home landmarks", () => {
+    const markup = renderCommandWorkspace();
+    const visibleText = (pattern: RegExp) =>
+      Array.from(markup.matchAll(pattern), (match) => match[1]);
+
+    expect({
+      capability: visibleText(/data-scene-capabilities="">([^<]+)/g),
+      executionTargets: visibleText(
+        /data-value="(?:crewon|team:[^"]+)"[^>]*><span><strong>([^<]+)/g,
+      ),
+      hero: visibleText(/<h1>([^<]+)<\/h1>/g),
+      quickActions: visibleText(/data-scene="office" type="button">([^<]+)/g),
+      sceneTabs: visibleText(/data-scene-target="[^"]+"[^>]*>\s*([^<]+)/g),
+      executionIntents: visibleText(
+        /data-execution-intent="[^"]+"[^>]*>\s*<svg[^>]*>.*?<\/svg>\s*<span>([^<]+)/gs,
+      ),
+    }).toMatchSnapshot();
   });
 
   it("renders only real workspaces and conversations in the sidebar", () => {
@@ -270,21 +308,160 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain('data-od-id="workspace-node-product"');
   });
 
-  it("keeps only the original visible composer actions and hidden palette hooks", () => {
+  it("keeps only execution-relevant composer controls and hidden palette hooks", () => {
     const markup = renderCommandWorkspace();
+    const commandHomeMarkup = markup.slice(
+      markup.indexOf('data-shell-view="command"'),
+      markup.indexOf('data-shell-view="assist"'),
+    );
 
-    expect(markup).toContain('class="icon-action prompt-action"');
-    expect(markup).toContain('aria-label="\u8bed\u97f3\u8f93\u5165"');
-    expect(markup).toContain('class="send-button"');
-    expect(markup).toContain('data-context-open=""');
-    expect(markup).toContain('data-slash-open=""');
-    expect(markup).toContain("gpt-5.6-sol");
-    expect(markup).toContain("gpt-5.5");
-    expect(markup).toContain('data-value="gpt-5.6-sol"');
-    expect(markup).not.toContain("自动选择");
-    expect(markup).not.toContain("快速模型");
-    expect(markup).not.toContain('class="icon-action context-trigger"');
-    expect(markup).not.toContain('class="icon-action slash-trigger"');
+    expect(commandHomeMarkup).toContain(
+      'class="icon-action composer-plus-action"',
+    );
+    expect(commandHomeMarkup).toContain('aria-label="添加上下文"');
+    expect(commandHomeMarkup).toContain('aria-label="权限选择"');
+    expect(commandHomeMarkup).toContain('aria-label="执行意图"');
+    expect(commandHomeMarkup).toContain('data-execution-intent="goal"');
+    expect(commandHomeMarkup).toContain('data-execution-intent="plan"');
+    expect(commandHomeMarkup).toMatch(
+      /aria-pressed="false"[^>]+data-execution-intent="goal"/,
+    );
+    expect(commandHomeMarkup).toMatch(
+      /aria-pressed="false"[^>]+data-execution-intent="plan"/,
+    );
+    expect(commandHomeMarkup).toContain("添加文件、知识库、Skill 或 MCP");
+    expect(commandHomeMarkup).toContain("文件和文件夹");
+    const addPanelMarkup = commandHomeMarkup.slice(
+      commandHomeMarkup.indexOf('id="add-search-panel"'),
+      commandHomeMarkup.indexOf('id="context-search-panel"'),
+    );
+    expect(addPanelMarkup).toContain('class="add-palette-group"');
+    expect(addPanelMarkup).toContain('class="add-palette-group-label">文件');
+    expect(addPanelMarkup).not.toContain(">工作空间<");
+    expect(commandHomeMarkup).toContain('aria-label="执行主体"');
+    expect(commandHomeMarkup).toContain('aria-label="模型选择"');
+    expect(commandHomeMarkup).toContain('class="send-button"');
+    expect(commandHomeMarkup).toContain('data-context-open=""');
+    expect(commandHomeMarkup).toContain('data-slash-open=""');
+    expect(commandHomeMarkup).toContain("gpt-5.6-sol");
+    expect(commandHomeMarkup).toContain("gpt-5.5");
+    expect(commandHomeMarkup).toContain('data-value="gpt-5.6-sol"');
+    expect(commandHomeMarkup).not.toContain('aria-label="任务类型"');
+    expect(commandHomeMarkup).not.toContain('aria-label="优化提示词"');
+    expect(commandHomeMarkup).not.toContain('aria-label="搜索资源"');
+    expect(commandHomeMarkup).not.toContain('aria-label="语音输入"');
+  });
+
+  it("toggles goal and plan as an optional mutually exclusive intent", () => {
+    expect(nextExecutionIntent("none", "goal")).toBe("goal");
+    expect(nextExecutionIntent("goal", "goal")).toBe("none");
+    expect(nextExecutionIntent("goal", "plan")).toBe("plan");
+    expect(nextExecutionIntent("plan", "goal")).toBe("goal");
+    expect(nextExecutionIntent("plan", "plan")).toBe("none");
+  });
+
+  it("closes composer palettes only for outside pointer targets", () => {
+    const paletteTarget = {} as Node;
+    const triggerTarget = {} as Node;
+    const outsideTarget = {} as Node;
+    const paletteRoot = {
+      contains: (target: Node) => target === paletteTarget,
+    };
+    const trigger = {
+      contains: (target: Node) => target === triggerTarget,
+    };
+
+    expect(
+      shouldCloseComposerPalette({
+        paletteRoots: [paletteRoot],
+        target: paletteTarget,
+        triggers: [trigger],
+      }),
+    ).toBe(false);
+    expect(
+      shouldCloseComposerPalette({
+        paletteRoots: [paletteRoot],
+        target: triggerTarget,
+        triggers: [trigger],
+      }),
+    ).toBe(false);
+    expect(
+      shouldCloseComposerPalette({
+        paletteRoots: [paletteRoot],
+        target: outsideTarget,
+        triggers: [trigger],
+      }),
+    ).toBe(true);
+  });
+
+  it("groups add-menu resource types with visible separators", () => {
+    const markup = renderToStaticMarkup(
+      <Palette
+        id="add-menu"
+        inputId="add-menu-search"
+        items={[
+          {
+            detail: "选择本地内容",
+            kind: "file",
+            label: "文件",
+            title: "文件和文件夹",
+          },
+          {
+            detail: "引用知识",
+            kind: "knowledge",
+            label: "知识库",
+            title: "产品知识",
+          },
+          {
+            detail: "检查页面",
+            kind: "skill",
+            label: "Skill",
+            title: "页面审阅",
+          },
+          {
+            detail: "访问文件",
+            kind: "mcp",
+            label: "MCP",
+            title: "Filesystem",
+          },
+        ]}
+        kind="add"
+        open
+        placeholder="添加资源"
+        query=""
+        onClose={() => undefined}
+        onQueryChange={() => undefined}
+        onSelect={() => undefined}
+      />,
+    );
+
+    expect(markup.match(/class="add-palette-group"/g)).toHaveLength(4);
+    expect(markup).toContain('class="add-palette-group-label">文件');
+    expect(markup).toContain('class="add-palette-group-label">知识库');
+    expect(markup).toContain('class="add-palette-group-label">Skill');
+    expect(markup).toContain('class="add-palette-group-label">MCP');
+  });
+
+  it("uses a compact connection light instead of visible connection copy", () => {
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('class="connection-indicator"');
+    expect(markup).toContain('data-state="connected"');
+    expect(markup).toContain('aria-label="App Server 已连接"');
+    expect(markup).not.toContain('class="composer-state connection-state"');
   });
 
   it("renders shell views for sidebar navigation", () => {
@@ -311,7 +488,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("\u529e\u516c\u5ba4");
   });
 
-  it("labels agent-platform fallback without implying app-server is down", () => {
+  it("hides the optional resource dock when agent-platform is unavailable", () => {
     const markup = renderToStaticMarkup(
       <ResourceDock
         platformState="fallback"
@@ -319,16 +496,52 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain("可选资源服务未启动，对话后端可用");
-    expect(markup).not.toContain("资源服务未连接");
+    expect(markup).toBe("");
+  });
+
+  it("keeps workspaces from existing conversations visible when another workspace is active", () => {
+    const originalWorkspaceThread = {
+      cwd: "/repo/original-workspace",
+      id: "thread-original-workspace",
+      name: "Original workspace conversation",
+      preview: "Conversation from the original workspace",
+      updatedAt: Math.floor(Date.now() / 1000),
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/current-workspace"
+        isSending={false}
+        linkedThreads={[originalWorkspaceThread]}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("current-workspace");
+    expect(markup).toContain("original-workspace");
+    expect(markup).toContain('aria-label="切换到工作空间 original-workspace"');
+    expect(markup).toContain(
+      'data-linked-thread-id="thread-original-workspace"',
+    );
   });
 
   it("includes original schedule modal and filter landmarks", () => {
     const markup = renderCommandWorkspace();
 
     expect(markup).toContain('data-shell-view="schedule"');
-    expect(markup).toContain('data-filter-group="schedule-mode" data-filter="calendar"');
-    expect(markup).toContain('data-filter-group="schedule-source" data-filter="teamflow"');
+    expect(markup).toContain(
+      'data-filter-group="schedule-mode" data-filter="calendar"',
+    );
+    expect(markup).toContain(
+      'data-filter-group="schedule-source" data-filter="teamflow"',
+    );
     expect(markup).toContain('data-od-id="schedule-calendar-team"');
     expect(markup).toContain('data-od-id="schedule-arrangement-catalog"');
     expect(markup).toContain('id="schedule-arrangement-modal"');
@@ -434,7 +647,9 @@ describe("CommandWorkspace", () => {
     );
 
     expect(markup).toContain("无工作空间");
-    expect(markup).toContain('aria-controls="standalone-workspace-thread-list"');
+    expect(markup).toContain(
+      'aria-controls="standalone-workspace-thread-list"',
+    );
     expect(markup).toContain('id="standalone-workspace-thread-list"');
     expect(markup).toContain('data-linked-thread-id="thread-standalone-1"');
     expect(markup).toContain("Standalone conversation");
@@ -839,22 +1054,40 @@ describe("CommandWorkspace", () => {
     `;
 
     syncDesignFilterState(scope);
-    expect(scope.querySelector<HTMLElement>('[data-card="team-calendar"]')?.hidden).toBe(false);
-    expect(scope.querySelector<HTMLElement>('[data-card="personal-calendar"]')?.hidden).toBe(true);
-    expect(scope.querySelector<HTMLElement>('[data-card="personal-arrangement"]')?.hidden).toBe(
-      true,
-    );
-    expect(scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')?.hidden).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-calendar"]')?.hidden,
+    ).toBe(false);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="personal-calendar"]')
+        ?.hidden,
+    ).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="personal-arrangement"]')
+        ?.hidden,
+    ).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')
+        ?.hidden,
+    ).toBe(true);
 
     setActiveFilter(scope, "schedule-mode", "arrangement");
-    expect(scope.querySelector<HTMLElement>('[data-card="team-calendar"]')?.hidden).toBe(true);
-    expect(scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')?.hidden).toBe(false);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-calendar"]')?.hidden,
+    ).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')
+        ?.hidden,
+    ).toBe(false);
 
     setActiveFilter(scope, "schedule-source", "personal");
-    expect(scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')?.hidden).toBe(true);
-    expect(scope.querySelector<HTMLElement>('[data-card="personal-arrangement"]')?.hidden).toBe(
-      false,
-    );
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')
+        ?.hidden,
+    ).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="personal-arrangement"]')
+        ?.hidden,
+    ).toBe(false);
   });
 
   it("applies catalog search on top of active filters", () => {
@@ -870,8 +1103,12 @@ describe("CommandWorkspace", () => {
     `;
 
     applyDesignCardVisibility(scope);
-    expect(scope.querySelectorAll<HTMLElement>("[data-card-filter]")[0]?.hidden).toBe(false);
-    expect(scope.querySelectorAll<HTMLElement>("[data-card-filter]")[1]?.hidden).toBe(true);
+    expect(
+      scope.querySelectorAll<HTMLElement>("[data-card-filter]")[0]?.hidden,
+    ).toBe(false);
+    expect(
+      scope.querySelectorAll<HTMLElement>("[data-card-filter]")[1]?.hidden,
+    ).toBe(true);
   });
 
   it("resets team page to the original office list state without showing inline rooms", () => {
@@ -902,16 +1139,38 @@ describe("CommandWorkspace", () => {
 
     setDefaultTeamOfficePreview(view);
 
-    expect(view.querySelector<HTMLElement>("[data-office-list]")?.hidden).toBe(false);
-    expect(view.querySelector<HTMLElement>("[data-office-room]")?.hidden).toBe(true);
-    expect(view.querySelector<HTMLElement>("[data-workflow-list]")?.hidden).toBe(false);
-    expect(view.querySelector<HTMLElement>("[data-workflow-room]")?.hidden).toBe(true);
-    expect(view.querySelector<HTMLElement>("[data-office-shell]")?.classList.contains("is-room-open")).toBe(false);
-    expect(view.querySelector<HTMLElement>("[data-workflow-shell]")?.classList.contains("is-room-open")).toBe(false);
+    expect(view.querySelector<HTMLElement>("[data-office-list]")?.hidden).toBe(
+      false,
+    );
+    expect(view.querySelector<HTMLElement>("[data-office-room]")?.hidden).toBe(
+      true,
+    );
+    expect(
+      view.querySelector<HTMLElement>("[data-workflow-list]")?.hidden,
+    ).toBe(false);
+    expect(
+      view.querySelector<HTMLElement>("[data-workflow-room]")?.hidden,
+    ).toBe(true);
+    expect(
+      view
+        .querySelector<HTMLElement>("[data-office-shell]")
+        ?.classList.contains("is-room-open"),
+    ).toBe(false);
+    expect(
+      view
+        .querySelector<HTMLElement>("[data-workflow-shell]")
+        ?.classList.contains("is-room-open"),
+    ).toBe(false);
     expect(view.classList.contains("office-room-active")).toBe(false);
     expect(view.classList.contains("workflow-room-active")).toBe(false);
-    expect(view.querySelector<HTMLElement>('[data-office-drawer="members"]')?.hidden).toBe(true);
-    expect(view.querySelector<HTMLElement>("[data-office-drawer-open]")?.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      view.querySelector<HTMLElement>('[data-office-drawer="members"]')?.hidden,
+    ).toBe(true);
+    expect(
+      view
+        .querySelector<HTMLElement>("[data-office-drawer-open]")
+        ?.getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 
   it("switches room tab panels like the original design runtime", () => {
@@ -928,19 +1187,32 @@ describe("CommandWorkspace", () => {
       <section id="run" data-tab-panel hidden></section>
       <section id="memory" data-tab-panel hidden></section>
     `;
-    const runTab = scope.querySelector<HTMLButtonElement>('[data-tab-target="#run"]');
+    const runTab = scope.querySelector<HTMLButtonElement>(
+      '[data-tab-target="#run"]',
+    );
     expect(runTab).not.toBeNull();
 
     if (runTab) {
       activateDesignPanelTab(runTab, scope);
     }
 
-    expect(scope.querySelector<HTMLElement>('[data-tab-target="#chat"]')?.classList.contains("active")).toBe(false);
-    expect(scope.querySelector<HTMLElement>('[data-tab-target="#run"]')?.classList.contains("active")).toBe(true);
-    expect(scope.querySelector<HTMLElement>('[data-tab-target="#run"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(
+      scope
+        .querySelector<HTMLElement>('[data-tab-target="#chat"]')
+        ?.classList.contains("active"),
+    ).toBe(false);
+    expect(
+      scope
+        .querySelector<HTMLElement>('[data-tab-target="#run"]')
+        ?.classList.contains("active"),
+    ).toBe(true);
+    expect(
+      scope
+        .querySelector<HTMLElement>('[data-tab-target="#run"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
     expect(scope.querySelector<HTMLElement>("#chat")?.hidden).toBe(true);
     expect(scope.querySelector<HTMLElement>("#run")?.hidden).toBe(false);
     expect(scope.querySelector<HTMLElement>("#memory")?.hidden).toBe(true);
   });
-
 });

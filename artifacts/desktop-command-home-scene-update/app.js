@@ -320,11 +320,11 @@
             <kbd>⌘K</kbd>
           </div>
           <div class="sidebar-search-results" role="listbox" aria-label="搜索结果">
-            <button class="sidebar-search-result" type="button" data-search-result data-search-keywords="Agent 小队交付空间 workspace 当前空间 agent team delivery" data-search-status-zh="已定位到 Agent 小队交付空间" data-search-status-en="Located Agent team delivery space">
-              <span><strong data-zh="Agent 小队交付空间" data-en="Agent team delivery">Agent 小队交付空间</strong><small data-zh="当前空间" data-en="Current space">当前空间</small></span><em>Space</em>
+            <button class="sidebar-search-result" type="button" data-search-result data-search-keywords="CrewON 工作空间 workspace 当前空间 scenes" data-search-status-zh="已定位到 CrewON 工作空间" data-search-status-en="Located CrewON workspace">
+              <span><strong data-zh="CrewON 工作空间" data-en="CrewON workspace">CrewON 工作空间</strong><small data-zh="当前空间" data-en="Current space">当前空间</small></span><em>Space</em>
             </button>
-            <button class="sidebar-search-result" type="button" data-search-result data-search-keywords="小队创建草稿 conversation team setup" data-search-status-zh="已定位到小队创建草稿会话" data-search-status-en="Located team setup draft conversation">
-              <span><strong data-zh="小队创建草稿" data-en="Team setup draft">小队创建草稿</strong><small data-zh="Agent 小队交付空间" data-en="Agent team delivery">Agent 小队交付空间</small></span><em>Chat</em>
+            <button class="sidebar-search-result" type="button" data-search-result data-search-keywords="三场景设计 conversation scene design" data-search-status-zh="已定位到三场景设计会话" data-search-status-en="Located scene design conversation">
+              <span><strong data-zh="三场景设计" data-en="Three-scene design">三场景设计</strong><small data-zh="CrewON 工作空间" data-en="CrewON workspace">CrewON 工作空间</small></span><em>Chat</em>
             </button>
             <button class="sidebar-search-result" type="button" data-search-result data-search-keywords="Skill MCP 能力空间 tool capability schema sandbox" data-search-status-zh="已定位到 Skill/MCP 能力空间" data-search-status-en="Located Skill/MCP capability space">
               <span><strong data-zh="Skill/MCP 能力空间" data-en="Skill/MCP capability">Skill/MCP 能力空间</strong><small>Schema · Sandbox</small></span><em>Space</em>
@@ -351,10 +351,10 @@
             <button class="tree-add" type="button" aria-label="新建空间" ${runAttrs(logTarget, "新建空间", "New space", "已准备新建空间，可继续填写名称与成员。", "New space is ready for a name and members.", "准备新建空间", "New space ready")}>+</button>
           </div>
           <div class="space-node current" data-od-id="workspace-node-product">
-            <button class="space-title" type="button" ${runAttrs(logTarget, "Agent 小队交付空间", "Agent team delivery space", "Agent 小队交付空间包含 3 个会话：小队创建草稿、Workflow Gate、交付验收清单。", "Agent team delivery space contains 3 conversations: team setup draft, Workflow Gate, delivery checklist.", "已切换到 Agent 小队交付空间", "Agent team delivery selected")}><span aria-hidden="true">⌄</span><strong data-zh="Agent 小队交付空间" data-en="Agent team delivery">Agent 小队交付空间</strong></button>
+            <button class="space-title" type="button" ${runAttrs(logTarget, "CrewON 工作空间", "CrewON workspace", "CrewON 工作空间包含三场景设计、运行时合同和交付验收清单。", "CrewON workspace contains scene design, runtime contract, and delivery checklist conversations.", "已切换到 CrewON 工作空间", "CrewON workspace selected")}><span aria-hidden="true">⌄</span><strong data-zh="CrewON 工作空间" data-en="CrewON workspace">CrewON 工作空间</strong></button>
             <div class="conversation-list">
-              <button class="conversation-item active" type="button" ${runAttrs(logTarget, "小队创建草稿", "Team setup draft", "已打开小队创建草稿会话。", "Opened Team setup draft conversation.", "已打开会话", "Conversation opened")} data-zh="小队创建草稿" data-en="Team setup draft">小队创建草稿</button>
-              <button class="conversation-item" type="button" ${runAttrs(logTarget, "Workflow Gate", "Workflow Gate", "Workflow Gate 会话已准备继续编辑。", "Workflow Gate conversation is ready to continue.", "已打开会话", "Conversation opened")} data-zh="Workflow Gate" data-en="Workflow Gate">Workflow Gate</button>
+              <button class="conversation-item active" type="button" ${runAttrs(logTarget, "三场景设计", "Three-scene design", "已打开三场景设计会话。", "Opened the three-scene design conversation.", "已打开会话", "Conversation opened")} data-zh="三场景设计" data-en="Three-scene design">三场景设计</button>
+              <button class="conversation-item" type="button" ${runAttrs(logTarget, "运行时合同", "Runtime contract", "运行时合同会话已准备继续编辑。", "Runtime contract conversation is ready to continue.", "已打开会话", "Conversation opened")} data-zh="运行时合同" data-en="Runtime contract">运行时合同</button>
               <button class="conversation-item" type="button" ${runAttrs(logTarget, "交付验收清单", "Delivery checklist", "交付验收清单会话已准备继续编辑。", "Delivery checklist conversation is ready to continue.", "已打开会话", "Conversation opened")} data-zh="交付验收清单" data-en="Delivery checklist">交付验收清单</button>
             </div>
           </div>
@@ -574,13 +574,13 @@
   }
 
   function setupComposerControls() {
-    const modeSelect = document.querySelector("[data-task-mode]");
-    const modelSelect = document.querySelector("[data-model-select]");
-    const permissionSelect = document.querySelector("[data-permission-select]");
-    const agentMenu = document.querySelector("[data-agent-menu]");
-    const agentSelect = document.querySelector("[data-agent-select]");
-    const workspaceSelect = document.querySelector("[data-workspace-select]");
-    const composer = document.querySelector("[data-composer]");
+    const primaryRoot = document.querySelector(".command-home-view .command-input");
+    const modeSelect = primaryRoot?.querySelector("[data-task-mode]");
+    const modelSelect = primaryRoot?.querySelector("[data-model-select]");
+    const permissionSelect = primaryRoot?.querySelector("[data-permission-select]");
+    const executionTargetSelect = primaryRoot?.querySelector("[data-execution-target-select]");
+    const workspaceSelect = primaryRoot?.querySelector("[data-workspace-select]");
+    const composer = primaryRoot?.querySelector("[data-composer]");
 
     function setupEnhancedSelect(select) {
       const wrap = select.closest(".control-select, .workspace-picker");
@@ -606,6 +606,8 @@
         item.dataset.value = option.value;
         if (option.dataset.zh) item.dataset.zh = option.dataset.zh;
         if (option.dataset.en) item.dataset.en = option.dataset.en;
+        if (option.dataset.scenes) item.dataset.scenes = option.dataset.scenes;
+        if (option.dataset.strategy) item.dataset.strategy = option.dataset.strategy;
         item.setAttribute("role", "option");
         menu.appendChild(item);
       });
@@ -642,6 +644,7 @@
         Array.from(menu.querySelectorAll(".select-option")).forEach((item) => {
           const option = Array.from(select.options).find((entry) => entry.value === item.dataset.value);
           item.textContent = copyForOption(option);
+          item.hidden = option?.hidden || false;
           item.setAttribute("aria-selected", item.dataset.value === select.value ? "true" : "false");
         });
       }
@@ -693,7 +696,7 @@
     const enhancedSelects = new Set([
       modeSelect,
       modelSelect,
-      agentSelect,
+      executionTargetSelect,
       permissionSelect,
       workspaceSelect,
       ...document.querySelectorAll(".control-select select, .workspace-picker select")
@@ -704,47 +707,40 @@
 
     if (modeSelect) {
       const modeCopy = {
-        plan: {
-          zh: "计划模式会先生成 Workflow、风险和 Gate。",
-          en: "Plan mode drafts Workflow, risks, and gates first.",
-          placeholderZh: "把这个需求拆成 Workflow 节点、角色分工和 Stage Gate。@ 引用上下文，/ 搜索 Skill 和 MCP。",
-          placeholderEn: "Turn this into Workflow nodes, role split, and Stage Gates. @ context, / search Skills and MCP."
-        },
-        goal: {
-          zh: "目标模式会先确认交付结果，再反推小队配置。",
-          en: "Goal mode defines the outcome first, then derives team setup.",
-          placeholderZh: "我的目标是... 请帮我反推 Agent 小队、权限边界和验收标准。@ 引用上下文，/ 搜索 Skill 和 MCP。",
-          placeholderEn: "My goal is... Help derive Agent team, access boundary, and acceptance criteria. @ context, / search Skills and MCP."
-        },
-        agent: {
-          zh: "智能体模式会使用角色配置、能力权限和审批卡点。",
-          en: "Agent mode uses role config, tool access, and approval gates.",
-          placeholderZh: "调用选中的智能体，并按当前 Gate 与 Skill/MCP 权限推进任务。@ 引用上下文。",
-          placeholderEn: "Use the selected Agent with current Gate and Skill/MCP access. @ context."
-        }
+        auto: ["将根据任务自动判断方式。", "The task mode will be detected automatically."],
+        organize: ["整理模式会生成结构化行动项或知识条目。", "Organize mode creates structured actions or knowledge entries."],
+        write: ["撰写模式会围绕受众、事实来源和可直接使用的成稿完成。", "Write mode produces audience-aware, source-grounded copy."],
+        analyze: ["分析模式会说明方法、来源和结论。", "Analyze mode explains method, sources, and conclusions."],
+        coordinate: ["协同模式会准备外部动作草稿，真实发送仍受 Gate 控制。", "Coordinate mode drafts external actions; real sends remain gated."],
+        ask: ["询问模式只读并以仓库证据回答。", "Ask mode is read-only and answers from repository evidence."],
+        plan: ["计划模式只读并输出可执行的实现计划。", "Plan mode is read-only and produces an actionable implementation plan."],
+        implement: ["生码模式允许工作区改动并要求适用验证。", "Implement mode allows workspace changes and requires relevant validation."],
+        review: ["审阅模式只读并输出可定位发现。", "Review mode is read-only and produces actionable findings."],
+        explore: ["探索模式会给出有明显差异的设计方向。", "Explore mode produces meaningfully distinct design directions."],
+        refine: ["收敛模式会深化选定方向并复用设计系统。", "Refine mode develops a chosen direction using the design system."],
+        produce: ["制作模式会生成可预览、可交付的设计产物。", "Produce mode creates previewable, handoff-ready design artifacts."],
+        inspect: ["走查模式只诊断并输出可定位问题。", "Inspect mode is diagnostic and produces actionable findings."]
       };
 
       function syncMode(showToast) {
-        const copy = modeCopy[modeSelect.value] || modeCopy.plan;
-        if (agentMenu) agentMenu.hidden = modeSelect.value !== "agent";
-        if (composer) {
-          composer.dataset.placeholderZh = copy.placeholderZh;
-          composer.dataset.placeholderEn = copy.placeholderEn;
-          composer.setAttribute("placeholder", currentLocale() === "en" ? copy.placeholderEn : copy.placeholderZh);
-        }
-        setComposerStatus(copy.zh, copy.en, modeSelect.closest(".command-input"));
-        if (showToast) toast(currentLocale() === "en" ? copy.en : copy.zh);
+        const copy = modeCopy[modeSelect.value] || modeCopy.auto;
+        setComposerStatus(copy[0], copy[1], modeSelect.closest(".command-input"));
+        document.dispatchEvent(new CustomEvent("scenemodechange", { detail: { mode: modeSelect.value } }));
+        if (showToast) toast(currentLocale() === "en" ? copy[1] : copy[0]);
       }
 
       modeSelect.addEventListener("change", () => syncMode(true));
       syncMode(false);
     }
 
-    if (agentSelect) {
-      agentSelect.addEventListener("change", () => {
-        const copy = selectedCopy(agentSelect);
-        setComposerStatus(`已使用智能体配置：${copy.zh}`, `Using agent config: ${copy.en}`, agentSelect.closest(".command-input"));
-        toast(currentLocale() === "en" ? `Agent selected: ${copy.en}` : `已选择${copy.zh}`);
+    if (executionTargetSelect) {
+      document.querySelector(".command-home-view")?.setAttribute("data-execution-strategy", executionTargetSelect.selectedOptions[0]?.dataset.strategy || "single");
+      executionTargetSelect.addEventListener("change", () => {
+        const copy = selectedCopy(executionTargetSelect);
+        const strategy = executionTargetSelect.selectedOptions[0]?.dataset.strategy || "single";
+        document.querySelector(".command-home-view")?.setAttribute("data-execution-strategy", strategy);
+        setComposerStatus(`执行主体：${copy.zh}`, `Execution target: ${copy.en}`, executionTargetSelect.closest(".command-input"));
+        toast(currentLocale() === "en" ? `Execution target: ${copy.en}` : `执行主体：${copy.zh}`);
       });
     }
 
@@ -1450,27 +1446,136 @@
   }
 
   function setupSceneTabs() {
+    const presets = {
+      office: {
+        subtitle: ["整理、撰写和推进你的工作", "Organize, write, and move work forward"],
+        context: ["文档 / 日历 / 知识库", "Docs / Calendar / Knowledge"],
+        deliverable: ["文档与行动项", "Documents and actions"],
+        capabilities: ["推荐能力：文档整理 · Calendar · Knowledge", "Recommended: Documents · Calendar · Knowledge"],
+        placeholder: ["例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库", "Example: organize today's project work, meetings, blockers, and knowledge capture"]
+      },
+      code: {
+        subtitle: ["围绕仓库完成询问、计划、实现与审阅", "Ask, plan, implement, and review around the repository"],
+        context: ["仓库 / Issue / 日志", "Repository / Issues / Logs"],
+        deliverable: ["回答、计划、Diff 与测试", "Answers, plans, diffs, and tests"],
+        capabilities: ["推荐能力：Workspace · Terminal · Test · Git", "Recommended: Workspace · Terminal · Test · Git"],
+        placeholder: ["例如：读取当前仓库规则，实现这个功能并运行适用测试", "Example: read repository rules, implement this feature, and run relevant tests"]
+      },
+      design: {
+        subtitle: ["从 Brief 完成探索、制作与走查", "Explore, produce, and inspect from a brief"],
+        context: ["Brief / Figma / 品牌与参考", "Brief / Figma / Brand and references"],
+        deliverable: ["方向、视觉产物与交付说明", "Directions, visual artifacts, and handoff"],
+        capabilities: ["推荐能力：Vision · Figma · Image Generation", "Recommended: Vision · Figma · Image Generation"],
+        placeholder: ["例如：基于这个 Brief 探索三个方向，并制作可预览的页面方案", "Example: explore three directions from this brief and produce a previewable page concept"]
+      }
+    };
+
     document.querySelectorAll(".scene-tabs").forEach((group) => {
       const scope = group.closest(".hero-center") || document;
       const scenarioButtons = Array.from(scope.querySelectorAll(".quick-row [data-scene]"));
-      function syncScenarios(button) {
-        const scene = button.dataset.sceneTarget;
-        if (!scene || !scenarioButtons.length) return;
+      const sceneMode = scope.querySelector("[data-scene-mode]");
+      const subtitle = scope.querySelector("[data-scene-subtitle]");
+      const configMode = scope.querySelector("[data-scene-config-mode]");
+      const configContext = scope.querySelector("[data-scene-config-context]");
+      const configDeliverable = scope.querySelector("[data-scene-config-deliverable]");
+      const capabilities = scope.querySelector("[data-scene-capabilities]");
+      const composer = scope.querySelector("[data-composer]");
+      const risk = scope.querySelector("[data-scene-risk]");
+      let activeScene = "office";
+      const quickModeByLabel = {
+        "整理今日工作": "organize",
+        "生成会议材料": "write",
+        "撰写项目汇报": "write",
+        "沉淀知识库": "organize",
+        "实现一个功能": "implement",
+        "修复一个 Bug": "implement",
+        "审阅当前改动": "review",
+        "补齐测试与 CI": "implement",
+        "探索设计方向": "explore",
+        "设计页面或组件": "produce",
+        "生成视觉资产": "produce",
+        "走查并交付": "inspect"
+      };
+
+      function setLocalized(node, copy) {
+        if (!node || !copy) return;
+        node.dataset.zh = copy[0];
+        node.dataset.en = copy[1];
+        node.textContent = currentLocale() === "en" ? copy[1] : copy[0];
+      }
+
+      function syncRisk() {
+        if (!risk || !sceneMode) return;
+        risk.hidden = !["coordinate", "implement", "refine", "produce"].includes(sceneMode.value);
+        if (configMode) {
+          const copy = selectedCopy(sceneMode);
+          setLocalized(configMode, [copy.zh, copy.en]);
+        }
+      }
+
+      function syncScene(scene) {
+        const preset = presets[scene];
+        if (!preset) return;
+        activeScene = scene;
         scenarioButtons.forEach((item) => {
           item.classList.toggle("is-hidden", item.dataset.scene !== scene);
         });
+        scope.querySelectorAll("[data-scenes]").forEach((item) => {
+          if (item.matches("option")) return;
+          item.hidden = !item.dataset.scenes.split(" ").includes(scene);
+        });
+        if (sceneMode) {
+          Array.from(sceneMode.options).forEach((option) => {
+            option.hidden = !option.dataset.scenes?.split(" ").includes(scene);
+          });
+          sceneMode.value = "auto";
+          sceneMode.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        setLocalized(subtitle, preset.subtitle);
+        setLocalized(configMode, ["自动判断", "Auto detect"]);
+        setLocalized(configContext, preset.context);
+        setLocalized(configDeliverable, preset.deliverable);
+        setLocalized(capabilities, preset.capabilities);
+        if (composer) {
+          composer.dataset.placeholderZh = preset.placeholder[0];
+          composer.dataset.placeholderEn = preset.placeholder[1];
+          composer.setAttribute("placeholder", currentLocale() === "en" ? preset.placeholder[1] : preset.placeholder[0]);
+        }
+        syncRisk();
       }
       group.querySelectorAll("button").forEach((button) => {
         button.setAttribute("aria-pressed", button.classList.contains("active") ? "true" : "false");
-        if (button.classList.contains("active")) syncScenarios(button);
+        if (button.classList.contains("active")) syncScene(button.dataset.sceneTarget);
         button.addEventListener("click", () => {
           group.querySelectorAll("button").forEach((item) => {
             const active = item === button;
             item.classList.toggle("active", active);
             item.setAttribute("aria-pressed", active ? "true" : "false");
           });
-          syncScenarios(button);
+          syncScene(button.dataset.sceneTarget);
         });
+      });
+      scenarioButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const mode = quickModeByLabel[button.dataset.zh || button.textContent.trim()];
+          if (sceneMode && mode) {
+            sceneMode.value = mode;
+            sceneMode.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+      });
+      sceneMode?.addEventListener("change", syncRisk);
+      document.addEventListener("localechange", () => {
+        const preset = presets[activeScene];
+        setLocalized(subtitle, preset.subtitle);
+        setLocalized(configContext, preset.context);
+        setLocalized(configDeliverable, preset.deliverable);
+        setLocalized(capabilities, preset.capabilities);
+        if (sceneMode && configMode) {
+          const copy = selectedCopy(sceneMode);
+          setLocalized(configMode, [copy.zh, copy.en]);
+        }
+        if (composer) composer.setAttribute("placeholder", currentLocale() === "en" ? preset.placeholder[1] : preset.placeholder[0]);
       });
     });
   }
@@ -1502,7 +1607,7 @@
           const zhConversation = button.dataset.zh || button.textContent.trim();
           const enConversation = button.dataset.en || zhConversation;
           if (workspace.tagName === "SELECT") {
-            const value = zhSpace.includes("办公室") ? "team" : (zhSpace.includes("Skill") || zhSpace.includes("MCP") ? "agents" : "product");
+            const value = zhSpace.includes("办公室") ? "project" : (zhSpace.includes("Skill") || zhSpace.includes("MCP") ? "capabilities" : "crewon");
             workspace.value = value;
             workspace.dispatchEvent(new Event("change", { bubbles: true }));
             setComposerStatus(`当前会话：${zhSpace} / ${zhConversation}`, `Current conversation: ${enSpace} / ${enConversation}`);

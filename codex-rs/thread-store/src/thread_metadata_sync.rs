@@ -552,6 +552,7 @@ mod tests {
                 ..Default::default()
             },
             git: None,
+            scene_runtime: None,
         }
     }
 

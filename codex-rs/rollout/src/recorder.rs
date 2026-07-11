@@ -79,6 +79,12 @@ pub struct RolloutRecorder {
 }
 
 #[derive(Clone)]
+struct PendingSessionMeta {
+    meta: SessionMeta,
+    scene_runtime: Option<crewon_protocol::scene::SceneThreadMetadata>,
+}
+
+#[derive(Clone)]
 pub enum RolloutRecorderParams {
     Create {
         conversation_id: ThreadId,
@@ -89,6 +95,7 @@ pub enum RolloutRecorderParams {
         base_instructions: BaseInstructions,
         dynamic_tools: Vec<DynamicToolSpec>,
         multi_agent_version: Option<MultiAgentVersion>,
+        scene_runtime: Option<crewon_protocol::scene::SceneThreadMetadata>,
     },
     Resume {
         path: PathBuf,
@@ -175,6 +182,7 @@ impl RolloutRecorderParams {
             base_instructions,
             dynamic_tools,
             multi_agent_version: None,
+            scene_runtime: None,
         }
     }
 
@@ -188,6 +196,20 @@ impl RolloutRecorderParams {
         } = &mut self
         {
             *version = multi_agent_version;
+        }
+        self
+    }
+
+    pub fn with_scene_runtime(
+        mut self,
+        scene_runtime: Option<crewon_protocol::scene::SceneThreadMetadata>,
+    ) -> Self {
+        if let Self::Create {
+            scene_runtime: value,
+            ..
+        } = &mut self
+        {
+            *value = scene_runtime;
         }
         self
     }
@@ -679,6 +701,7 @@ impl RolloutRecorder {
                 base_instructions,
                 dynamic_tools,
                 multi_agent_version,
+                scene_runtime,
             } => {
                 let log_file_info = precompute_log_file_info(config, conversation_id)?;
                 let path = log_file_info.path.clone();
@@ -717,7 +740,15 @@ impl RolloutRecorder {
                     multi_agent_version,
                 };
 
-                (None, Some(log_file_info), path, Some(session_meta))
+                (
+                    None,
+                    Some(log_file_info),
+                    path,
+                    Some(PendingSessionMeta {
+                        meta: session_meta,
+                        scene_runtime,
+                    }),
+                )
             }
             RolloutRecorderParams::Resume { path } => {
                 let path = compression::materialize_rollout_for_append(path.as_path()).await?;
@@ -1413,7 +1444,7 @@ struct RolloutWriterState {
     writer: Option<JsonlWriter>,
     deferred_log_file_info: Option<LogFileInfo>,
     pending_items: Vec<RolloutItem>,
-    meta: Option<SessionMeta>,
+    meta: Option<PendingSessionMeta>,
     cwd: PathBuf,
     rollout_path: PathBuf,
     last_logged_error: Option<String>,
@@ -1423,7 +1454,7 @@ impl RolloutWriterState {
     fn new(
         file: Option<tokio::fs::File>,
         deferred_log_file_info: Option<LogFileInfo>,
-        meta: Option<SessionMeta>,
+        meta: Option<PendingSessionMeta>,
         cwd: PathBuf,
         rollout_path: PathBuf,
     ) -> Self {
@@ -1581,7 +1612,7 @@ async fn rollout_writer(
     file: Option<tokio::fs::File>,
     deferred_log_file_info: Option<LogFileInfo>,
     mut rx: mpsc::Receiver<RolloutCmd>,
-    meta: Option<SessionMeta>,
+    meta: Option<PendingSessionMeta>,
     cwd: PathBuf,
     rollout_path: PathBuf,
 ) -> std::io::Result<()> {
@@ -1617,7 +1648,7 @@ async fn rollout_writer(
 
 async fn write_session_meta(
     mut writer: Option<&mut JsonlWriter>,
-    session_meta: SessionMeta,
+    session_meta: PendingSessionMeta,
     cwd: &Path,
 ) -> std::io::Result<()> {
     let git_info = if get_git_repo_root(cwd).is_some() {
@@ -1630,8 +1661,9 @@ async fn write_session_meta(
         None
     };
     let session_meta_line = SessionMetaLine {
-        meta: session_meta,
+        meta: session_meta.meta,
         git: git_info,
+        scene_runtime: session_meta.scene_runtime,
     };
 
     let rollout_item = RolloutItem::SessionMeta(session_meta_line);

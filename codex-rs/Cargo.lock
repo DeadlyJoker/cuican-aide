@@ -2227,6 +2227,7 @@ dependencies = [
  "crewon-rmcp-client",
  "crewon-rollout",
  "crewon-sandboxing",
+ "crewon-scene-runtime",
  "crewon-shell-command",
  "crewon-skills-extension",
  "crewon-state",
@@ -2304,6 +2305,7 @@ dependencies = [
  "clap",
  "crewon-experimental-api-macros",
  "crewon-protocol",
+ "crewon-scene-runtime",
  "crewon-shell-command",
  "crewon-utils-absolute-path",
  "crewon-utils-cargo-bin",
@@ -2699,6 +2701,7 @@ dependencies = [
  "crewon-rollout",
  "crewon-rollout-trace",
  "crewon-sandboxing",
+ "crewon-scene-runtime",
  "crewon-shell-command",
  "crewon-shell-escalation",
  "crewon-state",
@@ -3727,6 +3730,15 @@ dependencies = [
  "tracing",
  "url",
  "which 8.0.3",
+]
+
+[[package]]
+name = "crewon-scene-runtime"
+version = "0.0.0"
+dependencies = [
+ "crewon-protocol",
+ "pretty_assertions",
+ "serde",
 ]
 
 [[package]]

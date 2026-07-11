@@ -475,6 +475,7 @@ fn write_rollout(path: &std::path::Path, thread_id: ThreadId, message: &str) -> 
             multi_agent_version: None,
         },
         git: None,
+        scene_runtime: None,
     };
     let lines = [
         RolloutLine {

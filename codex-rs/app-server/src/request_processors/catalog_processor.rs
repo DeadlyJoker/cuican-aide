@@ -198,6 +198,13 @@ impl CatalogRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
+    pub(crate) async fn scene_list(
+        &self,
+        params: SceneListParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        Self::list_scenes(params).map(|response| Some(response.into()))
+    }
+
     pub(crate) async fn mock_experimental_method(
         &self,
         params: MockExperimentalMethodParams,
@@ -313,6 +320,28 @@ impl CatalogRequestProcessor {
             .collect();
         let response = CollaborationModeListResponse { data: items };
         Ok(response)
+    }
+
+    fn list_scenes(params: SceneListParams) -> Result<SceneListResponse, JSONRPCErrorError> {
+        let SceneListParams { cursor, limit } = params;
+        let presets = crewon_scene_runtime::all_scene_presets();
+        let total = presets.len();
+        let start = match cursor {
+            Some(cursor) => cursor
+                .parse::<usize>()
+                .map_err(|_| invalid_request(format!("invalid cursor: {cursor}")))?,
+            None => 0,
+        };
+        if start > total {
+            return Err(invalid_request(format!(
+                "cursor {start} exceeds total scenes {total}"
+            )));
+        }
+        let effective_limit = limit.unwrap_or(total as u32).max(1) as usize;
+        let end = start.saturating_add(effective_limit).min(total);
+        let data = presets[start..end].iter().map(Into::into).collect();
+        let next_cursor = (end < total).then(|| end.to_string());
+        Ok(SceneListResponse { data, next_cursor })
     }
 
     async fn experimental_feature_list_response(

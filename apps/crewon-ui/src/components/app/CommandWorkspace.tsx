@@ -1,7 +1,8 @@
-import { ArrowUp, AtSign, CheckCircle2, Mic, Paperclip } from "lucide-react";
+import { ArrowUp, ListChecks, Plus, ShieldCheck, Target } from "lucide-react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import {
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
   useId,
   useMemo,
@@ -9,12 +10,7 @@ import {
   useState,
 } from "react";
 
-import {
-  officeRooms,
-  quickScenarios,
-  sceneTabs,
-  workflowRooms,
-} from "./commandWorkspaceData";
+import { officeRooms, workflowRooms } from "./commandWorkspaceData";
 import {
   CommandSidebar,
   Palette,
@@ -23,6 +19,7 @@ import {
   type PaletteItemWithCommand,
 } from "./CommandWorkspaceChrome";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
+import { CommandSceneHeader } from "./CommandSceneHeader";
 import {
   AgentsView,
   AssistView,
@@ -30,15 +27,19 @@ import {
   ScheduleView,
   TeamView,
 } from "./CommandWorkspaceViews";
-import { classNames, connectionLabel } from "./commandWorkspaceUtils";
+import { classNames } from "./commandWorkspaceUtils";
 import {
   emptyAgentPlatformSnapshot,
   insertTokenIntoComposerValue,
   selectCommandHomeSlots,
   type CommandHomeSlots,
-  type CommandScene,
   type CommandShellView,
 } from "./commandWorkspaceState";
+import {
+  commandSceneContextItems,
+  commandSceneResourceDockItems,
+  commandSceneSlashItems,
+} from "./commandWorkspaceSceneResources";
 import {
   readAgentPlatformSnapshot,
   type AgentPlatformSnapshot,
@@ -48,9 +49,17 @@ import type { Locale } from "../../lib/i18n";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import { formatRelativeTime } from "../../lib/shared/text";
 import {
+  executionTargetOptionsFromDomain,
+  scenePresets,
+  type CommandScene,
+  type SceneInteractionMode,
+} from "../../lib/scene/sceneCatalog";
+import type { AgentConfig, OfficeConfig } from "../../lib/domain/domainTypes";
+import {
   commandComposerRuntimeSettings,
   fallbackCommandModelOptions,
   type CommandComposerPermission,
+  type CommandExecutionIntent,
   type CommandModelOption,
   type ThreadRuntimeSettings,
 } from "../../lib/thread/threadRuntimeSettings";
@@ -73,6 +82,14 @@ type CommandWorkspaceProps = {
   composerValue: string;
   connectionState: ConnectionState;
   cwd: string;
+  executionTargetClient?: {
+    listAgentConfigs(cwd: string): Promise<{
+      data: Array<{ config: AgentConfig; filePath: string }>;
+    }>;
+    listOfficeConfigs(cwd: string): Promise<{
+      data: Array<{ config: OfficeConfig; filePath: string }>;
+    }>;
+  } | null;
   isSending: boolean;
   linkedThreads?: Thread[];
   locale?: Locale;
@@ -86,18 +103,19 @@ type CommandWorkspaceProps = {
   onChangeComposerValue: (value: string) => void;
   onChangeWorkspaceCwd?: (cwd: string) => void;
   onModeChange: (mode: WorkMode) => void;
-  onNewThread?: () => void;
   onRetryConnection: () => void;
   onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
+  onSendNewThread?: (
+    text: string,
+    threadSettings?: ThreadRuntimeSettings,
+  ) => void;
   onSelectLinkedThread?: (threadId: string | null) => void;
   onSlashCommandSelect?: (command: ComposerSlashCommand) => void;
   onStop?: () => void;
 };
 
-
 type PlatformLoadState = "loading" | "ready" | "fallback";
 type TeamMode = "office" | "workflow" | "experts";
-type CommandComposerMode = "agent" | "goal" | "plan";
 export type CommandComposerKeyIntent =
   | "closePalette"
   | "openContext"
@@ -126,36 +144,24 @@ const shellViewIds: CommandShellView[] = [
 
 type CommandSelectOption<TValue extends string = string> = {
   detail?: string;
+  disabled?: boolean;
   tone?: "danger" | "normal" | "warning";
   value: TValue;
   label: string;
 };
 
-const composerModeOptions: CommandSelectOption<CommandComposerMode>[] = [
-  { label: "计划", value: "plan" },
-  { label: "目标", value: "goal" },
-  { label: "智能体", value: "agent" },
-];
-
 const permissionOptions: CommandSelectOption<CommandComposerPermission>[] = [
   {
     detail: "工作区内自动执行，必要时请求升级",
-    label: "替我审批",
+    label: "本地自动",
     value: "approve-for-me",
   },
   {
-    detail: "执行前请求确认",
-    label: "请求批准",
+    detail: "涉及授权时先请求确认",
+    label: "操作前确认",
     value: "request-approval",
   },
-  {
-    detail: "不经审批地使用完整文件系统权限",
-    label: "完全访问",
-    tone: "warning",
-    value: "full-access",
-  },
 ];
-
 
 function isShellView(value: string): value is CommandShellView {
   return shellViewIds.includes(value as CommandShellView);
@@ -172,12 +178,14 @@ function shellViewFromHash(): CommandShellView {
 function CommandComposerSelect<TValue extends string>({
   ariaLabel,
   className,
+  icon,
   options,
   value,
   onChange,
 }: {
   ariaLabel: string;
   className: string;
+  icon?: ReactNode;
   options: CommandSelectOption<TValue>[];
   value: TValue;
   onChange: (value: TValue) => void;
@@ -226,14 +234,10 @@ function CommandComposerSelect<TValue extends string>({
         type="button"
         onClick={() => setOpen((current) => !current)}
       >
+        {icon}
         {selectedOption?.label ?? value}
       </button>
-      <div
-        className="select-menu"
-        hidden={!open}
-        id={menuId}
-        role="listbox"
-      >
+      <div className="select-menu" hidden={!open} id={menuId} role="listbox">
         {options.map((option) => (
           <button
             key={option.value}
@@ -241,9 +245,13 @@ function CommandComposerSelect<TValue extends string>({
             className="select-option"
             data-tone={option.tone ?? "normal"}
             data-value={option.value}
+            disabled={option.disabled}
             role="option"
             type="button"
             onClick={() => {
+              if (option.disabled) {
+                return;
+              }
               onChange(option.value);
               setOpen(false);
             }}
@@ -275,6 +283,30 @@ function paletteFilter(items: PaletteItemWithCommand[], query: string) {
       .join(" ")
       .toLowerCase()
       .includes(normalized),
+  );
+}
+
+export function nextExecutionIntent(
+  current: CommandExecutionIntent,
+  selected: Exclude<CommandExecutionIntent, "none">,
+): CommandExecutionIntent {
+  return current === selected ? "none" : selected;
+}
+
+export function shouldCloseComposerPalette({
+  paletteRoots,
+  target,
+  triggers,
+}: {
+  paletteRoots: Array<Pick<Node, "contains">>;
+  target: Node | null;
+  triggers: Array<Pick<Node, "contains">>;
+}): boolean {
+  if (!target) {
+    return false;
+  }
+  return ![...paletteRoots, ...triggers].some((element) =>
+    element.contains(target),
   );
 }
 
@@ -321,84 +353,12 @@ export function commandComposerKeyIntent({
   return null;
 }
 
-function contextItems(slots: CommandHomeSlots, cwd: string): PaletteItemWithCommand[] {
-  return [
-    {
-      kind: "file",
-      label: "文件",
-      title: basename(cwd || "workspace"),
-      detail: cwd || "当前工作区",
-    },
-    {
-      kind: "conversation",
-      label: "会话",
-      title: slots.workflow.title,
-      detail: slots.workflow.detail,
-    },
-    {
-      kind: "workspace",
-      label: "空间",
-      title: slots.knowledge.title,
-      detail: slots.knowledge.detail,
-    },
-    {
-      kind: "agent",
-      label: "智能体",
-      title: slots.agent.title,
-      detail: slots.agent.detail,
-    },
-    {
-      kind: "knowledge",
-      label: "知识库",
-      title: "Knowledge base",
-      detail: "团队文档、项目材料、长期记忆和可引用资源",
-    },
-  ];
-}
-
-function slashItems(
-  slots: CommandHomeSlots,
-  slashCommands: ComposerSlashCommand[],
-): PaletteItemWithCommand[] {
-  const commandItems: PaletteItemWithCommand[] = slashCommands.map((command) => ({
-    command,
-    detail: command.description,
-    kind: command.kind === "mcp" ? "mcp" : command.kind === "skill" ? "skill" : "agent",
-    label: command.meta,
-    title: command.label,
-    token: command.token,
-  }));
-  const fallbackItems: PaletteItemWithCommand[] = [
-    ...slots.skills.map((item) => ({
-      detail: item.detail,
-      kind: "skill" as const,
-      label: item.label,
-      title: item.title,
-      token: item.title,
-    })),
-    ...slots.mcps.map((item) => ({
-      detail: item.detail,
-      kind: "mcp" as const,
-      label: item.label,
-      title: item.title,
-      token: item.title,
-    })),
-    {
-      detail: slots.workflow.detail,
-      kind: "workflow",
-      label: slots.workflow.label,
-      title: slots.workflow.title,
-      token: slots.workflow.title,
-    },
-  ];
-  return [...commandItems, ...fallbackItems].slice(0, 12);
-}
-
 export function CommandWorkspace({
   activeTurnId = null,
   composerValue,
   connectionState,
   cwd,
+  executionTargetClient = null,
   isSending,
   linkedThreads = [],
   locale = "zh",
@@ -412,9 +372,9 @@ export function CommandWorkspace({
   onChangeComposerValue,
   onChangeWorkspaceCwd,
   onModeChange,
-  onNewThread,
   onRetryConnection,
   onSend,
+  onSendNewThread,
   onSelectLinkedThread,
   onSlashCommandSelect,
   onStop,
@@ -426,29 +386,32 @@ export function CommandWorkspace({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
-  const [activeLinkedThreadId, setActiveLinkedThreadId] = useState<string | null>(
-    selectedThreadId,
-  );
-  const [scene, setScene] = useState<CommandScene>(
-    workMode === "office" ? "office" : "code",
-  );
-  const [composerMode, setComposerMode] =
-    useState<CommandComposerMode>("plan");
+  const [activeLinkedThreadId, setActiveLinkedThreadId] = useState<
+    string | null
+  >(selectedThreadId);
+  const [newTaskDraft, setNewTaskDraft] = useState(false);
+  const [scene, setScene] = useState<CommandScene>("office");
+  const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
   const [model, setModel] = useState(fallbackCommandModelOptions[0].value);
   const [modelSelectionTouched, setModelSelectionTouched] = useState(false);
-  const [agent, setAgent] = useState("product-review");
+  const [executionTarget, setExecutionTarget] = useState("crewon");
+  const [executionTargetCatalog, setExecutionTargetCatalog] = useState<{
+    agents: Array<{ config: AgentConfig; filePath: string }>;
+    offices: Array<{ config: OfficeConfig; filePath: string }>;
+    status: "loading" | "ready" | "unavailable";
+  }>({ agents: [], offices: [], status: "loading" });
   const [permission, setPermission] =
     useState<CommandComposerPermission>("approve-for-me");
-  const [workspace, setWorkspace] = useState("product");
-  const [openPalette, setOpenPalette] = useState<"context" | "slash" | null>(
-    null,
-  );
+  const [executionIntent, setExecutionIntent] =
+    useState<CommandExecutionIntent>("none");
+  const [openPalette, setOpenPalette] = useState<
+    "add" | "context" | "slash" | null
+  >(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [platformState, setPlatformState] =
     useState<PlatformLoadState>("loading");
-  const [platformSnapshot, setPlatformSnapshot] = useState<AgentPlatformSnapshot>(
-    emptyAgentPlatformSnapshot,
-  );
+  const [platformSnapshot, setPlatformSnapshot] =
+    useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
   const [catalogFilter, setCatalogFilter] = useState("skill");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [scheduleMode, setScheduleMode] = useState("calendar");
@@ -467,6 +430,44 @@ export function CommandWorkspace({
     window.addEventListener("hashchange", syncHash);
     return () => window.removeEventListener("hashchange", syncHash);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!executionTargetClient || !cwd) {
+      setExecutionTargetCatalog({
+        agents: [],
+        offices: [],
+        status: "unavailable",
+      });
+      return;
+    }
+    setExecutionTargetCatalog((current) => ({ ...current, status: "loading" }));
+    Promise.all([
+      executionTargetClient.listAgentConfigs(cwd),
+      executionTargetClient.listOfficeConfigs(cwd),
+    ])
+      .then(([agents, offices]) => {
+        if (!cancelled) {
+          setExecutionTargetCatalog({
+            agents: agents.data,
+            offices: offices.data,
+            status: "ready",
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExecutionTargetCatalog({
+            agents: [],
+            offices: [],
+            status: "unavailable",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cwd, executionTargetClient]);
 
   useEffect(() => {
     let cancelled = false;
@@ -520,15 +521,47 @@ export function CommandWorkspace({
     [platformSnapshot],
   );
   const contextPaletteItems = useMemo(
-    () => contextItems(slots, cwd),
-    [cwd, slots],
+    () => commandSceneContextItems(scene, platformSnapshot, cwd),
+    [cwd, platformSnapshot, scene],
   );
   const slashPaletteItems = useMemo(
-    () => slashItems(slots, slashCommands),
-    [slots, slashCommands],
+    () => commandSceneSlashItems(platformSnapshot, slashCommands),
+    [platformSnapshot, slashCommands],
   );
+  const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
+    () => [
+      {
+        action: "attach-files",
+        detail: "从当前工作空间选择要加入任务的内容",
+        kind: "file",
+        label: "文件",
+        title: "文件和文件夹",
+      },
+      ...contextPaletteItems.filter((item) => item.kind === "knowledge"),
+      ...slashPaletteItems.filter(
+        (item) => item.kind === "skill" || item.kind === "mcp",
+      ),
+    ],
+    [contextPaletteItems, slashPaletteItems],
+  );
+  const executionTargets = useMemo(
+    () => executionTargetOptionsFromDomain(executionTargetCatalog),
+    [executionTargetCatalog],
+  );
+  const scenePreset = scenePresets[scene];
+  const resourceDockItems = useMemo(
+    () => commandSceneResourceDockItems(platformSnapshot),
+    [platformSnapshot],
+  );
+
+  useEffect(() => {
+    if (!executionTargets.some((target) => target.value === executionTarget)) {
+      setExecutionTarget("crewon");
+    }
+  }, [executionTarget, executionTargets]);
   const visibleContextItems = paletteFilter(contextPaletteItems, paletteQuery);
   const visibleSlashItems = paletteFilter(slashPaletteItems, paletteQuery);
+  const visibleAddItems = paletteFilter(addPaletteItems, paletteQuery);
   const commandLinkedThreads: CommandLinkedThread[] = useMemo(
     () =>
       linkedThreads.map((thread) => ({
@@ -568,21 +601,17 @@ export function CommandWorkspace({
 
   function switchScene(nextScene: CommandScene) {
     setScene(nextScene);
-    onModeChange(nextScene === "office" ? "office" : "code");
+    setSceneMode("auto");
   }
 
-  function prefillScenario(prompt: string, nextScene: CommandScene) {
+  function prefillScenario(
+    prompt: string,
+    nextScene: CommandScene,
+    mode: SceneInteractionMode,
+  ) {
     switchScene(nextScene);
+    setSceneMode(mode);
     onChangeComposerValue(prompt);
-    textareaRef.current?.focus();
-  }
-
-  function refinePrompt() {
-    const current = composerValue.trim();
-    const refined = current
-      ? `请优化以下任务描述，保留目标、约束和验收项：${current}`
-      : "请帮我把任务描述整理成目标、上下文、约束、交付物和验收标准。";
-    onChangeComposerValue(refined);
     textareaRef.current?.focus();
   }
 
@@ -592,21 +621,65 @@ export function CommandWorkspace({
       return;
     }
     onChangeComposerValue("");
-    onSend(
+    (newTaskDraft ? (onSendNewThread ?? onSend) : onSend)(
       trimmed,
-      commandComposerRuntimeSettings({ model, permission }),
+      commandComposerRuntimeSettings({
+        executionTarget,
+        model,
+        permission,
+        scene,
+        sceneMode,
+        executionIntent,
+      }),
     );
+    setNewTaskDraft(false);
+    setExecutionIntent("none");
   }
 
-  function openComposerPalette(kind: "context" | "slash") {
+  function openComposerPalette(kind: "add" | "context" | "slash") {
     setOpenPalette(kind);
     setPaletteQuery("");
+  }
+
+  function toggleComposerPalette(kind: "add" | "context" | "slash") {
+    if (openPalette === kind) {
+      closeComposerPalette();
+      return;
+    }
+    openComposerPalette(kind);
   }
 
   function closeComposerPalette() {
     setOpenPalette(null);
     setPaletteQuery("");
   }
+
+  useEffect(() => {
+    if (!openPalette) {
+      return;
+    }
+
+    function handleOutsidePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      const paletteRoots = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-composer-palette]"),
+      );
+      const triggers = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-palette-trigger]"),
+      );
+      if (shouldCloseComposerPalette({ paletteRoots, target, triggers })) {
+        closeComposerPalette();
+      }
+    }
+
+    document.addEventListener("pointerdown", handleOutsidePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointerDown);
+    };
+  }, [openPalette]);
 
   function insertContextItem(item: PaletteItemWithCommand) {
     onChangeComposerValue(
@@ -633,6 +706,19 @@ export function CommandWorkspace({
     );
     closeComposerPalette();
     textareaRef.current?.focus();
+  }
+
+  function insertAddItem(item: PaletteItemWithCommand) {
+    if (item.action === "attach-files") {
+      closeComposerPalette();
+      onAttachContext();
+      return;
+    }
+    if (item.kind === "skill" || item.kind === "mcp" || item.command) {
+      insertSlashItem(item);
+      return;
+    }
+    insertContextItem(item);
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -672,14 +758,22 @@ export function CommandWorkspace({
   const activeOfficeRoom =
     officeRooms.find((room) => room.id === officeRoomId) ?? officeRooms[0];
   const activeWorkflowRoom =
-    workflowRooms.find((room) => room.id === workflowRoomId) ?? workflowRooms[0];
-  const showCommandThread = activeView === "command" && Boolean(selectedThread);
+    workflowRooms.find((room) => room.id === workflowRoomId) ??
+    workflowRooms[0];
+  const showCommandThread =
+    activeView === "command" && Boolean(selectedThread) && !newTaskDraft;
   const commandThreadRunning =
     Boolean(activeTurnId) ||
-    Boolean(
-      selectedThread?.turns.some((turn) => turn.status === "inProgress"),
-    );
-  const composerRuntimeLabel = isSending
+    Boolean(selectedThread?.turns.some((turn) => turn.status === "inProgress"));
+  const connectionStatusLabel =
+    connectionState === "connected"
+      ? "App Server 已连接"
+      : connectionState === "connecting"
+        ? "正在连接 App Server"
+        : connectionState === "demo"
+          ? "演示模式"
+          : "App Server 已断开";
+  const composerActivityLabel = isSending
     ? "发送中"
     : commandThreadRunning && composerValue.trim()
       ? "继续补充指令"
@@ -687,17 +781,14 @@ export function CommandWorkspace({
         ? "Agent 正在执行，可继续输入补充指令"
         : composerValue.trim()
           ? "草稿未发送"
-          : connectionLabel(connectionState);
-  const composerStateLabel =
-    showCommandThread && !commandThreadRunning && !composerValue.trim()
-      ? "内容由 AI 生成，请核实重要信息"
-      : composerRuntimeLabel;
+          : null;
   const composerSendLabel = commandThreadRunning ? "发送补充指令" : "发送任务";
 
   return (
     <section
       className="screen-shell command-screen desktop-command-screen"
       data-od-id="desktop-command-screen"
+      data-force-new-task={newTaskDraft ? "true" : "false"}
       data-locale={locale}
     >
       <section
@@ -722,18 +813,22 @@ export function CommandWorkspace({
           onCreateWorkspace={onChangeWorkspaceCwd}
           onNewThread={() => {
             setActiveLinkedThreadId(null);
+            setNewTaskDraft(true);
+            onChangeComposerValue("");
             switchView("command");
-            onNewThread?.();
             textareaRef.current?.focus();
           }}
           onOpenLinkedThread={(threadId) => {
             setActiveLinkedThreadId(threadId);
+            setNewTaskDraft(false);
             switchView("command");
             onSelectLinkedThread?.(threadId);
           }}
           onQueryChange={setSidebarSearchQuery}
           onSwitchView={switchView}
-          onToggleCollapse={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          onToggleCollapse={() =>
+            setSidebarCollapsed((collapsed) => !collapsed)
+          }
           onToggleSearch={() => setSidebarSearchOpen((open) => !open)}
         />
 
@@ -751,16 +846,6 @@ export function CommandWorkspace({
             data-has-thread={showCommandThread ? "true" : "false"}
             hidden={activeView !== "command"}
           >
-            <button
-              className="workspace-pill"
-              type="button"
-              data-od-id="workspace-pill"
-              onClick={() => switchView("projects")}
-            >
-              <span aria-hidden="true" />
-              <strong>{currentWorkspace} · 已同步</strong>
-            </button>
-
             <section
               className={classNames(
                 "hero-center",
@@ -781,50 +866,13 @@ export function CommandWorkspace({
                 />
               ) : (
                 <>
-                  <header
-                    className="home-title"
-                    data-od-id="desktop-command-header"
-                  >
-                    <h1>
-                      <span>Crewon</span>
-                      <br />
-                      <span>创建可编排的 Agent 小队</span>
-                    </h1>
-                  </header>
-
-                  <div className="scene-tabs scene-pills" data-od-id="scene-tabs">
-                    {sceneTabs.map((tab) => (
-                      <button
-                        className={classNames(scene === tab.key && "active")}
-                        key={tab.key}
-                        type="button"
-                        aria-pressed={scene === tab.key}
-                        data-scene-target={tab.key}
-                        title={tab.description}
-                        onClick={() => switchScene(tab.key)}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="quick-row" data-od-id="quick-scenarios">
-                    {quickScenarios.map((scenario) => (
-                      <button
-                        className={classNames(
-                          scenario.scene !== scene && "is-hidden",
-                        )}
-                        data-scene={scenario.scene}
-                        key={`${scenario.scene}-${scenario.label}`}
-                        type="button"
-                        onClick={() =>
-                          prefillScenario(scenario.prompt, scenario.scene)
-                        }
-                      >
-                        {scenario.label}
-                      </button>
-                    ))}
-                  </div>
+                  <CommandSceneHeader
+                    scene={scene}
+                    onQuickAction={(action) =>
+                      prefillScenario(action.prompt, scene, action.mode)
+                    }
+                    onSceneChange={switchScene}
+                  />
                 </>
               )}
 
@@ -843,7 +891,7 @@ export function CommandWorkspace({
                   data-composer=""
                   data-od-id="composer-input"
                   id="desktop-task-input"
-                  placeholder="例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库"
+                  placeholder={scenePreset.placeholder}
                   ref={textareaRef}
                   value={composerValue}
                   onChange={(event) =>
@@ -855,6 +903,7 @@ export function CommandWorkspace({
                   aria-hidden="true"
                   className="shortcut-proxy"
                   data-context-open=""
+                  data-palette-trigger="context"
                   hidden
                   tabIndex={-1}
                   type="button"
@@ -864,6 +913,7 @@ export function CommandWorkspace({
                   aria-hidden="true"
                   className="shortcut-proxy"
                   data-slash-open=""
+                  data-palette-trigger="slash"
                   hidden
                   tabIndex={-1}
                   type="button"
@@ -871,13 +921,75 @@ export function CommandWorkspace({
                 />
 
                 <div className="input-tools" data-od-id="composer-tools">
-                  <div className="composer-controls" data-od-id="composer-control-row">
+                  <div
+                    className="composer-controls"
+                    data-od-id="composer-control-row"
+                  >
+                    <button
+                      aria-label="添加上下文"
+                      className="icon-action composer-plus-action"
+                      data-palette-trigger="add"
+                      type="button"
+                      onClick={() => toggleComposerPalette("add")}
+                    >
+                      <Plus aria-hidden="true" />
+                    </button>
                     <CommandComposerSelect
-                      ariaLabel="任务类型"
-                      className="mode-dropdown"
-                      options={composerModeOptions}
-                      value={composerMode}
-                      onChange={setComposerMode}
+                      ariaLabel="权限选择"
+                      className="permission-dropdown"
+                      icon={<ShieldCheck aria-hidden="true" />}
+                      options={permissionOptions}
+                      value={permission}
+                      onChange={setPermission}
+                    />
+                    <div
+                      aria-label="执行意图"
+                      className="execution-intent-switch"
+                      role="group"
+                    >
+                      <button
+                        aria-pressed={executionIntent === "goal"}
+                        className="execution-intent-button"
+                        data-execution-intent="goal"
+                        title="持续追求当前任务目标"
+                        type="button"
+                        onClick={() =>
+                          setExecutionIntent((current) =>
+                            nextExecutionIntent(current, "goal"),
+                          )
+                        }
+                      >
+                        <Target aria-hidden="true" />
+                        <span>目标</span>
+                      </button>
+                      <button
+                        aria-pressed={executionIntent === "plan"}
+                        className="execution-intent-button"
+                        data-execution-intent="plan"
+                        title="先制定计划，不直接执行"
+                        type="button"
+                        onClick={() =>
+                          setExecutionIntent((current) =>
+                            nextExecutionIntent(current, "plan"),
+                          )
+                        }
+                      >
+                        <ListChecks aria-hidden="true" />
+                        <span>计划</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    className="composer-actions"
+                    data-od-id="composer-action-row"
+                  >
+                    <CommandComposerSelect
+                      ariaLabel="执行主体"
+                      className="execution-target-dropdown"
+                      options={executionTargets}
+                      value={executionTarget}
+                      onChange={setExecutionTarget}
                     />
                     <CommandComposerSelect
                       ariaLabel="模型选择"
@@ -889,77 +1001,14 @@ export function CommandWorkspace({
                         setModel(nextModel);
                       }}
                     />
-                    <label
-                      className="control-select agent-dropdown"
-                      data-agent-menu=""
-                      hidden={composerMode !== "agent"}
-                    >
-                      <span className="visually-hidden">智能体配置</span>
-                      <select
-                        aria-label="智能体配置"
-                        data-agent-select=""
-                        value={agent}
-                        onChange={(event) => setAgent(event.target.value)}
-                      >
-                        <option value="product-review">{slots.agent.title}</option>
-                        <option value="engineering-handoff">开发交付智能体</option>
-                        <option value="visual-polish">视觉打磨智能体</option>
-                        <option value="meeting-prep">会议准备智能体</option>
-                      </select>
-                    </label>
-                    <CommandComposerSelect
-                      ariaLabel="权限选择"
-                      className={classNames(
-                        "permission-dropdown",
-                        permission === "full-access" && "is-warning",
-                      )}
-                      options={permissionOptions}
-                      value={permission}
-                      onChange={setPermission}
-                    />
-                  </div>
-
-                  <div className="composer-actions" data-od-id="composer-action-row">
-                    <button
-                      aria-label="优化提示词"
-                      className="icon-action prompt-action"
-                      type="button"
-                      onClick={refinePrompt}
-                    >
-                      Aa
-                    </button>
-                    <button
-                      aria-label="添加上下文"
-                      className="icon-action"
-                      type="button"
-                      onClick={() => {
-                        onAttachContext();
-                        openComposerPalette("context");
-                      }}
-                    >
-                      <Paperclip aria-hidden="true" />
-                    </button>
-                    <button
-                      aria-label="搜索资源"
-                      className="icon-action"
-                      type="button"
-                      onClick={() => openComposerPalette("slash")}
-                    >
-                      <AtSign aria-hidden="true" />
-                    </button>
-                    <button
-                      aria-label="语音输入"
-                      className="icon-action"
-                      type="button"
-                    >
-                      <Mic aria-hidden="true" />
-                    </button>
                     <button
                       aria-busy={isSending}
-                      aria-label={composerSendLabel}
+                      aria-label={
+                        showCommandThread ? composerSendLabel : "开始任务"
+                      }
                       className="send-button"
                       disabled={isSending || !composerValue.trim()}
-                      title={composerSendLabel}
+                      title={showCommandThread ? composerSendLabel : "开始任务"}
                       type="button"
                       onClick={sendComposerValue}
                     >
@@ -968,6 +1017,18 @@ export function CommandWorkspace({
                   </div>
                 </div>
 
+                <Palette
+                  id="add-search-panel"
+                  inputId="add-search"
+                  items={visibleAddItems}
+                  kind="add"
+                  open={openPalette === "add"}
+                  placeholder="添加文件、知识库、Skill 或 MCP"
+                  query={paletteQuery}
+                  onClose={closeComposerPalette}
+                  onQueryChange={setPaletteQuery}
+                  onSelect={insertAddItem}
+                />
                 <Palette
                   id="context-search-panel"
                   inputId="context-search"
@@ -998,33 +1059,44 @@ export function CommandWorkspace({
                   data-od-id="composer-state-row"
                   id="composer-status"
                 >
-                  <label className="workspace-picker" data-od-id="workspace-picker">
-                    <span className="visually-hidden">工作空间</span>
-                    <select
-                      aria-label="工作空间"
-                      className="workspace-select"
-                      data-workspace-select=""
-                      value={workspace}
-                      onChange={(event) => setWorkspace(event.target.value)}
-                    >
-                      <option value={workspace}>{currentWorkspace}</option>
-                    </select>
-                  </label>
-                  <span className="composer-state">{resourceStatus}</span>
+                  <span
+                    className="workspace-picker"
+                    data-od-id="workspace-picker"
+                  >
+                    {currentWorkspace}
+                  </span>
+                  {composerActivityLabel ? (
+                    <span className="composer-state">
+                      {composerActivityLabel}
+                    </span>
+                  ) : null}
                   {connectionState === "disconnected" ? (
-                    <button className="button compact" type="button" onClick={onRetryConnection}>
+                    <button
+                      className="button compact"
+                      type="button"
+                      onClick={onRetryConnection}
+                    >
                       重试 app-server
                     </button>
                   ) : null}
-                  <span className="composer-state connection-state">
-                    <CheckCircle2 aria-hidden="true" />
-                    {composerStateLabel}
-                  </span>
+                  <span
+                    aria-label={connectionStatusLabel}
+                    className="connection-indicator"
+                    data-state={connectionState}
+                    role="status"
+                    title={connectionStatusLabel}
+                  />
                 </div>
               </section>
             </section>
 
-            <ResourceDock slots={slots} platformState={platformState} />
+            {platformState === "ready" && resourceDockItems.length > 0 ? (
+              <ResourceDock
+                platformState={platformState}
+                resources={resourceDockItems}
+                slots={slots}
+              />
+            ) : null}
           </section>
 
           <AssistView

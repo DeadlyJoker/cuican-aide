@@ -4452,6 +4452,9 @@ impl MessageProcessor {
             ClientRequest::CollaborationModeList { params, .. } => {
                 self.catalog_processor.collaboration_mode_list(params).await
             }
+            ClientRequest::SceneList { params, .. } => {
+                self.catalog_processor.scene_list(params).await
+            }
             ClientRequest::MockExperimentalMethod { params, .. } => {
                 self.catalog_processor
                     .mock_experimental_method(params)

@@ -13,23 +13,20 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import {
-  type FormEvent,
-  type ReactNode,
-  useEffect,
-  useState,
-} from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import { shellNavItems } from "./commandWorkspaceData";
 import type {
   CommandHomeSlots,
   CommandPaletteItem,
   CommandShellView,
+  SlotItem,
 } from "./commandWorkspaceState";
 import { classNames } from "./commandWorkspaceUtils";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
+  action?: "attach-files";
   command?: ComposerSlashCommand;
 };
 
@@ -72,7 +69,9 @@ const viewIcons: Record<CommandShellView, ReactNode> = {
 
 function workspaceName(path: string, emptyLabel = "工作空间"): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-  return normalized.split("/").filter(Boolean).pop() || normalized || emptyLabel;
+  return (
+    normalized.split("/").filter(Boolean).pop() || normalized || emptyLabel
+  );
 }
 
 export function CommandSidebar({
@@ -110,9 +109,9 @@ export function CommandSidebar({
 }) {
   const [workspaceFormOpen, setWorkspaceFormOpen] = useState(false);
   const [workspaceDraft, setWorkspaceDraft] = useState(cwd);
-  const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<
+    Set<string>
+  >(() => new Set());
   const currentWorkspaceName = workspaceName(cwd, "无工作空间");
   const currentWorkspaceThreads = linkedThreads
     .filter((thread) => Boolean(cwd) && thread.cwd === cwd)
@@ -120,6 +119,22 @@ export function CommandSidebar({
   const standaloneThreads = linkedThreads
     .filter((thread) => !thread.cwd)
     .slice(0, 5);
+  const otherWorkspaceGroups = Array.from(
+    linkedThreads.reduce((groups, thread) => {
+      const threadCwd = thread.cwd?.trim();
+      if (!threadCwd || threadCwd === cwd) {
+        return groups;
+      }
+      const group = groups.get(threadCwd) ?? [];
+      if (group.length < 5) {
+        group.push(thread);
+      }
+      groups.set(threadCwd, group);
+      return groups;
+    }, new Map<string, CommandLinkedThread[]>()),
+  )
+    .slice(0, 8)
+    .map(([path, threads]) => ({ path, threads }));
 
   useEffect(() => {
     setWorkspaceDraft(cwd);
@@ -147,8 +162,10 @@ export function CommandSidebar({
     });
   }
 
-  const currentWorkspaceCollapsed = Boolean(cwd) && collapsedWorkspaceGroups.has(cwd);
-  const standaloneWorkspaceCollapsed = collapsedWorkspaceGroups.has("standalone");
+  const currentWorkspaceCollapsed =
+    Boolean(cwd) && collapsedWorkspaceGroups.has(cwd);
+  const standaloneWorkspaceCollapsed =
+    collapsedWorkspaceGroups.has("standalone");
   const sidebarSearchResults: SidebarSearchResult[] = [
     {
       action: "view" as const,
@@ -160,7 +177,10 @@ export function CommandSidebar({
     },
     ...linkedThreads.map((thread) => ({
       action: "thread" as const,
-      detail: [workspaceName(thread.cwd ?? "", "无工作空间"), thread.preview || thread.updatedLabel]
+      detail: [
+        workspaceName(thread.cwd ?? "", "无工作空间"),
+        thread.preview || thread.updatedLabel,
+      ]
         .filter(Boolean)
         .join(" · "),
       key: `thread-${thread.id}`,
@@ -169,7 +189,10 @@ export function CommandSidebar({
       title: thread.title,
     })),
   ].filter((item) =>
-    [item.kind, item.title, item.detail].join(" ").toLowerCase().includes(query.trim().toLowerCase()),
+    [item.kind, item.title, item.detail]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
   );
 
   function activateSearchResult(item: SidebarSearchResult) {
@@ -252,13 +275,19 @@ export function CommandSidebar({
           />
           <kbd>⌘K</kbd>
         </div>
-        <div className="sidebar-search-results" role="listbox" aria-label="搜索结果">
+        <div
+          className="sidebar-search-results"
+          role="listbox"
+          aria-label="搜索结果"
+        >
           {sidebarSearchResults.map((item) => (
             <button
               className="sidebar-search-result"
               data-search-action={item.action}
               data-search-result=""
-              data-thread-id={item.action === "thread" ? item.threadId : undefined}
+              data-thread-id={
+                item.action === "thread" ? item.threadId : undefined
+              }
               key={item.key}
               type="button"
               onClick={() => activateSearchResult(item)}
@@ -294,7 +323,7 @@ export function CommandSidebar({
       </a>
 
       <nav className="sidebar-nav" data-od-id="desktop-nav">
-        {shellNavItems.filter((item) => item.key !== "command").map((item) => (
+        {shellNavItems.map((item) => (
           <button
             aria-current={activeView === item.key ? "page" : undefined}
             className={classNames(activeView === item.key && "active")}
@@ -302,7 +331,13 @@ export function CommandSidebar({
             data-shell-view-target={item.key}
             key={item.key}
             type="button"
-            onClick={() => onSwitchView(item.key)}
+            onClick={() => {
+              if (item.key === "command") {
+                onNewThread();
+                return;
+              }
+              onSwitchView(item.key);
+            }}
           >
             <span className="nav-glyph" aria-hidden="true">
               {viewIcons[item.key]}
@@ -324,7 +359,11 @@ export function CommandSidebar({
         </button>
       </nav>
 
-      <section className="space-tree" data-od-id="desktop-workspace-tree" aria-label="工作空间和对话">
+      <section
+        className="space-tree"
+        data-od-id="desktop-workspace-tree"
+        aria-label="工作空间和对话"
+      >
         <div className="tree-head">
           <button type="button">工作空间</button>
           <button
@@ -349,7 +388,10 @@ export function CommandSidebar({
             value={workspaceDraft}
             onChange={(event) => setWorkspaceDraft(event.target.value)}
           />
-          <button type="submit" disabled={!workspaceDraft.trim() || !onCreateWorkspace}>
+          <button
+            type="submit"
+            disabled={!workspaceDraft.trim() || !onCreateWorkspace}
+          >
             打开
           </button>
         </form>
@@ -384,7 +426,11 @@ export function CommandSidebar({
                 >
                   <MoreHorizontal aria-hidden="true" />
                 </button>
-                <button aria-label="新建会话" type="button" onClick={onNewThread}>
+                <button
+                  aria-label="新建会话"
+                  type="button"
+                  onClick={onNewThread}
+                >
                   <SquarePen aria-hidden="true" />
                 </button>
               </span>
@@ -412,7 +458,9 @@ export function CommandSidebar({
                   </button>
                 ))
               ) : (
-                <p className="sidebar-empty-hint">开始一次任务后，会话会出现在这个工作空间下。</p>
+                <p className="sidebar-empty-hint">
+                  开始一次任务后，会话会出现在这个工作空间下。
+                </p>
               )}
             </div>
           </div>
@@ -421,6 +469,43 @@ export function CommandSidebar({
             当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。
           </p>
         ) : null}
+        {otherWorkspaceGroups.map((group, index) => (
+          <div className="space-node real-workspace-node" key={group.path}>
+            <div className="space-title real-workspace-title">
+              <button
+                aria-controls={`other-workspace-thread-list-${index}`}
+                aria-label={`切换到工作空间 ${workspaceName(group.path)}`}
+                className="workspace-title-toggle"
+                type="button"
+                onClick={() => onCreateWorkspace?.(group.path)}
+              >
+                <Folder aria-hidden="true" />
+                <strong>{workspaceName(group.path)}</strong>
+              </button>
+            </div>
+            <div
+              className="conversation-list recent-thread-list"
+              id={`other-workspace-thread-list-${index}`}
+            >
+              {group.threads.map((thread) => (
+                <button
+                  className={classNames(
+                    "conversation-item linked-conversation-item recent-thread-item",
+                    selectedLinkedThreadId === thread.id && "active",
+                  )}
+                  data-linked-thread-id={thread.id}
+                  key={thread.id}
+                  title={thread.preview}
+                  type="button"
+                  onClick={() => onOpenLinkedThread(thread.id)}
+                >
+                  <span>{thread.title}</span>
+                  <em>{thread.updatedLabel}</em>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
         {standaloneThreads.length > 0 ? (
           <div
             className={classNames(
@@ -440,7 +525,11 @@ export function CommandSidebar({
                 <strong>无工作空间</strong>
               </button>
               <span className="workspace-row-actions">
-                <button aria-label="新建无工作空间会话" type="button" onClick={onNewThread}>
+                <button
+                  aria-label="新建无工作空间会话"
+                  type="button"
+                  onClick={onNewThread}
+                >
                   <SquarePen aria-hidden="true" />
                 </button>
               </span>
@@ -497,7 +586,7 @@ export function Palette({
   id: string;
   inputId: string;
   items: PaletteItemWithCommand[];
-  kind: "context" | "slash";
+  kind: "add" | "context" | "slash";
   open: boolean;
   placeholder: string;
   query: string;
@@ -505,11 +594,62 @@ export function Palette({
   onQueryChange: (query: string) => void;
   onSelect: (item: PaletteItemWithCommand) => void;
 }) {
+  const addGroups =
+    kind === "add"
+      ? [
+          {
+            id: "files",
+            label: "文件",
+            items: items.filter((item) => item.kind === "file"),
+          },
+          {
+            id: "knowledge",
+            label: "知识库",
+            items: items.filter((item) => item.kind === "knowledge"),
+          },
+          {
+            id: "skills",
+            label: "Skill",
+            items: items.filter((item) => item.kind === "skill"),
+          },
+          {
+            id: "mcp",
+            label: "MCP",
+            items: items.filter((item) => item.kind === "mcp"),
+          },
+        ].filter((group) => group.items.length > 0)
+      : [];
+
+  function renderItem(item: PaletteItemWithCommand) {
+    return (
+      <button
+        data-context-item={kind === "context" ? "" : undefined}
+        data-kind={item.kind}
+        data-label={item.title}
+        data-slash-item={kind === "slash" ? "" : undefined}
+        key={`${item.kind}-${item.title}-${item.token ?? ""}`}
+        type="button"
+        onClick={() => onSelect(item)}
+      >
+        <span>{item.label}</span>
+        <strong>{item.title}</strong>
+        <em>{item.detail}</em>
+      </button>
+    );
+  }
+
   return (
     <div
-      className={kind === "context" ? "context-palette" : "slash-palette"}
+      className={
+        kind === "slash"
+          ? "slash-palette"
+          : kind === "add"
+            ? "context-palette add-palette"
+            : "context-palette"
+      }
       data-context-palette={kind === "context" ? "" : undefined}
       data-od-id={id}
+      data-composer-palette=""
       data-slash-palette={kind === "slash" ? "" : undefined}
       hidden={!open}
       id={id}
@@ -533,22 +673,15 @@ export function Palette({
           }
         }}
       />
-      <div className={kind === "context" ? "context-list" : "slash-list"}>
-        {items.map((item) => (
-          <button
-            data-context-item={kind === "context" ? "" : undefined}
-            data-kind={item.kind}
-            data-label={item.title}
-            data-slash-item={kind === "slash" ? "" : undefined}
-            key={`${item.kind}-${item.title}-${item.token ?? ""}`}
-            type="button"
-            onClick={() => onSelect(item)}
-          >
-            <span>{item.label}</span>
-            <strong>{item.title}</strong>
-            <em>{item.detail}</em>
-          </button>
-        ))}
+      <div className={kind === "slash" ? "slash-list" : "context-list"}>
+        {kind === "add"
+          ? addGroups.map((group) => (
+              <section className="add-palette-group" key={group.id}>
+                <div className="add-palette-group-label">{group.label}</div>
+                {group.items.map(renderItem)}
+              </section>
+            ))
+          : items.map(renderItem)}
         {items.length === 0 ? (
           <button disabled type="button">
             <span>空</span>
@@ -563,32 +696,31 @@ export function Palette({
 
 export function ResourceDock({
   platformState,
+  resources,
   slots,
 }: {
   platformState: PlatformLoadState;
+  resources?: SlotItem[];
   slots: CommandHomeSlots;
 }) {
-  const resources = [
+  const visibleResources = resources ?? [
     slots.agent,
     slots.skills[0],
     slots.mcps[0],
     slots.knowledge,
     slots.workflow,
   ];
+  if (platformState !== "ready" || visibleResources.length === 0) {
+    return null;
+  }
   return (
     <section className="resource-dock" data-od-id="capability-dock">
       <header>
         <strong>Agent / Skill / MCP / Knowledge / Workflow</strong>
-        <span>
-          {platformState === "ready"
-            ? "资源入口已就绪"
-            : platformState === "fallback"
-              ? "可选资源服务未启动，对话后端可用"
-              : "同步中"}
-        </span>
+        <span>资源入口已就绪</span>
       </header>
       <div className="resource-grid">
-        {resources.map((resource, index) => (
+        {visibleResources.map((resource, index) => (
           <article className="resource-card" key={`${resource.value}-${index}`}>
             <span>{resource.label}</span>
             <strong>{resource.title}</strong>

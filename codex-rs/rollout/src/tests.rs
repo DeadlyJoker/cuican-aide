@@ -1277,6 +1277,7 @@ async fn test_updated_at_uses_file_mtime() -> Result<()> {
                 multi_agent_version: None,
             },
             git: None,
+            scene_runtime: None,
         }),
     };
     writeln!(file, "{}", serde_json::to_string(&meta_line)?)?;

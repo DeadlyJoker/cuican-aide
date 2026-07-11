@@ -1151,6 +1151,13 @@ client_request_definitions! {
         serialization: None,
         response: v2::CollaborationModeListResponse,
     },
+    #[experimental("scene/list")]
+    /// Lists built-in scene presets and their executable contracts.
+    SceneList => "scene/list" {
+        params: v2::SceneListParams,
+        serialization: None,
+        response: v2::SceneListResponse,
+    },
     #[experimental("mock/experimentalMethod")]
     /// Test-only method used to validate experimental gating.
     MockExperimentalMethod => "mock/experimentalMethod" {
@@ -2757,6 +2764,7 @@ mod tests {
                 sandbox: v2::SandboxPolicy::DangerFullAccess,
                 active_permission_profile: None,
                 reasoning_effort: None,
+                scene_runtime: None,
             },
         };
 
@@ -2803,7 +2811,8 @@ mod tests {
                         "type": "dangerFullAccess"
                     },
                     "activePermissionProfile": null,
-                    "reasoningEffort": null
+                    "reasoningEffort": null,
+                    "sceneRuntime": null
                 }
             }),
             serde_json::to_value(&response)?,

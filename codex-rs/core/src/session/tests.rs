@@ -1842,6 +1842,7 @@ fn session_meta_item(
             ..SessionMeta::default()
         },
         git: None,
+        scene_runtime: None,
     })
 }
 

@@ -161,6 +161,7 @@ fn write_rollout_with_user_message(
                     multi_agent_version: None,
                 },
                 git: None,
+                scene_runtime: None,
             }),
         },
         RolloutLine {

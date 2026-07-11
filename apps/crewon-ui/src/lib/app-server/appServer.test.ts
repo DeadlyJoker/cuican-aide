@@ -40,7 +40,9 @@ class FakeWebSocket extends EventTarget {
   }
 }
 
-async function connectFakeClient(client: AppServerClient): Promise<FakeWebSocket> {
+async function connectFakeClient(
+  client: AppServerClient,
+): Promise<FakeWebSocket> {
   vi.stubGlobal("window", {
     clearTimeout: globalThis.clearTimeout,
     setTimeout: globalThis.setTimeout,
@@ -115,6 +117,44 @@ describe("app server client connection lifecycle", () => {
     socket.closeFromServer();
 
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("app server execution intent", () => {
+  it("sends plan collaboration mode for a plan turn", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+
+    const turnPromise = client.startTurn("thread-1", "Plan this", [], {
+      executionIntent: "plan",
+      model: "gpt-5.6-sol",
+    });
+    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+
+    expect(request).toMatchObject({
+      method: "turn/start",
+      params: {
+        collaborationMode: {
+          mode: "plan",
+          settings: {
+            developer_instructions: null,
+            model: "gpt-5.6-sol",
+            reasoning_effort: null,
+          },
+        },
+      },
+    });
+
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(JSON.stringify({ id: request.id, result: { turn: {} } }));
+    await turnPromise;
   });
 });
 

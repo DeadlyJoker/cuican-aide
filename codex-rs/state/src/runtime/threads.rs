@@ -1770,6 +1770,7 @@ mod tests {
                 multi_agent_version: None,
             },
             git: None,
+            scene_runtime: None,
         })];
 
         runtime
@@ -1835,6 +1836,7 @@ mod tests {
                 branch: Some("rollout-branch".to_string()),
                 repository_url: Some("git@example.com:openai/codex.git".to_string()),
             }),
+            scene_runtime: None,
         })];
 
         runtime

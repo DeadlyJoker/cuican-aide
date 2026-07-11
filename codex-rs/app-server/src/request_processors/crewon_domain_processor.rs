@@ -1735,7 +1735,7 @@ fn ensure_agent_id(mut config: JsonValue) -> Result<(JsonValue, String), JSONRPC
     Ok((config, agent_id))
 }
 
-async fn read_office_record(
+pub(super) async fn read_office_record(
     cwd: &str,
     thread_id: Option<&str>,
     title: Option<&str>,
@@ -1753,7 +1753,7 @@ async fn read_office_record(
     }))
 }
 
-async fn read_agent_record(
+pub(super) async fn read_agent_record(
     cwd: &str,
     agent_id: Option<&str>,
     thread_id: Option<&str>,
@@ -1772,6 +1772,22 @@ async fn read_agent_record(
         }) || name
             .is_some_and(|name| record.config.get("name").and_then(JsonValue::as_str) == Some(name))
     }))
+}
+
+pub(super) async fn read_agent_record_by_file_path(
+    cwd: &str,
+    file_path: &str,
+) -> Result<Option<CrewonDomainConfigRecord>, JSONRPCErrorError> {
+    let file_path = validate_record_file_path(cwd, DomainKind::Agent, file_path)?;
+    read_record(DomainKind::Agent, &file_path).await
+}
+
+pub(super) async fn read_office_record_by_file_path(
+    cwd: &str,
+    file_path: &str,
+) -> Result<Option<CrewonDomainConfigRecord>, JSONRPCErrorError> {
+    let file_path = validate_record_file_path(cwd, DomainKind::Office, file_path)?;
+    read_record(DomainKind::Office, &file_path).await
 }
 
 async fn read_automation_record(

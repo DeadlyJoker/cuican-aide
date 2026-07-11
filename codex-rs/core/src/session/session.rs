@@ -194,6 +194,11 @@ impl SessionConfiguration {
             forked_from_thread_id: self.forked_from_thread_id,
             parent_thread_id: self.parent_thread_id,
             thread_source: self.thread_source.clone(),
+            scene_runtime: self
+                .original_config_do_not_use
+                .extra_config
+                .as_ref()
+                .and_then(|extra| extra.scene_runtime.clone()),
         }
     }
 

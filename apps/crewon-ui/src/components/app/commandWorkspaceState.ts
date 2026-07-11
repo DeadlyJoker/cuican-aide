@@ -1,6 +1,9 @@
 import type {
   AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
+import type { CommandScene } from "../../lib/scene/sceneCatalog";
+
+export type { CommandScene } from "../../lib/scene/sceneCatalog";
 
 export type CommandShellView =
   | "command"
@@ -10,7 +13,6 @@ export type CommandShellView =
   | "schedule"
   | "team";
 
-export type CommandScene = "office" | "code" | "design";
 export type CommandComposerMode = "plan" | "goal" | "agent";
 export type CommandPaletteKind =
   | "agent"

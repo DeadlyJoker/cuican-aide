@@ -510,8 +510,42 @@ impl Crewon {
             analytics_events_client,
             thread_store,
             attestation_provider,
-            inherited_multi_agent_version,
+            mut inherited_multi_agent_version,
         } = args;
+        if config.extra_config.is_none()
+            && let Some(scene_runtime) = conversation_history.get_scene_runtime()
+        {
+            config.extra_config = Some(crate::config::ExtraConfig {
+                scene_runtime: Some(scene_runtime),
+                scene_execution_target_profile: None,
+            });
+        }
+        if let Some(scene_runtime) = config
+            .extra_config
+            .as_ref()
+            .and_then(|extra| extra.scene_runtime.as_ref())
+        {
+            match scene_runtime.execution_strategy {
+                crewon_protocol::scene::SceneExecutionStrategy::Single => {
+                    config
+                        .features
+                        .disable(Feature::Collab)
+                        .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
+                    config
+                        .features
+                        .disable(Feature::MultiAgentV2)
+                        .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
+                    inherited_multi_agent_version = Some(MultiAgentVersion::Disabled);
+                }
+                crewon_protocol::scene::SceneExecutionStrategy::Team => {
+                    config
+                        .features
+                        .enable(Feature::MultiAgentV2)
+                        .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
+                    inherited_multi_agent_version = Some(MultiAgentVersion::V2);
+                }
+            }
+        }
         let (tx_sub, rx_sub) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
         let (tx_event, rx_event) = async_channel::unbounded();
 
@@ -586,7 +620,17 @@ impl Crewon {
         // TODO (aibrahim): Consolidate config.model and config.model_reasoning_effort into config.collaboration_mode
         // to avoid extracting these fields separately and constructing CollaborationMode here.
         let collaboration_mode = CollaborationMode {
-            mode: ModeKind::Default,
+            mode: if config
+                .extra_config
+                .as_ref()
+                .and_then(|extra| extra.scene_runtime.as_ref())
+                .is_some_and(|scene| {
+                    scene.contract.mode == crewon_protocol::scene::SceneInteractionMode::Plan
+                }) {
+                ModeKind::Plan
+            } else {
+                ModeKind::Default
+            },
             settings: Settings {
                 model: model.clone(),
                 reasoning_effort: config.model_reasoning_effort.clone(),
@@ -2935,6 +2979,24 @@ impl Session {
             developer_sections.push(plugin_instructions.render());
         }
         let context_contributors = self.services.extensions.context_contributors().to_vec();
+        if let Some(scene_runtime) = turn_context
+            .config
+            .extra_config
+            .as_ref()
+            .and_then(|extra| extra.scene_runtime.clone())
+        {
+            developer_sections
+                .push(crate::context::SceneContextFragment::new(scene_runtime).render());
+        }
+        if let Some(profile) = turn_context
+            .config
+            .extra_config
+            .as_ref()
+            .and_then(|extra| extra.scene_execution_target_profile.clone())
+        {
+            developer_sections
+                .push(crate::context::ExecutionTargetContextFragment::new(profile).render());
+        }
         for contributor in context_contributors {
             for fragment in contributor
                 .contribute(

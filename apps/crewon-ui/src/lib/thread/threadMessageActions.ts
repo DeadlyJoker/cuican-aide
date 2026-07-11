@@ -34,6 +34,7 @@ type ActiveTurnByThreadSetter = (
 type ThreadListSetter = (updater: (current: Thread[]) => Thread[]) => void;
 
 type ThreadMessageClient = {
+  clearThreadGoal?(threadId: string): Promise<unknown>;
   interruptTurn(threadId: string, turnId: string): Promise<unknown>;
   readThread?(threadId: string): Promise<Thread>;
   resumeThread(threadId: string): Promise<Thread>;
@@ -48,6 +49,11 @@ type ThreadMessageClient = {
     mentions?: PendingComposerMention[],
     settings?: ThreadRuntimeSettings,
   ): Promise<TurnStartResponse>;
+  setThreadGoal?(
+    threadId: string,
+    objective: string,
+    tokenBudget: number | null,
+  ): Promise<unknown>;
   steerTurn(
     threadId: string,
     text: string,
@@ -93,10 +99,12 @@ export type SendMessageActionParams = {
   client:
     | Pick<
         ThreadMessageClient,
+        | "clearThreadGoal"
         | "readThread"
         | "resumeThread"
         | "startTurn"
         | "steerTurn"
+        | "setThreadGoal"
         | "updateThreadSettings"
       >
     | null
@@ -322,6 +330,11 @@ export async function sendMessageAction({
 
     const turnThreadId = (resumedThread ?? activeThread).id;
     failedThreadId = turnThreadId;
+    if (threadSettings?.executionIntent === "goal") {
+      await client?.setThreadGoal?.(turnThreadId, text, null);
+    } else if (threadSettings?.executionIntent === "plan") {
+      await client?.clearThreadGoal?.(turnThreadId);
+    }
     if (threadSettings && !createdThreadForMessage) {
       await client?.updateThreadSettings?.(turnThreadId, threadSettings);
     }
@@ -452,7 +465,9 @@ export async function interruptActiveTurnAction({
   setIsSending(true);
   try {
     await client?.interruptTurn(selectedThreadId, activeTurnId);
-    setActiveTurnByThread((current) => removeRecordKey(current, selectedThreadId));
+    setActiveTurnByThread((current) =>
+      removeRecordKey(current, selectedThreadId),
+    );
     setThreads((current) =>
       updateThreadInList(current, selectedThreadId, (thread) => ({
         ...thread,
@@ -463,7 +478,9 @@ export async function interruptActiveTurnAction({
         ),
       })),
     );
-    const refreshedThread = await client?.readThread?.(selectedThreadId).catch(() => null);
+    const refreshedThread = await client
+      ?.readThread?.(selectedThreadId)
+      .catch(() => null);
     const refreshedTurn = refreshedThread?.turns.find(
       (turn) => turn.id === activeTurnId,
     );
