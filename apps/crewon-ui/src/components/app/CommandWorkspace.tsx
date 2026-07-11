@@ -18,7 +18,6 @@ import {
 import {
   CommandSidebar,
   Palette,
-  ResourceDock,
   type CommandLinkedThread,
   type PaletteItemWithCommand,
 } from "./CommandWorkspaceChrome";
@@ -1065,7 +1064,6 @@ export function CommandWorkspace({
               </section>
             </section>
 
-            <ResourceDock slots={slots} platformState={platformState} />
           </section>
 
           <AssistView
