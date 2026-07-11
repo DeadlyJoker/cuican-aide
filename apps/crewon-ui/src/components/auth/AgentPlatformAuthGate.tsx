@@ -69,6 +69,7 @@ export function PasswordInput(
 }
 
 export function clearWeComCallbackParams(params: URLSearchParams) {
+  params.delete("wecom_ticket");
   params.delete("code");
   params.delete("state");
   const query = params.toString();
@@ -186,6 +187,28 @@ export function AgentPlatformAuthScreen({
             </p>
           </header>
 
+          <button
+            className="crewon-auth-sso"
+            disabled={busy || !wecomConfig.enabled}
+            title={wecomConfig.reason || undefined}
+            type="button"
+            onClick={onWeComLogin}
+          >
+            <Building2 aria-hidden="true" />
+            {busy
+              ? "正在连接企业微信…"
+              : wecomConfig.enabled
+                ? "使用企业微信登录"
+                : "企业微信（配置后启用）"}
+          </button>
+          {!wecomConfig.enabled && wecomConfig.reason ? (
+            <p className="crewon-auth-sso-note">{wecomConfig.reason}</p>
+          ) : null}
+
+          <div className="crewon-auth-divider">
+            <span>或使用账号密码</span>
+          </div>
+
           <div
             className="crewon-auth-tabs"
             role="tablist"
@@ -285,26 +308,6 @@ export function AgentPlatformAuthScreen({
             </button>
           </form>
 
-          <div className="crewon-auth-divider">
-            <span>企业单点登录</span>
-          </div>
-          <button
-            className="crewon-auth-sso"
-            disabled={busy || !wecomConfig.enabled}
-            title={wecomConfig.reason || undefined}
-            type="button"
-            onClick={onWeComLogin}
-          >
-            <Building2 aria-hidden="true" />
-            {busy
-              ? "正在连接企业微信…"
-              : wecomConfig.enabled
-                ? "使用企业微信登录"
-                : "企业微信（配置后启用）"}
-          </button>
-          {!wecomConfig.enabled && wecomConfig.reason ? (
-            <p className="crewon-auth-sso-note">{wecomConfig.reason}</p>
-          ) : null}
           <footer>登录即表示同意企业账号与资源访问策略</footer>
         </div>
       </section>
@@ -334,11 +337,10 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
         const config = await readWeComLoginConfig();
         if (!cancelled) setWeComConfig(config);
         const params = new URLSearchParams(window.location.search);
-        const code = params.get("code");
-        const state = params.get("state");
-        if (code && state) {
+        const ticket = params.get("wecom_ticket");
+        if (ticket) {
           try {
-            const currentUser = await completeWeComLogin(code, state);
+            const currentUser = await completeWeComLogin(ticket);
             if (!cancelled) setUser(currentUser);
           } finally {
             clearWeComCallbackParams(params);

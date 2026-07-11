@@ -13,7 +13,6 @@ import {
 import { useMemo, useState, type ReactNode } from "react";
 
 import { officeRooms, workflowRooms } from "./commandWorkspaceData";
-import type { CommandHomeSlots } from "./commandWorkspaceState";
 import { classNames, connectionLabel } from "./commandWorkspaceUtils";
 import { CatalogResourceDialog } from "../catalog/CatalogResourceDialog";
 import {
@@ -785,178 +784,11 @@ export function ProjectsView({
   );
 }
 
-function agentCatalog(slots: CommandHomeSlots): CatalogItem[] {
-  return [
-    {
-      accent: "employee-card",
-      detail: slots.agent.detail,
-      filter: "employee personal",
-      icon: "产",
-      id: "employee-card-product-review",
-      label: "员工",
-      meta: ["PRD", "Gate", "只读"],
-      title: slots.agent.title,
-    },
-    {
-      accent: "employee-card",
-      detail: "把设计意图转成开发任务、边界条件和验收清单。",
-      filter: "employee personal",
-      icon: "交",
-      id: "employee-card-engineering-handoff",
-      label: "员工",
-      meta: ["MRD", "任务拆解", "写草稿"],
-      title: "开发交付智能体",
-    },
-    {
-      accent: "employee-card",
-      detail: "检查层级、密度、间距和组件一致性，避免功能页漂移。",
-      filter: "employee market",
-      icon: "视",
-      id: "employee-card-visual-polish",
-      label: "员工",
-      meta: ["来源：市场", "UI QA", "组件", "建议态"],
-      title: "视觉打磨智能体",
-    },
-    {
-      accent: "employee-card",
-      detail: "整理决策记录、待审批事项和对齐摘要，发送前保留人工确认。",
-      filter: "employee market",
-      icon: "会",
-      id: "employee-card-meeting-prep",
-      label: "员工",
-      meta: ["来源：市场", "Channel", "纪要", "Gate"],
-      title: "会议准备智能体",
-    },
-    {
-      accent: "skill-card",
-      detail: "读取 PR diff、运行静态检查，只把高风险结论送入 Gate。",
-      filter: "skill market",
-      icon: "CR",
-      id: "skill-card-code-review",
-      label: "Skill",
-      meta: ["来源：市场", "/review", "只读", "高风险"],
-      title: "code-review-system",
-    },
-    {
-      accent: "skill-card",
-      detail: slots.skills[0].detail,
-      filter: "skill personal",
-      icon: "页",
-      id: "skill-card-page-review",
-      label: "Skill",
-      meta: ["/ui-review", "视觉", "建议态"],
-      title: slots.skills[0].title,
-    },
-    {
-      accent: "skill-card",
-      detail:
-        slots.skills[1]?.detail ??
-        "把变更压缩成开发可执行的验收点、风险和回归范围。",
-      filter: "skill personal",
-      icon: "交",
-      id: "skill-card-handoff",
-      label: "Skill",
-      meta: ["/handoff", "验收", "导出"],
-      title: slots.skills[1]?.title ?? "交付检查 Skill",
-    },
-    {
-      accent: "skill-card",
-      detail: "解释 Agent / Team 生命周期，生成串行、并行或嵌套 Workflow。",
-      filter: "skill market",
-      icon: "队",
-      id: "skill-card-agent-management",
-      label: "Skill",
-      meta: ["来源：市场", "/team", "Workflow", "Gate"],
-      title: "小队编排 Skill",
-    },
-    {
-      accent: "skill-card",
-      detail: "读取网页、抽取结构化片段，并把来源回写到当前任务上下文。",
-      filter: "skill market",
-      icon: "WA",
-      id: "skill-card-web-access",
-      label: "Skill",
-      meta: ["来源：市场", "/web", "引用", "只读"],
-      title: "Web Access",
-    },
-    {
-      accent: "skill-card",
-      detail: "把会议、PRD 或验收点整理成可复制的文档草稿。",
-      filter: "skill market",
-      icon: "文",
-      id: "skill-card-doc-generator",
-      label: "Skill",
-      meta: ["来源：市场", "/doc", "草稿", "导出"],
-      title: "文档生成 Skill",
-    },
-    {
-      accent: "skill-card",
-      detail: "打开页面、点击表单、采集状态，用于低风险网页任务。",
-      filter: "skill market",
-      icon: "BR",
-      id: "skill-card-browser-automation",
-      label: "Skill",
-      meta: ["来源：市场", "/browser", "沙箱", "Gate"],
-      title: "浏览器自动化",
-    },
-    {
-      accent: "skill-card",
-      detail: "把用户反馈、缺陷记录和会议备注聚类成可执行问题。",
-      filter: "skill market",
-      icon: "馈",
-      id: "skill-card-feedback-mining",
-      label: "Skill",
-      meta: ["来源：市场", "/feedback", "聚类", "建议态"],
-      title: "反馈归因 Skill",
-    },
-    {
-      accent: "service-card",
-      detail: slots.mcps[0].detail,
-      filter: "service personal",
-      icon: "FS",
-      id: "service-card-filesystem",
-      label: "Service",
-      meta: ["@文件", "项目内", "就绪"],
-      title: slots.mcps[0].title,
-    },
-    {
-      accent: "service-card",
-      detail: "读取 Issue、PR 和提交状态；写入评论或触发 Action 前需要 Gate。",
-      filter: "service market",
-      icon: "GH",
-      id: "service-card-github",
-      label: "Service",
-      meta: ["来源：市场", "@PR", "待授权", "Gate"],
-      title: "GitHub MCP",
-    },
-    {
-      accent: "service-card",
-      detail: "只检索办公室授权的知识集合，并把引用来源写入上下文。",
-      filter: "service personal",
-      icon: "KB",
-      id: "service-card-knowledge",
-      label: "Service",
-      meta: ["@知识库", "引用", "正常"],
-      title: "知识库 RAG",
-    },
-    {
-      accent: "service-card",
-      detail: "读取会议、提醒和自动化窗口；创建外部事件需要 Gate。",
-      filter: "service market",
-      icon: "日",
-      id: "service-card-calendar",
-      label: "Service",
-      meta: ["来源：市场", "@日程", "只读", "正常"],
-      title: "日历服务",
-    },
-  ];
-}
-
 export function AgentsView({
   active,
   catalogFilter,
   catalogSearch,
-  slots,
+  platformState,
   snapshot,
   onReload,
   onCatalogFilterChange,
@@ -965,7 +797,7 @@ export function AgentsView({
   active: boolean;
   catalogFilter: string;
   catalogSearch: string;
-  slots: CommandHomeSlots;
+  platformState: "loading" | "ready" | "fallback";
   snapshot: AgentPlatformSnapshot;
   onReload: () => Promise<void>;
   onCatalogFilterChange: (filter: string) => void;
@@ -979,10 +811,7 @@ export function AgentsView({
     Record<string, number>
   >({});
   const syncedCards = useMemo(() => syncedAgentCatalog(snapshot), [snapshot]);
-  const cards = useMemo(
-    () => (syncedCards.length > 0 ? syncedCards : agentCatalog(slots)),
-    [slots, syncedCards],
-  );
+  const cards = syncedCards;
   const visibleCards = cards.filter(
     (item) =>
       (catalogFilter === "all" || hasFilter(item, catalogFilter)) &&
@@ -1097,13 +926,21 @@ export function AgentsView({
               onOpen={setSelectedResource}
             />
           ))}
-          <div
-            className="filter-empty-state"
-            data-filter-empty=""
-            hidden={visibleCards.length > 0}
-          >
-            没有匹配项
-          </div>
+          {visibleCards.length === 0 ? (
+            <div
+              className="filter-empty-state"
+              data-filter-empty=""
+              role="status"
+            >
+              {platformState === "loading"
+                ? "正在读取当前账号的 Agent、Skill 和 MCP…"
+                : platformState === "fallback"
+                  ? "资源目录暂时不可用，请确认 agent-platform 已启动后重试。"
+                  : cards.length === 0
+                    ? "当前账号暂无可用资源。请先在 agent-platform 创建或授权资源，再更新目录。"
+                    : "没有匹配项"}
+            </div>
+          ) : null}
         </section>
       </div>
       <CatalogResourceDialog
@@ -1117,10 +954,12 @@ export function AgentsView({
 
 export function KnowledgeCatalogView({
   active,
+  platformState,
   snapshot,
   onReload,
 }: {
   active: boolean;
+  platformState: "loading" | "ready" | "fallback";
   snapshot: AgentPlatformSnapshot;
   onReload: () => Promise<void>;
 }) {
@@ -1241,9 +1080,17 @@ export function KnowledgeCatalogView({
               onOpen={setSelectedResource}
             />
           ))}
-          <div className="filter-empty-state" hidden={visibleCards.length > 0}>
-            没有匹配的知识库
-          </div>
+          {visibleCards.length === 0 ? (
+            <div className="filter-empty-state" role="status">
+              {platformState === "loading"
+                ? "正在读取当前账号的知识库…"
+                : platformState === "fallback"
+                  ? "知识库目录暂时不可用，请确认 agent-platform 已启动后重试。"
+                  : cards.length === 0
+                    ? "当前账号暂无可用知识库。请先在 agent-platform 创建或授权知识库，再更新目录。"
+                    : "没有匹配的知识库"}
+            </div>
+          ) : null}
         </section>
       </div>
       <CatalogResourceDialog

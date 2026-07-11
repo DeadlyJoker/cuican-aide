@@ -81,6 +81,40 @@ function SchemaTable({ schema }: { schema: unknown }) {
   );
 }
 
+const mcpCallResponseSchema = {
+  type: "object",
+  required: ["tool_id", "tool_name", "result", "session_id"],
+  properties: {
+    tool_id: { type: "integer", description: "平台 Tool ID" },
+    tool_name: { type: "string", description: "MCP Tool 名称" },
+    result: { type: "object", description: "MCP ToolResult" },
+    session_id: { type: "string", description: "本次调用会话 ID" },
+  },
+};
+
+const mcpToolResultSchema = {
+  type: "object",
+  properties: {
+    content: {
+      type: "array",
+      description: "文本、图片、音频或资源内容",
+    },
+    structuredContent: {
+      type: "object",
+      description: "工具返回的结构化数据",
+    },
+    isError: { type: "boolean", description: "工具是否返回执行错误" },
+  },
+};
+
+function declaredMcpOutputSchema(tool: JsonObject): unknown | null {
+  const candidates = [
+    tool.output_schema,
+    objectValue(tool.invocation).output,
+  ];
+  return candidates.find((candidate) => schemaRows(candidate).length > 0) ?? null;
+}
+
 function skillMarkdown(detail: CatalogResourceDetail): string {
   if (typeof detail.skill_md === "string") return detail.skill_md;
   const skillMd = objectValue(detail.skill_md);
@@ -349,42 +383,52 @@ export function McpDetail({ detail }: { detail: CatalogResourceDetail }) {
       <section>
         <h3>工具</h3>
         <div className="catalog-tool-list">
-          {tools.map((tool, index) => (
-            <details
-              key={String(tool.id ?? tool.name ?? index)}
-              open={index === 0}
-            >
-              <summary>
-                <span>
-                  <strong>
-                    {stringValue(tool.alias) ||
-                      stringValue(tool.name) ||
-                      `工具 ${index + 1}`}
-                  </strong>
-                  <small>
-                    {stringValue(tool.description) || stringValue(tool.intro)}
-                  </small>
-                </span>
-                <span>查看参数</span>
-              </summary>
-              <div>
-                <h4>输入参数</h4>
-                <SchemaTable
-                  schema={
-                    tool.input_schema ??
-                    objectValue(tool.invocation).input ??
-                    tool.schema
-                  }
-                />
-                <h4>输出结构</h4>
-                <SchemaTable
-                  schema={
-                    tool.output_schema ?? objectValue(tool.invocation).output
-                  }
-                />
-              </div>
-            </details>
-          ))}
+          {tools.map((tool, index) => {
+            const outputSchema = declaredMcpOutputSchema(tool);
+            return (
+              <details
+                key={String(tool.id ?? tool.name ?? index)}
+                open={index === 0}
+              >
+                <summary>
+                  <span>
+                    <strong>
+                      {stringValue(tool.alias) ||
+                        stringValue(tool.name) ||
+                        `工具 ${index + 1}`}
+                    </strong>
+                    <small>
+                      {stringValue(tool.description) || stringValue(tool.intro)}
+                    </small>
+                  </span>
+                  <span>查看参数</span>
+                </summary>
+                <div>
+                  <h4>输入参数</h4>
+                  <SchemaTable
+                    schema={
+                      tool.input_schema ??
+                      objectValue(tool.invocation).input ??
+                      tool.schema
+                    }
+                  />
+                  <h4>调用响应</h4>
+                  <SchemaTable schema={mcpCallResponseSchema} />
+                  <h4>Tool 结果</h4>
+                  {outputSchema ? (
+                    <SchemaTable schema={outputSchema} />
+                  ) : (
+                    <>
+                      <p className="catalog-schema-note">
+                        该工具未声明 outputSchema，按 MCP 标准 ToolResult 展示。
+                      </p>
+                      <SchemaTable schema={mcpToolResultSchema} />
+                    </>
+                  )}
+                </div>
+              </details>
+            );
+          })}
           {tools.length === 0 ? (
             <p className="catalog-empty-copy">暂无可展示工具</p>
           ) : null}

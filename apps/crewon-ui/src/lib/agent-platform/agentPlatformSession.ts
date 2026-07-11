@@ -132,25 +132,17 @@ export async function readWeComLoginConfig(): Promise<WeComLoginConfig> {
 }
 
 export async function beginWeComLogin(): Promise<string> {
-  const response = await fetch(
-    `${agentPlatformBaseUrl()}/api/v1/auth/wecom/authorize`,
-  );
-  if (!response.ok) {
-    throw await responseError(response, "企业微信登录尚未配置");
-  }
-  const payload = (await response.json()) as { auth_url: string };
-  return payload.auth_url;
+  return `${agentPlatformBaseUrl()}/api/v1/auth/wecom/authorize`;
 }
 
 export async function completeWeComLogin(
-  code: string,
-  state: string,
+  ticket: string,
 ): Promise<AgentPlatformUser> {
   const response = await fetch(
-    `${agentPlatformBaseUrl()}/api/v1/auth/wecom/callback`,
+    `${agentPlatformBaseUrl()}/api/v1/auth/wecom/exchange`,
     {
       method: "POST",
-      body: JSON.stringify({ code, state }),
+      body: JSON.stringify({ ticket }),
       headers: { "Content-Type": "application/json" },
     },
   );

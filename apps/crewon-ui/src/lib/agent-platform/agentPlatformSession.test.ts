@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   beginWeComLogin,
+  completeWeComLogin,
   readWeComLoginConfig,
   registerAgentPlatform,
   setAgentPlatformPassword,
@@ -27,26 +28,17 @@ describe("agent-platform WeCom session", () => {
     vi.unstubAllGlobals();
   });
 
-  it("reads the disabled reason and starts the configured authorize URL", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            enabled: false,
-            provider: "wecom",
-            label: "企业微信",
-            reason: "missing config",
-          }),
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            auth_url: "https://login.work.weixin.qq.com/wwlogin/sso/login?state=signed",
-          }),
-        ),
-      );
+  it("reads the disabled reason and navigates through the backend authorize endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          enabled: false,
+          provider: "wecom",
+          label: "企业微信",
+          reason: "missing config",
+        }),
+      ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     expect(await readWeComLoginConfig()).toEqual({
@@ -55,13 +47,59 @@ describe("agent-platform WeCom session", () => {
       label: "企业微信",
       reason: "missing config",
     });
-    expect(await beginWeComLogin()).toContain("login.work.weixin.qq.com");
+    expect(await beginWeComLogin()).toBe(
+      "/agent-platform-api/api/v1/auth/wecom/authorize",
+    );
+  });
+
+  it("exchanges a one-time callback ticket without placing tokens in the URL", async () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: "access-token",
+            refresh_token: "refresh-token",
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 7,
+            username: "wecom_user",
+            email: "user@example.com",
+            role: "user",
+            linked_providers: ["wecom"],
+            password_login_enabled: false,
+          }),
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      completeWeComLogin("single-use-ticket"),
+    ).resolves.toMatchObject({
+      id: 7,
+      linked_providers: ["wecom"],
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/agent-platform-api/api/v1/auth/wecom/exchange",
+      expect.objectContaining({
+        body: JSON.stringify({ ticket: "single-use-ticket" }),
+        method: "POST",
+      }),
+    );
   });
 
   it("sets the initial password through the authenticated account API", async () => {
     vi.stubGlobal("localStorage", memoryStorage());
     storeAgentPlatformSession("local-token");
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true })));
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ ok: true })),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await setAgentPlatformPassword("CrewON123");

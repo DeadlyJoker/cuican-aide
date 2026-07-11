@@ -7,7 +7,6 @@ import {
   clearWeComCallbackParams,
 } from "../auth/AgentPlatformAuthGate";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
-import type { CommandHomeSlots } from "./commandWorkspaceState";
 import { AgentsView, KnowledgeCatalogView } from "./CommandWorkspaceViews";
 import {
   AgentDetail,
@@ -15,26 +14,6 @@ import {
   McpDetail,
   SkillDetail,
 } from "../catalog/CatalogResourceDialog";
-
-const slots: CommandHomeSlots = {
-  agent: {
-    label: "Agent",
-    title: "Fallback Agent",
-    detail: "Fallback",
-    value: "agent",
-  },
-  workflow: { label: "Workflow", title: "Flow", detail: "Flow", value: "flow" },
-  knowledge: { label: "空间", title: "Space", detail: "Space", value: "space" },
-  skills: [
-    { label: "Skill", title: "Skill A", detail: "A", value: "a" },
-    { label: "Skill", title: "Skill B", detail: "B", value: "b" },
-  ],
-  mcps: [
-    { label: "MCP", title: "MCP A", detail: "A", value: "a" },
-    { label: "MCP", title: "MCP B", detail: "B", value: "b" },
-  ],
-  model: "qwen-plus",
-};
 
 const snapshot: AgentPlatformSnapshot = {
   agents: [
@@ -148,13 +127,13 @@ describe("CrewON resource catalog MVP", () => {
     });
 
     clearWeComCallbackParams(
-      new URLSearchParams("code=auth-code&state=signed-state&source=desktop"),
+      new URLSearchParams("wecom_ticket=one-time-ticket&source=web"),
     );
 
     expect(replaceState).toHaveBeenCalledWith(
       {},
       "",
-      "/workspace?source=desktop#view-command",
+      "/workspace?source=web#view-command",
     );
   });
 
@@ -165,7 +144,7 @@ describe("CrewON resource catalog MVP", () => {
           active
           catalogFilter="all"
           catalogSearch=""
-          slots={slots}
+          platformState="ready"
           snapshot={snapshot}
           onReload={async () => {}}
           onCatalogFilterChange={() => {}}
@@ -173,12 +152,59 @@ describe("CrewON resource catalog MVP", () => {
         />
         <KnowledgeCatalogView
           active
+          platformState="ready"
           snapshot={snapshot}
           onReload={async () => {}}
         />
       </>,
     );
 
+    expect(markup).toMatchSnapshot();
+  });
+
+  it("snapshots loading, empty-account, and unavailable catalog states", () => {
+    const emptySnapshot: AgentPlatformSnapshot = {
+      agents: [],
+      skills: [],
+      mcpServers: [],
+      knowledgeBases: [],
+      mcpTools: [],
+      workflows: [],
+    };
+    const renderAgents = (platformState: "loading" | "ready" | "fallback") => (
+      <AgentsView
+        active
+        catalogFilter="all"
+        catalogSearch=""
+        platformState={platformState}
+        snapshot={emptySnapshot}
+        onReload={async () => {}}
+        onCatalogFilterChange={() => {}}
+        onCatalogSearchChange={() => {}}
+      />
+    );
+
+    const markup = renderToStaticMarkup(
+      <>
+        {renderAgents("loading")}
+        {renderAgents("ready")}
+        {renderAgents("fallback")}
+        <KnowledgeCatalogView
+          active
+          platformState="loading"
+          snapshot={emptySnapshot}
+          onReload={async () => {}}
+        />
+        <KnowledgeCatalogView
+          active
+          platformState="ready"
+          snapshot={emptySnapshot}
+          onReload={async () => {}}
+        />
+      </>,
+    );
+
+    expect(markup).not.toContain("产品审阅智能体");
     expect(markup).toMatchSnapshot();
   });
 
@@ -227,6 +253,22 @@ describe("CrewON resource catalog MVP", () => {
                   },
                 },
               },
+              {
+                id: 2,
+                name: "score_risk",
+                description: "输出结构化风险等级",
+                input_schema: {
+                  type: "object",
+                  properties: { company: { type: "string" } },
+                },
+                output_schema: {
+                  type: "object",
+                  required: ["risk_level"],
+                  properties: {
+                    risk_level: { type: "string", description: "风险等级" },
+                  },
+                },
+              },
             ],
           }}
         />
@@ -245,6 +287,10 @@ describe("CrewON resource catalog MVP", () => {
       </>,
     );
 
+    expect(markup).toContain("tool_id");
+    expect(markup).toContain("structuredContent");
+    expect(markup).toContain("risk_level");
+    expect(markup).not.toContain("无额外字段");
     expect(markup).toMatchSnapshot();
   });
 });
