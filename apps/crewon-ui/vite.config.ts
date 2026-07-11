@@ -1,5 +1,37 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+
+const AGENT_PLATFORM_UNAVAILABLE_BODY = JSON.stringify({
+  error: "agent-platform unavailable",
+  message:
+    "Local agent-platform is not running. CrewON app-server conversations are still available.",
+});
+const AGENT_PLATFORM_REACHABILITY_TTL_MS = 2_000;
+const AGENT_PLATFORM_REACHABILITY_TIMEOUT_MS = 250;
+const MERMAID_CHUNK_PACKAGES = new Set([
+  "@braintree/sanitize-url",
+  "@iconify/utils",
+  "@mermaid-js/parser",
+  "@upsetjs/venn.js",
+  "cytoscape",
+  "cytoscape-cose-bilkent",
+  "cytoscape-fcose",
+  "d3",
+  "d3-sankey",
+  "dagre-d3-es",
+  "dayjs",
+  "dompurify",
+  "es-toolkit",
+  "katex",
+  "khroma",
+  "marked",
+  "mermaid",
+  "roughjs",
+  "stylis",
+  "ts-dedent",
+  "uuid",
+]);
+const REACT_CHUNK_PACKAGES = new Set(["react", "react-dom", "scheduler"]);
 
 type WebSocketProxy = {
   on(
@@ -8,6 +40,127 @@ type WebSocketProxy = {
   ): void;
 };
 
+type HttpProxyResponse = {
+  end?: (body?: string) => void;
+  headersSent?: boolean;
+  writeHead?: (statusCode: number, headers?: Record<string, string>) => void;
+};
+
+type HttpProxy = {
+  on(
+    event: "error",
+    callback: (error: Error, request: unknown, response: HttpProxyResponse) => void,
+  ): void;
+};
+
+type ReachabilityCache = {
+  available: boolean;
+  checkedAt: number;
+  pending: Promise<boolean> | null;
+};
+
+function parseReachabilityUrl(target: string): string | null {
+  try {
+    const url = new URL(target);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return `${url.origin}/__crewon_agent_platform_probe__`;
+  } catch {
+    return null;
+  }
+}
+
+function isAgentPlatformReachable(
+  reachabilityUrl: string,
+  cache: ReachabilityCache,
+): Promise<boolean> {
+  const now = Date.now();
+  if (
+    !cache.pending &&
+    now - cache.checkedAt < AGENT_PLATFORM_REACHABILITY_TTL_MS
+  ) {
+    return Promise.resolve(cache.available);
+  }
+
+  cache.pending ??= new Promise<boolean>((resolve) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      AGENT_PLATFORM_REACHABILITY_TIMEOUT_MS,
+    );
+    const finish = (available: boolean) => {
+      clearTimeout(timeoutId);
+      cache.available = available;
+      cache.checkedAt = Date.now();
+      cache.pending = null;
+      resolve(available);
+    };
+
+    fetch(reachabilityUrl, {
+      method: "HEAD",
+      signal: controller.signal,
+    }).then(
+      () => finish(true),
+      () => finish(false),
+    );
+  });
+
+  return cache.pending;
+}
+
+function agentPlatformFallbackPlugin(target: string): Plugin {
+  const reachabilityUrl = parseReachabilityUrl(target);
+  const cache: ReachabilityCache = {
+    available: false,
+    checkedAt: 0,
+    pending: null,
+  };
+
+  return {
+    name: "crewon-agent-platform-fallback",
+    configureServer(server) {
+      server.middlewares.use("/agent-platform-api", async (_request, response, next) => {
+        if (
+          !reachabilityUrl ||
+          (await isAgentPlatformReachable(reachabilityUrl, cache))
+        ) {
+          next();
+          return;
+        }
+
+        response.statusCode = 503;
+        response.setHeader("Content-Type", "application/json");
+        response.end(AGENT_PLATFORM_UNAVAILABLE_BODY);
+      });
+    },
+  };
+}
+
+function nodeModulePackageName(id: string): string | null {
+  const normalized = id.replace(/\\/g, "/");
+  const marker = "/node_modules/";
+  const markerIndex = normalized.lastIndexOf(marker);
+  if (markerIndex < 0) {
+    return null;
+  }
+
+  const parts = normalized.slice(markerIndex + marker.length).split("/");
+  if (parts[0]?.startsWith("@")) {
+    return parts[1] ? `${parts[0]}/${parts[1]}` : null;
+  }
+  return parts[0] ?? null;
+}
+
+function isMermaidChunkModule(id: string): boolean {
+  const packageName = nodeModulePackageName(id);
+  return Boolean(
+    packageName &&
+      (MERMAID_CHUNK_PACKAGES.has(packageName) ||
+        packageName.startsWith("d3-")),
+  );
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
   const appServerTarget = env.CREWON_APP_SERVER_TARGET ?? "ws://127.0.0.1:6176";
@@ -15,7 +168,7 @@ export default defineConfig(({ mode }) => {
     env.CREWON_AGENT_PLATFORM_TARGET ?? "http://127.0.0.1:8000";
 
   return {
-    plugins: [react()],
+    plugins: [agentPlatformFallbackPlugin(agentPlatformTarget), react()],
     server: {
       port: 5175,
       strictPort: false,
@@ -36,6 +189,17 @@ export default defineConfig(({ mode }) => {
         "/agent-platform-api": {
           target: agentPlatformTarget,
           changeOrigin: true,
+          configure(proxy) {
+            (proxy as unknown as HttpProxy).on("error", (_error, _request, response) => {
+              if (!response?.writeHead || response.headersSent) {
+                return;
+              }
+              response.writeHead(503, {
+                "Content-Type": "application/json",
+              });
+              response.end?.(AGENT_PLATFORM_UNAVAILABLE_BODY);
+            });
+          },
           rewrite: (path) => path.replace(/^\/agent-platform-api/, ""),
         },
       },
@@ -48,10 +212,14 @@ export default defineConfig(({ mode }) => {
             if (!id.includes("node_modules")) {
               return undefined;
             }
-            if (id.includes("lucide-react")) {
+            const packageName = nodeModulePackageName(id);
+            if (isMermaidChunkModule(id)) {
+              return "mermaid";
+            }
+            if (packageName === "lucide-react") {
               return "icons";
             }
-            if (id.includes("react")) {
+            if (packageName && REACT_CHUNK_PACKAGES.has(packageName)) {
               return "react";
             }
             return "vendor";

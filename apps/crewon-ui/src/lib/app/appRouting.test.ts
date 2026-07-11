@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   appViewFromSearch,
+  isCommandShellHash,
   libraryViewFromSearch,
+  shouldRenderCommandShellView,
   settingsSectionFromSearch,
 } from "./appRouting";
 
@@ -34,5 +36,20 @@ describe("app routing search parsing", () => {
     expect(settingsSectionFromSearch("section=mcp-servers")).toBe("mcp-servers");
     expect(settingsSectionFromSearch("?section=unknown")).toBe("account");
     expect(settingsSectionFromSearch("")).toBe("account");
+  });
+
+  it("detects command shell hash routes independently from selected threads", () => {
+    expect(isCommandShellHash("#view-command")).toBe(true);
+    expect(isCommandShellHash("#view-agents")).toBe(true);
+    expect(isCommandShellHash("#view-settings")).toBe(false);
+    expect(isCommandShellHash("")).toBe(false);
+  });
+
+  it("uses the command shell for the default chat app view", () => {
+    expect(shouldRenderCommandShellView("chat")).toBe(true);
+    expect(shouldRenderCommandShellView("settings", true)).toBe(true);
+    expect(shouldRenderCommandShellView("library", true)).toBe(true);
+    expect(shouldRenderCommandShellView("settings")).toBe(false);
+    expect(shouldRenderCommandShellView("library")).toBe(false);
   });
 });

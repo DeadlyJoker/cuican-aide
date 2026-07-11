@@ -3,6 +3,10 @@ import type { Thread } from "@crewon-protocol/v2/Thread";
 import { AppConversationSurface } from "./AppConversationSurface";
 import { CommandWorkspace } from "./CommandWorkspace";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
+import type {
+  CommandModelOption,
+  ThreadRuntimeSettings,
+} from "../../lib/thread/threadRuntimeSettings";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import { translate, type Locale } from "../../lib/i18n";
 import type { PlatformKind } from "../../lib/platform";
@@ -16,6 +20,7 @@ export function AppWorkspaceConversationContent({
   cwd,
   isSending,
   locale,
+  modelOptions,
   platform,
   selectedThread,
   selectedThreadId,
@@ -38,6 +43,7 @@ export function AppWorkspaceConversationContent({
   cwd: string;
   isSending: boolean;
   locale: Locale;
+  modelOptions?: CommandModelOption[];
   platform: PlatformKind;
   selectedThread: Thread | null;
   selectedThreadId: string | null;
@@ -48,7 +54,7 @@ export function AppWorkspaceConversationContent({
   onChangeComposerValue: (value: string) => void;
   onModeChange: (mode: WorkMode) => void;
   onRetryConnection: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
   onSlashCommandSelect: (command: ComposerSlashCommand) => void;
   onStop: () => void;
   onThreadSettings: () => void;
@@ -70,12 +76,16 @@ export function AppWorkspaceConversationContent({
         connectionState={connectionState}
         cwd={cwd}
         isSending={isSending}
+        locale={locale}
+        modelOptions={modelOptions}
+        slashCommands={slashCommands}
         workMode={workMode}
         onAttachContext={onAttachContext}
         onChangeComposerValue={onChangeComposerValue}
         onModeChange={onModeChange}
         onRetryConnection={onRetryConnection}
         onSend={onSend}
+        onSlashCommandSelect={onSlashCommandSelect}
       />
     );
   }

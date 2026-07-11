@@ -829,7 +829,9 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
         .await;
     let body = response_mock.single_request().body_json();
     let instructions = body["instructions"].as_str().unwrap();
-    assert_eq!(instructions, base_model_info.base_instructions);
+    assert!(instructions.starts_with(&base_model_info.base_instructions));
+    assert!(instructions.contains("<runtime_model_identity>"));
+    assert!(instructions.contains(&format!("`{model}`")));
 
     Ok(())
 }

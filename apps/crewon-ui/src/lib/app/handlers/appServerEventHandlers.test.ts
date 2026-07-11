@@ -107,6 +107,7 @@ function createParams(
 ): AppServerEventHandlersParams {
   const currentClient = client();
   return {
+    appendStreamingTextDelta: () => {},
     automationRunsByTurn: () => ({
       "turn-1": { filePath: "automation.json", runId: "run-1", threadId: "t1" },
     }),

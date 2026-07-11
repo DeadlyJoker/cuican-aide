@@ -288,6 +288,19 @@ describe("app thread runtime handlers", () => {
     });
   });
 
+  it("can send from the command home as a new thread even when another thread is selected", async () => {
+    const handlers = createAppThreadRuntimeHandlers(createParams());
+
+    await handlers.sendMessageInNewThread("fresh prompt");
+
+    expect(threadMessageSpy.sendParams).toMatchObject({
+      activeTurnId: null,
+      selectedThread: null,
+      selectedThreadId: null,
+      text: "fresh prompt",
+    });
+  });
+
   it("shares createThread with review and side chat handlers", async () => {
     const handlers = createAppThreadRuntimeHandlers(createParams());
 

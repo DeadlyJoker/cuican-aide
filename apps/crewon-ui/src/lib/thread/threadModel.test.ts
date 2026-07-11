@@ -7,7 +7,10 @@ import {
   appendCommandOutputDeltaInThread,
   appendItemInThread,
   appendPlanDeltaInThread,
+  appendReasoningContentDeltaInThread,
+  appendReasoningSummaryDeltaInThread,
   appendTurnWithFallbackPreview,
+  ensureReasoningSummaryPartInThread,
   mergeThreadListSummaries,
   removeThreadFromList,
   selectedThreadIdAfterThreadList,
@@ -70,6 +73,18 @@ function fileChangeItem(
     id: "file-1",
     changes: [],
     status: "inProgress",
+    ...overrides,
+  };
+}
+
+function reasoningItem(
+  overrides: Partial<Extract<ThreadItem, { type: "reasoning" }>> = {},
+): Extract<ThreadItem, { type: "reasoning" }> {
+  return {
+    type: "reasoning",
+    id: "reasoning-1",
+    summary: [],
+    content: [],
     ...overrides,
   };
 }
@@ -165,6 +180,7 @@ describe("thread model list helpers", () => {
               commandExecutionItem(),
               fileChangeItem(),
               planItem({ id: "plan-1" }),
+              reasoningItem(),
             ],
           }),
         ],
@@ -222,6 +238,44 @@ describe("thread model list helpers", () => {
       planItem({ id: "plan-1", text: "first done" }),
     );
     expect(withPlanDelta[1]).toBe(threads[1]);
+
+    const withReasoningSummaryPart = ensureReasoningSummaryPartInThread(
+      threads,
+      "thread-1",
+      "turn-1",
+      "reasoning-1",
+      1,
+    );
+    expect(withReasoningSummaryPart[0].turns[0]?.items[3]).toEqual(
+      reasoningItem({ summary: ["", ""] }),
+    );
+
+    const withReasoningSummaryDelta = appendReasoningSummaryDeltaInThread(
+      withReasoningSummaryPart,
+      "thread-1",
+      "turn-1",
+      "reasoning-1",
+      1,
+      "Planning",
+    );
+    expect(withReasoningSummaryDelta[0].turns[0]?.items[3]).toEqual(
+      reasoningItem({ summary: ["", "Planning"] }),
+    );
+
+    const withReasoningContentDelta = appendReasoningContentDeltaInThread(
+      withReasoningSummaryDelta,
+      "thread-1",
+      "turn-1",
+      "reasoning-1",
+      0,
+      "Detailed thought",
+    );
+    expect(withReasoningContentDelta[0].turns[0]?.items[3]).toEqual(
+      reasoningItem({
+        summary: ["", "Planning"],
+        content: ["Detailed thought"],
+      }),
+    );
   });
 
   it("updates thread metadata in a list", () => {

@@ -85,6 +85,7 @@ pub fn should_persist_event_msg(ev: &EventMsg) -> bool {
         | EventMsg::ContextCompacted(_)
         | EventMsg::EnteredReviewMode(_)
         | EventMsg::ExitedReviewMode(_)
+        | EventMsg::ExecCommandEnd(_)
         | EventMsg::McpToolCallEnd(_)
         | EventMsg::ThreadRolledBack(_)
         | EventMsg::TurnAborted(_)
@@ -101,7 +102,6 @@ pub fn should_persist_event_msg(ev: &EventMsg) -> bool {
         }
         EventMsg::Error(_)
         | EventMsg::GuardianAssessment(_)
-        | EventMsg::ExecCommandEnd(_)
         | EventMsg::ViewImageToolCall(_)
         | EventMsg::CollabAgentSpawnEnd(_)
         | EventMsg::CollabAgentInteractionEnd(_)
@@ -158,3 +158,7 @@ pub fn should_persist_event_msg(ev: &EventMsg) -> bool {
         | EventMsg::CollabResumeBegin(_) => false,
     }
 }
+
+#[cfg(test)]
+#[path = "policy_tests.rs"]
+mod tests;

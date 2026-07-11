@@ -4,6 +4,27 @@ import type { SettingsSection } from "../settings/settingsCatalog";
 
 export type { AppView } from "../shared/appView";
 
+const commandShellViews = new Set([
+  "command",
+  "assist",
+  "projects",
+  "agents",
+  "schedule",
+  "team",
+]);
+
+export function isCommandShellHash(hash: string): boolean {
+  const view = hash.replace(/^#view-/, "");
+  return view !== hash && commandShellViews.has(view);
+}
+
+export function shouldRenderCommandShellView(
+  appView: AppView,
+  commandShellRouteActive = false,
+): boolean {
+  return appView === "chat" || commandShellRouteActive;
+}
+
 export function libraryViewFromSearch(search: string): LibraryKind | null {
   const view = new URLSearchParams(search).get("view");
 

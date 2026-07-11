@@ -31,6 +31,7 @@ function createParams(
 ): AppServerEventCoordinatorParams {
   return {
     appViewRef: { current: "chat" as AppView },
+    appendStreamingTextDelta: () => {},
     automationRunByTurnRef: { current: {} },
     capabilityPanelRef: { current: null },
     clientRef: { current: null as AppServerClient | null },

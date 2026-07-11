@@ -7,6 +7,7 @@ import type { ConfirmHandler } from "../../shared/confirmHandler";
 import type { NoticeState } from "../appRuntimeState";
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { Locale, ToolId } from "../../i18n";
+import type { ThreadRuntimeSettings } from "../../thread/threadRuntimeSettings";
 import {
   archiveThreadAction,
   deleteArchivedThreadAction,
@@ -48,7 +49,14 @@ export type AppThreadRuntimeHandlers = {
   interruptActiveTurn: () => Promise<void>;
   renameThread: (thread: Thread) => Promise<void>;
   selectThread: (threadId: string) => Promise<void>;
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (
+    text: string,
+    threadSettings?: ThreadRuntimeSettings,
+  ) => Promise<void>;
+  sendMessageInNewThread: (
+    text: string,
+    threadSettings?: ThreadRuntimeSettings,
+  ) => Promise<void>;
   startDraftThread: () => void;
   startReview: () => Promise<void>;
   startSideChat: () => Promise<void>;
@@ -121,7 +129,11 @@ export function createAppThreadRuntimeHandlers(
       shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
     });
 
-  const createThread = (initialPrompt?: string, threadSource = "app_server") =>
+  const createThread = (
+    initialPrompt?: string,
+    threadSource = "app_server",
+    threadSettings?: ThreadRuntimeSettings,
+  ) =>
     createThreadAction({
       client: params.client,
       createDemoThread,
@@ -135,7 +147,44 @@ export function createAppThreadRuntimeHandlers(
       setSidebarOpen: params.setSidebarOpen,
       setThreads: params.setThreads,
       shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
+      threadSettings,
       threadSource,
+    });
+
+  const sendMessageWithThreadContext = (
+    text: string,
+    threadSettings: ThreadRuntimeSettings | undefined,
+    threadContext: {
+      activeTurnId: string | null;
+      selectedThread: Thread | null;
+      selectedThreadId: string | null;
+    },
+  ) =>
+    sendMessageAction({
+      activeTurnId: threadContext.activeTurnId,
+      client: params.client,
+      createThread: (initialPrompt) =>
+        createThread(initialPrompt, "app_server", threadSettings),
+      demoResponse: params.demoResponse,
+      isConnected: params.isConnected,
+      isDemoPreview: params.isDemoPreview,
+      isSending: params.isSending,
+      locale: params.locale,
+      pendingComposerMentions: params.pendingComposerMentions,
+      preserveThreadsAfterConnectionLoss:
+        params.preserveThreadsAfterConnectionLoss,
+      selectedThread: threadContext.selectedThread,
+      selectedThreadId: threadContext.selectedThreadId,
+      setActiveTurnByThread: params.setActiveTurnByThread,
+      setComposerFocusSignal: params.setComposerFocusSignal,
+      setComposerValue: params.setComposerValue,
+      setIsSending: params.setIsSending,
+      setNotice: params.setNotice,
+      setPendingComposerMentions: params.setPendingComposerMentions,
+      setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
+      setThreads: params.setThreads,
+      text,
+      threadSettings,
     });
 
   return {
@@ -204,30 +253,17 @@ export function createAppThreadRuntimeHandlers(
         shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
         threadId,
       }),
-    sendMessage: (text) =>
-      sendMessageAction({
+    sendMessage: (text, threadSettings) =>
+      sendMessageWithThreadContext(text, threadSettings, {
         activeTurnId,
-        client: params.client,
-        createThread: (initialPrompt) => createThread(initialPrompt),
-        demoResponse: params.demoResponse,
-        isConnected: params.isConnected,
-        isDemoPreview: params.isDemoPreview,
-        isSending: params.isSending,
-        locale: params.locale,
-        pendingComposerMentions: params.pendingComposerMentions,
-        preserveThreadsAfterConnectionLoss:
-          params.preserveThreadsAfterConnectionLoss,
         selectedThread: params.selectedThread,
         selectedThreadId: params.selectedThreadId,
-        setActiveTurnByThread: params.setActiveTurnByThread,
-        setComposerFocusSignal: params.setComposerFocusSignal,
-        setComposerValue: params.setComposerValue,
-        setIsSending: params.setIsSending,
-        setNotice: params.setNotice,
-        setPendingComposerMentions: params.setPendingComposerMentions,
-        setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
-        setThreads: params.setThreads,
-        text,
+      }),
+    sendMessageInNewThread: (text, threadSettings) =>
+      sendMessageWithThreadContext(text, threadSettings, {
+        activeTurnId: null,
+        selectedThread: null,
+        selectedThreadId: null,
       }),
     startDraftThread: () => {
       startDraftThreadAction({

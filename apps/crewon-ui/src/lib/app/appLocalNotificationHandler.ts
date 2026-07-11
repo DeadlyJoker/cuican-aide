@@ -30,7 +30,11 @@ import { decodeBase64Text } from "../server-request/serverRequestPresentation";
 import {
   appendCommandOutputDeltaInThread,
   appendItemInThread,
+  appendMcpToolCallProgressInThread,
   appendPlanDeltaInThread,
+  appendReasoningContentDeltaInThread,
+  appendReasoningSummaryDeltaInThread,
+  ensureReasoningSummaryPartInThread,
   removeThreadFromList,
   selectedThreadIdAfterThreadRemoval,
   updateFileChangeItemChangesInThread,
@@ -43,6 +47,7 @@ import {
 type StateSetter<T> = (updater: (current: T) => T) => void;
 
 export type LocalNotificationHandlerParams = {
+  appendStreamingTextDelta?: (threadId: string, delta: string) => void;
   locale: Locale;
   notification: AppServerNotification;
   selectedThreadId: string | null;
@@ -62,6 +67,7 @@ export type LocalNotificationHandlerParams = {
 };
 
 export function handleLocalAppNotification({
+  appendStreamingTextDelta,
   locale,
   notification,
   selectedThreadId,
@@ -79,6 +85,12 @@ export function handleLocalAppNotification({
   setStreamingTextByThread,
   setThreads,
 }: LocalNotificationHandlerParams): boolean {
+  const selectThreadIfNone = (threadId: string) => {
+    if (!selectedThreadId) {
+      setSelectedThreadId((current) => current ?? threadId);
+    }
+  };
+
   switch (notification.method) {
     case "command/exec/outputDelta": {
       const { processId, stream, deltaBase64, capReached } =
@@ -116,13 +128,19 @@ export function handleLocalAppNotification({
     }
     case "item/agentMessage/delta": {
       const { threadId, delta } = notification.params;
-      setStreamingTextByThread((current) =>
-        appendThreadText(current, threadId, delta),
-      );
+      selectThreadIfNone(threadId);
+      if (appendStreamingTextDelta) {
+        appendStreamingTextDelta(threadId, delta);
+      } else {
+        setStreamingTextByThread((current) =>
+          appendThreadText(current, threadId, delta),
+        );
+      }
       return true;
     }
     case "item/commandExecution/outputDelta": {
       const { threadId, turnId, itemId, delta } = notification.params;
+      selectThreadIfNone(threadId);
       setThreads((current) =>
         appendCommandOutputDeltaInThread(
           current,
@@ -134,14 +152,31 @@ export function handleLocalAppNotification({
       );
       return true;
     }
+    case "item/mcpToolCall/progress": {
+      const { threadId, turnId, itemId, message } = notification.params;
+      selectThreadIfNone(threadId);
+      setThreads((current) =>
+        appendMcpToolCallProgressInThread(
+          current,
+          threadId,
+          turnId,
+          itemId,
+          message,
+        ),
+      );
+      return true;
+    }
     case "item/completed": {
       const { threadId, turnId, item } = notification.params;
+      selectThreadIfNone(threadId);
       setThreads((current) => appendItemInThread(current, threadId, turnId, item));
-      setStreamingTextByThread((current) => clearThreadText(current, threadId));
+      // Keep streamed answer text visible across segmented item completions.
+      // The turn/completed handler replaces it with the finalized transcript item.
       return true;
     }
     case "item/fileChange/patchUpdated": {
       const { threadId, turnId, itemId, changes } = notification.params;
+      selectThreadIfNone(threadId);
       setThreads((current) =>
         updateFileChangeItemChangesInThread(
           current,
@@ -155,13 +190,61 @@ export function handleLocalAppNotification({
     }
     case "item/plan/delta": {
       const { threadId, turnId, itemId, delta } = notification.params;
+      selectThreadIfNone(threadId);
       setThreads((current) =>
         appendPlanDeltaInThread(current, threadId, turnId, itemId, delta),
       );
       return true;
     }
+    case "item/reasoning/summaryPartAdded": {
+      const { threadId, turnId, itemId, summaryIndex } = notification.params;
+      selectThreadIfNone(threadId);
+      setThreads((current) =>
+        ensureReasoningSummaryPartInThread(
+          current,
+          threadId,
+          turnId,
+          itemId,
+          summaryIndex,
+        ),
+      );
+      return true;
+    }
+    case "item/reasoning/summaryTextDelta": {
+      const { threadId, turnId, itemId, summaryIndex, delta } =
+        notification.params;
+      selectThreadIfNone(threadId);
+      setThreads((current) =>
+        appendReasoningSummaryDeltaInThread(
+          current,
+          threadId,
+          turnId,
+          itemId,
+          summaryIndex,
+          delta,
+        ),
+      );
+      return true;
+    }
+    case "item/reasoning/textDelta": {
+      const { threadId, turnId, itemId, contentIndex, delta } =
+        notification.params;
+      selectThreadIfNone(threadId);
+      setThreads((current) =>
+        appendReasoningContentDeltaInThread(
+          current,
+          threadId,
+          turnId,
+          itemId,
+          contentIndex,
+          delta,
+        ),
+      );
+      return true;
+    }
     case "item/started": {
       const { threadId, turnId, item } = notification.params;
+      selectThreadIfNone(threadId);
       setThreads((current) => appendItemInThread(current, threadId, turnId, item));
       return true;
     }
@@ -208,6 +291,7 @@ export function handleLocalAppNotification({
     }
     case "turn/started": {
       const { threadId, turn } = notification.params;
+      selectThreadIfNone(threadId);
       setThreads((current) => upsertTurnInThread(current, threadId, turn));
       setActiveTurnByThread((current) =>
         activeTurnByThreadAfterTurn(current, threadId, turn),

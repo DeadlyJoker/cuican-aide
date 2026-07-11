@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   platformAgentsToLibraryItems,
   platformKnowledgeToData,
   platformToolsToLibraryItems,
+  readAgentPlatformSnapshot,
   type AgentPlatformSnapshot,
 } from "./agentPlatformClient";
 
@@ -71,6 +72,35 @@ function snapshot(): AgentPlatformSnapshot {
 }
 
 describe("agent-platform client mapping", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("short-circuits concurrent snapshot reads when the local resource service is unavailable", async () => {
+    const fetchMock = vi.fn(async (_input: Parameters<typeof fetch>[0]) => {
+      return new Response(
+        JSON.stringify({
+          error: "agent-platform unavailable",
+        }),
+        {
+          status: 503,
+          statusText: "Service Unavailable",
+        },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [first, second] = await Promise.allSettled([
+      readAgentPlatformSnapshot(),
+      readAgentPlatformSnapshot(),
+    ]);
+
+    expect(first.status).toBe("rejected");
+    expect(second.status).toBe("rejected");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/v1/mcp/tools");
+  });
+
   it("maps platform agents with bound knowledge, skill, and MCP resources", () => {
     const items = platformAgentsToLibraryItems(snapshot());
 

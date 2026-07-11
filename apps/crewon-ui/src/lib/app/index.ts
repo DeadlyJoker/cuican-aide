@@ -18,17 +18,23 @@ export {
   shouldAutoCloseInspector,
   shouldAutoCloseSidebar,
 } from "./appUiState";
+export { isCommandShellHash, shouldRenderCommandShellView } from "./appRouting";
 export { createAppDomainActionCoordinator } from "./appDomainActionCoordinator";
 export { createAppDomainBackendCoordinator } from "./appDomainBackendCoordinator";
+export { createAppCommandShellHandlers } from "./appCommandShellHandlers";
+export { commandShellRuntimeState } from "./appCommandShellRuntime";
 export { createAppLibraryOpenCoordinator } from "./appLibraryOpenCoordinator";
 export { createAppLibraryPanelDispatchCoordinator } from "./appLibraryPanelDispatchCoordinator";
 export { createAppOfficeRuntimeCoordinator } from "./appOfficeRuntimeCoordinator";
 export { createAppSettingsCoordinator } from "./appSettingsCoordinator";
 export { useAppChromeState } from "./useAppChromeState";
+export { useAppCommandModelOptions } from "./useAppCommandModelOptions";
+export { useAppCommandShellRoute } from "./useAppCommandShellRoute";
 export { useAppComposerState } from "./useAppComposerState";
 export { useAppConfirmDialog } from "./useAppConfirmDialog";
 export { useAppConnectionHandlerSet } from "./useAppConnectionHandlerSet";
 export { useAppCoordinatorRefs } from "./useAppCoordinatorRefs";
+export { useAppDraftWorkspaceState } from "./useAppDraftWorkspaceState";
 export { useAppEnvironment } from "./useAppEnvironment";
 export { useAppPanelState } from "./useAppPanelState";
 export { useAppPendingServerRequests } from "./useAppPendingServerRequests";

@@ -1,3 +1,5 @@
+import type { AskForApproval } from "@crewon-protocol/v2/AskForApproval";
+import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { Turn } from "@crewon-protocol/v2/Turn";
 
@@ -27,9 +29,9 @@ type ThreadSettingsClient = {
   updateThreadSettings(
     threadId: string,
     settings: {
-      approvalPolicy?: string | null;
+      approvalPolicy?: AskForApproval | null;
       model?: string | null;
-      sandboxMode?: string | null;
+      sandboxMode?: SandboxMode | null;
     },
   ): Promise<void>;
 };
@@ -108,7 +110,11 @@ function saveThreadSettings(params: ThreadSettingsActionHandlersParams) {
     );
 
     try {
-      await client?.updateThreadSettings(threadId, settingsPatch);
+      await client?.updateThreadSettings(threadId, {
+        approvalPolicy: settingsPatch.approvalPolicy || null,
+        model: settingsPatch.model || null,
+        sandboxMode: settingsPatch.sandboxMode || null,
+      });
       setCapabilityPanel((currentPanel) =>
         threadSettingsSaveSuccessPanel(currentPanel, settingsPatch, locale),
       );

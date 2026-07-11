@@ -7,6 +7,62 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+class FakeWebSocket extends EventTarget {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 3;
+  static instances: FakeWebSocket[] = [];
+
+  readyState = FakeWebSocket.CONNECTING;
+  sent: string[] = [];
+
+  constructor(readonly url: string) {
+    super();
+    FakeWebSocket.instances.push(this);
+  }
+
+  send(payload: string): void {
+    this.sent.push(payload);
+  }
+
+  close(): void {
+    this.closeFromServer();
+  }
+
+  open(): void {
+    this.readyState = FakeWebSocket.OPEN;
+    this.dispatchEvent(new Event("open"));
+  }
+
+  closeFromServer(): void {
+    this.readyState = FakeWebSocket.CLOSED;
+    this.dispatchEvent(new Event("close"));
+  }
+}
+
+async function connectFakeClient(client: AppServerClient): Promise<FakeWebSocket> {
+  vi.stubGlobal("window", {
+    clearTimeout: globalThis.clearTimeout,
+    setTimeout: globalThis.setTimeout,
+  });
+  FakeWebSocket.instances = [];
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+
+  const connected = client.connect();
+  const socket = FakeWebSocket.instances[0];
+  socket.open();
+  const initializeRequest = JSON.parse(socket.sent[0] ?? "{}") as {
+    id: number;
+  };
+  (
+    client as unknown as {
+      handleMessage: (rawData: string) => void;
+    }
+  ).handleMessage(JSON.stringify({ id: initializeRequest.id, result: {} }));
+  await connected;
+  return socket;
+}
+
 describe("app server composer input", () => {
   it("maps composer mentions to v2 turn input items", () => {
     expect(
@@ -32,7 +88,74 @@ describe("app server composer input", () => {
   });
 });
 
+describe("app server client connection lifecycle", () => {
+  it("does not report connection loss for an intentional close", async () => {
+    const onClose = vi.fn();
+    const client = new AppServerClient(
+      "ws://app-server",
+      () => undefined,
+      onClose,
+    );
+    await connectFakeClient(client);
+
+    client.close();
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("reports connection loss when the socket closes unexpectedly", async () => {
+    const onClose = vi.fn();
+    const client = new AppServerClient(
+      "ws://app-server",
+      () => undefined,
+      onClose,
+    );
+    const socket = await connectFakeClient(client);
+
+    socket.closeFromServer();
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
 describe("app server notifications", () => {
+  it("accepts reasoning delta notifications", () => {
+    const notifications: unknown[] = [];
+    const client = new AppServerClient("ws://app-server", (notification) => {
+      notifications.push(notification);
+    });
+
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        method: "item/reasoning/summaryTextDelta",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "reasoning-1",
+          summaryIndex: 0,
+          delta: "Planning",
+        },
+      }),
+    );
+
+    expect(notifications).toEqual([
+      {
+        method: "item/reasoning/summaryTextDelta",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "reasoning-1",
+          summaryIndex: 0,
+          delta: "Planning",
+        },
+      },
+    ]);
+  });
+
   it("accepts office run updated notifications", () => {
     const notifications: unknown[] = [];
     const client = new AppServerClient("ws://app-server", (notification) => {

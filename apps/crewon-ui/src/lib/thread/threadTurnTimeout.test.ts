@@ -59,6 +59,17 @@ function userMessage(): ThreadItem {
 }
 
 describe("thread turn timeout", () => {
+  it("uses a real-agent startup window by default", () => {
+    expect(
+      modelResponseTimeoutDelayMs({
+        nowMs: 112_000,
+        streamingText: "",
+        thread: thread({ turns: [turn({ items: [userMessage()] })] }),
+        turnId: "turn-1",
+      }),
+    ).toBe(108_000);
+  });
+
   it("treats user-only empty turns as having no model progress", () => {
     expect(turnHasModelProgress(turn({ items: [userMessage()] }))).toBe(false);
     expect(
