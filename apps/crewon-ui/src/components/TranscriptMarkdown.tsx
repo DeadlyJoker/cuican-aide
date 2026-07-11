@@ -262,6 +262,44 @@ function fenceLanguage(line: string): string | null {
   return rawLanguage ? rawLanguage.toLowerCase() : null;
 }
 
+function codeLanguageClass(language: string | null): string | undefined {
+  if (!language) {
+    return undefined;
+  }
+
+  return `language-${language.replace(/[^a-z0-9_-]/g, "-")}`;
+}
+
+function codeLanguageLabel(language: string | null): string | null {
+  if (!language) {
+    return null;
+  }
+
+  const labels: Record<string, string> = {
+    bash: "Bash",
+    css: "CSS",
+    html: "HTML",
+    js: "JavaScript",
+    json: "JSON",
+    jsx: "JSX",
+    md: "Markdown",
+    mermaid: "Mermaid",
+    py: "Python",
+    python: "Python",
+    rust: "Rust",
+    sh: "Shell",
+    ts: "TypeScript",
+    tsx: "TSX",
+    txt: "Text",
+    xml: "XML",
+    yaml: "YAML",
+    yml: "YAML",
+    zsh: "Zsh",
+  };
+
+  return labels[language] ?? language.slice(0, 28);
+}
+
 function splitMarkdownSegments(text: string): MarkdownSegment[] {
   const segments: MarkdownSegment[] = [];
   const markdownLines: string[] = [];
@@ -318,12 +356,27 @@ function renderCodeSegment(segment: Extract<MarkdownSegment, { type: "code" }>, 
     return <MermaidDiagram code={segment.code} complete={segment.complete} key={key} />;
   }
 
+  const languageLabel = codeLanguageLabel(segment.language);
+
   return (
-    <pre data-language={segment.language ?? undefined} key={key}>
-      <code className={segment.language ? `language-${segment.language}` : undefined}>
-        {segment.code}
-      </code>
-    </pre>
+    <figure
+      className="markdown-code-block"
+      data-complete={segment.complete}
+      data-language={segment.language ?? undefined}
+      key={key}
+    >
+      {languageLabel ? (
+        <figcaption>
+          <span>{languageLabel}</span>
+          {!segment.complete ? <em>Streaming</em> : null}
+        </figcaption>
+      ) : null}
+      <pre className="markdown-code-pre">
+        <code className={codeLanguageClass(segment.language)}>
+          {segment.code}
+        </code>
+      </pre>
+    </figure>
   );
 }
 

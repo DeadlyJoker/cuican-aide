@@ -3,6 +3,7 @@ import type { Thread } from "@crewon-protocol/v2/Thread";
 import {
   type KeyboardEvent,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -12,19 +13,12 @@ import {
   officeRooms,
   quickScenarios,
   sceneTabs,
-  workspaceNodes,
   workflowRooms,
 } from "./commandWorkspaceData";
 import {
-  conversationBindingKey,
-  findLinkedThreadForConversation,
-  readConversationThreadBindings,
-  writeConversationThreadBindings,
-  type ConversationThreadBindings,
-} from "./commandWorkspaceThreadLinks";
-import {
   CommandSidebar,
   Palette,
+  ResourceDock,
   type CommandLinkedThread,
   type PaletteItemWithCommand,
 } from "./CommandWorkspaceChrome";
@@ -54,6 +48,13 @@ import type { ComposerSlashCommand } from "../../lib/composer/composerSlashComma
 import type { Locale } from "../../lib/i18n";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import { formatRelativeTime } from "../../lib/shared/text";
+import {
+  commandComposerRuntimeSettings,
+  fallbackCommandModelOptions,
+  type CommandComposerPermission,
+  type CommandModelOption,
+  type ThreadRuntimeSettings,
+} from "../../lib/thread/threadRuntimeSettings";
 import type { WorkMode } from "../../lib/workMode";
 import { sidebarThreadTitle } from "../SidebarPresentation";
 
@@ -76,6 +77,7 @@ type CommandWorkspaceProps = {
   isSending: boolean;
   linkedThreads?: Thread[];
   locale?: Locale;
+  modelOptions?: CommandModelOption[];
   selectedThread?: Thread | null;
   selectedThreadId?: string | null;
   slashCommands?: ComposerSlashCommand[];
@@ -83,9 +85,11 @@ type CommandWorkspaceProps = {
   workMode: WorkMode;
   onAttachContext: () => void;
   onChangeComposerValue: (value: string) => void;
+  onChangeWorkspaceCwd?: (cwd: string) => void;
   onModeChange: (mode: WorkMode) => void;
+  onNewThread?: () => void;
   onRetryConnection: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
   onSelectLinkedThread?: (threadId: string | null) => void;
   onSlashCommandSelect?: (command: ComposerSlashCommand) => void;
   onStop?: () => void;
@@ -93,12 +97,13 @@ type CommandWorkspaceProps = {
 
 type PlatformLoadState = "loading" | "ready" | "fallback";
 type TeamMode = "office" | "workflow" | "experts";
-type PendingConversationThreadBinding = {
-  key: string;
-  previousThreadId: string | null;
-};
+type CommandComposerMode = "agent" | "goal" | "plan";
 export type CommandComposerKeyIntent =
-  "closePalette" | "openContext" | "openSlash" | "send" | null;
+  | "closePalette"
+  | "openContext"
+  | "openSlash"
+  | "send"
+  | null;
 export type CommandComposerKeyIntentInput = {
   altKey: boolean;
   composerValue: string;
@@ -120,6 +125,38 @@ const shellViewIds: CommandShellView[] = [
   "team",
 ];
 
+type CommandSelectOption<TValue extends string = string> = {
+  detail?: string;
+  tone?: "danger" | "normal" | "warning";
+  value: TValue;
+  label: string;
+};
+
+const composerModeOptions: CommandSelectOption<CommandComposerMode>[] = [
+  { label: "计划", value: "plan" },
+  { label: "目标", value: "goal" },
+  { label: "智能体", value: "agent" },
+];
+
+const permissionOptions: CommandSelectOption<CommandComposerPermission>[] = [
+  {
+    detail: "工作区内自动执行，必要时请求升级",
+    label: "替我审批",
+    value: "approve-for-me",
+  },
+  {
+    detail: "执行前请求确认",
+    label: "请求批准",
+    value: "request-approval",
+  },
+  {
+    detail: "不经审批地使用完整文件系统权限",
+    label: "完全访问",
+    tone: "warning",
+    value: "full-access",
+  },
+];
+
 function isShellView(value: string): value is CommandShellView {
   return shellViewIds.includes(value as CommandShellView);
 }
@@ -130,6 +167,91 @@ function shellViewFromHash(): CommandShellView {
   }
   const value = window.location.hash.replace(/^#view-/, "");
   return isShellView(value) ? value : "command";
+}
+
+function CommandComposerSelect<TValue extends string>({
+  ariaLabel,
+  className,
+  options,
+  value,
+  onChange,
+}: {
+  ariaLabel: string;
+  className: string;
+  options: CommandSelectOption<TValue>[];
+  value: TValue;
+  onChange: (value: TValue) => void;
+}) {
+  const menuId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const selectedOption =
+    options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function closeOnPointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function closeOnEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", closeOnPointerDown, true);
+    document.addEventListener("keydown", closeOnEscape, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown, true);
+      document.removeEventListener("keydown", closeOnEscape, true);
+    };
+  }, [open]);
+
+  return (
+    <div
+      ref={rootRef}
+      className={classNames("control-select", className)}
+      data-open={open ? "true" : "false"}
+    >
+      <span className="visually-hidden">{ariaLabel}</span>
+      <button
+        aria-controls={menuId}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        className="select-trigger"
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+      >
+        {selectedOption?.label ?? value}
+      </button>
+      <div className="select-menu" hidden={!open} id={menuId} role="listbox">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            aria-selected={option.value === value}
+            className="select-option"
+            data-tone={option.tone ?? "normal"}
+            data-value={option.value}
+            role="option"
+            type="button"
+            onClick={() => {
+              onChange(option.value);
+              setOpen(false);
+            }}
+          >
+            <span>
+              <strong>{option.label}</strong>
+              {option.detail ? <em>{option.detail}</em> : null}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function basename(path: string) {
@@ -257,20 +379,24 @@ function slashItems(
     }),
   );
   const fallbackItems: PaletteItemWithCommand[] = [
-    ...slots.skills.filter((item) => /^skill-\d+$/.test(item.value)).map((item) => ({
-      detail: item.detail,
-      kind: "skill" as const,
-      label: item.label,
-      title: item.title,
-      token: item.title,
-    })),
-    ...slots.mcps.filter((item) => /^mcp-\d+$/.test(item.value)).map((item) => ({
-      detail: item.detail,
-      kind: "mcp" as const,
-      label: item.label,
-      title: item.title,
-      token: item.title,
-    })),
+    ...slots.skills
+      .filter((item) => /^skill-\d+$/.test(item.value))
+      .map((item) => ({
+        detail: item.detail,
+        kind: "skill" as const,
+        label: item.label,
+        title: item.title,
+        token: item.title,
+      })),
+    ...slots.mcps
+      .filter((item) => /^mcp-\d+$/.test(item.value))
+      .map((item) => ({
+        detail: item.detail,
+        kind: "mcp" as const,
+        label: item.label,
+        title: item.title,
+        token: item.title,
+      })),
     {
       detail: slots.workflow.detail,
       kind: "workflow",
@@ -290,6 +416,7 @@ export function CommandWorkspace({
   isSending,
   linkedThreads = [],
   locale = "zh",
+  modelOptions = fallbackCommandModelOptions,
   selectedThread = null,
   selectedThreadId = null,
   slashCommands = [],
@@ -297,7 +424,9 @@ export function CommandWorkspace({
   workMode,
   onAttachContext,
   onChangeComposerValue,
+  onChangeWorkspaceCwd,
   onModeChange,
+  onNewThread,
   onRetryConnection,
   onSend,
   onSelectLinkedThread,
@@ -314,26 +443,15 @@ export function CommandWorkspace({
   const [activeLinkedThreadId, setActiveLinkedThreadId] = useState<
     string | null
   >(selectedThreadId);
-  const [conversationThreadBindings, setConversationThreadBindings] =
-    useState<ConversationThreadBindings>(() =>
-      readConversationThreadBindings(),
-    );
-  const [pendingConversationBinding, setPendingConversationBinding] =
-    useState<PendingConversationThreadBinding | null>(null);
-  const [armedConversationBinding, setArmedConversationBinding] =
-    useState<PendingConversationThreadBinding | null>(null);
-  const [collapsedSpaces, setCollapsedSpaces] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [activeSpaceId, setActiveSpaceId] = useState("product");
-  const [activeConversation, setActiveConversation] = useState("小队创建草稿");
   const [scene, setScene] = useState<CommandScene>(
     workMode === "office" ? "office" : "code",
   );
-  const [composerMode, setComposerMode] = useState("plan");
-  const [model, setModel] = useState("auto");
+  const [composerMode, setComposerMode] = useState<CommandComposerMode>("plan");
+  const [model, setModel] = useState(fallbackCommandModelOptions[0].value);
+  const [modelSelectionTouched, setModelSelectionTouched] = useState(false);
   const [agent, setAgent] = useState("product-review");
-  const [permission, setPermission] = useState("approve-for-me");
+  const [permission, setPermission] =
+    useState<CommandComposerPermission>("approve-for-me");
   const [workspace, setWorkspace] = useState("product");
   const [openPalette, setOpenPalette] = useState<"context" | "slash" | null>(
     null,
@@ -389,29 +507,25 @@ export function CommandWorkspace({
     setActiveLinkedThreadId(selectedThreadId);
   }, [selectedThreadId]);
 
+  const effectiveModelOptions =
+    modelOptions.length > 0 ? modelOptions : fallbackCommandModelOptions;
+
   useEffect(() => {
-    if (
-      !armedConversationBinding ||
-      !selectedThreadId ||
-      selectedThreadId === armedConversationBinding.previousThreadId
-    ) {
+    const defaultModel = effectiveModelOptions.find(
+      (option) => option.isDefault,
+    )?.value;
+    if (!effectiveModelOptions.some((option) => option.value === model)) {
+      setModel(
+        defaultModel ??
+          effectiveModelOptions[0]?.value ??
+          fallbackCommandModelOptions[0].value,
+      );
       return;
     }
-
-    setConversationThreadBindings((current) => {
-      if (current[armedConversationBinding.key] === selectedThreadId) {
-        return current;
-      }
-      const next = {
-        ...current,
-        [armedConversationBinding.key]: selectedThreadId,
-      };
-      writeConversationThreadBindings(next);
-      return next;
-    });
-    setPendingConversationBinding(null);
-    setArmedConversationBinding(null);
-  }, [armedConversationBinding, selectedThreadId]);
+    if (!modelSelectionTouched && defaultModel && model !== defaultModel) {
+      setModel(defaultModel);
+    }
+  }, [effectiveModelOptions, model, modelSelectionTouched]);
 
   const slots = useMemo(
     () => selectCommandHomeSlots(platformSnapshot),
@@ -430,6 +544,7 @@ export function CommandWorkspace({
   const commandLinkedThreads: CommandLinkedThread[] = useMemo(
     () =>
       linkedThreads.map((thread) => ({
+        cwd: thread.cwd ?? null,
         id: thread.id,
         preview: thread.preview,
         title: sidebarThreadTitle(
@@ -499,11 +614,8 @@ export function CommandWorkspace({
     if (isSending || !trimmed) {
       return;
     }
-    if (pendingConversationBinding) {
-      setArmedConversationBinding(pendingConversationBinding);
-    }
     onChangeComposerValue("");
-    onSend(trimmed);
+    onSend(trimmed, commandComposerRuntimeSettings({ model, permission }));
   }
 
   function openComposerPalette(kind: "context" | "slash") {
@@ -576,58 +688,7 @@ export function CommandWorkspace({
     }
   }
 
-  function toggleSpace(spaceId: string) {
-    setCollapsedSpaces((current) => {
-      const next = new Set(current);
-      if (next.has(spaceId)) {
-        next.delete(spaceId);
-      } else {
-        next.add(spaceId);
-      }
-      return next;
-    });
-  }
-
-  function chooseConversation(spaceId: string, conversation: string) {
-    setActiveSpaceId(spaceId);
-    setActiveConversation(conversation);
-    setWorkspace(spaceId);
-    const node = workspaceNodes.find((candidate) => candidate.id === spaceId);
-    const conversationAliases =
-      node?.conversations.find((candidate) => candidate.title === conversation)
-        ?.aliases ?? [];
-    const bindingKey = conversationBindingKey(spaceId, conversation);
-    const linkedThread = findLinkedThreadForConversation(
-      commandLinkedThreads,
-      conversation,
-      conversationAliases,
-      conversationThreadBindings[bindingKey],
-    );
-    if (linkedThread && onSelectLinkedThread) {
-      setPendingConversationBinding(null);
-      setArmedConversationBinding(null);
-      setActiveLinkedThreadId(linkedThread.id);
-      switchView("command");
-      onSelectLinkedThread(linkedThread.id);
-      return;
-    }
-
-    setPendingConversationBinding({
-      key: bindingKey,
-      previousThreadId: selectedThreadId,
-    });
-    setArmedConversationBinding(null);
-    setActiveLinkedThreadId(null);
-    onSelectLinkedThread?.(null);
-    if (!composerValue.trim()) {
-      onChangeComposerValue(`继续推进「${conversation}」：`);
-      textareaRef.current?.focus();
-    }
-  }
-
-  const currentWorkspace =
-    workspaceNodes.find((node) => node.id === activeSpaceId)?.title ??
-    "Agent 小队交付空间";
+  const currentWorkspace = basename(cwd || "工作空间");
   const activeOfficeRoom =
     officeRooms.find((room) => room.id === officeRoomId) ?? officeRooms[0];
   const activeWorkflowRoom =
@@ -666,12 +727,9 @@ export function CommandWorkspace({
         data-od-id="desktop-window"
       >
         <CommandSidebar
-          activeConversation={activeConversation}
-          activeSpaceId={activeSpaceId}
           activeView={activeView}
-          collapsedSpaces={collapsedSpaces}
           isSearchOpen={sidebarSearchOpen}
-          conversationThreadBindings={conversationThreadBindings}
+          cwd={cwd}
           linkedThreads={commandLinkedThreads}
           query={sidebarSearchQuery}
           selectedLinkedThreadId={activeLinkedThreadId}
@@ -680,10 +738,14 @@ export function CommandWorkspace({
             setSidebarSearchOpen(false);
             setSidebarSearchQuery("");
           }}
-          onChooseConversation={chooseConversation}
+          onCreateWorkspace={onChangeWorkspaceCwd}
+          onNewThread={() => {
+            setActiveLinkedThreadId(null);
+            switchView("command");
+            onNewThread?.();
+            textareaRef.current?.focus();
+          }}
           onOpenLinkedThread={(threadId) => {
-            setPendingConversationBinding(null);
-            setArmedConversationBinding(null);
             setActiveLinkedThreadId(threadId);
             switchView("command");
             onSelectLinkedThread?.(threadId);
@@ -694,7 +756,6 @@ export function CommandWorkspace({
             setSidebarCollapsed((collapsed) => !collapsed)
           }
           onToggleSearch={() => setSidebarSearchOpen((open) => !open)}
-          onToggleSpace={toggleSpace}
         />
 
         <section className="command-canvas" data-od-id="desktop-main-pane">
@@ -838,35 +899,23 @@ export function CommandWorkspace({
                     className="composer-controls"
                     data-od-id="composer-control-row"
                   >
-                    <label className="control-select mode-dropdown">
-                      <span className="visually-hidden">任务类型</span>
-                      <select
-                        aria-label="任务类型"
-                        data-task-mode=""
-                        value={composerMode}
-                        onChange={(event) =>
-                          setComposerMode(event.target.value)
-                        }
-                      >
-                        <option value="plan">计划</option>
-                        <option value="goal">目标</option>
-                        <option value="agent">智能体</option>
-                      </select>
-                    </label>
-                    <label className="control-select model-dropdown">
-                      <span className="visually-hidden">模型选择</span>
-                      <select
-                        aria-label="模型选择"
-                        data-model-select=""
-                        value={model}
-                        onChange={(event) => setModel(event.target.value)}
-                      >
-                        <option value="auto">自动选择</option>
-                        <option value="fast">快速模型</option>
-                        <option value="reasoning">推理模型</option>
-                        <option value="vision">视觉模型</option>
-                      </select>
-                    </label>
+                    <CommandComposerSelect
+                      ariaLabel="任务类型"
+                      className="mode-dropdown"
+                      options={composerModeOptions}
+                      value={composerMode}
+                      onChange={setComposerMode}
+                    />
+                    <CommandComposerSelect
+                      ariaLabel="模型选择"
+                      className="model-dropdown"
+                      options={effectiveModelOptions}
+                      value={model}
+                      onChange={(nextModel) => {
+                        setModelSelectionTouched(true);
+                        setModel(nextModel);
+                      }}
+                    />
                     <label
                       className="control-select agent-dropdown"
                       data-agent-menu=""
@@ -889,24 +938,16 @@ export function CommandWorkspace({
                         <option value="meeting-prep">会议准备智能体</option>
                       </select>
                     </label>
-                    <label
+                    <CommandComposerSelect
+                      ariaLabel="权限选择"
                       className={classNames(
-                        "control-select permission-dropdown",
+                        "permission-dropdown",
                         permission === "full-access" && "is-warning",
                       )}
-                    >
-                      <span className="visually-hidden">权限选择</span>
-                      <select
-                        aria-label="权限选择"
-                        data-permission-select=""
-                        value={permission}
-                        onChange={(event) => setPermission(event.target.value)}
-                      >
-                        <option value="approve-for-me">替我审批</option>
-                        <option value="request-approval">请求批准</option>
-                        <option value="full-access">完全访问</option>
-                      </select>
-                    </label>
+                      options={permissionOptions}
+                      value={permission}
+                      onChange={setPermission}
+                    />
                   </div>
 
                   <div
@@ -1003,11 +1044,7 @@ export function CommandWorkspace({
                       value={workspace}
                       onChange={(event) => setWorkspace(event.target.value)}
                     >
-                      {workspaceNodes.map((node) => (
-                        <option key={node.id} value={node.id}>
-                          {node.title}
-                        </option>
-                      ))}
+                      <option value={workspace}>{currentWorkspace}</option>
                     </select>
                   </label>
                   <span className="composer-state">{resourceStatus}</span>
@@ -1028,6 +1065,7 @@ export function CommandWorkspace({
               </section>
             </section>
 
+            <ResourceDock slots={slots} platformState={platformState} />
           </section>
 
           <AssistView

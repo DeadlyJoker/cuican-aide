@@ -88,6 +88,9 @@ use crewon_tools::create_tools_json_for_responses_api;
 use eventsource_stream::Event;
 use eventsource_stream::EventStreamError;
 use futures::StreamExt;
+
+use crate::context::ContextualUserFragment;
+use crate::context::RuntimeModelIdentity;
 use http::HeaderMap as ApiHeaderMap;
 use http::HeaderValue;
 use http::StatusCode as HttpStatusCode;
@@ -745,7 +748,11 @@ impl ModelClient {
         service_tier: Option<String>,
         window_id: &str,
     ) -> Result<ResponsesApiRequest> {
-        let instructions = &prompt.base_instructions.text;
+        let mut instructions = prompt.base_instructions.text.clone();
+        if !instructions.is_empty() {
+            instructions.push_str("\n\n");
+        }
+        instructions.push_str(&RuntimeModelIdentity::new(&model_info.slug).render());
         let input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let tools = create_tools_json_for_responses_api(&prompt.tools)?;
         let reasoning = Self::build_reasoning(model_info, effort, summary);
@@ -774,7 +781,7 @@ impl ModelClient {
         let service_tier = model_info.service_tier_for_request(service_tier);
         let request = ResponsesApiRequest {
             model: model_info.slug.clone(),
-            instructions: instructions.clone(),
+            instructions,
             input,
             tools,
             tool_choice: "auto".to_string(),

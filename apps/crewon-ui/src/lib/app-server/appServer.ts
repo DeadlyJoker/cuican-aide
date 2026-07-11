@@ -68,6 +68,7 @@ import type { ReasoningSummaryTextDeltaNotification } from "@crewon-protocol/v2/
 import type { ReasoningTextDeltaNotification } from "@crewon-protocol/v2/ReasoningTextDeltaNotification";
 import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
 import type { SandboxPolicy } from "@crewon-protocol/v2/SandboxPolicy";
+import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
 import type { ServerRequestResolvedNotification } from "@crewon-protocol/v2/ServerRequestResolvedNotification";
 import type { SkillsChangedNotification } from "@crewon-protocol/v2/SkillsChangedNotification";
 import type { SkillsCreateResponse } from "@crewon-protocol/v2/SkillsCreateResponse";
@@ -116,6 +117,7 @@ import type {
   ToolConfig,
   ToolConfigKind,
 } from "../domain/domainTypes";
+import type { ThreadRuntimeSettings } from "../thread/threadRuntimeSettings";
 
 type JsonRpcRequest = {
   id: number | string;
@@ -906,9 +908,13 @@ export class AppServerClient {
   async startThread(
     cwd?: string,
     threadSource = "app_server",
+    settings: ThreadRuntimeSettings = {},
   ): Promise<Thread> {
     const response = await this.request<ThreadStartResponse>("thread/start", {
+      approvalPolicy: settings.approvalPolicy ?? undefined,
       cwd: cwd || undefined,
+      model: settings.model || undefined,
+      sandbox: settings.sandboxMode ?? undefined,
       threadSource,
     });
     return response.thread;
@@ -983,8 +989,8 @@ export class AppServerClient {
     threadId: string,
     settings: {
       model?: string | null;
-      approvalPolicy?: string | null;
-      sandboxMode?: string | null;
+      approvalPolicy?: AskForApproval | null;
+      sandboxMode?: SandboxMode | null;
     },
   ): Promise<void> {
     const sandboxPolicy = settings.sandboxMode
@@ -1042,10 +1048,20 @@ export class AppServerClient {
     threadId: string,
     text: string,
     mentions: ComposerMentionInput[] = [],
+    settings: ThreadRuntimeSettings = {},
   ): Promise<TurnStartResponse> {
+    const sandboxPolicy = settings.sandboxMode
+      ? sandboxPolicyFromMode(settings.sandboxMode)
+      : null;
     return this.request<TurnStartResponse>(
       "turn/start",
-      { threadId, input: turnInputFromComposer(text, mentions) },
+      {
+        approvalPolicy: settings.approvalPolicy ?? undefined,
+        input: turnInputFromComposer(text, mentions),
+        model: settings.model || undefined,
+        sandboxPolicy: sandboxPolicy ?? undefined,
+        threadId,
+      },
       { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
     );
   }

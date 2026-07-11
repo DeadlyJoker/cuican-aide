@@ -3,7 +3,6 @@ import {
   useRef,
   useState,
   type MutableRefObject,
-  type SyntheticEvent,
 } from "react";
 import { Code2, Sparkles } from "lucide-react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
@@ -405,6 +404,10 @@ function processToggleLabel(isExpanded: boolean, locale: Locale): string {
   return isExpanded ? "Collapse process" : "Expand process";
 }
 
+type TurnProcessPanelState = "collapsed" | "collapsing" | "expanded";
+
+const TURN_PROCESS_COLLAPSE_MS = 260;
+
 function TranscriptProcessGroup({
   hasFinalOutput,
   itemLabels,
@@ -418,36 +421,78 @@ function TranscriptProcessGroup({
   locale: Locale;
   turnId: string;
 }) {
-  const [isExpanded, setIsExpanded] = useState(() => !hasFinalOutput);
+  const [panelState, setPanelState] = useState<TurnProcessPanelState>(() =>
+    hasFinalOutput ? "collapsed" : "expanded",
+  );
   const [isAutoCollapsed, setIsAutoCollapsed] = useState(hasFinalOutput);
   const hadFinalOutputRef = useRef(hasFinalOutput);
+  const collapseTimerRef = useRef<number | null>(null);
   const processId = `turn-process-${turnId}`;
+  const isExpanded = panelState === "expanded";
+  const isRendered = panelState !== "collapsed";
+
+  const clearCollapseTimer = () => {
+    if (collapseTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(collapseTimerRef.current);
+    collapseTimerRef.current = null;
+  };
+
+  const collapseWithAnimation = () => {
+    clearCollapseTimer();
+    setPanelState((current) =>
+      current === "collapsed" ? "collapsed" : "collapsing",
+    );
+    collapseTimerRef.current = window.setTimeout(() => {
+      collapseTimerRef.current = null;
+      setPanelState("collapsed");
+    }, TURN_PROCESS_COLLAPSE_MS);
+  };
 
   useEffect(() => {
     if (hasFinalOutput && !hadFinalOutputRef.current) {
-      setIsExpanded(false);
       setIsAutoCollapsed(true);
+      collapseWithAnimation();
     }
     hadFinalOutputRef.current = hasFinalOutput;
   }, [hasFinalOutput]);
 
-  const handleToggle = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    const nextExpanded = event.currentTarget.open;
-    setIsExpanded(nextExpanded);
-    if (nextExpanded) {
+  useEffect(
+    () => () => {
+      clearCollapseTimer();
+    },
+    [],
+  );
+
+  const handleToggle = () => {
+    if (isRendered) {
+      setIsAutoCollapsed(false);
+      collapseWithAnimation();
+      return;
+    }
+
+    clearCollapseTimer();
+    setPanelState("expanded");
+    if (isAutoCollapsed) {
       setIsAutoCollapsed(false);
     }
   };
 
   return (
-    <details
+    <section
       className="turn-process-details"
       data-auto-collapsed={isAutoCollapsed ? "true" : "false"}
-      data-state={isExpanded ? "expanded" : "collapsed"}
-      open={isExpanded}
-      onToggle={handleToggle}
+      data-state={panelState}
     >
-      <summary aria-controls={processId} aria-expanded={isExpanded}>
+      <button
+        type="button"
+        className="turn-process-summary"
+        aria-controls={processId}
+        aria-expanded={isRendered}
+        onClick={handleToggle}
+      >
         <span className="turn-process-summary-main">
           <span className="turn-process-title">
             {processDetailsLabel(items, locale)}
@@ -455,19 +500,25 @@ function TranscriptProcessGroup({
         </span>
         <em>{turnProcessBuckets(items, locale)}</em>
         <strong>{processToggleLabel(isExpanded, locale)}</strong>
-      </summary>
-      <div className="turn-process-items" id={processId}>
-        {items.map((item) => (
-          <TranscriptMessage
-            item={item}
-            itemLabels={itemLabels}
-            key={item.id}
-            locale={locale}
-            variant="process"
-          />
-        ))}
+      </button>
+      <div
+        className="turn-process-items-shell"
+        hidden={!isRendered}
+        id={processId}
+      >
+        <div className="turn-process-items">
+          {items.map((item) => (
+            <TranscriptMessage
+              item={item}
+              itemLabels={itemLabels}
+              key={item.id}
+              locale={locale}
+              variant="process"
+            />
+          ))}
+        </div>
       </div>
-    </details>
+    </section>
   );
 }
 

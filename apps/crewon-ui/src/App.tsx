@@ -2,6 +2,7 @@ import { AppCommandShellRoute, AppConfirmDialog, AppShellChromeFrame, AppWorkspa
 import { isMissingThreadError, isUnsupportedRpcError } from "./lib/app-server/appServer";
 import {
   createAppCapabilityPanelHandlers, createAppDomainActionCoordinator, createAppDomainBackendCoordinator,
+  createAppCommandShellHandlers,
   createAppLibraryOpenCoordinator, createAppLibraryPanelDispatchCoordinator, createAppOfficeRuntimeCoordinator,
   createAppSettingsCoordinator, createAppShellActionHandlers, createAppThreadRuntimeHandlers,
   createAppWorkspaceCapabilityHandlers, shouldAutoCloseSidebar, shouldAutoCloseInspector, useAppCallbackRefsEffect,
@@ -11,6 +12,7 @@ import {
   useAppComposerState, useAppSlashCommands, useAppWorkspaceStatusState, useAppShellRuntimeState, useAppTerminalState,
   useAppThreadSelection, useAppServerEventHandlerSet, useAppThreadListEffects, useAppThreadMetadataEffects,
   useAppViewSyncEffects, useAppModelResponseTimeoutEffect, shouldRenderCommandShellView, useAppCommandShellRoute, commandShellRuntimeState,
+  useAppCommandModelOptions, useAppDraftWorkspaceState,
 } from "./lib/app";
 import type { ComposerSlashCommand } from "./lib/composer/composerSlashCommands";
 import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
@@ -130,15 +132,18 @@ export function App() {
   const { confirmRequest, requestConfirm, resolveConfirm } = useAppConfirmDialog();
   const { commandShellRouteActive } = useAppCommandShellRoute();
   const renderCommandShell = shouldRenderCommandShellView(appView, commandShellRouteActive);
+  const { draftWorkspaceCwd, setDraftWorkspaceCwd } = useAppDraftWorkspaceState();
 
   const { activeTurnId, cwd, isConnected, isDemo, selectedThread, titlebarTitle } = useAppThreadSelection({
     activeTurnByThread,
     connectionState,
+    draftWorkspaceCwd,
     newDraftThreadLabel: t.newDraftThread,
     selectedThreadId,
     threads,
     untitledThreadLabel: t.untitledThread,
   });
+  const commandModelOptions = useAppCommandModelOptions({ client: clientRef.current, connectionAttempt, isConnected });
   const slashCommands = useAppSlashCommands({
     client: clientRef.current,
     cwd,
@@ -653,17 +658,10 @@ export function App() {
     }
     closeLibrary();
   };
-  const sendCommandShellMessage = (text: string) => {
-    setSelectedThreadId(null);
-    void sendMessageInNewThread(text);
-  };
-  const openCommandShellThread = (threadId: string | null) => {
-    if (!threadId) {
-      setSelectedThreadId(null);
-      return;
-    }
-    void selectThread(threadId);
-  };
+  const { changeCommandShellWorkspace, openCommandShellThread, sendCommandShellMessage, startCommandShellDraftThread } = createAppCommandShellHandlers({
+    selectThread, sendMessageInNewThread, setComposerFocusSignal, setDraftWorkspaceCwd,
+    setSelectedThreadId, setWorkMode, startDraftThread,
+  });
 
   useAppCallbackRefsEffect({
     openLibrary,
@@ -738,9 +736,10 @@ export function App() {
       <AppCommandShellRoute
         activeTurnId={commandShellRuntime.activeTurnId} composerValue={composerValue} connectionState={connectionState} cwd={cwd} isSending={isSending}
         linkedThreads={conversationThreads} locale={locale} selectedThread={commandShellRuntime.selectedThread} selectedThreadId={commandShellRuntime.selectedThreadId} slashCommands={slashCommands}
-        streamingText={commandShellRuntime.streamingText} workMode={workMode}
+        streamingText={commandShellRuntime.streamingText} workMode={workMode} modelOptions={commandModelOptions}
         confirmDialog={{ locale, request: confirmRequest, onCancel: () => resolveConfirm(false), onConfirm: () => resolveConfirm(true) }}
         onAttachContext={attachWorkspaceContext} onChangeComposerValue={setComposerValue} onModeChange={setWorkMode} onRetryConnection={retryConnection}
+        onChangeWorkspaceCwd={changeCommandShellWorkspace} onNewThread={startCommandShellDraftThread}
         onSelectLinkedThread={openCommandShellThread} onSend={!commandShellRuntime.selectedThread ? sendCommandShellMessage : sendMessage}
         onSlashCommandSelect={handleComposerSlashCommand} onStop={interruptActiveTurn}
       />
@@ -813,6 +812,7 @@ export function App() {
         isSending={isSending}
         libraryPanel={libraryPanel}
         locale={locale}
+        modelOptions={commandModelOptions}
         platform={platform}
         selectedThread={selectedThread}
         selectedThreadId={selectedThreadId}

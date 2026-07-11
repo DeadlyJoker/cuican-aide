@@ -340,9 +340,16 @@ async fn resume_switches_models_preserves_base_instructions() -> Result<()> {
 
     let requests = resumed_mock.requests();
     assert_eq!(requests.len(), 2, "expected two resumed requests");
+    let initial_base_instructions = initial_instructions
+        .split("\n\n<runtime_model_identity>")
+        .next()
+        .expect("initial base instructions");
+    let resumed_model = &resumed.session_configured.model;
 
     let first_resumed = &requests[0];
-    assert_eq!(first_resumed.instructions_text(), initial_instructions);
+    let first_resumed_instructions = first_resumed.instructions_text();
+    assert!(first_resumed_instructions.starts_with(initial_base_instructions));
+    assert!(first_resumed_instructions.contains(&format!("`{resumed_model}`")));
     let first_developer_texts = first_resumed.message_input_texts("developer");
     let first_model_switch_count = first_developer_texts
         .iter()
@@ -354,7 +361,10 @@ async fn resume_switches_models_preserves_base_instructions() -> Result<()> {
     );
 
     let second_resumed = &requests[1];
-    assert_eq!(second_resumed.instructions_text(), initial_instructions);
+    assert_eq!(
+        second_resumed.instructions_text(),
+        first_resumed_instructions
+    );
     let second_developer_texts = second_resumed.message_input_texts("developer");
     let second_model_switch_count = second_developer_texts
         .iter()

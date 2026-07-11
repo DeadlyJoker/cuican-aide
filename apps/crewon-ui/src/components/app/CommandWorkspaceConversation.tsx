@@ -97,6 +97,19 @@ function chipLabel(label: string, count: number): string | null {
   return count > 0 ? `${label} ${count}` : null;
 }
 
+function workspaceDisplayName(path: string): string {
+  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  return normalized.split("/").filter(Boolean).pop() || normalized || path;
+}
+
+function workspaceLabel(path: string | null, locale: Locale): string {
+  if (!path) {
+    return locale === "zh" ? "无工作空间" : "No workspace";
+  }
+  const name = workspaceDisplayName(path);
+  return locale === "zh" ? `工作空间 · ${name}` : `Workspace · ${name}`;
+}
+
 export function commandThreadRunSummary({
   activeTurnId,
   locale,
@@ -219,6 +232,15 @@ export function CommandThreadRoom({
     streamingText,
     thread: selectedThread,
   });
+  const contextLabel = isRunning
+    ? locale === "zh"
+      ? "Agent 正在执行"
+      : "Agent running"
+    : locale === "zh"
+      ? "Agent 对话"
+      : "Agent conversation";
+  const workspacePath = selectedThread.cwd || cwd || null;
+  const workspaceText = workspaceLabel(workspacePath, locale);
 
   return (
     <>
@@ -234,9 +256,13 @@ export function CommandThreadRoom({
 
       <section className="command-thread-room" data-od-id="command-thread-room">
         <div className="command-thread-toolbar">
-          <span className="command-thread-cwd">
-            {selectedThread.cwd || cwd || "workspace"}
-          </span>
+          <div className="command-thread-identity">
+            <span>{contextLabel}</span>
+            <strong>{title}</strong>
+            <em className="command-thread-cwd" title={workspacePath ?? undefined}>
+              {workspaceText}
+            </em>
+          </div>
           <div
             className="command-thread-runtime"
             role="status"

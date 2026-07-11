@@ -457,12 +457,12 @@ export function AssistView({
                   <select
                     data-model-select=""
                     aria-label="模型选择"
-                    defaultValue="auto"
+                    defaultValue="gpt-5.6-sol"
                   >
-                    <option value="auto">自动选择</option>
-                    <option value="fast">快速模型</option>
-                    <option value="reasoning">推理模型</option>
-                    <option value="vision">视觉模型</option>
+                    <option value="gpt-5.6-sol">gpt-5.6-sol</option>
+                    <option value="gpt-5.6">gpt-5.6</option>
+                    <option value="gpt-5.5">gpt-5.5</option>
+                    <option value="gpt-5-codex">gpt-5-codex</option>
                   </select>
                 </div>
                 <div

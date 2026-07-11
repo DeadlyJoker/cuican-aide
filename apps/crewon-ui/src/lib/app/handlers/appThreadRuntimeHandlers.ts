@@ -7,6 +7,7 @@ import type { ConfirmHandler } from "../../shared/confirmHandler";
 import type { NoticeState } from "../appRuntimeState";
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { Locale, ToolId } from "../../i18n";
+import type { ThreadRuntimeSettings } from "../../thread/threadRuntimeSettings";
 import {
   archiveThreadAction,
   deleteArchivedThreadAction,
@@ -48,8 +49,14 @@ export type AppThreadRuntimeHandlers = {
   interruptActiveTurn: () => Promise<void>;
   renameThread: (thread: Thread) => Promise<void>;
   selectThread: (threadId: string) => Promise<void>;
-  sendMessage: (text: string) => Promise<void>;
-  sendMessageInNewThread: (text: string) => Promise<void>;
+  sendMessage: (
+    text: string,
+    threadSettings?: ThreadRuntimeSettings,
+  ) => Promise<void>;
+  sendMessageInNewThread: (
+    text: string,
+    threadSettings?: ThreadRuntimeSettings,
+  ) => Promise<void>;
   startDraftThread: () => void;
   startReview: () => Promise<void>;
   startSideChat: () => Promise<void>;
@@ -122,7 +129,11 @@ export function createAppThreadRuntimeHandlers(
       shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
     });
 
-  const createThread = (initialPrompt?: string, threadSource = "app_server") =>
+  const createThread = (
+    initialPrompt?: string,
+    threadSource = "app_server",
+    threadSettings?: ThreadRuntimeSettings,
+  ) =>
     createThreadAction({
       client: params.client,
       createDemoThread,
@@ -136,11 +147,13 @@ export function createAppThreadRuntimeHandlers(
       setSidebarOpen: params.setSidebarOpen,
       setThreads: params.setThreads,
       shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
+      threadSettings,
       threadSource,
     });
 
   const sendMessageWithThreadContext = (
     text: string,
+    threadSettings: ThreadRuntimeSettings | undefined,
     threadContext: {
       activeTurnId: string | null;
       selectedThread: Thread | null;
@@ -150,7 +163,8 @@ export function createAppThreadRuntimeHandlers(
     sendMessageAction({
       activeTurnId: threadContext.activeTurnId,
       client: params.client,
-      createThread: (initialPrompt) => createThread(initialPrompt),
+      createThread: (initialPrompt) =>
+        createThread(initialPrompt, "app_server", threadSettings),
       demoResponse: params.demoResponse,
       isConnected: params.isConnected,
       isDemoPreview: params.isDemoPreview,
@@ -170,6 +184,7 @@ export function createAppThreadRuntimeHandlers(
       setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
       setThreads: params.setThreads,
       text,
+      threadSettings,
     });
 
   return {
@@ -238,14 +253,14 @@ export function createAppThreadRuntimeHandlers(
         shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
         threadId,
       }),
-    sendMessage: (text) =>
-      sendMessageWithThreadContext(text, {
+    sendMessage: (text, threadSettings) =>
+      sendMessageWithThreadContext(text, threadSettings, {
         activeTurnId,
         selectedThread: params.selectedThread,
         selectedThreadId: params.selectedThreadId,
       }),
-    sendMessageInNewThread: (text) =>
-      sendMessageWithThreadContext(text, {
+    sendMessageInNewThread: (text, threadSettings) =>
+      sendMessageWithThreadContext(text, threadSettings, {
         activeTurnId: null,
         selectedThread: null,
         selectedThreadId: null,

@@ -1,3 +1,6 @@
+import type { AskForApproval } from "@crewon-protocol/v2/AskForApproval";
+import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
+
 import {
   DESKTOP_LOCALE_KEY_PATH,
   DESKTOP_THEME_KEY_PATH,
@@ -11,9 +14,9 @@ export type ConfigEdit = {
 };
 
 export type ThreadSettingsPatch = {
-  approvalPolicy: string;
+  approvalPolicy: AskForApproval | "";
   model: string;
-  sandboxMode: string;
+  sandboxMode: SandboxMode | "";
 };
 
 export type ConfigWriteSummary = {
@@ -73,9 +76,11 @@ export function buildThreadSettingsPatch(
   fieldValue: (fieldId: string) => string,
 ): ThreadSettingsPatch {
   return {
-    approvalPolicy: fieldValue("thread-settings-approval-policy"),
+    approvalPolicy: fieldValue("thread-settings-approval-policy") as
+      | AskForApproval
+      | "",
     model: fieldValue("thread-settings-model"),
-    sandboxMode: fieldValue("thread-settings-sandbox-mode"),
+    sandboxMode: fieldValue("thread-settings-sandbox-mode") as SandboxMode | "",
   };
 }
 

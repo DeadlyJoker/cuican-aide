@@ -851,4 +851,18 @@ See [runbook](https://example.com/runbook) and ~~legacy parser~~.`}
     expect(markup).toContain("Before the divider.");
     expect(markup).toContain("After the divider.");
   });
+
+  it("renders fenced code blocks as structured code panels", () => {
+    const markup = renderToStaticMarkup(
+      renderMarkdown("```tsx\nconst enabled = true;\n```"),
+    );
+
+    expect(markup).toContain('class="markdown-code-block"');
+    expect(markup).toContain('data-complete="true"');
+    expect(markup).toContain('data-language="tsx"');
+    expect(markup).toContain("<figcaption><span>TSX</span></figcaption>");
+    expect(markup).toContain('class="markdown-code-pre"');
+    expect(markup).toContain('class="language-tsx"');
+    expect(markup).toContain("const enabled = true;");
+  });
 });

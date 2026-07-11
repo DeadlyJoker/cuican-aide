@@ -625,9 +625,10 @@ async fn review_input_isolated_from_parent_history() {
         "user message should only contain the raw review prompt"
     );
 
-    // Ensure the REVIEW_PROMPT rubric is sent via instructions.
+    // Ensure the REVIEW_PROMPT rubric and runtime model identity are sent via instructions.
     let instructions = body["instructions"].as_str().expect("instructions string");
-    assert_eq!(instructions, REVIEW_PROMPT);
+    assert!(instructions.starts_with(REVIEW_PROMPT));
+    assert!(instructions.contains("<runtime_model_identity>"));
 
     // Also verify that a user interruption note was recorded in the rollout.
     let path = codex.rollout_path().expect("rollout path");

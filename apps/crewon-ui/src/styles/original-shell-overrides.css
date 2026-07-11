@@ -2818,6 +2818,13 @@ body.modal-open {
   background: transparent;
   box-shadow: none;
   transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease; }
+.control-select[data-open="true"] {
+  z-index: 82; }
+.command-input:has(.control-select[data-open="true"]) {
+  z-index: 80; }
+.input-tools:has(.control-select[data-open="true"]) {
+  position: relative;
+  z-index: 81; }
 .control-select::before {
   content: none; }
 .control-select::after {
@@ -2895,6 +2902,10 @@ body.modal-open {
   display: grid;
   gap: 2px;
   min-width: max(168px, 100%);
+  max-height: min(320px, calc(100vh - 120px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
   padding: 6px;
   border: 1px solid oklch(84% 0.016 238);
   border-radius: 12px;
@@ -2920,6 +2931,8 @@ body.modal-open {
   font-weight: 510;
   text-align: left;
   white-space: nowrap; }
+.input-tools .select-menu .select-option:active {
+  transform: none; }
 .select-menu .select-option::after {
   content: "";
   width: 6px;
