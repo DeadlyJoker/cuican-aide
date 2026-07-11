@@ -45,6 +45,9 @@ Do not expose a Scene mode selector on the homepage. The selected Scene and user
 Keep the composer information architecture explicit:
 
 - Use `+` only for adding real context and capabilities: files/folders, knowledge bases, Skills, and MCP. Do not repeat the current workspace inside this menu; workspace selection already has a dedicated surface.
+- On an independent new-task draft, render the workspace surface as a real selector rather than a static label or decorative chevron. Include “无工作空间” even when no known workspace exists, plus unique known workspace paths when available.
+- A global “新建任务” starts without an explicit workspace. A workspace-scoped new-conversation action preselects that workspace. Changing the selection must update the draft state and the URL `cwd` when a path is selected; choosing “无工作空间” removes that explicit binding.
+- Pass the selected workspace path into thread creation as `cwd`, then group the returned conversation under its `thread.cwd`. For “无工作空间”, omit the explicit `cwd`; describe this as using the default execution environment rather than claiming the backend thread has a nullable working directory.
 - Group the `+` menu by resource type and separate File, Knowledge, Skill, and MCP sections visually instead of presenting one undifferentiated list.
 - Omit unavailable or disconnected resource entries. Do not place “未连接” placeholders in the primary composer menu.
 - Keep Goal and Plan outside the `+` menu as a compact optional segmented control.
@@ -93,4 +96,5 @@ Before marking frontend work done:
 6. Confirm Goal and Plan have no unnecessary outer frame, show a clear selected state, default to neither selected, remain mutually exclusive, can be toggled off, and reach the real thread Goal / Plan collaboration APIs.
 7. Confirm the three Scenes visibly differ in subtitle, context, quick actions, capabilities, placeholder, and result intent.
 8. Confirm Team selection keeps one main conversation and does not turn Team into a fourth scene.
-9. Report any backend or browser limitation explicitly.
+9. Confirm a new task can switch between “无工作空间” and known workspaces, and that thread creation receives the selected `cwd` so the conversation appears under the matching workspace.
+10. Report any backend or browser limitation explicitly.

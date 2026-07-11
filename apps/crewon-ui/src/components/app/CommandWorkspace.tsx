@@ -102,13 +102,14 @@ type CommandWorkspaceProps = {
   workMode: WorkMode;
   onAttachContext: () => void;
   onChangeComposerValue: (value: string) => void;
-  onChangeWorkspaceCwd?: (cwd: string) => void;
+  onChangeWorkspaceCwd?: (cwd: string | null) => void;
   onModeChange: (mode: WorkMode) => void;
   onRetryConnection: () => void;
   onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
   onSendNewThread?: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
+    workspaceCwd?: string | null,
   ) => void;
   onSelectLinkedThread?: (threadId: string | null) => void;
   onSlashCommandSelect?: (command: ComposerSlashCommand) => void;
@@ -164,6 +165,8 @@ const permissionOptions: CommandSelectOption<CommandComposerPermission>[] = [
     value: "request-approval",
   },
 ];
+
+const noWorkspaceValue = "__no_workspace__";
 
 function isShellView(value: string): value is CommandShellView {
   return shellViewIds.includes(value as CommandShellView);
@@ -555,6 +558,25 @@ export function CommandWorkspace({
     () => commandSceneResourceDockItems(platformSnapshot),
     [platformSnapshot],
   );
+  const workspaceOptions = useMemo<CommandSelectOption[]>(() => {
+    const paths = [cwd, ...linkedThreads.map((thread) => thread.cwd ?? "")]
+      .map((path) => path.trim())
+      .filter(
+        (path, index, allPaths) => path && allPaths.indexOf(path) === index,
+      );
+    return [
+      {
+        detail: "不绑定项目文件夹，使用默认执行环境",
+        label: "无工作空间",
+        value: noWorkspaceValue,
+      },
+      ...paths.map((path) => ({
+        detail: path,
+        label: basename(path),
+        value: path,
+      })),
+    ];
+  }, [cwd, linkedThreads]);
 
   useEffect(() => {
     if (!executionTargets.some((target) => target.value === executionTarget)) {
@@ -634,7 +656,8 @@ export function CommandWorkspace({
       return;
     }
     onChangeComposerValue("");
-    (newTaskDraft ? (onSendNewThread ?? onSend) : onSend)(
+    const shouldCreateNewThread = newTaskDraft || !selectedThread;
+    (shouldCreateNewThread ? (onSendNewThread ?? onSend) : onSend)(
       trimmed,
       commandComposerRuntimeSettings({
         executionTarget,
@@ -644,6 +667,7 @@ export function CommandWorkspace({
         sceneMode,
         executionIntent,
       }),
+      cwd || null,
     );
     setNewTaskDraft(false);
     setExecutionIntent("none");
@@ -824,9 +848,10 @@ export function CommandWorkspace({
             setSidebarSearchQuery("");
           }}
           onCreateWorkspace={onChangeWorkspaceCwd}
-          onNewThread={() => {
+          onNewThread={(workspaceCwd) => {
             setActiveLinkedThreadId(null);
             setNewTaskDraft(true);
+            onChangeWorkspaceCwd?.(workspaceCwd);
             onChangeComposerValue("");
             switchView("command");
             textareaRef.current?.focus();
@@ -1072,12 +1097,28 @@ export function CommandWorkspace({
                   data-od-id="composer-state-row"
                   id="composer-status"
                 >
-                  <span
-                    className="workspace-picker"
-                    data-od-id="workspace-picker"
-                  >
-                    {currentWorkspace}
-                  </span>
+                  {showCommandThread ? (
+                    <span
+                      className="workspace-label"
+                      data-od-id="workspace-picker"
+                    >
+                      {currentWorkspace}
+                    </span>
+                  ) : (
+                    <CommandComposerSelect
+                      ariaLabel="工作空间选择"
+                      className="workspace-dropdown"
+                      options={workspaceOptions}
+                      value={cwd || noWorkspaceValue}
+                      onChange={(nextWorkspace) =>
+                        onChangeWorkspaceCwd?.(
+                          nextWorkspace === noWorkspaceValue
+                            ? null
+                            : nextWorkspace,
+                        )
+                      }
+                    />
+                  )}
                   {composerActivityLabel ? (
                     <span className="composer-state">
                       {composerActivityLabel}

@@ -1,7 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { Turn } from "@crewon-protocol/v2/Turn";
 import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
 import type { NoticeState } from "../shared/noticeState";
@@ -258,6 +258,65 @@ describe("thread message actions", () => {
     expect(state.threads.map((item) => item.id)).toEqual(["thread-created"]);
     expect(state.selectedThreadId).toBe("thread-created");
     expect(sidebarOpen).toBe(false);
+  });
+
+  it("uses an explicit new-task workspace without resolving a fallback", async () => {
+    const state = threadState([]);
+    const resolveBackendCwd = vi.fn(async () => "/repo/fallback");
+    const starts: Array<string | undefined> = [];
+
+    await createThreadAction({
+      client: {
+        async startThread(cwd) {
+          starts.push(cwd);
+          return thread({ cwd, id: "thread-workspace" });
+        },
+      },
+      createDemoThread: () => thread({ id: "demo-thread" }),
+      isConnected: true,
+      locale: "en",
+      preserveThreadsAfterConnectionLoss: () => {},
+      resolveBackendCwd,
+      setNotice: state.setNotice,
+      setSelectedThreadId: state.setSelectedThreadId,
+      setSidebarOpen: () => {},
+      setThreads: state.setThreads,
+      shouldAutoCloseSidebar: () => false,
+      workspaceCwd: "/repo/selected",
+    });
+
+    expect(resolveBackendCwd).not.toHaveBeenCalled();
+    expect(starts).toEqual(["/repo/selected"]);
+    expect(state.threads[0]?.cwd).toBe("/repo/selected");
+  });
+
+  it("omits cwd for an explicitly workspace-less new task", async () => {
+    const state = threadState([]);
+    const resolveBackendCwd = vi.fn(async () => "/repo/fallback");
+    const starts: Array<string | undefined> = [];
+
+    await createThreadAction({
+      client: {
+        async startThread(cwd) {
+          starts.push(cwd);
+          return thread({ id: "thread-standalone" });
+        },
+      },
+      createDemoThread: () => thread({ id: "demo-thread" }),
+      isConnected: true,
+      locale: "en",
+      preserveThreadsAfterConnectionLoss: () => {},
+      resolveBackendCwd,
+      setNotice: state.setNotice,
+      setSelectedThreadId: state.setSelectedThreadId,
+      setSidebarOpen: () => {},
+      setThreads: state.setThreads,
+      shouldAutoCloseSidebar: () => false,
+      workspaceCwd: null,
+    });
+
+    expect(resolveBackendCwd).not.toHaveBeenCalled();
+    expect(starts).toEqual([undefined]);
   });
 
   it("preserves threads when backend thread creation fails", async () => {

@@ -28,12 +28,13 @@ describe("createAppCommandShellHandlers", () => {
 
   it("starts a blank command-shell draft", () => {
     const setWorkMode = vi.fn();
+    const setDraftWorkspaceCwd = vi.fn();
     const startDraftThread = vi.fn();
     const handlers = createAppCommandShellHandlers({
       selectThread: vi.fn(),
       sendMessageInNewThread: vi.fn(),
       setComposerFocusSignal: vi.fn(),
-      setDraftWorkspaceCwd: vi.fn(),
+      setDraftWorkspaceCwd,
       setSelectedThreadId: vi.fn(),
       setWorkMode,
       startDraftThread,
@@ -42,6 +43,28 @@ describe("createAppCommandShellHandlers", () => {
     handlers.startCommandShellDraftThread();
 
     expect(setWorkMode).toHaveBeenCalledWith("code");
+    expect(setDraftWorkspaceCwd).toHaveBeenCalledWith(null);
     expect(startDraftThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards the selected workspace when sending a new task", () => {
+    const sendMessageInNewThread = vi.fn();
+    const handlers = createAppCommandShellHandlers({
+      selectThread: vi.fn(),
+      sendMessageInNewThread,
+      setComposerFocusSignal: vi.fn(),
+      setDraftWorkspaceCwd: vi.fn(),
+      setSelectedThreadId: vi.fn(),
+      setWorkMode: vi.fn(),
+      startDraftThread: vi.fn(),
+    });
+
+    handlers.sendCommandShellMessage("Build it", undefined, "/repo/frontend");
+
+    expect(sendMessageInNewThread).toHaveBeenCalledWith(
+      "Build it",
+      undefined,
+      "/repo/frontend",
+    );
   });
 });

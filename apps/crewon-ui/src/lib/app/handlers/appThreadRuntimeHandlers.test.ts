@@ -299,6 +299,22 @@ describe("app thread runtime handlers", () => {
       selectedThreadId: null,
       text: "fresh prompt",
     });
+
+    await threadMessageSpy.sendParams?.createThread("fresh prompt");
+    expect(threadMessageSpy.createParams?.workspaceCwd).toBeUndefined();
+  });
+
+  it("passes the command workspace selection into new thread creation", async () => {
+    const handlers = createAppThreadRuntimeHandlers(createParams());
+
+    await handlers.sendMessageInNewThread(
+      "workspace prompt",
+      undefined,
+      "/repo/selected",
+    );
+    await threadMessageSpy.sendParams?.createThread("workspace prompt");
+
+    expect(threadMessageSpy.createParams?.workspaceCwd).toBe("/repo/selected");
   });
 
   it("shares createThread with review and side chat handlers", async () => {

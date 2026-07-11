@@ -26,5 +26,8 @@ exports[`CommandWorkspace > snapshots the default command-home landmarks 1`] = `
     "生码",
     "设计创意",
   ],
+  "workspaceOptions": [
+    "无工作空间",
+  ],
 }
 `;

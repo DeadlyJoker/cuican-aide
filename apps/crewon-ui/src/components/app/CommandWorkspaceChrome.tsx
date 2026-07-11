@@ -182,7 +182,7 @@ export function CommandSidebar({
   slots: CommandHomeSlots;
   onCloseSearch: () => void;
   onCreateWorkspace?: (cwd: string) => void;
-  onNewThread: () => void;
+  onNewThread: (workspaceCwd: string | null) => void;
   onOpenLinkedThread: (threadId: string) => void;
   onQueryChange: (query: string) => void;
   onSwitchView: (view: CommandShellView) => void;
@@ -416,7 +416,7 @@ export function CommandSidebar({
             type="button"
             onClick={() => {
               if (item.key === "command") {
-                onNewThread();
+                onNewThread(null);
                 return;
               }
               onSwitchView(item.key);
@@ -514,7 +514,7 @@ export function CommandSidebar({
                 <button
                   aria-label="新建会话"
                   type="button"
-                  onClick={onNewThread}
+                  onClick={() => onNewThread(cwd)}
                 >
                   <SquarePen aria-hidden="true" />
                 </button>
@@ -613,7 +613,7 @@ export function CommandSidebar({
                 <button
                   aria-label="新建无工作空间会话"
                   type="button"
-                  onClick={onNewThread}
+                  onClick={() => onNewThread(null)}
                 >
                   <SquarePen aria-hidden="true" />
                 </button>

@@ -92,6 +92,7 @@ export type CreateThreadActionParams = {
   shouldAutoCloseSidebar: () => boolean;
   threadSettings?: ThreadRuntimeSettings;
   threadSource?: ThreadSource;
+  workspaceCwd?: string | null;
 };
 
 export type SendMessageActionParams = {
@@ -205,13 +206,17 @@ export async function createThreadAction({
   shouldAutoCloseSidebar,
   threadSettings,
   threadSource = "app_server",
+  workspaceCwd,
 }: CreateThreadActionParams): Promise<Thread | null> {
   if (!isConnected) {
     return createDemoThread(initialPrompt);
   }
 
   try {
-    const threadCwd = await resolveBackendCwd();
+    const threadCwd =
+      workspaceCwd === undefined
+        ? await resolveBackendCwd()
+        : workspaceCwd?.trim() || undefined;
     const thread = await client?.startThread(
       threadCwd || undefined,
       threadSource,

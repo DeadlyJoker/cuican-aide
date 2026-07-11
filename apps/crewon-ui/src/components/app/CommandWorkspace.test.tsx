@@ -300,6 +300,9 @@ describe("CommandWorkspace", () => {
       executionIntents: visibleText(
         /data-execution-intent="[^"]+"[^>]*>\s*<svg[^>]*>.*?<\/svg>\s*<span>([^<]+)/gs,
       ),
+      workspaceOptions: visibleText(
+        /data-value="(?:__no_workspace__|C:\\Users\\admin\\Documents\\crewon)"[^>]*>\s*<span><strong>([^<]+)/g,
+      ),
     }).toMatchSnapshot();
   });
 
@@ -350,6 +353,10 @@ describe("CommandWorkspace", () => {
     expect(addPanelMarkup).not.toContain(">工作空间<");
     expect(commandHomeMarkup).toContain('aria-label="执行主体"');
     expect(commandHomeMarkup).toContain('aria-label="模型选择"');
+    expect(commandHomeMarkup).toContain('aria-label="工作空间选择"');
+    expect(commandHomeMarkup).toContain('data-value="__no_workspace__"');
+    expect(commandHomeMarkup).toContain("无工作空间");
+    expect(commandHomeMarkup).toContain("crewon");
     expect(commandHomeMarkup).toContain('class="send-button"');
     expect(commandHomeMarkup).toContain('data-context-open=""');
     expect(commandHomeMarkup).toContain('data-slash-open=""');

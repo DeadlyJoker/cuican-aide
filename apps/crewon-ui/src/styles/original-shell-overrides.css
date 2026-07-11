@@ -4372,6 +4372,60 @@ body.modal-open {
   grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
+.screen-shell.command-screen .workspace-label {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: 30px;
+  margin-left: 14px;
+  color: oklch(42% 0.02 238);
+  cursor: default;
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .composer-state-row .workspace-dropdown {
+  justify-self: start;
+  min-height: 30px;
+  margin-left: 10px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.screen-shell.command-screen
+  .composer-state-row
+  .workspace-dropdown
+  .select-trigger {
+  max-width: 240px;
+  min-height: 30px;
+  padding-left: 4px;
+  font-weight: 400;
+}
+
+.screen-shell.command-screen
+  .composer-state-row
+  .workspace-dropdown
+  .select-menu {
+  bottom: calc(100% + 7px);
+  min-width: 260px;
+}
+
+.screen-shell.command-screen .thread-command-input .workspace-label {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .screen-shell.command-screen .workspace-label {
+    margin-left: 0;
+  }
+
+  .screen-shell.command-screen .composer-state-row .workspace-dropdown {
+    margin-left: 0;
+  }
+}
+
 .screen-shell.command-screen .connection-indicator {
   display: inline-grid;
   width: 20px;
