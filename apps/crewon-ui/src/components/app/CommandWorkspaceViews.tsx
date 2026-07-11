@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   ArrowUp,
+  BookOpen,
   Bot,
   Layers3,
   Mic,
@@ -12,8 +13,14 @@ import {
 import { useMemo, useState, type ReactNode } from "react";
 
 import { officeRooms, workflowRooms } from "./commandWorkspaceData";
-import type { CommandHomeSlots } from "./commandWorkspaceState";
 import { classNames, connectionLabel } from "./commandWorkspaceUtils";
+import { CatalogResourceDialog } from "../catalog/CatalogResourceDialog";
+import {
+  downloadCatalogResource,
+  refreshAgentPlatformCatalog,
+  type CatalogResourceSummary,
+} from "../../lib/agent-platform/agentPlatformCatalog";
+import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 
 type FilterOption = {
@@ -34,6 +41,7 @@ type CatalogItem = {
   status?: string;
   statusTone?: "success" | "warn";
   title: string;
+  resource?: CatalogResourceSummary;
 };
 
 type TeamMode = "office" | "workflow" | "experts";
@@ -148,7 +156,17 @@ function CatalogSearch({
   );
 }
 
-function CatalogCard({ item }: { item: CatalogItem }) {
+function CatalogCard({
+  item,
+  progress,
+  onDownload,
+  onOpen,
+}: {
+  item: CatalogItem;
+  progress?: number;
+  onDownload?: (resource: CatalogResourceSummary) => void;
+  onOpen?: (resource: CatalogResourceSummary) => void;
+}) {
   return (
     <article
       className={classNames("catalog-card", item.accent)}
@@ -163,31 +181,172 @@ function CatalogCard({ item }: { item: CatalogItem }) {
           <span>{item.label}</span>
           <strong>{item.title}</strong>
         </div>
-        <p>{item.detail}</p>
-        <div className="catalog-meta">
-          {item.meta.map((meta) => (
-            <span
-              className={meta.includes("来源") || meta.includes("队列") ? "source-badge" : undefined}
-              key={meta}
-            >
-              {meta}
-            </span>
-          ))}
-        </div>
+        {item.detail ? <p>{item.detail}</p> : null}
+        {item.resource ? (
+          <span
+            className={classNames(
+              "catalog-download-status",
+              item.resource.update_available && "update",
+              item.resource.downloaded && "downloaded",
+            )}
+          >
+            {item.resource.update_available
+              ? "有更新"
+              : item.resource.downloaded
+                ? "已下载"
+                : "未下载"}
+          </span>
+        ) : (
+          <div className="catalog-meta">
+            {item.meta.map((meta) => (
+              <span key={meta}>{meta}</span>
+            ))}
+          </div>
+        )}
       </div>
-      {item.action ? (
+      {item.resource ? (
+        <div className="catalog-card-actions">
+          <button
+            className="button compact"
+            disabled={!item.resource.downloaded}
+            type="button"
+            onClick={() => onOpen?.(item.resource!)}
+          >
+            查看
+          </button>
+          <button
+            className="button compact"
+            disabled={
+              progress !== undefined ||
+              (Boolean(item.resource.downloaded) &&
+                !item.resource.update_available)
+            }
+            type="button"
+            onClick={() => onDownload?.(item.resource!)}
+          >
+            {progress !== undefined
+              ? "下载中…"
+              : item.resource.update_available
+                ? "更新"
+                : item.resource.downloaded
+                  ? "已下载"
+                  : "下载"}
+          </button>
+          {progress !== undefined ? (
+            <progress max="100" value={progress} />
+          ) : null}
+        </div>
+      ) : item.action ? (
         <button className="button compact" type="button">
           {item.action}
         </button>
       ) : item.status ? (
-        <span className={classNames("status", item.statusTone)}>{item.status}</span>
+        <span className={classNames("status", item.statusTone)}>
+          {item.status}
+        </span>
       ) : (
-        <button className="icon-action compact" type="button" aria-label={`添加 ${item.title}`}>
+        <button
+          className="icon-action compact"
+          type="button"
+          aria-label={`添加 ${item.title}`}
+        >
           +
         </button>
       )}
     </article>
   );
+}
+
+function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
+  const employees = snapshot.agents.map((agent): CatalogItem => {
+    const resource: CatalogResourceSummary = {
+      id: agent.id,
+      type: "agents",
+      name: agent.name,
+      description: agent.description || "",
+      owner_username: agent.owner_username,
+      model: agent.model_info?.model_name || agent.model_info?.name,
+      api_enabled: Boolean(agent.api_enabled),
+      invocation_url: agent.invocation_url,
+      enabled: agent.is_active,
+      download_available: true,
+      downloaded: agent.downloaded,
+      downloaded_at: agent.downloaded_at,
+      update_available: agent.update_available,
+      source_updated_at: agent.source_updated_at,
+    };
+    return {
+      accent: "employee-card",
+      detail: resource.description,
+      filter: "employee",
+      icon: "A",
+      id: `catalog-agent-${agent.id}`,
+      label: "员工",
+      meta: [],
+      resource,
+      title: agent.name,
+    };
+  });
+  const skills = snapshot.skills.map((skill): CatalogItem => {
+    const resource: CatalogResourceSummary = {
+      id: skill.id,
+      type: "skills",
+      name: skill.name,
+      description: skill.description || "",
+      owner_username: skill.owner_username,
+      category: skill.category,
+      tags: skill.tags ?? [],
+      version: skill.version,
+      file_count: skill.file_count ?? 0,
+      has_scripts: Boolean(skill.has_scripts),
+      download_available: true,
+      downloaded: skill.downloaded,
+      downloaded_at: skill.downloaded_at,
+      update_available: skill.update_available,
+      source_updated_at: skill.source_updated_at,
+    };
+    return {
+      accent: "skill-card",
+      detail: resource.description,
+      filter: "skill",
+      icon: "S",
+      id: `catalog-skill-${skill.id}`,
+      label: "技能",
+      meta: [],
+      resource,
+      title: skill.name,
+    };
+  });
+  const services = snapshot.mcpServers.map((server): CatalogItem => {
+    const resource: CatalogResourceSummary = {
+      id: server.id,
+      type: "mcp_servers",
+      name: server.alias || server.name,
+      description: server.description || "",
+      owner_username: server.owner_username,
+      category: server.category,
+      enabled: server.is_enabled,
+      connected: Boolean(server.is_connected),
+      tool_count: server.tool_count ?? 0,
+      download_available: true,
+      downloaded: server.downloaded,
+      downloaded_at: server.downloaded_at,
+      update_available: server.update_available,
+      source_updated_at: server.source_updated_at,
+    };
+    return {
+      accent: "service-card",
+      detail: resource.description,
+      filter: "service",
+      icon: "M",
+      id: `catalog-mcp-${server.id}`,
+      label: "服务",
+      meta: [],
+      resource,
+      title: resource.name,
+    };
+  });
+  return [...employees, ...skills, ...services];
 }
 
 export function AssistView({
@@ -220,8 +379,14 @@ export function AssistView({
             <span aria-hidden="true" />
             <span>Crewon 助理</span>
           </strong>
-          <span className="visually-hidden">{connectionLabel(connectionState)}</span>
-          <button className="icon-action compact" type="button" aria-label="连接设置">
+          <span className="visually-hidden">
+            {connectionLabel(connectionState)}
+          </span>
+          <button
+            className="icon-action compact"
+            type="button"
+            aria-label="连接设置"
+          >
             <Settings2 aria-hidden="true" />
           </button>
         </div>
@@ -234,7 +399,10 @@ export function AssistView({
         />
 
         <div className="assistant-bottom-zone">
-          <section className="command-input assistant-home-composer" data-od-id="assistant-composer">
+          <section
+            className="command-input assistant-home-composer"
+            data-od-id="assistant-composer"
+          >
             <label className="visually-hidden" htmlFor="assist-input">
               助理输入
             </label>
@@ -247,27 +415,65 @@ export function AssistView({
               value={composerValue}
               onChange={(event) => onChangeComposerValue(event.target.value)}
             />
-            <button className="shortcut-proxy" type="button" data-context-open="" hidden aria-hidden="true" tabIndex={-1} />
-            <button className="shortcut-proxy" type="button" data-slash-open="" hidden aria-hidden="true" tabIndex={-1} />
+            <button
+              className="shortcut-proxy"
+              type="button"
+              data-context-open=""
+              hidden
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+            <button
+              className="shortcut-proxy"
+              type="button"
+              data-slash-open=""
+              hidden
+              aria-hidden="true"
+              tabIndex={-1}
+            />
             <div className="input-tools" data-od-id="assistant-composer-tools">
-              <div className="composer-controls" data-od-id="assistant-composer-control-row">
-                <div className="control-select mode-dropdown" aria-label="任务类型">
-                  <select data-task-mode="" aria-label="任务类型" defaultValue="plan">
+              <div
+                className="composer-controls"
+                data-od-id="assistant-composer-control-row"
+              >
+                <div
+                  className="control-select mode-dropdown"
+                  aria-label="任务类型"
+                >
+                  <select
+                    data-task-mode=""
+                    aria-label="任务类型"
+                    defaultValue="plan"
+                  >
                     <option value="plan">计划</option>
                     <option value="goal">目标</option>
                     <option value="agent">智能体</option>
                   </select>
                 </div>
-                <div className="control-select model-dropdown" aria-label="模型选择">
-                  <select data-model-select="" aria-label="模型选择" defaultValue="gpt-5.6-sol">
+                <div
+                  className="control-select model-dropdown"
+                  aria-label="模型选择"
+                >
+                  <select
+                    data-model-select=""
+                    aria-label="模型选择"
+                    defaultValue="gpt-5.6-sol"
+                  >
                     <option value="gpt-5.6-sol">gpt-5.6-sol</option>
                     <option value="gpt-5.6">gpt-5.6</option>
                     <option value="gpt-5.5">gpt-5.5</option>
                     <option value="gpt-5-codex">gpt-5-codex</option>
                   </select>
                 </div>
-                <div className="control-select permission-dropdown" aria-label="权限选择">
-                  <select data-permission-select="" aria-label="权限选择" defaultValue="approve-for-me">
+                <div
+                  className="control-select permission-dropdown"
+                  aria-label="权限选择"
+                >
+                  <select
+                    data-permission-select=""
+                    aria-label="权限选择"
+                    defaultValue="approve-for-me"
+                  >
                     <option value="approve-for-me">替我审批</option>
                     <option value="request-approval">请求批准</option>
                     <option value="full-access">完全访问</option>
@@ -275,13 +481,26 @@ export function AssistView({
                 </div>
               </div>
               <div className="composer-actions">
-                <button className="icon-action prompt-action" type="button" aria-label="优化提示词">
+                <button
+                  className="icon-action prompt-action"
+                  type="button"
+                  aria-label="优化提示词"
+                >
                   Aa
                 </button>
-                <button className="icon-action" type="button" aria-label="语音输入">
+                <button
+                  className="icon-action"
+                  type="button"
+                  aria-label="语音输入"
+                >
                   <Mic aria-hidden="true" />
                 </button>
-                <button className="send-button" type="button" aria-label="发送" onClick={onSend}>
+                <button
+                  className="send-button"
+                  type="button"
+                  aria-label="发送"
+                  onClick={onSend}
+                >
                   <ArrowUp aria-hidden="true" />
                 </button>
               </div>
@@ -387,7 +606,10 @@ export function ProjectsView({
       hidden={!active}
     >
       <div className="page-stack" data-filter-scope="">
-        <header className="catalog-market-header function-market-header" data-od-id="projects-header-inline">
+        <header
+          className="catalog-market-header function-market-header"
+          data-od-id="projects-header-inline"
+        >
           <FilterTabs
             active={projectMode}
             group="project-mode"
@@ -415,7 +637,10 @@ export function ProjectsView({
           </div>
         </header>
 
-        <section className="catalog-source-bar" data-od-id="project-filters-inline">
+        <section
+          className="catalog-source-bar"
+          data-od-id="project-filters-inline"
+        >
           <SourceTabs
             active={projectSource}
             group="project-source"
@@ -426,14 +651,23 @@ export function ProjectsView({
             ]}
             onChange={setProjectSource}
           />
-          <span className="catalog-context-note">Stage Gate：需求确认 · running 56%</span>
+          <span className="catalog-context-note">
+            Stage Gate：需求确认 · running 56%
+          </span>
         </section>
 
-        <section className="capability-catalog function-catalog" data-od-id="project-task-catalog">
+        <section
+          className="capability-catalog function-catalog"
+          data-od-id="project-task-catalog"
+        >
           {visibleProjects.map((item) => (
             <CatalogCard item={item} key={item.id} />
           ))}
-          <div className="filter-empty-state" data-filter-empty="" hidden={visibleProjects.length > 0}>
+          <div
+            className="filter-empty-state"
+            data-filter-empty=""
+            hidden={visibleProjects.length > 0}
+          >
             没有匹配项
           </div>
         </section>
@@ -447,7 +681,10 @@ export function ProjectsView({
             <div className="compact-list" id="project-log" aria-live="polite">
               {projectCatalog.slice(0, 4).map((item) => (
                 <article
-                  className={classNames("capability-row", item.id.includes("requirement") && "is-priority")}
+                  className={classNames(
+                    "capability-row",
+                    item.id.includes("requirement") && "is-priority",
+                  )}
                   key={`queue-${item.id}`}
                 >
                   <div>
@@ -468,7 +705,10 @@ export function ProjectsView({
             </div>
           </section>
 
-          <aside className="side-rail" data-od-id="project-flow-inspector-inline">
+          <aside
+            className="side-rail"
+            data-od-id="project-flow-inspector-inline"
+          >
             <section className="rail-panel">
               <div className="panel-head">
                 <h3>执行状态机</h3>
@@ -498,15 +738,28 @@ export function ProjectsView({
               <div className="compact-list">
                 {[
                   ["start -> task", "接收需求后拆成可执行节点。", "核心"],
-                  ["parallel -> merge", "并行分发给多个角色，合并为共享上下文。", "并行"],
-                  ["gate -> end", "人类确认关键决策，再进入交付或回退。", "卡点"],
+                  [
+                    "parallel -> merge",
+                    "并行分发给多个角色，合并为共享上下文。",
+                    "并行",
+                  ],
+                  [
+                    "gate -> end",
+                    "人类确认关键决策，再进入交付或回退。",
+                    "卡点",
+                  ],
                 ].map(([title, detail, status]) => (
                   <div className="capability-row" key={title}>
                     <div>
                       <strong>{title}</strong>
                       <p>{detail}</p>
                     </div>
-                    <span className={classNames("status", status === "卡点" && "warn")}>
+                    <span
+                      className={classNames(
+                        "status",
+                        status === "卡点" && "warn",
+                      )}
+                    >
                       {status}
                     </span>
                   </div>
@@ -518,7 +771,10 @@ export function ProjectsView({
                 <h3>最小上下文</h3>
                 <span className="status success">已锁定</span>
               </div>
-              <p>只传 PRD 能力域、当前页面壳、审批策略，不把完整历史对话塞给 Agent。</p>
+              <p>
+                只传 PRD 能力域、当前页面壳、审批策略，不把完整历史对话塞给
+                Agent。
+              </p>
               <p>{resourceStatus}</p>
             </section>
           </aside>
@@ -528,194 +784,69 @@ export function ProjectsView({
   );
 }
 
-function agentCatalog(slots: CommandHomeSlots): CatalogItem[] {
-  return [
-    {
-      accent: "employee-card",
-      detail: slots.agent.detail,
-      filter: "employee personal",
-      icon: "产",
-      id: "employee-card-product-review",
-      label: "员工",
-      meta: ["PRD", "Gate", "只读"],
-      title: slots.agent.title,
-    },
-    {
-      accent: "employee-card",
-      detail: "把设计意图转成开发任务、边界条件和验收清单。",
-      filter: "employee personal",
-      icon: "交",
-      id: "employee-card-engineering-handoff",
-      label: "员工",
-      meta: ["MRD", "任务拆解", "写草稿"],
-      title: "开发交付智能体",
-    },
-    {
-      accent: "employee-card",
-      detail: "检查层级、密度、间距和组件一致性，避免功能页漂移。",
-      filter: "employee market",
-      icon: "视",
-      id: "employee-card-visual-polish",
-      label: "员工",
-      meta: ["来源：市场", "UI QA", "组件", "建议态"],
-      title: "视觉打磨智能体",
-    },
-    {
-      accent: "employee-card",
-      detail: "整理决策记录、待审批事项和对齐摘要，发送前保留人工确认。",
-      filter: "employee market",
-      icon: "会",
-      id: "employee-card-meeting-prep",
-      label: "员工",
-      meta: ["来源：市场", "Channel", "纪要", "Gate"],
-      title: "会议准备智能体",
-    },
-    {
-      accent: "skill-card",
-      detail: "读取 PR diff、运行静态检查，只把高风险结论送入 Gate。",
-      filter: "skill market",
-      icon: "CR",
-      id: "skill-card-code-review",
-      label: "Skill",
-      meta: ["来源：市场", "/review", "只读", "高风险"],
-      title: "code-review-system",
-    },
-    {
-      accent: "skill-card",
-      detail: slots.skills[0].detail,
-      filter: "skill personal",
-      icon: "页",
-      id: "skill-card-page-review",
-      label: "Skill",
-      meta: ["/ui-review", "视觉", "建议态"],
-      title: slots.skills[0].title,
-    },
-    {
-      accent: "skill-card",
-      detail: slots.skills[1]?.detail ?? "把变更压缩成开发可执行的验收点、风险和回归范围。",
-      filter: "skill personal",
-      icon: "交",
-      id: "skill-card-handoff",
-      label: "Skill",
-      meta: ["/handoff", "验收", "导出"],
-      title: slots.skills[1]?.title ?? "交付检查 Skill",
-    },
-    {
-      accent: "skill-card",
-      detail: "解释 Agent / Team 生命周期，生成串行、并行或嵌套 Workflow。",
-      filter: "skill market",
-      icon: "队",
-      id: "skill-card-agent-management",
-      label: "Skill",
-      meta: ["来源：市场", "/team", "Workflow", "Gate"],
-      title: "小队编排 Skill",
-    },
-    {
-      accent: "skill-card",
-      detail: "读取网页、抽取结构化片段，并把来源回写到当前任务上下文。",
-      filter: "skill market",
-      icon: "WA",
-      id: "skill-card-web-access",
-      label: "Skill",
-      meta: ["来源：市场", "/web", "引用", "只读"],
-      title: "Web Access",
-    },
-    {
-      accent: "skill-card",
-      detail: "把会议、PRD 或验收点整理成可复制的文档草稿。",
-      filter: "skill market",
-      icon: "文",
-      id: "skill-card-doc-generator",
-      label: "Skill",
-      meta: ["来源：市场", "/doc", "草稿", "导出"],
-      title: "文档生成 Skill",
-    },
-    {
-      accent: "skill-card",
-      detail: "打开页面、点击表单、采集状态，用于低风险网页任务。",
-      filter: "skill market",
-      icon: "BR",
-      id: "skill-card-browser-automation",
-      label: "Skill",
-      meta: ["来源：市场", "/browser", "沙箱", "Gate"],
-      title: "浏览器自动化",
-    },
-    {
-      accent: "skill-card",
-      detail: "把用户反馈、缺陷记录和会议备注聚类成可执行问题。",
-      filter: "skill market",
-      icon: "馈",
-      id: "skill-card-feedback-mining",
-      label: "Skill",
-      meta: ["来源：市场", "/feedback", "聚类", "建议态"],
-      title: "反馈归因 Skill",
-    },
-    {
-      accent: "service-card",
-      detail: slots.mcps[0].detail,
-      filter: "service personal",
-      icon: "FS",
-      id: "service-card-filesystem",
-      label: "Service",
-      meta: ["@文件", "项目内", "就绪"],
-      title: slots.mcps[0].title,
-    },
-    {
-      accent: "service-card",
-      detail: "读取 Issue、PR 和提交状态；写入评论或触发 Action 前需要 Gate。",
-      filter: "service market",
-      icon: "GH",
-      id: "service-card-github",
-      label: "Service",
-      meta: ["来源：市场", "@PR", "待授权", "Gate"],
-      title: "GitHub MCP",
-    },
-    {
-      accent: "service-card",
-      detail: "只检索办公室授权的知识集合，并把引用来源写入上下文。",
-      filter: "service personal",
-      icon: "KB",
-      id: "service-card-knowledge",
-      label: "Service",
-      meta: ["@知识库", "引用", "正常"],
-      title: "知识库 RAG",
-    },
-    {
-      accent: "service-card",
-      detail: "读取会议、提醒和自动化窗口；创建外部事件需要 Gate。",
-      filter: "service market",
-      icon: "日",
-      id: "service-card-calendar",
-      label: "Service",
-      meta: ["来源：市场", "@日程", "只读", "正常"],
-      title: "日历服务",
-    },
-  ];
-}
-
 export function AgentsView({
   active,
   catalogFilter,
   catalogSearch,
-  slots,
+  platformState,
+  snapshot,
+  onReload,
   onCatalogFilterChange,
   onCatalogSearchChange,
 }: {
   active: boolean;
   catalogFilter: string;
   catalogSearch: string;
-  slots: CommandHomeSlots;
+  platformState: "loading" | "ready" | "fallback";
+  snapshot: AgentPlatformSnapshot;
+  onReload: () => Promise<void>;
   onCatalogFilterChange: (filter: string) => void;
   onCatalogSearchChange: (query: string) => void;
 }) {
-  const [source, setSource] = useState("market");
-  const cards = useMemo(() => agentCatalog(slots), [slots]);
+  const [selectedResource, setSelectedResource] =
+    useState<CatalogResourceSummary | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<
+    Record<string, number>
+  >({});
+  const syncedCards = useMemo(() => syncedAgentCatalog(snapshot), [snapshot]);
+  const cards = syncedCards;
   const visibleCards = cards.filter(
     (item) =>
       (catalogFilter === "all" || hasFilter(item, catalogFilter)) &&
-      hasFilter(item, source) &&
       includesQuery(item, catalogSearch),
   );
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await refreshAgentPlatformCatalog();
+      await onReload();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function download(resource: CatalogResourceSummary) {
+    const key = `${resource.type}:${resource.id}`;
+    setDownloadProgress((current) => ({ ...current, [key]: 1 }));
+    setDownloadError(null);
+    try {
+      await downloadCatalogResource(resource.type, resource.id);
+      await onReload();
+    } catch (reason) {
+      setDownloadError(
+        reason instanceof Error ? reason.message : "资源下载失败",
+      );
+    } finally {
+      setDownloadProgress((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  }
 
   return (
     <section
@@ -726,15 +857,30 @@ export function AgentsView({
       hidden={!active}
     >
       <div className="page-stack" data-filter-scope="">
-        <header className="catalog-market-header" data-od-id="agents-header-inline">
+        <header
+          className="catalog-market-header"
+          data-od-id="agents-header-inline"
+        >
           <FilterTabs
             active={catalogFilter}
             group="category"
             label="能力分类筛选"
             options={[
-              { icon: <Bot aria-hidden="true" />, label: "员工", value: "employee" },
-              { icon: <Wrench aria-hidden="true" />, label: "技能", value: "skill" },
-              { icon: <Layers3 aria-hidden="true" />, label: "服务", value: "service" },
+              {
+                icon: <Bot aria-hidden="true" />,
+                label: "员工",
+                value: "employee",
+              },
+              {
+                icon: <Wrench aria-hidden="true" />,
+                label: "技能",
+                value: "skill",
+              },
+              {
+                icon: <Layers3 aria-hidden="true" />,
+                label: "服务",
+                value: "service",
+              },
             ]}
             onChange={onCatalogFilterChange}
           />
@@ -745,34 +891,213 @@ export function AgentsView({
               value={catalogSearch}
               onChange={onCatalogSearchChange}
             />
-            <button className="button primary compact" type="button">
-              新建个人能力
+            <button
+              className="button compact"
+              disabled={refreshing}
+              type="button"
+              onClick={refresh}
+            >
+              {refreshing ? "更新中…" : "更新目录"}
             </button>
           </div>
         </header>
 
-        <section className="catalog-source-bar" data-od-id="agent-filters-inline">
-          <SourceTabs
-            active={source}
-            group="source"
-            label="来源筛选"
-            options={[
-              { label: "个人能力", value: "personal" },
-              { label: "市场", value: "market" },
-            ]}
-            onChange={setSource}
-          />
-        </section>
-
-        <section className="capability-catalog" data-od-id="agent-capability-catalog">
+        {downloadError ? (
+          <p className="catalog-download-error" role="alert">
+            {downloadError}
+          </p>
+        ) : null}
+        <section
+          className="capability-catalog"
+          data-od-id="agent-capability-catalog"
+        >
           {visibleCards.map((item) => (
-            <CatalogCard item={item} key={item.id} />
+            <CatalogCard
+              item={item}
+              key={item.id}
+              progress={
+                item.resource
+                  ? downloadProgress[
+                      `${item.resource.type}:${item.resource.id}`
+                    ]
+                  : undefined
+              }
+              onDownload={download}
+              onOpen={setSelectedResource}
+            />
           ))}
-          <div className="filter-empty-state" data-filter-empty="" hidden={visibleCards.length > 0}>
-            没有匹配项
-          </div>
+          {visibleCards.length === 0 ? (
+            <div
+              className="filter-empty-state"
+              data-filter-empty=""
+              role="status"
+            >
+              {platformState === "loading"
+                ? "正在读取当前账号的 Agent、Skill 和 MCP…"
+                : platformState === "fallback"
+                  ? "资源目录暂时不可用，请确认 agent-platform 已启动后重试。"
+                  : cards.length === 0
+                    ? "当前账号暂无可用资源。请先在 agent-platform 创建或授权资源，再更新目录。"
+                    : "没有匹配项"}
+            </div>
+          ) : null}
         </section>
       </div>
+      <CatalogResourceDialog
+        resource={selectedResource}
+        onClose={() => setSelectedResource(null)}
+        onRefresh={refresh}
+      />
+    </section>
+  );
+}
+
+export function KnowledgeCatalogView({
+  active,
+  platformState,
+  snapshot,
+  onReload,
+}: {
+  active: boolean;
+  platformState: "loading" | "ready" | "fallback";
+  snapshot: AgentPlatformSnapshot;
+  onReload: () => Promise<void>;
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedResource, setSelectedResource] =
+    useState<CatalogResourceSummary | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<
+    Record<string, number>
+  >({});
+  const cards = snapshot.knowledgeBases.map((knowledgeBase): CatalogItem => {
+    const resource: CatalogResourceSummary = {
+      id: knowledgeBase.id,
+      type: "knowledge_bases",
+      name: knowledgeBase.name,
+      description: knowledgeBase.description || "",
+      owner_username: knowledgeBase.owner_username,
+      document_count: knowledgeBase.document_count ?? 0,
+      chunk_count: knowledgeBase.chunk_count ?? 0,
+      embedding_model: knowledgeBase.embedding_model,
+      download_available: true,
+      downloaded: knowledgeBase.downloaded,
+      downloaded_at: knowledgeBase.downloaded_at,
+      update_available: knowledgeBase.update_available,
+      source_updated_at: knowledgeBase.source_updated_at,
+    };
+    return {
+      accent: "knowledge-card",
+      detail: resource.description,
+      filter: "knowledge personal",
+      icon: <BookOpen aria-hidden="true" />,
+      id: `catalog-knowledge-${knowledgeBase.id}`,
+      label: "知识库",
+      meta: [],
+      resource,
+      title: knowledgeBase.name,
+    };
+  });
+  const visibleCards = cards.filter((item) => includesQuery(item, query));
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await refreshAgentPlatformCatalog();
+      await onReload();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function download(resource: CatalogResourceSummary) {
+    const key = `${resource.type}:${resource.id}`;
+    setDownloadProgress((current) => ({ ...current, [key]: 1 }));
+    setDownloadError(null);
+    try {
+      await downloadCatalogResource(resource.type, resource.id);
+      await onReload();
+    } catch (reason) {
+      setDownloadError(
+        reason instanceof Error ? reason.message : "知识库下载失败",
+      );
+    } finally {
+      setDownloadProgress((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  }
+
+  return (
+    <section
+      className={classNames("shell-view shell-page-view", active && "active")}
+      data-shell-view="knowledge"
+      hidden={!active}
+    >
+      <div className="page-stack">
+        <header className="catalog-market-header">
+          <div>
+            <h2>知识库</h2>
+          </div>
+          <div className="catalog-header-actions">
+            <CatalogSearch
+              label="搜索知识库"
+              placeholder="搜索知识库名称或描述"
+              value={query}
+              onChange={setQuery}
+            />
+            <button
+              className="button compact"
+              disabled={refreshing}
+              type="button"
+              onClick={refresh}
+            >
+              {refreshing ? "更新中…" : "更新目录"}
+            </button>
+          </div>
+        </header>
+        {downloadError ? (
+          <p className="catalog-download-error" role="alert">
+            {downloadError}
+          </p>
+        ) : null}
+        <section className="capability-catalog knowledge-catalog">
+          {visibleCards.map((item) => (
+            <CatalogCard
+              item={item}
+              key={item.id}
+              progress={
+                item.resource
+                  ? downloadProgress[
+                      `${item.resource.type}:${item.resource.id}`
+                    ]
+                  : undefined
+              }
+              onDownload={download}
+              onOpen={setSelectedResource}
+            />
+          ))}
+          {visibleCards.length === 0 ? (
+            <div className="filter-empty-state" role="status">
+              {platformState === "loading"
+                ? "正在读取当前账号的知识库…"
+                : platformState === "fallback"
+                  ? "知识库目录暂时不可用，请确认 agent-platform 已启动后重试。"
+                  : cards.length === 0
+                    ? "当前账号暂无可用知识库。请先在 agent-platform 创建或授权知识库，再更新目录。"
+                    : "没有匹配的知识库"}
+            </div>
+          ) : null}
+        </section>
+      </div>
+      <CatalogResourceDialog
+        resource={selectedResource}
+        onClose={() => setSelectedResource(null)}
+        onRefresh={refresh}
+      />
     </section>
   );
 }
@@ -791,10 +1116,17 @@ function CalendarPanel({
     <section
       className="schedule-calendar-panel"
       data-card-filter={`calendar ${kind}`}
-      data-od-id={kind === "personal" ? "schedule-calendar-personal" : "schedule-calendar-team"}
+      data-od-id={
+        kind === "personal"
+          ? "schedule-calendar-personal"
+          : "schedule-calendar-team"
+      }
       hidden={hidden}
     >
-      <div className="calendar-month" aria-label={kind === "personal" ? "个人日历" : "小队日历"}>
+      <div
+        className="calendar-month"
+        aria-label={kind === "personal" ? "个人日历" : "小队日历"}
+      >
         <div className="calendar-month-head">
           <strong>2026 年 7 月</strong>
           <span>{title}</span>
@@ -820,7 +1152,12 @@ function CalendarPanel({
       <div className="calendar-agenda">
         <div className="panel-head">
           <h3>{kind === "personal" ? "7 月 17 日安排" : "小队执行安排"}</h3>
-          <span className={classNames("status", kind === "personal" ? "success" : "warn")}>
+          <span
+            className={classNames(
+              "status",
+              kind === "personal" ? "success" : "warn",
+            )}
+          >
             {kind === "personal" ? "2/3 完成" : "1 项卡点"}
           </span>
         </div>
@@ -899,7 +1236,10 @@ export function ScheduleView({
       hidden={!active}
     >
       <div className="page-stack" data-filter-scope="">
-        <header className="catalog-market-header function-market-header" data-od-id="schedule-header-inline">
+        <header
+          className="catalog-market-header function-market-header"
+          data-od-id="schedule-header-inline"
+        >
           <FilterTabs
             active={scheduleMode}
             group="schedule-mode"
@@ -920,13 +1260,20 @@ export function ScheduleView({
             <button className="button" type="button">
               同步日程
             </button>
-            <button className="button primary" type="button" onClick={onOpenModal}>
+            <button
+              className="button primary"
+              type="button"
+              onClick={onOpenModal}
+            >
               新建安排
             </button>
           </div>
         </header>
 
-        <section className="catalog-source-bar" data-od-id="schedule-filters-inline">
+        <section
+          className="catalog-source-bar"
+          data-od-id="schedule-filters-inline"
+        >
           <SourceTabs
             active={scheduleSource}
             group="schedule-source"
@@ -937,23 +1284,61 @@ export function ScheduleView({
             ]}
             onChange={onSourceChange}
           />
-          <span className="catalog-context-note">今天 4 项安排 · 2 项执行中 · 1 个结果待确认</span>
+          <span className="catalog-context-note">
+            今天 4 项安排 · 2 项执行中 · 1 个结果待确认
+          </span>
         </section>
 
         <CalendarPanel
           agenda={[
-            ["09:00", "审批待确认 Gate", "安排：审阅需求拆解；状态：等待你确认；产出：任务分解摘要。", "待确认", "warn"],
-            ["11:30", "个人周报草稿", "安排：汇总本周项目变化；状态：执行完成；产出：周报草稿可编辑。", "已产出", "success"],
-            ["16:00", "设计走查提醒", "安排：检查能力库与日程页；状态：待开始；产出：检查清单。", "待开始", ""],
+            [
+              "09:00",
+              "审批待确认 Gate",
+              "安排：审阅需求拆解；状态：等待你确认；产出：任务分解摘要。",
+              "待确认",
+              "warn",
+            ],
+            [
+              "11:30",
+              "个人周报草稿",
+              "安排：汇总本周项目变化；状态：执行完成；产出：周报草稿可编辑。",
+              "已产出",
+              "success",
+            ],
+            [
+              "16:00",
+              "设计走查提醒",
+              "安排：检查能力库与日程页；状态：待开始；产出：检查清单。",
+              "待开始",
+              "",
+            ],
           ]}
           hidden={scheduleMode !== "calendar" || scheduleSource !== "personal"}
           kind="personal"
         />
         <CalendarPanel
           agenda={[
-            ["10:00", "Code Review 安排", "安排：PR 更新后触发审阅智能体；状态：运行中；产出：高风险结果推到 Gate。", "运行中", "success"],
-            ["14:00", "需求 Gate 超时", "安排：72h 未确认自动驳回；状态：待人介入；产出：驳回说明草稿。", "待确认", "warn"],
-            ["17:30", "小队日报推送", "安排：汇总执行状态、失败重试和完成报告；状态：待开始；产出：Channel 草稿。", "待开始", ""],
+            [
+              "10:00",
+              "Code Review 安排",
+              "安排：PR 更新后触发审阅智能体；状态：运行中；产出：高风险结果推到 Gate。",
+              "运行中",
+              "success",
+            ],
+            [
+              "14:00",
+              "需求 Gate 超时",
+              "安排：72h 未确认自动驳回；状态：待人介入；产出：驳回说明草稿。",
+              "待确认",
+              "warn",
+            ],
+            [
+              "17:30",
+              "小队日报推送",
+              "安排：汇总执行状态、失败重试和完成报告；状态：待开始；产出：Channel 草稿。",
+              "待开始",
+              "",
+            ],
           ]}
           hidden={scheduleMode !== "calendar" || scheduleSource !== "teamflow"}
           kind="teamflow"
@@ -968,7 +1353,13 @@ export function ScheduleView({
             <CatalogCard item={item} key={item.id} />
           ))}
         </section>
-        <div className="filter-empty-state" data-filter-empty="" hidden={scheduleMode !== "arrangement" || visibleArrangementCards.length > 0}>
+        <div
+          className="filter-empty-state"
+          data-filter-empty=""
+          hidden={
+            scheduleMode !== "arrangement" || visibleArrangementCards.length > 0
+          }
+        >
           没有匹配项
         </div>
         <div id="schedule-log" className="sr-log" aria-live="polite" />
@@ -982,10 +1373,18 @@ export function ScheduleView({
         aria-modal="true"
         aria-labelledby="schedule-arrangement-title"
       >
-        <section className="arrangement-modal-card" data-od-id="schedule-arrangement-modal">
+        <section
+          className="arrangement-modal-card"
+          data-od-id="schedule-arrangement-modal"
+        >
           <header className="arrangement-modal-header">
             <h2 id="schedule-arrangement-title">创建任务安排</h2>
-            <button className="icon-action compact" type="button" aria-label="关闭" onClick={onCloseModal}>
+            <button
+              className="icon-action compact"
+              type="button"
+              aria-label="关闭"
+              onClick={onCloseModal}
+            >
               <X aria-hidden="true" />
             </button>
           </header>
@@ -1006,7 +1405,9 @@ export function ScheduleView({
           <div className="form-field">
             <span>执行频率</span>
             <div className="frequency-tabs">
-              <button className="active" type="button">周期</button>
+              <button className="active" type="button">
+                周期
+              </button>
               <button type="button">按间隔</button>
               <button type="button">单次</button>
             </div>
@@ -1015,7 +1416,11 @@ export function ScheduleView({
             <button className="button" type="button" onClick={onCloseModal}>
               取消
             </button>
-            <button className="button primary" type="button" onClick={onCloseModal}>
+            <button
+              className="button primary"
+              type="button"
+              onClick={onCloseModal}
+            >
               创建
             </button>
           </footer>
@@ -1072,7 +1477,10 @@ export function TeamView({
       hidden={!active}
     >
       <div className="page-stack" data-filter-scope="">
-        <header className="catalog-market-header function-market-header" data-od-id="team-header-inline">
+        <header
+          className="catalog-market-header function-market-header"
+          data-od-id="team-header-inline"
+        >
           <FilterTabs
             active={teamMode}
             group="team-mode"
@@ -1094,32 +1502,58 @@ export function TeamView({
             <button className="button" type="button">
               同步能力库
             </button>
-            <button className="button primary" type="button" data-team-action="office" hidden={teamMode !== "office"}>
+            <button
+              className="button primary"
+              type="button"
+              data-team-action="office"
+              hidden={teamMode !== "office"}
+            >
               创建办公室
             </button>
-            <button className="button primary" type="button" data-team-action="workflow" hidden={teamMode !== "workflow"}>
+            <button
+              className="button primary"
+              type="button"
+              data-team-action="workflow"
+              hidden={teamMode !== "workflow"}
+            >
               创建协作流
             </button>
-            <button className="button primary" type="button" data-team-action="experts" hidden={teamMode !== "experts"}>
+            <button
+              className="button primary"
+              type="button"
+              data-team-action="experts"
+              hidden={teamMode !== "experts"}
+            >
               创建专家团
             </button>
           </div>
         </header>
 
-        <section className="catalog-source-bar" data-od-id="team-filters-inline">
+        <section
+          className="catalog-source-bar"
+          data-od-id="team-filters-inline"
+        >
           <span className="catalog-context-note">
             团队能力来自左侧智能体页 · 办公室可 @ 任意员工 · 专家团只和组长对话
           </span>
         </section>
 
         <section
-          className={classNames("team-office-shell", officeRoomId && "is-room-open")}
+          className={classNames(
+            "team-office-shell",
+            officeRoomId && "is-room-open",
+          )}
           data-card-filter="office"
           data-office-shell=""
           data-od-id="team-office-shell"
           hidden={teamMode !== "office" && !officeRoomId}
         >
-          <div className="office-card-grid" data-office-list="" aria-label="办公室卡片" hidden={Boolean(officeRoomId)}>
+          <div
+            className="office-card-grid"
+            data-office-list=""
+            aria-label="办公室卡片"
+            hidden={Boolean(officeRoomId)}
+          >
             {officeRooms.map((room) => (
               <button
                 className={classNames(
@@ -1133,7 +1567,9 @@ export function TeamView({
               >
                 <span className="office-card-head">
                   <strong>{room.title}</strong>
-                  <em className={classNames("status", room.statusTone)}>{room.status}</em>
+                  <em className={classNames("status", room.statusTone)}>
+                    {room.status}
+                  </em>
                 </span>
                 <span className="office-card-copy">{room.subtitle}</span>
                 <span className="office-card-foot">
@@ -1156,13 +1592,21 @@ export function TeamView({
         </section>
 
         <section
-          className={classNames("team-workflow-shell", workflowRoomId && "is-room-open")}
+          className={classNames(
+            "team-workflow-shell",
+            workflowRoomId && "is-room-open",
+          )}
           data-card-filter="workflow"
           data-od-id="team-workflow-shell"
           data-workflow-shell=""
           hidden={teamMode !== "workflow" && !workflowRoomId}
         >
-          <div className="workflow-list" data-workflow-list="" aria-label="协作流列表" hidden={Boolean(workflowRoomId)}>
+          <div
+            className="workflow-list"
+            data-workflow-list=""
+            aria-label="协作流列表"
+            hidden={Boolean(workflowRoomId)}
+          >
             {workflowRooms.map((room) => (
               <button
                 className={classNames(
@@ -1176,11 +1620,16 @@ export function TeamView({
               >
                 <span className="workflow-list-main">
                   <strong>{room.title}</strong>
-                  <em className={classNames("status", room.statusTone)}>{room.status}</em>
+                  <em className={classNames("status", room.statusTone)}>
+                    {room.status}
+                  </em>
                 </span>
                 <span className="workflow-list-meta">
                   <span className="workflow-list-copy">{room.stage}</span>
-                  <span className="workflow-member-strip" aria-label="协作流成员">
+                  <span
+                    className="workflow-member-strip"
+                    aria-label="协作流成员"
+                  >
                     {room.members.map((member) => (
                       <small key={member}>{member}</small>
                     ))}
@@ -1210,12 +1659,32 @@ export function TeamView({
           />
         </section>
 
-        <section className="team-experts-shell" data-card-filter="experts" data-od-id="team-experts-shell" hidden={teamMode !== "experts"}>
+        <section
+          className="team-experts-shell"
+          data-card-filter="experts"
+          data-od-id="team-experts-shell"
+          hidden={teamMode !== "experts"}
+        >
           <div className="expert-team-grid" aria-label="专家团卡片">
             {[
-              ["主页可选", "产品交付专家团", "用户只和组长智能体多轮澄清；员工在后台协作，不展示办公室群聊。", "设为主页可选"],
-              ["后台执行", "代码审查专家团", "组长接收需求，后台调度 Code Review Skill、Filesystem MCP 和 GitHub MCP。", "后台执行"],
-              ["草稿", "会议准备专家团", "组长负责澄清会议目标，后台员工整理议程、参会人上下文和材料清单。", "继续配置"],
+              [
+                "主页可选",
+                "产品交付专家团",
+                "用户只和组长智能体多轮澄清；员工在后台协作，不展示办公室群聊。",
+                "设为主页可选",
+              ],
+              [
+                "后台执行",
+                "代码审查专家团",
+                "组长接收需求，后台调度 Code Review Skill、Filesystem MCP 和 GitHub MCP。",
+                "后台执行",
+              ],
+              [
+                "草稿",
+                "会议准备专家团",
+                "组长负责澄清会议目标，后台员工整理议程、参会人上下文和材料清单。",
+                "继续配置",
+              ],
             ].map(([label, title, detail, action]) => (
               <article className="expert-team-card" key={title}>
                 <div className="catalog-card-head">
@@ -1271,7 +1740,9 @@ function RoomInline({
   return (
     <section
       className={isWorkflow ? "workflow-room-inline" : "office-room-inline"}
-      data-od-id={isWorkflow ? "team-workflow-room-inline" : "team-office-room-inline"}
+      data-od-id={
+        isWorkflow ? "team-workflow-room-inline" : "team-office-room-inline"
+      }
       data-office-room={isWorkflow ? undefined : ""}
       data-workflow-room={isWorkflow ? "" : undefined}
       hidden={!active}
@@ -1282,16 +1753,28 @@ function RoomInline({
           <ArrowLeft aria-hidden="true" />
           返回
         </button>
-        <div className={isWorkflow ? "workflow-room-title-block" : "office-room-title-block"}>
+        <div
+          className={
+            isWorkflow ? "workflow-room-title-block" : "office-room-title-block"
+          }
+        >
           <span>{isWorkflow ? "协作流群聊" : "办公室群聊"}</span>
           <h3>{title}</h3>
           <p>{subtitle}</p>
         </div>
-        <div className={isWorkflow ? "workflow-room-actions" : "office-room-actions"}>
+        <div
+          className={
+            isWorkflow ? "workflow-room-actions" : "office-room-actions"
+          }
+        >
           <span className={classNames("status", isWorkflow && "warn")}>
             {isWorkflow ? "按节点推进" : "执行中"}
           </span>
-          <button className="button compact" type="button" onClick={() => onTabChange("members")}>
+          <button
+            className="button compact"
+            type="button"
+            onClick={() => onTabChange("members")}
+          >
             成员
           </button>
         </div>
@@ -1299,20 +1782,33 @@ function RoomInline({
 
       {isWorkflow ? (
         <main className="workflow-room-stage">
-          <section className="workflow-execution-strip" data-od-id="workflow-execution-strip" aria-label="执行步节点流">
+          <section
+            className="workflow-execution-strip"
+            data-od-id="workflow-execution-strip"
+            aria-label="执行步节点流"
+          >
             {[
               ["01", "接收目标", "协作流组长智能体", "完成", "is-done"],
               ["02", "界面风险审阅", "产品审阅智能体", "运行中", "is-running"],
               ["03", "实现拆解", "开发交付智能体", "排队", ""],
               ["04", "人工 Gate", "真实员工 · 设计负责人", "待确认", ""],
             ].map(([step, stepTitle, owner, state, className]) => (
-              <article className={classNames("workflow-step-node", className)} key={step}>
+              <article
+                className={classNames("workflow-step-node", className)}
+                key={step}
+              >
                 <span>{step}</span>
                 <div>
                   <strong>{stepTitle}</strong>
                   <p>{owner}</p>
                 </div>
-                <em className={classNames("status", className === "is-done" && "success", className === "is-running" && "warn")}>
+                <em
+                  className={classNames(
+                    "status",
+                    className === "is-done" && "success",
+                    className === "is-running" && "warn",
+                  )}
+                >
                   {state}
                 </em>
               </article>
@@ -1371,41 +1867,79 @@ function RoomPanels({
       </div>
 
       <section
-        className={isWorkflow ? "workflow-tab-panel office-chat-panel" : "office-tab-panel office-chat-panel"}
+        className={
+          isWorkflow
+            ? "workflow-tab-panel office-chat-panel"
+            : "office-tab-panel office-chat-panel"
+        }
         data-tab-panel=""
         hidden={tab !== "chat"}
         id={`${prefix}-chat-panel`}
       >
-        <div className={isWorkflow ? "workflow-room-thread" : "office-room-thread"} role="log" aria-label="团队群聊">
+        <div
+          className={isWorkflow ? "workflow-room-thread" : "office-room-thread"}
+          role="log"
+          aria-label="团队群聊"
+        >
           {messages.map((message, index) => (
             <article
-              className={classNames("office-room-message", index === 0 && "is-user")}
+              className={classNames(
+                "office-room-message",
+                index === 0 && "is-user",
+              )}
               key={message}
             >
-              <span className="team-avatar">{index === 0 ? "你" : isWorkflow ? "流" : "组"}</span>
+              <span className="team-avatar">
+                {index === 0 ? "你" : isWorkflow ? "流" : "组"}
+              </span>
               <div>
-                <strong>{index === 0 ? "你" : isWorkflow ? "协作流组长智能体" : "办公室组长智能体"}</strong>
+                <strong>
+                  {index === 0
+                    ? "你"
+                    : isWorkflow
+                      ? "协作流组长智能体"
+                      : "办公室组长智能体"}
+                </strong>
                 <p>{message}</p>
               </div>
             </article>
           ))}
         </div>
-        <section className={classNames("command-input", isWorkflow ? "workflow-global-composer" : "office-global-composer")}>
+        <section
+          className={classNames(
+            "command-input",
+            isWorkflow ? "workflow-global-composer" : "office-global-composer",
+          )}
+        >
           <textarea
             data-composer=""
-            placeholder={isWorkflow ? "@ 指定阶段 Agent；/ 调用 Skill 或 MCP" : "@ 指定员工；留空默认交给办公室组长"}
-            defaultValue={isWorkflow ? "继续推进这个协作流..." : "告诉组长目标、背景或下一步..."}
+            placeholder={
+              isWorkflow
+                ? "@ 指定阶段 Agent；/ 调用 Skill 或 MCP"
+                : "@ 指定员工；留空默认交给办公室组长"
+            }
+            defaultValue={
+              isWorkflow
+                ? "继续推进这个协作流..."
+                : "告诉组长目标、背景或下一步..."
+            }
           />
           <div className="input-tools">
             <div className="composer-controls">
-              <div className="control-select mode-dropdown" aria-label="任务类型">
+              <div
+                className="control-select mode-dropdown"
+                aria-label="任务类型"
+              >
                 <select defaultValue="plan">
                   <option value="plan">计划</option>
                   <option value="goal">目标</option>
                   <option value="agent">智能体</option>
                 </select>
               </div>
-              <div className="control-select permission-dropdown" aria-label="权限选择">
+              <div
+                className="control-select permission-dropdown"
+                aria-label="权限选择"
+              >
                 <select defaultValue="request-approval">
                   <option value="request-approval">请求批准</option>
                   <option value="approve-for-me">替我审批</option>
@@ -1414,7 +1948,11 @@ function RoomPanels({
               </div>
             </div>
             <div className="composer-actions">
-              <button className="icon-action prompt-action" type="button" aria-label="优化提示词">
+              <button
+                className="icon-action prompt-action"
+                type="button"
+                aria-label="优化提示词"
+              >
                 Aa
               </button>
               <button className="send-button" type="button" aria-label="发送">
@@ -1423,12 +1961,19 @@ function RoomPanels({
             </div>
           </div>
           <div className="composer-state-row">
-            <span className="composer-state">{isWorkflow ? "协作流 · 等待输入" : "办公室 · 等待输入"}</span>
+            <span className="composer-state">
+              {isWorkflow ? "协作流 · 等待输入" : "办公室 · 等待输入"}
+            </span>
           </div>
         </section>
       </section>
 
-      <section className="office-tab-panel office-run-panel" data-tab-panel="" hidden={tab !== "run"} id={`${prefix}-run-panel`}>
+      <section
+        className="office-tab-panel office-run-panel"
+        data-tab-panel=""
+        hidden={tab !== "run"}
+        id={`${prefix}-run-panel`}
+      >
         <div className="office-kanban-board" aria-label="运行台看板">
           {[
             ["待接收", "补齐验收口径", "Human Gate"],
@@ -1451,9 +1996,17 @@ function RoomPanels({
         </div>
       </section>
 
-      <section className="office-tab-panel office-memory-panel" data-tab-panel="" hidden={tab !== "memory"} id={`${prefix}-memory-panel`}>
+      <section
+        className="office-tab-panel office-memory-panel"
+        data-tab-panel=""
+        hidden={tab !== "memory"}
+        id={`${prefix}-memory-panel`}
+      >
         <div className="office-memory-list">
-          {["页面交付先保留蓝灰轻工作台语言", "高风险输出必须进入人工确认 Gate"].map((memory) => (
+          {[
+            "页面交付先保留蓝灰轻工作台语言",
+            "高风险输出必须进入人工确认 Gate",
+          ].map((memory) => (
             <article className="office-memory-card" key={memory}>
               <span>决策</span>
               <strong>{memory}</strong>
@@ -1464,9 +2017,19 @@ function RoomPanels({
         </div>
       </section>
 
-      <section className="office-tab-panel office-memory-panel" data-tab-panel="" hidden={tab !== "members"} id={`${prefix}-members-panel`}>
+      <section
+        className="office-tab-panel office-memory-panel"
+        data-tab-panel=""
+        hidden={tab !== "members"}
+        id={`${prefix}-members-panel`}
+      >
         <div className="office-memory-list">
-          {["办公室组长智能体", "产品审阅智能体", "开发交付智能体", "真实员工 · 设计负责人"].map((member) => (
+          {[
+            "办公室组长智能体",
+            "产品审阅智能体",
+            "开发交付智能体",
+            "真实员工 · 设计负责人",
+          ].map((member) => (
             <article className="office-room-member" key={member}>
               <span className="team-avatar">{member.slice(0, 1)}</span>
               <div>

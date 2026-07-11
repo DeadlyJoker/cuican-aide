@@ -3,8 +3,11 @@ import {
   Bot,
   CalendarDays,
   ChevronRight,
+  ChevronUp,
   Folder,
   FolderOpen,
+  KeyRound,
+  LogOut,
   MoreHorizontal,
   PanelLeft,
   Plus,
@@ -13,12 +16,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import {
-  type FormEvent,
-  type ReactNode,
-  useEffect,
-  useState,
-} from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import { shellNavItems } from "./commandWorkspaceData";
 import type {
@@ -28,6 +26,10 @@ import type {
 } from "./commandWorkspaceState";
 import { classNames } from "./commandWorkspaceUtils";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
+import {
+  type AgentPlatformAccount,
+  useAgentPlatformAccount,
+} from "../auth/AgentPlatformAuthGate";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
   command?: ComposerSlashCommand;
@@ -66,13 +68,90 @@ const viewIcons: Record<CommandShellView, ReactNode> = {
   assist: <Sparkles aria-hidden="true" />,
   projects: <FolderOpen aria-hidden="true" />,
   agents: <Bot aria-hidden="true" />,
+  knowledge: <BookOpen aria-hidden="true" />,
   schedule: <CalendarDays aria-hidden="true" />,
   team: <Users aria-hidden="true" />,
 };
 
+export function SidebarAccount({ account }: { account: AgentPlatformAccount }) {
+  const displayName =
+    (account.user.nickname || account.user.username).trim() ||
+    account.user.username;
+  const initial = displayName.charAt(0).toUpperCase() || "U";
+
+  return (
+    <footer
+      aria-label="当前企业账号"
+      className="sidebar-account"
+      data-od-id="desktop-account-entry"
+    >
+      <details
+        className="sidebar-account-menu"
+        onBlur={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (
+            !(nextTarget instanceof Node) ||
+            !event.currentTarget.contains(nextTarget)
+          ) {
+            event.currentTarget.removeAttribute("open");
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.currentTarget.removeAttribute("open");
+            event.currentTarget.querySelector("summary")?.focus();
+          }
+        }}
+      >
+        <summary aria-label={`账号菜单：${displayName}`} title="账号菜单">
+          <span className="account-mark" aria-hidden="true">
+            {initial}
+          </span>
+          <span className="sidebar-account-copy">
+            <strong>{displayName}</strong>
+            <small>{account.providerLabel}</small>
+          </span>
+          <span className="sidebar-account-chevron" aria-hidden="true">
+            <ChevronUp />
+          </span>
+        </summary>
+        <div className="sidebar-account-popover" role="menu">
+          {account.needsPassword ? (
+            <button
+              role="menuitem"
+              type="button"
+              onClick={(event) => {
+                event.currentTarget.closest("details")?.removeAttribute("open");
+                account.onSetPassword();
+              }}
+            >
+              <KeyRound aria-hidden="true" />
+              <span>设置登录密码</span>
+            </button>
+          ) : null}
+          <button
+            className="danger"
+            role="menuitem"
+            type="button"
+            onClick={(event) => {
+              event.currentTarget.closest("details")?.removeAttribute("open");
+              account.onLogout();
+            }}
+          >
+            <LogOut aria-hidden="true" />
+            <span>退出登录</span>
+          </button>
+        </div>
+      </details>
+    </footer>
+  );
+}
+
 function workspaceName(path: string, emptyLabel = "工作空间"): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-  return normalized.split("/").filter(Boolean).pop() || normalized || emptyLabel;
+  return (
+    normalized.split("/").filter(Boolean).pop() || normalized || emptyLabel
+  );
 }
 
 export function CommandSidebar({
@@ -108,11 +187,12 @@ export function CommandSidebar({
   onToggleCollapse: () => void;
   onToggleSearch: () => void;
 }) {
+  const account = useAgentPlatformAccount();
   const [workspaceFormOpen, setWorkspaceFormOpen] = useState(false);
   const [workspaceDraft, setWorkspaceDraft] = useState(cwd);
-  const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<
+    Set<string>
+  >(() => new Set());
   const currentWorkspaceName = workspaceName(cwd, "无工作空间");
   const currentWorkspaceThreads = linkedThreads
     .filter((thread) => Boolean(cwd) && thread.cwd === cwd)
@@ -147,8 +227,10 @@ export function CommandSidebar({
     });
   }
 
-  const currentWorkspaceCollapsed = Boolean(cwd) && collapsedWorkspaceGroups.has(cwd);
-  const standaloneWorkspaceCollapsed = collapsedWorkspaceGroups.has("standalone");
+  const currentWorkspaceCollapsed =
+    Boolean(cwd) && collapsedWorkspaceGroups.has(cwd);
+  const standaloneWorkspaceCollapsed =
+    collapsedWorkspaceGroups.has("standalone");
   const sidebarSearchResults: SidebarSearchResult[] = [
     {
       action: "view" as const,
@@ -160,7 +242,10 @@ export function CommandSidebar({
     },
     ...linkedThreads.map((thread) => ({
       action: "thread" as const,
-      detail: [workspaceName(thread.cwd ?? "", "无工作空间"), thread.preview || thread.updatedLabel]
+      detail: [
+        workspaceName(thread.cwd ?? "", "无工作空间"),
+        thread.preview || thread.updatedLabel,
+      ]
         .filter(Boolean)
         .join(" · "),
       key: `thread-${thread.id}`,
@@ -169,7 +254,10 @@ export function CommandSidebar({
       title: thread.title,
     })),
   ].filter((item) =>
-    [item.kind, item.title, item.detail].join(" ").toLowerCase().includes(query.trim().toLowerCase()),
+    [item.kind, item.title, item.detail]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
   );
 
   function activateSearchResult(item: SidebarSearchResult) {
@@ -252,13 +340,19 @@ export function CommandSidebar({
           />
           <kbd>⌘K</kbd>
         </div>
-        <div className="sidebar-search-results" role="listbox" aria-label="搜索结果">
+        <div
+          className="sidebar-search-results"
+          role="listbox"
+          aria-label="搜索结果"
+        >
           {sidebarSearchResults.map((item) => (
             <button
               className="sidebar-search-result"
               data-search-action={item.action}
               data-search-result=""
-              data-thread-id={item.action === "thread" ? item.threadId : undefined}
+              data-thread-id={
+                item.action === "thread" ? item.threadId : undefined
+              }
               key={item.key}
               type="button"
               onClick={() => activateSearchResult(item)}
@@ -294,28 +388,32 @@ export function CommandSidebar({
       </a>
 
       <nav className="sidebar-nav" data-od-id="desktop-nav">
-        {shellNavItems.filter((item) => item.key !== "command").map((item) => (
-          <button
-            aria-current={activeView === item.key ? "page" : undefined}
-            className={classNames(activeView === item.key && "active")}
-            data-nav-key={item.key}
-            data-shell-view-target={item.key}
-            key={item.key}
-            type="button"
-            onClick={() => onSwitchView(item.key)}
-          >
-            <span className="nav-glyph" aria-hidden="true">
-              {viewIcons[item.key]}
-            </span>
-            <strong>{item.label}</strong>
-            {item.meta ? <em>{item.meta}</em> : null}
-          </button>
-        ))}
+        {shellNavItems
+          .filter((item) => item.key !== "command")
+          .map((item) => (
+            <button
+              aria-current={activeView === item.key ? "page" : undefined}
+              className={classNames(activeView === item.key && "active")}
+              data-nav-key={item.key}
+              data-shell-view-target={item.key}
+              key={item.key}
+              type="button"
+              onClick={() => onSwitchView(item.key)}
+            >
+              <span className="nav-glyph" aria-hidden="true">
+                {viewIcons[item.key]}
+              </span>
+              <strong>{item.label}</strong>
+              {item.meta ? <em>{item.meta}</em> : null}
+            </button>
+          ))}
         <button
+          aria-current={activeView === "knowledge" ? "page" : undefined}
+          className={classNames(activeView === "knowledge" && "active")}
           data-run-title-zh="知识库"
           data-run-title-en="Knowledge base"
           type="button"
-          onClick={() => onSwitchView("agents")}
+          onClick={() => onSwitchView("knowledge")}
         >
           <span className="nav-glyph" aria-hidden="true">
             <BookOpen aria-hidden="true" />
@@ -324,7 +422,11 @@ export function CommandSidebar({
         </button>
       </nav>
 
-      <section className="space-tree" data-od-id="desktop-workspace-tree" aria-label="工作空间和对话">
+      <section
+        className="space-tree"
+        data-od-id="desktop-workspace-tree"
+        aria-label="工作空间和对话"
+      >
         <div className="tree-head">
           <button type="button">工作空间</button>
           <button
@@ -349,7 +451,10 @@ export function CommandSidebar({
             value={workspaceDraft}
             onChange={(event) => setWorkspaceDraft(event.target.value)}
           />
-          <button type="submit" disabled={!workspaceDraft.trim() || !onCreateWorkspace}>
+          <button
+            type="submit"
+            disabled={!workspaceDraft.trim() || !onCreateWorkspace}
+          >
             打开
           </button>
         </form>
@@ -384,7 +489,11 @@ export function CommandSidebar({
                 >
                   <MoreHorizontal aria-hidden="true" />
                 </button>
-                <button aria-label="新建会话" type="button" onClick={onNewThread}>
+                <button
+                  aria-label="新建会话"
+                  type="button"
+                  onClick={onNewThread}
+                >
                   <SquarePen aria-hidden="true" />
                 </button>
               </span>
@@ -412,7 +521,9 @@ export function CommandSidebar({
                   </button>
                 ))
               ) : (
-                <p className="sidebar-empty-hint">开始一次任务后，会话会出现在这个工作空间下。</p>
+                <p className="sidebar-empty-hint">
+                  开始一次任务后，会话会出现在这个工作空间下。
+                </p>
               )}
             </div>
           </div>
@@ -440,7 +551,11 @@ export function CommandSidebar({
                 <strong>无工作空间</strong>
               </button>
               <span className="workspace-row-actions">
-                <button aria-label="新建无工作空间会话" type="button" onClick={onNewThread}>
+                <button
+                  aria-label="新建无工作空间会话"
+                  type="button"
+                  onClick={onNewThread}
+                >
                   <SquarePen aria-hidden="true" />
                 </button>
               </span>
@@ -471,17 +586,10 @@ export function CommandSidebar({
         ) : null}
       </section>
 
-      <footer className="sidebar-account" data-od-id="desktop-account-entry">
-        <span className="account-mark">R</span>
-        <strong>Turning_Around</strong>
-        <button className="locale-toggle" type="button">
-          EN
-        </button>
-      </footer>
+      {account ? <SidebarAccount account={account} /> : null}
     </aside>
   );
 }
-
 export function Palette({
   id,
   inputId,
@@ -589,7 +697,10 @@ export function ResourceDock({
       </header>
       <div className="resource-grid">
         {resources.map((resource, index) => (
-          <article className="resource-card" key={`${resource.value}-${index}`}>
+          <article
+            className="resource-card"
+            key={`${resource.value}-${index}`}
+          >
             <span>{resource.label}</span>
             <strong>{resource.title}</strong>
             <p>{resource.detail}</p>

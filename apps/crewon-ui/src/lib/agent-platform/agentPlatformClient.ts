@@ -34,6 +34,13 @@ type PlatformAgent = {
   mcp_servers?: string[] | null;
   config?: Record<string, unknown> | null;
   is_active?: boolean | number | null;
+  api_enabled?: boolean | number | null;
+  owner_username?: string | null;
+  invocation_url?: string | null;
+  downloaded?: boolean;
+  downloaded_at?: string | null;
+  update_available?: boolean;
+  source_updated_at?: string | null;
 };
 
 type PlatformKnowledgeBase = {
@@ -43,6 +50,12 @@ type PlatformKnowledgeBase = {
   document_count?: number | null;
   embedding_model?: string | null;
   chunk_size?: number | null;
+  chunk_count?: number | null;
+  owner_username?: string | null;
+  downloaded?: boolean;
+  downloaded_at?: string | null;
+  update_available?: boolean;
+  source_updated_at?: string | null;
 };
 
 type PlatformSkill = {
@@ -54,6 +67,13 @@ type PlatformSkill = {
   tags?: string[] | null;
   skill_md_content?: string | null;
   storage_path?: string | null;
+  file_count?: number | null;
+  has_scripts?: boolean | null;
+  owner_username?: string | null;
+  downloaded?: boolean;
+  downloaded_at?: string | null;
+  update_available?: boolean;
+  source_updated_at?: string | null;
 };
 
 type PlatformMcpServer = {
@@ -66,6 +86,12 @@ type PlatformMcpServer = {
   is_enabled?: boolean | null;
   is_connected?: boolean | null;
   call_count?: number | null;
+  tool_count?: number | null;
+  owner_username?: string | null;
+  downloaded?: boolean;
+  downloaded_at?: string | null;
+  update_available?: boolean;
+  source_updated_at?: string | null;
 };
 
 type PlatformMcpTool = {
@@ -103,12 +129,14 @@ export type AgentPlatformSnapshot = {
 
 type RequestOptions = {
   auth?: boolean;
+  init?: RequestInit;
 };
 
 const DEFAULT_BASE_URL = "/agent-platform-api";
-const PLATFORM_AVAILABILITY_PROBE_PATH =
-  "/api/v1/mcp/tools?page=1&page_size=1";
-const TOKEN_STORAGE_KEY = "crewon-agent-platform-token";
+const PLATFORM_AVAILABILITY_PROBE_PATH = "/api/v1/mcp/tools?page=1&page_size=1";
+export const AGENT_PLATFORM_TOKEN_STORAGE_KEY = "crewon-agent-platform-token";
+export const AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY =
+  "crewon-agent-platform-refresh-token";
 const UNAVAILABLE_RETRY_MS = 30_000;
 
 let cachedToken: string | null = null;
@@ -117,7 +145,10 @@ let availabilityProbePromise: Promise<void> | null = null;
 let unavailableRetryAt = 0;
 
 class AgentPlatformUnavailableError extends Error {
-  constructor(message: string, readonly cause?: unknown) {
+  constructor(
+    message: string,
+    readonly cause?: unknown,
+  ) {
     super(message);
     this.name = "AgentPlatformUnavailableError";
   }
@@ -140,7 +171,9 @@ function isUnavailableStatus(status: number): boolean {
   return status === 502 || status === 503 || status === 504;
 }
 
-function markAgentPlatformUnavailable(cause?: unknown): AgentPlatformUnavailableError {
+function markAgentPlatformUnavailable(
+  cause?: unknown,
+): AgentPlatformUnavailableError {
   unavailableRetryAt = Date.now() + UNAVAILABLE_RETRY_MS;
   return new AgentPlatformUnavailableError("agent-platform unavailable", cause);
 }
@@ -193,6 +226,7 @@ async function request<T>(
   }
 
   const response = await fetch(`${agentPlatformBaseUrl()}${path}`, {
+    ...options.init,
     headers,
   });
   if (!response.ok) {
@@ -208,7 +242,7 @@ async function getAgentPlatformToken(): Promise<string | null> {
     return cachedToken;
   }
 
-  cachedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+  cachedToken = localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
   if (cachedToken) {
     return cachedToken;
   }
@@ -224,8 +258,11 @@ async function getAgentPlatformToken(): Promise<string | null> {
 }
 
 async function loginWithConfiguredDevAccount(): Promise<string | null> {
-  const username = envValue("VITE_AGENT_PLATFORM_DEV_USERNAME") ?? "admin";
-  const password = envValue("VITE_AGENT_PLATFORM_DEV_PASSWORD") ?? "Admin123!";
+  const username = envValue("VITE_AGENT_PLATFORM_DEV_USERNAME");
+  const password = envValue("VITE_AGENT_PLATFORM_DEV_PASSWORD");
+  if (!username || !password) {
+    return null;
+  }
   const form = new URLSearchParams();
   form.set("username", username);
   form.set("password", password);
@@ -245,8 +282,41 @@ async function loginWithConfiguredDevAccount(): Promise<string | null> {
     return null;
   }
   cachedToken = body.access_token;
-  localStorage.setItem(TOKEN_STORAGE_KEY, cachedToken);
+  localStorage.setItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY, cachedToken);
   return cachedToken;
+}
+
+export function storeAgentPlatformSession(
+  accessToken: string,
+  refreshToken?: string | null,
+): void {
+  cachedToken = accessToken;
+  localStorage.setItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY, accessToken);
+  if (refreshToken) {
+    localStorage.setItem(
+      AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
+      refreshToken,
+    );
+  }
+}
+
+export function clearAgentPlatformSession(): void {
+  cachedToken = null;
+  localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
+  localStorage.removeItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY);
+}
+
+export async function agentPlatformAuthorizedFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const token = await getAgentPlatformToken();
+  const headers = new Headers(init.headers);
+  headers.set("Accept", headers.get("Accept") ?? "application/json");
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return fetch(`${agentPlatformBaseUrl()}${path}`, { ...init, headers });
 }
 
 async function listPage<T>(
@@ -260,14 +330,49 @@ async function listPage<T>(
 export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot> {
   await ensureAgentPlatformAvailable();
 
+  try {
+    const catalog = await request<{
+      resources?: {
+        agents?: Array<PlatformAgent & { model?: string | null }>;
+        knowledge_bases?: PlatformKnowledgeBase[];
+        skills?: PlatformSkill[];
+        mcp_servers?: PlatformMcpServer[];
+      };
+    }>("/api/v1/crewon/catalog", { auth: true });
+    const resources = catalog.resources ?? {};
+    const workflows = await listPage<PlatformWorkflow>(
+      "/api/v1/workflows?page=1&page_size=100",
+      { auth: true },
+    ).catch(() => []);
+    return {
+      agents: (resources.agents ?? []).map((agent) => ({
+        ...agent,
+        model_info: agent.model_info ?? {
+          model_name: agent.model ?? null,
+          name: agent.model ?? null,
+        },
+      })),
+      knowledgeBases: resources.knowledge_bases ?? [],
+      skills: resources.skills ?? [],
+      mcpServers: resources.mcp_servers ?? [],
+      mcpTools: [],
+      workflows,
+    };
+  } catch {
+    // Older agent-platform instances do not expose the CrewON catalog yet.
+  }
+
   const [agents, knowledgeBases, skills, mcpServers, mcpTools, workflows] =
     await Promise.all([
       listPage<PlatformAgent>("/api/v1/agents/?page=1&page_size=100", {
         auth: true,
       }),
-      listPage<PlatformKnowledgeBase>("/api/v1/knowledge/?page=1&page_size=100", {
-        auth: true,
-      }),
+      listPage<PlatformKnowledgeBase>(
+        "/api/v1/knowledge/?page=1&page_size=100",
+        {
+          auth: true,
+        },
+      ),
       listPage<PlatformSkill>("/api/v1/skills?page=1&page_size=100", {
         auth: true,
       }),
@@ -310,7 +415,8 @@ export function platformAgentsToLibraryItems(
 ): LibraryItem[] {
   const accents = capabilityAccents();
   return snapshot.agents.map((agent, index) => {
-    const model = agent.model_info?.model_name ?? agent.model_info?.name ?? "model";
+    const model =
+      agent.model_info?.model_name ?? agent.model_info?.name ?? "model";
     const config = platformAgentToConfig(agent, snapshot, index);
     return {
       title: agent.name,
@@ -321,8 +427,14 @@ export function platformAgentsToLibraryItems(
       glyph: "A",
       accent: accents[index % accents.length],
       badge: {
-        label: agent.is_active === false || agent.is_active === 0 ? "disabled" : "local",
-        tone: agent.is_active === false || agent.is_active === 0 ? "warning" : "running",
+        label:
+          agent.is_active === false || agent.is_active === 0
+            ? "disabled"
+            : "local",
+        tone:
+          agent.is_active === false || agent.is_active === 0
+            ? "warning"
+            : "running",
       },
       tags: [
         model,
@@ -381,7 +493,10 @@ export function platformToolsToLibraryItems(
           `Tools (${tools.length})`,
           tools
             .slice(0, 12)
-            .map((tool) => `- ${tool.alias || tool.name}: ${tool.description || tool.intro || ""}`)
+            .map(
+              (tool) =>
+                `- ${tool.alias || tool.name}: ${tool.description || tool.intro || ""}`,
+            )
             .join("\n") || "No tools found for this server.",
         ]
           .filter((line) => line !== null)
@@ -399,28 +514,30 @@ export function platformToolsToLibraryItems(
     };
   });
 
-  const skillItems = snapshot.skills.map((skill, index): LibraryItem => ({
-    title: skill.name,
-    meta: `Skill · agent-platform local #${skill.id}`,
-    description:
-      promptPreview(skill.description || skill.skill_md_content || "") ||
-      "Skill synced from local agent-platform.",
-    glyph: SKILL_GLYPHS[index % SKILL_GLYPHS.length],
-    accent: capabilityAccents()[(index + 2) % capabilityAccents().length],
-    badge: { label: "synced", tone: "running" },
-    tags: [
-      skill.category ?? "Skill",
-      skill.version ? `v${skill.version}` : null,
-      ...(skill.tags ?? []).slice(0, 2),
-    ].filter((tag): tag is string => Boolean(tag)),
-    action: {
-      type: "skill-file",
-      skillName: skill.name,
-      path: skill.storage_path ?? `agent-platform://skills/${skill.id}`,
-      enabled: true,
-      configPath: `agent-platform://skills/${skill.id}`,
-    },
-  }));
+  const skillItems = snapshot.skills.map(
+    (skill, index): LibraryItem => ({
+      title: skill.name,
+      meta: `Skill · agent-platform local #${skill.id}`,
+      description:
+        promptPreview(skill.description || skill.skill_md_content || "") ||
+        "Skill synced from local agent-platform.",
+      glyph: SKILL_GLYPHS[index % SKILL_GLYPHS.length],
+      accent: capabilityAccents()[(index + 2) % capabilityAccents().length],
+      badge: { label: "synced", tone: "running" },
+      tags: [
+        skill.category ?? "Skill",
+        skill.version ? `v${skill.version}` : null,
+        ...(skill.tags ?? []).slice(0, 2),
+      ].filter((tag): tag is string => Boolean(tag)),
+      action: {
+        type: "skill-file",
+        skillName: skill.name,
+        path: skill.storage_path ?? `agent-platform://skills/${skill.id}`,
+        enabled: true,
+        configPath: `agent-platform://skills/${skill.id}`,
+      },
+    }),
+  );
 
   return [...serverItems, ...skillItems];
 }
@@ -468,7 +585,8 @@ function platformAgentToConfig(
   index: number,
 ): AgentConfig {
   const accents = capabilityAccents();
-  const model = agent.model_info?.model_name ?? agent.model_info?.name ?? "qwen-plus";
+  const model =
+    agent.model_info?.model_name ?? agent.model_info?.name ?? "qwen-plus";
   const linkedSkillIds = new Set(agent.skill_ids ?? []);
   const linkedMcpNames = new Set(agent.mcp_servers ?? []);
   const mcp = snapshot.mcpServers.map(

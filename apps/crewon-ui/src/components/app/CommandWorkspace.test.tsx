@@ -26,6 +26,7 @@ function snapshot(): AgentPlatformSnapshot {
         name: "Plain Agent",
         model_info: { model_name: "qwen-lite" },
         is_active: true,
+        downloaded: true,
       },
       {
         id: 2,
@@ -36,6 +37,7 @@ function snapshot(): AgentPlatformSnapshot {
         skill_ids: [20],
         mcp_servers: ["filesystem"],
         is_active: true,
+        downloaded: true,
       },
     ],
     knowledgeBases: [
@@ -44,6 +46,7 @@ function snapshot(): AgentPlatformSnapshot {
         name: "Delivery Knowledge",
         document_count: 3,
         embedding_model: "text-embedding-v2",
+        downloaded: true,
       },
     ],
     skills: [
@@ -51,15 +54,18 @@ function snapshot(): AgentPlatformSnapshot {
         id: 20,
         name: "Schema 校验",
         description: "Validate schema.",
+        downloaded: true,
       },
       {
         id: 21,
         name: "交付检查 Skill",
         description: "Check delivery.",
+        downloaded: true,
       },
       {
         id: 22,
         name: "Unused Skill",
+        downloaded: true,
       },
     ],
     mcpServers: [
@@ -68,15 +74,18 @@ function snapshot(): AgentPlatformSnapshot {
         name: "filesystem",
         alias: "Filesystem MCP",
         description: "Read files.",
+        downloaded: true,
       },
       {
         id: 31,
         name: "http-tools",
         alias: "HTTP Tools",
+        downloaded: true,
       },
       {
         id: 32,
         name: "unused",
+        downloaded: true,
       },
     ],
     mcpTools: [],
@@ -121,15 +130,16 @@ describe("selectCommandHomeSlots", () => {
           name: "测试12333",
           model_info: { model_name: "qwen-plus" },
           is_active: true,
+          downloaded: true,
         },
       ],
       skills: [
-        { id: 20, name: "测试技能" },
-        { id: 21, name: "12345" },
+        { id: 20, name: "测试技能", downloaded: true },
+        { id: 21, name: "12345", downloaded: true },
       ],
       mcpServers: [
-        { id: 30, name: "test-mcp" },
-        { id: 31, name: "filesystem" },
+        { id: 30, name: "test-mcp", downloaded: true },
+        { id: 31, name: "filesystem", downloaded: true },
       ],
     });
 
@@ -208,12 +218,16 @@ describe("CommandWorkspace", () => {
     };
 
     expect(commandComposerKeyIntent(baseEvent)).toBe("send");
-    expect(commandComposerKeyIntent({ ...baseEvent, shiftKey: true })).toBeNull();
+    expect(
+      commandComposerKeyIntent({ ...baseEvent, shiftKey: true }),
+    ).toBeNull();
     expect(commandComposerKeyIntent({ ...baseEvent, altKey: true })).toBeNull();
     expect(commandComposerKeyIntent({ ...baseEvent, ctrlKey: true })).toBe(
       "send",
     );
-    expect(commandComposerKeyIntent({ ...baseEvent, isComposing: true })).toBeNull();
+    expect(
+      commandComposerKeyIntent({ ...baseEvent, isComposing: true }),
+    ).toBeNull();
     expect(
       commandComposerKeyIntent({ ...baseEvent, hasOpenPalette: true }),
     ).toBeNull();
@@ -250,8 +264,12 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('class="command-sidebar"');
     expect(markup).toContain('class="command-canvas"');
     expect(markup).toContain('class="shell-view command-home-view active"');
-    expect(markup).toContain("\u521b\u5efa\u53ef\u7f16\u6392\u7684 Agent \u5c0f\u961f");
-    expect(markup).toContain("\u4f8b\u5982\uff1a\u6574\u7406\u4eca\u5929\u7684\u9879\u76ee\u4e8b\u9879");
+    expect(markup).toContain(
+      "\u521b\u5efa\u53ef\u7f16\u6392\u7684 Agent \u5c0f\u961f",
+    );
+    expect(markup).toContain(
+      "\u4f8b\u5982\uff1a\u6574\u7406\u4eca\u5929\u7684\u9879\u76ee\u4e8b\u9879",
+    );
     expect(markup).not.toContain("????");
   });
 
@@ -309,26 +327,20 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("\u6280\u80fd\u00b7\u8fde\u63a5\u5668");
     expect(markup).toContain("\u8ba1\u5212\u00b7\u63d0\u9192");
     expect(markup).toContain("\u529e\u516c\u5ba4");
-  });
-
-  it("labels agent-platform fallback without implying app-server is down", () => {
-    const markup = renderToStaticMarkup(
-      <ResourceDock
-        platformState="fallback"
-        slots={selectCommandHomeSlots(snapshot())}
-      />,
-    );
-
-    expect(markup).toContain("可选资源服务未启动，对话后端可用");
-    expect(markup).not.toContain("资源服务未连接");
+    expect(markup).not.toContain("capability-dock");
+    expect(markup).not.toContain("\u8d44\u6e90\u5165\u53e3\u5df2\u5c31\u7eea");
   });
 
   it("includes original schedule modal and filter landmarks", () => {
     const markup = renderCommandWorkspace();
 
     expect(markup).toContain('data-shell-view="schedule"');
-    expect(markup).toContain('data-filter-group="schedule-mode" data-filter="calendar"');
-    expect(markup).toContain('data-filter-group="schedule-source" data-filter="teamflow"');
+    expect(markup).toContain(
+      'data-filter-group="schedule-mode" data-filter="calendar"',
+    );
+    expect(markup).toContain(
+      'data-filter-group="schedule-source" data-filter="teamflow"',
+    );
     expect(markup).toContain('data-od-id="schedule-calendar-team"');
     expect(markup).toContain('data-od-id="schedule-arrangement-catalog"');
     expect(markup).toContain('id="schedule-arrangement-modal"');
@@ -434,7 +446,9 @@ describe("CommandWorkspace", () => {
     );
 
     expect(markup).toContain("无工作空间");
-    expect(markup).toContain('aria-controls="standalone-workspace-thread-list"');
+    expect(markup).toContain(
+      'aria-controls="standalone-workspace-thread-list"',
+    );
     expect(markup).toContain('id="standalone-workspace-thread-list"');
     expect(markup).toContain('data-linked-thread-id="thread-standalone-1"');
     expect(markup).toContain("Standalone conversation");
@@ -839,22 +853,40 @@ describe("CommandWorkspace", () => {
     `;
 
     syncDesignFilterState(scope);
-    expect(scope.querySelector<HTMLElement>('[data-card="team-calendar"]')?.hidden).toBe(false);
-    expect(scope.querySelector<HTMLElement>('[data-card="personal-calendar"]')?.hidden).toBe(true);
-    expect(scope.querySelector<HTMLElement>('[data-card="personal-arrangement"]')?.hidden).toBe(
-      true,
-    );
-    expect(scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')?.hidden).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-calendar"]')?.hidden,
+    ).toBe(false);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="personal-calendar"]')
+        ?.hidden,
+    ).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="personal-arrangement"]')
+        ?.hidden,
+    ).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')
+        ?.hidden,
+    ).toBe(true);
 
     setActiveFilter(scope, "schedule-mode", "arrangement");
-    expect(scope.querySelector<HTMLElement>('[data-card="team-calendar"]')?.hidden).toBe(true);
-    expect(scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')?.hidden).toBe(false);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-calendar"]')?.hidden,
+    ).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')
+        ?.hidden,
+    ).toBe(false);
 
     setActiveFilter(scope, "schedule-source", "personal");
-    expect(scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')?.hidden).toBe(true);
-    expect(scope.querySelector<HTMLElement>('[data-card="personal-arrangement"]')?.hidden).toBe(
-      false,
-    );
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="team-arrangement"]')
+        ?.hidden,
+    ).toBe(true);
+    expect(
+      scope.querySelector<HTMLElement>('[data-card="personal-arrangement"]')
+        ?.hidden,
+    ).toBe(false);
   });
 
   it("applies catalog search on top of active filters", () => {
@@ -870,8 +902,12 @@ describe("CommandWorkspace", () => {
     `;
 
     applyDesignCardVisibility(scope);
-    expect(scope.querySelectorAll<HTMLElement>("[data-card-filter]")[0]?.hidden).toBe(false);
-    expect(scope.querySelectorAll<HTMLElement>("[data-card-filter]")[1]?.hidden).toBe(true);
+    expect(
+      scope.querySelectorAll<HTMLElement>("[data-card-filter]")[0]?.hidden,
+    ).toBe(false);
+    expect(
+      scope.querySelectorAll<HTMLElement>("[data-card-filter]")[1]?.hidden,
+    ).toBe(true);
   });
 
   it("resets team page to the original office list state without showing inline rooms", () => {
@@ -902,16 +938,38 @@ describe("CommandWorkspace", () => {
 
     setDefaultTeamOfficePreview(view);
 
-    expect(view.querySelector<HTMLElement>("[data-office-list]")?.hidden).toBe(false);
-    expect(view.querySelector<HTMLElement>("[data-office-room]")?.hidden).toBe(true);
-    expect(view.querySelector<HTMLElement>("[data-workflow-list]")?.hidden).toBe(false);
-    expect(view.querySelector<HTMLElement>("[data-workflow-room]")?.hidden).toBe(true);
-    expect(view.querySelector<HTMLElement>("[data-office-shell]")?.classList.contains("is-room-open")).toBe(false);
-    expect(view.querySelector<HTMLElement>("[data-workflow-shell]")?.classList.contains("is-room-open")).toBe(false);
+    expect(view.querySelector<HTMLElement>("[data-office-list]")?.hidden).toBe(
+      false,
+    );
+    expect(view.querySelector<HTMLElement>("[data-office-room]")?.hidden).toBe(
+      true,
+    );
+    expect(
+      view.querySelector<HTMLElement>("[data-workflow-list]")?.hidden,
+    ).toBe(false);
+    expect(
+      view.querySelector<HTMLElement>("[data-workflow-room]")?.hidden,
+    ).toBe(true);
+    expect(
+      view
+        .querySelector<HTMLElement>("[data-office-shell]")
+        ?.classList.contains("is-room-open"),
+    ).toBe(false);
+    expect(
+      view
+        .querySelector<HTMLElement>("[data-workflow-shell]")
+        ?.classList.contains("is-room-open"),
+    ).toBe(false);
     expect(view.classList.contains("office-room-active")).toBe(false);
     expect(view.classList.contains("workflow-room-active")).toBe(false);
-    expect(view.querySelector<HTMLElement>('[data-office-drawer="members"]')?.hidden).toBe(true);
-    expect(view.querySelector<HTMLElement>("[data-office-drawer-open]")?.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      view.querySelector<HTMLElement>('[data-office-drawer="members"]')?.hidden,
+    ).toBe(true);
+    expect(
+      view
+        .querySelector<HTMLElement>("[data-office-drawer-open]")
+        ?.getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 
   it("switches room tab panels like the original design runtime", () => {
@@ -928,19 +986,32 @@ describe("CommandWorkspace", () => {
       <section id="run" data-tab-panel hidden></section>
       <section id="memory" data-tab-panel hidden></section>
     `;
-    const runTab = scope.querySelector<HTMLButtonElement>('[data-tab-target="#run"]');
+    const runTab = scope.querySelector<HTMLButtonElement>(
+      '[data-tab-target="#run"]',
+    );
     expect(runTab).not.toBeNull();
 
     if (runTab) {
       activateDesignPanelTab(runTab, scope);
     }
 
-    expect(scope.querySelector<HTMLElement>('[data-tab-target="#chat"]')?.classList.contains("active")).toBe(false);
-    expect(scope.querySelector<HTMLElement>('[data-tab-target="#run"]')?.classList.contains("active")).toBe(true);
-    expect(scope.querySelector<HTMLElement>('[data-tab-target="#run"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(
+      scope
+        .querySelector<HTMLElement>('[data-tab-target="#chat"]')
+        ?.classList.contains("active"),
+    ).toBe(false);
+    expect(
+      scope
+        .querySelector<HTMLElement>('[data-tab-target="#run"]')
+        ?.classList.contains("active"),
+    ).toBe(true);
+    expect(
+      scope
+        .querySelector<HTMLElement>('[data-tab-target="#run"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
     expect(scope.querySelector<HTMLElement>("#chat")?.hidden).toBe(true);
     expect(scope.querySelector<HTMLElement>("#run")?.hidden).toBe(false);
     expect(scope.querySelector<HTMLElement>("#memory")?.hidden).toBe(true);
   });
-
 });
