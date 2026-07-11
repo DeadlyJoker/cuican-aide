@@ -549,48 +549,61 @@ export function CommandSidebar({
               )}
             </div>
           </div>
-        ) : standaloneThreads.length === 0 ? (
+        ) : standaloneThreads.length === 0 &&
+          otherWorkspaceGroups.length === 0 ? (
           <p className="sidebar-empty-hint workspace-empty-hint">
             当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。
           </p>
         ) : null}
-        {otherWorkspaceGroups.map((group, index) => (
-          <div className="space-node real-workspace-node" key={group.path}>
-            <div className="space-title real-workspace-title">
-              <button
-                aria-controls={`other-workspace-thread-list-${index}`}
-                aria-label={`切换到工作空间 ${workspaceName(group.path)}`}
-                className="workspace-title-toggle"
-                type="button"
-                onClick={() => onCreateWorkspace?.(group.path)}
-              >
-                <Folder aria-hidden="true" />
-                <strong>{workspaceName(group.path)}</strong>
-              </button>
-            </div>
-            <div
-              className="conversation-list recent-thread-list"
-              id={`other-workspace-thread-list-${index}`}
-            >
-              {group.threads.map((thread) => (
+        {otherWorkspaceGroups.map((group, index) => {
+          const name = workspaceName(group.path);
+          return (
+            <div className="space-node real-workspace-node" key={group.path}>
+              <div className="space-title real-workspace-title">
                 <button
-                  className={classNames(
-                    "conversation-item linked-conversation-item recent-thread-item",
-                    selectedLinkedThreadId === thread.id && "active",
-                  )}
-                  data-linked-thread-id={thread.id}
-                  key={thread.id}
-                  title={thread.preview}
+                  aria-controls={`other-workspace-thread-list-${index}`}
+                  aria-label={`切换到工作空间 ${name}`}
+                  className="workspace-title-toggle"
                   type="button"
-                  onClick={() => onOpenLinkedThread(thread.id)}
+                  onClick={() => onCreateWorkspace?.(group.path)}
                 >
-                  <span>{thread.title}</span>
-                  <em>{thread.updatedLabel}</em>
+                  <Folder aria-hidden="true" />
+                  <strong>{name}</strong>
                 </button>
-              ))}
+                <span className="workspace-row-actions">
+                  <button
+                    aria-label={`在工作空间 ${name} 中新建会话`}
+                    type="button"
+                    onClick={() => onNewThread(group.path)}
+                  >
+                    <SquarePen aria-hidden="true" />
+                  </button>
+                </span>
+              </div>
+              <div
+                className="conversation-list recent-thread-list"
+                id={`other-workspace-thread-list-${index}`}
+              >
+                {group.threads.map((thread) => (
+                  <button
+                    className={classNames(
+                      "conversation-item linked-conversation-item recent-thread-item",
+                      selectedLinkedThreadId === thread.id && "active",
+                    )}
+                    data-linked-thread-id={thread.id}
+                    key={thread.id}
+                    title={thread.preview}
+                    type="button"
+                    onClick={() => onOpenLinkedThread(thread.id)}
+                  >
+                    <span>{thread.title}</span>
+                    <em>{thread.updatedLabel}</em>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {standaloneThreads.length > 0 ? (
           <div
             className={classNames(

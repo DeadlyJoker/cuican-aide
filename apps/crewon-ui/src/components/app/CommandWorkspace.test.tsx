@@ -637,6 +637,58 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("Tool and MCP run streamed from app-server");
   });
 
+  it("keeps existing workspaces actionable for a workspace-less new task", () => {
+    const workspaceThread = {
+      cwd: "/repo/frontend",
+      id: "thread-existing-workspace",
+      name: "Existing workspace conversation",
+      preview: "This workspace remains available from a standalone draft",
+      updatedAt: Math.floor(Date.now() / 1000),
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd=""
+        isSending={false}
+        linkedThreads={[workspaceThread]}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onChangeWorkspaceCwd={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).not.toContain(
+      "当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。",
+    );
+    expect(markup).toContain('aria-label="在工作空间 frontend 中新建会话"');
+    expect(markup).toContain(
+      'data-linked-thread-id="thread-existing-workspace"',
+    );
+    expect({
+      hasEmptyWorkspaceHint: markup.includes(
+        "当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。",
+      ),
+      hasNewConversationAction: markup.includes(
+        'aria-label="在工作空间 frontend 中新建会话"',
+      ),
+      hasWorkspaceThread: markup.includes(
+        'data-linked-thread-id="thread-existing-workspace"',
+      ),
+    }).toMatchInlineSnapshot(`
+      {
+        "hasEmptyWorkspaceHint": false,
+        "hasNewConversationAction": true,
+        "hasWorkspaceThread": true,
+      }
+    `);
+  });
+
   it("renders workspace-less conversations in their own sidebar group", () => {
     const standaloneThread = {
       cwd: null,

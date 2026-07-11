@@ -4426,6 +4426,12 @@ body.modal-open {
   }
 }
 
+.screen-shell.command-screen .real-workspace-title .workspace-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
 .screen-shell.command-screen .connection-indicator {
   display: inline-grid;
   width: 20px;
