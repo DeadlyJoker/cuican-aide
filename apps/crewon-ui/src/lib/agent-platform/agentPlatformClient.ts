@@ -362,36 +362,47 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     // Older agent-platform instances do not expose the CrewON catalog yet.
   }
 
-  const [agents, knowledgeBases, skills, mcpServers, mcpTools, workflows] =
-    await Promise.all([
-      listPage<PlatformAgent>("/api/v1/agents/?page=1&page_size=100", {
-        auth: true,
-      }),
-      listPage<PlatformKnowledgeBase>(
-        "/api/v1/knowledge/?page=1&page_size=100",
-        {
-          auth: true,
-        },
-      ),
-      listPage<PlatformSkill>("/api/v1/skills?page=1&page_size=100", {
-        auth: true,
-      }),
-      listPage<PlatformMcpServer>("/api/v1/mcp/servers?page=1&page_size=100", {
-        auth: true,
-      }),
-      listPage<PlatformMcpTool>("/api/v1/mcp/tools?page=1&page_size=100"),
-      listPage<PlatformWorkflow>("/api/v1/workflows?page=1&page_size=100", {
-        auth: true,
-      }),
-    ]);
+  const results = await Promise.allSettled([
+    listPage<PlatformAgent>("/api/v1/agents/?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformKnowledgeBase>("/api/v1/knowledge/?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformSkill>("/api/v1/skills?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformMcpServer>("/api/v1/mcp/servers?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformMcpTool>("/api/v1/mcp/tools?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformWorkflow>("/api/v1/workflows?page=1&page_size=100", {
+      auth: true,
+    }),
+  ]);
+
+  const fulfilled = <T>(index: number): T[] => {
+    const result = results[index];
+    return result?.status === "fulfilled" ? (result.value as T[]) : [];
+  };
+  if (results.every((result) => result.status === "rejected")) {
+    const firstFailure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    throw (
+      firstFailure?.reason ?? new Error("agent-platform catalog unavailable")
+    );
+  }
 
   return {
-    agents,
-    knowledgeBases,
-    skills,
-    mcpServers,
-    mcpTools,
-    workflows,
+    agents: fulfilled<PlatformAgent>(0),
+    knowledgeBases: fulfilled<PlatformKnowledgeBase>(1),
+    skills: fulfilled<PlatformSkill>(2),
+    mcpServers: fulfilled<PlatformMcpServer>(3),
+    mcpTools: fulfilled<PlatformMcpTool>(4),
+    workflows: fulfilled<PlatformWorkflow>(5),
   };
 }
 

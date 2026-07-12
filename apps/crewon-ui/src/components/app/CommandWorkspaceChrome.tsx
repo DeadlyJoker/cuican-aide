@@ -23,7 +23,6 @@ import type {
   CommandHomeSlots,
   CommandPaletteItem,
   CommandShellView,
-  SlotItem,
 } from "./commandWorkspaceState";
 import { classNames } from "./commandWorkspaceUtils";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
@@ -44,8 +43,6 @@ export type CommandLinkedThread = {
   title: string;
   updatedLabel: string;
 };
-
-type PlatformLoadState = "loading" | "ready" | "fallback";
 
 type SidebarSearchResult =
   | {
@@ -782,43 +779,5 @@ export function Palette({
         ) : null}
       </div>
     </div>
-  );
-}
-
-export function ResourceDock({
-  platformState,
-  resources,
-  slots,
-}: {
-  platformState: PlatformLoadState;
-  resources?: SlotItem[];
-  slots: CommandHomeSlots;
-}) {
-  const visibleResources = resources ?? [
-    slots.agent,
-    slots.skills[0],
-    slots.mcps[0],
-    slots.knowledge,
-    slots.workflow,
-  ];
-  if (platformState !== "ready" || visibleResources.length === 0) {
-    return null;
-  }
-  return (
-    <section className="resource-dock" data-od-id="capability-dock">
-      <header>
-        <strong>Agent / Skill / MCP / Knowledge / Workflow</strong>
-        <span>资源入口已就绪</span>
-      </header>
-      <div className="resource-grid">
-        {visibleResources.map((resource, index) => (
-          <article className="resource-card" key={`${resource.value}-${index}`}>
-            <span>{resource.label}</span>
-            <strong>{resource.title}</strong>
-            <p>{resource.detail}</p>
-          </article>
-        ))}
-      </div>
-    </section>
   );
 }

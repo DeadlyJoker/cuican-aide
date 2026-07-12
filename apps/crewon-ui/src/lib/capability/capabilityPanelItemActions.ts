@@ -10,9 +10,7 @@ import {
 import type { ConfirmHandler } from "../shared/confirmHandler";
 import { appMentionAddedPanel } from "./appMentionPresentation";
 import type { NoticeState } from "../shared/noticeState";
-import {
-  terminateBackgroundTerminal,
-} from "../terminal/backgroundTerminalActions";
+import { terminateBackgroundTerminal } from "../terminal/backgroundTerminalActions";
 import type {
   CapabilityPanel,
   CapabilityPanelItem,
@@ -96,14 +94,8 @@ export type CapabilityPanelItemActionParams = {
 export async function handleCapabilityPanelItemAction(
   params: CapabilityPanelItemActionParams,
 ) {
-  const {
-    busyToolId,
-    isConnected,
-    isDemo,
-    item,
-    locale,
-    setCapabilityPanel,
-  } = params;
+  const { busyToolId, isConnected, isDemo, item, locale, setCapabilityPanel } =
+    params;
 
   if (isDemo) {
     if (item.kind === "directory") {
@@ -221,7 +213,9 @@ async function handlePluginItem(
   const { client, locale, setBusyToolId, setCapabilityPanel } = params;
 
   setBusyToolId("web");
-  setCapabilityPanel(pluginCapabilityLoadingPanel(itemAction.pluginName, locale));
+  setCapabilityPanel(
+    pluginCapabilityLoadingPanel(itemAction.pluginName, locale),
+  );
 
   try {
     const response = await client?.readPlugin(
@@ -234,7 +228,9 @@ async function handlePluginItem(
       return;
     }
 
-    setCapabilityPanel(pluginCapabilityDetailPanel(response, itemAction, locale));
+    setCapabilityPanel(
+      pluginCapabilityDetailPanel(response, itemAction, locale),
+    );
   } catch (error) {
     setCapabilityPanel(
       pluginCapabilityErrorPanel({
@@ -273,7 +269,10 @@ async function handleFileItem(params: CapabilityPanelItemActionParams) {
         client?.readDirectory(itemPath),
         client?.getMetadata(itemPath),
       ]);
-      const entries = directoryEntriesToPanelItems(response?.entries, itemPath);
+      const entries = directoryEntriesToPanelItems(
+        response?.entries,
+        itemPath,
+      ).map((entry) => ({ ...entry, intent: item.intent }));
       setCapabilityPanel(
         directoryPanel({
           entries,

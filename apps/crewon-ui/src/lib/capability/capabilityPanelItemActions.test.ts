@@ -284,6 +284,7 @@ describe("capability panel item actions", () => {
           label: "src",
           path: "/repo/src",
           kind: "directory",
+          intent: "attach-context",
         },
         setBusyToolId: (toolId) => busyStates.push(toolId),
         setCapabilityPanel: (panelOrUpdater) => {
@@ -302,6 +303,7 @@ describe("capability panel item actions", () => {
       title: "Files",
     });
     expect(panel?.items?.[0]).toMatchObject({
+      intent: "attach-context",
       label: "  README.md",
       path: "/repo/src/README.md",
     });

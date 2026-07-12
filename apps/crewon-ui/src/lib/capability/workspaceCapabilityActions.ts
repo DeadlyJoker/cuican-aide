@@ -21,6 +21,7 @@ import {
   attachContextErrorPanel,
   attachContextLoadingPanel,
   attachContextResultsPanel,
+  attachContextWorkspaceRequiredPanel,
   buildAttachContextItems,
 } from "../context/contextAttachPanel";
 import { demoCapabilityPanel } from "../demo/demoContent";
@@ -78,7 +79,9 @@ type WorkspaceCapabilityClient = {
   listHooks(
     cwd?: string,
   ): Promise<{ data?: Array<{ hooks: BrowserCapabilityHook[] }> }>;
-  listPlugins(cwd?: string): Promise<{ marketplaces?: BrowserCapabilityMarketplace[] }>;
+  listPlugins(
+    cwd?: string,
+  ): Promise<{ marketplaces?: BrowserCapabilityMarketplace[] }>;
   readDirectory(path: string): Promise<{ entries?: DirectoryEntry[] }>;
   runCommand(
     cwd: string,
@@ -105,24 +108,28 @@ type BaseWorkspaceCapabilityActionParams = {
   setCapabilityPanel: SetCapabilityPanel;
 };
 
-export type RunTerminalStatusActionParams = BaseWorkspaceCapabilityActionParams & {
-  processIdFactory?: () => string;
-  setTerminalProcessId: (processId: string | null) => void;
-  terminalCommand: string;
-  terminalProcessId: () => string | null;
-};
+export type RunTerminalStatusActionParams =
+  BaseWorkspaceCapabilityActionParams & {
+    processIdFactory?: () => string;
+    setTerminalProcessId: (processId: string | null) => void;
+    terminalCommand: string;
+    terminalProcessId: () => string | null;
+  };
 
-export type ReadWorkspaceFilesActionParams = BaseWorkspaceCapabilityActionParams;
+export type ReadWorkspaceFilesActionParams =
+  BaseWorkspaceCapabilityActionParams;
 
 export type AttachWorkspaceContextActionParams =
   BaseWorkspaceCapabilityActionParams & {
     setCapabilityDockOpen: (open: boolean) => void;
+    workspaceCwd?: string | null;
   };
 
-export type LoadBrowserAppsActionParams = BaseWorkspaceCapabilityActionParams & {
-  isDemoPreview: boolean;
-  selectedThreadId: string | null;
-};
+export type LoadBrowserAppsActionParams =
+  BaseWorkspaceCapabilityActionParams & {
+    isDemoPreview: boolean;
+    selectedThreadId: string | null;
+  };
 
 export async function runTerminalStatusAction(
   params: RunTerminalStatusActionParams,
@@ -256,6 +263,7 @@ export async function attachWorkspaceContextAction(
     setBusyToolId,
     setCapabilityDockOpen,
     setCapabilityPanel,
+    workspaceCwd,
   } = params;
 
   if (isDemo) {
@@ -268,8 +276,13 @@ export async function attachWorkspaceContextAction(
     return;
   }
 
-  const contextCwd = await resolveBackendCwd();
+  const contextCwd =
+    workspaceCwd === undefined
+      ? await resolveBackendCwd()
+      : workspaceCwd?.trim() || null;
   if (!contextCwd) {
+    setCapabilityDockOpen(true);
+    setCapabilityPanel(attachContextWorkspaceRequiredPanel(locale));
     return;
   }
 
@@ -278,12 +291,27 @@ export async function attachWorkspaceContextAction(
   setCapabilityPanel(attachContextLoadingPanel(contextCwd, locale));
 
   try {
-    const items = await buildAttachContextItems({
+    const suggestedItems = await buildAttachContextItems({
       contextCwd,
       getMetadata: async (path) => client?.getMetadata(path),
-      searchFiles: async (query, roots) => client?.fuzzyFileSearch(query, roots),
+      searchFiles: async (query, roots) =>
+        client?.fuzzyFileSearch(query, roots),
     });
-    setCapabilityPanel(attachContextResultsPanel({ contextCwd, items, locale }));
+    const items = [
+      {
+        intent: "attach-context" as const,
+        kind: "directory" as const,
+        label:
+          locale === "zh"
+            ? "> 浏览工作空间中的文件和文件夹"
+            : "> Browse workspace files and folders",
+        path: contextCwd,
+      },
+      ...suggestedItems,
+    ];
+    setCapabilityPanel(
+      attachContextResultsPanel({ contextCwd, items, locale }),
+    );
   } catch (error) {
     setCapabilityPanel(attachContextErrorPanel({ contextCwd, error, locale }));
   } finally {

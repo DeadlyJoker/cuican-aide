@@ -14,7 +14,6 @@ import { officeRooms, workflowRooms } from "./commandWorkspaceData";
 import {
   CommandSidebar,
   Palette,
-  ResourceDock,
   type CommandLinkedThread,
   type PaletteItemWithCommand,
 } from "./CommandWorkspaceChrome";
@@ -38,7 +37,6 @@ import {
 } from "./commandWorkspaceState";
 import {
   commandSceneContextItems,
-  commandSceneResourceDockItems,
   commandSceneSlashItems,
 } from "./commandWorkspaceSceneResources";
 import {
@@ -100,7 +98,7 @@ type CommandWorkspaceProps = {
   slashCommands?: ComposerSlashCommand[];
   streamingText?: string;
   workMode: WorkMode;
-  onAttachContext: () => void;
+  onAttachContext: (workspaceCwd?: string | null) => void;
   onChangeComposerValue: (value: string) => void;
   onChangeWorkspaceCwd?: (cwd: string | null) => void;
   onModeChange: (mode: WorkMode) => void;
@@ -554,10 +552,6 @@ export function CommandWorkspace({
     [executionTargetCatalog],
   );
   const scenePreset = scenePresets[scene];
-  const resourceDockItems = useMemo(
-    () => commandSceneResourceDockItems(platformSnapshot),
-    [platformSnapshot],
-  );
   const workspaceOptions = useMemo<CommandSelectOption[]>(() => {
     const paths = [cwd, ...linkedThreads.map((thread) => thread.cwd ?? "")]
       .map((path) => path.trim())
@@ -748,7 +742,7 @@ export function CommandWorkspace({
   function insertAddItem(item: PaletteItemWithCommand) {
     if (item.action === "attach-files") {
       closeComposerPalette();
-      onAttachContext();
+      onAttachContext(cwd || null);
       return;
     }
     if (item.kind === "skill" || item.kind === "mcp" || item.command) {
@@ -1143,14 +1137,6 @@ export function CommandWorkspace({
                 </div>
               </section>
             </section>
-
-            {platformState === "ready" && resourceDockItems.length > 0 ? (
-              <ResourceDock
-                platformState={platformState}
-                resources={resourceDockItems}
-                slots={slots}
-              />
-            ) : null}
           </section>
 
           <AssistView

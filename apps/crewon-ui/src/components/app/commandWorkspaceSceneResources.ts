@@ -2,7 +2,6 @@ import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatfo
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { CommandScene } from "../../lib/scene/sceneCatalog";
 import type { PaletteItemWithCommand } from "./CommandWorkspaceChrome";
-import type { SlotItem } from "./commandWorkspaceState";
 
 function workspaceName(path: string): string {
   const normalized = path.replace(/\\/g, "/");
@@ -62,73 +61,25 @@ export function commandSceneSlashItems(
       token: command.token,
     }),
   );
-  const platformItems: PaletteItemWithCommand[] = [
-    ...snapshot.skills.map((item) => ({
-      detail: item.description || "本地 Skill",
-      kind: "skill" as const,
-      label: "Skill",
-      title: item.name,
-      token: item.name,
-    })),
-    ...snapshot.mcpServers
-      .filter(
-        (item) => item.is_enabled !== false && item.is_connected !== false,
-      )
-      .map((item) => ({
-        detail: item.description || item.endpoint || "本地 MCP 服务",
-        kind: "mcp" as const,
-        label: "MCP",
-        title: item.alias || item.name,
-        token: item.alias || item.name,
-      })),
-  ];
-  return [...commandItems, ...platformItems].slice(0, 12);
-}
-
-export function commandSceneResourceDockItems(
-  snapshot: AgentPlatformSnapshot,
-): SlotItem[] {
-  const agent = snapshot.agents.find(
-    (item) => item.is_active !== false && item.is_active !== 0,
-  );
-  const skill = snapshot.skills[0];
-  const mcp = snapshot.mcpServers.find(
-    (item) => item.is_enabled !== false && item.is_connected !== false,
-  );
-  const knowledge = snapshot.knowledgeBases[0];
-  const workflow = snapshot.workflows.find(
-    (item) => item.is_active !== false && item.is_active !== 0,
-  );
-  return [
-    agent && {
-      detail: agent.description || "已同步的单 Agent 定义",
-      label: "Agent",
-      title: agent.name,
-      value: `agent-${agent.id}`,
-    },
-    skill && {
-      detail: skill.description || "已同步的本地 Skill",
-      label: "Skill",
-      title: skill.name,
-      value: `skill-${skill.id}`,
-    },
-    mcp && {
-      detail: mcp.description || mcp.endpoint || "已同步的 MCP 服务",
+  const skillItems: PaletteItemWithCommand[] = snapshot.skills.map((item) => ({
+    detail: item.description || "本地 Skill",
+    kind: "skill" as const,
+    label: "Skill",
+    title: item.name,
+    token: item.name,
+  }));
+  const mcpItems: PaletteItemWithCommand[] = snapshot.mcpServers
+    .filter((item) => item.is_enabled !== false && item.is_connected !== false)
+    .map((item) => ({
+      detail: item.description || item.endpoint || "本地 MCP 服务",
+      kind: "mcp" as const,
       label: "MCP",
-      title: mcp.alias || mcp.name,
-      value: `mcp-${mcp.id}`,
-    },
-    knowledge && {
-      detail: `${knowledge.document_count ?? 0} 个文档`,
-      label: "Knowledge",
-      title: knowledge.name,
-      value: `knowledge-${knowledge.id}`,
-    },
-    workflow && {
-      detail: workflow.description || "已同步的工作流定义",
-      label: "Workflow",
-      title: workflow.name,
-      value: `workflow-${workflow.id}`,
-    },
-  ].filter((item): item is SlotItem => Boolean(item));
+      title: item.alias || item.name,
+      token: item.alias || item.name,
+    }));
+  return [
+    ...commandItems.slice(0, 8),
+    ...skillItems.slice(0, 8),
+    ...mcpItems.slice(0, 4),
+  ].slice(0, 20);
 }

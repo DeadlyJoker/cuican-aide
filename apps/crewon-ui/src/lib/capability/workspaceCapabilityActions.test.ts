@@ -49,9 +49,7 @@ function appListResponse(): AppsListResponse {
   };
 }
 
-function baseClient(
-  overrides: Partial<WorkspaceClient> = {},
-): WorkspaceClient {
+function baseClient(overrides: Partial<WorkspaceClient> = {}): WorkspaceClient {
   return {
     async fuzzyFileSearch() {
       return { files: [] };
@@ -232,6 +230,12 @@ describe("workspace capability actions", () => {
     expect(dockStates).toEqual([true]);
     expect(sink.panel?.title).toBe("Attach context");
     expect(sink.panel?.subtitle).toBe("/repo");
+    expect(sink.panel?.items?.[0]).toEqual({
+      intent: "attach-context",
+      kind: "directory",
+      label: "> Browse workspace files and folders",
+      path: "/repo",
+    });
     expect(sink.panel?.items).toEqual(
       expect.arrayContaining([
         {
@@ -242,6 +246,30 @@ describe("workspace capability actions", () => {
         },
       ]),
     );
+  });
+
+  it("explains that a workspace is required instead of silently returning", async () => {
+    const sink = panelSink();
+    const dockStates: boolean[] = [];
+
+    await attachWorkspaceContextAction({
+      ...baseParams(),
+      resolveBackendCwd: async () => {
+        throw new Error("explicit workspace-less selection must not fallback");
+      },
+      setCapabilityDockOpen: (open) => dockStates.push(open),
+      setCapabilityPanel: sink.setCapabilityPanel,
+      workspaceCwd: null,
+    });
+
+    expect(dockStates).toEqual([true]);
+    expect(sink.panel).toMatchInlineSnapshot(`
+      {
+        "body": "Select a workspace below the task composer, then browse and add its files or folders.",
+        "subtitle": "No workspace selected",
+        "title": "Attach context",
+      }
+    `);
   });
 
   it("loads browser capability data for the selected thread", async () => {
@@ -329,8 +357,7 @@ describe("workspace capability actions", () => {
 
     expect(dockStates).toEqual([true]);
     expect(sink.panel).toMatchObject({
-      body:
-        "Demo mode does not read real files. With app-server connected, this searches README, AGENTS, and knowledge files.",
+      body: "Demo mode does not read real files. With app-server connected, this searches README, AGENTS, and knowledge files.",
       subtitle: "Demo mode",
       title: "Attach context",
     });

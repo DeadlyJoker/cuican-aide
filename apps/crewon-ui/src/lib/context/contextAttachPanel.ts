@@ -1,4 +1,7 @@
-import type { CapabilityPanel, CapabilityPanelItem } from "../capability/capabilityPanelTypes";
+import type {
+  CapabilityPanel,
+  CapabilityPanelItem,
+} from "../capability/capabilityPanelTypes";
 import { filePanelSearchControls } from "../capability/capabilityPanelText";
 import type { Locale } from "../i18n";
 import { joinPath, resolveSearchPath } from "../shared/pathUtils";
@@ -46,6 +49,19 @@ export function attachContextLoadingPanel(
       locale === "zh"
         ? "正在从工作区搜索可添加的上下文..."
         : "Searching workspace context...",
+  };
+}
+
+export function attachContextWorkspaceRequiredPanel(
+  locale: Locale,
+): CapabilityPanel {
+  return {
+    title: attachContextTitle(locale),
+    subtitle: locale === "zh" ? "未选择工作空间" : "No workspace selected",
+    body:
+      locale === "zh"
+        ? "先在任务输入框底部选择一个工作空间，然后即可浏览并添加其中的文件或文件夹。"
+        : "Select a workspace below the task composer, then browse and add its files or folders.",
   };
 }
 
@@ -101,7 +117,9 @@ export function attachContextErrorPanel(params: {
 
 export async function buildAttachContextItems(params: {
   contextCwd: string;
-  getMetadata: (path: string) => Promise<AttachContextMetadata | null | undefined>;
+  getMetadata: (
+    path: string,
+  ) => Promise<AttachContextMetadata | null | undefined>;
   limit?: number;
   searchFiles: (
     query: string,

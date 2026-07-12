@@ -16,7 +16,8 @@ import {
   shouldCloseComposerPalette,
   syncDesignFilterState,
 } from "./CommandWorkspace";
-import { Palette, ResourceDock } from "./CommandWorkspaceChrome";
+import { Palette } from "./CommandWorkspaceChrome";
+import { commandSceneSlashItems } from "./commandWorkspaceSceneResources";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 
@@ -158,6 +159,24 @@ describe("selectCommandHomeSlots", () => {
   });
 });
 
+describe("commandSceneSlashItems", () => {
+  it("reserves palette capacity for MCP resources when many skills exist", () => {
+    const platformSnapshot = snapshot();
+    platformSnapshot.skills = Array.from({ length: 12 }, (_, index) => ({
+      downloaded: true,
+      id: 100 + index,
+      name: `Skill ${index + 1}`,
+    }));
+
+    const items = commandSceneSlashItems(platformSnapshot, []);
+
+    expect(items.filter((item) => item.kind === "skill")).toHaveLength(8);
+    expect(
+      items.filter((item) => item.kind === "mcp").map((item) => item.title),
+    ).toEqual(["Filesystem MCP", "HTTP Tools", "unused"]);
+  });
+});
+
 describe("CommandWorkspace", () => {
   afterEach(() => {
     if (typeof document !== "undefined") {
@@ -281,6 +300,8 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("默认交付");
     expect(markup).toContain("暂无可选智能体或小队");
     expect(markup).not.toContain("创建可编排的 Agent 小队");
+    expect(markup).not.toContain("资源入口已就绪");
+    expect(markup).not.toContain("Agent / Skill / MCP / Knowledge / Workflow");
     expect(markup).not.toContain("????");
   });
 
@@ -503,17 +524,6 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("\u6280\u80fd\u00b7\u8fde\u63a5\u5668");
     expect(markup).toContain("\u8ba1\u5212\u00b7\u63d0\u9192");
     expect(markup).toContain("\u529e\u516c\u5ba4");
-  });
-
-  it("hides the optional resource dock when agent-platform is unavailable", () => {
-    const markup = renderToStaticMarkup(
-      <ResourceDock
-        platformState="fallback"
-        slots={selectCommandHomeSlots(snapshot())}
-      />,
-    );
-
-    expect(markup).toBe("");
   });
 
   it("keeps workspaces from existing conversations visible when another workspace is active", () => {

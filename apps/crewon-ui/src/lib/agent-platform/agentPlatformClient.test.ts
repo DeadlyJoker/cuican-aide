@@ -76,6 +76,57 @@ describe("agent-platform client mapping", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps successful legacy resources when one catalog endpoint fails", async () => {
+    const storage = new Map([["crewon-agent-platform-token", "token"]]);
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      removeItem: (key: string) => storage.delete(key),
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    const fetchMock = vi.fn(
+      async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/v1/crewon/catalog")) {
+          return new Response('{"message":"busy"}', { status: 503 });
+        }
+        if (url.includes("/api/v1/agents/")) {
+          return Response.json({ items: [{ id: 1, name: "Agent" }] });
+        }
+        if (url.includes("/api/v1/knowledge/")) {
+          return Response.json({ items: [{ id: 2, name: "Knowledge" }] });
+        }
+        if (url.includes("/api/v1/skills")) {
+          return Response.json({ items: [{ id: 3, name: "Skill" }] });
+        }
+        if (url.includes("/api/v1/mcp/servers")) {
+          return new Response('{"message":"failed"}', { status: 500 });
+        }
+        if (url.includes("/api/v1/mcp/tools")) {
+          const headers = new Headers(init?.headers);
+          if (!headers.get("Authorization")) {
+            return new Response('{"message":"unauthorized"}', {
+              status: 401,
+            });
+          }
+          return Response.json({ items: [{ id: 4, name: "Tool" }] });
+        }
+        return new Response('{"message":"missing"}', { status: 404 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await readAgentPlatformSnapshot();
+
+    expect(result).toEqual({
+      agents: [{ id: 1, name: "Agent" }],
+      knowledgeBases: [{ id: 2, name: "Knowledge" }],
+      skills: [{ id: 3, name: "Skill" }],
+      mcpServers: [],
+      mcpTools: [{ id: 4, name: "Tool" }],
+      workflows: [],
+    });
+  });
+
   it("short-circuits concurrent snapshot reads when the local resource service is unavailable", async () => {
     const fetchMock = vi.fn(async (_input: Parameters<typeof fetch>[0]) => {
       return new Response(

@@ -737,7 +737,7 @@ export function App() {
         activeTurnId={commandShellRuntime.activeTurnId} composerValue={composerValue} connectionState={connectionState} cwd={cwd} isSending={isSending}
         linkedThreads={conversationThreads} locale={locale} selectedThread={commandShellRuntime.selectedThread} selectedThreadId={commandShellRuntime.selectedThreadId} slashCommands={slashCommands}
         streamingText={commandShellRuntime.streamingText} workMode={workMode} modelOptions={commandModelOptions}
-        executionTargetClient={clientRef.current}
+        executionTargetClient={clientRef.current} capabilityDrawer={{ busyToolId, commandValue: terminalCommand, disabled: !isConnected && !isDemo, locale, open: capabilityDockOpen, panel: capabilityPanel, onClose: () => setCapabilityDockOpen(false), onCommandChange: setTerminalCommand, onCommandSubmit: runTerminalStatus, onPanelAction: handleCapabilityPanelAction, onPanelFieldChange: handleCapabilityPanelFieldChange, onPanelItem: handleCapabilityPanelItem }}
         confirmDialog={{ locale, request: confirmRequest, onCancel: () => resolveConfirm(false), onConfirm: () => resolveConfirm(true) }}
         onAttachContext={attachWorkspaceContext} onChangeComposerValue={setComposerValue} onModeChange={setWorkMode} onRetryConnection={retryConnection}
         onChangeWorkspaceCwd={changeCommandShellWorkspace}

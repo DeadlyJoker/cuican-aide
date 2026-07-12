@@ -16,7 +16,7 @@ type SetCapabilityPanel = (
 ) => void;
 
 export type AppWorkspaceCapabilityHandlers = {
-  attachWorkspaceContext: () => Promise<void>;
+  attachWorkspaceContext: (workspaceCwd?: string | null) => Promise<void>;
   loadBrowserApps: () => Promise<void>;
   readWorkspaceFiles: () => Promise<void>;
   runTerminalStatus: () => Promise<void>;
@@ -43,7 +43,7 @@ export function createAppWorkspaceCapabilityHandlers(
   params: AppWorkspaceCapabilityHandlersParams,
 ): AppWorkspaceCapabilityHandlers {
   return {
-    attachWorkspaceContext: () =>
+    attachWorkspaceContext: (workspaceCwd) =>
       attachWorkspaceContextAction({
         busyToolId: params.busyToolId,
         client: params.client,
@@ -54,6 +54,7 @@ export function createAppWorkspaceCapabilityHandlers(
         setBusyToolId: params.setBusyToolId,
         setCapabilityDockOpen: params.setCapabilityDockOpen,
         setCapabilityPanel: params.setCapabilityPanel,
+        workspaceCwd,
       }),
     loadBrowserApps: () =>
       loadBrowserAppsAction({
