@@ -5,6 +5,11 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .screen-shell.command-screen .command-thread-room .message-list {
   gap: 20px;
   padding: 26px 12px 24px;
+  scrollbar-gutter: stable both-edges;
+}
+
+.screen-shell.command-screen .command-input.thread-command-input {
+  width: min(780px, 100%);
 }
 
 .screen-shell.command-screen .command-thread-room .turn-group,
