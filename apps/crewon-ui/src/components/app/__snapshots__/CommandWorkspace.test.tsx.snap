@@ -1,0 +1,33 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CommandWorkspace > snapshots the default command-home landmarks 1`] = `
+{
+  "capability": [
+    "推荐能力：文档整理 · Calendar · Knowledge",
+  ],
+  "executionIntents": [
+    "目标",
+    "计划",
+  ],
+  "executionTargets": [
+    "CrewON",
+  ],
+  "hero": [
+    "让 CrewON 完成你的工作",
+  ],
+  "quickActions": [
+    "整理今日工作",
+    "生成会议材料",
+    "撰写项目汇报",
+    "沉淀知识库",
+  ],
+  "sceneTabs": [
+    "日常办公",
+    "生码",
+    "设计创意",
+  ],
+  "workspaceOptions": [
+    "无工作空间",
+  ],
+}
+`;

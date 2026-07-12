@@ -195,6 +195,10 @@ impl ThreadStore for InMemoryThreadStore {
             .push(RolloutItem::SessionMeta(SessionMetaLine {
                 meta: session_meta,
                 git: None,
+                scene_runtime: params
+                    .extra_config
+                    .as_ref()
+                    .and_then(|extra| extra.scene_runtime.clone()),
             }));
         state.created_threads.insert(params.thread_id, params);
         Ok(())

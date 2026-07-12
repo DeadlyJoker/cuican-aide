@@ -44,6 +44,8 @@ export type AppThreadRuntimeHandlers = {
   createThread: (
     initialPrompt?: string,
     threadSource?: string,
+    threadSettings?: ThreadRuntimeSettings,
+    workspaceCwd?: string | null,
   ) => Promise<Thread | null>;
   deleteArchivedThread: (thread: Thread) => Promise<void>;
   interruptActiveTurn: () => Promise<void>;
@@ -56,6 +58,7 @@ export type AppThreadRuntimeHandlers = {
   sendMessageInNewThread: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
+    workspaceCwd?: string | null,
   ) => Promise<void>;
   startDraftThread: () => void;
   startReview: () => Promise<void>;
@@ -95,7 +98,10 @@ export type AppThreadRuntimeHandlersParams = {
   setNotice: (notice: NoticeState | null) => void;
   setPendingComposerMentions: (mentions: PendingComposerMention[]) => void;
   setSelectedThreadId: (
-    threadId: string | null | ((currentThreadId: string | null) => string | null),
+    threadId:
+      | string
+      | null
+      | ((currentThreadId: string | null) => string | null),
   ) => void;
   setShowArchivedThreads: (showArchived: boolean) => void;
   setSidebarOpen: (open: boolean) => void;
@@ -106,9 +112,7 @@ export type AppThreadRuntimeHandlersParams = {
 };
 
 function inProgressTurnId(thread: Thread | null): string | null {
-  return (
-    thread?.turns.find((turn) => turn.status === "inProgress")?.id ?? null
-  );
+  return thread?.turns.find((turn) => turn.status === "inProgress")?.id ?? null;
 }
 
 export function createAppThreadRuntimeHandlers(
@@ -133,6 +137,7 @@ export function createAppThreadRuntimeHandlers(
     initialPrompt?: string,
     threadSource = "app_server",
     threadSettings?: ThreadRuntimeSettings,
+    workspaceCwd?: string | null,
   ) =>
     createThreadAction({
       client: params.client,
@@ -140,7 +145,8 @@ export function createAppThreadRuntimeHandlers(
       initialPrompt,
       isConnected: params.isConnected,
       locale: params.locale,
-      preserveThreadsAfterConnectionLoss: params.preserveThreadsAfterConnectionLoss,
+      preserveThreadsAfterConnectionLoss:
+        params.preserveThreadsAfterConnectionLoss,
       resolveBackendCwd: params.resolveBackendCwd,
       setNotice: params.setNotice,
       setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
@@ -149,6 +155,7 @@ export function createAppThreadRuntimeHandlers(
       shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
       threadSettings,
       threadSource,
+      workspaceCwd,
     });
 
   const sendMessageWithThreadContext = (
@@ -159,12 +166,13 @@ export function createAppThreadRuntimeHandlers(
       selectedThread: Thread | null;
       selectedThreadId: string | null;
     },
+    workspaceCwd?: string | null,
   ) =>
     sendMessageAction({
       activeTurnId: threadContext.activeTurnId,
       client: params.client,
       createThread: (initialPrompt) =>
-        createThread(initialPrompt, "app_server", threadSettings),
+        createThread(initialPrompt, "app_server", threadSettings, workspaceCwd),
       demoResponse: params.demoResponse,
       isConnected: params.isConnected,
       isDemoPreview: params.isDemoPreview,
@@ -259,12 +267,17 @@ export function createAppThreadRuntimeHandlers(
         selectedThread: params.selectedThread,
         selectedThreadId: params.selectedThreadId,
       }),
-    sendMessageInNewThread: (text, threadSettings) =>
-      sendMessageWithThreadContext(text, threadSettings, {
-        activeTurnId: null,
-        selectedThread: null,
-        selectedThreadId: null,
-      }),
+    sendMessageInNewThread: (text, threadSettings, workspaceCwd) =>
+      sendMessageWithThreadContext(
+        text,
+        threadSettings,
+        {
+          activeTurnId: null,
+          selectedThread: null,
+          selectedThreadId: null,
+        },
+        workspaceCwd,
+      ),
     startDraftThread: () => {
       startDraftThreadAction({
         setAppView: params.setAppView,

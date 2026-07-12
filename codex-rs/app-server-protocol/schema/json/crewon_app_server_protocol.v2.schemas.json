@@ -7233,6 +7233,13 @@
         }
       ]
     },
+    "ExternalActionPolicy": {
+      "enum": [
+        "draft-only",
+        "confirm-each"
+      ],
+      "type": "string"
+    },
     "ExternalAgentConfigDetectParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -9598,6 +9605,13 @@
         "completed",
         "in_progress",
         "incomplete"
+      ],
+      "type": "string"
+    },
+    "LocalWritePolicy": {
+      "enum": [
+        "read-only",
+        "workspace-write"
       ],
       "type": "string"
     },
@@ -14387,6 +14401,13 @@
       "title": "ReasoningTextDeltaNotification",
       "type": "object"
     },
+    "RecommendedPermission": {
+      "enum": [
+        "auto-local",
+        "on-request"
+      ],
+      "type": "string"
+    },
     "RemoteControlConnectionStatus": {
       "enum": [
         "disabled",
@@ -15494,6 +15515,289 @@
           "type": "array"
         }
       },
+      "type": "object"
+    },
+    "SceneContextKind": {
+      "enum": [
+        "workspace",
+        "repository",
+        "branch",
+        "file",
+        "document",
+        "thread",
+        "issue",
+        "pull-request",
+        "calendar",
+        "contact",
+        "date-range",
+        "figma-node",
+        "knowledge",
+        "image",
+        "web-page",
+        "log",
+        "brief",
+        "brand",
+        "canvas-spec"
+      ],
+      "type": "string"
+    },
+    "SceneContextSlotDescriptor": {
+      "properties": {
+        "accepts": {
+          "items": {
+            "$ref": "#/definitions/SceneContextKind"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "labelKey": {
+          "type": "string"
+        },
+        "maxItems": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "accepts",
+        "id",
+        "labelKey",
+        "maxItems"
+      ],
+      "type": "object"
+    },
+    "SceneDeliverable": {
+      "enum": [
+        "conversation",
+        "document",
+        "table",
+        "action-list",
+        "message-draft",
+        "knowledge-entry",
+        "implementation-plan",
+        "code-change",
+        "code-review",
+        "design-directions",
+        "design-artifact",
+        "design-review",
+        "handoff-spec"
+      ],
+      "type": "string"
+    },
+    "SceneDescriptor": {
+      "properties": {
+        "contextSlots": {
+          "items": {
+            "$ref": "#/definitions/SceneContextSlotDescriptor"
+          },
+          "type": "array"
+        },
+        "defaultDeliverable": {
+          "$ref": "#/definitions/SceneDeliverable"
+        },
+        "defaultMode": {
+          "$ref": "#/definitions/SceneInteractionMode"
+        },
+        "instructionVersion": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "labelKey": {
+          "type": "string"
+        },
+        "modeSpecs": {
+          "items": {
+            "$ref": "#/definitions/SceneModeDescriptor"
+          },
+          "type": "array"
+        },
+        "placeholderKey": {
+          "type": "string"
+        },
+        "presetVersion": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "recommendedPermission": {
+          "$ref": "#/definitions/RecommendedPermission"
+        },
+        "sceneId": {
+          "$ref": "#/definitions/SceneId"
+        },
+        "subtitleKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "contextSlots",
+        "defaultDeliverable",
+        "defaultMode",
+        "instructionVersion",
+        "labelKey",
+        "modeSpecs",
+        "placeholderKey",
+        "presetVersion",
+        "recommendedPermission",
+        "sceneId",
+        "subtitleKey"
+      ],
+      "type": "object"
+    },
+    "SceneExecutionStrategy": {
+      "enum": [
+        "single",
+        "team"
+      ],
+      "type": "string"
+    },
+    "SceneExecutionTargetKind": {
+      "enum": [
+        "crewon",
+        "agent",
+        "team"
+      ],
+      "type": "string"
+    },
+    "SceneExecutionTargetSelection": {
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "crewon"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "CrewonSceneExecutionTargetSelection",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "agent"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "team"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SceneId": {
+      "enum": [
+        "office",
+        "code",
+        "design"
+      ],
+      "type": "string"
+    },
+    "SceneInteractionMode": {
+      "enum": [
+        "auto",
+        "organize",
+        "write",
+        "analyze",
+        "coordinate",
+        "ask",
+        "plan",
+        "implement",
+        "review",
+        "explore",
+        "refine",
+        "produce",
+        "inspect"
+      ],
+      "type": "string"
+    },
+    "SceneModeDescriptor": {
+      "properties": {
+        "allowedDeliverables": {
+          "items": {
+            "$ref": "#/definitions/SceneDeliverable"
+          },
+          "type": "array"
+        },
+        "completionCheckIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "defaultContract": {
+          "$ref": "#/definitions/SceneTaskContract"
+        },
+        "mode": {
+          "$ref": "#/definitions/SceneInteractionMode"
+        }
+      },
+      "required": [
+        "allowedDeliverables",
+        "completionCheckIds",
+        "defaultContract",
+        "mode"
+      ],
+      "type": "object"
+    },
+    "SceneTaskContract": {
+      "properties": {
+        "deliverable": {
+          "$ref": "#/definitions/SceneDeliverable"
+        },
+        "externalActionPolicy": {
+          "$ref": "#/definitions/ExternalActionPolicy"
+        },
+        "localWritePolicy": {
+          "$ref": "#/definitions/LocalWritePolicy"
+        },
+        "mode": {
+          "$ref": "#/definitions/SceneInteractionMode"
+        },
+        "scene": {
+          "$ref": "#/definitions/SceneId"
+        }
+      },
+      "required": [
+        "deliverable",
+        "externalActionPolicy",
+        "localWritePolicy",
+        "mode",
+        "scene"
+      ],
       "type": "object"
     },
     "SelectedCapabilityRoot": {
@@ -19780,6 +20084,88 @@
         "thread"
       ],
       "title": "ThreadRollbackResponse",
+      "type": "object"
+    },
+    "ThreadSceneRuntime": {
+      "properties": {
+        "contract": {
+          "$ref": "#/definitions/SceneTaskContract"
+        },
+        "executionStrategy": {
+          "$ref": "#/definitions/SceneExecutionStrategy"
+        },
+        "executionTargetKind": {
+          "$ref": "#/definitions/SceneExecutionTargetKind"
+        },
+        "executionTargetToken": {
+          "type": "string"
+        },
+        "instructionVersion": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "presetVersion": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "version": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "contract",
+        "executionStrategy",
+        "executionTargetKind",
+        "executionTargetToken",
+        "instructionVersion",
+        "presetVersion",
+        "version"
+      ],
+      "type": "object"
+    },
+    "ThreadSceneSelectionParams": {
+      "properties": {
+        "deliverable": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SceneDeliverable"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "executionTarget": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SceneExecutionTargetSelection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SceneInteractionMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sceneId": {
+          "$ref": "#/definitions/SceneId"
+        }
+      },
+      "required": [
+        "sceneId"
+      ],
       "type": "object"
     },
     "ThreadSearchResult": {

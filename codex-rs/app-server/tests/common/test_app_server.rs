@@ -73,6 +73,7 @@ use crewon_app_server_protocol::RemoteControlPairingStartParams;
 use crewon_app_server_protocol::RemoteControlPairingStatusParams;
 use crewon_app_server_protocol::RequestId;
 use crewon_app_server_protocol::ReviewStartParams;
+use crewon_app_server_protocol::SceneListParams;
 use crewon_app_server_protocol::SendAddCreditsNudgeEmailParams;
 use crewon_app_server_protocol::ServerRequest;
 use crewon_app_server_protocol::SkillsCreateParams;
@@ -864,6 +865,15 @@ impl TestAppServer {
     ) -> anyhow::Result<i64> {
         let params = Some(serde_json::to_value(params)?);
         self.send_request("collaborationMode/list", params).await
+    }
+
+    /// Send a `scene/list` JSON-RPC request.
+    pub async fn send_scene_list_request(
+        &mut self,
+        params: SceneListParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("scene/list", params).await
     }
 
     /// Send a `mock/experimentalMethod` JSON-RPC request.

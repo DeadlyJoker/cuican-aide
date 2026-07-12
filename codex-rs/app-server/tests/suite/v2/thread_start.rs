@@ -5,6 +5,7 @@ use app_test_support::TestAppServer;
 use app_test_support::create_mock_responses_server_repeating_assistant;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
+use crewon_app_server_protocol::AgentSaveResponse;
 use crewon_app_server_protocol::AskForApproval;
 use crewon_app_server_protocol::JSONRPCError;
 use crewon_app_server_protocol::JSONRPCMessage;
@@ -13,7 +14,17 @@ use crewon_app_server_protocol::McpServerStartupState;
 use crewon_app_server_protocol::McpServerStatusUpdatedNotification;
 use crewon_app_server_protocol::RequestId;
 use crewon_app_server_protocol::SandboxMode;
+use crewon_app_server_protocol::SceneExecutionStrategy;
+use crewon_app_server_protocol::SceneExecutionTargetKind;
+use crewon_app_server_protocol::SceneExecutionTargetSelection;
+use crewon_app_server_protocol::SceneId;
+use crewon_app_server_protocol::SceneInteractionMode;
 use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ThreadForkParams;
+use crewon_app_server_protocol::ThreadForkResponse;
+use crewon_app_server_protocol::ThreadResumeParams;
+use crewon_app_server_protocol::ThreadResumeResponse;
+use crewon_app_server_protocol::ThreadSceneSelectionParams;
 use crewon_app_server_protocol::ThreadSource;
 use crewon_app_server_protocol::ThreadStartParams;
 use crewon_app_server_protocol::ThreadStartResponse;
@@ -21,6 +32,8 @@ use crewon_app_server_protocol::ThreadStartedNotification;
 use crewon_app_server_protocol::ThreadStatus;
 use crewon_app_server_protocol::ThreadStatusChangedNotification;
 use crewon_app_server_protocol::TurnEnvironmentParams;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::UserInput;
 use crewon_config::loader::project_trust_key;
 use crewon_config::types::AuthCredentialsStoreMode;
 use crewon_core::config::set_project_trust_level;
@@ -30,6 +43,7 @@ use crewon_login::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
 use crewon_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use crewon_protocol::config_types::TrustLevel;
 use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::MultiAgentVersion;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -50,6 +64,634 @@ use super::analytics::wait_for_analytics_payload;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const INVALID_REQUEST_ERROR_CODE: i64 = -32600;
+
+#[tokio::test]
+async fn thread_start_scene_defaults_to_crewon_single_and_persists_runtime() -> Result<()> {
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
+    let codex_home = TempDir::new()?;
+    create_config_toml_without_approval_policy(codex_home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
+
+    let request_id = mcp
+        .send_thread_start_request(ThreadStartParams {
+            scene: Some(ThreadSceneSelectionParams {
+                scene_id: SceneId::Office,
+                mode: None,
+                deliverable: None,
+                execution_target: None,
+            }),
+            ..Default::default()
+        })
+        .await?;
+    let response: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
+    )
+    .await??;
+    let ThreadStartResponse {
+        thread,
+        scene_runtime,
+        ..
+    } = to_response::<ThreadStartResponse>(response)?;
+    let scene_runtime = scene_runtime.expect("scene runtime should be resolved");
+    assert_eq!(scene_runtime.contract.scene, SceneId::Office);
+    assert_eq!(scene_runtime.contract.mode, SceneInteractionMode::Auto);
+    assert_eq!(
+        scene_runtime.execution_target_kind,
+        SceneExecutionTargetKind::Crewon
+    );
+    assert_eq!(
+        scene_runtime.execution_strategy,
+        SceneExecutionStrategy::Single
+    );
+
+    let turn_request_id = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: thread.id,
+            input: vec![UserInput::Text {
+                text: "prepare my day".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let _: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(turn_request_id)),
+    )
+    .await??;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+
+    let rollout_path = thread
+        .path
+        .expect("persistent thread should have a rollout path");
+    let session_meta = crewon_rollout::read_session_meta_line(&rollout_path).await?;
+    assert_eq!(
+        session_meta.meta.multi_agent_version,
+        Some(MultiAgentVersion::Disabled)
+    );
+    let persisted_scene = session_meta
+        .scene_runtime
+        .expect("rollout should persist scene runtime");
+    assert_eq!(
+        persisted_scene.contract.scene,
+        crewon_protocol::scene::SceneId::Office
+    );
+    assert_eq!(
+        persisted_scene.execution_target_token,
+        scene_runtime.execution_target_token
+    );
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("mock server should capture requests");
+    let request_body = requests[0].body_json::<Value>()?;
+    let request_text = request_body.to_string();
+    assert!(request_text.contains("<crewon_scene_context>"));
+    assert!(request_text.contains("Office scene:"));
+    assert!(request_text.contains("Auto mode: infer the requested behavior"));
+    assert!(!request_text.contains(&scene_runtime.execution_target_token));
+    let tools = request_body["tools"]
+        .as_array()
+        .expect("request tools should be an array");
+    let tool_names = tools
+        .iter()
+        .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+        .collect::<Vec<_>>();
+    assert_eq!(tool_names.contains(&"spawn_agent"), false);
+    assert_eq!(tool_names.contains(&"send_message"), false);
+    assert_eq!(tool_names.contains(&"list_agents"), false);
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_start_defined_team_enables_v2_team_runtime() -> Result<()> {
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
+    let codex_home = TempDir::new()?;
+    create_config_toml_without_approval_policy(codex_home.path(), &server.uri())?;
+    let cwd = codex_home.path().to_string_lossy().into_owned();
+    let mut mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
+
+    let office_request_id = mcp
+        .send_raw_request(
+            "office/save",
+            Some(json!({
+                "cwd": cwd,
+                "config": {
+                    "title": "Launch Team",
+                    "subtitle": "Ship the launch",
+                    "workspace": {
+                        "goal": "Launch safely",
+                        "members": [{
+                            "name": "Builder",
+                            "role": "Implementation",
+                            "agentId": "agent-builder"
+                        }],
+                        "messages": [],
+                        "tasks": [],
+                        "activity": { "approvals": [], "artifacts": [] }
+                    }
+                }
+            })),
+        )
+        .await?;
+    let _: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(office_request_id)),
+    )
+    .await??;
+
+    let request_id = mcp
+        .send_thread_start_request(ThreadStartParams {
+            cwd: Some(cwd),
+            scene: Some(ThreadSceneSelectionParams {
+                scene_id: SceneId::Office,
+                mode: None,
+                deliverable: None,
+                execution_target: Some(SceneExecutionTargetSelection::Team {
+                    id: "Launch Team".to_string(),
+                }),
+            }),
+            ..Default::default()
+        })
+        .await?;
+    let response: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
+    )
+    .await??;
+    let ThreadStartResponse {
+        thread,
+        scene_runtime,
+        ..
+    } = to_response::<ThreadStartResponse>(response)?;
+    let scene_runtime = scene_runtime.expect("team scene should resolve");
+    assert_eq!(
+        scene_runtime.execution_target_kind,
+        SceneExecutionTargetKind::Team
+    );
+    assert_eq!(
+        scene_runtime.execution_strategy,
+        SceneExecutionStrategy::Team
+    );
+
+    let turn_request_id = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: thread.id,
+            input: vec![UserInput::Text {
+                text: "prepare the launch".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let _: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(turn_request_id)),
+    )
+    .await??;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+
+    let rollout_path = thread
+        .path
+        .expect("persistent thread should have a rollout path");
+    let session_meta = crewon_rollout::read_session_meta_line(&rollout_path).await?;
+    assert_eq!(
+        session_meta.meta.multi_agent_version,
+        Some(MultiAgentVersion::V2)
+    );
+    let requests = server
+        .received_requests()
+        .await
+        .expect("mock server should capture requests");
+    let request_body = requests[0].body_json::<Value>()?;
+    let request_text = request_body.to_string();
+    assert!(request_text.contains("<crewon_execution_target_context>"));
+    assert!(request_text.contains("Launch Team"));
+    assert!(request_text.contains("Builder"));
+    let tool_names = request_body["tools"]
+        .as_array()
+        .expect("request tools should be an array")
+        .iter()
+        .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+        .collect::<Vec<_>>();
+    assert_eq!(tool_names.contains(&"spawn_agent"), true);
+    assert_eq!(tool_names.contains(&"send_message"), true);
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_start_defined_agent_resolves_to_single_runtime() -> Result<()> {
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
+    let codex_home = TempDir::new()?;
+    create_config_toml_without_approval_policy(codex_home.path(), &server.uri())?;
+    let cwd = codex_home.path().to_string_lossy().into_owned();
+    let mut mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
+
+    let agent_request_id = mcp
+        .send_raw_request(
+            "agent/save",
+            Some(json!({
+                "cwd": cwd,
+                "config": {
+                    "agentId": "agent-writer",
+                    "name": "Writer",
+                    "role": "Draft documents",
+                    "model": "gpt-5.6-sol",
+                    "systemPrompt": "Write concise source-grounded drafts.",
+                    "skills": [{
+                        "id": "document-drafting",
+                        "name": "Document drafting",
+                        "enabled": true
+                    }],
+                    "mcp": []
+                }
+            })),
+        )
+        .await?;
+    let _: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(agent_request_id)),
+    )
+    .await??;
+
+    let request_id = mcp
+        .send_thread_start_request(ThreadStartParams {
+            cwd: Some(cwd),
+            scene: Some(ThreadSceneSelectionParams {
+                scene_id: SceneId::Office,
+                mode: None,
+                deliverable: None,
+                execution_target: Some(SceneExecutionTargetSelection::Agent {
+                    id: "agent-writer".to_string(),
+                }),
+            }),
+            ..Default::default()
+        })
+        .await?;
+    let response: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(request_id)),
+    )
+    .await??;
+    let ThreadStartResponse {
+        model,
+        scene_runtime,
+        thread,
+        ..
+    } = to_response::<ThreadStartResponse>(response)?;
+    let scene_runtime = scene_runtime.expect("agent scene should resolve");
+    assert_eq!(model, "gpt-5.6-sol");
+    assert_eq!(
+        scene_runtime.execution_target_kind,
+        SceneExecutionTargetKind::Agent
+    );
+    assert_eq!(
+        scene_runtime.execution_strategy,
+        SceneExecutionStrategy::Single
+    );
+    assert_eq!(
+        scene_runtime
+            .execution_target_token
+            .contains("agent-writer"),
+        false
+    );
+
+    let turn_request_id = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: thread.id,
+            input: vec![UserInput::Text {
+                text: "draft the update".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let _: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(turn_request_id)),
+    )
+    .await??;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+    let requests = server
+        .received_requests()
+        .await
+        .expect("mock server should capture requests");
+    let request_text = requests[0].body_json::<Value>()?.to_string();
+    assert!(request_text.contains("<crewon_execution_target_context>"));
+    assert!(request_text.contains("Write concise source-grounded drafts."));
+    assert!(request_text.contains("Document drafting"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn cold_resume_restores_scene_identity_and_single_tool_policy() -> Result<()> {
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
+    let codex_home = TempDir::new()?;
+    create_config_toml_without_approval_policy(codex_home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
+
+    let start_request_id = mcp
+        .send_thread_start_request(ThreadStartParams {
+            scene: Some(ThreadSceneSelectionParams {
+                scene_id: SceneId::Code,
+                mode: Some(SceneInteractionMode::Review),
+                deliverable: None,
+                execution_target: None,
+            }),
+            ..Default::default()
+        })
+        .await?;
+    let start_response: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(start_request_id)),
+    )
+    .await??;
+    let ThreadStartResponse { thread, .. } = to_response::<ThreadStartResponse>(start_response)?;
+    let thread_id = thread.id;
+
+    let turn_request_id = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: thread_id.clone(),
+            input: vec![UserInput::Text {
+                text: "review this workspace".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let _: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(turn_request_id)),
+    )
+    .await??;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+
+    let fork_request_id = mcp
+        .send_thread_fork_request(ThreadForkParams {
+            thread_id: thread_id.clone(),
+            ..Default::default()
+        })
+        .await?;
+    let fork_response: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(fork_request_id)),
+    )
+    .await??;
+    let ThreadForkResponse {
+        scene_runtime: fork_scene_runtime,
+        ..
+    } = to_response::<ThreadForkResponse>(fork_response)?;
+    let fork_scene_runtime = fork_scene_runtime.expect("fork should inherit scene runtime");
+    assert_eq!(fork_scene_runtime.contract.scene, SceneId::Code);
+    assert_eq!(
+        fork_scene_runtime.contract.mode,
+        SceneInteractionMode::Review
+    );
+    assert_eq!(
+        fork_scene_runtime.execution_strategy,
+        SceneExecutionStrategy::Single
+    );
+    drop(mcp);
+
+    let mut resumed_mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_READ_TIMEOUT, resumed_mcp.initialize()).await??;
+    let resume_request_id = resumed_mcp
+        .send_thread_resume_request(ThreadResumeParams {
+            thread_id: thread_id.clone(),
+            ..Default::default()
+        })
+        .await?;
+    let resume_response: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        resumed_mcp.read_stream_until_response_message(RequestId::Integer(resume_request_id)),
+    )
+    .await??;
+    let ThreadResumeResponse { scene_runtime, .. } =
+        to_response::<ThreadResumeResponse>(resume_response)?;
+    let scene_runtime = scene_runtime.expect("resume should restore scene runtime");
+    assert_eq!(scene_runtime.contract.scene, SceneId::Code);
+    assert_eq!(scene_runtime.contract.mode, SceneInteractionMode::Review);
+    assert_eq!(
+        scene_runtime.execution_strategy,
+        SceneExecutionStrategy::Single
+    );
+
+    let resumed_turn_request_id = resumed_mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id,
+            input: vec![UserInput::Text {
+                text: "continue".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let _: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        resumed_mcp.read_stream_until_response_message(RequestId::Integer(resumed_turn_request_id)),
+    )
+    .await??;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        resumed_mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+    let requests = server
+        .received_requests()
+        .await
+        .expect("mock server should capture requests");
+    let resumed_request_body = requests
+        .last()
+        .expect("resumed turn should reach the model")
+        .body_json::<Value>()?;
+    let resumed_has_spawn_agent = resumed_request_body["tools"]
+        .as_array()
+        .expect("request tools should be an array")
+        .iter()
+        .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+        .any(|name| name == "spawn_agent");
+    assert_eq!(resumed_has_spawn_agent, false);
+    Ok(())
+}
+
+#[tokio::test]
+async fn code_plan_scene_enters_plan_collaboration_mode() -> Result<()> {
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
+    let codex_home = TempDir::new()?;
+    create_config_toml_without_approval_policy(codex_home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
+
+    let start_request_id = mcp
+        .send_thread_start_request(ThreadStartParams {
+            scene: Some(ThreadSceneSelectionParams {
+                scene_id: SceneId::Code,
+                mode: Some(SceneInteractionMode::Plan),
+                deliverable: None,
+                execution_target: None,
+            }),
+            ..Default::default()
+        })
+        .await?;
+    let start_response: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(start_request_id)),
+    )
+    .await??;
+    let ThreadStartResponse { thread, .. } = to_response::<ThreadStartResponse>(start_response)?;
+    let rollout_path = thread
+        .path
+        .clone()
+        .expect("persistent thread should have a rollout path");
+
+    let turn_request_id = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: thread.id,
+            input: vec![UserInput::Text {
+                text: "plan the implementation".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let _: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(turn_request_id)),
+    )
+    .await??;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("mock server should capture requests");
+    let request_text = requests[0].body_json::<Value>()?.to_string();
+    assert!(request_text.contains("Plan mode: produce a scoped implementation plan"));
+    let rollout = tokio::fs::read_to_string(rollout_path).await?;
+    assert!(rollout.contains("\"collaboration_mode_kind\":\"plan\""));
+    Ok(())
+}
+
+#[tokio::test]
+async fn cold_resume_rejects_a_deleted_agent_execution_target() -> Result<()> {
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
+    let codex_home = TempDir::new()?;
+    create_config_toml_without_approval_policy(codex_home.path(), &server.uri())?;
+    let cwd = codex_home.path().to_string_lossy().into_owned();
+    let mut mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_READ_TIMEOUT, mcp.initialize()).await??;
+
+    let save_request_id = mcp
+        .send_raw_request(
+            "agent/save",
+            Some(json!({
+                "cwd": cwd,
+                "config": {
+                    "agentId": "agent-temporary",
+                    "name": "Temporary",
+                    "role": "Temporary target"
+                }
+            })),
+        )
+        .await?;
+    let save_response: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(save_request_id)),
+    )
+    .await??;
+    let AgentSaveResponse { file_path, .. } = to_response::<AgentSaveResponse>(save_response)?;
+
+    let start_request_id = mcp
+        .send_thread_start_request(ThreadStartParams {
+            cwd: Some(cwd),
+            scene: Some(ThreadSceneSelectionParams {
+                scene_id: SceneId::Office,
+                mode: None,
+                deliverable: None,
+                execution_target: Some(SceneExecutionTargetSelection::Agent {
+                    id: "agent-temporary".to_string(),
+                }),
+            }),
+            ..Default::default()
+        })
+        .await?;
+    let start_response: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(start_request_id)),
+    )
+    .await??;
+    let ThreadStartResponse { thread, .. } = to_response::<ThreadStartResponse>(start_response)?;
+    let thread_id = thread.id;
+
+    let turn_request_id = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: thread_id.clone(),
+            input: vec![UserInput::Text {
+                text: "materialize the thread".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let _: JSONRPCResponse = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_response_message(RequestId::Integer(turn_request_id)),
+    )
+    .await??;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("turn/completed"),
+    )
+    .await??;
+    drop(mcp);
+    tokio::fs::remove_file(file_path).await?;
+
+    let mut resumed_mcp = TestAppServer::new(codex_home.path()).await?;
+    timeout(DEFAULT_READ_TIMEOUT, resumed_mcp.initialize()).await??;
+    let resume_request_id = resumed_mcp
+        .send_thread_resume_request(ThreadResumeParams {
+            thread_id,
+            ..Default::default()
+        })
+        .await?;
+    let error: JSONRPCError = timeout(
+        DEFAULT_READ_TIMEOUT,
+        resumed_mcp.read_stream_until_error_message(RequestId::Integer(resume_request_id)),
+    )
+    .await??;
+    assert_eq!(error.error.code, INVALID_REQUEST_ERROR_CODE);
+    assert_eq!(
+        error.error.message,
+        "persisted Agent execution target is unavailable"
+    );
+    Ok(())
+}
 
 #[tokio::test]
 async fn thread_start_creates_thread_and_emits_started() -> Result<()> {

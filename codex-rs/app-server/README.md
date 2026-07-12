@@ -130,10 +130,10 @@ Example with notification opt-out:
 
 ## API Overview
 
-- `thread/start` — create a new thread; emits `thread/started` (including the current `thread.status`) and auto-subscribes you to turn/item events for that thread. When the request includes a `cwd` and the resolved sandbox is `workspace-write` or full access, app-server also marks that project as trusted in the user `config.toml`. Pass `sessionStartSource: "clear"` when starting a replacement thread after clearing the current session so `SessionStart` hooks receive `source: "clear"` instead of the default `"startup"`. Experimental `runtimeWorkspaceRoots` replaces the thread-scoped runtime workspace roots used to materialize `:workspace_roots`; paths must be absolute. For permissions, prefer experimental `permissions` profile selection by id; the legacy `sandbox` shorthand is still accepted but cannot be combined with `permissions`. Experimental `environments` selects the sticky execution environments for turns on the thread; omit it to use the server default, pass `[]` to disable environments, or pass explicit environment ids with per-environment `cwd`. Experimental `selectedCapabilityRoots` selects environment-owned plugin or standalone-skill roots. Skills found below those roots are listed and read through the owning environment; other plugin capabilities are not activated yet.
-- `thread/resume` — reopen an existing thread by id so subsequent `turn/start` calls append to it. Accepts the same permission override rules as `thread/start`.
-- `thread/fork` — fork an existing thread into a new thread id by copying the stored history; if the source thread is currently mid-turn, the fork records the same interruption marker as `turn/interrupt` instead of inheriting an unmarked partial turn suffix. The returned `thread.forkedFromId` points at the source thread when known. Accepts `ephemeral: true` for an in-memory temporary fork, emits `thread/started` (including the current `thread.status`), and auto-subscribes you to turn/item events for the new thread. Experimental clients can pass `excludeTurns: true` when they plan to page fork history via `thread/turns/list` instead of receiving the full turn array immediately. Accepts the same permission override rules as `thread/start`.
-- `thread/start`, `thread/resume`, and `thread/fork` responses include the legacy `sandbox` compatibility projection. Experimental clients can read `runtimeWorkspaceRoots` for the thread-scoped runtime roots and `activePermissionProfile` for the named or implicit built-in profile identity/provenance when known.
+- `thread/start` — create a new thread; emits `thread/started` (including the current `thread.status`) and auto-subscribes you to turn/item events for that thread. Experimental `scene` selects an Office, Code, or Design contract plus an execution target. Omit `scene.executionTarget` (or pass `{ "kind": "crewon" }`) for the default CrewON single-Agent target; `{ "kind": "agent", "id": "..." }` resolves a saved `agent/list` definition, while `{ "kind": "team", "id": "..." }` resolves a saved, non-empty Office definition. The server owns the resulting `single` or `team` strategy: CrewON and Agent targets disable multi-agent tools, and Team targets enable the bounded Team runtime. Invalid scene/mode/deliverable combinations and unavailable targets fail closed. When the request includes a `cwd` and the resolved sandbox is `workspace-write` or full access, app-server also marks that project as trusted in the user `config.toml`. Pass `sessionStartSource: "clear"` when starting a replacement thread after clearing the current session so `SessionStart` hooks receive `source: "clear"` instead of the default `"startup"`. Experimental `runtimeWorkspaceRoots` replaces the thread-scoped runtime workspace roots used to materialize `:workspace_roots`; paths must be absolute. For permissions, prefer experimental `permissions` profile selection by id; the legacy `sandbox` shorthand is still accepted but cannot be combined with `permissions`. Experimental `environments` selects the sticky execution environments for turns on the thread; omit it to use the server default, pass `[]` to disable environments, or pass explicit environment ids with per-environment `cwd`. Experimental `selectedCapabilityRoots` selects environment-owned plugin or standalone-skill roots. Skills found below those roots are listed and read through the owning environment; other plugin capabilities are not activated yet.
+- `thread/resume` — reopen an existing thread by id so subsequent `turn/start` calls append to it. Accepts the same permission override rules as `thread/start`. Persisted Scene identity is immutable on resume; saved Agent and Team targets are revalidated before the thread is loaded, so deleted Agents and empty or deleted Teams are rejected.
+- `thread/fork` — fork an existing thread into a new thread id by copying the stored history; if the source thread is currently mid-turn, the fork records the same interruption marker as `turn/interrupt` instead of inheriting an unmarked partial turn suffix. Scene identity and execution target are inherited and revalidated before the fork is created. The returned `thread.forkedFromId` points at the source thread when known. Accepts `ephemeral: true` for an in-memory temporary fork, emits `thread/started` (including the current `thread.status`), and auto-subscribes you to turn/item events for the new thread. Experimental clients can pass `excludeTurns: true` when they plan to page fork history via `thread/turns/list` instead of receiving the full turn array immediately. Accepts the same permission override rules as `thread/start`.
+- `thread/start`, `thread/resume`, and `thread/fork` responses include the legacy `sandbox` compatibility projection. Experimental clients can read `sceneRuntime` for the resolved contract, target kind, opaque target token, and server-owned execution strategy; `runtimeWorkspaceRoots` for the thread-scoped runtime roots; and `activePermissionProfile` for the named or implicit built-in profile identity/provenance when known.
 - `thread/list` — page through stored rollouts; supports cursor-based pagination and optional `modelProviders`, `sourceKinds`, `archived`, `cwd`, and `searchTerm` filters. Each returned `thread` includes `status` (`ThreadStatus`), defaulting to `notLoaded` when the thread is not currently loaded. Subagent threads also include `parentThreadId` when the immediate control/spawn parent is known.
 - `thread/loaded/list` — list the thread ids currently loaded in memory.
 - `thread/read` — read a stored thread by id without resuming it; optionally include turns via `includeTurns`. The returned `thread` includes `status` (`ThreadStatus`), defaulting to `notLoaded` when the thread is not currently loaded.
@@ -198,6 +198,7 @@ Example with notification opt-out:
 - `experimentalFeature/enablement/set` — patch the in-memory process-wide runtime feature enablement for currently supported feature keys. For each feature, precedence is: cloud requirements > --enable <feature_name> > config.toml > experimentalFeature/enablement/set (new) > code default. Invalid keys will be ignored.
 - `environment/add` — experimental; add or replace a named remote environment by `environmentId` and `execServerUrl` for later selection by `thread/start` or `turn/start`; returns `{}` and does not change the default environment.
 - `collaborationMode/list` — list available collaboration mode presets (experimental, no pagination). Built-in presets do not select a model; the Plan preset selects medium reasoning effort. This response omits built-in developer instructions; clients should either pass `settings.developer_instructions: null` when setting a mode to use Crewon's built-in instructions, or provide their own instructions explicitly.
+- `scene/list` — experimental; list the built-in Office, Code, and Design scene presets with cursor pagination. The response includes server-owned preset/instruction versions, valid mode and deliverable combinations, local/external action policies, context slots, and completion-check ids; clients should not synthesize missing contracts or submit their own execution strategy.
 - `skills/list` — list skills for one or more `cwd` values (optional `forceReload`).
 - `skills/extraRoots/set` — replace the app-server process runtime extra standalone skill roots. The roots are not persisted; missing directories are accepted and simply load no skills.
 - `hooks/list` — list discovered hooks for one or more `cwd` values.
@@ -281,6 +282,12 @@ Start a fresh thread when you need a new Crewon conversation.
     "cwd": "/Users/me/project",
     "approvalPolicy": "never",
     "sandbox": "workspaceWrite",
+    "scene": {
+        "sceneId": "code",
+        "mode": "implement",
+        "deliverable": null,
+        "executionTarget": { "kind": "agent", "id": "agent-builder" }
+    },
     // Prefer experimental profile selection:
     // "permissions": ":workspace"
     // Experimental runtime roots for :workspace_roots materialization:
@@ -323,6 +330,21 @@ Start a fresh thread when you need a new Crewon conversation.
         "preview": "",
         "modelProvider": "openai",
         "createdAt": 1730910000
+    },
+    "sceneRuntime": {
+        "contract": {
+            "scene": "code",
+            "mode": "implement",
+            "deliverable": "code-change",
+            "localWritePolicy": "workspace-write",
+            "externalActionPolicy": "confirm-each"
+        },
+        "executionTargetKind": "agent",
+        "executionTargetToken": "tgt_opaque",
+        "executionStrategy": "single",
+        "version": 1,
+        "presetVersion": 1,
+        "instructionVersion": 1
     }
 } }
 { "method": "thread/started", "params": { "thread": { … } } }

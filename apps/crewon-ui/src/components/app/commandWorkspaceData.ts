@@ -1,6 +1,5 @@
 import type {
   CommandPaletteKind,
-  CommandScene,
   CommandShellView,
 } from "./commandWorkspaceState";
 
@@ -9,18 +8,6 @@ export type ShellNavItem = {
   label: string;
   en: string;
   meta?: string;
-};
-
-export type SceneTab = {
-  key: CommandScene;
-  label: string;
-  description: string;
-};
-
-export type QuickScenario = {
-  scene: CommandScene;
-  label: string;
-  prompt: string;
 };
 
 export type ResourceCard = {
@@ -37,77 +24,6 @@ export const shellNavItems: ShellNavItem[] = [
   { key: "agents", label: "智能体", en: "Agents", meta: "技能·连接器" },
   { key: "schedule", label: "日程安排", en: "Schedule", meta: "计划·提醒" },
   { key: "team", label: "团队", en: "Team" },
-];
-
-export const sceneTabs: SceneTab[] = [
-  {
-    key: "office",
-    label: "日常办公",
-    description: "事项、会议、项目同步和知识库沉淀优先。",
-  },
-  {
-    key: "code",
-    label: "代码开发",
-    description: "开发拆解、Code Review、测试生成和 GitHub MCP 授权优先。",
-  },
-  {
-    key: "design",
-    label: "设计创意",
-    description: "方向发散、界面走查、视觉打磨和交付清单优先。",
-  },
-];
-
-export const quickScenarios: QuickScenario[] = [
-  {
-    scene: "office",
-    label: "整理今日事项",
-    prompt: "整理今天的项目事项，列出待办、会议、跟进人、阻塞项和截止时间，并把结论写入知识库。",
-  },
-  {
-    scene: "office",
-    label: "安排会议",
-    prompt: "为项目同步安排一场会议，准备议题、参会人、材料清单、提醒时间和会后行动项。",
-  },
-  {
-    scene: "office",
-    label: "同步项目进展",
-    prompt: "同步当前项目进展，整理完成事项、阻塞项、负责人、风险和下一步计划。",
-  },
-  {
-    scene: "office",
-    label: "沉淀知识库",
-    prompt: "把这次讨论沉淀成知识库条目，包含结论、引用来源、适用范围和后续维护人。",
-  },
-  {
-    scene: "code",
-    label: "拆开发任务",
-    prompt: "拆解这个开发任务，输出范围、接口影响、实现步骤、风险、测试点和负责人。",
-  },
-  {
-    scene: "code",
-    label: "Code Review",
-    prompt: "对当前改动做 Code Review，优先找行为回归、架构问题、缺失测试和上线风险。",
-  },
-  {
-    scene: "code",
-    label: "生成测试",
-    prompt: "为当前功能生成测试计划，覆盖核心路径、边界条件、回归用例和本地执行命令。",
-  },
-  {
-    scene: "design",
-    label: "生成设计方向",
-    prompt: "基于当前需求生成 3 个设计方向，分别说明布局节奏、视觉语气、组件密度和适用场景。",
-  },
-  {
-    scene: "design",
-    label: "界面走查",
-    prompt: "走查当前界面，检查层级、对齐、文案、交互状态、响应式和可访问性风险。",
-  },
-  {
-    scene: "design",
-    label: "设计交付清单",
-    prompt: "生成设计交付清单，包含页面状态、组件约束、标注重点、验收口径和待确认问题。",
-  },
 ];
 
 export const fallbackResources: ResourceCard[] = [

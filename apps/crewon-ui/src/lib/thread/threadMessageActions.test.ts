@@ -1,7 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { Turn } from "@crewon-protocol/v2/Turn";
 import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
 import type { NoticeState } from "../shared/noticeState";
@@ -260,6 +260,65 @@ describe("thread message actions", () => {
     expect(sidebarOpen).toBe(false);
   });
 
+  it("uses an explicit new-task workspace without resolving a fallback", async () => {
+    const state = threadState([]);
+    const resolveBackendCwd = vi.fn(async () => "/repo/fallback");
+    const starts: Array<string | undefined> = [];
+
+    await createThreadAction({
+      client: {
+        async startThread(cwd) {
+          starts.push(cwd);
+          return thread({ cwd, id: "thread-workspace" });
+        },
+      },
+      createDemoThread: () => thread({ id: "demo-thread" }),
+      isConnected: true,
+      locale: "en",
+      preserveThreadsAfterConnectionLoss: () => {},
+      resolveBackendCwd,
+      setNotice: state.setNotice,
+      setSelectedThreadId: state.setSelectedThreadId,
+      setSidebarOpen: () => {},
+      setThreads: state.setThreads,
+      shouldAutoCloseSidebar: () => false,
+      workspaceCwd: "/repo/selected",
+    });
+
+    expect(resolveBackendCwd).not.toHaveBeenCalled();
+    expect(starts).toEqual(["/repo/selected"]);
+    expect(state.threads[0]?.cwd).toBe("/repo/selected");
+  });
+
+  it("omits cwd for an explicitly workspace-less new task", async () => {
+    const state = threadState([]);
+    const resolveBackendCwd = vi.fn(async () => "/repo/fallback");
+    const starts: Array<string | undefined> = [];
+
+    await createThreadAction({
+      client: {
+        async startThread(cwd) {
+          starts.push(cwd);
+          return thread({ id: "thread-standalone" });
+        },
+      },
+      createDemoThread: () => thread({ id: "demo-thread" }),
+      isConnected: true,
+      locale: "en",
+      preserveThreadsAfterConnectionLoss: () => {},
+      resolveBackendCwd,
+      setNotice: state.setNotice,
+      setSelectedThreadId: state.setSelectedThreadId,
+      setSidebarOpen: () => {},
+      setThreads: state.setThreads,
+      shouldAutoCloseSidebar: () => false,
+      workspaceCwd: null,
+    });
+
+    expect(resolveBackendCwd).not.toHaveBeenCalled();
+    expect(starts).toEqual([undefined]);
+  });
+
   it("preserves threads when backend thread creation fails", async () => {
     const state = threadState();
     let preserved = false;
@@ -490,6 +549,72 @@ describe("thread message actions", () => {
     ]);
   });
 
+  it("sets a persistent goal before starting a goal turn", async () => {
+    const state = threadState();
+    const calls: string[] = [];
+
+    await sendMessageAction(
+      baseSendParams({
+        client: {
+          async resumeThread(threadId) {
+            return thread({ id: threadId });
+          },
+          async setThreadGoal(threadId, objective, tokenBudget) {
+            calls.push(`goal:${threadId}:${objective}:${tokenBudget}`);
+          },
+          async startTurn(threadId) {
+            calls.push(`start:${threadId}`);
+            return turnStartResponse({ turn: turn({ id: "turn-started" }) });
+          },
+          async steerTurn() {
+            throw new Error("should not steer");
+          },
+          async updateThreadSettings() {},
+        },
+        setActiveTurnByThread: state.setActiveTurnByThread,
+        setIsSending: state.setIsSending,
+        setPendingComposerMentions: state.setPendingComposerMentions,
+        setThreads: state.setThreads,
+        threadSettings: { executionIntent: "goal" },
+      }),
+    );
+
+    expect(calls).toEqual(["goal:thread-1:Hello:null", "start:thread-1"]);
+  });
+
+  it("clears an existing goal before starting a plan turn", async () => {
+    const state = threadState();
+    const calls: string[] = [];
+
+    await sendMessageAction(
+      baseSendParams({
+        client: {
+          async clearThreadGoal(threadId) {
+            calls.push(`clear:${threadId}`);
+          },
+          async resumeThread(threadId) {
+            return thread({ id: threadId });
+          },
+          async startTurn(threadId) {
+            calls.push(`start:${threadId}`);
+            return turnStartResponse({ turn: turn({ id: "turn-started" }) });
+          },
+          async steerTurn() {
+            throw new Error("should not steer");
+          },
+          async updateThreadSettings() {},
+        },
+        setActiveTurnByThread: state.setActiveTurnByThread,
+        setIsSending: state.setIsSending,
+        setPendingComposerMentions: state.setPendingComposerMentions,
+        setThreads: state.setThreads,
+        threadSettings: { executionIntent: "plan" },
+      }),
+    );
+
+    expect(calls).toEqual(["clear:thread-1", "start:thread-1"]);
+  });
+
   it("filters removed slash mentions before starting a turn", async () => {
     const state = threadState();
     const startCalls: Array<{
@@ -579,7 +704,9 @@ describe("thread message actions", () => {
       items: [
         {
           type: "userMessage",
-          content: [{ type: "text", text: "Keep this text", text_elements: [] }],
+          content: [
+            { type: "text", text: "Keep this text", text_elements: [] },
+          ],
         },
       ],
     });

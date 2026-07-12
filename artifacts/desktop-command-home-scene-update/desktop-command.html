@@ -14,33 +14,45 @@
 
       <section class="command-canvas" data-od-id="desktop-main-pane">
         <section class="shell-view command-home-view active" data-shell-view="command" data-shell-view-title-zh="新建任务" data-shell-view-title-en="New task" data-od-id="shell-view-command">
-        <button class="workspace-pill" type="button" data-run="#command-log" data-run-title-zh="当前空间" data-run-title-en="Current space" data-run-copy="当前空间已同步：Agent 小队交付空间。" data-run-copy-en="Current space synced: Agent team delivery." data-toast="当前空间已同步" data-toast-en="Current space synced" data-od-id="workspace-pill">
+        <button class="workspace-pill" type="button" data-run="#command-log" data-run-title-zh="当前空间" data-run-title-en="Current space" data-run-copy="当前空间已同步：CrewON 工作空间。" data-run-copy-en="Current space synced: CrewON workspace." data-toast="当前空间已同步" data-toast-en="Current space synced" data-od-id="workspace-pill">
           <span aria-hidden="true"></span>
-          <strong data-zh="Agent 小队交付空间 · 已同步" data-en="Agent team delivery · synced">Agent 小队交付空间 · 已同步</strong>
+          <strong data-zh="CrewON 工作空间 · 已同步" data-en="CrewON workspace · synced">CrewON 工作空间 · 已同步</strong>
         </button>
 
         <section class="hero-center" data-od-id="primary-work-area">
           <header class="home-title" data-od-id="desktop-command-header">
-            <h1><span>Crewon</span><br><span data-zh="创建可编排的 Agent 小队" data-en="Create orchestrated Agent teams">创建可编排的 Agent 小队</span></h1>
+            <span class="home-eyebrow">CrewON</span>
+            <h1 data-zh="让 CrewON 完成你的工作" data-en="Let CrewON get the work done">让 CrewON 完成你的工作</h1>
+            <p class="scene-subtitle" data-scene-subtitle="" data-zh="整理、撰写和推进你的工作" data-en="Organize, write, and move work forward">整理、撰写和推进你的工作</p>
           </header>
 
           <div class="scene-tabs scene-pills" data-od-id="scene-tabs">
             <button class="active" type="button" data-scene-target="office" data-run="#command-log" data-run-title-zh="日常办公" data-run-title-en="Daily work" data-run-copy="已切换到日常办公场景，优先推荐事项整理、会议安排、项目同步和知识库沉淀。" data-run-copy-en="Switched to daily work with tasks, meetings, project sync, and knowledge capture prioritized." data-toast="已切换场景" data-toast-en="Scene switched" data-zh="日常办公" data-en="Daily work">日常办公</button>
-            <button type="button" data-scene-target="code" data-run="#command-log" data-run-title-zh="代码开发" data-run-title-en="Code development" data-run-copy="已切换到代码开发场景，优先推荐开发任务拆解、Code Review、测试生成和 GitHub MCP 授权。" data-run-copy-en="Switched to code development with implementation planning, Code Review, test generation, and GitHub MCP authorization prioritized." data-toast="已切换场景" data-toast-en="Scene switched" data-zh="代码开发" data-en="Code development">代码开发</button>
+            <button type="button" data-scene-target="code" data-run="#command-log" data-run-title-zh="生码" data-run-title-en="Code" data-run-copy="已切换到生码场景，围绕仓库提供询问、计划、实现与审阅。" data-run-copy-en="Switched to code for repository questions, planning, implementation, and review." data-toast="已切换场景" data-toast-en="Scene switched" data-zh="生码" data-en="Code">生码</button>
             <button type="button" data-scene-target="design" data-run="#command-log" data-run-title-zh="设计创意" data-run-title-en="Creative design" data-run-copy="已切换到设计创意场景，优先推荐方向发散、界面走查、视觉打磨和交付清单。" data-run-copy-en="Switched to creative design with direction exploration, UI review, visual polish, and handoff checklist prioritized." data-toast="已切换场景" data-toast-en="Scene switched" data-zh="设计创意" data-en="Creative design">设计创意</button>
           </div>
 
+          <div class="scene-config-bar" data-od-id="scene-config-bar">
+            <span><small data-zh="任务方式" data-en="Mode">任务方式</small><strong data-scene-config-mode="" data-zh="自动判断" data-en="Auto detect">自动判断</strong></span>
+            <span><small data-zh="核心上下文" data-en="Context">核心上下文</small><strong data-scene-config-context="" data-zh="文档 / 日历 / 知识库" data-en="Docs / Calendar / Knowledge">文档 / 日历 / 知识库</strong></span>
+            <span><small data-zh="默认交付" data-en="Deliverable">默认交付</small><strong data-scene-config-deliverable="" data-zh="文档与行动项" data-en="Documents and actions">文档与行动项</strong></span>
+          </div>
+
+          <div class="capability-summary" data-scene-capabilities="" data-zh="推荐能力：文档整理 · Calendar · Knowledge" data-en="Recommended: Documents · Calendar · Knowledge">推荐能力：文档整理 · Calendar · Knowledge</div>
+
           <div class="quick-row" data-od-id="quick-scenarios">
-            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="整理今日事项" data-run-title-en="Plan today" data-run-copy="已准备今日办公清单：待办、会议、跟进人和截止时间。" data-run-copy-en="Prepared today's work list with tasks, meetings, owners, and due times." data-toast="今日事项已准备" data-toast-en="Today planned" data-zh="整理今日事项" data-en="Plan today">整理今日事项</button>
-            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="安排会议" data-run-title-en="Schedule meeting" data-run-copy="已准备会议安排草稿：议题、参会人、材料和提醒时间。" data-run-copy-en="Prepared a meeting draft with agenda, attendees, materials, and reminder time." data-toast="会议安排已准备" data-toast-en="Meeting draft ready" data-zh="安排会议" data-en="Schedule meeting">安排会议</button>
-            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="同步项目进展" data-run-title-en="Project sync" data-run-copy="已准备项目同步摘要：当前进度、阻塞项、负责人和下一步。" data-run-copy-en="Prepared a project sync summary with progress, blockers, owners, and next steps." data-toast="项目同步已准备" data-toast-en="Project sync ready" data-zh="同步项目进展" data-en="Project sync">同步项目进展</button>
+            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="整理今日工作" data-run-title-en="Organize today" data-run-copy="已应用整理模式，将按待办、会议、负责人和截止时间生成行动清单。" data-run-copy-en="Applied organize mode for an action list with tasks, meetings, owners, and due times." data-toast="整理模式已应用" data-toast-en="Organize mode applied" data-zh="整理今日工作" data-en="Organize today">整理今日工作</button>
+            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="生成会议材料" data-run-title-en="Meeting materials" data-run-copy="已应用撰写模式，将结合资料和日程生成会议材料。" data-run-copy-en="Applied write mode to produce meeting materials from sources and calendar context." data-toast="撰写模式已应用" data-toast-en="Write mode applied" data-zh="生成会议材料" data-en="Meeting materials">生成会议材料</button>
+            <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="撰写项目汇报" data-run-title-en="Project report" data-run-copy="已应用撰写模式，将按事实来源生成可直接使用的项目汇报。" data-run-copy-en="Applied write mode for a ready-to-use project report grounded in sources." data-toast="汇报任务已准备" data-toast-en="Report task ready" data-zh="撰写项目汇报" data-en="Project report">撰写项目汇报</button>
             <button type="button" data-scene="office" data-run="#command-log" data-run-title-zh="沉淀知识库" data-run-title-en="Capture knowledge" data-run-copy="已准备知识库条目：结论、引用来源、适用范围和后续更新人。" data-run-copy-en="Prepared a knowledge entry with conclusion, citations, scope, and maintainer." data-toast="知识库条目已准备" data-toast-en="Knowledge entry ready" data-zh="沉淀知识库" data-en="Capture knowledge">沉淀知识库</button>
-            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="拆开发任务" data-run-title-en="Break down dev task" data-run-copy="已准备开发任务拆解：范围、接口、风险、测试点和负责人。" data-run-copy-en="Prepared a development breakdown with scope, APIs, risks, tests, and owners." data-toast="开发任务已拆解" data-toast-en="Dev task broken down" data-zh="拆开发任务" data-en="Dev task">拆开发任务</button>
-            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="Code Review" data-run-title-en="Code Review" data-run-copy="已准备 Code Review 自动化：PR 更新触发审阅 Agent，高风险结果进入 Gate。" data-run-copy-en="Prepared Code Review automation: PR updates trigger review Agent and high-risk output enters Gate." data-toast="Code Review 已准备" data-toast-en="Code Review ready" data-zh="Code Review" data-en="Code Review">Code Review</button>
-            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="生成测试" data-run-title-en="Generate tests" data-run-copy="已准备测试生成计划：核心路径、边界条件、回归用例和执行命令。" data-run-copy-en="Prepared a test plan with core paths, edge cases, regression cases, and commands." data-toast="测试计划已准备" data-toast-en="Test plan ready" data-zh="生成测试" data-en="Generate tests">生成测试</button>
-            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="生成设计方向" data-run-title-en="Design directions" data-run-copy="已准备 3 个设计方向：布局节奏、视觉语气、组件密度和适用场景。" data-run-copy-en="Prepared three design directions with layout rhythm, visual tone, component density, and use cases." data-toast="设计方向已准备" data-toast-en="Design directions ready" data-zh="生成设计方向" data-en="Design directions">生成设计方向</button>
-            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="界面走查" data-run-title-en="UI review" data-run-copy="已准备界面走查清单：层级、对齐、文案、交互状态和响应式风险。" data-run-copy-en="Prepared a UI review checklist for hierarchy, alignment, copy, states, and responsive risks." data-toast="走查清单已准备" data-toast-en="Review checklist ready" data-zh="界面走查" data-en="UI review">界面走查</button>
-            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="设计交付清单" data-run-title-en="Design handoff" data-run-copy="已准备设计交付清单：页面状态、组件约束、标注重点和验收口径。" data-run-copy-en="Prepared a design handoff checklist with screen states, component constraints, annotations, and acceptance criteria." data-toast="交付清单已准备" data-toast-en="Handoff checklist ready" data-zh="设计交付清单" data-en="Design handoff">设计交付清单</button>
+            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="实现一个功能" data-run-title-en="Implement a feature" data-run-copy="已应用实现模式，将读取仓库规则、修改代码并运行适用验证。" data-run-copy-en="Applied implement mode to read repository rules, change code, and run relevant validation." data-toast="实现模式已应用" data-toast-en="Implement mode applied" data-zh="实现一个功能" data-en="Implement a feature">实现一个功能</button>
+            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="修复一个 Bug" data-run-title-en="Fix a bug" data-run-copy="已应用实现模式，将结合问题、日志和仓库证据定位并修复。" data-run-copy-en="Applied implement mode to diagnose and fix the issue using logs and repository evidence." data-toast="修复任务已准备" data-toast-en="Fix task ready" data-zh="修复一个 Bug" data-en="Fix a bug">修复一个 Bug</button>
+            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="审阅当前改动" data-run-title-en="Review changes" data-run-copy="已应用只读审阅模式，将按严重程度输出可定位发现。" data-run-copy-en="Applied read-only review mode for severity-ranked, actionable findings." data-toast="审阅模式已应用" data-toast-en="Review mode applied" data-zh="审阅当前改动" data-en="Review changes">审阅当前改动</button>
+            <button type="button" data-scene="code" class="is-hidden" data-run="#command-log" data-run-title-zh="补齐测试与 CI" data-run-title-en="Tests and CI" data-run-copy="已应用实现模式，将补齐测试并检查 CI 证据。" data-run-copy-en="Applied implement mode to add tests and inspect CI evidence." data-toast="测试任务已准备" data-toast-en="Test task ready" data-zh="补齐测试与 CI" data-en="Tests and CI">补齐测试与 CI</button>
+            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="探索设计方向" data-run-title-en="Explore directions" data-run-copy="已应用探索模式，将生成有明显差异且说明取舍的设计方向。" data-run-copy-en="Applied explore mode for distinct design directions with explicit tradeoffs." data-toast="探索模式已应用" data-toast-en="Explore mode applied" data-zh="探索设计方向" data-en="Explore directions">探索设计方向</button>
+            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="设计页面或组件" data-run-title-en="Design a page" data-run-copy="已应用制作模式，将结合 Brief、品牌和目标画布生成设计产物。" data-run-copy-en="Applied produce mode to create an artifact from the brief, brand, and target canvas." data-toast="制作模式已应用" data-toast-en="Produce mode applied" data-zh="设计页面或组件" data-en="Design a page">设计页面或组件</button>
+            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="生成视觉资产" data-run-title-en="Generate asset" data-run-copy="已应用制作模式，将生成可预览和导出的视觉资产。" data-run-copy-en="Applied produce mode for a previewable, exportable visual asset." data-toast="资产任务已准备" data-toast-en="Asset task ready" data-zh="生成视觉资产" data-en="Generate asset">生成视觉资产</button>
+            <button type="button" data-scene="design" class="is-hidden" data-run="#command-log" data-run-title-zh="走查并交付" data-run-title-en="Review and hand off" data-run-copy="已应用走查模式，将输出可定位问题、状态覆盖和交付建议。" data-run-copy-en="Applied inspect mode for actionable findings, state coverage, and handoff guidance." data-toast="走查模式已应用" data-toast-en="Inspect mode applied" data-zh="走查并交付" data-en="Review and hand off">走查并交付</button>
           </div>
 
           <section class="command-input" data-od-id="ai-composer">
@@ -51,10 +63,20 @@
             <div class="input-tools" data-od-id="composer-tools">
               <div class="composer-controls" data-od-id="composer-control-row">
                 <div class="control-select mode-dropdown" aria-label="任务类型">
-                  <select data-task-mode="" aria-label="任务类型">
-                    <option value="plan" data-zh="计划" data-en="Plan">计划</option>
-                    <option value="goal" data-zh="目标" data-en="Goal">目标</option>
-                    <option value="agent" data-zh="智能体" data-en="Agent">智能体</option>
+                  <select data-task-mode="" data-scene-mode="" aria-label="任务类型">
+                    <option value="auto" data-scenes="office code design" data-zh="自动判断" data-en="Auto detect">自动判断</option>
+                    <option value="organize" data-scenes="office" data-zh="整理" data-en="Organize">整理</option>
+                    <option value="write" data-scenes="office" data-zh="撰写" data-en="Write">撰写</option>
+                    <option value="analyze" data-scenes="office" data-zh="分析" data-en="Analyze">分析</option>
+                    <option value="coordinate" data-scenes="office" data-zh="协同" data-en="Coordinate">协同</option>
+                    <option value="ask" data-scenes="code" data-zh="询问" data-en="Ask">询问</option>
+                    <option value="plan" data-scenes="code" data-zh="计划" data-en="Plan">计划</option>
+                    <option value="implement" data-scenes="code" data-zh="生码" data-en="Implement">生码</option>
+                    <option value="review" data-scenes="code" data-zh="审阅" data-en="Review">审阅</option>
+                    <option value="explore" data-scenes="design" data-zh="探索" data-en="Explore">探索</option>
+                    <option value="refine" data-scenes="design" data-zh="收敛" data-en="Refine">收敛</option>
+                    <option value="produce" data-scenes="design" data-zh="制作" data-en="Produce">制作</option>
+                    <option value="inspect" data-scenes="design" data-zh="走查" data-en="Inspect">走查</option>
                   </select>
                 </div>
                 <div class="control-select model-dropdown" aria-label="模型选择">
@@ -65,19 +87,18 @@
                     <option value="vision" data-zh="视觉模型" data-en="Vision model">视觉模型</option>
                   </select>
                 </div>
-                <div class="control-select agent-dropdown" data-agent-menu="" hidden="" aria-label="智能体配置">
-                  <select data-agent-select="" aria-label="智能体配置">
-                    <option value="product-review" data-zh="产品审阅智能体" data-en="Product review agent">产品审阅智能体</option>
-                    <option value="engineering-handoff" data-zh="开发交付智能体" data-en="Engineering handoff agent">开发交付智能体</option>
-                    <option value="visual-polish" data-zh="视觉打磨智能体" data-en="Visual polish agent">视觉打磨智能体</option>
-                    <option value="meeting-prep" data-zh="会议准备智能体" data-en="Meeting prep agent">会议准备智能体</option>
+                <div class="control-select execution-target-dropdown" aria-label="执行主体">
+                  <select data-execution-target-select="" aria-label="执行主体">
+                    <option value="crewon" data-strategy="single" data-zh="CrewON · 单 Agent" data-en="CrewON · Single agent">CrewON · 单 Agent</option>
+                    <option value="agent:product-review" data-strategy="single" data-zh="产品审阅智能体 · 单 Agent" data-en="Product review agent · Single">产品审阅智能体 · 单 Agent</option>
+                    <option value="agent:engineering-handoff" data-strategy="single" data-zh="开发交付智能体 · 单 Agent" data-en="Engineering handoff agent · Single">开发交付智能体 · 单 Agent</option>
+                    <option value="team:product-delivery" data-strategy="team" data-zh="产品交付小队 · Team" data-en="Product delivery team · Team">产品交付小队 · Team</option>
                   </select>
                 </div>
                 <div class="control-select permission-dropdown" aria-label="权限选择">
                   <select data-permission-select="" aria-label="权限选择">
-                    <option value="approve-for-me" data-zh="替我审批" data-en="Approve for me">替我审批</option>
-                    <option value="request-approval" data-zh="请求批准" data-en="Request approval">请求批准</option>
-                    <option value="full-access" data-zh="完全访问" data-en="Full access">完全访问</option>
+                    <option value="auto-local" data-zh="自动执行本地操作" data-en="Run local actions automatically">自动执行本地操作</option>
+                    <option value="on-request" data-zh="需要时请求批准" data-en="Ask for approval when needed">需要时请求批准</option>
                   </select>
                 </div>
               </div>
@@ -86,20 +107,27 @@
                 <button class="icon-action" type="button" data-run="#command-log" data-run-title-zh="语音输入" data-run-title-en="Voice input" data-run-copy="语音输入入口已聚焦。" data-run-copy-en="Voice input focused." data-toast="语音输入已聚焦" data-toast-en="Voice input focused" aria-label="语音输入">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75a3 3 0 0 0-3 3v4.2a3 3 0 0 0 6 0v-4.2a3 3 0 0 0-3-3Z"></path><path d="M6.8 11.7a5.2 5.2 0 0 0 10.4 0"></path><path d="M12 17v2.75"></path><path d="M8.8 19.75h6.4"></path></svg>
                 </button>
-                <button class="send-button" type="button" data-run="#command-log" data-run-title-zh="Agent 小队草稿" data-run-title-en="Agent team draft" data-run-copy="已生成小队草稿，并推荐角色配置、Workflow、Stage Gate 和 Skill/MCP 权限。" data-run-copy-en="Created an Agent team draft with role config, Workflow, Stage Gate, and Skill/MCP access." data-toast="小队草稿已创建" data-toast-en="Team draft created" aria-label="发送任务">
+                <button class="send-button" type="button" data-run="#command-log" data-run-title-zh="开始任务" data-run-title-en="Start task" data-run-copy="任务已按当前场景、执行主体、能力和权限设置开始。" data-run-copy-en="Started the task with the selected scene, execution target, capabilities, and permissions." data-toast="任务已开始" data-toast-en="Task started" aria-label="开始任务">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.75 5.25 19.25 12 16.35l6.75 2.9L12 4.75Z"></path><path d="M12 4.75v11.6"></path></svg>
                 </button>
               </div>
             </div>
 
+            <div class="scene-risk-bar" data-scene-risk="" hidden="" data-zh="首发版本的外部发送、共享写入、推送和发布仅生成草稿。" data-en="In the initial release, external sends, shared writes, pushes, and publishing remain draft-only.">首发版本的外部发送、共享写入、推送和发布仅生成草稿。</div>
+
             <div class="context-palette" data-context-palette="" hidden="" data-od-id="context-search-panel">
               <label class="visually-hidden" for="context-search" data-zh="搜索上下文" data-en="Search context">搜索上下文</label>
               <input id="context-search" type="search" data-context-search="" placeholder="搜索文件、会话或工作空间" data-placeholder-zh="搜索文件、会话或工作空间" data-placeholder-en="Search files, conversations, or workspaces">
               <div class="context-list">
-                <button type="button" data-context-item="" data-kind="file" data-label="desktop-command.html"><span>文件</span><strong>desktop-command.html</strong><em>当前新建任务页面</em></button>
-                <button type="button" data-context-item="" data-kind="conversation" data-label="项目交付清单"><span>会话</span><strong>项目交付清单</strong><em>验收点、负责人和风险记录</em></button>
-                <button type="button" data-context-item="" data-kind="workspace" data-label="Agent 小队交付空间"><span>空间</span><strong>Agent 小队交付空间</strong><em>默认创建新小队任务的位置</em></button>
-                <button type="button" data-context-item="" data-kind="agent" data-label="产品审阅智能体"><span>智能体</span><strong>产品审阅智能体</strong><em>引用左侧智能体配置</em></button>
+                <button type="button" data-context-item="" data-scenes="office" data-kind="document" data-label="项目周报素材"><span>文档</span><strong>项目周报素材</strong><em>会议记录、进度与风险来源</em></button>
+                <button type="button" data-context-item="" data-scenes="office" data-kind="calendar" data-label="本周日历"><span>日历</span><strong>本周日历</strong><em>会议、参会人和时间范围</em></button>
+                <button type="button" data-context-item="" data-scenes="office" data-kind="knowledge" data-label="产品知识库"><span>知识库</span><strong>产品知识库</strong><em>术语、历史决策和项目约束</em></button>
+                <button type="button" data-context-item="" data-scenes="code" data-kind="workspace" data-label="当前代码工作区"><span>工作区</span><strong>当前代码工作区</strong><em>仓库、分支和项目规则</em></button>
+                <button type="button" data-context-item="" data-scenes="code" data-kind="issue" data-label="Issue 与 PR"><span>Issue/PR</span><strong>Issue 与 PR</strong><em>需求、审阅范围和远端证据</em></button>
+                <button type="button" data-context-item="" data-scenes="code" data-kind="log" data-label="测试与运行日志"><span>日志</span><strong>测试与运行日志</strong><em>失败证据和验证记录</em></button>
+                <button type="button" data-context-item="" data-scenes="design" data-kind="brief" data-label="设计 Brief"><span>Brief</span><strong>设计 Brief</strong><em>目标、受众、约束和验收口径</em></button>
+                <button type="button" data-context-item="" data-scenes="design" data-kind="figma" data-label="Figma 目标节点"><span>Figma</span><strong>Figma 目标节点</strong><em>页面、组件和当前设计系统</em></button>
+                <button type="button" data-context-item="" data-scenes="design" data-kind="image" data-label="品牌与参考图"><span>图片</span><strong>品牌与参考图</strong><em>视觉语气、品牌约束和灵感参考</em></button>
               </div>
             </div>
 
@@ -107,21 +135,22 @@
               <label class="visually-hidden" for="slash-search" data-zh="搜索 Skill 和 MCP" data-en="Search Skill and MCP">搜索 Skill 和 MCP</label>
               <input id="slash-search" type="search" data-slash-search="" placeholder="搜索 Skill 或 MCP，例如 页面审阅、Filesystem" data-placeholder-zh="搜索 Skill 或 MCP，例如 页面审阅、Filesystem" data-placeholder-en="Search Skill or MCP, e.g. page review, Filesystem">
               <div class="slash-list">
-                <button type="button" data-slash-item="" data-kind="skill" data-label="页面审阅 Skill"><span>Skill</span><strong>页面审阅 Skill</strong><em>检查层级、文案、交互和验收点</em></button>
-                <button type="button" data-slash-item="" data-kind="skill" data-label="文档整理 Skill"><span>Skill</span><strong>文档整理 Skill</strong><em>整理会议、需求和交付说明</em></button>
-                <button type="button" data-slash-item="" data-kind="skill" data-label="交付检查 Skill"><span>Skill</span><strong>交付检查 Skill</strong><em>生成测试点、风险和上线清单</em></button>
-                <button type="button" data-slash-item="" data-kind="mcp" data-label="Filesystem MCP"><span>MCP</span><strong>Filesystem MCP</strong><em>读取和写入当前项目文件</em></button>
-                <button type="button" data-slash-item="" data-kind="mcp" data-label="Screenshot MCP"><span>MCP</span><strong>Screenshot MCP</strong><em>渲染页面并做视觉核验</em></button>
-                <button type="button" data-slash-item="" data-kind="mcp" data-label="Calendar MCP"><span>MCP</span><strong>Calendar MCP</strong><em>读取日程并生成会议准备</em></button>
+                <button type="button" data-slash-item="" data-scenes="office" data-kind="skill" data-label="文档整理 Skill"><span>Skill</span><strong>文档整理 Skill</strong><em>整理资料并生成办公成果</em></button>
+                <button type="button" data-slash-item="" data-scenes="office" data-kind="mcp" data-label="Calendar MCP"><span>MCP</span><strong>Calendar MCP</strong><em>读取日程并准备协同草稿</em></button>
+                <button type="button" data-slash-item="" data-scenes="code" data-kind="skill" data-label="代码审阅 Skill"><span>Skill</span><strong>代码审阅 Skill</strong><em>按证据和严重程度输出发现</em></button>
+                <button type="button" data-slash-item="" data-scenes="code" data-kind="mcp" data-label="Filesystem MCP"><span>MCP</span><strong>Filesystem MCP</strong><em>读取和写入当前项目文件</em></button>
+                <button type="button" data-slash-item="" data-scenes="design" data-kind="skill" data-label="页面审阅 Skill"><span>Skill</span><strong>页面审阅 Skill</strong><em>检查层级、状态、响应式和可访问性</em></button>
+                <button type="button" data-slash-item="" data-scenes="design" data-kind="mcp" data-label="Figma MCP"><span>MCP</span><strong>Figma MCP</strong><em>读取或写入已授权的设计文件</em></button>
+                <button type="button" data-slash-item="" data-scenes="design" data-kind="skill" data-label="Image Generation"><span>Skill</span><strong>Image Generation</strong><em>生成可预览的视觉资产</em></button>
               </div>
             </div>
 
             <div class="composer-state-row">
               <div class="workspace-picker" data-od-id="workspace-picker">
                 <select data-workspace-select="" aria-label="选择工作空间">
-                  <option value="product" data-zh="Agent 小队交付空间" data-en="Agent team delivery">Agent 小队交付空间</option>
-                  <option value="team" data-zh="办公室权限空间" data-en="Office access">办公室权限空间</option>
-                  <option value="agents" data-zh="智能体能力库" data-en="Agent capability library">智能体能力库</option>
+                  <option value="crewon" data-zh="CrewON 工作空间" data-en="CrewON workspace">CrewON 工作空间</option>
+                  <option value="project" data-zh="项目工作空间" data-en="Project workspace">项目工作空间</option>
+                  <option value="capabilities" data-zh="能力实验空间" data-en="Capability lab">能力实验空间</option>
                 </select>
               </div>
               <span id="composer-status" class="composer-state" role="status" aria-live="polite" data-composer-status="" data-zh="空闲 · 等待输入" data-en="Idle · waiting for input">空闲 · 等待输入</span>
@@ -1063,7 +1092,7 @@
         </section>
 
         <div id="command-log" class="sr-log" aria-live="polite">
-          <div class="log-line"><div class="log-top"><strong>Crewon</strong><span class="mono">14:32</span></div><p data-zh="已载入 PRD 能力：Agent 小队、Workflow、Stage Gate、Channel、Skill/MCP 与 Harness 审计。" data-en="Loaded PRD capabilities: Agent team, Workflow, Stage Gate, Channel, Skill/MCP, and Harness audit.">已载入 PRD 能力：Agent 小队、Workflow、Stage Gate、Channel、Skill/MCP 与 Harness 审计。</p></div>
+          <div class="log-line"><div class="log-top"><strong>Crewon</strong><span class="mono">14:32</span></div><p data-zh="已载入三场景预设；默认由 CrewON 单 Agent 执行，也可选择已有智能体或小队。" data-en="Loaded three scene presets; CrewON single-agent execution is the default, with existing agents and teams selectable.">已载入三场景预设；默认由 CrewON 单 Agent 执行，也可选择已有智能体或小队。</p></div>
         </div>
       </section>
     </section>

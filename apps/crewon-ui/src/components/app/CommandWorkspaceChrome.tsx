@@ -23,6 +23,7 @@ import type {
   CommandHomeSlots,
   CommandPaletteItem,
   CommandShellView,
+  SlotItem,
 } from "./commandWorkspaceState";
 import { classNames } from "./commandWorkspaceUtils";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
@@ -32,6 +33,7 @@ import {
 } from "../auth/AgentPlatformAuthGate";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
+  action?: "attach-files";
   command?: ComposerSlashCommand;
 };
 
@@ -180,7 +182,7 @@ export function CommandSidebar({
   slots: CommandHomeSlots;
   onCloseSearch: () => void;
   onCreateWorkspace?: (cwd: string) => void;
-  onNewThread: () => void;
+  onNewThread: (workspaceCwd: string | null) => void;
   onOpenLinkedThread: (threadId: string) => void;
   onQueryChange: (query: string) => void;
   onSwitchView: (view: CommandShellView) => void;
@@ -200,6 +202,22 @@ export function CommandSidebar({
   const standaloneThreads = linkedThreads
     .filter((thread) => !thread.cwd)
     .slice(0, 5);
+  const otherWorkspaceGroups = Array.from(
+    linkedThreads.reduce((groups, thread) => {
+      const threadCwd = thread.cwd?.trim();
+      if (!threadCwd || threadCwd === cwd) {
+        return groups;
+      }
+      const group = groups.get(threadCwd) ?? [];
+      if (group.length < 5) {
+        group.push(thread);
+      }
+      groups.set(threadCwd, group);
+      return groups;
+    }, new Map<string, CommandLinkedThread[]>()),
+  )
+    .slice(0, 8)
+    .map(([path, threads]) => ({ path, threads }));
 
   useEffect(() => {
     setWorkspaceDraft(cwd);
@@ -388,25 +406,29 @@ export function CommandSidebar({
       </a>
 
       <nav className="sidebar-nav" data-od-id="desktop-nav">
-        {shellNavItems
-          .filter((item) => item.key !== "command")
-          .map((item) => (
-            <button
-              aria-current={activeView === item.key ? "page" : undefined}
-              className={classNames(activeView === item.key && "active")}
-              data-nav-key={item.key}
-              data-shell-view-target={item.key}
-              key={item.key}
-              type="button"
-              onClick={() => onSwitchView(item.key)}
-            >
-              <span className="nav-glyph" aria-hidden="true">
-                {viewIcons[item.key]}
-              </span>
-              <strong>{item.label}</strong>
-              {item.meta ? <em>{item.meta}</em> : null}
-            </button>
-          ))}
+        {shellNavItems.map((item) => (
+          <button
+            aria-current={activeView === item.key ? "page" : undefined}
+            className={classNames(activeView === item.key && "active")}
+            data-nav-key={item.key}
+            data-shell-view-target={item.key}
+            key={item.key}
+            type="button"
+            onClick={() => {
+              if (item.key === "command") {
+                onNewThread(null);
+                return;
+              }
+              onSwitchView(item.key);
+            }}
+          >
+            <span className="nav-glyph" aria-hidden="true">
+              {viewIcons[item.key]}
+            </span>
+            <strong>{item.label}</strong>
+            {item.meta ? <em>{item.meta}</em> : null}
+          </button>
+        ))}
         <button
           aria-current={activeView === "knowledge" ? "page" : undefined}
           className={classNames(activeView === "knowledge" && "active")}
@@ -492,7 +514,7 @@ export function CommandSidebar({
                 <button
                   aria-label="新建会话"
                   type="button"
-                  onClick={onNewThread}
+                  onClick={() => onNewThread(cwd)}
                 >
                   <SquarePen aria-hidden="true" />
                 </button>
@@ -527,11 +549,61 @@ export function CommandSidebar({
               )}
             </div>
           </div>
-        ) : standaloneThreads.length === 0 ? (
+        ) : standaloneThreads.length === 0 &&
+          otherWorkspaceGroups.length === 0 ? (
           <p className="sidebar-empty-hint workspace-empty-hint">
             当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。
           </p>
         ) : null}
+        {otherWorkspaceGroups.map((group, index) => {
+          const name = workspaceName(group.path);
+          return (
+            <div className="space-node real-workspace-node" key={group.path}>
+              <div className="space-title real-workspace-title">
+                <button
+                  aria-controls={`other-workspace-thread-list-${index}`}
+                  aria-label={`切换到工作空间 ${name}`}
+                  className="workspace-title-toggle"
+                  type="button"
+                  onClick={() => onCreateWorkspace?.(group.path)}
+                >
+                  <Folder aria-hidden="true" />
+                  <strong>{name}</strong>
+                </button>
+                <span className="workspace-row-actions">
+                  <button
+                    aria-label={`在工作空间 ${name} 中新建会话`}
+                    type="button"
+                    onClick={() => onNewThread(group.path)}
+                  >
+                    <SquarePen aria-hidden="true" />
+                  </button>
+                </span>
+              </div>
+              <div
+                className="conversation-list recent-thread-list"
+                id={`other-workspace-thread-list-${index}`}
+              >
+                {group.threads.map((thread) => (
+                  <button
+                    className={classNames(
+                      "conversation-item linked-conversation-item recent-thread-item",
+                      selectedLinkedThreadId === thread.id && "active",
+                    )}
+                    data-linked-thread-id={thread.id}
+                    key={thread.id}
+                    title={thread.preview}
+                    type="button"
+                    onClick={() => onOpenLinkedThread(thread.id)}
+                  >
+                    <span>{thread.title}</span>
+                    <em>{thread.updatedLabel}</em>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
         {standaloneThreads.length > 0 ? (
           <div
             className={classNames(
@@ -554,7 +626,7 @@ export function CommandSidebar({
                 <button
                   aria-label="新建无工作空间会话"
                   type="button"
-                  onClick={onNewThread}
+                  onClick={() => onNewThread(null)}
                 >
                   <SquarePen aria-hidden="true" />
                 </button>
@@ -605,7 +677,7 @@ export function Palette({
   id: string;
   inputId: string;
   items: PaletteItemWithCommand[];
-  kind: "context" | "slash";
+  kind: "add" | "context" | "slash";
   open: boolean;
   placeholder: string;
   query: string;
@@ -613,11 +685,62 @@ export function Palette({
   onQueryChange: (query: string) => void;
   onSelect: (item: PaletteItemWithCommand) => void;
 }) {
+  const addGroups =
+    kind === "add"
+      ? [
+          {
+            id: "files",
+            label: "文件",
+            items: items.filter((item) => item.kind === "file"),
+          },
+          {
+            id: "knowledge",
+            label: "知识库",
+            items: items.filter((item) => item.kind === "knowledge"),
+          },
+          {
+            id: "skills",
+            label: "Skill",
+            items: items.filter((item) => item.kind === "skill"),
+          },
+          {
+            id: "mcp",
+            label: "MCP",
+            items: items.filter((item) => item.kind === "mcp"),
+          },
+        ].filter((group) => group.items.length > 0)
+      : [];
+
+  function renderItem(item: PaletteItemWithCommand) {
+    return (
+      <button
+        data-context-item={kind === "context" ? "" : undefined}
+        data-kind={item.kind}
+        data-label={item.title}
+        data-slash-item={kind === "slash" ? "" : undefined}
+        key={`${item.kind}-${item.title}-${item.token ?? ""}`}
+        type="button"
+        onClick={() => onSelect(item)}
+      >
+        <span>{item.label}</span>
+        <strong>{item.title}</strong>
+        <em>{item.detail}</em>
+      </button>
+    );
+  }
+
   return (
     <div
-      className={kind === "context" ? "context-palette" : "slash-palette"}
+      className={
+        kind === "slash"
+          ? "slash-palette"
+          : kind === "add"
+            ? "context-palette add-palette"
+            : "context-palette"
+      }
       data-context-palette={kind === "context" ? "" : undefined}
       data-od-id={id}
+      data-composer-palette=""
       data-slash-palette={kind === "slash" ? "" : undefined}
       hidden={!open}
       id={id}
@@ -641,22 +764,15 @@ export function Palette({
           }
         }}
       />
-      <div className={kind === "context" ? "context-list" : "slash-list"}>
-        {items.map((item) => (
-          <button
-            data-context-item={kind === "context" ? "" : undefined}
-            data-kind={item.kind}
-            data-label={item.title}
-            data-slash-item={kind === "slash" ? "" : undefined}
-            key={`${item.kind}-${item.title}-${item.token ?? ""}`}
-            type="button"
-            onClick={() => onSelect(item)}
-          >
-            <span>{item.label}</span>
-            <strong>{item.title}</strong>
-            <em>{item.detail}</em>
-          </button>
-        ))}
+      <div className={kind === "slash" ? "slash-list" : "context-list"}>
+        {kind === "add"
+          ? addGroups.map((group) => (
+              <section className="add-palette-group" key={group.id}>
+                <div className="add-palette-group-label">{group.label}</div>
+                {group.items.map(renderItem)}
+              </section>
+            ))
+          : items.map(renderItem)}
         {items.length === 0 ? (
           <button disabled type="button">
             <span>空</span>
@@ -671,36 +787,32 @@ export function Palette({
 
 export function ResourceDock({
   platformState,
+  resources,
   slots,
 }: {
   platformState: PlatformLoadState;
+  resources?: SlotItem[];
   slots: CommandHomeSlots;
 }) {
-  const resources = [
+  const visibleResources = resources ?? [
     slots.agent,
     slots.skills[0],
     slots.mcps[0],
     slots.knowledge,
     slots.workflow,
   ];
+  if (platformState !== "ready" || visibleResources.length === 0) {
+    return null;
+  }
   return (
     <section className="resource-dock" data-od-id="capability-dock">
       <header>
         <strong>Agent / Skill / MCP / Knowledge / Workflow</strong>
-        <span>
-          {platformState === "ready"
-            ? "资源入口已就绪"
-            : platformState === "fallback"
-              ? "可选资源服务未启动，对话后端可用"
-              : "同步中"}
-        </span>
+        <span>资源入口已就绪</span>
       </header>
       <div className="resource-grid">
-        {resources.map((resource, index) => (
-          <article
-            className="resource-card"
-            key={`${resource.value}-${index}`}
-          >
+        {visibleResources.map((resource, index) => (
+          <article className="resource-card" key={`${resource.value}-${index}`}>
             <span>{resource.label}</span>
             <strong>{resource.title}</strong>
             <p>{resource.detail}</p>

@@ -71,6 +71,7 @@ crewon-feedback = { workspace = true }
 crewon-rmcp-client = { workspace = true }
 crewon-rollout = { workspace = true }
 crewon-sandboxing = { workspace = true }
+crewon-scene-runtime = { workspace = true }
 crewon-state = { workspace = true }
 crewon-thread-store = { workspace = true }
 crewon-tools = { workspace = true }

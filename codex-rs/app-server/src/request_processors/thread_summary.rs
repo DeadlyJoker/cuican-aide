@@ -31,6 +31,7 @@ pub(crate) async fn read_summary_from_rollout(
     let SessionMetaLine {
         meta: session_meta,
         git,
+        scene_runtime: _,
     } = session_meta_line;
     let mut session_meta = session_meta;
     session_meta.source = with_thread_spawn_agent_metadata(

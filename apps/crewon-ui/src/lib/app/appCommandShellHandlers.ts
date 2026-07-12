@@ -6,6 +6,7 @@ type CommandShellHandlersParams = {
   sendMessageInNewThread: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
+    workspaceCwd?: string | null,
   ) => void | Promise<void>;
   setComposerFocusSignal: (updater: (signal: number) => number) => void;
   setDraftWorkspaceCwd: (cwd: string | null) => void;
@@ -24,18 +25,19 @@ export function createAppCommandShellHandlers({
   startDraftThread,
 }: CommandShellHandlersParams) {
   return {
-    changeCommandShellWorkspace(nextCwd: string) {
-      const trimmedCwd = nextCwd.trim();
-      if (!trimmedCwd) {
-        return;
-      }
+    changeCommandShellWorkspace(nextCwd: string | null) {
+      const trimmedCwd = nextCwd?.trim() || null;
       setDraftWorkspaceCwd(trimmedCwd);
       setSelectedThreadId(null);
       setWorkMode("code");
       setComposerFocusSignal((signal) => signal + 1);
       if (typeof window !== "undefined") {
         const nextUrl = new URL(window.location.href);
-        nextUrl.searchParams.set("cwd", trimmedCwd);
+        if (trimmedCwd) {
+          nextUrl.searchParams.set("cwd", trimmedCwd);
+        } else {
+          nextUrl.searchParams.delete("cwd");
+        }
         nextUrl.hash = "#view-command";
         window.history.replaceState(
           null,
@@ -54,11 +56,13 @@ export function createAppCommandShellHandlers({
     sendCommandShellMessage(
       text: string,
       threadSettings?: ThreadRuntimeSettings,
+      workspaceCwd?: string | null,
     ) {
       setSelectedThreadId(null);
-      void sendMessageInNewThread(text, threadSettings);
+      void sendMessageInNewThread(text, threadSettings, workspaceCwd);
     },
     startCommandShellDraftThread() {
+      setDraftWorkspaceCwd(null);
       setWorkMode("code");
       startDraftThread();
       if (typeof window !== "undefined") {

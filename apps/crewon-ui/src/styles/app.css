@@ -12560,11 +12560,11 @@ button.library-item:hover .library-card-chevron {
 }
 
 .screen-shell.command-screen .permission-dropdown select {
-  max-width: 138px;
+  max-width: 108px;
 }
 
 .screen-shell.command-screen .permission-dropdown .select-trigger {
-  max-width: 138px;
+  max-width: 108px;
 }
 
 .screen-shell.command-screen .agent-dropdown select {

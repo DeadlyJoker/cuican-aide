@@ -470,6 +470,13 @@
       ],
       "type": "string"
     },
+    "ExternalActionPolicy": {
+      "enum": [
+        "draft-only",
+        "confirm-each"
+      ],
+      "type": "string"
+    },
     "FileUpdateChange": {
       "properties": {
         "diff": {
@@ -533,6 +540,13 @@
         "low",
         "high",
         "original"
+      ],
+      "type": "string"
+    },
+    "LocalWritePolicy": {
+      "enum": [
+        "read-only",
+        "workspace-write"
       ],
       "type": "string"
     },
@@ -820,6 +834,92 @@
           "type": "object"
         }
       ]
+    },
+    "SceneDeliverable": {
+      "enum": [
+        "conversation",
+        "document",
+        "table",
+        "action-list",
+        "message-draft",
+        "knowledge-entry",
+        "implementation-plan",
+        "code-change",
+        "code-review",
+        "design-directions",
+        "design-artifact",
+        "design-review",
+        "handoff-spec"
+      ],
+      "type": "string"
+    },
+    "SceneExecutionStrategy": {
+      "enum": [
+        "single",
+        "team"
+      ],
+      "type": "string"
+    },
+    "SceneExecutionTargetKind": {
+      "enum": [
+        "crewon",
+        "agent",
+        "team"
+      ],
+      "type": "string"
+    },
+    "SceneId": {
+      "enum": [
+        "office",
+        "code",
+        "design"
+      ],
+      "type": "string"
+    },
+    "SceneInteractionMode": {
+      "enum": [
+        "auto",
+        "organize",
+        "write",
+        "analyze",
+        "coordinate",
+        "ask",
+        "plan",
+        "implement",
+        "review",
+        "explore",
+        "refine",
+        "produce",
+        "inspect"
+      ],
+      "type": "string"
+    },
+    "SceneTaskContract": {
+      "properties": {
+        "deliverable": {
+          "$ref": "#/definitions/SceneDeliverable"
+        },
+        "externalActionPolicy": {
+          "$ref": "#/definitions/ExternalActionPolicy"
+        },
+        "localWritePolicy": {
+          "$ref": "#/definitions/LocalWritePolicy"
+        },
+        "mode": {
+          "$ref": "#/definitions/SceneInteractionMode"
+        },
+        "scene": {
+          "$ref": "#/definitions/SceneId"
+        }
+      },
+      "required": [
+        "deliverable",
+        "externalActionPolicy",
+        "localWritePolicy",
+        "mode",
+        "scene"
+      ],
+      "type": "object"
     },
     "SessionSource": {
       "oneOf": [
@@ -1834,6 +1934,47 @@
           "type": "object"
         }
       ]
+    },
+    "ThreadSceneRuntime": {
+      "properties": {
+        "contract": {
+          "$ref": "#/definitions/SceneTaskContract"
+        },
+        "executionStrategy": {
+          "$ref": "#/definitions/SceneExecutionStrategy"
+        },
+        "executionTargetKind": {
+          "$ref": "#/definitions/SceneExecutionTargetKind"
+        },
+        "executionTargetToken": {
+          "type": "string"
+        },
+        "instructionVersion": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "presetVersion": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "version": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "contract",
+        "executionStrategy",
+        "executionTargetKind",
+        "executionTargetToken",
+        "instructionVersion",
+        "presetVersion",
+        "version"
+      ],
+      "type": "object"
     },
     "ThreadSource": {
       "type": "string"

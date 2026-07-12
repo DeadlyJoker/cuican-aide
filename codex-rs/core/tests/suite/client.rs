@@ -499,6 +499,7 @@ async fn resume_replays_legacy_js_repl_image_rollout_shapes() {
                     ..Default::default()
                 },
                 git: None,
+                scene_runtime: None,
             }),
         },
         RolloutLine {
@@ -630,6 +631,7 @@ async fn resume_replays_image_tool_outputs_with_detail() {
                     ..Default::default()
                 },
                 git: None,
+                scene_runtime: None,
             }),
         },
         RolloutLine {

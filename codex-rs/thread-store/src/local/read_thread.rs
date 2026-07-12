@@ -309,10 +309,10 @@ async fn stored_thread_from_sqlite_metadata(
             .flatten()
             .filter(|title| !title.trim().is_empty()),
     };
-    let session_meta = read_session_meta_line(metadata.rollout_path.as_path())
+    let session_meta_line = read_session_meta_line(metadata.rollout_path.as_path())
         .await
-        .ok()
-        .map(|meta_line| meta_line.meta);
+        .ok();
+    let session_meta = session_meta_line.as_ref().map(|meta_line| &meta_line.meta);
     let rollout_path = crewon_rollout::plain_rollout_path(metadata.rollout_path.as_path());
     let forked_from_id = session_meta.as_ref().and_then(|meta| meta.forked_from_id);
     let parent_thread_id = session_meta.as_ref().and_then(|meta| meta.parent_thread_id);
@@ -325,7 +325,12 @@ async fn stored_thread_from_sqlite_metadata(
         permission_profile_from_metadata_value(&metadata.sandbox_policy, metadata.cwd.as_path());
     StoredThread {
         thread_id: metadata.id,
-        extra_config: None,
+        extra_config: session_meta_line
+            .and_then(|meta_line| meta_line.scene_runtime)
+            .map(|scene_runtime| crate::ExtraConfig {
+                scene_runtime: Some(scene_runtime),
+                scene_execution_target_profile: None,
+            }),
         rollout_path: Some(rollout_path),
         forked_from_id,
         parent_thread_id,
@@ -391,7 +396,13 @@ fn stored_thread_from_meta_line(
     let rollout_path = crewon_rollout::plain_rollout_path(path.as_path());
     StoredThread {
         thread_id: meta_line.meta.id,
-        extra_config: None,
+        extra_config: meta_line
+            .scene_runtime
+            .clone()
+            .map(|scene_runtime| crate::ExtraConfig {
+                scene_runtime: Some(scene_runtime),
+                scene_execution_target_profile: None,
+            }),
         rollout_path: Some(rollout_path),
         forked_from_id: meta_line.meta.forked_from_id,
         parent_thread_id: meta_line.meta.parent_thread_id,

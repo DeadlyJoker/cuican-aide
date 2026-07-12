@@ -34,13 +34,17 @@ export function selectedThreadWorkspaceCwd({
       : "";
   }
 
+  if (draftWorkspaceCwd === null) {
+    return "";
+  }
+
   return preferredBackendCwd(draftWorkspaceCwd, threads);
 }
 
 export function useAppThreadSelection({
   activeTurnByThread,
   connectionState,
-  draftWorkspaceCwd = null,
+  draftWorkspaceCwd,
   newDraftThreadLabel,
   selectedThreadId,
   threads,

@@ -1964,6 +1964,7 @@ stream_max_retries = 0
                 "payload": serde_json::to_value(SessionMetaLine {
                     meta: session_meta,
                     git: None,
+                    scene_runtime: None,
                 })?,
             })
             .to_string(),

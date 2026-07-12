@@ -57,8 +57,15 @@ pub struct ThreadPersistenceMetadata {
 }
 
 /// Extra configuration fields for a thread.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExtraConfig {}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtraConfig {
+    /// Server-resolved scene identity for this thread.
+    pub scene_runtime: Option<crewon_protocol::scene::SceneThreadMetadata>,
+    /// Current execution-target definition resolved for model context.
+    /// Rebuilt from the persisted target reference on resume and fork.
+    #[serde(skip)]
+    pub scene_execution_target_profile: Option<crewon_protocol::scene::SceneExecutionTargetProfile>,
+}
 
 /// Parameters required to create a persisted thread.
 #[derive(Clone, Debug, Serialize, Deserialize)]

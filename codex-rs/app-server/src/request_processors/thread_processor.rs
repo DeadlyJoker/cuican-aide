@@ -1016,6 +1016,7 @@ impl ThreadRequestProcessor {
             developer_instructions,
             dynamic_tools,
             selected_capability_roots,
+            scene,
             mock_experimental_field: _mock_experimental_field,
             experimental_raw_events,
             personality,
@@ -1073,6 +1074,7 @@ impl ThreadRequestProcessor {
                 typesafe_overrides,
                 dynamic_tools,
                 selected_capability_roots.unwrap_or_default(),
+                scene,
                 session_start_source,
                 thread_source.map(Into::into),
                 environment_selections,
@@ -1146,6 +1148,7 @@ impl ThreadRequestProcessor {
         typesafe_overrides: ConfigOverrides,
         dynamic_tools: Option<Vec<ApiDynamicToolSpec>>,
         selected_capability_roots: Vec<SelectedCapabilityRoot>,
+        scene: Option<crewon_app_server_protocol::ThreadSceneSelectionParams>,
         session_start_source: Option<crewon_app_server_protocol::ThreadStartSource>,
         thread_source: Option<crewon_protocol::protocol::ThreadSource>,
         environments: Option<Vec<TurnEnvironmentSelection>>,
@@ -1159,7 +1162,16 @@ impl ThreadRequestProcessor {
             .load_with_overrides(config_overrides.clone(), typesafe_overrides.clone())
             .await
             .map_err(|err| config_load_error(&err))?;
-
+        let scene_runtime = match scene {
+            Some(scene) => Some(
+                super::scene_runtime::resolve_thread_scene(
+                    config.cwd.to_string_lossy().as_ref(),
+                    scene,
+                )
+                .await?,
+            ),
+            None => None,
+        };
         // The user may have requested WorkspaceWrite or DangerFullAccess via
         // the command line, though in the process of deriving the Config, it
         // could be downgraded to ReadOnly (perhaps there is no sandbox
@@ -1223,6 +1235,15 @@ impl ThreadRequestProcessor {
                 )
                 .await
                 .map_err(|err| config_load_error(&err))?;
+        }
+        if let Some(scene_runtime) = scene_runtime.as_ref() {
+            let cwd = config.cwd.to_string_lossy().into_owned();
+            super::scene_runtime::hydrate_thread_scene_config(
+                &cwd,
+                scene_runtime.clone(),
+                &mut config,
+            )
+            .await?;
         }
 
         let environments = environments.unwrap_or_else(|| {
@@ -1375,6 +1396,7 @@ impl ThreadRequestProcessor {
             sandbox,
             active_permission_profile,
             reasoning_effort: config_snapshot.reasoning_effort,
+            scene_runtime: scene_runtime.map(Into::into),
         };
         let notif = thread_started_notification(thread);
         listener_task_context
@@ -3262,6 +3284,7 @@ impl ThreadRequestProcessor {
                 return Ok(());
             }
         };
+        let persisted_scene_runtime = thread_history.get_scene_runtime();
 
         let history_cwd = thread_history.session_cwd();
         let runtime_workspace_roots = runtime_workspace_roots.map(resolve_runtime_workspace_roots);
@@ -3287,7 +3310,7 @@ impl ThreadRequestProcessor {
         .await;
 
         // Derive a Config using the same logic as new conversation, honoring overrides if provided.
-        let config = match self
+        let mut config = match self
             .config_manager
             .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
             .await
@@ -3299,6 +3322,27 @@ impl ThreadRequestProcessor {
                 return Ok(());
             }
         };
+        if let Some(scene_runtime) = persisted_scene_runtime {
+            let cwd = config.cwd.to_string_lossy();
+            let scene_runtime =
+                match super::scene_runtime::revalidate_thread_scene(cwd.as_ref(), scene_runtime)
+                    .await
+                {
+                    Ok(scene_runtime) => scene_runtime,
+                    Err(error) => {
+                        self.outgoing.send_error(request_id, error).await;
+                        return Ok(());
+                    }
+                };
+            let cwd = config.cwd.to_string_lossy().into_owned();
+            if let Err(error) =
+                super::scene_runtime::hydrate_thread_scene_config(&cwd, scene_runtime, &mut config)
+                    .await
+            {
+                self.outgoing.send_error(request_id, error).await;
+                return Ok(());
+            }
+        }
 
         let response_history = thread_history.clone();
 
@@ -3434,6 +3478,7 @@ impl ThreadRequestProcessor {
                     sandbox,
                     active_permission_profile,
                     reasoning_effort: session_configured.reasoning_effort,
+                    scene_runtime: config_snapshot.scene_runtime.map(Into::into),
                     initial_turns_page,
                 };
 
@@ -4006,11 +4051,25 @@ impl ThreadRequestProcessor {
         );
         typesafe_overrides.ephemeral = ephemeral.then_some(true);
         // Derive a Config using the same logic as new conversation, honoring overrides if provided.
-        let config = self
+        let source_history = InitialHistory::Resumed(ResumedHistory {
+            conversation_id: source_thread_id,
+            history: history_items.clone(),
+            rollout_path: source_thread.rollout_path.clone(),
+        });
+        let persisted_scene_runtime = source_history.get_scene_runtime();
+        let mut config = self
             .config_manager
             .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
             .await
             .map_err(|err| config_load_error(&err))?;
+        if let Some(scene_runtime) = persisted_scene_runtime {
+            let cwd = config.cwd.to_string_lossy();
+            let scene_runtime =
+                super::scene_runtime::revalidate_thread_scene(cwd.as_ref(), scene_runtime).await?;
+            let cwd = config.cwd.to_string_lossy().into_owned();
+            super::scene_runtime::hydrate_thread_scene_config(&cwd, scene_runtime, &mut config)
+                .await?;
+        }
 
         let fallback_model_provider = config.model_provider_id.clone();
 
@@ -4024,11 +4083,7 @@ impl ThreadRequestProcessor {
             .fork_thread_from_history(
                 ForkSnapshot::Interrupted,
                 config,
-                InitialHistory::Resumed(ResumedHistory {
-                    conversation_id: source_thread_id,
-                    history: history_items.clone(),
-                    rollout_path: source_thread.rollout_path.clone(),
-                }),
+                source_history,
                 thread_source.map(Into::into),
                 self.request_trace_context(&request_id).await,
             )
@@ -4149,6 +4204,7 @@ impl ThreadRequestProcessor {
             sandbox,
             active_permission_profile,
             reasoning_effort: session_configured.reasoning_effort,
+            scene_runtime: config_snapshot.scene_runtime.map(Into::into),
         };
 
         let notif = thread_started_notification(thread);

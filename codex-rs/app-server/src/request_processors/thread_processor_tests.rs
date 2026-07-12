@@ -765,6 +765,7 @@ mod thread_processor_behavior_tests {
             forked_from_thread_id: None,
             parent_thread_id: None,
             thread_source: None,
+            scene_runtime: None,
         };
 
         assert_eq!(
@@ -999,6 +1000,7 @@ mod thread_processor_behavior_tests {
             item: RolloutItem::SessionMeta(SessionMetaLine {
                 meta: session_meta.clone(),
                 git: None,
+                scene_runtime: None,
             }),
         };
 
@@ -1065,6 +1067,7 @@ mod thread_processor_behavior_tests {
             item: RolloutItem::SessionMeta(SessionMetaLine {
                 meta: session_meta,
                 git: None,
+                scene_runtime: None,
             }),
         };
         fs::write(&path, format!("{}\n", serde_json::to_string(&line)?))?;
@@ -1106,6 +1109,7 @@ mod thread_processor_behavior_tests {
             item: RolloutItem::SessionMeta(SessionMetaLine {
                 meta: session_meta,
                 git: None,
+                scene_runtime: None,
             }),
         };
         fs::write(&path, format!("{}\n", serde_json::to_string(&line)?))?;

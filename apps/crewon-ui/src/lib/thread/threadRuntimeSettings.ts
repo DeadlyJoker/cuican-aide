@@ -7,6 +7,8 @@ export type CommandComposerPermission =
   | "full-access"
   | "request-approval";
 
+export type CommandExecutionIntent = "goal" | "none" | "plan";
+
 export type CommandModelOption = {
   detail?: string;
   isDefault?: boolean;
@@ -18,6 +20,30 @@ export type ThreadRuntimeSettings = {
   approvalPolicy?: AskForApproval | null;
   model?: string | null;
   sandboxMode?: SandboxMode | null;
+  scene?: ThreadSceneSelection;
+  executionIntent?: CommandExecutionIntent;
+};
+
+export type ThreadSceneSelection = {
+  sceneId: "office" | "code" | "design";
+  mode?:
+    | "auto"
+    | "organize"
+    | "write"
+    | "analyze"
+    | "coordinate"
+    | "ask"
+    | "plan"
+    | "implement"
+    | "review"
+    | "explore"
+    | "refine"
+    | "produce"
+    | "inspect";
+  executionTarget:
+    | { kind: "crewon" }
+    | { kind: "agent"; id: string }
+    | { kind: "team"; id: string };
 };
 
 export const fallbackCommandModelOptions: CommandModelOption[] = [
@@ -82,14 +108,50 @@ export function commandPermissionRuntimeSettings(
 }
 
 export function commandComposerRuntimeSettings({
+  executionTarget,
   model,
   permission,
+  scene,
+  sceneMode,
+  executionIntent = "none",
 }: {
+  executionTarget?: string;
   model: string;
   permission: CommandComposerPermission;
+  scene?: ThreadSceneSelection["sceneId"];
+  sceneMode?: NonNullable<ThreadSceneSelection["mode"]>;
+  executionIntent?: CommandExecutionIntent;
 }): ThreadRuntimeSettings {
   return {
+    executionIntent,
     model,
+    ...(scene && sceneMode && executionTarget
+      ? {
+          scene: {
+            sceneId: scene,
+            mode: sceneMode,
+            executionTarget: executionTargetSelection(executionTarget),
+          },
+        }
+      : {}),
     ...commandPermissionRuntimeSettings(permission),
   };
+}
+
+function executionTargetSelection(
+  value: string,
+): ThreadSceneSelection["executionTarget"] {
+  if (value === "crewon") {
+    return { kind: "crewon" };
+  }
+  const separator = value.indexOf(":");
+  const kind = value.slice(0, separator);
+  const id = value.slice(separator + 1);
+  if (separator > 0 && id && kind === "agent") {
+    return { kind, id };
+  }
+  if (separator > 0 && id && kind === "team") {
+    return { kind, id };
+  }
+  return { kind: "crewon" };
 }

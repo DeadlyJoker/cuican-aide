@@ -339,6 +339,7 @@ mod tests {
                     multi_agent_version: None,
                 },
                 git: None,
+                scene_runtime: None,
             }),
             "test-provider",
         );
@@ -506,6 +507,7 @@ mod tests {
                     multi_agent_version: None,
                 },
                 git: None,
+                scene_runtime: None,
             }),
             "test-provider",
         );

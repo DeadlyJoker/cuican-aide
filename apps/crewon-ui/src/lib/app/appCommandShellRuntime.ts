@@ -35,17 +35,12 @@ export function commandShellRuntimeState({
     };
   }
 
-  const streamingThreadId =
-    selectedThreadId ??
-    Object.entries(streamingTextByThread).find(
-      ([, text]) => text.trim().length > 0,
-    )?.[0] ??
-    null;
+  const streamingThreadId = selectedThreadId;
   const shellThread = streamingThreadId
-    ? (selectedThread ??
+    ? ((selectedThread?.id === streamingThreadId ? selectedThread : null) ??
       threads.find((thread) => thread.id === streamingThreadId) ??
       null)
-    : selectedThread;
+    : null;
 
   return {
     activeTurnId: streamingThreadId

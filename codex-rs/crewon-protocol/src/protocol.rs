@@ -2482,6 +2482,22 @@ impl InitialHistory {
         }
     }
 
+    pub fn get_scene_runtime(&self) -> Option<crate::scene::SceneThreadMetadata> {
+        match self {
+            InitialHistory::New | InitialHistory::Cleared => None,
+            InitialHistory::Resumed(resumed) => {
+                resumed.history.iter().find_map(|item| match item {
+                    RolloutItem::SessionMeta(meta_line) => meta_line.scene_runtime.clone(),
+                    _ => None,
+                })
+            }
+            InitialHistory::Forked(items) => items.iter().find_map(|item| match item {
+                RolloutItem::SessionMeta(meta_line) => meta_line.scene_runtime.clone(),
+                _ => None,
+            }),
+        }
+    }
+
     pub fn get_resumed_session_sources(&self) -> Option<(SessionSource, Option<ThreadSource>)> {
         let meta = self.get_resumed_session_meta()?;
         Some((meta.source.clone(), meta.thread_source.clone()))
@@ -2881,6 +2897,8 @@ pub struct SessionMetaLine {
     pub meta: SessionMeta,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub git: Option<GitInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene_runtime: Option<crate::scene::SceneThreadMetadata>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, TS)]
@@ -5215,6 +5233,7 @@ mod tests {
                 ..Default::default()
             },
             git: None,
+            scene_runtime: None,
         };
         let newer_meta_without_version = SessionMetaLine {
             meta: SessionMeta {
@@ -5223,6 +5242,7 @@ mod tests {
                 ..Default::default()
             },
             git: None,
+            scene_runtime: None,
         };
 
         assert_eq!(

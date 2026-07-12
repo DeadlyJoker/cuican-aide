@@ -34,7 +34,11 @@ describe("thread runtime settings", () => {
     expect(
       commandModelOptionsFromModels([
         model({ model: "gpt-5.5", displayName: "GPT 5.5" }),
-        model({ model: "gpt-5.6-sol", displayName: "GPT 5.6 Sol", isDefault: true }),
+        model({
+          model: "gpt-5.6-sol",
+          displayName: "GPT 5.6 Sol",
+          isDefault: true,
+        }),
         model({ model: "gpt-5.5", displayName: "duplicate" }),
         model({ model: "hidden-model", hidden: true }),
       ]),
@@ -91,6 +95,7 @@ describe("thread runtime settings", () => {
       }),
     ).toEqual({
       approvalPolicy: "on-failure",
+      executionIntent: "none",
       model: "gpt-5.6-sol",
       sandboxMode: "workspace-write",
     });
@@ -101,6 +106,7 @@ describe("thread runtime settings", () => {
       }),
     ).toEqual({
       approvalPolicy: "on-request",
+      executionIntent: "none",
       model: "gpt-5.5",
       sandboxMode: "workspace-write",
     });
@@ -111,8 +117,37 @@ describe("thread runtime settings", () => {
       }),
     ).toEqual({
       approvalPolicy: "never",
+      executionIntent: "none",
       model: "gpt-5",
       sandboxMode: "danger-full-access",
+    });
+  });
+
+  it("includes the selected execution intent", () => {
+    expect(
+      commandComposerRuntimeSettings({
+        executionIntent: "plan",
+        model: "gpt-5.6-sol",
+        permission: "approve-for-me",
+      }),
+    ).toMatchObject({ executionIntent: "plan" });
+  });
+
+  it("adds scene identity and a target id without deriving the execution strategy", () => {
+    expect(
+      commandComposerRuntimeSettings({
+        executionTarget: "team:交付小队",
+        model: "gpt-5.6-sol",
+        permission: "approve-for-me",
+        scene: "design",
+        sceneMode: "produce",
+      }),
+    ).toMatchObject({
+      scene: {
+        sceneId: "design",
+        mode: "produce",
+        executionTarget: { kind: "team", id: "交付小队" },
+      },
     });
   });
 });
