@@ -4494,3 +4494,113 @@ body.modal-open {
     width: calc(100vw - 20px);
   }
 }
+
+/* Keep active conversations close to Codex's quiet transcript hierarchy. */
+.screen-shell.command-screen .command-thread-room .message-list {
+  gap: 20px;
+  padding: 26px 12px 24px;
+}
+
+.screen-shell.command-screen .command-thread-room .turn-group,
+.screen-shell.command-screen .command-thread-room .message-list > .message {
+  width: min(780px, 100%);
+  max-width: 780px;
+}
+
+.screen-shell.command-screen .command-thread-room .message {
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 0;
+}
+
+.screen-shell.command-screen .command-thread-room .message::before {
+  display: none;
+}
+
+.screen-shell.command-screen .command-thread-room .message-body {
+  grid-column: 1;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .message-header {
+  display: none;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content,
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="plan"]
+  .markdown-content {
+  max-width: 760px;
+  color: oklch(30% 0.014 235);
+  font-size: 14.5px;
+  font-weight: 400;
+  line-height: 1.66;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  > :is(p, ul, ol, blockquote, pre, figure, table) {
+  margin-bottom: 12px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .message-body {
+  max-width: min(560px, 76%);
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content {
+  padding: 9px 13px;
+  border: 0;
+  border-radius: 16px;
+  background: oklch(96% 0.006 235);
+  box-shadow: none;
+  color: oklch(24% 0.014 235);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-transcript-variant="process"] {
+  grid-template-columns: 10px minmax(0, 1fr);
+  column-gap: 9px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-transcript-variant="process"]::before {
+  display: block;
+}
+
+@media (max-width: 860px) {
+  .screen-shell.command-screen .command-thread-room .message-list {
+    padding: 16px 14px 18px;
+  }
+
+  .screen-shell.command-screen
+    .command-thread-room
+    .message[data-kind="agentMessage"]
+    .markdown-content,
+  .screen-shell.command-screen
+    .command-thread-room
+    .message[data-kind="plan"]
+    .markdown-content {
+    font-size: 14px;
+    line-height: 1.64;
+  }
+}
