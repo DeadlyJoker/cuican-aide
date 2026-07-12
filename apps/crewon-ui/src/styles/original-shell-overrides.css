@@ -4537,9 +4537,9 @@ body.modal-open {
   .markdown-content {
   max-width: 760px;
   color: oklch(30% 0.014 235);
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 400;
-  line-height: 1.66;
+  line-height: 1.68;
 }
 
 .screen-shell.command-screen
@@ -4567,9 +4567,9 @@ body.modal-open {
   background: oklch(96% 0.006 235);
   box-shadow: none;
   color: oklch(24% 0.014 235);
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 400;
-  line-height: 1.55;
+  line-height: 1.58;
 }
 
 .screen-shell.command-screen
@@ -4600,7 +4600,7 @@ body.modal-open {
     .command-thread-room
     .message[data-kind="plan"]
     .markdown-content {
-    font-size: 14px;
-    line-height: 1.64;
+    font-size: 14.5px;
+    line-height: 1.66;
   }
 }
