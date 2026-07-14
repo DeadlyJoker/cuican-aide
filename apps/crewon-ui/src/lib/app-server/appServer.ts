@@ -1841,12 +1841,13 @@ export class AppServerClient {
   async listAutomationRuns(
     cwd: string,
     threadId?: string | null,
+    limit = 100,
   ): Promise<AutomationRunsListResponse> {
     return this.request<AutomationRunsListResponse>("automation/runs/list", {
       cwd,
       threadId: threadId ?? null,
       cursor: null,
-      limit: 24,
+      limit,
     });
   }
 

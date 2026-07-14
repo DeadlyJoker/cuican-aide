@@ -278,7 +278,7 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain('data-od-id="workspace-pill"');
     expect(markup).not.toContain("任务方式");
     expect(markup).not.toContain("核心上下文");
-    expect(markup).not.toContain("默认交付");
+    expect(markup).toContain("结果发送给：我（创建者）");
     expect(markup).toContain("暂无可选智能体或小队");
     expect(markup).not.toContain("创建可编排的 Agent 小队");
     expect(markup).not.toContain("????");
@@ -549,21 +549,17 @@ describe("CommandWorkspace", () => {
     );
   });
 
-  it("includes original schedule modal and filter landmarks", () => {
+  it("includes personal schedule jobs, history, and delivery landmarks", () => {
     const markup = renderCommandWorkspace();
 
     expect(markup).toContain('data-shell-view="schedule"');
-    expect(markup).toContain(
-      'data-filter-group="schedule-mode" data-filter="calendar"',
-    );
-    expect(markup).toContain(
-      'data-filter-group="schedule-source" data-filter="teamflow"',
-    );
-    expect(markup).toContain('data-od-id="schedule-calendar-team"');
-    expect(markup).toContain('data-od-id="schedule-arrangement-catalog"');
-    expect(markup).toContain('id="schedule-arrangement-modal"');
-    expect(markup).toContain("创建任务安排");
-    expect(markup).toContain("小队执行安排");
+    expect(markup).toContain("个人日程");
+    expect(markup).toContain("执行记录");
+    expect(markup).not.toContain("定时任务");
+    expect(markup).toContain("个人日程中心");
+    expect(markup).toContain('aria-labelledby="schedule-create-title"');
+    expect(markup).toContain("新建个人日程");
+    expect(markup).toContain("到时自动开始执行");
   });
 
   it("renders real slash commands as homepage palette candidates", () => {

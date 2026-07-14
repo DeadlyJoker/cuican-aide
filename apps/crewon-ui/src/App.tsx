@@ -737,7 +737,7 @@ export function App() {
         activeTurnId={commandShellRuntime.activeTurnId} composerValue={composerValue} connectionState={connectionState} cwd={cwd} isSending={isSending}
         linkedThreads={conversationThreads} locale={locale} selectedThread={commandShellRuntime.selectedThread} selectedThreadId={commandShellRuntime.selectedThreadId} slashCommands={slashCommands}
         streamingText={commandShellRuntime.streamingText} workMode={workMode} modelOptions={commandModelOptions}
-        executionTargetClient={clientRef.current}
+        executionTargetClient={clientRef.current} scheduleClient={clientRef.current}
         confirmDialog={{ locale, request: confirmRequest, onCancel: () => resolveConfirm(false), onConfirm: () => resolveConfirm(true) }}
         onAttachContext={attachWorkspaceContext} onChangeComposerValue={setComposerValue} onModeChange={setWorkMode} onRetryConnection={retryConnection}
         onChangeWorkspaceCwd={changeCommandShellWorkspace}

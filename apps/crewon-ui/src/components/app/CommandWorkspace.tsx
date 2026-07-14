@@ -25,9 +25,12 @@ import {
   AssistView,
   KnowledgeCatalogView,
   ProjectsView,
-  ScheduleView,
   TeamView,
 } from "./CommandWorkspaceViews";
+import {
+  ScheduleView,
+  type ScheduleClient,
+} from "./CommandWorkspaceSchedule";
 import { classNames } from "./commandWorkspaceUtils";
 import {
   emptyAgentPlatformSnapshot,
@@ -91,6 +94,7 @@ type CommandWorkspaceProps = {
       data: Array<{ config: OfficeConfig; filePath: string }>;
     }>;
   } | null;
+  scheduleClient?: ScheduleClient | null;
   isSending: boolean;
   linkedThreads?: Thread[];
   locale?: Locale;
@@ -364,6 +368,7 @@ export function CommandWorkspace({
   connectionState,
   cwd,
   executionTargetClient = null,
+  scheduleClient = null,
   isSending,
   linkedThreads = [],
   locale = "zh",
@@ -419,7 +424,7 @@ export function CommandWorkspace({
     useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
   const [catalogFilter, setCatalogFilter] = useState("skill");
   const [catalogSearch, setCatalogSearch] = useState("");
-  const [scheduleMode, setScheduleMode] = useState("calendar");
+  const [scheduleMode, setScheduleMode] = useState("tasks");
   const [scheduleSource, setScheduleSource] = useState("personal");
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [teamMode, setTeamMode] = useState<TeamMode>("office");
@@ -1182,6 +1187,8 @@ export function CommandWorkspace({
           />
           <ScheduleView
             active={activeView === "schedule"}
+            client={scheduleClient}
+            cwd={cwd}
             modalOpen={scheduleModalOpen}
             scheduleMode={scheduleMode}
             scheduleSource={scheduleSource}
@@ -1189,6 +1196,7 @@ export function CommandWorkspace({
             onModeChange={setScheduleMode}
             onOpenModal={() => setScheduleModalOpen(true)}
             onSourceChange={setScheduleSource}
+            onOpenThread={onSelectLinkedThread}
           />
           <TeamView
             active={activeView === "team"}

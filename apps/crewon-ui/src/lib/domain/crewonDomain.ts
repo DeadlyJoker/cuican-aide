@@ -191,6 +191,13 @@ export type AutomationConfig = {
     type: "manual" | "schedule" | "event" | "file";
     [key: string]: unknown;
   };
+  scope?: "personal" | "team" | string;
+  delivery?: {
+    destination: "scheduleCenter" | string;
+    recipient: "owner" | string;
+    recipientLabel: string;
+    notifyOn: "always" | "failure" | "actionRequired" | string;
+  };
   targetOffice?: OfficeConfig | null;
   executionAgent?: AgentConfig | null;
   enabled?: boolean;
