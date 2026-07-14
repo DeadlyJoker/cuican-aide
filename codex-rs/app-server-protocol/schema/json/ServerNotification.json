@@ -164,6 +164,204 @@
     "AgentPath": {
       "type": "string"
     },
+    "AgentPlatformChatCompletedNotification": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "durationMs": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "resourceEvents": {
+          "items": {
+            "$ref": "#/definitions/AgentPlatformResourceEvent"
+          },
+          "type": "array"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "skillsUsed": {
+          "items": true,
+          "type": "array"
+        },
+        "thoughts": {
+          "items": true,
+          "type": "array"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "tokens": {
+          "$ref": "#/definitions/AgentPlatformTokenUsage"
+        }
+      },
+      "required": [
+        "agentId",
+        "durationMs",
+        "message",
+        "resourceEvents",
+        "runId",
+        "skillsUsed",
+        "thoughts",
+        "threadId",
+        "tokens"
+      ],
+      "type": "object"
+    },
+    "AgentPlatformChatDeltaNotification": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "delta": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "delta",
+        "runId",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "AgentPlatformChatFailedNotification": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "cancelled": {
+          "type": "boolean"
+        },
+        "code": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "cancelled",
+        "code",
+        "error",
+        "runId",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "AgentPlatformResourceEvent": {
+      "properties": {
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inputSummary": true,
+        "name": {
+          "type": "string"
+        },
+        "outputSummary": true,
+        "status": {
+          "$ref": "#/definitions/AgentPlatformResourceStatus"
+        },
+        "type": {
+          "$ref": "#/definitions/AgentPlatformResourceType"
+        }
+      },
+      "required": [
+        "inputSummary",
+        "name",
+        "outputSummary",
+        "status",
+        "type"
+      ],
+      "type": "object"
+    },
+    "AgentPlatformResourceEventNotification": {
+      "properties": {
+        "agentId": {
+          "type": "string"
+        },
+        "event": {
+          "$ref": "#/definitions/AgentPlatformResourceEvent"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentId",
+        "event",
+        "runId",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "AgentPlatformResourceStatus": {
+      "enum": [
+        "started",
+        "succeeded",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "AgentPlatformResourceType": {
+      "enum": [
+        "skill",
+        "mcp",
+        "knowledge"
+      ],
+      "type": "string"
+    },
+    "AgentPlatformTokenUsage": {
+      "properties": {
+        "completionTokens": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "promptTokens": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "totalTokens": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "completionTokens",
+        "promptTokens",
+        "totalTokens"
+      ],
+      "type": "object"
+    },
     "AppBranding": {
       "description": "EXPERIMENTAL - app metadata returned by app-list APIs.",
       "properties": {
@@ -6227,6 +6425,86 @@
         "params"
       ],
       "title": "Office/run/updatedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "agentPlatform/chat/delta"
+          ],
+          "title": "AgentPlatform/chat/deltaNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformChatDeltaNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/chat/deltaNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "agentPlatform/chat/resourceEvent"
+          ],
+          "title": "AgentPlatform/chat/resourceEventNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformResourceEventNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/chat/resourceEventNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "agentPlatform/chat/completed"
+          ],
+          "title": "AgentPlatform/chat/completedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformChatCompletedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/chat/completedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "agentPlatform/chat/failed"
+          ],
+          "title": "AgentPlatform/chat/failedNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformChatFailedNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/chat/failedNotification",
       "type": "object"
     },
     {

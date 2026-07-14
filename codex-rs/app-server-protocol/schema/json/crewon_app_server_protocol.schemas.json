@@ -1292,6 +1292,174 @@
             },
             "method": {
               "enum": [
+                "agentPlatform/auth"
+              ],
+              "title": "AgentPlatform/authRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformAuthParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/authRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agentPlatform/agent/info"
+              ],
+              "title": "AgentPlatform/agent/infoRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformAgentParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/agent/infoRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agentPlatform/chat"
+              ],
+              "title": "AgentPlatform/chatRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformChatParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/chatRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agentPlatform/chat/start"
+              ],
+              "title": "AgentPlatform/chat/startRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformChatParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/chat/startRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agentPlatform/run/cancel"
+              ],
+              "title": "AgentPlatform/run/cancelRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformRunCancelParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/run/cancelRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agentPlatform/session/read"
+              ],
+              "title": "AgentPlatform/session/readRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformSessionParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/session/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "agentPlatform/session/clear"
+              ],
+              "title": "AgentPlatform/session/clearRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformSessionParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/session/clearRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "office/list"
               ],
               "title": "Office/listRequestMethod",
@@ -6062,6 +6230,86 @@
           "properties": {
             "method": {
               "enum": [
+                "agentPlatform/chat/delta"
+              ],
+              "title": "AgentPlatform/chat/deltaNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformChatDeltaNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/chat/deltaNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "agentPlatform/chat/resourceEvent"
+              ],
+              "title": "AgentPlatform/chat/resourceEventNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformResourceEventNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/chat/resourceEventNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "agentPlatform/chat/completed"
+              ],
+              "title": "AgentPlatform/chat/completedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformChatCompletedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/chat/completedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "agentPlatform/chat/failed"
+              ],
+              "title": "AgentPlatform/chat/failedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/AgentPlatformChatFailedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "AgentPlatform/chat/failedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "remoteControl/status/changed"
               ],
               "title": "RemoteControl/status/changedNotificationMethod",
@@ -7448,6 +7696,486 @@
       },
       "AgentPath": {
         "type": "string"
+      },
+      "AgentPlatformAgentInfoResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "activeConnections": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "maxConcurrency": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "uid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "activeConnections",
+          "id",
+          "maxConcurrency",
+          "name"
+        ],
+        "title": "AgentPlatformAgentInfoResponse",
+        "type": "object"
+      },
+      "AgentPlatformAgentParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken",
+          "agentId"
+        ],
+        "title": "AgentPlatformAgentParams",
+        "type": "object"
+      },
+      "AgentPlatformAuthParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken"
+        ],
+        "title": "AgentPlatformAuthParams",
+        "type": "object"
+      },
+      "AgentPlatformAuthResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "user": {
+            "$ref": "#/definitions/v2/AgentPlatformUser"
+          }
+        },
+        "required": [
+          "user"
+        ],
+        "title": "AgentPlatformAuthResponse",
+        "type": "object"
+      },
+      "AgentPlatformChatCompletedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "durationMs": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "resourceEvents": {
+            "items": {
+              "$ref": "#/definitions/v2/AgentPlatformResourceEvent"
+            },
+            "type": "array"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "skillsUsed": {
+            "items": true,
+            "type": "array"
+          },
+          "thoughts": {
+            "items": true,
+            "type": "array"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "tokens": {
+            "$ref": "#/definitions/v2/AgentPlatformTokenUsage"
+          }
+        },
+        "required": [
+          "agentId",
+          "durationMs",
+          "message",
+          "resourceEvents",
+          "runId",
+          "skillsUsed",
+          "thoughts",
+          "threadId",
+          "tokens"
+        ],
+        "title": "AgentPlatformChatCompletedNotification",
+        "type": "object"
+      },
+      "AgentPlatformChatDeltaNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "delta": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "delta",
+          "runId",
+          "threadId"
+        ],
+        "title": "AgentPlatformChatDeltaNotification",
+        "type": "object"
+      },
+      "AgentPlatformChatFailedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "code": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "cancelled",
+          "code",
+          "error",
+          "runId",
+          "threadId"
+        ],
+        "title": "AgentPlatformChatFailedNotification",
+        "type": "object"
+      },
+      "AgentPlatformChatParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken",
+          "agentId",
+          "message",
+          "threadId"
+        ],
+        "title": "AgentPlatformChatParams",
+        "type": "object"
+      },
+      "AgentPlatformChatResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "durationMs": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "resourceEvents": {
+            "items": {
+              "$ref": "#/definitions/v2/AgentPlatformResourceEvent"
+            },
+            "type": "array"
+          },
+          "skillsUsed": {
+            "items": true,
+            "type": "array"
+          },
+          "thoughts": {
+            "items": true,
+            "type": "array"
+          },
+          "tokens": {
+            "$ref": "#/definitions/v2/AgentPlatformTokenUsage"
+          }
+        },
+        "required": [
+          "agentId",
+          "durationMs",
+          "message",
+          "resourceEvents",
+          "skillsUsed",
+          "thoughts",
+          "tokens"
+        ],
+        "title": "AgentPlatformChatResponse",
+        "type": "object"
+      },
+      "AgentPlatformChatStartResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "title": "AgentPlatformChatStartResponse",
+        "type": "object"
+      },
+      "AgentPlatformHistoryMessage": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "role"
+        ],
+        "type": "object"
+      },
+      "AgentPlatformResourceEvent": {
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inputSummary": true,
+          "name": {
+            "type": "string"
+          },
+          "outputSummary": true,
+          "status": {
+            "$ref": "#/definitions/v2/AgentPlatformResourceStatus"
+          },
+          "type": {
+            "$ref": "#/definitions/v2/AgentPlatformResourceType"
+          }
+        },
+        "required": [
+          "inputSummary",
+          "name",
+          "outputSummary",
+          "status",
+          "type"
+        ],
+        "type": "object"
+      },
+      "AgentPlatformResourceEventNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "event": {
+            "$ref": "#/definitions/v2/AgentPlatformResourceEvent"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "event",
+          "runId",
+          "threadId"
+        ],
+        "title": "AgentPlatformResourceEventNotification",
+        "type": "object"
+      },
+      "AgentPlatformResourceStatus": {
+        "enum": [
+          "started",
+          "succeeded",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "AgentPlatformResourceType": {
+        "enum": [
+          "skill",
+          "mcp",
+          "knowledge"
+        ],
+        "type": "string"
+      },
+      "AgentPlatformRunCancelParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "title": "AgentPlatformRunCancelParams",
+        "type": "object"
+      },
+      "AgentPlatformRunCancelResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "cancelled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cancelled"
+        ],
+        "title": "AgentPlatformRunCancelResponse",
+        "type": "object"
+      },
+      "AgentPlatformSessionClearResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "cleared": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cleared"
+        ],
+        "title": "AgentPlatformSessionClearResponse",
+        "type": "object"
+      },
+      "AgentPlatformSessionParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken",
+          "agentId",
+          "threadId"
+        ],
+        "title": "AgentPlatformSessionParams",
+        "type": "object"
+      },
+      "AgentPlatformSessionReadResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/definitions/v2/AgentPlatformHistoryMessage"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "title": "AgentPlatformSessionReadResponse",
+        "type": "object"
+      },
+      "AgentPlatformTokenUsage": {
+        "properties": {
+          "completionTokens": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "promptTokens": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "completionTokens",
+          "promptTokens",
+          "totalTokens"
+        ],
+        "type": "object"
+      },
+      "AgentPlatformUser": {
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username"
+        ],
+        "type": "object"
       },
       "AgentReadParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",

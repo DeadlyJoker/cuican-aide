@@ -111,6 +111,85 @@
         }
       ]
     },
+    "AgentPlatformAgentParams": {
+      "properties": {
+        "accessToken": {
+          "type": "string"
+        },
+        "agentId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accessToken",
+        "agentId"
+      ],
+      "type": "object"
+    },
+    "AgentPlatformAuthParams": {
+      "properties": {
+        "accessToken": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accessToken"
+      ],
+      "type": "object"
+    },
+    "AgentPlatformChatParams": {
+      "properties": {
+        "accessToken": {
+          "type": "string"
+        },
+        "agentId": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accessToken",
+        "agentId",
+        "message",
+        "threadId"
+      ],
+      "type": "object"
+    },
+    "AgentPlatformRunCancelParams": {
+      "properties": {
+        "runId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId"
+      ],
+      "type": "object"
+    },
+    "AgentPlatformSessionParams": {
+      "properties": {
+        "accessToken": {
+          "type": "string"
+        },
+        "agentId": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accessToken",
+        "agentId",
+        "threadId"
+      ],
+      "type": "object"
+    },
     "AgentReadParams": {
       "properties": {
         "agentId": {
@@ -8455,6 +8534,174 @@
         "params"
       ],
       "title": "Agent/deleteRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agentPlatform/auth"
+          ],
+          "title": "AgentPlatform/authRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformAuthParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/authRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agentPlatform/agent/info"
+          ],
+          "title": "AgentPlatform/agent/infoRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformAgentParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/agent/infoRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agentPlatform/chat"
+          ],
+          "title": "AgentPlatform/chatRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformChatParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/chatRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agentPlatform/chat/start"
+          ],
+          "title": "AgentPlatform/chat/startRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformChatParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/chat/startRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agentPlatform/run/cancel"
+          ],
+          "title": "AgentPlatform/run/cancelRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformRunCancelParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/run/cancelRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agentPlatform/session/read"
+          ],
+          "title": "AgentPlatform/session/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformSessionParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/session/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "agentPlatform/session/clear"
+          ],
+          "title": "AgentPlatform/session/clearRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/AgentPlatformSessionParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "AgentPlatform/session/clearRequest",
       "type": "object"
     },
     {
