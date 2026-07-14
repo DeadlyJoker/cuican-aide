@@ -67,6 +67,7 @@ import type { ReasoningSummaryPartAddedNotification } from "@crewon-protocol/v2/
 import type { ReasoningSummaryTextDeltaNotification } from "@crewon-protocol/v2/ReasoningSummaryTextDeltaNotification";
 import type { ReasoningTextDeltaNotification } from "@crewon-protocol/v2/ReasoningTextDeltaNotification";
 import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
+import type { ReviewTarget } from "@crewon-protocol/v2/ReviewTarget";
 import type { SandboxPolicy } from "@crewon-protocol/v2/SandboxPolicy";
 import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
 import type { ServerRequestResolvedNotification } from "@crewon-protocol/v2/ServerRequestResolvedNotification";
@@ -101,6 +102,7 @@ import type { TurnPlanUpdatedNotification } from "@crewon-protocol/v2/TurnPlanUp
 import type { TurnStartedNotification } from "@crewon-protocol/v2/TurnStartedNotification";
 import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
 import type { UserInput } from "@crewon-protocol/v2/UserInput";
+import type { ComposerImageInput } from "../shared/composerImages";
 import type { WarningNotification } from "@crewon-protocol/v2/WarningNotification";
 import type { WindowsSandboxReadinessResponse } from "@crewon-protocol/v2/WindowsSandboxReadinessResponse";
 import type { WindowsSandboxSetupMode } from "@crewon-protocol/v2/WindowsSandboxSetupMode";
@@ -182,6 +184,64 @@ export type BackgroundTerminal = {
   rssKb: number | null;
 };
 
+export type AgentPlatformChatResponse = {
+  agentId: string;
+  message: string;
+  thoughts: unknown[];
+  skillsUsed: unknown[];
+  resourceEvents?: AgentPlatformResourceEvent[];
+  tokens: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  durationMs: number;
+};
+
+export type AgentPlatformResourceEvent = {
+  type: "skill" | "mcp" | "knowledge";
+  status: "started" | "succeeded" | "failed";
+  name: string;
+  inputSummary: unknown;
+  outputSummary: unknown;
+  error: string | null;
+};
+
+type AgentPlatformChatDeltaNotification = {
+  runId: string;
+  threadId: string;
+  agentId: string;
+  delta: string;
+};
+
+type AgentPlatformChatCompletedNotification = {
+  runId: string;
+  threadId: string;
+  agentId: string;
+  message: string;
+  thoughts: unknown[];
+  skillsUsed: unknown[];
+  resourceEvents?: AgentPlatformResourceEvent[];
+  tokens: AgentPlatformChatResponse["tokens"];
+  durationMs: number;
+};
+
+type AgentPlatformResourceEventNotification = {
+  runId: string;
+  threadId: string;
+  agentId: string;
+  event: AgentPlatformResourceEvent;
+};
+
+type AgentPlatformChatFailedNotification = {
+  runId: string;
+  threadId: string;
+  agentId: string;
+  error: string;
+  code: number;
+  cancelled: boolean;
+};
+
 type BackgroundTerminalsListResponse = {
   data: BackgroundTerminal[];
   nextCursor: string | null;
@@ -198,12 +258,23 @@ type ComposerMentionInput = {
   path: string;
 };
 
+export type { ComposerImageInput } from "../shared/composerImages";
+
 export function turnInputFromComposer(
   text: string,
   mentions: ComposerMentionInput[] = [],
+  images: ComposerImageInput[] = [],
 ): UserInput[] {
   return [
     { type: "text", text, text_elements: [] },
+    ...images.map(
+      (image) =>
+        ({
+          type: "image" as const,
+          detail: image.detail,
+          url: image.url,
+        }) satisfies UserInput,
+    ),
     ...mentions.map((mention) =>
       mention.kind === "skill"
         ? ({
@@ -516,12 +587,16 @@ function collaborationModeFromSettings(settings: ThreadRuntimeSettings) {
   if (!model) {
     return undefined;
   }
+  const developerInstructions =
+    settings.scene?.sceneId === "code" && settings.scene.mode === "auto"
+      ? "For coding tasks, inspect the workspace and use the available tools before claiming that code was reviewed, changed, or tested. Report only actions and results that actually occurred."
+      : null;
   return {
     mode: settings.executionIntent === "plan" ? "plan" : "default",
     settings: {
       model,
       reasoning_effort: null,
-      developer_instructions: null,
+      developer_instructions: developerInstructions,
     },
   };
 }
@@ -553,6 +628,22 @@ export type KnownAppServerNotification =
     }
   | { method: "account/updated"; params: AccountUpdatedNotification }
   | { method: "app/list/updated"; params: AppListUpdatedNotification }
+  | {
+      method: "agentPlatform/chat/delta";
+      params: AgentPlatformChatDeltaNotification;
+    }
+  | {
+      method: "agentPlatform/chat/resourceEvent";
+      params: AgentPlatformResourceEventNotification;
+    }
+  | {
+      method: "agentPlatform/chat/completed";
+      params: AgentPlatformChatCompletedNotification;
+    }
+  | {
+      method: "agentPlatform/chat/failed";
+      params: AgentPlatformChatFailedNotification;
+    }
   | { method: "configWarning"; params: ConfigWarningNotification }
   | {
       method: "externalAgentConfig/import/completed";
@@ -639,6 +730,10 @@ export type AppServerNotification = KnownAppServerNotification;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 12000;
 const LONG_REQUEST_TIMEOUT_MS = 60000;
+const AGENT_PLATFORM_CONTROL_TIMEOUT_MS = 90000;
+const AGENT_PLATFORM_STREAM_TIMEOUT_MS = 5 * 60_000 + 30_000;
+const MAX_ORPHAN_AGENT_PLATFORM_RUNS = 100;
+const MAX_ORPHAN_AGENT_PLATFORM_EVENTS_PER_RUN = 100;
 
 export class AppServerClient {
   private socket: WebSocket | null = null;
@@ -651,6 +746,28 @@ export class AppServerClient {
       reject: (error: Error) => void;
       timeoutId: number;
     }
+  >();
+  private agentPlatformRuns = new Map<
+    string,
+    {
+      threadId: string;
+      resolve: (response: AgentPlatformChatResponse) => void;
+      reject: (error: Error) => void;
+      onDelta: (delta: string) => void;
+      onResourceEvent: (event: AgentPlatformResourceEvent, index: number) => void;
+      resourceEvents: AgentPlatformResourceEvent[];
+      timeoutId: number;
+    }
+  >();
+  private agentPlatformRunByThread = new Map<string, string>();
+  private orphanAgentPlatformEvents = new Map<
+    string,
+    Array<
+      | AgentPlatformChatDeltaNotification
+      | AgentPlatformResourceEventNotification
+      | AgentPlatformChatCompletedNotification
+      | AgentPlatformChatFailedNotification
+    >
   >();
 
   constructor(
@@ -692,6 +809,13 @@ export class AppServerClient {
           pending.reject(new Error("App-server connection closed"));
         }
         this.pending.clear();
+        for (const [, run] of this.agentPlatformRuns) {
+          window.clearTimeout(run.timeoutId);
+          run.reject(new Error("App-server connection closed"));
+        }
+        this.agentPlatformRuns.clear();
+        this.agentPlatformRunByThread.clear();
+        this.orphanAgentPlatformEvents.clear();
         if (this.socket === socket) {
           this.socket = null;
         }
@@ -932,6 +1056,7 @@ export class AppServerClient {
       sandbox: settings.sandboxMode ?? undefined,
       scene: settings.scene,
       threadSource,
+      dynamicTools: settings.dynamicTools,
     });
     return response.thread;
   }
@@ -1062,6 +1187,7 @@ export class AppServerClient {
     text: string,
     mentions: ComposerMentionInput[] = [],
     settings: ThreadRuntimeSettings = {},
+    images: ComposerImageInput[] = [],
   ): Promise<TurnStartResponse> {
     const sandboxPolicy = settings.sandboxMode
       ? sandboxPolicyFromMode(settings.sandboxMode)
@@ -1071,13 +1197,148 @@ export class AppServerClient {
       {
         approvalPolicy: settings.approvalPolicy ?? undefined,
         collaborationMode: collaborationModeFromSettings(settings),
-        input: turnInputFromComposer(text, mentions),
+        effort: settings.reasoningEffort ?? undefined,
+        input: turnInputFromComposer(text, mentions, images),
         model: settings.model || undefined,
         sandboxPolicy: sandboxPolicy ?? undefined,
         threadId,
       },
       { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
     );
+  }
+
+  async chatAgentPlatform(
+    accessToken: string,
+    threadId: string,
+    agentId: string,
+    message: string,
+  ): Promise<AgentPlatformChatResponse> {
+    return this.request<AgentPlatformChatResponse>(
+      "agentPlatform/chat",
+      { accessToken, threadId, agentId, message },
+      { timeoutMs: AGENT_PLATFORM_CONTROL_TIMEOUT_MS },
+    );
+  }
+
+  async authenticateAgentPlatform(accessToken: string): Promise<{
+    user: { id: number; username: string };
+  }> {
+    return this.request("agentPlatform/auth", { accessToken });
+  }
+
+  async readAgentPlatformAgentInfo(
+    accessToken: string,
+    agentId: string,
+  ): Promise<{
+    id: number;
+    uid: string | null;
+    name: string;
+    description: string | null;
+    maxConcurrency: number;
+    activeConnections: number;
+  }> {
+    return this.request(
+      "agentPlatform/agent/info",
+      { accessToken, agentId },
+      { timeoutMs: AGENT_PLATFORM_CONTROL_TIMEOUT_MS },
+    );
+  }
+
+  async startAgentPlatformChat(
+    accessToken: string,
+    threadId: string,
+    agentId: string,
+    message: string,
+  ): Promise<{ runId: string }> {
+    return this.request(
+      "agentPlatform/chat/start",
+      { accessToken, threadId, agentId, message },
+      { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
+    );
+  }
+
+  async runAgentPlatformChat(
+    accessToken: string,
+    threadId: string,
+    agentId: string,
+    message: string,
+    onDelta: (delta: string) => void = () => {},
+    onResourceEvent: (
+      event: AgentPlatformResourceEvent,
+      index: number,
+    ) => void = () => {},
+  ): Promise<AgentPlatformChatResponse> {
+    const { runId } = await this.startAgentPlatformChat(
+      accessToken,
+      threadId,
+      agentId,
+      message,
+    );
+    return new Promise((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        this.agentPlatformRuns.delete(runId);
+        this.agentPlatformRunByThread.delete(threadId);
+        void this.cancelAgentPlatformRun(runId).catch(() => undefined);
+        reject(new Error("Agent Platform stream timed out"));
+      }, AGENT_PLATFORM_STREAM_TIMEOUT_MS);
+      this.agentPlatformRuns.set(runId, {
+        threadId,
+        resolve,
+        reject,
+        onDelta,
+        onResourceEvent,
+        resourceEvents: [],
+        timeoutId,
+      });
+      this.agentPlatformRunByThread.set(threadId, runId);
+      const pendingEvents = this.orphanAgentPlatformEvents.get(runId) ?? [];
+      this.orphanAgentPlatformEvents.delete(runId);
+      for (const event of pendingEvents) {
+        this.handleAgentPlatformEvent(runId, event);
+      }
+    });
+  }
+
+  async cancelAgentPlatformRunForThread(threadId: string): Promise<boolean> {
+    const runId = this.agentPlatformRunByThread.get(threadId);
+    if (!runId) return false;
+    return this.cancelAgentPlatformRun(runId);
+  }
+
+  async cancelAgentPlatformRun(runId: string): Promise<boolean> {
+    const response = await this.request<{ cancelled: boolean }>(
+      "agentPlatform/run/cancel",
+      { runId },
+    );
+    return response.cancelled;
+  }
+
+  async readAgentPlatformSession(
+    accessToken: string,
+    threadId: string,
+    agentId: string,
+  ): Promise<Array<{ role: string; content: string }>> {
+    const response = await this.request<{
+      messages: Array<{ role: string; content: string }>;
+    }>(
+      "agentPlatform/session/read",
+      { accessToken, threadId, agentId },
+      { timeoutMs: AGENT_PLATFORM_CONTROL_TIMEOUT_MS },
+    );
+    return response.messages;
+  }
+
+  async clearAgentPlatformSession(
+    accessToken: string,
+    threadId: string,
+    agentId: string,
+  ): Promise<boolean> {
+    const response = await this.request<{ cleared: boolean }>(
+      "agentPlatform/session/clear",
+      { accessToken, threadId, agentId },
+      { timeoutMs: AGENT_PLATFORM_CONTROL_TIMEOUT_MS },
+    );
+    return response.cleared;
   }
 
   async steerTurn(
@@ -1131,11 +1392,14 @@ export class AppServerClient {
     await this.request("turn/interrupt", { threadId, turnId });
   }
 
-  async startReview(threadId: string): Promise<ReviewStartResponse> {
+  async startReview(
+    threadId: string,
+    target: ReviewTarget = { type: "uncommittedChanges" },
+  ): Promise<ReviewStartResponse> {
     return this.request<ReviewStartResponse>("review/start", {
       threadId,
       delivery: "inline",
-      target: { type: "uncommittedChanges" },
+      target,
     });
   }
 
@@ -2342,8 +2606,73 @@ export class AppServerClient {
     }
 
     if (isKnownNotification(message)) {
+      switch (message.method) {
+        case "agentPlatform/chat/delta":
+        case "agentPlatform/chat/resourceEvent":
+        case "agentPlatform/chat/completed":
+        case "agentPlatform/chat/failed":
+          this.handleAgentPlatformEvent(message.params.runId, message.params);
+      }
       this.onNotification(message);
     }
+  }
+
+  private handleAgentPlatformEvent(
+    runId: string,
+    event:
+      | AgentPlatformChatDeltaNotification
+      | AgentPlatformResourceEventNotification
+      | AgentPlatformChatCompletedNotification
+      | AgentPlatformChatFailedNotification,
+  ): void {
+    const run = this.agentPlatformRuns.get(runId);
+    if (!run) {
+      if (
+        !this.orphanAgentPlatformEvents.has(runId) &&
+        this.orphanAgentPlatformEvents.size >= MAX_ORPHAN_AGENT_PLATFORM_RUNS
+      ) {
+        const oldestRunId = this.orphanAgentPlatformEvents.keys().next().value;
+        if (oldestRunId) {
+          this.orphanAgentPlatformEvents.delete(oldestRunId);
+        }
+      }
+      const pending = this.orphanAgentPlatformEvents.get(runId) ?? [];
+      pending.push(event);
+      this.orphanAgentPlatformEvents.set(
+        runId,
+        pending.slice(-MAX_ORPHAN_AGENT_PLATFORM_EVENTS_PER_RUN),
+      );
+      return;
+    }
+    if ("delta" in event) {
+      run.onDelta(event.delta);
+      return;
+    }
+    if ("event" in event) {
+      run.resourceEvents.push(event.event);
+      run.onResourceEvent(event.event, run.resourceEvents.length - 1);
+      return;
+    }
+    window.clearTimeout(run.timeoutId);
+    this.agentPlatformRuns.delete(runId);
+    this.agentPlatformRunByThread.delete(run.threadId);
+    if ("error" in event) {
+      run.reject(
+        new AppServerRpcError(event.error, event.cancelled ? 499 : event.code, {
+          cancelled: event.cancelled,
+        }),
+      );
+      return;
+    }
+    run.resolve({
+      agentId: event.agentId,
+      message: event.message,
+      thoughts: event.thoughts,
+      skillsUsed: event.skillsUsed,
+      resourceEvents: event.resourceEvents ?? run.resourceEvents,
+      tokens: event.tokens,
+      durationMs: event.durationMs,
+    });
   }
 
   private handleServerRequest(request: JsonRpcRequest): void {
@@ -2391,6 +2720,10 @@ function isKnownNotification(
     message.method === "account/rateLimits/updated" ||
     message.method === "account/updated" ||
     message.method === "app/list/updated" ||
+    message.method === "agentPlatform/chat/delta" ||
+    message.method === "agentPlatform/chat/resourceEvent" ||
+    message.method === "agentPlatform/chat/completed" ||
+    message.method === "agentPlatform/chat/failed" ||
     message.method === "command/exec/outputDelta" ||
     message.method === "configWarning" ||
     message.method === "externalAgentConfig/import/completed" ||

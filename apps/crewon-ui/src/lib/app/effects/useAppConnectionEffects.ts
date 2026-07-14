@@ -22,6 +22,7 @@ import type {
   GitRemoteDiffSummary,
 } from "../appStatusTypes";
 import type { Locale } from "../../i18n";
+import { restoreAgentPlatformThread } from "../../thread/agentPlatformThreadHistory";
 
 export type AppConnectionEffectsParams = {
   clientRef: MutableRefObject<AppServerClient | null>;
@@ -88,6 +89,8 @@ export function useAppConnectionEffects({
       currentClient: () => clientRef.current,
       isDemoPreview,
       preserveThreadsAfterConnectionLoss,
+      restoreThread: (client, thread) =>
+        restoreAgentPlatformThread({ client, thread }),
       setAccountStatus,
       setClient: (client) => {
         clientRef.current = client;

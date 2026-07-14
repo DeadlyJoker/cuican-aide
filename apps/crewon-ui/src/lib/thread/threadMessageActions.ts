@@ -1,6 +1,9 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { Turn } from "@crewon-protocol/v2/Turn";
+import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
 import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
+import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
+import type { ReviewTarget } from "@crewon-protocol/v2/ReviewTarget";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
 import {
@@ -26,6 +29,14 @@ import {
 } from "./threadActionPresentation";
 import type { ThreadRuntimeSettings } from "./threadRuntimeSettings";
 import { promptPreview } from "../shared/text";
+import { getAgentPlatformAccessToken } from "../agent-platform/agentPlatformClient";
+import {
+  AppServerRpcError,
+  type AgentPlatformChatResponse,
+  type AgentPlatformResourceEvent,
+} from "../app-server/appServer";
+import type { ComposerImageInput } from "../shared/composerImages";
+import { restoredAgentPlatformTurns } from "./agentPlatformThreadHistory";
 
 type ThreadSource = string;
 type ActiveTurnByThreadSetter = (
@@ -48,7 +59,12 @@ type ThreadMessageClient = {
     text: string,
     mentions?: PendingComposerMention[],
     settings?: ThreadRuntimeSettings,
+    images?: ComposerImageInput[],
   ): Promise<TurnStartResponse>;
+  startReview?(
+    threadId: string,
+    target?: ReviewTarget,
+  ): Promise<ReviewStartResponse>;
   setThreadGoal?(
     threadId: string,
     objective: string,
@@ -63,6 +79,23 @@ type ThreadMessageClient = {
     threadId: string,
     settings: ThreadRuntimeSettings,
   ): Promise<void>;
+  runAgentPlatformChat?(
+    accessToken: string,
+    threadId: string,
+    agentId: string,
+    message: string,
+    onDelta?: (delta: string) => void,
+    onResourceEvent?: (
+      event: AgentPlatformResourceEvent,
+      index: number,
+    ) => void,
+  ): Promise<AgentPlatformChatResponse>;
+  readAgentPlatformSession?(
+    accessToken: string,
+    threadId: string,
+    agentId: string,
+  ): Promise<Array<{ role: string; content: string }>>;
+  cancelAgentPlatformRunForThread?(threadId: string): Promise<boolean>;
 };
 
 export type CreateDemoThreadActionParams = {
@@ -103,10 +136,13 @@ export type SendMessageActionParams = {
         | "clearThreadGoal"
         | "readThread"
         | "resumeThread"
+        | "startReview"
         | "startTurn"
         | "steerTurn"
         | "setThreadGoal"
         | "updateThreadSettings"
+        | "runAgentPlatformChat"
+        | "readAgentPlatformSession"
       >
     | null
     | undefined;
@@ -129,13 +165,17 @@ export type SendMessageActionParams = {
   setSelectedThreadId: (threadId: string | null) => void;
   setThreads: ThreadListSetter;
   text: string;
+  images?: ComposerImageInput[];
   threadSettings?: ThreadRuntimeSettings;
 };
 
 export type InterruptActiveTurnActionParams = {
   activeTurnId: string | null;
   client:
-    | Pick<ThreadMessageClient, "interruptTurn" | "readThread">
+    | Pick<
+        ThreadMessageClient,
+        "interruptTurn" | "readThread" | "cancelAgentPlatformRunForThread"
+      >
     | null
     | undefined;
   isConnected: boolean;
@@ -163,6 +203,103 @@ export function visibleComposerMentionsForText(
     (mention) =>
       !mention.token || textIncludesMentionToken(text, mention.token),
   );
+}
+
+function agentPlatformTurn(text: string, turnId: string, nowMs: number): Turn {
+  const turn = createDemoTurn({ text, responseText: "", nowMs });
+  return {
+    ...turn,
+    id: turnId,
+    status: "inProgress",
+    completedAt: null,
+    durationMs: null,
+  };
+}
+
+function agentPlatformResponseText(
+  response: AgentPlatformChatResponse,
+): string {
+  return response.message;
+}
+
+function updateAgentPlatformTurn(
+  threads: Thread[],
+  threadId: string,
+  turnId: string,
+  update: (turn: Turn) => Turn,
+): Thread[] {
+  return updateThreadInList(threads, threadId, (thread) => ({
+    ...thread,
+    turns: thread.turns.map((turn) =>
+      turn.id === turnId ? update(turn) : turn,
+    ),
+  }));
+}
+
+function appendAgentPlatformDelta(turn: Turn, delta: string): Turn {
+  return {
+    ...turn,
+    items: turn.items.map((item) =>
+      item.type === "agentMessage"
+        ? { ...item, text: item.text + delta }
+        : item,
+    ),
+  };
+}
+
+function agentPlatformResourceItem(
+  event: AgentPlatformResourceEvent,
+  turnId: string,
+  index: number,
+): Extract<ThreadItem, { type: "dynamicToolCall" }> {
+  const output = event.error ?? JSON.stringify(event.outputSummary ?? "");
+  return {
+    type: "dynamicToolCall",
+    id: `${turnId}-pim-resource-${index}`,
+    namespace: `pim-${event.type}`,
+    tool: event.name,
+    arguments: (event.inputSummary ?? {}) as never,
+    status:
+      event.status === "started"
+        ? "inProgress"
+        : event.status === "failed"
+          ? "failed"
+          : "completed",
+    contentItems: output
+      ? [{ type: "inputText", text: output.slice(0, 4_000) }]
+      : [],
+    success: event.status === "started" ? null : event.status === "succeeded",
+    durationMs: null,
+  };
+}
+
+function appendAgentPlatformResourceEvent(
+  turn: Turn,
+  event: AgentPlatformResourceEvent,
+  index: number,
+): Turn {
+  const item = agentPlatformResourceItem(event, turn.id, index);
+  if (event.status !== "started") {
+    let matchingIndex = -1;
+    for (let itemIndex = turn.items.length - 1; itemIndex >= 0; itemIndex -= 1) {
+      const candidate = turn.items[itemIndex];
+      if (
+        candidate.type === "dynamicToolCall" &&
+        candidate.status === "inProgress" &&
+        candidate.namespace === item.namespace &&
+        candidate.tool === item.tool
+      ) {
+        matchingIndex = itemIndex;
+        break;
+      }
+    }
+    if (matchingIndex >= 0) {
+      const items = [...turn.items];
+      items[matchingIndex] = { ...item, id: items[matchingIndex].id };
+      return { ...turn, items };
+    }
+  }
+  return { ...turn, items: [...turn.items, item] };
 }
 
 export function createDemoThreadAction({
@@ -261,6 +398,7 @@ export async function sendMessageAction({
   setSelectedThreadId,
   setThreads,
   text,
+  images = [],
   threadSettings,
 }: SendMessageActionParams): Promise<void> {
   if (isSending) {
@@ -275,6 +413,7 @@ export async function sendMessageAction({
   let thread = isDemoPreview ? null : selectedThread;
   let failedThreadId = selectedThreadId;
   let createdThreadForMessage = false;
+  let agentPlatformTurnId: string | null = null;
 
   try {
     if (activeTurnId && selectedThreadId && isConnected) {
@@ -343,11 +482,129 @@ export async function sendMessageAction({
     if (threadSettings && !createdThreadForMessage) {
       await client?.updateThreadSettings?.(turnThreadId, threadSettings);
     }
+    if (
+      threadSettings?.scene?.sceneId === "code" &&
+      threadSettings.scene.mode === "review" &&
+      !threadSettings.agentPlatformAgentId
+    ) {
+      const response = await client?.startReview?.(turnThreadId, {
+        type: "custom",
+        instructions: text,
+      });
+      if (!response) {
+        throw new Error("代码审查服务不可用");
+      }
+      setPendingComposerMentions([]);
+      setThreads((current) =>
+        upsertTurnInThread(current, response.reviewThreadId, response.turn),
+      );
+      setSelectedThreadId(response.reviewThreadId);
+      setActiveTurnByThread((current) =>
+        activeTurnByThreadAfterTurn(
+          current,
+          response.reviewThreadId,
+          response.turn,
+        ),
+      );
+      return;
+    }
+    if (threadSettings?.agentPlatformAgentId) {
+      const accessToken = await getAgentPlatformAccessToken();
+      if (!accessToken) {
+        throw new Error("Agent Platform 登录已失效，请重新登录");
+      }
+      const currentThread = resumedThread ?? activeThread;
+      if (currentThread.turns.length === 0) {
+        const history = await client?.readAgentPlatformSession?.(
+          accessToken,
+          turnThreadId,
+          threadSettings.agentPlatformAgentId,
+        );
+        const restoredTurns = restoredAgentPlatformTurns(history ?? []);
+        if (restoredTurns.length > 0) {
+          setThreads((current) =>
+            updateThreadInList(current, turnThreadId, (thread) => ({
+              ...thread,
+              turns: restoredTurns,
+            })),
+          );
+        }
+      }
+      const nowMs = Date.now();
+      agentPlatformTurnId = `agent-platform-turn-${nowMs}`;
+      const pendingTurn = agentPlatformTurn(text, agentPlatformTurnId, nowMs);
+      setPendingComposerMentions([]);
+      setThreads((current) =>
+        appendTurnWithFallbackPreview(
+          current,
+          turnThreadId,
+          pendingTurn,
+          promptPreview(text),
+          Math.floor(nowMs / 1000),
+        ),
+      );
+      setActiveTurnByThread((current) => ({
+        ...current,
+        [turnThreadId]: agentPlatformTurnId!,
+      }));
+      const response = await client?.runAgentPlatformChat?.(
+        accessToken,
+        turnThreadId,
+        threadSettings.agentPlatformAgentId,
+        text,
+        (delta) => {
+          setThreads((current) =>
+            updateAgentPlatformTurn(
+              current,
+              turnThreadId,
+              agentPlatformTurnId!,
+              (turn) => appendAgentPlatformDelta(turn, delta),
+            ),
+          );
+        },
+        (event, index) => {
+          setThreads((current) =>
+            updateAgentPlatformTurn(
+              current,
+              turnThreadId,
+              agentPlatformTurnId!,
+              (turn) => appendAgentPlatformResourceEvent(turn, event, index),
+            ),
+          );
+        },
+      );
+      if (!response) {
+        throw new Error("Agent Platform app-server BFF 不可用");
+      }
+      setThreads((current) =>
+        updateAgentPlatformTurn(
+          current,
+          turnThreadId,
+          agentPlatformTurnId!,
+          (turn) => ({
+            ...turn,
+            status: "completed",
+            completedAt: Math.floor(Date.now() / 1000),
+            durationMs: response.durationMs,
+            items: turn.items.map((item) =>
+              item.type === "agentMessage"
+                ? { ...item, text: agentPlatformResponseText(response) }
+                : item,
+            ),
+          }),
+        ),
+      );
+      setActiveTurnByThread((current) =>
+        removeRecordKey(current, turnThreadId),
+      );
+      return;
+    }
     const response = await client?.startTurn(
       turnThreadId,
       text,
       visibleMentions,
       threadSettings,
+      images,
     );
     if (response) {
       setPendingComposerMentions([]);
@@ -367,13 +624,36 @@ export async function sendMessageAction({
     }
   } catch (error) {
     setPendingComposerMentions([]);
-    if (isConnected) {
+    if (isConnected && !(error instanceof AppServerRpcError)) {
       preserveThreadsAfterConnectionLoss();
     }
     setComposerValue(text);
     setComposerFocusSignal((signal) => signal + 1);
     const targetThreadId = failedThreadId;
-    if (!activeTurnId && targetThreadId) {
+    if (agentPlatformTurnId && targetThreadId) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Agent Platform 请求失败";
+      setThreads((current) =>
+        updateAgentPlatformTurn(
+          current,
+          targetThreadId,
+          agentPlatformTurnId!,
+          (turn) => ({
+            ...turn,
+            status: "failed",
+            completedAt: Math.floor(Date.now() / 1000),
+            error: {
+              message: errorMessage,
+              codexErrorInfo: null,
+              additionalDetails: null,
+            },
+          }),
+        ),
+      );
+      setActiveTurnByThread((current) =>
+        removeRecordKey(current, targetThreadId),
+      );
+    } else if (!activeTurnId && targetThreadId) {
       const now = Math.floor(Date.now() / 1000);
       const errorMessage =
         error instanceof Error
@@ -469,6 +749,25 @@ export async function interruptActiveTurnAction({
 
   setIsSending(true);
   try {
+    const cancelledAgentRun =
+      await client?.cancelAgentPlatformRunForThread?.(selectedThreadId);
+    if (cancelledAgentRun) {
+      setActiveTurnByThread((current) =>
+        removeRecordKey(current, selectedThreadId),
+      );
+      setThreads((current) =>
+        updateThreadInList(current, selectedThreadId, (thread) => ({
+          ...thread,
+          turns: thread.turns.map((turn) =>
+            turn.id === activeTurnId && turn.status === "inProgress"
+              ? { ...turn, status: "interrupted" }
+              : turn,
+          ),
+        })),
+      );
+      setNotice(threadInterruptRequestedNotice(locale));
+      return;
+    }
     await client?.interruptTurn(selectedThreadId, activeTurnId);
     setActiveTurnByThread((current) =>
       removeRecordKey(current, selectedThreadId),

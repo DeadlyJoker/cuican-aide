@@ -71,6 +71,7 @@ export function runConnectionBootstrapEffectAction<
   currentClient: () => Client | null | undefined;
   isDemoPreview: boolean;
   preserveThreadsAfterConnectionLoss: (showConnectionNotice?: boolean) => void;
+  restoreThread?: (client: Client, thread: Thread) => Promise<Thread>;
   setAccountStatus: (accountStatus: AccountStatus) => void;
   setClient: (client: Client) => void;
   setConnectionState: ConnectionStateSetter;
@@ -121,6 +122,7 @@ export function runConnectionBootstrapEffectAction<
               client,
               currentClient: params.currentClient,
               isMounted: () => isMounted,
+              restoreThread: params.restoreThread,
               selectedThread,
               setThreads: params.setThreads,
               serverThreads,
@@ -158,6 +160,7 @@ function refreshSelectedThreadAfterBootstrap<
   client: Client;
   currentClient: () => Client | null | undefined;
   isMounted: () => boolean;
+  restoreThread?: (client: Client, thread: Thread) => Promise<Thread>;
   selectedThread: Thread | null;
   setThreads: ThreadListSetter;
   serverThreads: Thread[];
@@ -168,6 +171,11 @@ function refreshSelectedThreadAfterBootstrap<
 
   void params.client
     .readThread(params.selectedThread.id)
+    .then((thread) =>
+      params.restoreThread
+        ? params.restoreThread(params.client, thread).catch(() => thread)
+        : thread,
+    )
     .then((thread) => {
       if (!params.isMounted() || params.currentClient() !== params.client) {
         return;

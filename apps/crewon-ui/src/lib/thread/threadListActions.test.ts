@@ -83,6 +83,10 @@ describe("thread list actions", () => {
       isConnected: true,
       locale: "en",
       preserveThreadsAfterConnectionLoss: () => {},
+      restoreThread: async (restoredThread) => ({
+        ...restoredThread,
+        name: "Restored",
+      }),
       setAppView: (view) => {
         appView = view;
       },
@@ -104,6 +108,7 @@ describe("thread list actions", () => {
     expect(sidebarOpen).toBe(false);
     expect(state.selectedThreadId).toBe("thread-1");
     expect(state.threads[0]?.updatedAt).toBe(2);
+    expect(state.threads[0]?.name).toBe("Restored");
   });
 
   it("preserves local threads when selecting fails", async () => {

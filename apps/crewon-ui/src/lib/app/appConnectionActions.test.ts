@@ -254,6 +254,7 @@ describe("app connection actions", () => {
   it("refreshes the selected thread after bootstrap loads summary threads", async () => {
     const serverThreads = [thread("thread-1"), thread("thread-2")];
     const fullThread = { ...serverThreads[0], turns: [turn()] };
+    const restoredThread = { ...fullThread, name: "Restored" };
     let threads: Thread[] = [];
     let currentClient: TestConnectionClient | null = null;
     const readThreadIds: string[] = [];
@@ -276,6 +277,10 @@ describe("app connection actions", () => {
       currentClient: () => currentClient,
       isDemoPreview: false,
       preserveThreadsAfterConnectionLoss: () => {},
+      restoreThread: async (_client, nextThread) => {
+        expect(nextThread).toEqual(fullThread);
+        return restoredThread;
+      },
       setAccountStatus: () => {},
       setClient: (client) => {
         currentClient = client;
@@ -294,7 +299,7 @@ describe("app connection actions", () => {
     await flushAsyncWork();
 
     expect(readThreadIds).toEqual(["thread-1"]);
-    expect(threads).toEqual([fullThread, serverThreads[1]]);
+    expect(threads).toEqual([restoredThread, serverThreads[1]]);
   });
 
   it("keeps demo threads after a successful demo preview connection", async () => {
