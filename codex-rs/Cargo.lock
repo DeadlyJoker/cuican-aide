@@ -2237,6 +2237,8 @@ dependencies = [
  "crewon-utils-cargo-bin",
  "crewon-utils-json-to-toml",
  "crewon-utils-options",
+ "crewon-utils-output-truncation",
+ "crewon-utils-path",
  "crewon-utils-pty",
  "crewon-web-search-extension",
  "crewon-windows-sandbox",

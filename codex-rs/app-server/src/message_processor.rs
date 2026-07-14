@@ -24,6 +24,7 @@ use crate::outgoing_message::ConnectionRequestId;
 use crate::outgoing_message::OutgoingMessageSender;
 use crate::outgoing_message::RequestContext;
 use crate::request_processors::AccountRequestProcessor;
+use crate::request_processors::AgentPlatformRequestProcessor;
 use crate::request_processors::AppsRequestProcessor;
 use crate::request_processors::CatalogRequestProcessor;
 use crate::request_processors::CommandExecRequestProcessor;
@@ -219,6 +220,7 @@ pub(crate) struct MessageProcessor {
     office_scheduler_recovery_running: Arc<AtomicBool>,
     skills_watcher: Arc<SkillsWatcher>,
     account_processor: AccountRequestProcessor,
+    agent_platform_processor: AgentPlatformRequestProcessor,
     apps_processor: AppsRequestProcessor,
     catalog_processor: CatalogRequestProcessor,
     command_exec_processor: CommandExecRequestProcessor,
@@ -248,6 +250,7 @@ pub(crate) struct MessageProcessor {
 #[derive(Debug)]
 pub(crate) struct ConnectionSessionState {
     pub(crate) rpc_gate: Arc<ConnectionRpcGate>,
+    cancellation: CancellationToken,
     initialized: OnceLock<InitializedConnectionSessionState>,
 }
 
@@ -270,6 +273,7 @@ impl ConnectionSessionState {
     pub(crate) fn new() -> Self {
         Self {
             rpc_gate: Arc::new(ConnectionRpcGate::new()),
+            cancellation: CancellationToken::new(),
             initialized: OnceLock::new(),
         }
     }
@@ -307,6 +311,10 @@ impl ConnectionSessionState {
         self.initialized
             .get()
             .is_some_and(|session| session.request_attestation)
+    }
+
+    pub(crate) fn cancellation_token(&self) -> CancellationToken {
+        self.cancellation.clone()
     }
 
     pub(crate) fn initialize(&self, session: InitializedConnectionSessionState) -> Result<(), ()> {
@@ -2247,6 +2255,8 @@ impl MessageProcessor {
             Arc::clone(&config),
             config_manager.clone(),
         );
+        let agent_platform_processor =
+            AgentPlatformRequestProcessor::new(config.codex_home.to_path_buf(), outgoing.clone());
         let apps_processor = AppsRequestProcessor::new(
             auth_manager.clone(),
             Arc::clone(&thread_manager),
@@ -2408,6 +2418,7 @@ impl MessageProcessor {
             office_scheduler_recovery_running: Arc::new(AtomicBool::new(false)),
             skills_watcher,
             account_processor,
+            agent_platform_processor,
             apps_processor,
             catalog_processor,
             command_exec_processor,
@@ -2736,6 +2747,7 @@ impl MessageProcessor {
         connection_id: ConnectionId,
         session_state: &ConnectionSessionState,
     ) {
+        session_state.cancellation.cancel();
         if timeout(
             CONNECTION_RPC_DRAIN_TIMEOUT,
             session_state.rpc_gate.shutdown(),
@@ -2750,6 +2762,9 @@ impl MessageProcessor {
             );
         }
         self.outgoing.connection_closed(connection_id).await;
+        self.agent_platform_processor
+            .connection_closed(connection_id)
+            .await;
         self.fs_processor.connection_closed(connection_id).await;
         self.command_exec_processor
             .connection_closed(connection_id)
@@ -2850,6 +2865,7 @@ impl MessageProcessor {
         let serialization_scope = crewon_request.serialization_scope();
         let app_server_client_name = session.app_server_client_name().map(str::to_string);
         let client_version = session.client_version().map(str::to_string);
+        let connection_cancellation = session.cancellation_token();
         let error_request_id = connection_request_id.clone();
         let rpc_gate = Arc::clone(&session.rpc_gate);
         let processor = Arc::clone(self);
@@ -2865,6 +2881,7 @@ impl MessageProcessor {
                         request_context,
                         app_server_client_name,
                         client_version,
+                        connection_cancellation,
                     )
                     .await;
                 if let Err(error) = result {
@@ -2894,6 +2911,7 @@ impl MessageProcessor {
         request_context: RequestContext,
         app_server_client_name: Option<String>,
         client_version: Option<String>,
+        connection_cancellation: CancellationToken,
     ) -> Result<(), JSONRPCErrorError> {
         let connection_id = connection_request_id.connection_id;
         let request_id = ConnectionRequestId {
@@ -3262,6 +3280,42 @@ impl MessageProcessor {
             ClientRequest::AgentDelete { params, .. } => self
                 .crewon_domain_processor
                 .agent_delete(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AgentPlatformAuth { params, .. } => self
+                .agent_platform_processor
+                .authenticate(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AgentPlatformAgentInfo { params, .. } => self
+                .agent_platform_processor
+                .agent_info(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AgentPlatformChat { params, .. } => self
+                .agent_platform_processor
+                .chat(connection_id, params, connection_cancellation)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AgentPlatformChatStart { params, .. } => self
+                .agent_platform_processor
+                .chat_start(connection_id, params, connection_cancellation)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AgentPlatformRunCancel { params, .. } => Ok(Some(
+                self.agent_platform_processor
+                    .run_cancel(connection_id, params)
+                    .await
+                    .into(),
+            )),
+            ClientRequest::AgentPlatformSessionRead { params, .. } => self
+                .agent_platform_processor
+                .session_read(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::AgentPlatformSessionClear { params, .. } => self
+                .agent_platform_processor
+                .session_clear(params)
                 .await
                 .map(|response| Some(response.into())),
             ClientRequest::OfficeList { params, .. } => {
