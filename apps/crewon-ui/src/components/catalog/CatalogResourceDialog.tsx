@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   Download,
+  Eye,
   FileCode2,
   FileText,
   Folder,
@@ -118,7 +119,11 @@ function declaredMcpOutputSchema(tool: JsonObject): unknown | null {
 function skillMarkdown(detail: CatalogResourceDetail): string {
   if (typeof detail.skill_md === "string") return detail.skill_md;
   const skillMd = objectValue(detail.skill_md);
-  return stringValue(skillMd.content);
+  return (
+    stringValue(skillMd.content) ||
+    stringValue(detail.skill_md_content) ||
+    stringValue(detail.content)
+  );
 }
 
 function markdownBody(value: string): string {
@@ -156,18 +161,9 @@ function documentContent(document: JsonObject): string {
     .join("\n\n");
 }
 
-export function AgentDetail({
-  detail,
-  resourceId,
-}: {
-  detail: CatalogResourceDetail;
-  resourceId: number;
-}) {
-  const authenticated = objectValue(
-    objectValue(detail.invocation).authenticated,
-  );
-  const input = objectValue(authenticated.input);
-  const output = objectValue(authenticated.output);
+export function AgentDetail({ detail }: { detail: CatalogResourceDetail }) {
+  const active = detail.is_active !== false && detail.is_active !== 0;
+  const apiEnabled = detail.api_enabled === true || detail.api_enabled === 1;
   return (
     <div className="catalog-detail-document">
       <section>
@@ -177,59 +173,17 @@ export function AgentDetail({
         </p>
       </section>
       <section>
-        <h3>访问方式</h3>
+        <h3>配置状态</h3>
         <dl className="catalog-contract-list">
           <div>
-            <dt>请求</dt>
-            <dd>
-              <code>
-                POST /api/v1/crewon/catalog/resources/agents/{resourceId}/run
-              </code>
-            </dd>
+            <dt>模式</dt>
+            <dd>{active ? "可用" : "已停用"}</dd>
           </div>
           <div>
-            <dt>鉴权</dt>
-            <dd>
-              <code>Authorization: Bearer &lt;CrewON access token&gt;</code>
-            </dd>
-          </div>
-          <div>
-            <dt>格式</dt>
-            <dd>
-              <code>application/json</code>
-            </dd>
+            <dt>运行</dt>
+            <dd>{apiEnabled ? "Open API 已启用" : "Open API 未启用"}</dd>
           </div>
         </dl>
-      </section>
-      <section>
-        <h3>输入参数</h3>
-        <SchemaTable
-          schema={{
-            properties: {
-              inputs: {
-                type: "object",
-                description: "Agent 业务输入，例如 query",
-              },
-              subject: { type: "object", description: "可选的调用主体信息" },
-              channel: { type: "string", description: "调用来源，默认 crewon" },
-            },
-            required: ["inputs"],
-            ...input,
-          }}
-        />
-      </section>
-      <section>
-        <h3>输出结果</h3>
-        <SchemaTable
-          schema={{
-            properties: Object.fromEntries(
-              Object.entries(output).map(([name, value]) => [
-                name,
-                { type: displayType(value) },
-              ]),
-            ),
-          }}
-        />
       </section>
     </div>
   );
@@ -237,10 +191,10 @@ export function AgentDetail({
 
 export function SkillDetail({
   detail,
-  resourceId,
+  resource,
 }: {
   detail: CatalogResourceDetail;
-  resourceId: number;
+  resource: CatalogResourceSummary;
 }) {
   const [listing, setListing] = useState<CatalogSkillFile | null>(null);
   const [selectedFile, setSelectedFile] = useState<CatalogSkillFile | null>(
@@ -250,8 +204,14 @@ export function SkillDetail({
   const markdown = markdownBody(skillMarkdown(detail));
 
   useEffect(() => {
+    if (resource.source === "catalog" && !resource.downloaded) {
+      setListing(null);
+      setSelectedFile(null);
+      setFileError(null);
+      return;
+    }
     let cancelled = false;
-    readCatalogSkillFile(resourceId).then(
+    readCatalogSkillFile(resource).then(
       (value) => !cancelled && setListing(value),
       (reason: unknown) =>
         !cancelled &&
@@ -262,12 +222,12 @@ export function SkillDetail({
     return () => {
       cancelled = true;
     };
-  }, [resourceId]);
+  }, [resource]);
 
   async function openPath(path: string, type: "directory" | "file") {
     setFileError(null);
     try {
-      const value = await readCatalogSkillFile(resourceId, path);
+      const value = await readCatalogSkillFile(resource, path);
       if (type === "directory") {
         setListing(value);
         setSelectedFile(null);
@@ -298,6 +258,9 @@ export function SkillDetail({
           ) : null}
         </header>
         {fileError ? <p role="alert">{fileError}</p> : null}
+        {resource.source === "catalog" && !resource.downloaded ? (
+          <p>下载 Skill 后可浏览完整文件树</p>
+        ) : null}
         <div>
           {(listing?.items ?? []).map((item) => (
             <button
@@ -495,6 +458,7 @@ export function CatalogResourceDialog({
   const [detail, setDetail] = useState<CatalogResourceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
 
   useEffect(() => {
     if (!resource) {
@@ -504,7 +468,8 @@ export function CatalogResourceDialog({
     let cancelled = false;
     setError(null);
     setDetail(null);
-    readCatalogResourceDetail(resource.type, resource.id).then(
+    setDownloaded(Boolean(resource.downloaded));
+    readCatalogResourceDetail(resource).then(
       (value) => !cancelled && setDetail(value),
       (reason: unknown) =>
         !cancelled &&
@@ -517,15 +482,22 @@ export function CatalogResourceDialog({
 
   if (!resource) return null;
   const activeResource = resource;
+  const isCatalogSkill =
+    activeResource.type === "skills" && activeResource.source === "catalog";
 
   async function updateResource() {
+    if (activeResource.type !== "skills" || activeResource.source !== "catalog") {
+      setError("只有目录 Skill 可以下载或更新");
+      return;
+    }
     setUpdating(true);
     setError(null);
     try {
-      await downloadCatalogResource(activeResource.type, activeResource.id);
+      await downloadCatalogResource("skills", activeResource.id);
+      setDownloaded(true);
       await onRefresh();
       setDetail(
-        await readCatalogResourceDetail(activeResource.type, activeResource.id),
+        await readCatalogResourceDetail(activeResource),
       );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "资源更新失败");
@@ -562,7 +534,7 @@ export function CatalogResourceDialog({
             {resource.description ? <p>{resource.description}</p> : null}
           </div>
           <div>
-            {resource.update_available ? (
+            {isCatalogSkill && (!downloaded || resource.update_available) ? (
               <button
                 className="button compact"
                 disabled={updating}
@@ -574,7 +546,7 @@ export function CatalogResourceDialog({
                 ) : (
                   <RefreshCw aria-hidden="true" />
                 )}
-                更新资源
+                {resource.update_available ? "更新 Skill" : "下载 Skill"}
               </button>
             ) : null}
             <button
@@ -596,15 +568,18 @@ export function CatalogResourceDialog({
         {!detail && !error ? (
           <p className="catalog-resource-loading">
             <LoaderCircle className="spin" aria-hidden="true" />
-            正在读取已下载内容…
+            正在读取线上资源内容…
           </p>
         ) : null}
         <div className="catalog-resource-detail-body">
           {detail && resource.type === "agents" ? (
-            <AgentDetail detail={detail} resourceId={resource.id} />
+            <AgentDetail detail={detail} />
           ) : null}
           {detail && resource.type === "skills" ? (
-            <SkillDetail detail={detail} resourceId={resource.id} />
+            <SkillDetail
+              detail={detail}
+              resource={{ ...resource, downloaded }}
+            />
           ) : null}
           {detail && resource.type === "mcp_servers" ? (
             <McpDetail detail={detail} />
@@ -615,8 +590,16 @@ export function CatalogResourceDialog({
         </div>
         <footer className="catalog-resource-dialog-foot">
           <span>
-            <Download aria-hidden="true" />
-            已保存到当前账号资源池
+            {isCatalogSkill ? (
+              <Download aria-hidden="true" />
+            ) : (
+              <Eye aria-hidden="true" />
+            )}
+            {isCatalogSkill
+              ? downloaded
+                ? "Skill 已保存到当前账号"
+                : "目录 Skill · 可下载"
+              : "在线只读 · 运行时由绑定的 Agent 使用"}
           </span>
         </footer>
       </section>

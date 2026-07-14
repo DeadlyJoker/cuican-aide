@@ -6,8 +6,15 @@ import {
   SetPasswordDialog,
   clearWeComCallbackParams,
 } from "../auth/AgentPlatformAuthGate";
-import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
+import type {
+  AgentPlatformResourceStates,
+  AgentPlatformSnapshot,
+} from "../../lib/agent-platform/agentPlatformClient";
 import { AgentsView, KnowledgeCatalogView } from "./CommandWorkspaceViews";
+import {
+  createAgentPlatformResourceStates,
+  mergeAgentPlatformSnapshot,
+} from "./commandWorkspaceState";
 import {
   AgentDetail,
   KnowledgeDetail,
@@ -25,7 +32,7 @@ const snapshot: AgentPlatformSnapshot = {
       owner_username: "admin",
       api_enabled: true,
       is_active: true,
-      downloaded: true,
+      resource_source: "online",
     },
   ],
   skills: [
@@ -37,7 +44,8 @@ const snapshot: AgentPlatformSnapshot = {
       category: "风控",
       file_count: 4,
       has_scripts: true,
-      downloaded: true,
+      downloaded: false,
+      resource_source: "catalog",
     },
   ],
   mcpServers: [
@@ -49,7 +57,7 @@ const snapshot: AgentPlatformSnapshot = {
       owner_username: "admin",
       tool_count: 3,
       is_connected: true,
-      downloaded: true,
+      resource_source: "online",
     },
   ],
   knowledgeBases: [
@@ -61,12 +69,14 @@ const snapshot: AgentPlatformSnapshot = {
       document_count: 8,
       chunk_count: 126,
       embedding_model: "text-embedding-v2",
-      downloaded: true,
+      resource_source: "online",
     },
   ],
   mcpTools: [],
   workflows: [],
 };
+
+const readyResourceStates = createAgentPlatformResourceStates("ready");
 
 describe("CrewON resource catalog MVP", () => {
   afterEach(() => {
@@ -145,6 +155,7 @@ describe("CrewON resource catalog MVP", () => {
           catalogFilter="all"
           catalogSearch=""
           platformState="ready"
+          resourceStates={readyResourceStates}
           snapshot={snapshot}
           onReload={async () => {}}
           onCatalogFilterChange={() => {}}
@@ -153,12 +164,18 @@ describe("CrewON resource catalog MVP", () => {
         <KnowledgeCatalogView
           active
           platformState="ready"
+          resourceStates={readyResourceStates}
           snapshot={snapshot}
           onReload={async () => {}}
         />
       </>,
     );
 
+    expect(markup).toContain("在线 Agent");
+    expect(markup).toContain("在线 · 已连接");
+    expect(markup).toContain("在线 · 只读");
+    expect(markup.match(/>下载<\/button>/g)).toHaveLength(1);
+    expect(markup).not.toContain(">测试</button>");
     expect(markup).toMatchSnapshot();
   });
 
@@ -177,6 +194,16 @@ describe("CrewON resource catalog MVP", () => {
         catalogFilter="all"
         catalogSearch=""
         platformState={platformState}
+        resourceStates={
+          platformState === "loading"
+            ? createAgentPlatformResourceStates("loading")
+            : platformState === "fallback"
+              ? createAgentPlatformResourceStates(
+                  "error",
+                  "agent-platform unavailable",
+                )
+              : readyResourceStates
+        }
         snapshot={emptySnapshot}
         onReload={async () => {}}
         onCatalogFilterChange={() => {}}
@@ -192,12 +219,14 @@ describe("CrewON resource catalog MVP", () => {
         <KnowledgeCatalogView
           active
           platformState="loading"
+          resourceStates={createAgentPlatformResourceStates("loading")}
           snapshot={emptySnapshot}
           onReload={async () => {}}
         />
         <KnowledgeCatalogView
           active
           platformState="ready"
+          resourceStates={readyResourceStates}
           snapshot={emptySnapshot}
           onReload={async () => {}}
         />
@@ -208,13 +237,102 @@ describe("CrewON resource catalog MVP", () => {
     expect(markup).toMatchSnapshot();
   });
 
-  it("snapshots friendly downloaded resource details", () => {
+  it("snapshots category errors without hiding last successful resources", () => {
+    const resourceStates: AgentPlatformResourceStates = {
+      agents: {
+        status: "error",
+        error: "agent-platform /api/v1/agents failed: 500",
+      },
+      skills: { status: "ready", error: null },
+      mcp: { status: "loading", error: null },
+      knowledge: {
+        status: "error",
+        error: "agent-platform /api/v1/knowledge failed: 503",
+      },
+    };
+    const markup = renderToStaticMarkup(
+      <>
+        <AgentsView
+          active
+          catalogFilter="all"
+          catalogSearch=""
+          platformState="ready"
+          resourceStates={resourceStates}
+          snapshot={snapshot}
+          onReload={async () => {}}
+          onCatalogFilterChange={() => {}}
+          onCatalogSearchChange={() => {}}
+        />
+        <KnowledgeCatalogView
+          active
+          platformState="ready"
+          resourceStates={resourceStates}
+          snapshot={snapshot}
+          onReload={async () => {}}
+        />
+      </>,
+    );
+
+    expect(markup).toContain("Agent 加载失败，继续显示上次成功加载的 1 项");
+    expect(markup).toContain("重试 Agent");
+    expect(markup).toContain("正在更新 MCP");
+    expect(markup).toContain("重试知识库");
+    expect(markup).toMatchSnapshot();
+  });
+
+  it("only replaces categories whose reload completed successfully", () => {
+    const current = {
+      ...snapshot,
+      resourceStates: readyResourceStates,
+    };
+    const incoming: AgentPlatformSnapshot = {
+      ...snapshot,
+      agents: [],
+      skills: [
+        {
+          id: 22,
+          name: "更新后的 Skill",
+          downloaded: true,
+        },
+      ],
+      resourceStates: {
+        ...readyResourceStates,
+        agents: { status: "error", error: "Agent request failed" },
+      },
+    };
+
+    const merged = mergeAgentPlatformSnapshot(current, incoming);
+
+    expect(merged.agents).toEqual(snapshot.agents);
+    expect(merged.skills).toEqual(incoming.skills);
+    expect(merged.resourceStates?.agents).toEqual({
+      status: "error",
+      error: "Agent request failed",
+    });
+
+    const scopedReload = mergeAgentPlatformSnapshot(
+      current,
+      {
+        ...incoming,
+        agents: [{ id: 13, name: "更新后的 Agent", downloaded: true }],
+        resourceStates: readyResourceStates,
+      },
+      ["agents"],
+    );
+    expect(scopedReload.agents).toEqual([
+      { id: 13, name: "更新后的 Agent", downloaded: true },
+    ]);
+    expect(scopedReload.skills).toEqual(snapshot.skills);
+  });
+
+  it("snapshots friendly online read-only resource details", () => {
     const markup = renderToStaticMarkup(
       <>
         <AgentDetail
-          resourceId={12}
           detail={{
             id: 12,
+            is_active: true,
+            api_enabled: true,
             description: "回答企业授信业务问题",
             invocation: {
               authenticated: {
@@ -225,7 +343,13 @@ describe("CrewON resource catalog MVP", () => {
           }}
         />
         <SkillDetail
-          resourceId={21}
+          resource={{
+            id: 21,
+            type: "skills",
+            name: "risk-check",
+            description: "",
+            source: "online",
+          }}
           detail={{
             id: 21,
             skill_md: {

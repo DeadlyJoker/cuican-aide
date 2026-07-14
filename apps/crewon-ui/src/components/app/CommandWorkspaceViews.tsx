@@ -17,10 +17,14 @@ import { classNames, connectionLabel } from "./commandWorkspaceUtils";
 import { CatalogResourceDialog } from "../catalog/CatalogResourceDialog";
 import {
   downloadCatalogResource,
-  refreshAgentPlatformCatalog,
   type CatalogResourceSummary,
 } from "../../lib/agent-platform/agentPlatformCatalog";
-import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
+import type {
+  AgentPlatformResourceCategory,
+  AgentPlatformResourceState,
+  AgentPlatformResourceStates,
+  AgentPlatformSnapshot,
+} from "../../lib/agent-platform/agentPlatformClient";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 
 type FilterOption = {
@@ -45,6 +49,69 @@ type CatalogItem = {
 };
 
 type TeamMode = "office" | "workflow" | "experts";
+
+const resourceCategoryLabels: Record<AgentPlatformResourceCategory, string> = {
+  agents: "Agent",
+  skills: "Skill",
+  mcp: "MCP",
+  knowledge: "知识库",
+};
+
+function CatalogCategoryState({
+  category,
+  count,
+  state,
+  onRetry,
+}: {
+  category: AgentPlatformResourceCategory;
+  count: number;
+  state: AgentPlatformResourceState;
+  onRetry: (category: AgentPlatformResourceCategory) => Promise<void>;
+}) {
+  const label = resourceCategoryLabels[category];
+  const inlineLabel = category === "knowledge" ? label : ` ${label}`;
+  const subjectLabel = category === "knowledge" ? label : `${label} `;
+  if (state.status === "ready" && count > 0) {
+    return null;
+  }
+
+  let message = `当前账号暂无${inlineLabel}。`;
+  if (state.status === "loading") {
+    message =
+      count > 0
+        ? `正在更新 ${label}，继续显示上次成功加载的 ${count} 项。`
+        : `正在读取当前账号的${inlineLabel}…`;
+  } else if (state.status === "error") {
+    message =
+      count > 0
+        ? `${subjectLabel}加载失败，继续显示上次成功加载的 ${count} 项。`
+        : `${subjectLabel}暂时无法加载，请重试。`;
+  }
+
+  return (
+    <div
+      className={classNames("catalog-category-state", `is-${state.status}`)}
+      data-resource-category={category}
+      role={state.status === "error" ? "alert" : "status"}
+    >
+      <div>
+        <strong>{message}</strong>
+        {state.status === "error" && state.error ? (
+          <span className="catalog-category-error-detail">{state.error}</span>
+        ) : null}
+      </div>
+      {state.status === "error" ? (
+        <button
+          className="button compact"
+          type="button"
+          onClick={() => void onRetry(category)}
+        >
+          {category === "knowledge" ? "重试知识库" : `重试 ${label}`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 function includesQuery(item: CatalogItem, query: string) {
   const normalized = query.trim().toLowerCase();
@@ -167,6 +234,30 @@ function CatalogCard({
   onDownload?: (resource: CatalogResourceSummary) => void;
   onOpen?: (resource: CatalogResourceSummary) => void;
 }) {
+  const resource = item.resource;
+  const canDownload =
+    resource?.type === "skills" &&
+    resource.source === "catalog" &&
+    resource.download_available !== false;
+  const resourceStatus = resource
+    ? resource.type === "skills"
+        ? resource.source === "catalog"
+        ? resource.update_available
+          ? "有更新"
+          : resource.downloaded
+            ? "已下载"
+            : "可下载"
+        : "在线 Skill"
+      : resource.type === "agents"
+        ? resource.enabled && resource.api_enabled
+          ? "在线 Agent"
+          : "在线 · 只读"
+        : resource.type === "mcp_servers"
+          ? resource.connected
+            ? "在线 · 已连接"
+            : "在线 · 未连接"
+          : "在线 · 只读"
+    : null;
   return (
     <article
       className={classNames("catalog-card", item.accent)}
@@ -182,19 +273,16 @@ function CatalogCard({
           <strong>{item.title}</strong>
         </div>
         {item.detail ? <p>{item.detail}</p> : null}
-        {item.resource ? (
+        {resource ? (
           <span
             className={classNames(
               "catalog-download-status",
-              item.resource.update_available && "update",
-              item.resource.downloaded && "downloaded",
+              resource.update_available && "update",
+              (resource.downloaded || resource.source !== "catalog") &&
+                "downloaded",
             )}
           >
-            {item.resource.update_available
-              ? "有更新"
-              : item.resource.downloaded
-                ? "已下载"
-                : "未下载"}
+            {resourceStatus}
           </span>
         ) : (
           <div className="catalog-meta">
@@ -204,36 +292,38 @@ function CatalogCard({
           </div>
         )}
       </div>
-      {item.resource ? (
+      {resource ? (
         <div className="catalog-card-actions">
           <button
             className="button compact"
-            disabled={!item.resource.downloaded}
             type="button"
-            onClick={() => onOpen?.(item.resource!)}
+            onClick={() => onOpen?.(resource)}
           >
             查看
           </button>
-          <button
-            className="button compact"
-            disabled={
-              progress !== undefined ||
-              (Boolean(item.resource.downloaded) &&
-                !item.resource.update_available)
-            }
-            type="button"
-            onClick={() => onDownload?.(item.resource!)}
-          >
-            {progress !== undefined
-              ? "下载中…"
-              : item.resource.update_available
-                ? "更新"
-                : item.resource.downloaded
-                  ? "已下载"
-                  : "下载"}
-          </button>
-          {progress !== undefined ? (
-            <progress max="100" value={progress} />
+          {canDownload ? (
+            <>
+              <button
+                className="button compact"
+                disabled={
+                  progress !== undefined ||
+                  (Boolean(resource.downloaded) && !resource.update_available)
+                }
+                type="button"
+                onClick={() => onDownload?.(resource)}
+              >
+                {progress !== undefined
+                  ? "下载中…"
+                  : resource.update_available
+                    ? "更新"
+                    : resource.downloaded
+                      ? "已下载"
+                      : "下载"}
+              </button>
+              {progress !== undefined ? (
+                <progress max="100" value={progress} />
+              ) : null}
+            </>
           ) : null}
         </div>
       ) : item.action ? (
@@ -269,18 +359,19 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
       api_enabled: Boolean(agent.api_enabled),
       invocation_url: agent.invocation_url,
       enabled: agent.is_active,
-      download_available: true,
+      download_available: false,
       downloaded: agent.downloaded,
       downloaded_at: agent.downloaded_at,
       update_available: agent.update_available,
       source_updated_at: agent.source_updated_at,
+      source: agent.resource_source,
     };
     return {
       accent: "employee-card",
       detail: resource.description,
       filter: "employee",
       icon: "A",
-      id: `catalog-agent-${agent.id}`,
+      id: `agent-platform:agents:${agent.id}`,
       label: "员工",
       meta: [],
       resource,
@@ -299,18 +390,19 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
       version: skill.version,
       file_count: skill.file_count ?? 0,
       has_scripts: Boolean(skill.has_scripts),
-      download_available: true,
+      download_available: skill.resource_source === "catalog",
       downloaded: skill.downloaded,
       downloaded_at: skill.downloaded_at,
       update_available: skill.update_available,
       source_updated_at: skill.source_updated_at,
+      source: skill.resource_source,
     };
     return {
       accent: "skill-card",
       detail: resource.description,
       filter: "skill",
       icon: "S",
-      id: `catalog-skill-${skill.id}`,
+      id: `agent-platform:skills:${skill.id}`,
       label: "技能",
       meta: [],
       resource,
@@ -328,18 +420,19 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
       enabled: server.is_enabled,
       connected: Boolean(server.is_connected),
       tool_count: server.tool_count ?? 0,
-      download_available: true,
+      download_available: false,
       downloaded: server.downloaded,
       downloaded_at: server.downloaded_at,
       update_available: server.update_available,
       source_updated_at: server.source_updated_at,
+      source: server.resource_source,
     };
     return {
       accent: "service-card",
       detail: resource.description,
       filter: "service",
       icon: "M",
-      id: `catalog-mcp-${server.id}`,
+      id: `agent-platform:mcp_servers:${server.id}`,
       label: "服务",
       meta: [],
       resource,
@@ -789,6 +882,7 @@ export function AgentsView({
   catalogFilter,
   catalogSearch,
   platformState,
+  resourceStates,
   snapshot,
   onReload,
   onCatalogFilterChange,
@@ -798,13 +892,15 @@ export function AgentsView({
   catalogFilter: string;
   catalogSearch: string;
   platformState: "loading" | "ready" | "fallback";
+  resourceStates: AgentPlatformResourceStates;
   snapshot: AgentPlatformSnapshot;
-  onReload: () => Promise<void>;
+  onReload: (category?: AgentPlatformResourceCategory) => Promise<void>;
   onCatalogFilterChange: (filter: string) => void;
   onCatalogSearchChange: (query: string) => void;
 }) {
-  const [selectedResource, setSelectedResource] =
-    useState<CatalogResourceSummary | null>(null);
+  const [selectedResource, setSelectedResource] = useState<{
+    resource: CatalogResourceSummary;
+  } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<
@@ -817,11 +913,33 @@ export function AgentsView({
       (catalogFilter === "all" || hasFilter(item, catalogFilter)) &&
       includesQuery(item, catalogSearch),
   );
+  const displayedCategories: AgentPlatformResourceCategory[] =
+    catalogFilter === "employee"
+      ? ["agents"]
+      : catalogFilter === "skill"
+        ? ["skills"]
+        : catalogFilter === "service"
+          ? ["mcp"]
+          : ["agents", "skills", "mcp"];
+  const categoryCounts: Record<AgentPlatformResourceCategory, number> = {
+    agents: snapshot.agents.length,
+    skills: snapshot.skills.length,
+    mcp: snapshot.mcpServers.length,
+    knowledge: snapshot.knowledgeBases.length,
+  };
+  const selectedCardCount = displayedCategories.reduce(
+    (total, category) => total + categoryCounts[category],
+    0,
+  );
+  const stateCategories = displayedCategories.filter(
+    (category) =>
+      resourceStates[category].status !== "ready" ||
+      categoryCounts[category] === 0,
+  );
 
   async function refresh() {
     setRefreshing(true);
     try {
-      await refreshAgentPlatformCatalog();
       await onReload();
     } finally {
       setRefreshing(false);
@@ -829,11 +947,15 @@ export function AgentsView({
   }
 
   async function download(resource: CatalogResourceSummary) {
+    if (resource.type !== "skills" || resource.source !== "catalog") {
+      setDownloadError("只有目录 Skill 可以下载");
+      return;
+    }
     const key = `${resource.type}:${resource.id}`;
     setDownloadProgress((current) => ({ ...current, [key]: 1 }));
     setDownloadError(null);
     try {
-      await downloadCatalogResource(resource.type, resource.id);
+      await downloadCatalogResource("skills", resource.id);
       await onReload();
     } catch (reason) {
       setDownloadError(
@@ -897,7 +1019,7 @@ export function AgentsView({
               type="button"
               onClick={refresh}
             >
-              {refreshing ? "更新中…" : "更新目录"}
+              {refreshing ? "更新中…" : "刷新资源"}
             </button>
           </div>
         </header>
@@ -906,6 +1028,19 @@ export function AgentsView({
           <p className="catalog-download-error" role="alert">
             {downloadError}
           </p>
+        ) : null}
+        {stateCategories.length > 0 ? (
+          <div className="catalog-category-states">
+            {stateCategories.map((category) => (
+              <CatalogCategoryState
+                category={category}
+                count={categoryCounts[category]}
+                key={category}
+                state={resourceStates[category]}
+                onRetry={onReload}
+              />
+            ))}
+          </div>
         ) : null}
         <section
           className="capability-catalog"
@@ -923,28 +1058,22 @@ export function AgentsView({
                   : undefined
               }
               onDownload={download}
-              onOpen={setSelectedResource}
+              onOpen={(resource) => setSelectedResource({ resource })}
             />
           ))}
-          {visibleCards.length === 0 ? (
+          {visibleCards.length === 0 && selectedCardCount > 0 ? (
             <div
               className="filter-empty-state"
               data-filter-empty=""
               role="status"
             >
-              {platformState === "loading"
-                ? "正在读取当前账号的 Agent、Skill 和 MCP…"
-                : platformState === "fallback"
-                  ? "资源目录暂时不可用，请确认 agent-platform 已启动后重试。"
-                  : cards.length === 0
-                    ? "当前账号暂无可用资源。请先在 agent-platform 创建或授权资源，再更新目录。"
-                    : "没有匹配项"}
+              没有匹配项
             </div>
           ) : null}
         </section>
       </div>
       <CatalogResourceDialog
-        resource={selectedResource}
+        resource={selectedResource?.resource ?? null}
         onClose={() => setSelectedResource(null)}
         onRefresh={refresh}
       />
@@ -954,23 +1083,21 @@ export function AgentsView({
 
 export function KnowledgeCatalogView({
   active,
-  platformState,
+  resourceStates,
   snapshot,
   onReload,
 }: {
   active: boolean;
   platformState: "loading" | "ready" | "fallback";
+  resourceStates: AgentPlatformResourceStates;
   snapshot: AgentPlatformSnapshot;
-  onReload: () => Promise<void>;
+  onReload: (category?: AgentPlatformResourceCategory) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
-  const [selectedResource, setSelectedResource] =
-    useState<CatalogResourceSummary | null>(null);
+  const [selectedResource, setSelectedResource] = useState<{
+    resource: CatalogResourceSummary;
+  } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<
-    Record<string, number>
-  >({});
   const cards = snapshot.knowledgeBases.map((knowledgeBase): CatalogItem => {
     const resource: CatalogResourceSummary = {
       id: knowledgeBase.id,
@@ -981,18 +1108,19 @@ export function KnowledgeCatalogView({
       document_count: knowledgeBase.document_count ?? 0,
       chunk_count: knowledgeBase.chunk_count ?? 0,
       embedding_model: knowledgeBase.embedding_model,
-      download_available: true,
+      download_available: false,
       downloaded: knowledgeBase.downloaded,
       downloaded_at: knowledgeBase.downloaded_at,
       update_available: knowledgeBase.update_available,
       source_updated_at: knowledgeBase.source_updated_at,
+      source: knowledgeBase.resource_source,
     };
     return {
       accent: "knowledge-card",
       detail: resource.description,
       filter: "knowledge personal",
       icon: <BookOpen aria-hidden="true" />,
-      id: `catalog-knowledge-${knowledgeBase.id}`,
+      id: `agent-platform:knowledge_bases:${knowledgeBase.id}`,
       label: "知识库",
       meta: [],
       resource,
@@ -1004,30 +1132,9 @@ export function KnowledgeCatalogView({
   async function refresh() {
     setRefreshing(true);
     try {
-      await refreshAgentPlatformCatalog();
       await onReload();
     } finally {
       setRefreshing(false);
-    }
-  }
-
-  async function download(resource: CatalogResourceSummary) {
-    const key = `${resource.type}:${resource.id}`;
-    setDownloadProgress((current) => ({ ...current, [key]: 1 }));
-    setDownloadError(null);
-    try {
-      await downloadCatalogResource(resource.type, resource.id);
-      await onReload();
-    } catch (reason) {
-      setDownloadError(
-        reason instanceof Error ? reason.message : "知识库下载失败",
-      );
-    } finally {
-      setDownloadProgress((current) => {
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
     }
   }
 
@@ -1055,46 +1162,37 @@ export function KnowledgeCatalogView({
               type="button"
               onClick={refresh}
             >
-              {refreshing ? "更新中…" : "更新目录"}
+              {refreshing ? "更新中…" : "刷新资源"}
             </button>
           </div>
         </header>
-        {downloadError ? (
-          <p className="catalog-download-error" role="alert">
-            {downloadError}
-          </p>
+        {resourceStates.knowledge.status !== "ready" || cards.length === 0 ? (
+          <div className="catalog-category-states">
+            <CatalogCategoryState
+              category="knowledge"
+              count={cards.length}
+              state={resourceStates.knowledge}
+              onRetry={onReload}
+            />
+          </div>
         ) : null}
         <section className="capability-catalog knowledge-catalog">
           {visibleCards.map((item) => (
             <CatalogCard
               item={item}
               key={item.id}
-              progress={
-                item.resource
-                  ? downloadProgress[
-                      `${item.resource.type}:${item.resource.id}`
-                    ]
-                  : undefined
-              }
-              onDownload={download}
-              onOpen={setSelectedResource}
+              onOpen={(resource) => setSelectedResource({ resource })}
             />
           ))}
-          {visibleCards.length === 0 ? (
+          {visibleCards.length === 0 && cards.length > 0 ? (
             <div className="filter-empty-state" role="status">
-              {platformState === "loading"
-                ? "正在读取当前账号的知识库…"
-                : platformState === "fallback"
-                  ? "知识库目录暂时不可用，请确认 agent-platform 已启动后重试。"
-                  : cards.length === 0
-                    ? "当前账号暂无可用知识库。请先在 agent-platform 创建或授权知识库，再更新目录。"
-                    : "没有匹配的知识库"}
+              没有匹配的知识库
             </div>
           ) : null}
         </section>
       </div>
       <CatalogResourceDialog
-        resource={selectedResource}
+        resource={selectedResource?.resource ?? null}
         onClose={() => setSelectedResource(null)}
         onRefresh={refresh}
       />

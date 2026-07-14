@@ -23,6 +23,18 @@ type PlatformModelInfo = {
   provider?: string | null;
 };
 
+export type AgentPlatformResourceSource = "online" | "catalog" | "local";
+
+type PlatformAgentMcpBinding =
+  | string
+  | number
+  | {
+      server_id: number;
+      enabled?: boolean;
+      included_tool_ids?: number[];
+      excluded_tool_ids?: number[];
+    };
+
 type PlatformAgent = {
   id: number;
   name: string;
@@ -31,7 +43,7 @@ type PlatformAgent = {
   model_info?: PlatformModelInfo | null;
   knowledge_base_ids?: number[] | null;
   skill_ids?: number[] | null;
-  mcp_servers?: string[] | null;
+  mcp_servers?: PlatformAgentMcpBinding[] | null;
   config?: Record<string, unknown> | null;
   is_active?: boolean | number | null;
   api_enabled?: boolean | number | null;
@@ -41,6 +53,8 @@ type PlatformAgent = {
   downloaded_at?: string | null;
   update_available?: boolean;
   source_updated_at?: string | null;
+  resource_source?: AgentPlatformResourceSource;
+  user_id?: number | null;
 };
 
 type PlatformKnowledgeBase = {
@@ -56,12 +70,15 @@ type PlatformKnowledgeBase = {
   downloaded_at?: string | null;
   update_available?: boolean;
   source_updated_at?: string | null;
+  resource_source?: AgentPlatformResourceSource;
+  user_id?: number | null;
 };
 
 type PlatformSkill = {
   id: number;
   name: string;
   description?: string | null;
+  enabled?: boolean | number | null;
   category?: string | null;
   version?: string | null;
   tags?: string[] | null;
@@ -74,6 +91,9 @@ type PlatformSkill = {
   downloaded_at?: string | null;
   update_available?: boolean;
   source_updated_at?: string | null;
+  resource_source?: AgentPlatformResourceSource;
+  user_id?: number | null;
+  is_enabled?: boolean | number | null;
 };
 
 type PlatformMcpServer = {
@@ -92,18 +112,21 @@ type PlatformMcpServer = {
   downloaded_at?: string | null;
   update_available?: boolean;
   source_updated_at?: string | null;
+  resource_source?: AgentPlatformResourceSource;
+  owner_user_id?: number | null;
+  created_by?: number | null;
 };
 
 type PlatformMcpTool = {
   id: number;
+  server_id: number;
   name: string;
   alias?: string | null;
   description?: string | null;
   intro?: string | null;
   category?: string | null;
   version?: string | null;
-  server_name?: string | null;
-  schema?: unknown;
+  input_schema?: unknown;
   tags?: string[] | null;
 };
 
@@ -116,7 +139,25 @@ export type PlatformWorkflow = {
   created_at?: string | null;
   updated_at?: string | null;
   config?: Record<string, unknown> | null;
+  user_id?: number | null;
+  resource_source?: AgentPlatformResourceSource;
 };
+
+export type AgentPlatformResourceCategory =
+  | "agents"
+  | "skills"
+  | "mcp"
+  | "knowledge";
+
+export type AgentPlatformResourceState = {
+  status: "loading" | "ready" | "error";
+  error: string | null;
+};
+
+export type AgentPlatformResourceStates = Record<
+  AgentPlatformResourceCategory,
+  AgentPlatformResourceState
+>;
 
 export type AgentPlatformSnapshot = {
   agents: PlatformAgent[];
@@ -125,6 +166,13 @@ export type AgentPlatformSnapshot = {
   mcpServers: PlatformMcpServer[];
   mcpTools: PlatformMcpTool[];
   workflows: PlatformWorkflow[];
+  resourceStates?: AgentPlatformResourceStates;
+};
+
+type AgentPlatformUser = {
+  id: number;
+  username: string;
+  role?: string | null;
 };
 
 type RequestOptions = {
@@ -133,7 +181,7 @@ type RequestOptions = {
 };
 
 const DEFAULT_BASE_URL = "/agent-platform-api";
-const PLATFORM_AVAILABILITY_PROBE_PATH = "/api/v1/mcp/tools?page=1&page_size=1";
+const PLATFORM_AVAILABILITY_PROBE_PATH = "/api/v1/health";
 export const AGENT_PLATFORM_TOKEN_STORAGE_KEY = "crewon-agent-platform-token";
 export const AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY =
   "crewon-agent-platform-refresh-token";
@@ -257,6 +305,10 @@ async function getAgentPlatformToken(): Promise<string | null> {
   return cachedTokenPromise;
 }
 
+export async function getAgentPlatformAccessToken(): Promise<string | null> {
+  return getAgentPlatformToken();
+}
+
 async function loginWithConfiguredDevAccount(): Promise<string | null> {
   const username = envValue("VITE_AGENT_PLATFORM_DEV_USERNAME");
   const password = envValue("VITE_AGENT_PLATFORM_DEV_PASSWORD");
@@ -327,63 +379,223 @@ async function listPage<T>(
   return Array.isArray(response.items) ? response.items : [];
 }
 
+function settledError(result: PromiseSettledResult<unknown>): string {
+  if (result.status === "rejected" && result.reason instanceof Error) {
+    return result.reason.message;
+  }
+  return "agent-platform request failed";
+}
+
 export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot> {
   await ensureAgentPlatformAvailable();
 
-  try {
-    const catalog = await request<{
+  const currentUser = await request<AgentPlatformUser>("/api/v1/auth/me", {
+    auth: true,
+  });
+
+  const results = await Promise.allSettled([
+    listPage<PlatformAgent>("/api/v1/agents/?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformKnowledgeBase>("/api/v1/knowledge/?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformSkill>("/api/v1/skills?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformMcpServer>("/api/v1/mcp/servers?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformMcpTool>("/api/v1/mcp/tools?page=1&page_size=100", {
+      auth: true,
+    }),
+    listPage<PlatformWorkflow>("/api/v1/workflows?page=1&page_size=100", {
+      auth: true,
+    }),
+    request<{
       resources?: {
-        agents?: Array<PlatformAgent & { model?: string | null }>;
+        agents?: PlatformAgent[];
         knowledge_bases?: PlatformKnowledgeBase[];
         skills?: PlatformSkill[];
         mcp_servers?: PlatformMcpServer[];
       };
-    }>("/api/v1/crewon/catalog", { auth: true });
-    const resources = catalog.resources ?? {};
-    const workflows = await listPage<PlatformWorkflow>(
-      "/api/v1/workflows?page=1&page_size=100",
+    }>(
+      "/api/v1/crewon/catalog",
       { auth: true },
-    ).catch(() => []);
-    return {
-      agents: (resources.agents ?? []).map((agent) => ({
-        ...agent,
-        model_info: agent.model_info ?? {
-          model_name: agent.model ?? null,
-          name: agent.model ?? null,
-        },
-      })),
-      knowledgeBases: resources.knowledge_bases ?? [],
-      skills: resources.skills ?? [],
-      mcpServers: resources.mcp_servers ?? [],
-      mcpTools: [],
-      workflows,
-    };
-  } catch {
-    // Older agent-platform instances do not expose the CrewON catalog yet.
-  }
+    ),
+  ] as const);
 
-  const [agents, knowledgeBases, skills, mcpServers, mcpTools, workflows] =
-    await Promise.all([
-      listPage<PlatformAgent>("/api/v1/agents/?page=1&page_size=100", {
-        auth: true,
-      }),
-      listPage<PlatformKnowledgeBase>(
-        "/api/v1/knowledge/?page=1&page_size=100",
-        {
-          auth: true,
-        },
-      ),
-      listPage<PlatformSkill>("/api/v1/skills?page=1&page_size=100", {
-        auth: true,
-      }),
-      listPage<PlatformMcpServer>("/api/v1/mcp/servers?page=1&page_size=100", {
-        auth: true,
-      }),
-      listPage<PlatformMcpTool>("/api/v1/mcp/tools?page=1&page_size=100"),
-      listPage<PlatformWorkflow>("/api/v1/workflows?page=1&page_size=100", {
-        auth: true,
-      }),
-    ]);
+  const settledItems = <T>(result: PromiseSettledResult<T[]>): T[] | null =>
+    result.status === "fulfilled" ? result.value : null;
+  const markOnline = <
+    T extends {
+      downloaded?: boolean;
+      downloaded_at?: string | null;
+      update_available?: boolean;
+      resource_source?: AgentPlatformResourceSource;
+    },
+  >(
+    items: T[],
+  ): T[] =>
+    items.map((item) => {
+      const onlineItem = { ...item, resource_source: "online" as const };
+      delete onlineItem.downloaded;
+      delete onlineItem.downloaded_at;
+      delete onlineItem.update_available;
+      return onlineItem;
+    });
+  const markCatalog = <
+    T extends { resource_source?: AgentPlatformResourceSource },
+  >(
+    items: T[],
+  ): T[] => items.map((item) => ({ ...item, resource_source: "catalog" }));
+
+  const ownedByCurrentUser = <
+    T extends {
+      owner_username?: string | null;
+      user_id?: number | null;
+      owner_user_id?: number | null;
+      created_by?: number | null;
+    },
+  >(
+    item: T,
+  ): boolean => {
+    if (item.owner_username) {
+      return item.owner_username === currentUser.username;
+    }
+    const ownerId = item.user_id ?? item.owner_user_id ?? item.created_by;
+    return ownerId != null && ownerId === currentUser.id;
+  };
+  const ownedCatalog = <T extends { owner_username?: string | null }>(
+    items: T[],
+  ): T[] =>
+    items.filter((item) => item.owner_username === currentUser.username);
+  const ownedOnline = <
+    T extends {
+      owner_username?: string | null;
+      user_id?: number | null;
+      owner_user_id?: number | null;
+      created_by?: number | null;
+    },
+  >(
+    items: T[],
+  ): T[] => items.filter(ownedByCurrentUser);
+
+  const onlineAgents = markOnline(ownedOnline(settledItems(results[0]) ?? []));
+  const onlineKnowledgeBases = markOnline(
+    ownedOnline(settledItems(results[1]) ?? []),
+  );
+  const onlineSkills = markOnline(ownedOnline(settledItems(results[2]) ?? []));
+  const onlineMcpServers = markOnline(
+    ownedOnline(settledItems(results[3]) ?? []),
+  );
+  const catalogResources =
+    results[6].status === "fulfilled" ? results[6].value.resources : undefined;
+  const catalogAgents = markCatalog(
+    ownedCatalog(catalogResources?.agents ?? []),
+  );
+  const agentsById = new Map(
+    onlineAgents.map((agent) => [agent.id, agent] as const),
+  );
+  catalogAgents.forEach((catalogAgent) => {
+    const onlineAgent = agentsById.get(catalogAgent.id);
+    agentsById.set(
+      catalogAgent.id,
+      onlineAgent
+        ? { ...onlineAgent, ...catalogAgent, resource_source: "catalog" }
+        : catalogAgent,
+    );
+  });
+  const agents = [...agentsById.values()];
+  const catalogKnowledgeBases = markCatalog(
+    ownedCatalog(catalogResources?.knowledge_bases ?? []),
+  );
+  const knowledgeBasesById = new Map(
+    onlineKnowledgeBases.map((knowledgeBase) => [
+      knowledgeBase.id,
+      knowledgeBase,
+    ] as const),
+  );
+  catalogKnowledgeBases.forEach((catalogKnowledgeBase) => {
+    const onlineKnowledgeBase = knowledgeBasesById.get(
+      catalogKnowledgeBase.id,
+    );
+    knowledgeBasesById.set(
+      catalogKnowledgeBase.id,
+      onlineKnowledgeBase
+        ? {
+            ...onlineKnowledgeBase,
+            ...catalogKnowledgeBase,
+            resource_source: "catalog",
+          }
+        : catalogKnowledgeBase,
+    );
+  });
+  const knowledgeBases = [...knowledgeBasesById.values()];
+  const catalogSkills =
+    results[6].status === "fulfilled"
+      ? markCatalog(ownedCatalog(catalogResources?.skills ?? []))
+      : [];
+  const skillsById = new Map(
+    onlineSkills.map((skill) => [skill.id, skill] as const),
+  );
+  catalogSkills.forEach((catalogSkill) => {
+    const onlineSkill = skillsById.get(catalogSkill.id);
+    skillsById.set(
+      catalogSkill.id,
+      onlineSkill
+        ? { ...onlineSkill, ...catalogSkill, resource_source: "catalog" }
+        : catalogSkill,
+    );
+  });
+  const skills = [...skillsById.values()];
+  const catalogMcpServers =
+    results[6].status === "fulfilled"
+      ? markCatalog(ownedCatalog(catalogResources?.mcp_servers ?? []))
+      : [];
+  const mcpServersById = new Map(
+    onlineMcpServers.map((server) => [server.id, server] as const),
+  );
+  catalogMcpServers.forEach((catalogServer) => {
+    const onlineServer = mcpServersById.get(catalogServer.id);
+    mcpServersById.set(
+      catalogServer.id,
+      onlineServer
+        ? { ...onlineServer, ...catalogServer, resource_source: "catalog" }
+        : catalogServer,
+    );
+  });
+  const mcpServers = [...mcpServersById.values()];
+  const visibleMcpServerIds = new Set(mcpServers.map((server) => server.id));
+  const mcpTools = (settledItems(results[4]) ?? []).filter((tool) => {
+    const serverId = tool.server_id;
+    return visibleMcpServerIds.has(serverId);
+  });
+  const workflows = markOnline(ownedOnline(settledItems(results[5]) ?? []));
+
+  const categoryState = (
+    result: PromiseSettledResult<unknown>,
+    fallbackItems: readonly unknown[],
+  ): AgentPlatformResourceState =>
+    result.status === "fulfilled" || fallbackItems.length > 0
+      ? { status: "ready", error: null }
+      : { status: "error", error: settledError(result) };
+  const mcpServerState = categoryState(results[3], mcpServers);
+  const mcpState =
+    mcpServerState.status === "ready" &&
+    mcpServers.length > 0 &&
+    results[4].status === "rejected"
+      ? {
+          status: "error" as const,
+          error: settledError(results[4]),
+        }
+      : mcpServerState;
+  const resourceStates: AgentPlatformResourceStates = {
+    agents: categoryState(results[0], agents),
+    knowledge: categoryState(results[1], knowledgeBases),
+    skills: categoryState(results[2], skills),
+    mcp: mcpState,
+  };
 
   return {
     agents,
@@ -392,6 +604,7 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     mcpServers,
     mcpTools,
     workflows,
+    resourceStates,
   };
 }
 
@@ -417,10 +630,12 @@ export function platformAgentsToLibraryItems(
   return snapshot.agents.map((agent, index) => {
     const model =
       agent.model_info?.model_name ?? agent.model_info?.name ?? "model";
+    const sourceLabel =
+      agent.resource_source === "catalog" ? "catalog" : "online";
     const config = platformAgentToConfig(agent, snapshot, index);
     return {
       title: agent.name,
-      meta: `agent-platform local #${agent.id}`,
+      meta: `agent-platform ${sourceLabel} #${agent.id}`,
       description:
         agent.description ||
         `${model} · ${agent.knowledge_base_ids?.length ?? 0} KB · ${agent.skill_ids?.length ?? 0} Skills · ${agent.mcp_servers?.length ?? 0} MCP`,
@@ -430,7 +645,7 @@ export function platformAgentsToLibraryItems(
         label:
           agent.is_active === false || agent.is_active === 0
             ? "disabled"
-            : "local",
+            : sourceLabel,
         tone:
           agent.is_active === false || agent.is_active === 0
             ? "warning"
@@ -458,11 +673,11 @@ export function platformToolsToLibraryItems(
     const accent = capabilityAccents()[index % capabilityAccents().length];
     const title = server.alias || server.name;
     const tools = snapshot.mcpTools.filter(
-      (tool) => tool.server_name === server.name,
+      (tool) => tool.server_id === server.id,
     );
     return {
       title,
-      meta: `MCP · agent-platform local #${server.id}`,
+      meta: `MCP · agent-platform online #${server.id}`,
       description:
         server.description ||
         server.endpoint ||
@@ -483,7 +698,7 @@ export function platformToolsToLibraryItems(
         title,
         subtitle: server.name,
         body: [
-          `Source: local agent-platform MCP server #${server.id}`,
+          `Source: online agent-platform MCP server #${server.id}`,
           server.description,
           server.endpoint ? `Endpoint: ${server.endpoint}` : null,
           `Enabled: ${server.is_enabled !== false}`,
@@ -506,7 +721,7 @@ export function platformToolsToLibraryItems(
               server: server.name,
               name: tools[0].name,
               label: tools[0].alias || tools[0].name,
-              inputSchema: JSON.stringify(tools[0].schema ?? {}, null, 2),
+              inputSchema: JSON.stringify(tools[0].input_schema ?? {}, null, 2),
             }
           : undefined,
         configPath: `agent-platform://mcp/servers/${server.id}`,
@@ -517,13 +732,16 @@ export function platformToolsToLibraryItems(
   const skillItems = snapshot.skills.map(
     (skill, index): LibraryItem => ({
       title: skill.name,
-      meta: `Skill · agent-platform local #${skill.id}`,
+      meta: `Skill · agent-platform ${skill.resource_source === "catalog" ? "catalog" : "online"} #${skill.id}`,
       description:
         promptPreview(skill.description || skill.skill_md_content || "") ||
-        "Skill synced from local agent-platform.",
+        "Skill available from agent-platform.",
       glyph: SKILL_GLYPHS[index % SKILL_GLYPHS.length],
       accent: capabilityAccents()[(index + 2) % capabilityAccents().length],
-      badge: { label: "synced", tone: "running" },
+      badge: {
+        label: skill.resource_source === "catalog" ? "catalog" : "online",
+        tone: "running",
+      },
       tags: [
         skill.category ?? "Skill",
         skill.version ? `v${skill.version}` : null,
@@ -588,7 +806,21 @@ function platformAgentToConfig(
   const model =
     agent.model_info?.model_name ?? agent.model_info?.name ?? "qwen-plus";
   const linkedSkillIds = new Set(agent.skill_ids ?? []);
-  const linkedMcpNames = new Set(agent.mcp_servers ?? []);
+  const linkedMcpServerIds = new Set<number>();
+  const linkedMcpNames = new Set<string>();
+  for (const binding of agent.mcp_servers ?? []) {
+    if (typeof binding === "number") {
+      linkedMcpServerIds.add(binding);
+    } else if (typeof binding === "string") {
+      linkedMcpNames.add(binding);
+      const legacyId = Number(binding);
+      if (Number.isInteger(legacyId)) {
+        linkedMcpServerIds.add(legacyId);
+      }
+    } else if (binding.enabled !== false) {
+      linkedMcpServerIds.add(binding.server_id);
+    }
+  }
   const mcp = snapshot.mcpServers.map(
     (server, serverIndex): AgentCapabilityOption => ({
       id: String(server.id),
@@ -598,8 +830,9 @@ function platformAgentToConfig(
       description:
         server.description ||
         server.endpoint ||
-        "MCP server synced from local agent-platform.",
-      enabled: linkedMcpNames.has(server.name),
+        "MCP server available from agent-platform.",
+      enabled:
+        linkedMcpServerIds.has(server.id) || linkedMcpNames.has(server.name),
     }),
   );
   const skills = snapshot.skills.map(
@@ -610,17 +843,17 @@ function platformAgentToConfig(
       accent: accents[(skillIndex + 2) % accents.length],
       description:
         promptPreview(skill.description || skill.skill_md_content || "") ||
-        "Skill synced from local agent-platform.",
+        "Skill available from agent-platform.",
       enabled: linkedSkillIds.has(skill.id),
     }),
   );
 
   return {
-    agentId: `agent-platform:${agent.id}`,
+    agentId: `agent-platform:agents:${agent.id}`,
     name: agent.name,
     glyph: "A",
     accent: accents[index % accents.length],
-    role: agent.description || "Local agent-platform agent",
+    role: agent.description || "Online agent-platform agent",
     model,
     models: [model],
     permission: "agent-platform-local",

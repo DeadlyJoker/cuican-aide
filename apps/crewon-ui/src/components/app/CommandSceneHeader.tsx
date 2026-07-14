@@ -19,7 +19,6 @@ export function CommandSceneHeader({
   return (
     <>
       <header className="home-title" data-od-id="desktop-command-header">
-        <span className="home-eyebrow">CREWON</span>
         <h1>让 CrewON 完成你的工作</h1>
         <p className="scene-subtitle" data-scene-subtitle="">
           {preset.subtitle}

@@ -10,6 +10,7 @@ import {
   CommandWorkspace,
   insertTokenIntoComposerValue,
   nextExecutionIntent,
+  paletteFilter,
   selectCommandHomeSlots,
   setDefaultTeamOfficePreview,
   setActiveFilter,
@@ -276,6 +277,8 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('aria-label="执行主体"');
     expect(markup).not.toContain("执行主体：");
     expect(markup).not.toContain('data-od-id="workspace-pill"');
+    expect(markup).not.toContain('class="home-eyebrow"');
+    expect(markup).not.toContain('class="resource-dock"');
     expect(markup).not.toContain("任务方式");
     expect(markup).not.toContain("核心上下文");
     expect(markup).not.toContain("默认交付");
@@ -308,17 +311,22 @@ describe("CommandWorkspace", () => {
 
   it("renders only real workspaces and conversations in the sidebar", () => {
     const markup = renderCommandWorkspace();
+    const projectTreeMarkup = markup.slice(
+      markup.indexOf('class="space-tree project-tree"'),
+      markup.indexOf("</aside>"),
+    );
 
-    expect(markup).toContain("新建会话");
-    expect(markup).toContain("新增空间");
-    expect(markup).toContain("文件夹路径");
-    expect(markup).toContain("工作空间");
-    expect(markup).toContain('aria-controls="current-workspace-thread-list"');
-    expect(markup).toContain('aria-expanded="true"');
-    expect(markup).toContain('id="current-workspace-thread-list"');
+    expect(markup).toContain('aria-label="项目和任务"');
+    expect(markup).toContain('aria-label="添加项目"');
+    expect(markup).toContain("新建空白项目");
+    expect(markup).toContain("使用现有文件夹");
+    expect(markup).not.toContain("文件夹路径");
+    expect(markup).toContain('aria-label="折叠项目 crewon"');
+    expect(markup).toContain('aria-label="在 crewon 新建任务"');
     expect(markup).toContain("crewon");
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain('data-od-id="workspace-node-product"');
+    expect(projectTreeMarkup).toMatchSnapshot();
   });
 
   it("keeps only execution-relevant composer controls and hidden palette hooks", () => {
@@ -459,6 +467,62 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('class="add-palette-group-label">MCP');
   });
 
+  it("finds Skill and MCP resources with fuzzy palette queries", () => {
+    const items = [
+      {
+        detail: "Create and scaffold plugin directories",
+        kind: "skill" as const,
+        label: "Skill",
+        title: "plugin-creator",
+      },
+      {
+        detail: "Read and write workspace files",
+        kind: "mcp" as const,
+        label: "MCP",
+        title: "Filesystem",
+      },
+    ];
+
+    expect(paletteFilter(items, "skl crt")[0]?.title).toBe("plugin-creator");
+    expect(paletteFilter(items, "fsytem").map((item) => item.title)).toEqual([
+      "Filesystem",
+    ]);
+  });
+
+  it("exposes the first palette item as the active keyboard option", () => {
+    const markup = renderToStaticMarkup(
+      <Palette
+        id="context-menu"
+        inputId="context-menu-search"
+        items={[
+          {
+            detail: "引用知识",
+            kind: "knowledge",
+            label: "知识库",
+            title: "产品知识",
+          },
+          {
+            detail: "检查页面",
+            kind: "skill",
+            label: "Skill",
+            title: "页面审阅",
+          },
+        ]}
+        kind="context"
+        open
+        placeholder="搜索资源"
+        query=""
+        onClose={() => undefined}
+        onQueryChange={() => undefined}
+        onSelect={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('aria-activedescendant="context-menu-option-0"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain('role="listbox"');
+  });
+
   it("uses a compact connection light instead of visible connection copy", () => {
     const markup = renderToStaticMarkup(
       <CommandWorkspace
@@ -516,6 +580,20 @@ describe("CommandWorkspace", () => {
     expect(markup).toBe("");
   });
 
+  it("keeps resource cards on the new-task surface and out of conversations", () => {
+    const slots = selectCommandHomeSlots(snapshot());
+    const newTaskMarkup = renderToStaticMarkup(
+      <ResourceDock platformState="ready" slots={slots} />,
+    );
+    const conversationMarkup = renderToStaticMarkup(
+      <ResourceDock hidden platformState="ready" slots={slots} />,
+    );
+
+    expect(newTaskMarkup).toContain('class="resource-dock"');
+    expect(conversationMarkup).toBe("");
+    expect(newTaskMarkup).toMatchSnapshot();
+  });
+
   it("keeps workspaces from existing conversations visible when another workspace is active", () => {
     const originalWorkspaceThread = {
       cwd: "/repo/original-workspace",
@@ -543,7 +621,7 @@ describe("CommandWorkspace", () => {
 
     expect(markup).toContain("current-workspace");
     expect(markup).toContain("original-workspace");
-    expect(markup).toContain('aria-label="切换到工作空间 original-workspace"');
+    expect(markup).toContain('aria-label="折叠项目 original-workspace"');
     expect(markup).toContain(
       'data-linked-thread-id="thread-original-workspace"',
     );
@@ -628,7 +706,7 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain("工作空间");
+    expect(markup).toContain("项目");
     expect(markup).toContain("frontend");
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain("后端会话");
@@ -666,7 +744,7 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain(
       "当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。",
     );
-    expect(markup).toContain('aria-label="在工作空间 frontend 中新建会话"');
+    expect(markup).toContain('aria-label="在 frontend 新建任务"');
     expect(markup).toContain(
       'data-linked-thread-id="thread-existing-workspace"',
     );
@@ -675,7 +753,7 @@ describe("CommandWorkspace", () => {
         "当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。",
       ),
       hasNewConversationAction: markup.includes(
-        'aria-label="在工作空间 frontend 中新建会话"',
+        'aria-label="在 frontend 新建任务"',
       ),
       hasWorkspaceThread: markup.includes(
         'data-linked-thread-id="thread-existing-workspace"',
@@ -716,10 +794,7 @@ describe("CommandWorkspace", () => {
     );
 
     expect(markup).toContain("无工作空间");
-    expect(markup).toContain(
-      'aria-controls="standalone-workspace-thread-list"',
-    );
-    expect(markup).toContain('id="standalone-workspace-thread-list"');
+    expect(markup).toContain('aria-label="折叠项目 无工作空间"');
     expect(markup).toContain('data-linked-thread-id="thread-standalone-1"');
     expect(markup).toContain("Standalone conversation");
     expect(markup).toContain("No folder was attached to this chat");
@@ -784,9 +859,9 @@ describe("CommandWorkspace", () => {
 
     expect(markup).toContain('data-has-thread="true"');
     expect(markup).toContain('data-od-id="command-thread-room"');
-    expect(markup).toContain('class="command-thread-identity"');
-    expect(markup).toContain("Agent 对话");
-    expect(markup).toContain(">工作空间 · frontend</em>");
+    expect(markup).not.toContain('class="command-thread-identity"');
+    expect(markup).not.toContain("Agent 对话");
+    expect(markup).not.toContain("工作空间 · frontend");
     expect(markup).toContain("Command room transcript");
     expect(markup).toContain('class="transcript"');
     expect(markup).toContain('class="command-input thread-command-input"');
@@ -906,9 +981,9 @@ describe("CommandWorkspace", () => {
 
     expect(markup).toContain('data-od-id="command-thread-room"');
     expect(markup).toContain('class="transcript"');
-    expect(markup).toContain("MCP 1");
-    expect(markup).toContain("Skill 1");
-    expect(markup).toContain("命令 1");
+    expect(markup).not.toContain('class="command-thread-runtime"');
+    expect(markup).not.toContain("最近完成");
+    expect(markup).not.toContain("对话就绪");
     expect(markup).toContain("filesystem.read_file");
     expect(markup).toContain("已读取 1 个文件");
     expect(markup).toContain("README.md");
@@ -923,7 +998,7 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain('class="app-shell"');
   });
 
-  it("labels command composer input as steer guidance while an agent turn is running", () => {
+  it("keeps the running action in the composer like Codex", () => {
     const runningThread = {
       id: "thread-running-command-room",
       name: "Running command room transcript",
@@ -973,13 +1048,15 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain("Agent 正在执行");
-    expect(markup).toContain("继续补充指令");
-    expect(markup).toContain('aria-label="发送补充指令"');
-    expect(markup).toContain('title="发送补充指令"');
+    expect(markup).not.toContain("Agent 正在执行");
+    expect(markup).not.toContain('class="command-thread-runtime"');
+    expect(markup).toContain('aria-label="停止任务"');
+    expect(markup).toContain('title="停止任务"');
+    expect(markup).toContain('data-action="stop"');
+    expect(markup).toContain("lucide-square");
   });
 
-  it("summarizes live backend agent work in the command transcript toolbar", () => {
+  it("keeps live backend work in the transcript without a duplicate toolbar", () => {
     const runningThread = {
       id: "thread-live-agent-runtime",
       name: "Live agent runtime",
@@ -1065,13 +1142,13 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain('class="command-thread-runtime"');
-    expect(markup).toContain('data-state="running"');
-    expect(markup).toContain("实时渲染中");
+    expect(markup).not.toContain('class="command-thread-runtime"');
+    expect(markup).not.toContain("实时渲染中");
     expect(markup).toContain("MCP 1");
-    expect(markup).toContain("Skill 1");
+    expect(markup).toContain("技能 1");
     expect(markup).toContain("命令 1");
     expect(markup).toContain("正在实时生成最终回复");
+    expect(markup).toContain('aria-label="停止任务"');
   });
 
   it("makes sidebar search results actionable for real conversations and views", () => {

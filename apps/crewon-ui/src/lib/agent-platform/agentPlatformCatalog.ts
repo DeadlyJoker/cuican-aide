@@ -6,6 +6,8 @@ export type CatalogResourceType =
   | "mcp_servers"
   | "knowledge_bases";
 
+export type CatalogDownloadableResourceType = "skills";
+
 export type CatalogResourceSummary = {
   id: number;
   type: CatalogResourceType;
@@ -34,6 +36,7 @@ export type CatalogResourceSummary = {
   downloaded_at?: string | null;
   update_available?: boolean;
   source_updated_at?: string | null;
+  source?: "online" | "catalog" | "local";
 };
 
 export type CatalogResourceDetail = Record<string, unknown> & {
@@ -66,8 +69,12 @@ async function checkedResponse(response: Response): Promise<Response> {
   }
   let message = `请求失败 (${response.status})`;
   try {
-    const body = (await response.json()) as { detail?: string };
-    message = body.detail || message;
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") {
+      message = body.detail;
+    } else if (body.detail) {
+      message = JSON.stringify(body.detail);
+    }
   } catch {
     // Preserve the status-based fallback.
   }
@@ -75,32 +82,70 @@ async function checkedResponse(response: Response): Promise<Response> {
 }
 
 export async function readCatalogResourceDetail(
-  type: CatalogResourceType,
-  id: number,
+  resource: CatalogResourceSummary,
 ): Promise<CatalogResourceDetail> {
+  if (resource.source !== "catalog") {
+    if (resource.type === "mcp_servers") {
+      const [detailResponse, toolsResponse] = await Promise.all([
+        checkedResponse(
+          await agentPlatformAuthorizedFetch(
+            `/api/v1/mcp/servers/${resource.id}`,
+          ),
+        ),
+        checkedResponse(
+          await agentPlatformAuthorizedFetch(
+            `/api/v1/mcp/servers/${resource.id}/tools?page=1&page_size=100`,
+          ),
+        ),
+      ]);
+      const detail = (await detailResponse.json()) as CatalogResourceDetail;
+      const toolsPage = (await toolsResponse.json()) as {
+        items?: Array<Record<string, unknown>>;
+      };
+      return { ...detail, tools: toolsPage.items ?? [] };
+    }
+    if (resource.type === "knowledge_bases") {
+      const detailResponse = await checkedResponse(
+        await agentPlatformAuthorizedFetch(`/api/v1/knowledge/${resource.id}`),
+      );
+      const detail = (await detailResponse.json()) as CatalogResourceDetail;
+      const documentsResponse = await checkedResponse(
+        await agentPlatformAuthorizedFetch(
+          `/api/v1/knowledge/${resource.id}/documents?page=1&page_size=100`,
+        ),
+      );
+      const documentsPage = (await documentsResponse.json()) as {
+        items?: Array<Record<string, unknown>>;
+      };
+      return { ...detail, documents: documentsPage.items ?? [] };
+    }
+    const path =
+      resource.type === "skills"
+        ? `/api/v1/skills/${resource.id}`
+        : `/api/v1/agents/${resource.id}`;
+    const response = await checkedResponse(
+      await agentPlatformAuthorizedFetch(path),
+    );
+    return (await response.json()) as CatalogResourceDetail;
+  }
   const response = await checkedResponse(
     await agentPlatformAuthorizedFetch(
-      `/api/v1/crewon/catalog/resources/${type}/${id}/content`,
+      `/api/v1/crewon/catalog/resources/${resource.type}/${resource.id}`,
     ),
   );
   return (await response.json()) as CatalogResourceDetail;
 }
 
-export async function refreshAgentPlatformCatalog(): Promise<void> {
-  await checkedResponse(
-    await agentPlatformAuthorizedFetch("/api/v1/crewon/catalog/refresh", {
-      method: "POST",
-    }),
-  );
-}
-
 export async function downloadCatalogResource(
-  type: CatalogResourceType,
+  type: CatalogDownloadableResourceType,
   id: number,
 ): Promise<CatalogDownloadState> {
+  if (type !== "skills") {
+    throw new Error("只有 Skill 支持下载");
+  }
   const response = await checkedResponse(
     await agentPlatformAuthorizedFetch(
-      `/api/v1/crewon/catalog/resources/${type}/${id}/download`,
+      `/api/v1/crewon/catalog/resources/skills/${id}/download`,
       { method: "POST" },
     ),
   );
@@ -108,85 +153,59 @@ export async function downloadCatalogResource(
 }
 
 export async function readCatalogSkillFile(
-  id: number,
+  resource: CatalogResourceSummary,
   path = "",
 ): Promise<CatalogSkillFile> {
+  if (resource.source !== "catalog") {
+    const listingResponse = await checkedResponse(
+      await agentPlatformAuthorizedFetch(`/api/v1/skills/${resource.id}/files`),
+    );
+    const listing = (await listingResponse.json()) as { file_tree?: unknown[] };
+    const tree = (listing.file_tree ?? []).filter(
+      (item): item is string => typeof item === "string",
+    );
+    const normalizedPath = path.replace(/^\/+|\/+$/g, "");
+    if (normalizedPath && tree.includes(normalizedPath)) {
+      const encodedPath = normalizedPath
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/");
+      const fileResponse = await checkedResponse(
+        await agentPlatformAuthorizedFetch(
+          `/api/v1/skills/${resource.id}/files/${encodedPath}`,
+        ),
+      );
+      const file = (await fileResponse.json()) as { content?: string };
+      return {
+        path: normalizedPath,
+        type: "file",
+        content: file.content ?? "",
+      };
+    }
+    const prefix = normalizedPath ? `${normalizedPath}/` : "";
+    const children = new Map<string, "directory" | "file">();
+    tree
+      .filter((item) => item.startsWith(prefix))
+      .forEach((item) => {
+        const remainder = item.slice(prefix.length);
+        const [name, ...rest] = remainder.split("/");
+        if (name) children.set(name, rest.length ? "directory" : "file");
+      });
+    return {
+      path: normalizedPath,
+      type: "directory",
+      items: [...children].map(([name, type]) => ({
+        name,
+        type,
+        path: prefix + name,
+      })),
+    };
+  }
   const query = path ? `?path=${encodeURIComponent(path)}` : "";
   const response = await checkedResponse(
     await agentPlatformAuthorizedFetch(
-      `/api/v1/crewon/catalog/resources/skills/${id}/files${query}`,
+      `/api/v1/crewon/catalog/resources/skills/${resource.id}/files${query}`,
     ),
   );
   return (await response.json()) as CatalogSkillFile;
-}
-
-export async function invokeCatalogAgent(
-  id: number,
-  query: string,
-): Promise<Record<string, unknown>> {
-  const response = await checkedResponse(
-    await agentPlatformAuthorizedFetch(
-      `/api/v1/crewon/catalog/resources/agents/${id}/run`,
-      {
-        method: "POST",
-        body: JSON.stringify({ inputs: { query }, channel: "crewon" }),
-        headers: { "Content-Type": "application/json" },
-      },
-    ),
-  );
-  return (await response.json()) as Record<string, unknown>;
-}
-
-export async function invokeCatalogSkill(
-  id: number,
-  script: string,
-  args: string[],
-): Promise<unknown> {
-  const response = await checkedResponse(
-    await agentPlatformAuthorizedFetch(
-      `/api/v1/crewon/catalog/resources/skills/${id}/run`,
-      {
-        method: "POST",
-        body: JSON.stringify({ script, args, timeout: 30 }),
-        headers: { "Content-Type": "application/json" },
-      },
-    ),
-  );
-  return response.json();
-}
-
-export async function invokeCatalogMcpTool(
-  serverId: number,
-  toolId: number,
-  argumentsValue: Record<string, unknown>,
-): Promise<unknown> {
-  const response = await checkedResponse(
-    await agentPlatformAuthorizedFetch(
-      `/api/v1/crewon/catalog/resources/mcp_servers/${serverId}/tools/${toolId}/call`,
-      {
-        method: "POST",
-        body: JSON.stringify({ arguments: argumentsValue }),
-        headers: { "Content-Type": "application/json" },
-      },
-    ),
-  );
-  return response.json();
-}
-
-export async function searchCatalogKnowledge(
-  id: number,
-  query: string,
-  topK: number,
-): Promise<unknown> {
-  const response = await checkedResponse(
-    await agentPlatformAuthorizedFetch(
-      `/api/v1/crewon/catalog/resources/knowledge_bases/${id}/search`,
-      {
-        method: "POST",
-        body: JSON.stringify({ query, top_k: topK, search_mode: "keyword" }),
-        headers: { "Content-Type": "application/json" },
-      },
-    ),
-  );
-  return response.json();
 }
