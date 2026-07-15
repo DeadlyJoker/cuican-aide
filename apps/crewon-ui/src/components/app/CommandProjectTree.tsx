@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import {
   type KeyboardEvent,
+  type SyntheticEvent,
   useEffect,
   useMemo,
   useRef,
@@ -179,6 +180,13 @@ export function CommandProjectTree({
     return () => document.removeEventListener("pointerdown", closeMenus);
   }, []);
 
+  function closeOtherProjectMenus(event: SyntheticEvent<HTMLDetailsElement>) {
+    if (!event.currentTarget.open) return;
+    for (const menu of projectTreeRef.current?.querySelectorAll<HTMLDetailsElement>("details.project-menu[open]") ?? []) {
+      if (menu !== event.currentTarget) menu.removeAttribute("open");
+    }
+  }
+
   const pinned = useMemo(() => new Set(preferences.pinnedThreadIds), [preferences.pinnedThreadIds]);
   const manualRank = useMemo(
     () => new Map(preferences.manualOrder.map((id, index) => [id, index])),
@@ -319,7 +327,7 @@ export function CommandProjectTree({
       <div className="tree-head project-tree-head">
         <strong>项目</strong>
         <span>
-          <details className="project-menu" onKeyDown={menuKeyboard}>
+          <details className="project-menu" onKeyDown={menuKeyboard} onToggle={closeOtherProjectMenus}>
             <summary aria-label="整理项目"><MoreHorizontal aria-hidden="true" /></summary>
             <div className="project-menu-popover project-sort-menu" role="menu">
               <small>整理</small>
@@ -338,7 +346,7 @@ export function CommandProjectTree({
               ))}
             </div>
           </details>
-          <details className="project-menu" onKeyDown={menuKeyboard}>
+          <details className="project-menu" onKeyDown={menuKeyboard} onToggle={closeOtherProjectMenus}>
             <summary aria-label="添加项目"><Plus aria-hidden="true" /></summary>
             <div className="project-menu-popover project-add-menu" role="menu">
               <button type="button" onClick={() => openDirectoryDialog("create")}><Plus />新建空白项目</button>
@@ -364,7 +372,7 @@ export function CommandProjectTree({
                     {collapsed ? <Folder /> : <FolderOpen />}<strong>{project.name}</strong>
                   </button>
                   <span className="project-row-actions">
-                    <details className="project-menu project-row-menu" onKeyDown={menuKeyboard}>
+                    <details className="project-menu project-row-menu" onKeyDown={menuKeyboard} onToggle={closeOtherProjectMenus}>
                       <summary aria-label={`项目 ${project.name} 菜单`} title="项目菜单"><MoreHorizontal /></summary>
                       <div className="project-menu-popover project-row-menu-popover" role="menu">
                         <button type="button" disabled={!project.path} onClick={(event) => {
@@ -404,7 +412,7 @@ export function CommandProjectTree({
                     <span className="project-thread-actions">
                       <button aria-label={pinned.has(thread.id) ? "取消置顶" : "置顶任务"} title={pinned.has(thread.id) ? "取消置顶" : "置顶任务"} type="button" onClick={() => togglePinned(thread.id)}><Pin fill={pinned.has(thread.id) ? "currentColor" : "none"} /></button>
                       <button aria-label="归档任务" title="归档任务" type="button" onClick={() => void archiveThread(thread.id)}><Archive /></button>
-                      <details className="project-menu thread-menu" onKeyDown={menuKeyboard}>
+                      <details className="project-menu thread-menu" onKeyDown={menuKeyboard} onToggle={closeOtherProjectMenus}>
                         <summary aria-label="任务菜单"><MoreHorizontal /></summary>
                         <div className="project-menu-popover thread-menu-popover" role="menu">
                           <button type="button" onClick={() => togglePinned(thread.id)}><Pin />{pinned.has(thread.id) ? "取消置顶" : "置顶任务"}</button>

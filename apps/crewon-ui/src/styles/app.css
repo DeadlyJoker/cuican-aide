@@ -12881,10 +12881,131 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .tree-head {
   display: flex;
+  position: relative;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
   padding: 0 6px 2px;
+}
+
+.screen-shell.command-screen .tree-head > span,
+.screen-shell.command-screen .project-row-actions,
+.screen-shell.command-screen .project-thread-actions {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  gap: 2px;
+}
+
+.screen-shell.command-screen .project-menu {
+  position: relative;
+}
+
+.screen-shell.command-screen .project-menu summary {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  place-items: center;
+  border-radius: 7px;
+  color: oklch(48% 0.018 235);
+  cursor: pointer;
+  list-style: none;
+}
+
+.screen-shell.command-screen .project-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.screen-shell.command-screen .project-menu summary:hover,
+.screen-shell.command-screen .project-menu[open] summary {
+  background: var(--command-sidebar-hover);
+  color: oklch(30% 0.02 235);
+}
+
+.screen-shell.command-screen .project-menu summary svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+}
+
+.screen-shell.command-screen .project-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  display: grid;
+  min-width: 178px;
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  gap: 2px;
+  padding: 7px;
+  border: 1px solid oklch(86% 0.014 238);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.98);
+  box-shadow: 0 16px 42px rgb(18 26 38 / 0.16);
+}
+
+.screen-shell.command-screen .project-menu-popover small {
+  padding: 5px 7px 3px;
+  color: oklch(55% 0.018 235);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.06em;
+}
+
+.screen-shell.command-screen .project-menu-popover button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: oklch(29% 0.018 235);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 590;
+  text-align: left;
+}
+
+.screen-shell.command-screen .project-menu-popover button:hover,
+.screen-shell.command-screen .project-menu-popover button:focus-visible {
+  background: var(--command-sidebar-hover);
+  outline: 0;
+}
+
+.screen-shell.command-screen .project-menu-popover button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.screen-shell.command-screen .project-menu-popover button svg,
+.screen-shell.command-screen .project-menu-popover button span {
+  width: 15px;
+  height: 15px;
+}
+
+.screen-shell.command-screen .project-menu-popover hr {
+  width: 100%;
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  background: oklch(90% 0.01 238);
+}
+
+.screen-shell.command-screen .project-row-menu-popover,
+.screen-shell.command-screen .thread-menu-popover {
+  top: calc(100% + 5px);
+  min-width: 166px;
+}
+
+.screen-shell.command-screen .project-tree-head .project-menu-popover {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 
 .screen-shell.command-screen .tree-add {

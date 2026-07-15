@@ -4203,9 +4203,9 @@ body.modal-open {
 .screen-shell.command-screen .command-home-view:not(.has-command-thread) {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   overflow: auto;
-  padding: 28px 32px;
+  padding: clamp(72px, 11vh, 132px) 32px 28px;
   scrollbar-gutter: stable;
 }
 .screen-shell.command-screen .hero-center:not(.has-command-thread) {
@@ -4335,8 +4335,7 @@ body.modal-open {
 
 @media (max-height: 760px) and (min-width: 761px) {
   .screen-shell.command-screen .command-home-view:not(.has-command-thread) {
-    justify-content: flex-start;
-    padding-top: 12px;
+    padding-top: clamp(86px, 15.5vh, 112px);
     padding-bottom: 20px;
   }
   .screen-shell.command-screen .hero-center:not(.has-command-thread) {
