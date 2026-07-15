@@ -1,4 +1,5 @@
 import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
+import type { ReviewTarget } from "@crewon-protocol/v2/ReviewTarget";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import type { NoticeState } from "../shared/noticeState";
@@ -18,7 +19,10 @@ import {
 
 type ThreadToolClient = {
   forkThread(threadId: string): Promise<{ thread: Thread }>;
-  startReview(threadId: string): Promise<ReviewStartResponse>;
+  startReview(
+    threadId: string,
+    target?: ReviewTarget,
+  ): Promise<ReviewStartResponse>;
 };
 
 type SetCapabilityPanel = (

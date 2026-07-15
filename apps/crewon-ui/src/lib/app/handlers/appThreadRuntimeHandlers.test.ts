@@ -267,7 +267,7 @@ describe("app thread runtime handlers", () => {
     });
   });
 
-  it("falls back to the selected thread running turn when interrupting", async () => {
+  it("does not revive a persisted running turn without a live handle", async () => {
     const handlers = createAppThreadRuntimeHandlers(
       createParams({
         activeTurnId: null,
@@ -279,11 +279,11 @@ describe("app thread runtime handlers", () => {
     await handlers.sendMessage("add guidance");
 
     expect(threadMessageSpy.interruptParams).toMatchObject({
-      activeTurnId: "turn-recovered",
+      activeTurnId: null,
       selectedThreadId: "selected-thread",
     });
     expect(threadMessageSpy.sendParams).toMatchObject({
-      activeTurnId: "turn-recovered",
+      activeTurnId: null,
       selectedThreadId: "selected-thread",
     });
   });
@@ -315,6 +315,19 @@ describe("app thread runtime handlers", () => {
     await threadMessageSpy.sendParams?.createThread("workspace prompt");
 
     expect(threadMessageSpy.createParams?.workspaceCwd).toBe("/repo/selected");
+  });
+
+  it("persists the Agent Platform target in new thread source metadata", async () => {
+    const handlers = createAppThreadRuntimeHandlers(createParams());
+
+    await handlers.sendMessageInNewThread("external prompt", {
+      agentPlatformAgentId: "7",
+    });
+    await threadMessageSpy.sendParams?.createThread("external prompt");
+
+    expect(threadMessageSpy.createParams?.threadSource).toBe(
+      "agent-platform:agents:7",
+    );
   });
 
   it("shares createThread with review and side chat handlers", async () => {

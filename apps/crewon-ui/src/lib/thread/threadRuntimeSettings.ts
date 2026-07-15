@@ -2,12 +2,22 @@ import type { AskForApproval } from "@crewon-protocol/v2/AskForApproval";
 import type { Model } from "@crewon-protocol/v2/Model";
 import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
 
+export type RuntimeDynamicTool = {
+  namespace: string;
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  deferLoading: boolean;
+};
+
 export type CommandComposerPermission =
   | "approve-for-me"
   | "full-access"
   | "request-approval";
 
 export type CommandExecutionIntent = "goal" | "none" | "plan";
+
+export const AGENT_PLATFORM_THREAD_SOURCE_PREFIX = "agent-platform:agents:";
 
 export type CommandModelOption = {
   detail?: string;
@@ -19,9 +29,12 @@ export type CommandModelOption = {
 export type ThreadRuntimeSettings = {
   approvalPolicy?: AskForApproval | null;
   model?: string | null;
+  reasoningEffort?: string | null;
   sandboxMode?: SandboxMode | null;
   scene?: ThreadSceneSelection;
   executionIntent?: CommandExecutionIntent;
+  agentPlatformAgentId?: string;
+  dynamicTools?: RuntimeDynamicTool[];
 };
 
 export type ThreadSceneSelection = {
@@ -47,6 +60,7 @@ export type ThreadSceneSelection = {
 };
 
 export const fallbackCommandModelOptions: CommandModelOption[] = [
+  { label: "gpt-5-mini", value: "gpt-5-mini" },
   { label: "gpt-5.6-sol", value: "gpt-5.6-sol" },
   { label: "gpt-5.6", value: "gpt-5.6" },
   { label: "gpt-5.5", value: "gpt-5.5" },
@@ -110,6 +124,7 @@ export function commandPermissionRuntimeSettings(
 export function commandComposerRuntimeSettings({
   executionTarget,
   model,
+  reasoningEffort,
   permission,
   scene,
   sceneMode,
@@ -117,14 +132,22 @@ export function commandComposerRuntimeSettings({
 }: {
   executionTarget?: string;
   model: string;
+  reasoningEffort?: string;
   permission: CommandComposerPermission;
   scene?: ThreadSceneSelection["sceneId"];
   sceneMode?: NonNullable<ThreadSceneSelection["mode"]>;
   executionIntent?: CommandExecutionIntent;
 }): ThreadRuntimeSettings {
+  const agentPlatformAgentId = executionTarget?.startsWith(
+    AGENT_PLATFORM_THREAD_SOURCE_PREFIX,
+  )
+    ? executionTarget.slice(AGENT_PLATFORM_THREAD_SOURCE_PREFIX.length)
+    : undefined;
   return {
     executionIntent,
     model,
+    ...(reasoningEffort ? { reasoningEffort } : {}),
+    agentPlatformAgentId,
     ...(scene && sceneMode && executionTarget
       ? {
           scene: {
@@ -136,6 +159,24 @@ export function commandComposerRuntimeSettings({
       : {}),
     ...commandPermissionRuntimeSettings(permission),
   };
+}
+
+export function agentPlatformThreadSource(
+  agentId: string | null | undefined,
+): string | null {
+  const normalized = agentId?.trim();
+  return normalized ? `${AGENT_PLATFORM_THREAD_SOURCE_PREFIX}${normalized}` : null;
+}
+
+export function agentPlatformTargetFromThreadSource(
+  threadSource: string | null | undefined,
+): string | null {
+  if (!threadSource?.startsWith(AGENT_PLATFORM_THREAD_SOURCE_PREFIX)) {
+    return null;
+  }
+  return threadSource.length > AGENT_PLATFORM_THREAD_SOURCE_PREFIX.length
+    ? threadSource
+    : null;
 }
 
 function executionTargetSelection(

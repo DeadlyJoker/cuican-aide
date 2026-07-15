@@ -1,6 +1,18 @@
-import { ArrowUp, ListChecks, Plus, ShieldCheck, Target } from "lucide-react";
+import {
+  ArrowUp,
+  FileText,
+  ImagePlus,
+  ListChecks,
+  Plus,
+  ShieldCheck,
+  Square,
+  Target,
+  X,
+} from "lucide-react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import {
+  type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
   type ReactNode,
   useEffect,
@@ -17,6 +29,7 @@ import {
   type CommandLinkedThread,
   type PaletteItemWithCommand,
 } from "./CommandWorkspaceChrome";
+import type { CommandWorkspaceClient } from "./CommandProjectTree";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
 import { CommandSceneHeader } from "./CommandSceneHeader";
 import {
@@ -29,20 +42,34 @@ import {
 } from "./CommandWorkspaceViews";
 import { classNames } from "./commandWorkspaceUtils";
 import {
+  agentPlatformResourceCategories,
+  agentPlatformResourceStates,
   emptyAgentPlatformSnapshot,
   insertTokenIntoComposerValue,
+  mergeAgentPlatformSnapshot,
   selectCommandHomeSlots,
+  setAgentPlatformResourceState,
+  type AgentPlatformComposerResource,
   type CommandHomeSlots,
   type CommandShellView,
 } from "./commandWorkspaceState";
 import {
   commandSceneContextItems,
   commandSceneSlashItems,
+  findCompatibleOnlineAgent,
 } from "./commandWorkspaceSceneResources";
 import {
   readAgentPlatformSnapshot,
+  type AgentPlatformResourceCategory,
   type AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
+import { buildPimDynamicTools } from "../../lib/agent-platform/pimDynamicTools";
+import type { ComposerImageInput } from "../../lib/shared/composerImages";
+import {
+  attachmentContext,
+  prepareComposerAttachments,
+  type ComposerAttachment,
+} from "../../lib/shared/composerAttachments";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
 import type { ConnectionState } from "../../lib/shared/connectionState";
@@ -55,6 +82,8 @@ import {
 } from "../../lib/scene/sceneCatalog";
 import type { AgentConfig, OfficeConfig } from "../../lib/domain/domainTypes";
 import {
+  agentPlatformTargetFromThreadSource,
+  agentPlatformThreadSource,
   commandComposerRuntimeSettings,
   fallbackCommandModelOptions,
   type CommandComposerPermission,
@@ -81,14 +110,14 @@ type CommandWorkspaceProps = {
   composerValue: string;
   connectionState: ConnectionState;
   cwd: string;
-  executionTargetClient?: {
+  executionTargetClient?: (CommandWorkspaceClient & {
     listAgentConfigs(cwd: string): Promise<{
       data: Array<{ config: AgentConfig; filePath: string }>;
     }>;
     listOfficeConfigs(cwd: string): Promise<{
       data: Array<{ config: OfficeConfig; filePath: string }>;
     }>;
-  } | null;
+  }) | null;
   isSending: boolean;
   linkedThreads?: Thread[];
   locale?: Locale;
@@ -98,16 +127,21 @@ type CommandWorkspaceProps = {
   slashCommands?: ComposerSlashCommand[];
   streamingText?: string;
   workMode: WorkMode;
-  onAttachContext: (workspaceCwd?: string | null) => void;
+  onAttachContext: () => void;
   onChangeComposerValue: (value: string) => void;
   onChangeWorkspaceCwd?: (cwd: string | null) => void;
   onModeChange: (mode: WorkMode) => void;
   onRetryConnection: () => void;
-  onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
+  onSend: (
+    text: string,
+    threadSettings?: ThreadRuntimeSettings,
+    images?: ComposerImageInput[],
+  ) => void;
   onSendNewThread?: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
     workspaceCwd?: string | null,
+    images?: ComposerImageInput[],
   ) => void;
   onSelectLinkedThread?: (threadId: string | null) => void;
   onSlashCommandSelect?: (command: ComposerSlashCommand) => void;
@@ -165,6 +199,13 @@ const permissionOptions: CommandSelectOption<CommandComposerPermission>[] = [
 ];
 
 const noWorkspaceValue = "__no_workspace__";
+const maxComposerImages = 2;
+const maxComposerImageBytes = 5 * 1024 * 1024;
+const supportedComposerImageTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 function isShellView(value: string): value is CommandShellView {
   return shellViewIds.includes(value as CommandShellView);
@@ -176,6 +217,15 @@ function shellViewFromHash(): CommandShellView {
   }
   const value = window.location.hash.replace(/^#view-/, "");
   return isShellView(value) ? value : "command";
+}
+
+function imageDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("无法读取粘贴的图片。"));
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsDataURL(file);
+  });
 }
 
 function CommandComposerSelect<TValue extends string>({
@@ -275,18 +325,88 @@ function basename(path: string) {
   return normalized.split("/").filter(Boolean).pop() ?? path;
 }
 
-function paletteFilter(items: PaletteItemWithCommand[], query: string) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
+function compactSearchText(value: string) {
+  return value.toLocaleLowerCase().replace(/[\s_\-./]+/g, "");
+}
+
+function isSubsequence(query: string, value: string) {
+  let queryIndex = 0;
+  for (const character of value) {
+    if (character === query[queryIndex]) {
+      queryIndex += 1;
+    }
+  }
+  return queryIndex === query.length;
+}
+
+function fuzzyTermScore(term: string, value: string, weight: number) {
+  const normalized = value.toLocaleLowerCase();
+  if (normalized.includes(term)) {
+    return weight * 2;
+  }
+  return normalized
+    .split(/[^\p{L}\p{N}]+/u)
+    .map(compactSearchText)
+    .some((word) => isSubsequence(term, word))
+    ? weight
+    : 0;
+}
+
+export function paletteFilter(items: PaletteItemWithCommand[], query: string) {
+  const terms = query
+    .trim()
+    .split(/\s+/)
+    .map(compactSearchText)
+    .filter(Boolean);
+  if (terms.length === 0) {
     return items;
   }
-  return items.filter((item) =>
-    [item.label, item.title, item.detail, item.token]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(normalized),
-  );
+
+  return items
+    .map((item) => {
+      const fields = [
+        { value: item.title, weight: 5 },
+        { value: item.token, weight: 4 },
+        { value: item.label, weight: 2 },
+        { value: item.detail, weight: 1 },
+      ];
+      let score = 0;
+      for (const term of terms) {
+        const termScore = Math.max(
+          ...fields.map(({ value, weight }) =>
+            value ? fuzzyTermScore(term, value, weight) : 0,
+          ),
+        );
+        if (termScore === 0) {
+          return null;
+        }
+        score += termScore;
+      }
+      return { item, score };
+    })
+    .filter((candidate): candidate is { item: PaletteItemWithCommand; score: number } =>
+      candidate !== null,
+    )
+    .sort((left, right) => right.score - left.score)
+    .map((candidate) => candidate.item);
+}
+
+function platformResourcePrefix(resource: AgentPlatformComposerResource) {
+  return resource.type === "knowledge_bases" ? "@" : "/";
+}
+
+function platformResourceToken(resource: AgentPlatformComposerResource) {
+  return `${platformResourcePrefix(resource)}${resource.name}`;
+}
+
+function platformResourceLabel(resource: AgentPlatformComposerResource) {
+  if (resource.type === "skills") return "Skill";
+  if (resource.type === "mcp_servers") return "MCP";
+  return "知识库";
+}
+
+function isPimExecutionTarget(value: string): boolean {
+  return value.startsWith("agent-platform:agents:");
 }
 
 export function nextExecutionIntent(
@@ -371,7 +491,6 @@ export function CommandWorkspace({
   slashCommands = [],
   streamingText = "",
   workMode,
-  onAttachContext,
   onChangeComposerValue,
   onChangeWorkspaceCwd,
   onModeChange,
@@ -396,6 +515,7 @@ export function CommandWorkspace({
   const [scene, setScene] = useState<CommandScene>("office");
   const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
   const [model, setModel] = useState(fallbackCommandModelOptions[0].value);
+  const [reasoningEffort, setReasoningEffort] = useState("medium");
   const [modelSelectionTouched, setModelSelectionTouched] = useState(false);
   const [executionTarget, setExecutionTarget] = useState("crewon");
   const [executionTargetCatalog, setExecutionTargetCatalog] = useState<{
@@ -411,10 +531,20 @@ export function CommandWorkspace({
     "add" | "context" | "slash" | null
   >(null);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const [platformState, setPlatformState] =
-    useState<PlatformLoadState>("loading");
   const [platformSnapshot, setPlatformSnapshot] =
     useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
+  const [selectedPlatformResources, setSelectedPlatformResources] = useState<
+    AgentPlatformComposerResource[]
+  >([]);
+  const [composerImages, setComposerImages] = useState<ComposerImageInput[]>(
+    [],
+  );
+  const [composerAttachments, setComposerAttachments] = useState<
+    ComposerAttachment[]
+  >([]);
+  const [composerResourceError, setComposerResourceError] = useState<
+    string | null
+  >(null);
   const [catalogFilter, setCatalogFilter] = useState("skill");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [scheduleMode, setScheduleMode] = useState("calendar");
@@ -425,6 +555,8 @@ export function CommandWorkspace({
   const [workflowRoomId, setWorkflowRoomId] = useState<string | null>(null);
   const [officeTab, setOfficeTab] = useState("chat");
   const [workflowTab, setWorkflowTab] = useState("run");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function syncHash() {
@@ -474,21 +606,30 @@ export function CommandWorkspace({
 
   useEffect(() => {
     let cancelled = false;
-    setPlatformState("loading");
     readAgentPlatformSnapshot()
       .then((snapshot) => {
         if (cancelled) {
           return;
         }
-        setPlatformSnapshot(snapshot);
-        setPlatformState("ready");
+        setPlatformSnapshot((current) =>
+          mergeAgentPlatformSnapshot(current, snapshot),
+        );
       })
-      .catch(() => {
+      .catch((reason) => {
         if (cancelled) {
           return;
         }
-        setPlatformSnapshot(emptyAgentPlatformSnapshot);
-        setPlatformState("fallback");
+        const error =
+          reason instanceof Error
+            ? reason.message
+            : "agent-platform unavailable";
+        setPlatformSnapshot((current) =>
+          setAgentPlatformResourceState(
+            current,
+            agentPlatformResourceCategories,
+            { status: "error", error },
+          ),
+        );
       });
     return () => {
       cancelled = true;
@@ -535,10 +676,17 @@ export function CommandWorkspace({
     () => [
       {
         action: "attach-files",
-        detail: "从当前工作空间选择要加入任务的内容",
+        detail: "上传文本、DOCX 或 Excel 并加入本轮会话",
         kind: "file",
         label: "文件",
         title: "文件和文件夹",
+      },
+      {
+        action: "attach-folder",
+        detail: "选择本机目录，按相对路径读取支持的文件",
+        kind: "file",
+        label: "文件夹",
+        title: "上传文件夹",
       },
       ...contextPaletteItems.filter((item) => item.kind === "knowledge"),
       ...slashPaletteItems.filter(
@@ -548,8 +696,12 @@ export function CommandWorkspace({
     [contextPaletteItems, slashPaletteItems],
   );
   const executionTargets = useMemo(
-    () => executionTargetOptionsFromDomain(executionTargetCatalog),
-    [executionTargetCatalog],
+    () =>
+      executionTargetOptionsFromDomain({
+        ...executionTargetCatalog,
+        platformAgents: platformSnapshot.agents,
+      }),
+    [executionTargetCatalog, platformSnapshot.agents],
   );
   const scenePreset = scenePresets[scene];
   const workspaceOptions = useMemo<CommandSelectOption[]>(() => {
@@ -577,9 +729,33 @@ export function CommandWorkspace({
       setExecutionTarget("crewon");
     }
   }, [executionTarget, executionTargets]);
-  const visibleContextItems = paletteFilter(contextPaletteItems, paletteQuery);
-  const visibleSlashItems = paletteFilter(slashPaletteItems, paletteQuery);
-  const visibleAddItems = paletteFilter(addPaletteItems, paletteQuery);
+
+  useEffect(() => {
+    if (newTaskDraft || !selectedThread) {
+      return;
+    }
+    const restoredTarget = agentPlatformTargetFromThreadSource(
+      selectedThread.threadSource,
+    );
+    setExecutionTarget(
+      restoredTarget &&
+        executionTargets.some((target) => target.value === restoredTarget)
+        ? restoredTarget
+        : "crewon",
+    );
+  }, [executionTargets, newTaskDraft, selectedThread]);
+  const visibleContextItems = useMemo(
+    () => paletteFilter(contextPaletteItems, paletteQuery),
+    [contextPaletteItems, paletteQuery],
+  );
+  const visibleSlashItems = useMemo(
+    () => paletteFilter(slashPaletteItems, paletteQuery),
+    [paletteQuery, slashPaletteItems],
+  );
+  const visibleAddItems = useMemo(
+    () => paletteFilter(addPaletteItems, paletteQuery),
+    [addPaletteItems, paletteQuery],
+  );
   const commandLinkedThreads: CommandLinkedThread[] = useMemo(
     () =>
       linkedThreads.map((thread) => ({
@@ -590,6 +766,7 @@ export function CommandWorkspace({
           thread,
           locale === "zh" ? "未命名会话" : "Untitled thread",
         ),
+        updatedAt: thread.updatedAt,
         updatedLabel: formatRelativeTime(thread.updatedAt, locale),
       })),
     [linkedThreads, locale],
@@ -601,23 +778,54 @@ export function CommandWorkspace({
       platformSnapshot.knowledgeBases.length +
       platformSnapshot.workflows.length >
     0;
+  const platformResourceStates = agentPlatformResourceStates(platformSnapshot);
+  const platformResourceStateValues = Object.values(platformResourceStates);
+  const platformState: PlatformLoadState = platformResourceStateValues.every(
+    (state) => state.status === "loading",
+  )
+    ? "loading"
+    : platformResourceStateValues.every((state) => state.status === "error") &&
+        !platformHasResources
+      ? "fallback"
+      : "ready";
+  const failedResourceCount = platformResourceStateValues.filter(
+    (state) => state.status === "error",
+  ).length;
   const resourceStatus =
     platformState === "loading"
       ? "正在读取当前账号的资源。"
       : platformState === "fallback"
-        ? "本地 agent-platform 未连接，对话后端不受影响。"
-        : platformHasResources
-          ? "Agent-platform 资源已同步。"
-          : "当前账号暂无已创建或已授权的资源。";
+        ? "Agent Platform 暂不可用，本地会话仍可使用。"
+        : failedResourceCount > 0
+          ? `${failedResourceCount} 类资源加载失败，其他资源和本地工作台仍可使用。`
+          : platformHasResources
+            ? "已读取当前账号的 Agent Platform 资源。"
+            : "当前账号暂无已创建或已授权的资源。";
 
-  async function reloadPlatformResources() {
-    setPlatformState("loading");
+  async function reloadPlatformResources(
+    category?: AgentPlatformResourceCategory,
+  ) {
+    const categories = category ? [category] : agentPlatformResourceCategories;
+    setPlatformSnapshot((current) =>
+      setAgentPlatformResourceState(current, categories, {
+        status: "loading",
+        error: null,
+      }),
+    );
     try {
-      setPlatformSnapshot(await readAgentPlatformSnapshot());
-      setPlatformState("ready");
-    } catch {
-      setPlatformSnapshot(emptyAgentPlatformSnapshot);
-      setPlatformState("fallback");
+      const incoming = await readAgentPlatformSnapshot();
+      setPlatformSnapshot((current) =>
+        mergeAgentPlatformSnapshot(current, incoming, categories),
+      );
+    } catch (reason) {
+      const error =
+        reason instanceof Error ? reason.message : "agent-platform unavailable";
+      setPlatformSnapshot((current) =>
+        setAgentPlatformResourceState(current, categories, {
+          status: "error",
+          error,
+        }),
+      );
     }
   }
 
@@ -644,27 +852,195 @@ export function CommandWorkspace({
     textareaRef.current?.focus();
   }
 
-  function sendComposerValue() {
-    const trimmed = composerValue.trim();
-    if (isSending || !trimmed) {
+  function selectPlatformResource(resource: AgentPlatformComposerResource) {
+    const pimTarget = isPimExecutionTarget(executionTarget);
+    const selectedResource: AgentPlatformComposerResource = {
+      ...resource,
+      execution:
+        !pimTarget && resource.type === "skills" ? "local" : "remote",
+    };
+    if (!pimTarget && resource.type === "skills") {
+      const skill = platformSnapshot.skills.find(
+        (candidate) => candidate.id === resource.id,
+      );
+      if (!skill?.downloaded) {
+        setComposerResourceError(
+          `Skill“${resource.name}”需要先下载，才能由本地智能体使用。`,
+        );
+        return;
+      }
+    }
+    const alreadySelected = selectedPlatformResources.some(
+      (item) => item.type === resource.type && item.id === resource.id,
+    );
+    const nextResources = alreadySelected
+      ? selectedPlatformResources
+      : [...selectedPlatformResources, selectedResource];
+    const compatibleAgent = pimTarget
+      ? findCompatibleOnlineAgent(
+          platformSnapshot,
+          nextResources,
+          executionTarget,
+        )
+      : null;
+    if (pimTarget && !compatibleAgent) {
+      setComposerResourceError(
+        `当前 PIM Agent 没有同时绑定所选 ${nextResources
+          .map(platformResourceLabel)
+          .join("、")} 资源。`,
+      );
       return;
     }
-    onChangeComposerValue("");
-    const shouldCreateNewThread = newTaskDraft || !selectedThread;
-    (shouldCreateNewThread ? (onSendNewThread ?? onSend) : onSend)(
-      trimmed,
-      commandComposerRuntimeSettings({
-        executionTarget,
-        model,
-        permission,
-        scene,
-        sceneMode,
-        executionIntent,
-      }),
-      cwd || null,
+
+    setSelectedPlatformResources(nextResources);
+    setComposerResourceError(null);
+    const token = platformResourceToken(resource);
+    if (!composerValue.includes(token)) {
+      onChangeComposerValue(
+        insertTokenIntoComposerValue({
+          prefix: platformResourcePrefix(resource),
+          token: resource.name,
+          value: composerValue,
+        }),
+      );
+    }
+    closeComposerPalette();
+    textareaRef.current?.focus();
+  }
+
+  function sendComposerValue() {
+    const trimmed = composerValue.trim();
+    if (
+      isSending ||
+      (!trimmed && composerImages.length === 0 && composerAttachments.length === 0)
+    ) {
+      return;
+    }
+    const pimTarget = isPimExecutionTarget(executionTarget);
+    if (pimTarget && composerImages.length > 0) {
+      setComposerResourceError(
+        "远程 PIM Agent 当前不接收图片输入，请切换到 CrewON 本地智能体。",
+      );
+      return;
+    }
+    const referencedResources = selectedPlatformResources.filter((resource) =>
+      trimmed.includes(platformResourceToken(resource)),
     );
+    const compatibleAgent =
+      pimTarget && referencedResources.length > 0
+        ? findCompatibleOnlineAgent(
+            platformSnapshot,
+            referencedResources,
+            executionTarget,
+          )
+        : null;
+    if (pimTarget && referencedResources.length > 0 && !compatibleAgent) {
+      setComposerResourceError(
+        "所选资源未全部绑定到当前 PIM Agent，请减少资源或调整 Agent 绑定。",
+      );
+      return;
+    }
+    const effectiveExecutionTarget = executionTarget;
+    const runtimeSettings = commandComposerRuntimeSettings({
+      executionTarget: effectiveExecutionTarget,
+      model,
+      reasoningEffort: pimTarget ? undefined : reasoningEffort,
+      permission,
+      scene,
+      sceneMode,
+      executionIntent,
+    });
+    runtimeSettings.dynamicTools = pimTarget
+      ? []
+      : buildPimDynamicTools(referencedResources, platformSnapshot);
+    const selectedAgentPlatformSource = agentPlatformTargetFromThreadSource(
+      selectedThread?.threadSource,
+    );
+    const requestedAgentPlatformSource = agentPlatformThreadSource(
+      runtimeSettings.agentPlatformAgentId,
+    );
+    const shouldCreateNewThread =
+      newTaskDraft ||
+      !selectedThread ||
+      (!pimTarget && referencedResources.length > 0) ||
+      ((selectedAgentPlatformSource !== null ||
+        requestedAgentPlatformSource !== null) &&
+        selectedAgentPlatformSource !== requestedAgentPlatformSource);
+    const prompt = `${trimmed || (composerImages.length > 0 ? "请描述这张图片。" : "请分析这些附件。")}${attachmentContext(composerAttachments)}`;
+    if (shouldCreateNewThread && onSendNewThread) {
+      onSendNewThread(prompt, runtimeSettings, cwd || null, composerImages);
+    } else {
+      onSend(prompt, runtimeSettings, composerImages);
+    }
+    onChangeComposerValue("");
+    setComposerImages([]);
+    setComposerAttachments([]);
+    setSelectedPlatformResources([]);
+    setComposerResourceError(null);
     setNewTaskDraft(false);
     setExecutionIntent("none");
+  }
+
+  async function handleComposerPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.clipboardData.files).filter((file) =>
+      supportedComposerImageTypes.has(file.type),
+    );
+    if (files.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    const availableSlots = maxComposerImages - composerImages.length;
+    if (availableSlots <= 0) {
+      setComposerResourceError(`每次最多添加 ${maxComposerImages} 张图片。`);
+      return;
+    }
+    const accepted = files.slice(0, availableSlots);
+    const oversized = accepted.find((file) => file.size > maxComposerImageBytes);
+    if (oversized) {
+      setComposerResourceError("图片不能超过 5MB。请压缩后再粘贴。");
+      return;
+    }
+    try {
+      const images = await Promise.all(
+        accepted.map(async (file) => ({
+          detail: "high" as const,
+          url: await imageDataUrl(file),
+        })),
+      );
+      setComposerImages((current) => [...current, ...images].slice(0, maxComposerImages));
+      setComposerResourceError(null);
+    } catch (error) {
+      setComposerResourceError(
+        error instanceof Error ? error.message : "无法读取粘贴的图片。",
+      );
+    }
+  }
+
+  async function addComposerFiles(files: File[]) {
+    try {
+      const attachments = await prepareComposerAttachments(files);
+      setComposerAttachments((current) => {
+        const merged = [...current, ...attachments];
+        const ids = new Set<string>();
+        return merged.filter((attachment) => {
+          if (ids.has(attachment.id)) {
+            return false;
+          }
+          ids.add(attachment.id);
+          return true;
+        });
+      });
+      setComposerResourceError(null);
+    } catch (error) {
+      setComposerResourceError(
+        error instanceof Error ? error.message : "无法读取所选文件。",
+      );
+    }
+  }
+
+  function handleComposerDrop(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    void addComposerFiles(Array.from(event.dataTransfer.files));
   }
 
   function openComposerPalette(kind: "add" | "context" | "slash") {
@@ -713,6 +1089,10 @@ export function CommandWorkspace({
   }, [openPalette]);
 
   function insertContextItem(item: PaletteItemWithCommand) {
+    if (item.platformResource) {
+      selectPlatformResource(item.platformResource);
+      return;
+    }
     onChangeComposerValue(
       insertTokenIntoComposerValue({
         prefix: "@",
@@ -725,13 +1105,18 @@ export function CommandWorkspace({
   }
 
   function insertSlashItem(item: PaletteItemWithCommand) {
+    if (item.platformResource) {
+      selectPlatformResource(item.platformResource);
+      return;
+    }
     if (item.command) {
       onSlashCommandSelect?.(item.command);
     }
     onChangeComposerValue(
       insertTokenIntoComposerValue({
         prefix: "/",
-        token: item.command?.token ?? item.token ?? item.title,
+        token:
+          item.command?.token ?? (item.token ?? item.title).replace(/^\$/, ""),
         value: composerValue,
       }),
     );
@@ -742,7 +1127,12 @@ export function CommandWorkspace({
   function insertAddItem(item: PaletteItemWithCommand) {
     if (item.action === "attach-files") {
       closeComposerPalette();
-      onAttachContext(cwd || null);
+      fileInputRef.current?.click();
+      return;
+    }
+    if (item.action === "attach-folder") {
+      closeComposerPalette();
+      folderInputRef.current?.click();
       return;
     }
     if (item.kind === "skill" || item.kind === "mcp" || item.command) {
@@ -793,9 +1183,7 @@ export function CommandWorkspace({
     workflowRooms[0];
   const showCommandThread =
     activeView === "command" && Boolean(selectedThread) && !newTaskDraft;
-  const commandThreadRunning =
-    Boolean(activeTurnId) ||
-    Boolean(selectedThread?.turns.some((turn) => turn.status === "inProgress"));
+  const commandThreadRunning = Boolean(activeTurnId);
   const connectionStatusLabel =
     connectionState === "connected"
       ? "App Server 已连接"
@@ -845,6 +1233,8 @@ export function CommandWorkspace({
           onNewThread={(workspaceCwd) => {
             setActiveLinkedThreadId(null);
             setNewTaskDraft(true);
+            setSelectedPlatformResources([]);
+            setComposerResourceError(null);
             onChangeWorkspaceCwd?.(workspaceCwd);
             onChangeComposerValue("");
             switchView("command");
@@ -853,6 +1243,8 @@ export function CommandWorkspace({
           onOpenLinkedThread={(threadId) => {
             setActiveLinkedThreadId(threadId);
             setNewTaskDraft(false);
+            setSelectedPlatformResources([]);
+            setComposerResourceError(null);
             switchView("command");
             onSelectLinkedThread?.(threadId);
           }}
@@ -862,6 +1254,7 @@ export function CommandWorkspace({
             setSidebarCollapsed((collapsed) => !collapsed)
           }
           onToggleSearch={() => setSidebarSearchOpen((open) => !open)}
+          workspaceClient={executionTargetClient}
         />
 
         <section className="command-canvas" data-od-id="desktop-main-pane">
@@ -882,13 +1275,13 @@ export function CommandWorkspace({
               className={classNames(
                 "hero-center",
                 showCommandThread && "has-command-thread",
+                showCommandThread && "conversation-shell",
               )}
               data-od-id="primary-work-area"
             >
               {showCommandThread && selectedThread ? (
                 <CommandThreadRoom
                   activeTurnId={activeTurnId}
-                  cwd={cwd}
                   locale={locale}
                   selectedThread={selectedThread}
                   streamingText={streamingText}
@@ -912,12 +1305,80 @@ export function CommandWorkspace({
                 className={classNames(
                   "command-input",
                   showCommandThread && "thread-command-input",
+                  showCommandThread && "conversation-frame",
                 )}
                 data-od-id="ai-composer"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleComposerDrop}
               >
                 <label className="visually-hidden" htmlFor="desktop-task-input">
                   任务输入
                 </label>
+                {composerImages.length > 0 ? (
+                  <div className="composer-image-chips" aria-label="已添加的图片">
+                    {composerImages.map((image, index) => (
+                      <div className="composer-image-chip" key={image.url}>
+                        <img alt={`待发送图片 ${index + 1}`} src={image.url} />
+                        <button
+                          aria-label={`移除图片 ${index + 1}`}
+                          title="移除图片"
+                          type="button"
+                          onClick={() =>
+                            setComposerImages((current) =>
+                              current.filter((_, itemIndex) => itemIndex !== index),
+                            )
+                          }
+                        >
+                          <X aria-hidden="true" size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {composerAttachments.length > 0 ? (
+                  <div className="composer-attachment-chips" aria-label="已添加的文件">
+                    {composerAttachments.map((attachment) => (
+                      <div className="composer-attachment-chip" key={attachment.id}>
+                        <FileText aria-hidden="true" size={14} />
+                        <span title={attachment.relativePath}>{attachment.relativePath}</span>
+                        <button
+                          aria-label={`移除文件 ${attachment.name}`}
+                          title="移除文件"
+                          type="button"
+                          onClick={() =>
+                            setComposerAttachments((current) =>
+                              current.filter((item) => item.id !== attachment.id),
+                            )
+                          }
+                        >
+                          <X aria-hidden="true" size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <input
+                  accept=".txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.ts,.tsx,.js,.jsx,.py,.rs,.java,.sql,.docx,.xlsx,.xls"
+                  className="composer-file-input"
+                  multiple
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={(event) => {
+                    void addComposerFiles(Array.from(event.currentTarget.files ?? []));
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <input
+                  className="composer-file-input"
+                  multiple
+                  ref={folderInputRef}
+                  type="file"
+                  {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+                  onChange={(event) => {
+                    void addComposerFiles(Array.from(event.currentTarget.files ?? []));
+                    event.currentTarget.value = "";
+                  }}
+                />
                 <textarea
                   aria-describedby="composer-status composer-error"
                   data-composer=""
@@ -930,7 +1391,13 @@ export function CommandWorkspace({
                     onChangeComposerValue(event.currentTarget.value)
                   }
                   onKeyDown={handleComposerKeyDown}
+                  onPaste={handleComposerPaste}
                 />
+                {composerResourceError ? (
+                  <p className="composer-error" id="composer-error" role="alert">
+                    {composerResourceError}
+                  </p>
+                ) : null}
                 <button
                   aria-hidden="true"
                   className="shortcut-proxy"
@@ -959,6 +1426,7 @@ export function CommandWorkspace({
                   >
                     <button
                       aria-label="添加上下文"
+                      title="添加上下文；也可直接粘贴图片"
                       className="icon-action composer-plus-action"
                       data-palette-trigger="add"
                       type="button"
@@ -966,6 +1434,9 @@ export function CommandWorkspace({
                     >
                       <Plus aria-hidden="true" />
                     </button>
+                    <span className="visually-hidden">
+                      <ImagePlus aria-hidden="true" /> 可直接粘贴 PNG、JPEG 或 WebP 图片
+                    </span>
                     <CommandComposerSelect
                       ariaLabel="权限选择"
                       className="permission-dropdown"
@@ -1021,7 +1492,11 @@ export function CommandWorkspace({
                       className="execution-target-dropdown"
                       options={executionTargets}
                       value={executionTarget}
-                      onChange={setExecutionTarget}
+                      onChange={(value) => {
+                        setExecutionTarget(value);
+                        setSelectedPlatformResources([]);
+                        setComposerResourceError(null);
+                      }}
                     />
                     <CommandComposerSelect
                       ariaLabel="模型选择"
@@ -1033,18 +1508,51 @@ export function CommandWorkspace({
                         setModel(nextModel);
                       }}
                     />
+                    {!isPimExecutionTarget(executionTarget) ? (
+                      <CommandComposerSelect
+                        ariaLabel="推理强度"
+                        className="reasoning-dropdown"
+                        options={[
+                          { label: "轻度", value: "low" },
+                          { label: "中", value: "medium" },
+                          { label: "高", value: "high" },
+                          { label: "极高", value: "xhigh" },
+                        ]}
+                        value={reasoningEffort}
+                        onChange={setReasoningEffort}
+                      />
+                    ) : null}
                     <button
-                      aria-busy={isSending}
+                      aria-busy={isSending && !commandThreadRunning}
                       aria-label={
-                        showCommandThread ? composerSendLabel : "开始任务"
+                        commandThreadRunning
+                          ? "停止任务"
+                          : showCommandThread
+                            ? composerSendLabel
+                            : "开始任务"
                       }
                       className="send-button"
-                      disabled={isSending || !composerValue.trim()}
-                      title={showCommandThread ? composerSendLabel : "开始任务"}
+                      data-action={commandThreadRunning ? "stop" : "send"}
+                      disabled={
+                        commandThreadRunning
+                          ? !onStop
+                          : isSending || !composerValue.trim()
+                      }
+                      title={
+                        commandThreadRunning
+                          ? "停止任务"
+                          : showCommandThread
+                            ? composerSendLabel
+                            : "开始任务"
+                      }
                       type="button"
-                      onClick={sendComposerValue}
+                      onClick={commandThreadRunning ? onStop : sendComposerValue}
                     >
-                      <ArrowUp aria-hidden="true" />
+                      {commandThreadRunning ? (
+                        <Square aria-hidden="true" />
+                      ) : (
+                        <ArrowUp aria-hidden="true" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1137,6 +1645,7 @@ export function CommandWorkspace({
                 </div>
               </section>
             </section>
+
           </section>
 
           <AssistView
@@ -1155,6 +1664,7 @@ export function CommandWorkspace({
             catalogFilter={catalogFilter}
             catalogSearch={catalogSearch}
             platformState={platformState}
+            resourceStates={platformResourceStates}
             snapshot={platformSnapshot}
             onReload={reloadPlatformResources}
             onCatalogFilterChange={setCatalogFilter}
@@ -1163,6 +1673,7 @@ export function CommandWorkspace({
           <KnowledgeCatalogView
             active={activeView === "knowledge"}
             platformState={platformState}
+            resourceStates={platformResourceStates}
             snapshot={platformSnapshot}
             onReload={reloadPlatformResources}
           />

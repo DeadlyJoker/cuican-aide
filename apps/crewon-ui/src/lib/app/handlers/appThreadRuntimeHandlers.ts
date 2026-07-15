@@ -1,13 +1,19 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
-import type { AppServerClient } from "../../app-server/appServer";
+import type {
+  AppServerClient,
+} from "../../app-server/appServer";
+import type { ComposerImageInput } from "../../shared/composerImages";
 import type { AppView } from "../appRouting";
 import type { PendingComposerMention } from "../../shared/composerMentions";
 import type { ConfirmHandler } from "../../shared/confirmHandler";
 import type { NoticeState } from "../appRuntimeState";
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { Locale, ToolId } from "../../i18n";
-import type { ThreadRuntimeSettings } from "../../thread/threadRuntimeSettings";
+import {
+  agentPlatformThreadSource,
+  type ThreadRuntimeSettings,
+} from "../../thread/threadRuntimeSettings";
 import {
   archiveThreadAction,
   deleteArchivedThreadAction,
@@ -22,6 +28,7 @@ import {
   interruptActiveTurnAction,
   sendMessageAction,
 } from "../../thread/threadMessageActions";
+import { restoreAgentPlatformThread } from "../../thread/agentPlatformThreadHistory";
 import {
   startReviewAction,
   startSideChatAction,
@@ -54,11 +61,13 @@ export type AppThreadRuntimeHandlers = {
   sendMessage: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
+    images?: ComposerImageInput[],
   ) => Promise<void>;
   sendMessageInNewThread: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
     workspaceCwd?: string | null,
+    images?: ComposerImageInput[],
   ) => Promise<void>;
   startDraftThread: () => void;
   startReview: () => Promise<void>;
@@ -111,15 +120,10 @@ export type AppThreadRuntimeHandlersParams = {
   untitledThreadLabel: string;
 };
 
-function inProgressTurnId(thread: Thread | null): string | null {
-  return thread?.turns.find((turn) => turn.status === "inProgress")?.id ?? null;
-}
-
 export function createAppThreadRuntimeHandlers(
   params: AppThreadRuntimeHandlersParams,
 ): AppThreadRuntimeHandlers {
-  const activeTurnId =
-    params.activeTurnId ?? inProgressTurnId(params.selectedThread);
+  const activeTurnId = params.activeTurnId;
   const createDemoThread = (initialPrompt?: string) =>
     createDemoThreadAction({
       initialPrompt,
@@ -167,12 +171,19 @@ export function createAppThreadRuntimeHandlers(
       selectedThreadId: string | null;
     },
     workspaceCwd?: string | null,
+    images?: ComposerImageInput[],
   ) =>
     sendMessageAction({
       activeTurnId: threadContext.activeTurnId,
       client: params.client,
       createThread: (initialPrompt) =>
-        createThread(initialPrompt, "app_server", threadSettings, workspaceCwd),
+        createThread(
+          initialPrompt,
+          agentPlatformThreadSource(threadSettings?.agentPlatformAgentId) ??
+            "app_server",
+          threadSettings,
+          workspaceCwd,
+        ),
       demoResponse: params.demoResponse,
       isConnected: params.isConnected,
       isDemoPreview: params.isDemoPreview,
@@ -192,6 +203,7 @@ export function createAppThreadRuntimeHandlers(
       setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
       setThreads: params.setThreads,
       text,
+      images,
       threadSettings,
     });
 
@@ -245,13 +257,17 @@ export function createAppThreadRuntimeHandlers(
         thread,
         untitledThreadLabel: params.untitledThreadLabel,
       }),
-    selectThread: (threadId) =>
-      selectThreadAction({
+    selectThread: async (threadId) => {
+      await selectThreadAction({
         client: params.client,
         isConnected: params.isConnected,
         locale: params.locale,
         preserveThreadsAfterConnectionLoss:
           params.preserveThreadsAfterConnectionLoss,
+        restoreThread: (thread) =>
+          params.client
+            ? restoreAgentPlatformThread({ client: params.client, thread })
+            : Promise.resolve(thread),
         setAppView: params.setAppView,
         setInspectorOpen: params.setInspectorOpen,
         setNotice: params.setNotice,
@@ -260,14 +276,15 @@ export function createAppThreadRuntimeHandlers(
         setThreads: params.setThreads,
         shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
         threadId,
-      }),
-    sendMessage: (text, threadSettings) =>
+      });
+    },
+    sendMessage: (text, threadSettings, images) =>
       sendMessageWithThreadContext(text, threadSettings, {
         activeTurnId,
         selectedThread: params.selectedThread,
         selectedThreadId: params.selectedThreadId,
-      }),
-    sendMessageInNewThread: (text, threadSettings, workspaceCwd) =>
+      }, undefined, images),
+    sendMessageInNewThread: (text, threadSettings, workspaceCwd, images) =>
       sendMessageWithThreadContext(
         text,
         threadSettings,
@@ -277,6 +294,7 @@ export function createAppThreadRuntimeHandlers(
           selectedThreadId: null,
         },
         workspaceCwd,
+        images,
       ),
     startDraftThread: () => {
       startDraftThreadAction({

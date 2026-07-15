@@ -171,6 +171,105 @@ function baseSendParams(
 }
 
 describe("thread message actions", () => {
+  it("adds a completed Agent Platform response to the existing CrewON thread", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => "agent-platform-access-token"),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+    const state = threadState();
+    const runAgentPlatformChat = vi.fn(
+      async (
+        _accessToken: string,
+        _threadId: string,
+        _agentId: string,
+        _message: string,
+        onDelta?: (delta: string) => void,
+        onResourceEvent?: (
+          event: {
+            type: "skill" | "mcp" | "knowledge";
+            status: "started" | "succeeded" | "failed";
+            name: string;
+            inputSummary: unknown;
+            outputSummary: unknown;
+            error: string | null;
+          },
+          index: number,
+        ) => void,
+      ) => {
+        onDelta?.("Agent ");
+        onDelta?.("answer");
+        onResourceEvent?.(
+          {
+            type: "mcp",
+            status: "succeeded",
+            name: "echo",
+            inputSummary: { message: "hello" },
+            outputSummary: "hello",
+            error: null,
+          },
+          0,
+        );
+        return {
+          agentId: "7",
+          message: "Agent answer",
+          thoughts: [],
+          skillsUsed: ["skill-12"],
+          tokens: { promptTokens: 3, completionTokens: 2, totalTokens: 5 },
+          durationMs: 42,
+        };
+      },
+    );
+
+    await sendMessageAction(
+      baseSendParams({
+        client: {
+          runAgentPlatformChat,
+          async readAgentPlatformSession() {
+            return [];
+          },
+          async resumeThread(threadId) {
+            return thread({ id: threadId });
+          },
+          async startTurn() {
+            throw new Error("local turn must not start");
+          },
+          async steerTurn() {
+            return { turnId: "unused" };
+          },
+        },
+        setIsSending: state.setIsSending,
+        setPendingComposerMentions: state.setPendingComposerMentions,
+        setThreads: state.setThreads,
+        threadSettings: { agentPlatformAgentId: "7" },
+      }),
+    );
+
+    expect(runAgentPlatformChat).toHaveBeenCalledWith(
+      "agent-platform-access-token",
+      "thread-1",
+      "7",
+      "Hello",
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(state.threads[0]?.turns[0]).toMatchObject({
+      durationMs: 42,
+      status: "completed",
+      items: [
+        { type: "userMessage" },
+        { type: "agentMessage", text: "Agent answer" },
+        {
+          type: "dynamicToolCall",
+          namespace: "pim-mcp",
+          tool: "echo",
+          success: true,
+        },
+      ],
+    });
+    vi.unstubAllGlobals();
+  });
+
   it("keeps pending composer mentions only while their visible tokens remain", () => {
     expect(
       visibleComposerMentionsForText("$files summarize", [
@@ -749,5 +848,34 @@ describe("thread message actions", () => {
       tone: "success",
     });
     expect(state.isSending).toBe(false);
+  });
+
+  it("cancels an active Agent Platform run without interrupting a CrewON turn", async () => {
+    const state = threadState([
+      thread({
+        turns: [turn({ id: "agent-platform-turn", status: "inProgress" })],
+      }),
+    ]);
+    const interruptTurn = vi.fn(async () => undefined);
+    const cancelAgentPlatformRunForThread = vi.fn(async () => true);
+
+    await interruptActiveTurnAction({
+      activeTurnId: "agent-platform-turn",
+      client: {
+        cancelAgentPlatformRunForThread,
+        interruptTurn,
+      },
+      isConnected: true,
+      locale: "en",
+      selectedThreadId: "thread-1",
+      setActiveTurnByThread: state.setActiveTurnByThread,
+      setIsSending: state.setIsSending,
+      setNotice: state.setNotice,
+      setThreads: state.setThreads,
+    });
+
+    expect(cancelAgentPlatformRunForThread).toHaveBeenCalledWith("thread-1");
+    expect(interruptTurn).not.toHaveBeenCalled();
+    expect(state.threads[0]?.turns[0]?.status).toBe("interrupted");
   });
 });

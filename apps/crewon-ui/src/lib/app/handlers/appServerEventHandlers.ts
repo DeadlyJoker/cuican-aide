@@ -49,6 +49,10 @@ import type {
   AutomationRunTurnRecord,
   OfficeRunTurnRecord,
 } from "../appTurnCompletionNotificationHandler";
+import {
+  executePimDynamicTool,
+  isPimDynamicToolCall,
+} from "../../agent-platform/pimDynamicTools";
 
 type StateSetter<T> = (updater: (current: T) => T) => void;
 
@@ -250,6 +254,24 @@ export function createAppServerEventHandlers(
       }
     },
     handleServerRequest: (request) => {
+      if (
+        request.method === "item/tool/call" &&
+        isPimDynamicToolCall(request.params)
+      ) {
+        void executePimDynamicTool(request.params)
+          .then((response) =>
+            params.client()?.respondServerRequest(request.id, response),
+          )
+          .catch((reason: unknown) => {
+            const message =
+              reason instanceof Error ? reason.message : "PIM 调用失败";
+            params.client()?.respondServerRequest(request.id, {
+              success: false,
+              contentItems: [{ type: "inputText", text: message }],
+            });
+          });
+        return;
+      }
       handleIncomingServerRequest({
         locale: params.locale(),
         request,

@@ -157,6 +157,7 @@ export function AppConversationSurface({
         </div>
       </div>
       <Transcript
+        activeTurnId={activeTurnId}
         commandLabel={commandLabel}
         crewonLabel={crewonLabel}
         emptyDescription={emptyDescription}

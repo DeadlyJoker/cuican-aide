@@ -1,4 +1,9 @@
-import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
+import type {
+  AgentPlatformResourceCategory,
+  AgentPlatformResourceState,
+  AgentPlatformResourceStates,
+  AgentPlatformSnapshot,
+} from "../../lib/agent-platform/agentPlatformClient";
 import type { CommandScene } from "../../lib/scene/sceneCatalog";
 
 export type { CommandScene } from "../../lib/scene/sceneCatalog";
@@ -24,6 +29,13 @@ export type CommandPaletteKind =
   | "workflow"
   | "workspace";
 
+export type AgentPlatformComposerResource = {
+  execution: "local" | "remote";
+  id: number;
+  name: string;
+  type: "skills" | "mcp_servers" | "knowledge_bases";
+};
+
 export type SlotItem = {
   label: string;
   title: string;
@@ -44,9 +56,35 @@ export type CommandPaletteItem = {
   detail: string;
   kind: CommandPaletteKind;
   label: string;
+  platformResource?: AgentPlatformComposerResource;
   title: string;
   token?: string;
 };
+
+export const agentPlatformResourceCategories = [
+  "agents",
+  "skills",
+  "mcp",
+  "knowledge",
+] as const satisfies readonly AgentPlatformResourceCategory[];
+
+export function createAgentPlatformResourceStates(
+  status: AgentPlatformResourceState["status"],
+  error: string | null = null,
+): AgentPlatformResourceStates {
+  return {
+    agents: { status, error },
+    skills: { status, error },
+    mcp: { status, error },
+    knowledge: { status, error },
+  };
+}
+
+export function agentPlatformResourceStates(
+  snapshot: AgentPlatformSnapshot,
+): AgentPlatformResourceStates {
+  return snapshot.resourceStates ?? createAgentPlatformResourceStates("ready");
+}
 
 export const emptyAgentPlatformSnapshot: AgentPlatformSnapshot = {
   agents: [],
@@ -55,7 +93,58 @@ export const emptyAgentPlatformSnapshot: AgentPlatformSnapshot = {
   mcpServers: [],
   mcpTools: [],
   workflows: [],
+  resourceStates: createAgentPlatformResourceStates("loading"),
 };
+
+export function setAgentPlatformResourceState(
+  snapshot: AgentPlatformSnapshot,
+  categories: readonly AgentPlatformResourceCategory[],
+  state: AgentPlatformResourceState,
+): AgentPlatformSnapshot {
+  const nextStates = { ...agentPlatformResourceStates(snapshot) };
+  for (const category of categories) {
+    nextStates[category] = state;
+  }
+  return { ...snapshot, resourceStates: nextStates };
+}
+
+export function mergeAgentPlatformSnapshot(
+  current: AgentPlatformSnapshot,
+  incoming: AgentPlatformSnapshot,
+  categories: readonly AgentPlatformResourceCategory[] = agentPlatformResourceCategories,
+): AgentPlatformSnapshot {
+  const selected = new Set(categories);
+  const incomingStates = agentPlatformResourceStates(incoming);
+  const nextStates = {
+    ...agentPlatformResourceStates(current),
+  };
+  const next: AgentPlatformSnapshot = {
+    ...current,
+    resourceStates: nextStates,
+  };
+
+  for (const category of categories) {
+    nextStates[category] = incomingStates[category];
+    if (incomingStates[category].status !== "ready") {
+      continue;
+    }
+    if (category === "agents") {
+      next.agents = incoming.agents;
+    } else if (category === "skills") {
+      next.skills = incoming.skills;
+    } else if (category === "mcp") {
+      next.mcpServers = incoming.mcpServers;
+      next.mcpTools = incoming.mcpTools;
+    } else {
+      next.knowledgeBases = incoming.knowledgeBases;
+    }
+  }
+
+  if (selected.size === agentPlatformResourceCategories.length) {
+    next.workflows = incoming.workflows;
+  }
+  return next;
+}
 
 export function insertTokenIntoComposerValue({
   prefix,
@@ -82,16 +171,20 @@ export function insertTokenIntoComposerValue({
 export function selectCommandHomeSlots(
   snapshot: AgentPlatformSnapshot,
 ): CommandHomeSlots {
-  const downloadedAgents = snapshot.agents.filter((item) => item.downloaded);
-  const downloadedKnowledge = snapshot.knowledgeBases.filter(
-    (item) => item.downloaded,
+  const accountAgents = snapshot.agents.filter(
+    (item) => item.resource_source !== "catalog",
   );
-  const downloadedSkills = snapshot.skills.filter((item) => item.downloaded);
-  const downloadedMcpServers = snapshot.mcpServers.filter(
-    (item) => item.downloaded,
+  const accountKnowledge = snapshot.knowledgeBases.filter(
+    (item) => item.resource_source !== "catalog",
+  );
+  const accountSkills = snapshot.skills.filter(
+    (item) => item.resource_source !== "catalog",
+  );
+  const accountMcpServers = snapshot.mcpServers.filter(
+    (item) => item.resource_source !== "catalog",
   );
   const agent =
-    downloadedAgents.find(
+    accountAgents.find(
       (item) =>
         item.is_active !== false &&
         item.is_active !== 0 &&
@@ -99,10 +192,10 @@ export function selectCommandHomeSlots(
           (item.mcp_servers?.length ?? 0) > 0 ||
           (item.knowledge_base_ids?.length ?? 0) > 0),
     ) ??
-    downloadedAgents.find(
+    accountAgents.find(
       (item) => item.is_active !== false && item.is_active !== 0,
     ) ??
-    downloadedAgents[0];
+    accountAgents[0];
   const workflow =
     findByKeyword(snapshot.workflows, [
       "gate",
@@ -111,29 +204,28 @@ export function selectCommandHomeSlots(
       "测试",
       "验收",
     ]) ?? snapshot.workflows[0];
-  const knowledge = downloadedKnowledge[0];
+  const knowledge = accountKnowledge[0];
   const skillA =
-    findByKeyword(downloadedSkills, [
+    findByKeyword(accountSkills, [
       "schema",
       "校验",
       "审阅",
       "交付",
       "检查",
-    ]) ?? downloadedSkills[0];
+    ]) ?? accountSkills[0];
   const skillB =
-    downloadedSkills.find((item) => item.id !== skillA?.id) ??
-    downloadedSkills[1];
+    accountSkills.find((item) => item.id !== skillA?.id) ?? accountSkills[1];
   const mcpA =
-    findByKeyword(downloadedMcpServers, [
+    findByKeyword(accountMcpServers, [
       "filesystem",
       "文件",
       "github",
       "screenshot",
       "browser",
-    ]) ?? downloadedMcpServers[0];
+    ]) ?? accountMcpServers[0];
   const mcpB =
-    downloadedMcpServers.find((item) => item.id !== mcpA?.id) ??
-    downloadedMcpServers[1];
+    accountMcpServers.find((item) => item.id !== mcpA?.id) ??
+    accountMcpServers[1];
 
   return {
     agent: {

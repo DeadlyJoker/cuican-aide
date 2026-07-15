@@ -22,6 +22,7 @@ import {
 import { hasDisplayableReasoning } from "./transcriptReasoning";
 
 type TranscriptProps = {
+  activeTurnId?: string | null;
   commandLabel: string;
   crewonLabel: string;
   emptyDescription: string;

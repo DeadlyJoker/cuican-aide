@@ -3,13 +3,11 @@ import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
 
 import type { Locale } from "../../lib/i18n";
 import type { WorkMode } from "../../lib/workMode";
-import { sidebarThreadTitle } from "../SidebarPresentation";
 import { Transcript } from "../Transcript";
 import { dynamicToolKindLabel } from "../transcriptToolPresentation";
 
 type CommandThreadRoomProps = {
   activeTurnId: string | null;
-  cwd: string;
   locale: Locale;
   selectedThread: Thread;
   streamingText: string;
@@ -97,19 +95,6 @@ function chipLabel(label: string, count: number): string | null {
   return count > 0 ? `${label} ${count}` : null;
 }
 
-function workspaceDisplayName(path: string): string {
-  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-  return normalized.split("/").filter(Boolean).pop() || normalized || path;
-}
-
-function workspaceLabel(path: string | null, locale: Locale): string {
-  if (!path) {
-    return locale === "zh" ? "无工作空间" : "No workspace";
-  }
-  const name = workspaceDisplayName(path);
-  return locale === "zh" ? `工作空间 · ${name}` : `Workspace · ${name}`;
-}
-
 export function commandThreadRunSummary({
   activeTurnId,
   locale,
@@ -148,8 +133,7 @@ export function commandThreadRunSummary({
     { agents: 0, commands: 0, files: 0, mcps: 0, skills: 0, tools: 0 },
   );
 
-  const hasRunningTurn =
-    Boolean(activeTurnId) || lastTurn?.status === "inProgress";
+  const hasRunningTurn = Boolean(activeTurnId);
   let state: CommandThreadRunSummary["state"] = "idle";
   if (hasRunningTurn) {
     state = "running";
@@ -199,10 +183,7 @@ export function commandThreadRunSummary({
   ].filter((chip): chip is string => Boolean(chip));
 
   return {
-    chips:
-      chips.length > 0
-        ? chips
-        : [locale === "zh" ? "对话就绪" : "Conversation ready"],
+    chips,
     state,
     title,
   };
@@ -210,7 +191,6 @@ export function commandThreadRunSummary({
 
 export function CommandThreadRoom({
   activeTurnId,
-  cwd,
   locale,
   selectedThread,
   streamingText,
@@ -219,70 +199,41 @@ export function CommandThreadRoom({
   onStop,
 }: CommandThreadRoomProps) {
   const labels = transcriptLabels(locale);
-  const isRunning =
-    Boolean(activeTurnId) ||
-    selectedThread.turns.some((turn) => turn.status === "inProgress");
-  const title = sidebarThreadTitle(
-    selectedThread,
-    locale === "zh" ? "未命名会话" : "Untitled thread",
-  );
   const runSummary = commandThreadRunSummary({
     activeTurnId,
     locale,
     streamingText,
     thread: selectedThread,
   });
-  const contextLabel = isRunning
-    ? locale === "zh"
-      ? "Agent 正在执行"
-      : "Agent running"
-    : locale === "zh"
-      ? "Agent 对话"
-      : "Agent conversation";
-  const workspacePath = selectedThread.cwd || cwd || null;
-  const workspaceText = workspaceLabel(workspacePath, locale);
-
+  const showRunSummary =
+    runSummary.state === "failed" || runSummary.state === "interrupted";
   return (
     <>
-      <header
-        className="home-title thread-home-title"
-        data-od-id="desktop-command-header"
+      <section
+        className="command-thread-room conversation-frame"
+        data-od-id="command-thread-room"
       >
-        <p>{isRunning ? "Agent 正在执行" : "Agent 对话"}</p>
-        <h1>
-          <span>{title}</span>
-        </h1>
-      </header>
-
-      <section className="command-thread-room" data-od-id="command-thread-room">
-        <div className="command-thread-toolbar">
-          <div className="command-thread-identity">
-            <span>{contextLabel}</span>
-            <strong>{title}</strong>
-            <em className="command-thread-cwd" title={workspacePath ?? undefined}>
-              {workspaceText}
-            </em>
+        {showRunSummary ? (
+          <div className="command-thread-toolbar">
+            <div
+              className="command-thread-runtime"
+              role="status"
+              aria-live="polite"
+              data-state={runSummary.state}
+            >
+              <strong>{runSummary.title}</strong>
+              {runSummary.chips.length > 0 ? (
+                <span>
+                  {runSummary.chips.map((chip) => (
+                    <em key={chip}>{chip}</em>
+                  ))}
+                </span>
+              ) : null}
+            </div>
           </div>
-          <div
-            className="command-thread-runtime"
-            role="status"
-            aria-live="polite"
-            data-state={runSummary.state}
-          >
-            <strong>{runSummary.title}</strong>
-            <span>
-              {runSummary.chips.map((chip) => (
-                <em key={chip}>{chip}</em>
-              ))}
-            </span>
-          </div>
-          {isRunning && onStop ? (
-            <button type="button" onClick={onStop}>
-              {labels.stopLabel}
-            </button>
-          ) : null}
-        </div>
+        ) : null}
         <Transcript
+          activeTurnId={activeTurnId}
           commandLabel={labels.commandLabel}
           crewonLabel={labels.crewonLabel}
           emptyDescription={labels.emptyDescription}

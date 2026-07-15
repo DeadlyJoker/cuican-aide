@@ -1294,6 +1294,43 @@ All filesystem paths in this section must be absolute.
 { "id": 45, "result": {} }
 ```
 
+### Agent Platform Agent sessions
+
+CrewON can proxy an Agent Platform Open API Agent while keeping conversation
+history in the local app-server. Configure the app-server process with
+`CREWON_AGENT_PLATFORM_BASE_URL` and `CREWON_AGENT_PLATFORM_API_KEY`. The API
+key is never returned to clients. Client access tokens are verified against
+Agent Platform `/api/v1/auth/me`; the verified user ID, CrewON `threadId`, and
+`agentId` form the local history key.
+
+`CREWON_AGENT_PLATFORM_BASE_URL` must use HTTPS for remote deployments. Plain
+HTTP is accepted for loopback development addresses such as `localhost` or
+`127.0.0.1`. A legacy remote deployment without TLS must also set
+`CREWON_AGENT_PLATFORM_ALLOW_INSECURE_HTTP=1`; leave this unset once HTTPS is
+available. Agent Platform responses are never followed through HTTP redirects.
+Synchronous and streaming Agent calls share immediate admission
+limits of 64 active requests globally and 8 per app-server connection.
+
+- `agentPlatform/auth` verifies an Agent Platform access token.
+- `agentPlatform/agent/info` reads Open API Agent status.
+- `agentPlatform/chat` performs a completed synchronous turn.
+- `agentPlatform/chat/start` starts SSE execution and returns a `runId`.
+- `agentPlatform/run/cancel` cancels local waiting for an SSE run.
+- `agentPlatform/session/read` and `agentPlatform/session/clear` manage local
+  derived history without writing Agent Platform conversations.
+
+Streaming runs emit `agentPlatform/chat/delta`,
+`agentPlatform/chat/completed`, or `agentPlatform/chat/failed`. Only completed
+runs are persisted. At most the latest 20 messages are sent, with a 10,000
+approximate-token hard limit including the current message. Individual remote
+answers and local session files are also bounded. A second operation for the
+same verified user, `threadId`, and `agentId` is rejected while the first is
+active instead of being queued indefinitely.
+
+This history belongs only to the external Agent Platform Open API request. It
+is not injected into CrewON core model context and does not bypass the typed
+`core/context` fragment rules used by CrewON inference requests.
+
 ## Events
 
 Event notifications are the server-initiated event stream for thread lifecycles, turn lifecycles, and the items within them. After you start or resume a thread, keep reading stdout for `thread/started`, `thread/archived`, `thread/unarchived`, `thread/closed`, `turn/*`, and `item/*` notifications.

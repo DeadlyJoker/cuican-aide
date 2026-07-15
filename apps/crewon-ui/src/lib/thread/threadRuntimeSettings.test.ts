@@ -2,6 +2,8 @@ import type { Model } from "@crewon-protocol/v2/Model";
 import { describe, expect, it } from "vitest";
 
 import {
+  agentPlatformTargetFromThreadSource,
+  agentPlatformThreadSource,
   commandComposerRuntimeSettings,
   commandModelOptionsFromModels,
   mergeCommandModelOptions,
@@ -149,5 +151,30 @@ describe("thread runtime settings", () => {
         executionTarget: { kind: "team", id: "交付小队" },
       },
     });
+  });
+
+  it("routes an Agent Platform target through the BFF while keeping the CrewON thread", () => {
+    expect(
+      commandComposerRuntimeSettings({
+        executionTarget: "agent-platform:agents:7",
+        model: "gpt-5.6-sol",
+        permission: "approve-for-me",
+        scene: "office",
+        sceneMode: "auto",
+      }),
+    ).toMatchObject({
+      agentPlatformAgentId: "7",
+      scene: {
+        executionTarget: { kind: "crewon" },
+      },
+    });
+  });
+
+  it("round-trips an Agent Platform target through persisted thread source metadata", () => {
+    expect(agentPlatformThreadSource("7")).toBe("agent-platform:agents:7");
+    expect(
+      agentPlatformTargetFromThreadSource("agent-platform:agents:7"),
+    ).toBe("agent-platform:agents:7");
+    expect(agentPlatformTargetFromThreadSource("app_server")).toBeNull();
   });
 });

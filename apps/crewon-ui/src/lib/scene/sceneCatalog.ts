@@ -53,6 +53,10 @@ export type ScenePreset = {
   tabLabel: string;
 };
 
+function explicitlyEnabled(value: unknown): boolean {
+  return value === true || value === 1;
+}
+
 const autoMode: SceneModeOption = {
   detail: "根据任务对象、交付物和风险自动判断",
   label: "自动判断",
@@ -184,17 +188,23 @@ export function executionTargetOptions(
   },
 ): ExecutionTargetOption[] {
   const agents = snapshot.agents
-    .filter((agent) => agent.is_active !== false && agent.is_active !== 0)
-    .map((agent) => ({
-      detail: runtimeAvailability.agent
-        ? agent.description?.trim() || "使用该智能体的模型与能力配置"
-        : "智能体定义已同步，Execution Target Runtime 尚未接入",
-      disabled: !runtimeAvailability.agent,
-      kind: "agent" as const,
-      label: `${agent.name} · 单 Agent`,
-      strategy: "single" as const,
-      value: `agent:${agent.id}`,
-    }));
+    .filter((agent) => explicitlyEnabled(agent.is_active))
+    .map((agent) => {
+      const apiEnabled = explicitlyEnabled(agent.api_enabled);
+      const available = apiEnabled && runtimeAvailability.agent;
+      return {
+        detail: !apiEnabled
+          ? "Agent 尚未开放 Open API"
+          : runtimeAvailability.agent
+            ? agent.description?.trim() || "使用该智能体的模型与能力配置"
+            : "智能体定义已同步，Execution Target Runtime 尚未接入",
+        disabled: !available,
+        kind: "agent" as const,
+        label: `${agent.name} · 单 Agent`,
+        strategy: "single" as const,
+        value: `agent:${agent.id}`,
+      };
+    });
 
   return [
     {
@@ -226,10 +236,12 @@ type ExecutionTargetConfigRecord<TConfig> = {
 export function executionTargetOptionsFromDomain({
   agents,
   offices,
+  platformAgents = [],
   status,
 }: {
   agents: Array<ExecutionTargetConfigRecord<AgentConfig>>;
   offices: Array<ExecutionTargetConfigRecord<OfficeConfig>>;
+  platformAgents?: AgentPlatformSnapshot["agents"];
   status: "loading" | "ready" | "unavailable";
 }): ExecutionTargetOption[] {
   const agentOptions = agents.flatMap((record) => {
@@ -259,11 +271,25 @@ export function executionTargetOptionsFromDomain({
       value: `team:${record.config.title}`,
     };
   });
+  const platformAgentOptions = platformAgents.flatMap((agent) => {
+    const active = explicitlyEnabled(agent.is_active);
+    const apiEnabled = explicitlyEnabled(agent.api_enabled);
+    if (!active || !apiEnabled) {
+      return [];
+    }
+    return [{
+      detail: agent.description?.trim() || "通过 Agent Platform Open API 执行",
+      kind: "agent" as const,
+      label: `${agent.name} · 在线 Agent`,
+      strategy: "single" as const,
+      value: `agent-platform:agents:${agent.id}`,
+    }];
+  });
   const fallback = status === "loading"
     ? "正在读取本地 Agent 与小队定义"
     : "未读取到可用的本地 Agent 或小队定义";
 
-  return [
+  const options: ExecutionTargetOption[] = [
     {
       detail: "本地 Agent，独立完成任务",
       kind: "crewon",
@@ -271,9 +297,10 @@ export function executionTargetOptionsFromDomain({
       strategy: "single",
       value: "crewon",
     },
+    ...platformAgentOptions,
     ...agentOptions,
     ...teamOptions,
-    ...(agentOptions.length === 0 && teamOptions.length === 0
+    ...(platformAgentOptions.length === 0 && agentOptions.length === 0 && teamOptions.length === 0
       ? [{
           detail: fallback,
           disabled: true,
@@ -284,6 +311,9 @@ export function executionTargetOptionsFromDomain({
         }]
       : []),
   ];
+  return options.filter(
+    (option, index) => options.findIndex((candidate) => candidate.value === option.value) === index,
+  );
 }
 
 export function modeMayWrite(mode: SceneInteractionMode): boolean {

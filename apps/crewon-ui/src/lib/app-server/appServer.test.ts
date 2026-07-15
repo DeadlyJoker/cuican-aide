@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AppServerClient, turnInputFromComposer } from "./appServer";
+import {
+  AppServerClient,
+  AppServerRpcError,
+  turnInputFromComposer,
+} from "./appServer";
 import type { OfficeConfig } from "../domain/crewonDomain";
 
 afterEach(() => {
@@ -88,6 +92,28 @@ describe("app server composer input", () => {
       },
     ]);
   });
+
+  it("keeps pasted images in v2 turn input items", () => {
+    expect(
+      turnInputFromComposer(
+        "Describe this image",
+        [],
+        [
+          {
+            detail: "high",
+            url: "data:image/png;base64,aW1hZ2U=",
+          },
+        ],
+      ),
+    ).toEqual([
+      { type: "text", text: "Describe this image", text_elements: [] },
+      {
+        type: "image",
+        detail: "high",
+        url: "data:image/png;base64,aW1hZ2U=",
+      },
+    ]);
+  });
 });
 
 describe("app server client connection lifecycle", () => {
@@ -118,6 +144,228 @@ describe("app server client connection lifecycle", () => {
 
     expect(onClose).toHaveBeenCalledOnce();
   });
+});
+
+describe("Agent Platform stream client", () => {
+  it("bounds notifications that arrive before their run is registered", () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const harness = client as unknown as {
+      handleAgentPlatformEvent: (
+        runId: string,
+        event: {
+          runId: string;
+          threadId: string;
+          agentId: string;
+          delta: string;
+        },
+      ) => void;
+      orphanAgentPlatformEvents: Map<string, unknown[]>;
+    };
+
+    for (let index = 0; index <= 100; index += 1) {
+      const runId = `run-${index}`;
+      harness.handleAgentPlatformEvent(runId, {
+        runId,
+        threadId: "thread-1",
+        agentId: "7",
+        delta: "chunk",
+      });
+    }
+
+    expect(harness.orphanAgentPlatformEvents.size).toBe(100);
+    expect(harness.orphanAgentPlatformEvents.has("run-0")).toBe(false);
+    expect(harness.orphanAgentPlatformEvents.has("run-100")).toBe(true);
+  });
+
+  it("collects delta and completed notifications for a run", async () => {
+    const notifications: unknown[] = [];
+    const client = new AppServerClient("ws://app-server", (notification) => {
+      notifications.push(notification);
+    });
+    const socket = await connectFakeClient(client);
+    const deltas: string[] = [];
+    const resourceEvents: unknown[] = [];
+    const pending = client.runAgentPlatformChat(
+      "access-token",
+      "thread-1",
+      "7",
+      "hello",
+      (delta) => deltas.push(delta),
+      (event) => resourceEvents.push(event),
+    );
+    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as { id: number };
+    const handleMessage = (
+      client as unknown as { handleMessage: (rawData: string) => void }
+    ).handleMessage.bind(client);
+    handleMessage(
+      JSON.stringify({ id: request.id, result: { runId: "run-1" } }),
+    );
+    await Promise.resolve();
+    handleMessage(
+      JSON.stringify({
+        method: "agentPlatform/chat/resourceEvent",
+        params: {
+          runId: "run-1",
+          threadId: "thread-1",
+          agentId: "7",
+          event: {
+            type: "mcp",
+            status: "succeeded",
+            name: "echo",
+            inputSummary: { message: "hello" },
+            outputSummary: "hello",
+            error: null,
+          },
+        },
+      }),
+    );
+    handleMessage(
+      JSON.stringify({
+        method: "agentPlatform/chat/delta",
+        params: {
+          runId: "run-1",
+          threadId: "thread-1",
+          agentId: "7",
+          delta: "你",
+        },
+      }),
+    );
+    handleMessage(
+      JSON.stringify({
+        method: "agentPlatform/chat/completed",
+        params: {
+          runId: "run-1",
+          threadId: "thread-1",
+          agentId: "7",
+          message: "你好",
+          thoughts: [],
+          skillsUsed: ["skill-12"],
+          tokens: { promptTokens: 3, completionTokens: 2, totalTokens: 5 },
+          durationMs: 42,
+        },
+      }),
+    );
+
+    await expect(pending).resolves.toEqual({
+      agentId: "7",
+      message: "你好",
+      thoughts: [],
+      skillsUsed: ["skill-12"],
+      resourceEvents: [
+        {
+          type: "mcp",
+          status: "succeeded",
+          name: "echo",
+          inputSummary: { message: "hello" },
+          outputSummary: "hello",
+          error: null,
+        },
+      ],
+      tokens: { promptTokens: 3, completionTokens: 2, totalTokens: 5 },
+      durationMs: 42,
+    });
+    expect(deltas).toEqual(["你"]);
+    expect(resourceEvents).toHaveLength(1);
+    expect(notifications).toHaveLength(3);
+  });
+
+  it("best-effort cancels the remote run when a stream times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = new AppServerClient("ws://app-server", () => undefined);
+      const socket = await connectFakeClient(client);
+      const pending = client.runAgentPlatformChat(
+        "access-token",
+        "thread-timeout",
+        "7",
+        "hello",
+        () => undefined,
+      );
+      const startRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+        id: number;
+      };
+      const handleMessage = (
+        client as unknown as { handleMessage: (rawData: string) => void }
+      ).handleMessage.bind(client);
+      handleMessage(
+        JSON.stringify({
+          id: startRequest.id,
+          result: { runId: "run-timeout" },
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      const timeoutRejection = expect(pending).rejects.toThrow(
+        "Agent Platform stream timed out",
+      );
+      await vi.advanceTimersByTimeAsync(5 * 60_000 + 30_000);
+      await timeoutRejection;
+
+      const cancelRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+        id: number;
+        method: string;
+        params: unknown;
+      };
+      expect(cancelRequest).toMatchObject({
+        method: "agentPlatform/run/cancel",
+        params: { runId: "run-timeout" },
+      });
+      handleMessage(
+        JSON.stringify({
+          id: cancelRequest.id,
+          error: { code: -32000, message: "cancel failed" },
+        }),
+      );
+      await Promise.resolve();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    { cancelled: false, eventCode: -32042, expectedCode: -32042 },
+    { cancelled: true, eventCode: -32042, expectedCode: 499 },
+  ])(
+    "maps a failed notification to error code $expectedCode when cancelled is $cancelled",
+    async ({ cancelled, eventCode, expectedCode }) => {
+      const client = new AppServerClient("ws://app-server", () => undefined);
+      const socket = await connectFakeClient(client);
+      const pending = client.runAgentPlatformChat(
+        "access-token",
+        "thread-1",
+        "7",
+        "hello",
+        () => undefined,
+      );
+      const request = JSON.parse(socket.sent.at(-1) ?? "{}") as { id: number };
+      const handleMessage = (
+        client as unknown as { handleMessage: (rawData: string) => void }
+      ).handleMessage.bind(client);
+      handleMessage(
+        JSON.stringify({ id: request.id, result: { runId: "run-1" } }),
+      );
+      await Promise.resolve();
+      handleMessage(
+        JSON.stringify({
+          method: "agentPlatform/chat/failed",
+          params: {
+            runId: "run-1",
+            threadId: "thread-1",
+            agentId: "7",
+            error: "Agent Platform failed",
+            code: eventCode,
+            cancelled,
+          },
+        }),
+      );
+
+      await expect(pending).rejects.toEqual(
+        new AppServerRpcError("Agent Platform failed", expectedCode, {
+          cancelled,
+        }),
+      );
+    },
+  );
 });
 
 describe("app server execution intent", () => {

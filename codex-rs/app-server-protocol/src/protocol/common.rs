@@ -762,6 +762,41 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AgentDeleteResponse,
     },
+    AgentPlatformAuth => "agentPlatform/auth" {
+        params: v2::AgentPlatformAuthParams,
+        serialization: None,
+        response: v2::AgentPlatformAuthResponse,
+    },
+    AgentPlatformAgentInfo => "agentPlatform/agent/info" {
+        params: v2::AgentPlatformAgentParams,
+        serialization: None,
+        response: v2::AgentPlatformAgentInfoResponse,
+    },
+    AgentPlatformChat => "agentPlatform/chat" {
+        params: v2::AgentPlatformChatParams,
+        serialization: None,
+        response: v2::AgentPlatformChatResponse,
+    },
+    AgentPlatformChatStart => "agentPlatform/chat/start" {
+        params: v2::AgentPlatformChatParams,
+        serialization: None,
+        response: v2::AgentPlatformChatStartResponse,
+    },
+    AgentPlatformRunCancel => "agentPlatform/run/cancel" {
+        params: v2::AgentPlatformRunCancelParams,
+        serialization: None,
+        response: v2::AgentPlatformRunCancelResponse,
+    },
+    AgentPlatformSessionRead => "agentPlatform/session/read" {
+        params: v2::AgentPlatformSessionParams,
+        serialization: None,
+        response: v2::AgentPlatformSessionReadResponse,
+    },
+    AgentPlatformSessionClear => "agentPlatform/session/clear" {
+        params: v2::AgentPlatformSessionParams,
+        serialization: None,
+        response: v2::AgentPlatformSessionClearResponse,
+    },
     OfficeList => "office/list" {
         params: v2::OfficeListParams,
         serialization: global("crewon-domain"),
@@ -1861,6 +1896,10 @@ server_notification_definitions! {
     AccountRateLimitsUpdated => "account/rateLimits/updated" (v2::AccountRateLimitsUpdatedNotification),
     AppListUpdated => "app/list/updated" (v2::AppListUpdatedNotification),
     OfficeRunUpdated => "office/run/updated" (v2::OfficeRunUpdatedNotification),
+    AgentPlatformChatDelta => "agentPlatform/chat/delta" (v2::AgentPlatformChatDeltaNotification),
+    AgentPlatformResourceEvent => "agentPlatform/chat/resourceEvent" (v2::AgentPlatformResourceEventNotification),
+    AgentPlatformChatCompleted => "agentPlatform/chat/completed" (v2::AgentPlatformChatCompletedNotification),
+    AgentPlatformChatFailed => "agentPlatform/chat/failed" (v2::AgentPlatformChatFailedNotification),
     RemoteControlStatusChanged => "remoteControl/status/changed" (v2::RemoteControlStatusChangedNotification),
     ExternalAgentConfigImportCompleted => "externalAgentConfig/import/completed" (v2::ExternalAgentConfigImportCompletedNotification),
     FsChanged => "fs/changed" (v2::FsChangedNotification),

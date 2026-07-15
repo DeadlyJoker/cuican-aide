@@ -44,6 +44,7 @@ export type SelectThreadActionParams = {
   isConnected: boolean;
   locale: Locale;
   preserveThreadsAfterConnectionLoss: () => void;
+  restoreThread?: (thread: Thread) => Promise<Thread>;
   setAppView: (view: AppView) => void;
   setInspectorOpen: (open: boolean) => void;
   setNotice: (notice: NoticeState | null) => void;
@@ -123,6 +124,7 @@ export async function selectThreadAction({
   isConnected,
   locale,
   preserveThreadsAfterConnectionLoss,
+  restoreThread,
   setAppView,
   setInspectorOpen,
   setNotice,
@@ -131,7 +133,7 @@ export async function selectThreadAction({
   setThreads,
   shouldAutoCloseSidebar,
   threadId,
-}: SelectThreadActionParams): Promise<void> {
+}: SelectThreadActionParams): Promise<Thread | null> {
   setAppView("chat");
   setSelectedThreadId(threadId);
   setInspectorOpen(false);
@@ -140,18 +142,23 @@ export async function selectThreadAction({
   }
 
   if (!isConnected) {
-    return;
+    return null;
   }
 
   try {
     const thread = await client?.readThread(threadId);
     if (thread) {
-      setThreads((current) => upsertThread(current, thread));
+      const restoredThread = restoreThread
+        ? await restoreThread(thread).catch(() => thread)
+        : thread;
+      setThreads((current) => upsertThread(current, restoredThread));
+      return restoredThread;
     }
   } catch (error) {
     preserveThreadsAfterConnectionLoss();
     setNotice(threadReadPreservedFailureNotice(error, locale));
   }
+  return null;
 }
 
 export function startDraftThreadAction({

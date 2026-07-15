@@ -107,6 +107,9 @@ fn server_notification_requires_delivery(notification: &ServerNotification) -> b
         ServerNotification::TurnCompleted(_)
             | ServerNotification::ThreadSettingsUpdated(_)
             | ServerNotification::ExternalAgentConfigImportCompleted(_)
+            | ServerNotification::AgentPlatformChatDelta(_)
+            | ServerNotification::AgentPlatformChatCompleted(_)
+            | ServerNotification::AgentPlatformChatFailed(_)
     )
 }
 
@@ -729,6 +732,10 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crewon_app_server_protocol::AgentPlatformChatCompletedNotification;
+    use crewon_app_server_protocol::AgentPlatformChatDeltaNotification;
+    use crewon_app_server_protocol::AgentPlatformChatFailedNotification;
+    use crewon_app_server_protocol::AgentPlatformTokenUsage;
     use crewon_app_server_protocol::ClientInfo;
     use crewon_app_server_protocol::ConfigRequirementsReadResponse;
     use crewon_app_server_protocol::ExternalAgentConfigImportCompletedNotification;
@@ -900,6 +907,43 @@ mod tests {
             &ServerNotification::ExternalAgentConfigImportCompleted(
                 ExternalAgentConfigImportCompletedNotification {},
             )
+        ));
+        assert!(server_notification_requires_delivery(
+            &ServerNotification::AgentPlatformChatDelta(AgentPlatformChatDeltaNotification {
+                run_id: "run-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                agent_id: "agent-1".to_string(),
+                delta: "hello".to_string(),
+            },)
+        ));
+        assert!(server_notification_requires_delivery(
+            &ServerNotification::AgentPlatformChatCompleted(
+                AgentPlatformChatCompletedNotification {
+                    run_id: "run-1".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    agent_id: "agent-1".to_string(),
+                    message: "hello".to_string(),
+                    thoughts: Vec::new(),
+                    skills_used: Vec::new(),
+                    resource_events: Vec::new(),
+                    tokens: AgentPlatformTokenUsage {
+                        prompt_tokens: 1,
+                        completion_tokens: 1,
+                        total_tokens: 2,
+                    },
+                    duration_ms: 1,
+                },
+            )
+        ));
+        assert!(server_notification_requires_delivery(
+            &ServerNotification::AgentPlatformChatFailed(AgentPlatformChatFailedNotification {
+                run_id: "run-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                agent_id: "agent-1".to_string(),
+                error: "failed".to_string(),
+                code: -32000,
+                cancelled: false,
+            },)
         ));
     }
 }
