@@ -413,6 +413,9 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
       auth: true,
     }),
     request<{
+      source?: {
+        type?: string;
+      };
       resources?: {
         agents?: PlatformAgent[];
         knowledge_bases?: PlatformKnowledgeBase[];
@@ -491,9 +494,23 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
   );
   const catalogResources =
     results[6].status === "fulfilled" ? results[6].value.resources : undefined;
-  const catalogAgents = markCatalog(
-    ownedCatalog(catalogResources?.agents ?? []),
-  );
+  const catalogIsLiveDatabase =
+    results[6].status === "fulfilled" &&
+    results[6].value.source?.type === "live_database";
+  const markCatalogResource = <
+    T extends {
+      downloaded?: boolean;
+      downloaded_at?: string | null;
+      update_available?: boolean;
+      resource_source?: AgentPlatformResourceSource;
+    },
+  >(
+    items: T[],
+  ): T[] => (catalogIsLiveDatabase ? markOnline(items) : markCatalog(items));
+  const catalogResourceSource: AgentPlatformResourceSource = catalogIsLiveDatabase
+    ? "online"
+    : "catalog";
+  const catalogAgents = markCatalogResource(ownedCatalog(catalogResources?.agents ?? []));
   const agentsById = new Map(
     onlineAgents.map((agent) => [agent.id, agent] as const),
   );
@@ -502,12 +519,12 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     agentsById.set(
       catalogAgent.id,
       onlineAgent
-        ? { ...onlineAgent, ...catalogAgent, resource_source: "catalog" }
+        ? { ...onlineAgent, ...catalogAgent, resource_source: catalogResourceSource }
         : catalogAgent,
     );
   });
   const agents = [...agentsById.values()];
-  const catalogKnowledgeBases = markCatalog(
+  const catalogKnowledgeBases = markCatalogResource(
     ownedCatalog(catalogResources?.knowledge_bases ?? []),
   );
   const knowledgeBasesById = new Map(
@@ -526,7 +543,7 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
         ? {
             ...onlineKnowledgeBase,
             ...catalogKnowledgeBase,
-            resource_source: "catalog",
+            resource_source: catalogResourceSource,
           }
         : catalogKnowledgeBase,
     );
@@ -534,7 +551,7 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
   const knowledgeBases = [...knowledgeBasesById.values()];
   const catalogSkills =
     results[6].status === "fulfilled"
-      ? markCatalog(ownedCatalog(catalogResources?.skills ?? []))
+      ? markCatalogResource(ownedCatalog(catalogResources?.skills ?? []))
       : [];
   const skillsById = new Map(
     onlineSkills.map((skill) => [skill.id, skill] as const),
@@ -544,14 +561,14 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     skillsById.set(
       catalogSkill.id,
       onlineSkill
-        ? { ...onlineSkill, ...catalogSkill, resource_source: "catalog" }
+        ? { ...onlineSkill, ...catalogSkill, resource_source: catalogResourceSource }
         : catalogSkill,
     );
   });
   const skills = [...skillsById.values()];
   const catalogMcpServers =
     results[6].status === "fulfilled"
-      ? markCatalog(ownedCatalog(catalogResources?.mcp_servers ?? []))
+      ? markCatalogResource(ownedCatalog(catalogResources?.mcp_servers ?? []))
       : [];
   const mcpServersById = new Map(
     onlineMcpServers.map((server) => [server.id, server] as const),
@@ -561,7 +578,7 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     mcpServersById.set(
       catalogServer.id,
       onlineServer
-        ? { ...onlineServer, ...catalogServer, resource_source: "catalog" }
+        ? { ...onlineServer, ...catalogServer, resource_source: catalogResourceSource }
         : catalogServer,
     );
   });

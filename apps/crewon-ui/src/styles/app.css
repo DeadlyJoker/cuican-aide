@@ -1653,6 +1653,16 @@ textarea:focus-visible {
   line-height: 1.55;
 }
 
+.composer-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .input-tools {
   display: grid;
   grid-column: 1 / 2;

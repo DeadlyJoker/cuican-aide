@@ -514,6 +514,56 @@ describe("agent-platform client mapping", () => {
     ]);
   });
 
+  it("treats live database catalog resources as online resources", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => "admin-token",
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    });
+    const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/auth/me")) {
+        return Response.json({ id: 3, username: "admin", role: "admin" });
+      }
+      if (url.endsWith("/api/v1/crewon/catalog")) {
+        return Response.json({
+          source: { type: "live_database" },
+          resources: {
+            skills: [
+              {
+                id: 75,
+                name: "Dgg-数据概览诊断",
+                owner_username: "admin",
+                downloaded: true,
+              },
+            ],
+          },
+        });
+      }
+      if (/[?&]page_size=1(?:&|$)/.test(url)) {
+        return Response.json({ items: [] });
+      }
+      if (url.includes("/skills")) {
+        return Response.json({
+          items: [{ id: 75, name: "Dgg-数据概览诊断", user_id: 3 }],
+        });
+      }
+      return Response.json({ items: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await readAgentPlatformSnapshot();
+
+    expect(result.skills).toEqual([
+      expect.objectContaining({
+        id: 75,
+        name: "Dgg-数据概览诊断",
+        resource_source: "online",
+      }),
+    ]);
+    expect(Object.hasOwn(result.skills[0] ?? {}, "downloaded")).toBe(false);
+  });
+
   it("short-circuits concurrent snapshot reads when the local resource service is unavailable", async () => {
     const fetchMock = vi.fn(async (_input: Parameters<typeof fetch>[0]) => {
       return new Response(
