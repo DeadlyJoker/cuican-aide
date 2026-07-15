@@ -11429,6 +11429,52 @@ button.library-item:hover .library-card-chevron {
   scrollbar-gutter: stable;
 }
 
+.screen-shell.command-screen .project-row,
+.screen-shell.command-screen .project-row-main,
+.screen-shell.command-screen .project-row-actions,
+.screen-shell.command-screen .project-thread-row,
+.screen-shell.command-screen .project-thread-main,
+.screen-shell.command-screen .project-thread-actions {
+  color: oklch(25% 0.018 235);
+}
+
+.screen-shell.command-screen .project-row-main,
+.screen-shell.command-screen .project-row-actions > button,
+.screen-shell.command-screen .project-row-menu > summary,
+.screen-shell.command-screen .project-thread-row,
+.screen-shell.command-screen .project-thread-main,
+.screen-shell.command-screen .project-thread-actions > button,
+.screen-shell.command-screen .thread-menu > summary {
+  background: transparent;
+}
+
+.screen-shell.command-screen .project-row-main:hover,
+.screen-shell.command-screen .project-row-actions > button:hover,
+.screen-shell.command-screen .project-row-menu > summary:hover,
+.screen-shell.command-screen .project-thread-row:hover,
+.screen-shell.command-screen .project-thread-row.selected,
+.screen-shell.command-screen .project-thread-row.active,
+.screen-shell.command-screen .project-thread-main:hover,
+.screen-shell.command-screen .project-thread-actions > button:hover,
+.screen-shell.command-screen .thread-menu > summary:hover {
+  background: oklch(92.5% 0.014 235);
+  color: oklch(20% 0.018 235);
+}
+
+.screen-shell.command-screen .project-row svg,
+.screen-shell.command-screen .project-thread-row svg,
+.screen-shell.command-screen .project-thread-main svg,
+.screen-shell.command-screen .project-thread-actions svg {
+  color: oklch(40% 0.018 235);
+  opacity: 1;
+}
+
+.screen-shell.command-screen .project-thread-row small,
+.screen-shell.command-screen .project-row-actions,
+.screen-shell.command-screen .project-thread-actions {
+  color: oklch(48% 0.016 235);
+}
+
 .screen-shell.command-screen .command-thread-room .turn-group,
 .screen-shell.command-screen .command-thread-room .message-list > .message {
   width: min(840px, 100%);
@@ -11635,10 +11681,23 @@ button.library-item:hover .library-card-chevron {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: oklch(28% 0.018 235);
+  color: oklch(22% 0.018 235);
   box-shadow: none;
   font-size: 15px;
   line-height: 1.75;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(p, li, blockquote, h1, h2, h3, h4, strong, em, span),
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="plan"]
+  .markdown-content
+  :is(p, li, blockquote, h1, h2, h3, h4, strong, em, span) {
+  color: oklch(22% 0.018 235);
 }
 
 .screen-shell.command-screen

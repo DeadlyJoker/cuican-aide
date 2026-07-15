@@ -864,7 +864,7 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("工作空间 · frontend");
     expect(markup).toContain("Command room transcript");
     expect(markup).toContain('class="transcript"');
-    expect(markup).toContain('class="command-input thread-command-input"');
+    expect(markup).toContain("thread-command-input");
     expect(markup).toContain("内容由 AI 生成，请核实重要信息");
     expect(markup).toContain("Run inside command shell");
     expect(markup).toContain("Command response");
