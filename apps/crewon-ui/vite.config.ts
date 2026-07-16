@@ -49,7 +49,11 @@ type HttpProxyResponse = {
 type HttpProxy = {
   on(
     event: "error",
-    callback: (error: Error, request: unknown, response: HttpProxyResponse) => void,
+    callback: (
+      error: Error,
+      request: unknown,
+      response: HttpProxyResponse,
+    ) => void,
   ): void;
 };
 
@@ -120,19 +124,22 @@ function agentPlatformFallbackPlugin(target: string): Plugin {
   return {
     name: "crewon-agent-platform-fallback",
     configureServer(server) {
-      server.middlewares.use("/agent-platform-api", async (_request, response, next) => {
-        if (
-          !reachabilityUrl ||
-          (await isAgentPlatformReachable(reachabilityUrl, cache))
-        ) {
-          next();
-          return;
-        }
+      server.middlewares.use(
+        "/agent-platform-api",
+        async (_request, response, next) => {
+          if (
+            !reachabilityUrl ||
+            (await isAgentPlatformReachable(reachabilityUrl, cache))
+          ) {
+            next();
+            return;
+          }
 
-        response.statusCode = 503;
-        response.setHeader("Content-Type", "application/json");
-        response.end(AGENT_PLATFORM_UNAVAILABLE_BODY);
-      });
+          response.statusCode = 503;
+          response.setHeader("Content-Type", "application/json");
+          response.end(AGENT_PLATFORM_UNAVAILABLE_BODY);
+        },
+      );
     },
   };
 }
@@ -156,9 +163,14 @@ function isMermaidChunkModule(id: string): boolean {
   const packageName = nodeModulePackageName(id);
   return Boolean(
     packageName &&
-      (MERMAID_CHUNK_PACKAGES.has(packageName) ||
-        packageName.startsWith("d3-")),
+    (MERMAID_CHUNK_PACKAGES.has(packageName) || packageName.startsWith("d3-")),
   );
+}
+
+function isMermaidChunkDependency(dependency: string): boolean {
+  const filename =
+    dependency.replace(/\\/g, "/").split("/").pop() ?? dependency;
+  return filename.startsWith("mermaid-") && filename.endsWith(".js");
 }
 
 export default defineConfig(({ mode }) => {
@@ -190,21 +202,29 @@ export default defineConfig(({ mode }) => {
           target: agentPlatformTarget,
           changeOrigin: true,
           configure(proxy) {
-            (proxy as unknown as HttpProxy).on("error", (_error, _request, response) => {
-              if (!response?.writeHead || response.headersSent) {
-                return;
-              }
-              response.writeHead(503, {
-                "Content-Type": "application/json",
-              });
-              response.end?.(AGENT_PLATFORM_UNAVAILABLE_BODY);
-            });
+            (proxy as unknown as HttpProxy).on(
+              "error",
+              (_error, _request, response) => {
+                if (!response?.writeHead || response.headersSent) {
+                  return;
+                }
+                response.writeHead(503, {
+                  "Content-Type": "application/json",
+                });
+                response.end?.(AGENT_PLATFORM_UNAVAILABLE_BODY);
+              },
+            );
           },
           rewrite: (path) => path.replace(/^\/agent-platform-api/, ""),
         },
       },
     },
     build: {
+      modulePreload: {
+        resolveDependencies(_url, deps) {
+          return deps.filter((dep) => !isMermaidChunkDependency(dep));
+        },
+      },
       target: "es2022",
       rollupOptions: {
         output: {
