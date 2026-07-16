@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "officeRecordId": "legacy-81525733c84f1738601587a2224fdd67c80fac4930ecef85f713ba1960f080fd",
+  "recordRevision": "019f660d-c6ac-7022-84a6-e3ff80c7b0e7",
+  "receipts": [
+    {
+      "receiptId": "office-message-receipt-f835ff7fcccbb7427c5a8095b33e88456ff5c2666be7f8f114e6fc2c0b310c0a",
+      "clientUserMessageId": "office-message-26ef63a8-3c1a-4b8a-aca8-05f186db54b2",
+      "payloadHash": "dbb5df747d9c33545a5ff49b8263e6fc00fd0e1ad103520fb72de29ed7c062d9",
+      "messageId": "office-message-f835ff7fcccbb7427c5a8095b33e88456ff5c2666be7f8f114e6fc2c0b310c0a",
+      "sequence": 1,
+      "text": "？",
+      "locale": "zh",
+      "mentions": [],
+      "messageIntent": "conversation",
+      "intentClassifierVersion": 1,
+      "status": "delivered",
+      "action": "startRun",
+      "runId": "office-run-41af4501-614f-44fe-90a4-a0b4d99f6dd8",
+      "threadId": "019f0eb9-d7fd-75c2-ab01-912739bf48c8",
+      "expectedTurnId": null,
+      "turnId": "019f660d-3e36-74f0-a71d-5c92491eb567",
+      "afterRunId": null,
+      "queuePosition": null,
+      "leaseId": null,
+      "leaseExpiresAt": null,
+      "attempts": 1,
+      "createdAt": "2026-07-15T13:52:51.609834+00:00",
+      "updatedAt": "2026-07-15T13:52:51.788259+00:00",
+      "error": null
+    }
+  ]
+}

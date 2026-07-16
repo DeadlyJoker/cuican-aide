@@ -11,8 +11,6 @@ import type {
   LibraryItem,
   LibraryKind,
   LibraryPanel,
-  OfficeMessage,
-  OfficeTask,
   OfficeWorkspace,
 } from "../domain/crewonDomain";
 import type { SettingsSection } from "../settings/settingsCatalog";
@@ -109,11 +107,27 @@ export function demoLibraryPanel(
 ): LibraryPanel {
   const title = demoLibraryTitle(kind, locale);
   if (kind === "tools") return demoToolsPanel(title, locale);
-  if (kind === "office") return demoOfficePanel(title, locale);
+  if (kind === "office") return unavailableDemoOfficePanel(title, locale);
   if (kind === "automation") return demoAutomationPanel(title, locale);
   if (kind === "agents") return demoAgentsPanel(title, locale);
   if (kind === "knowledge") return demoKnowledgePanel(title, locale);
   return demoPluginsPanel(title, locale);
+}
+
+function unavailableDemoOfficePanel(
+  title: string,
+  locale: Locale,
+): LibraryPanel {
+  return {
+    kind: "office",
+    title,
+    subtitle: zh(locale) ? "需要真实 App Server" : "Real App Server required",
+    body: zh(locale)
+      ? "办公室只展示当前工作空间中由 App Server 返回的真实配置、成员、消息和运行状态。演示模式不会创建或展示虚构办公室。"
+      : "Office only shows real configurations, members, messages, and runtime state returned by the App Server for the current workspace. Demo mode does not create or display fictional offices.",
+    actions: [],
+    items: [],
+  };
 }
 
 // [LIBRARY_TOOLS]
@@ -1823,103 +1837,6 @@ export function demoCapabilityPanel(
     body: zh(locale)
       ? "审查结论（演示）\n\n范围：6 个文件 · +128 / -34\n\n- 阻塞：无\n- 风险：库页面与设置依赖连接态，演示模式下需补全 fallback（本次已处理）\n- 建议：为空态补充引导文案\n- 测试：建议补一条三端布局快照\n\n结论：可作为 demo 交付。"
       : "Review result (demo)\n\nScope: 6 files · +128 / -34\n\n- Blocking: none\n- Risk: library/settings depend on connection; demo needs fallbacks (handled here)\n- Suggestion: add guidance copy for empty states\n- Tests: add a cross-platform layout snapshot\n\nVerdict: ready for demo.",
-  };
-}
-
-// [OFFICE_CHAT]
-function nowTime(locale: Locale): string {
-  return new Date().toLocaleTimeString(zh(locale) ? "zh-CN" : "en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
-function findMentionedMember(workspace: OfficeWorkspace, text: string) {
-  const mentionMatch = text.match(/@(\S+)/);
-  const explicit = mentionMatch
-    ? workspace.members.find(
-        (member) =>
-          member.glyph !== "@" &&
-          (member.name === mentionMatch[1] ||
-            mentionMatch[1].startsWith(member.name)),
-      )
-    : undefined;
-  if (explicit) {
-    return explicit;
-  }
-  return (
-    workspace.members.find((member) => member.glyph !== "@") ??
-    workspace.members[0]
-  );
-}
-
-function buildAgentReply(
-  member: OfficeWorkspace["members"][number],
-  text: string,
-  willDispatch: boolean,
-  locale: Locale,
-): OfficeMessage {
-  const replyText = willDispatch
-    ? zh(locale)
-      ? `收到，我来跟进「${text.replace(/@\S+\s*/, "").trim()}」，已加到任务看板，完成后在群里同步。`
-      : `Got it. I'll take "${text.replace(/@\S+\s*/, "").trim()}", added it to the task board and will report back here.`
-    : zh(locale)
-      ? "明白，我先评估一下，有进展同步到群聊。"
-      : "Understood. I'll assess it and post progress to the chat.";
-  return {
-    author: member.name,
-    glyph: member.glyph,
-    accent: member.accent,
-    time: nowTime(locale),
-    text: replyText,
-    kind: willDispatch ? "task" : "message",
-  };
-}
-
-export function appendOfficeUserMessage(
-  workspace: OfficeWorkspace,
-  rawText: string,
-  locale: Locale,
-): OfficeWorkspace {
-  const text = rawText.trim();
-  if (!text) {
-    return workspace;
-  }
-
-  const owner = workspace.members.find((member) => member.glyph === "@");
-  const userMessage: OfficeMessage = {
-    author: owner?.name ?? (zh(locale) ? "你" : "You"),
-    glyph: "@",
-    accent: "slate",
-    time: nowTime(locale),
-    text,
-    kind: "message",
-  };
-
-  const member = findMentionedMember(workspace, text);
-  const willDispatch = /@/.test(text) || text.length > 6;
-  const reply = buildAgentReply(member, text, willDispatch, locale);
-
-  const tasks: OfficeTask[] = willDispatch
-    ? [
-        {
-          title:
-            text
-              .replace(/@\S+\s*/, "")
-              .trim()
-              .slice(0, 24) || (zh(locale) ? "新任务" : "New task"),
-          owner: member.name,
-          status: "doing",
-        },
-        ...workspace.tasks,
-      ]
-    : workspace.tasks;
-
-  return {
-    ...workspace,
-    messages: [...workspace.messages, userMessage, reply],
-    tasks,
   };
 }
 

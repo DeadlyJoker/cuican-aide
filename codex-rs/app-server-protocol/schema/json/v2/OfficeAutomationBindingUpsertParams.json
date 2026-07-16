@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "OfficeAutomationBindingApprovalMode": {
+      "enum": [
+        "notRequired",
+        "required"
+      ],
+      "type": "string"
+    },
+    "OfficeAutomationBindingDispatchMode": {
+      "enum": [
+        "auto",
+        "manual"
+      ],
+      "type": "string"
+    },
+    "OfficeAutomationBindingPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "approvalMode": {
+          "$ref": "#/definitions/OfficeAutomationBindingApprovalMode"
+        },
+        "dispatchMode": {
+          "$ref": "#/definitions/OfficeAutomationBindingDispatchMode"
+        },
+        "riskLevel": {
+          "$ref": "#/definitions/OfficeAutomationBindingRiskLevel"
+        },
+        "status": {
+          "$ref": "#/definitions/OfficeAutomationBindingStatus"
+        }
+      },
+      "required": [
+        "approvalMode",
+        "dispatchMode",
+        "riskLevel",
+        "status"
+      ],
+      "type": "object"
+    },
+    "OfficeAutomationBindingRiskLevel": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "type": "string"
+    },
+    "OfficeAutomationBindingStatus": {
+      "enum": [
+        "enabled",
+        "disabled"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "automationFilePath": {
+      "type": "string"
+    },
+    "bindingId": {
+      "type": "string"
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "expectedRecordRevision": {
+      "type": "string"
+    },
+    "officeRecordId": {
+      "type": "string"
+    },
+    "policy": {
+      "$ref": "#/definitions/OfficeAutomationBindingPolicy"
+    }
+  },
+  "required": [
+    "automationFilePath",
+    "bindingId",
+    "cwd",
+    "expectedRecordRevision",
+    "officeRecordId",
+    "policy"
+  ],
+  "title": "OfficeAutomationBindingUpsertParams",
+  "type": "object"
+}

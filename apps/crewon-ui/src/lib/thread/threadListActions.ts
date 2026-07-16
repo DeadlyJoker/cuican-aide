@@ -15,6 +15,10 @@ import {
   upsertThread,
 } from "./threadModel";
 import {
+  assistantThreadClearConfirmMessage,
+  assistantThreadClearFailureNotice,
+  assistantThreadClearedNotice,
+  assistantThreadClearUnavailableNotice,
   threadArchiveFailureNotice,
   threadDeleteArchivedConfirmMessage,
   threadDeletedNotice,
@@ -106,6 +110,20 @@ export type DeleteArchivedThreadActionParams = {
   showArchivedThreads: boolean;
   thread: Thread;
   untitledThreadLabel: string;
+};
+
+export type ClearAssistantThreadActionParams = {
+  client:
+    | Pick<ThreadListClient, "deleteThread" | "listThreads">
+    | null
+    | undefined;
+  confirm: ConfirmHandler;
+  isConnected: boolean;
+  locale: Locale;
+  setNotice: (notice: NoticeState | null) => void;
+  setSelectedThreadId: SelectedThreadSetter;
+  setThreads: ThreadListSetter;
+  thread: Thread;
 };
 
 export type RenameThreadActionParams = {
@@ -278,6 +296,38 @@ export async function deleteArchivedThreadAction({
     setNotice(threadDeletedNotice(title, locale));
   } catch (error) {
     setNotice(threadDeleteFailureNotice(error, locale));
+  }
+}
+
+export async function clearAssistantThreadAction({
+  client,
+  confirm,
+  isConnected,
+  locale,
+  setNotice,
+  setSelectedThreadId,
+  setThreads,
+  thread,
+}: ClearAssistantThreadActionParams): Promise<void> {
+  if (!isConnected || !client) {
+    setNotice(assistantThreadClearUnavailableNotice(locale));
+    return;
+  }
+
+  if (!(await confirm(assistantThreadClearConfirmMessage(locale)))) {
+    return;
+  }
+
+  try {
+    await client.deleteThread(thread.id);
+    const serverThreads = await client.listThreads(false);
+    setThreads(() => serverThreads);
+    setSelectedThreadId((currentThreadId) =>
+      selectedThreadIdAfterThreadList(currentThreadId, serverThreads),
+    );
+    setNotice(assistantThreadClearedNotice(locale));
+  } catch (error) {
+    setNotice(assistantThreadClearFailureNotice(error, locale));
   }
 }
 

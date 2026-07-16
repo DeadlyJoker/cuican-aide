@@ -36,7 +36,7 @@ const officeMessageSpy = vi.hoisted(() => ({
   lastParams: null as OfficeMessageActionParams | null,
   send: vi.fn(async (params: OfficeMessageActionParams) => {
     officeMessageSpy.lastParams = params;
-    return true;
+    return { delivery: null, disposition: "clearOutbox" as const };
   }),
 }));
 
@@ -96,6 +96,7 @@ const officeBackendSpy = vi.hoisted(() => ({
   retryVerification: vi.fn(async () => null),
   retry: vi.fn(async () => null),
   run: vi.fn(async () => null),
+  submit: vi.fn(async () => null),
 }));
 
 vi.mock("../../office/officeThreadActions", () => ({
@@ -130,6 +131,7 @@ vi.mock("../../domain/domainOfficeBackend", () => ({
   retryAppOfficeVerification: officeBackendSpy.retryVerification,
   retryAppOfficeRun: officeBackendSpy.retry,
   runAppOfficeMessage: officeBackendSpy.run,
+  submitAppOfficeMessage: officeBackendSpy.submit,
 }));
 
 const { createAppOfficeRuntimeHandlers } = await import(
@@ -185,19 +187,18 @@ function createParams(
 ): AppOfficeRuntimeHandlersParams {
   return {
     client: client(),
+    getActiveTurnByThread: () => ({}),
     getLibraryPanel: () => panel(),
     isConnected: true,
     isMissingThreadError: () => false,
     locale: "en",
     persistOfficeMessage: async () => null,
-    persistOfficeWorkspace: async () => null,
     recordOfficeRunTurn: () => {},
     resolveBackendCwd: async () => "/repo",
     setActiveTurnByThread: () => {},
     setLibraryPanel: () => {},
     setNotice: () => {},
     setThreads: () => {},
-    startBackendDomainThread: async () => thread(),
     uniqueOfficeRunId: () => "retry-1",
     ...overrides,
   };
@@ -234,7 +235,7 @@ describe("app office runtime handlers", () => {
     vi.clearAllMocks();
   });
 
-  it("wires office thread creation through the current client and domain thread starter", async () => {
+  it("wires Office manager provisioning through the server-owned ensure RPC", async () => {
     const calls: unknown[] = [];
     const handlers = createAppOfficeRuntimeHandlers(
       createParams({
@@ -243,31 +244,29 @@ describe("app office runtime handlers", () => {
             calls.push({ method: "readThread", threadId });
             return thread(threadId);
           },
-          async renameThread(threadId, title) {
-            calls.push({ method: "renameThread", threadId, title });
-          },
-          async setThreadGoal(threadId, goal, tokenBudget) {
+          async ensureOfficeManagerConfig(cwd, officeRecordId, revision) {
             calls.push({
-              goal,
-              method: "setThreadGoal",
-              threadId,
-              tokenBudget,
+              cwd,
+              method: "ensureOfficeManagerConfig",
+              officeRecordId,
+              revision,
             });
-            return null as unknown as Awaited<
-              ReturnType<AppServerClient["setThreadGoal"]>
-            >;
-          },
-          async startTurn(threadId, text) {
-            calls.push({ method: "startTurn", text, threadId });
-            return null as unknown as Awaited<
-              ReturnType<AppServerClient["startTurn"]>
-            >;
+            return {
+              config: {
+                subtitle: "Runtime",
+                title: "Office",
+                workspace: workspace({
+                  recordId: officeRecordId,
+                  recordRevision: "revision-2",
+                  threadId: "new-office-thread",
+                }),
+              },
+              filePath: "/repo/.crewon/offices/office.json",
+              status: "created",
+              threadId: "new-office-thread",
+            };
           },
         }),
-        startBackendDomainThread: async (source) => {
-          calls.push({ method: "startBackendDomainThread", source });
-          return thread("new-office-thread");
-        },
       }),
     );
 
@@ -276,10 +275,7 @@ describe("app office runtime handlers", () => {
     await handlers.ensureOfficeThread(targetPanel, overrideWorkspace, true);
     const params = capturedEnsureParams();
     await params.readThread("existing-thread");
-    await params.renameThread("new-office-thread", "Office");
-    await params.setThreadGoal("new-office-thread", "Ship it", null);
-    await params.startTurn("new-office-thread", "bind");
-    await params.startOfficeThread();
+    await params.ensureOfficeManager("office-record", "revision-1");
 
     expect(params.forceNew).toBe(true);
     expect(params.panel).toBe(targetPanel);
@@ -287,23 +283,29 @@ describe("app office runtime handlers", () => {
     expect(calls).toEqual([
       { method: "readThread", threadId: "existing-thread" },
       {
-        method: "renameThread",
-        threadId: "new-office-thread",
-        title: "Office",
+        cwd: "/repo",
+        method: "ensureOfficeManagerConfig",
+        officeRecordId: "office-record",
+        revision: "revision-1",
       },
-      {
-        goal: "Ship it",
-        method: "setThreadGoal",
-        threadId: "new-office-thread",
-        tokenBudget: null,
-      },
-      { method: "startTurn", text: "bind", threadId: "new-office-thread" },
-      { method: "startBackendDomainThread", source: "office" },
     ]);
   });
 
   it("wires office messages to the current panel and backend run helper", async () => {
     const currentPanel = panel();
+    const officeWorkspace = workspace({
+      members: [
+        {
+          accent: "blue",
+          glyph: "R",
+          memberId: "member-reviewer",
+          name: "Reviewer",
+          role: "Reviewer",
+          status: "idle",
+        },
+      ],
+      threadId: "thread-1",
+    });
     const recordOfficeRunTurn = vi.fn();
     const handlers = createAppOfficeRuntimeHandlers(
       createParams({
@@ -313,9 +315,12 @@ describe("app office runtime handlers", () => {
       }),
     );
 
-    await handlers.sendOfficeMessage("hello");
+    await handlers.sendOfficeMessage("hello", "message-1");
     const params = capturedMessageParams();
-    const before = workspace({ threadId: "thread-1" });
+    await expect(
+      params.confirmLegacyOfficeIdle(workspace({ threadId: "thread-1" })),
+    ).resolves.toBe("deny");
+    const before = officeWorkspace;
     const message: OfficeMessage = {
       accent: "blue",
       author: "User",
@@ -330,6 +335,13 @@ describe("app office runtime handlers", () => {
       "hello",
       "thread-1",
       before,
+      "message-1",
+    );
+    await params.submitOfficeMessage(
+      currentPanel,
+      before,
+      "hello @Reviewer",
+      "message-1",
     );
     params.recordOfficeRunTurn("turn-1", {
       config: { title: "Office", subtitle: "Runtime", workspace: before },
@@ -342,6 +354,7 @@ describe("app office runtime handlers", () => {
     expect(recordOfficeRunTurn).toHaveBeenCalledOnce();
     expect(officeBackendSpy.run).toHaveBeenCalledWith({
       client: null,
+      clientUserMessageId: "message-1",
       fallbackWorkspace: before,
       locale: "en",
       message,
@@ -351,6 +364,89 @@ describe("app office runtime handlers", () => {
       threadId: "thread-1",
       workspaceBeforeMessage: before,
     });
+    expect(officeBackendSpy.submit).toHaveBeenCalledWith({
+      client: null,
+      clientUserMessageId: "message-1",
+      locale: "en",
+      mentions: [{ memberId: "member-reviewer" }],
+      panel: currentPanel,
+      resolveBackendCwd: expect.any(Function),
+      text: "hello @Reviewer",
+      workspace: before,
+    });
+  });
+
+  it("preserves a palette-selected canonical member ID for duplicate names", async () => {
+    const currentPanel = panel();
+    const duplicateNameWorkspace = workspace({
+      members: [
+        {
+          accent: "blue",
+          glyph: "A",
+          memberId: "member-reviewer",
+          name: "Alex",
+          role: "Reviewer",
+          status: "idle",
+        },
+        {
+          accent: "green",
+          glyph: "A",
+          memberId: "member-builder",
+          name: "Alex",
+          role: "Builder",
+          status: "idle",
+        },
+      ],
+      threadId: "thread-1",
+    });
+    const handlers = createAppOfficeRuntimeHandlers(
+      createParams({ client: null, getLibraryPanel: () => currentPanel }),
+    );
+
+    await handlers.sendOfficeMessage(
+      "请 @Alex（Builder） 实现",
+      "message-duplicate",
+      [{ memberId: "member-builder" }],
+    );
+    await capturedMessageParams().submitOfficeMessage(
+      currentPanel,
+      duplicateNameWorkspace,
+      "请 @Alex（Builder） 实现",
+      "message-duplicate",
+    );
+
+    expect(officeBackendSpy.submit).toHaveBeenLastCalledWith({
+      client: null,
+      clientUserMessageId: "message-duplicate",
+      locale: "en",
+      mentions: [{ memberId: "member-builder" }],
+      panel: currentPanel,
+      resolveBackendCwd: expect.any(Function),
+      text: "请 @Alex（Builder） 实现",
+      workspace: duplicateNameWorkspace,
+    });
+  });
+
+  it("wires exact active-turn and thread reads into legacy idle confirmation", async () => {
+    const handlers = createAppOfficeRuntimeHandlers(
+      createParams({
+        client: client({
+          readThread: async () =>
+            ({
+              status: { type: "idle" },
+              turns: [],
+            }) as unknown as Thread,
+        }),
+        getActiveTurnByThread: () => ({ "thread-1": "turn-active" }),
+      }),
+    );
+
+    await handlers.sendOfficeMessage("hello", "message-1");
+    await expect(
+      capturedMessageParams().confirmLegacyOfficeIdle(
+        workspace({ threadId: "thread-1" }),
+      ),
+    ).resolves.toBe("deny");
   });
 
   it("wires office run cancel to the current panel provider and backend helper", async () => {

@@ -1,21 +1,33 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
 
-import type { LibraryPanel, OfficeWorkspace } from "../domain/crewonDomain";
+import type {
+  LibraryPanel,
+  OfficeConfig,
+  OfficeWorkspace,
+} from "../domain/crewonDomain";
 import { officeConfigForThread } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
 import {
-  officeBindThreadTurnPrompt,
   officeThreadBindingPanel,
   officeThreadBoundPanel,
   officeWorkspaceConnectedPanel,
 } from "./officeDetailPanel";
 import { upsertThread } from "../thread/threadModel";
+import {
+  officeIdentityFromPanel,
+  officePanelMatchesIdentity,
+} from "./officeIdentity";
 
 type StateSetter<T> = (updater: (current: T) => T) => void;
 type LibraryPanelSetter = (
   updater: (panel: LibraryPanel | null) => LibraryPanel | null,
 ) => void;
+
+export type OfficeThreadResolution = {
+  config: OfficeConfig;
+  filePath: string | null;
+  threadId: string;
+};
 
 export type EnsureOfficeThreadActionParams = {
   forceNew?: boolean;
@@ -23,25 +35,13 @@ export type EnsureOfficeThreadActionParams = {
   isMissingThreadError: (error: unknown) => boolean;
   locale: Locale;
   panel: LibraryPanel;
-  persistOfficeWorkspace: (
-    panel: Pick<LibraryPanel, "title" | "subtitle">,
-    workspace: OfficeWorkspace,
-    threadId?: string | null,
-  ) => Promise<string | null>;
+  ensureOfficeManager: (
+    officeRecordId: string,
+    expectedRecordRevision: string,
+  ) => Promise<OfficeThreadResolution | null>;
   readThread: (threadId: string) => Promise<Thread | null | undefined>;
-  renameThread: (threadId: string, title: string) => Promise<void>;
   setLibraryPanel: LibraryPanelSetter;
-  setThreadGoal: (
-    threadId: string,
-    goal: string,
-    tokenBudget: number | null,
-  ) => Promise<void>;
   setThreads: StateSetter<Thread[]>;
-  startOfficeThread: () => Promise<Thread | null>;
-  startTurn: (
-    threadId: string,
-    text: string,
-  ) => Promise<TurnStartResponse | null | undefined>;
   workspaceOverride?: OfficeWorkspace;
 };
 
@@ -51,38 +51,60 @@ export async function ensureOfficeThreadAction({
   isMissingThreadError,
   locale,
   panel,
-  persistOfficeWorkspace,
+  ensureOfficeManager,
   readThread,
-  renameThread,
   setLibraryPanel,
-  setThreadGoal,
   setThreads,
-  startOfficeThread,
-  startTurn,
   workspaceOverride,
-}: EnsureOfficeThreadActionParams): Promise<string | null> {
+}: EnsureOfficeThreadActionParams): Promise<OfficeThreadResolution | null> {
   const workspace = workspaceOverride ?? panel.workspace;
   if (!workspace) {
     return null;
   }
+  const expectedIdentity = officeIdentityFromPanel(panel);
+  if (!expectedIdentity) {
+    return null;
+  }
 
   if (!isConnected) {
-    return workspace.threadId ?? null;
+    const threadId = workspace.threadId;
+    return threadId
+      ? {
+          config: officeConfigForThread(
+            panel.title,
+            panel.subtitle,
+            workspace,
+            threadId,
+          ),
+          filePath: panel.configPath ?? null,
+          threadId,
+        }
+      : null;
   }
 
   if (workspace.threadId && !forceNew) {
     const existingThreadId = workspace.threadId;
     try {
       await readThread(existingThreadId);
-      await persistOfficeWorkspace(panel, workspace, existingThreadId);
       setLibraryPanel((currentPanel) =>
-        officeWorkspaceConnectedPanel(
-          currentPanel,
-          currentPanel?.workspace ?? workspace,
+        officePanelMatchesIdentity(currentPanel, expectedIdentity)
+          ? officeWorkspaceConnectedPanel(
+              currentPanel,
+              currentPanel?.workspace ?? workspace,
+              existingThreadId,
+            )
+          : currentPanel,
+      );
+      return {
+        config: officeConfigForThread(
+          panel.title,
+          panel.subtitle,
+          workspace,
           existingThreadId,
         ),
-      );
-      return existingThreadId;
+        filePath: panel.configPath ?? null,
+        threadId: existingThreadId,
+      };
     } catch (error) {
       if (!isMissingThreadError(error)) {
         throw error;
@@ -90,43 +112,49 @@ export async function ensureOfficeThreadAction({
     }
   }
 
-  setLibraryPanel((currentPanel) => officeThreadBindingPanel(currentPanel));
+  let bindingPanelForTarget: LibraryPanel | null = null;
+  setLibraryPanel((currentPanel) => {
+    if (!officePanelMatchesIdentity(currentPanel, expectedIdentity)) {
+      return currentPanel;
+    }
+    bindingPanelForTarget = officeThreadBindingPanel(currentPanel);
+    return bindingPanelForTarget;
+  });
 
-  const thread = await startOfficeThread();
-  if (!thread) {
-    return null;
+  const recordId = workspace.recordId?.trim();
+  const recordRevision = workspace.recordRevision?.trim();
+  if (!recordId || !recordRevision) {
+    throw new Error(
+      locale === "zh"
+        ? "办公室状态不完整，请刷新后重试"
+        : "The Office state is incomplete; refresh it and retry",
+    );
   }
 
-  await renameThread(thread.id, panel.title);
-  await setThreadGoal(thread.id, workspace.goal, null);
-  const config = officeConfigForThread(
-    panel.title,
-    panel.subtitle,
-    workspace,
-    thread.id,
-  );
-  const officeConfigPath = await persistOfficeWorkspace(
-    panel,
-    workspace,
-    thread.id,
-  );
-  await startTurn(
-    thread.id,
-    officeBindThreadTurnPrompt({
-      config,
-      locale,
-      officeConfigPath,
-      panel,
-    }),
-  );
-  setThreads((current) => upsertThread(current, { ...thread, name: panel.title }));
+  const ensured = await ensureOfficeManager(recordId, recordRevision);
+  if (!ensured) {
+    return null;
+  }
+  const thread = await readThread(ensured.threadId);
+  if (thread) {
+    setThreads((current) =>
+      upsertThread(current, { ...thread, name: panel.title }),
+    );
+  }
 
-  setLibraryPanel((currentPanel) =>
-    officeThreadBoundPanel(currentPanel, {
-      locale,
-      threadId: thread.id,
-    }),
-  );
+  setLibraryPanel((currentPanel) => {
+    const isCurrentTarget =
+      officePanelMatchesIdentity(currentPanel, expectedIdentity) ||
+      (bindingPanelForTarget !== null && currentPanel === bindingPanelForTarget);
+    return isCurrentTarget
+      ? officeThreadBoundPanel(currentPanel, {
+          config: ensured.config,
+          filePath: ensured.filePath,
+          locale,
+          threadId: ensured.threadId,
+        })
+      : currentPanel;
+  });
 
-  return thread.id;
+  return ensured;
 }

@@ -36,6 +36,7 @@ import { joinPath, pathDirName, resolveSearchPath } from "../shared/pathUtils";
 import { decodeBase64Text } from "../server-request/serverRequestPresentation";
 import { slugifySkillName } from "../shared/text";
 import { upsertTurnInThread } from "../thread/threadModel";
+import type { OfficeThreadResolution } from "./officeThreadActions";
 
 type StateSetter<T> = (updater: (current: T) => T) => void;
 type LibraryPanelSetter = (
@@ -65,7 +66,7 @@ export type OfficeArtifactActionParams = {
   ensureOfficeThread: (
     panel: LibraryPanel,
     workspace: OfficeWorkspace,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   handleDirectoryItem: (item: CapabilityPanelItem) => Promise<void>;
   isConnected: boolean;
   libraryPanel: LibraryPanel | null;
@@ -125,8 +126,8 @@ export async function handleOfficeArtifactAction({
     if (!root) {
       throw new Error(
         locale === "zh"
-          ? "未找到后端工作区路径"
-          : "No backend workspace path found",
+          ? "未找到工作区路径"
+          : "No workspace path found",
       );
     }
 
@@ -271,7 +272,7 @@ async function createOfficeArtifactDraft(params: {
   ensureOfficeThread: (
     panel: LibraryPanel,
     workspace: OfficeWorkspace,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   libraryPanel: LibraryPanel | null;
   locale: Locale;
   nowIso: () => string;
@@ -330,18 +331,21 @@ async function createOfficeArtifactDraft(params: {
       libraryPanel.workspace,
       systemMessage,
     );
-    const threadId = await ensureOfficeThread(libraryPanel, nextWorkspace);
-    if (threadId) {
+    const thread = await ensureOfficeThread(
+      libraryPanel,
+      libraryPanel.workspace,
+    );
+    if (thread) {
       const savedConfig = await upsertOfficeArtifact(
         root,
         libraryPanel,
-        libraryPanel.workspace,
-        threadId,
+        thread.config.workspace,
+        thread.threadId,
         savedArtifact,
         systemMessage,
       );
       const turn = await client?.startTurn(
-        threadId,
+        thread.threadId,
         officeArtifactTurnPrompt({
           artifact,
           body: artifactBody,
@@ -351,13 +355,13 @@ async function createOfficeArtifactDraft(params: {
       );
       if (turn) {
         setThreads((current) =>
-          upsertTurnInThread(current, threadId, turn.turn),
+          upsertTurnInThread(current, thread.threadId, turn.turn),
         );
       }
       setLibraryPanel((currentPanel) =>
         officeArtifactSavedPanel(currentPanel, {
           workspace: savedConfig?.workspace ?? nextWorkspace,
-          threadId,
+          threadId: thread.threadId,
         }),
       );
     }

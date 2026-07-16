@@ -1,75 +1,56 @@
-import {
-  ArrowUp,
-  FileText,
-  ImagePlus,
-  ListChecks,
-  Plus,
-  ShieldCheck,
-  Square,
-  Target,
-  X,
-} from "lucide-react";
+import { ListChecks, Plus, ShieldCheck, Target } from "lucide-react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import {
-  type ClipboardEvent,
-  type DragEvent,
-  type KeyboardEvent,
-  type ReactNode,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
-import { officeRooms, workflowRooms } from "./commandWorkspaceData";
+import { CommandOfficeCreateDialog } from "./CommandOfficeCreateDialog";
+import { syncDownloadedAgentPlatformConfigs } from "./commandAgentPlatformSync";
+import {
+  createCommandOffice,
+  type CommandOfficeCreationClient,
+  type CommandOfficeCreationInput,
+} from "./commandOfficeCreation";
+import {
+  commandTeamWorkspaceCwdFromSearch,
+  initialCommandTeamWorkspaceCwd,
+  persistCommandTeamWorkspaceCwd,
+} from "./commandTeamWorkspace";
 import {
   CommandSidebar,
   Palette,
   type CommandLinkedThread,
   type PaletteItemWithCommand,
 } from "./CommandWorkspaceChrome";
-import type { CommandWorkspaceClient } from "./CommandProjectTree";
+import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
 import { CommandSceneHeader } from "./CommandSceneHeader";
 import {
   AgentsView,
-  AssistView,
   KnowledgeCatalogView,
   ProjectsView,
-  ScheduleView,
   TeamView,
 } from "./CommandWorkspaceViews";
+import {
+  ScheduleView,
+  type ScheduleClient,
+} from "./CommandWorkspaceSchedule";
 import { classNames } from "./commandWorkspaceUtils";
 import {
-  agentPlatformResourceCategories,
-  agentPlatformResourceStates,
+  agentPlatformResourceStates as selectAgentPlatformResourceStates,
   emptyAgentPlatformSnapshot,
   insertTokenIntoComposerValue,
-  mergeAgentPlatformSnapshot,
   selectCommandHomeSlots,
-  setAgentPlatformResourceState,
-  type AgentPlatformComposerResource,
   type CommandHomeSlots,
   type CommandShellView,
 } from "./commandWorkspaceState";
 import {
   commandSceneContextItems,
   commandSceneSlashItems,
-  findCompatibleOnlineAgent,
 } from "./commandWorkspaceSceneResources";
 import {
   readAgentPlatformSnapshot,
-  type AgentPlatformResourceCategory,
   type AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
-import { buildPimDynamicTools } from "../../lib/agent-platform/pimDynamicTools";
-import type { ComposerImageInput } from "../../lib/shared/composerImages";
-import {
-  attachmentContext,
-  prepareComposerAttachments,
-  type ComposerAttachment,
-} from "../../lib/shared/composerAttachments";
+import { isLegacyGeneratedAgentPlaceholder } from "../../lib/agent-config/legacyAgentPlaceholder";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
 import type { ConnectionState } from "../../lib/shared/connectionState";
@@ -80,10 +61,13 @@ import {
   type CommandScene,
   type SceneInteractionMode,
 } from "../../lib/scene/sceneCatalog";
-import type { AgentConfig, OfficeConfig } from "../../lib/domain/domainTypes";
+import type { AgentConfig } from "../../lib/domain/domainTypes";
 import {
-  agentPlatformTargetFromThreadSource,
-  agentPlatformThreadSource,
+  officeRecordKey,
+  type OfficeConfigRecordReference,
+} from "../../lib/office/officePanelFromRecord";
+import { isLegacyGeneratedOfficePlaceholder } from "../../lib/office/legacyOfficePlaceholder";
+import {
   commandComposerRuntimeSettings,
   fallbackCommandModelOptions,
   type CommandComposerPermission,
@@ -93,6 +77,11 @@ import {
 } from "../../lib/thread/threadRuntimeSettings";
 import type { WorkMode } from "../../lib/workMode";
 import { sidebarThreadTitle } from "../SidebarPresentation";
+import {
+  CommandComposer,
+  CommandComposerSelect,
+  type CommandComposerSelectOption,
+} from "../composer/CommandComposer";
 
 export {
   activateDesignPanelTab,
@@ -104,69 +93,80 @@ export {
   setDefaultTeamOfficePreview,
   syncDesignFilterState,
 } from "./commandWorkspaceState";
+export { composerKeyIntent as commandComposerKeyIntent } from "../composer/ComposerCore";
+export type {
+  ComposerKeyIntent as CommandComposerKeyIntent,
+  ComposerKeyIntentInput as CommandComposerKeyIntentInput,
+} from "../composer/ComposerCore";
 
 type CommandWorkspaceProps = {
   activeTurnId?: string | null;
+  assistantActiveTurnId?: string | null;
+  assistantStreamingText?: string;
+  assistantThread?: Thread | null;
   composerValue: string;
   connectionState: ConnectionState;
   cwd: string;
-  executionTargetClient?: (CommandWorkspaceClient & {
+  executionTargetClient?: {
+    addOfficeMemberConfig: CommandOfficeCreationClient["addOfficeMemberConfig"];
+    createOfficeConfig: CommandOfficeCreationClient["createOfficeConfig"];
     listAgentConfigs(cwd: string): Promise<{
       data: Array<{ config: AgentConfig; filePath: string }>;
     }>;
     listOfficeConfigs(cwd: string): Promise<{
-      data: Array<{ config: OfficeConfig; filePath: string }>;
+      data: OfficeConfigRecordReference[];
     }>;
-  }) | null;
+    saveAgentConfig?: (cwd: string, config: AgentConfig) => Promise<unknown>;
+  } | null;
+  scheduleClient?: ScheduleClient | null;
   isSending: boolean;
   linkedThreads?: Thread[];
   locale?: Locale;
   modelOptions?: CommandModelOption[];
+  officeRoomAdapter?: CommandOfficeRoomAdapter | null;
   selectedThread?: Thread | null;
   selectedThreadId?: string | null;
   slashCommands?: ComposerSlashCommand[];
   streamingText?: string;
   workMode: WorkMode;
-  onAttachContext: () => void;
+  onAttachContext: (workspaceCwd?: string | null) => void;
   onChangeComposerValue: (value: string) => void;
   onChangeWorkspaceCwd?: (cwd: string | null) => void;
+  onClearAssistantThread?: () => void | Promise<void>;
   onModeChange: (mode: WorkMode) => void;
   onRetryConnection: () => void;
-  onSend: (
+  onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
+  onSendAssistant?: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
-    images?: ComposerImageInput[],
   ) => void;
   onSendNewThread?: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
     workspaceCwd?: string | null,
-    images?: ComposerImageInput[],
   ) => void;
   onSelectLinkedThread?: (threadId: string | null) => void;
   onSlashCommandSelect?: (command: ComposerSlashCommand) => void;
   onStop?: () => void;
 };
 
-type PlatformLoadState = "loading" | "ready" | "fallback";
-type TeamMode = "office" | "workflow" | "experts";
-export type CommandComposerKeyIntent =
-  | "closePalette"
-  | "openContext"
-  | "openSlash"
-  | "send"
-  | null;
-export type CommandComposerKeyIntentInput = {
-  altKey: boolean;
-  composerValue: string;
-  ctrlKey: boolean;
-  hasOpenPalette: boolean;
-  isComposing: boolean;
-  key: string;
-  metaKey: boolean;
-  shiftKey: boolean;
+export type CommandOfficeRoomAdapter = {
+  open: (record: OfficeConfigRecordReference) => void | Promise<void>;
+  render: (
+    record: OfficeConfigRecordReference,
+    onBack: () => void,
+    onDeleted: () => void,
+  ) => ReactNode;
 };
 
+type PlatformLoadState = "loading" | "ready" | "fallback";
+type TeamMode = "office" | "workflow" | "experts";
+type CommandDomainCatalog = {
+  agents: Array<{ config: AgentConfig; filePath: string }>;
+  officeStatus: "loading" | "ready" | "unavailable";
+  offices: OfficeConfigRecordReference[];
+  status: "loading" | "ready" | "unavailable";
+};
 const shellViewIds: CommandShellView[] = [
   "command",
   "assist",
@@ -177,35 +177,21 @@ const shellViewIds: CommandShellView[] = [
   "team",
 ];
 
-type CommandSelectOption<TValue extends string = string> = {
-  detail?: string;
-  disabled?: boolean;
-  tone?: "danger" | "normal" | "warning";
-  value: TValue;
-  label: string;
-};
-
-const permissionOptions: CommandSelectOption<CommandComposerPermission>[] = [
-  {
-    detail: "工作区内自动执行，必要时请求升级",
-    label: "本地自动",
-    value: "approve-for-me",
-  },
-  {
-    detail: "涉及授权时先请求确认",
-    label: "操作前确认",
-    value: "request-approval",
-  },
-];
+const permissionOptions: CommandComposerSelectOption<CommandComposerPermission>[] =
+  [
+    {
+      detail: "工作区内自动执行，必要时请求升级",
+      label: "本地自动",
+      value: "approve-for-me",
+    },
+    {
+      detail: "涉及授权时先请求确认",
+      label: "操作前确认",
+      value: "request-approval",
+    },
+  ];
 
 const noWorkspaceValue = "__no_workspace__";
-const maxComposerImages = 2;
-const maxComposerImageBytes = 5 * 1024 * 1024;
-const supportedComposerImageTypes = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
 
 function isShellView(value: string): value is CommandShellView {
   return shellViewIds.includes(value as CommandShellView);
@@ -219,194 +205,23 @@ function shellViewFromHash(): CommandShellView {
   return isShellView(value) ? value : "command";
 }
 
-function imageDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("无法读取粘贴的图片。"));
-    reader.onload = () => resolve(String(reader.result));
-    reader.readAsDataURL(file);
-  });
-}
-
-function CommandComposerSelect<TValue extends string>({
-  ariaLabel,
-  className,
-  icon,
-  options,
-  value,
-  onChange,
-}: {
-  ariaLabel: string;
-  className: string;
-  icon?: ReactNode;
-  options: CommandSelectOption<TValue>[];
-  value: TValue;
-  onChange: (value: TValue) => void;
-}) {
-  const menuId = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const selectedOption =
-    options.find((option) => option.value === value) ?? options[0];
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    function closeOnPointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function closeOnEscape(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("pointerdown", closeOnPointerDown, true);
-    document.addEventListener("keydown", closeOnEscape, true);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnPointerDown, true);
-      document.removeEventListener("keydown", closeOnEscape, true);
-    };
-  }, [open]);
-
-  return (
-    <div
-      ref={rootRef}
-      className={classNames("control-select", className)}
-      data-open={open ? "true" : "false"}
-    >
-      <span className="visually-hidden">{ariaLabel}</span>
-      <button
-        aria-controls={menuId}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-label={ariaLabel}
-        className="select-trigger"
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-      >
-        {icon}
-        {selectedOption?.label ?? value}
-      </button>
-      <div className="select-menu" hidden={!open} id={menuId} role="listbox">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            aria-selected={option.value === value}
-            className="select-option"
-            data-tone={option.tone ?? "normal"}
-            data-value={option.value}
-            disabled={option.disabled}
-            role="option"
-            type="button"
-            onClick={() => {
-              if (option.disabled) {
-                return;
-              }
-              onChange(option.value);
-              setOpen(false);
-            }}
-          >
-            <span>
-              <strong>{option.label}</strong>
-              {option.detail ? <em>{option.detail}</em> : null}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function basename(path: string) {
   const normalized = path.replace(/\\/g, "/");
   return normalized.split("/").filter(Boolean).pop() ?? path;
 }
 
-function compactSearchText(value: string) {
-  return value.toLocaleLowerCase().replace(/[\s_\-./]+/g, "");
-}
-
-function isSubsequence(query: string, value: string) {
-  let queryIndex = 0;
-  for (const character of value) {
-    if (character === query[queryIndex]) {
-      queryIndex += 1;
-    }
-  }
-  return queryIndex === query.length;
-}
-
-function fuzzyTermScore(term: string, value: string, weight: number) {
-  const normalized = value.toLocaleLowerCase();
-  if (normalized.includes(term)) {
-    return weight * 2;
-  }
-  return normalized
-    .split(/[^\p{L}\p{N}]+/u)
-    .map(compactSearchText)
-    .some((word) => isSubsequence(term, word))
-    ? weight
-    : 0;
-}
-
-export function paletteFilter(items: PaletteItemWithCommand[], query: string) {
-  const terms = query
-    .trim()
-    .split(/\s+/)
-    .map(compactSearchText)
-    .filter(Boolean);
-  if (terms.length === 0) {
+function paletteFilter(items: PaletteItemWithCommand[], query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
     return items;
   }
-
-  return items
-    .map((item) => {
-      const fields = [
-        { value: item.title, weight: 5 },
-        { value: item.token, weight: 4 },
-        { value: item.label, weight: 2 },
-        { value: item.detail, weight: 1 },
-      ];
-      let score = 0;
-      for (const term of terms) {
-        const termScore = Math.max(
-          ...fields.map(({ value, weight }) =>
-            value ? fuzzyTermScore(term, value, weight) : 0,
-          ),
-        );
-        if (termScore === 0) {
-          return null;
-        }
-        score += termScore;
-      }
-      return { item, score };
-    })
-    .filter((candidate): candidate is { item: PaletteItemWithCommand; score: number } =>
-      candidate !== null,
-    )
-    .sort((left, right) => right.score - left.score)
-    .map((candidate) => candidate.item);
-}
-
-function platformResourcePrefix(resource: AgentPlatformComposerResource) {
-  return resource.type === "knowledge_bases" ? "@" : "/";
-}
-
-function platformResourceToken(resource: AgentPlatformComposerResource) {
-  return `${platformResourcePrefix(resource)}${resource.name}`;
-}
-
-function platformResourceLabel(resource: AgentPlatformComposerResource) {
-  if (resource.type === "skills") return "Skill";
-  if (resource.type === "mcp_servers") return "MCP";
-  return "知识库";
-}
-
-function isPimExecutionTarget(value: string): boolean {
-  return value.startsWith("agent-platform:agents:");
+  return items.filter((item) =>
+    [item.label, item.title, item.detail, item.token]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalized),
+  );
 }
 
 export function nextExecutionIntent(
@@ -433,75 +248,42 @@ export function shouldCloseComposerPalette({
   );
 }
 
-export function commandComposerKeyIntent({
-  altKey,
-  composerValue,
-  ctrlKey,
-  hasOpenPalette,
-  isComposing,
-  key,
-  metaKey,
-  shiftKey,
-}: CommandComposerKeyIntentInput): CommandComposerKeyIntent {
-  if (isComposing) {
-    return null;
-  }
-
-  if (key === "Escape" && hasOpenPalette) {
-    return "closePalette";
-  }
-
-  if (key === "Enter") {
-    if (hasOpenPalette) {
-      return null;
-    }
-    if (metaKey || ctrlKey) {
-      return "send";
-    }
-    if (!shiftKey && !altKey) {
-      return "send";
-    }
-    return null;
-  }
-
-  if (!metaKey && !ctrlKey && !altKey) {
-    if (key === "@") {
-      return "openContext";
-    }
-    if (key === "/" && (!composerValue || /\s$/.test(composerValue))) {
-      return "openSlash";
-    }
-  }
-
-  return null;
-}
-
 export function CommandWorkspace({
   activeTurnId = null,
+  assistantActiveTurnId = null,
+  assistantStreamingText = "",
+  assistantThread = null,
   composerValue,
   connectionState,
   cwd,
   executionTargetClient = null,
+  scheduleClient = null,
   isSending,
   linkedThreads = [],
   locale = "zh",
   modelOptions = fallbackCommandModelOptions,
+  officeRoomAdapter = null,
   selectedThread = null,
   selectedThreadId = null,
   slashCommands = [],
   streamingText = "",
   workMode,
+  onAttachContext,
   onChangeComposerValue,
   onChangeWorkspaceCwd,
+  onClearAssistantThread,
   onModeChange,
   onRetryConnection,
   onSend,
+  onSendAssistant,
   onSendNewThread,
   onSelectLinkedThread,
   onSlashCommandSelect,
   onStop,
 }: CommandWorkspaceProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const assistantTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastCommandThreadIdRef = useRef<string | null>(selectedThreadId);
   const [activeView, setActiveView] = useState<CommandShellView>(() =>
     shellViewFromHash(),
   );
@@ -512,17 +294,19 @@ export function CommandWorkspace({
     string | null
   >(selectedThreadId);
   const [newTaskDraft, setNewTaskDraft] = useState(false);
+  const [assistantComposerValue, setAssistantComposerValue] = useState("");
   const [scene, setScene] = useState<CommandScene>("office");
   const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
   const [model, setModel] = useState(fallbackCommandModelOptions[0].value);
-  const [reasoningEffort, setReasoningEffort] = useState("medium");
   const [modelSelectionTouched, setModelSelectionTouched] = useState(false);
   const [executionTarget, setExecutionTarget] = useState("crewon");
-  const [executionTargetCatalog, setExecutionTargetCatalog] = useState<{
-    agents: Array<{ config: AgentConfig; filePath: string }>;
-    offices: Array<{ config: OfficeConfig; filePath: string }>;
-    status: "loading" | "ready" | "unavailable";
-  }>({ agents: [], offices: [], status: "loading" });
+  const [executionTargetCatalog, setExecutionTargetCatalog] =
+    useState<CommandDomainCatalog>({
+      agents: [],
+      offices: [],
+      officeStatus: "loading",
+      status: "loading",
+    });
   const [permission, setPermission] =
     useState<CommandComposerPermission>("approve-for-me");
   const [executionIntent, setExecutionIntent] =
@@ -531,105 +315,207 @@ export function CommandWorkspace({
     "add" | "context" | "slash" | null
   >(null);
   const [paletteQuery, setPaletteQuery] = useState("");
+  const [platformState, setPlatformState] =
+    useState<PlatformLoadState>("loading");
   const [platformSnapshot, setPlatformSnapshot] =
     useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
-  const [selectedPlatformResources, setSelectedPlatformResources] = useState<
-    AgentPlatformComposerResource[]
-  >([]);
-  const [composerImages, setComposerImages] = useState<ComposerImageInput[]>(
-    [],
-  );
-  const [composerAttachments, setComposerAttachments] = useState<
-    ComposerAttachment[]
-  >([]);
-  const [composerResourceError, setComposerResourceError] = useState<
-    string | null
-  >(null);
   const [catalogFilter, setCatalogFilter] = useState("skill");
   const [catalogSearch, setCatalogSearch] = useState("");
-  const [scheduleMode, setScheduleMode] = useState("calendar");
+  const [scheduleMode, setScheduleMode] = useState("tasks");
   const [scheduleSource, setScheduleSource] = useState("personal");
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [teamMode, setTeamMode] = useState<TeamMode>("office");
+  const [teamWorkspaceCwd, setTeamWorkspaceCwd] = useState(() =>
+    initialCommandTeamWorkspaceCwd(cwd),
+  );
+  const [teamCatalog, setTeamCatalog] = useState<CommandDomainCatalog>({
+    agents: [],
+    offices: [],
+    officeStatus: "loading",
+    status: "loading",
+  });
+  const [teamRefreshNonce, setTeamRefreshNonce] = useState(0);
   const [officeRoomId, setOfficeRoomId] = useState<string | null>(null);
-  const [workflowRoomId, setWorkflowRoomId] = useState<string | null>(null);
-  const [officeTab, setOfficeTab] = useState("chat");
-  const [workflowTab, setWorkflowTab] = useState("run");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
+  const [officeCreateOpen, setOfficeCreateOpen] = useState(false);
+  const [officeCreateBusy, setOfficeCreateBusy] = useState(false);
+  const [officeCreateError, setOfficeCreateError] = useState<string | null>(
+    null,
+  );
+  const [officeRoomWarning, setOfficeRoomWarning] = useState<string | null>(
+    null,
+  );
+  const [selectedOfficeRecord, setSelectedOfficeRecord] =
+    useState<OfficeConfigRecordReference | null>(null);
+  const [officeRoomError, setOfficeRoomError] = useState<string | null>(null);
+  const officeOpenRequestRef = useRef(0);
+  const downloadedAgentSyncKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    function syncHash() {
+    function syncRoute() {
       setActiveView(shellViewFromHash());
+      const routeTeamCwd = commandTeamWorkspaceCwdFromSearch(
+        window.location.search,
+        cwd,
+      );
+      setTeamWorkspaceCwd(routeTeamCwd);
     }
-    window.addEventListener("hashchange", syncHash);
-    return () => window.removeEventListener("hashchange", syncHash);
-  }, []);
+    window.addEventListener("hashchange", syncRoute);
+    window.addEventListener("popstate", syncRoute);
+    return () => {
+      window.removeEventListener("hashchange", syncRoute);
+      window.removeEventListener("popstate", syncRoute);
+    };
+  }, [cwd]);
+
+  useEffect(() => {
+    if (!teamWorkspaceCwd && cwd.trim()) {
+      setTeamWorkspaceCwd(cwd.trim());
+    }
+  }, [cwd, teamWorkspaceCwd]);
+
+  useEffect(() => {
+    const normalizedCwd = teamWorkspaceCwd.trim();
+    if (!normalizedCwd || typeof window === "undefined") {
+      return;
+    }
+    const persistedCwd = new URLSearchParams(window.location.search)
+      .get("teamCwd")
+      ?.trim();
+    if (!persistedCwd) {
+      persistCommandTeamWorkspaceCwd(normalizedCwd);
+    }
+  }, [teamWorkspaceCwd]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!executionTargetClient || !cwd) {
+    if (!executionTargetClient || !cwd || connectionState !== "connected") {
       setExecutionTargetCatalog({
         agents: [],
         offices: [],
-        status: "unavailable",
+        officeStatus:
+          connectionState === "connecting" ? "loading" : "unavailable",
+        status: connectionState === "connecting" ? "loading" : "unavailable",
       });
       return;
     }
-    setExecutionTargetCatalog((current) => ({ ...current, status: "loading" }));
-    Promise.all([
+    setExecutionTargetCatalog({
+      agents: [],
+      offices: [],
+      officeStatus: "loading",
+      status: "loading",
+    });
+    Promise.allSettled([
       executionTargetClient.listAgentConfigs(cwd),
       executionTargetClient.listOfficeConfigs(cwd),
-    ])
-      .then(([agents, offices]) => {
-        if (!cancelled) {
-          setExecutionTargetCatalog({
-            agents: agents.data,
-            offices: offices.data,
-            status: "ready",
-          });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setExecutionTargetCatalog({
-            agents: [],
-            offices: [],
-            status: "unavailable",
-          });
-        }
-      });
+    ]).then(([agents, offices]) => {
+      if (!cancelled) {
+        const agentsAvailable = agents.status === "fulfilled";
+        const officesAvailable = offices.status === "fulfilled";
+        setExecutionTargetCatalog({
+          agents: agentsAvailable
+            ? agents.value.data.filter(
+                (record) => !isLegacyGeneratedAgentPlaceholder(record.config),
+              )
+            : [],
+          offices: officesAvailable
+            ? offices.value.data
+                .filter(
+                  (record) =>
+                    !isLegacyGeneratedOfficePlaceholder(record.config),
+                )
+                .map((record) => ({
+                  ...record,
+                  workspaceCwd: cwd,
+                }))
+            : [],
+          officeStatus: officesAvailable ? "ready" : "unavailable",
+          status: agentsAvailable || officesAvailable ? "ready" : "unavailable",
+        });
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [cwd, executionTargetClient]);
+  }, [connectionState, cwd, executionTargetClient]);
 
   useEffect(() => {
     let cancelled = false;
+    if (
+      !executionTargetClient ||
+      !teamWorkspaceCwd ||
+      connectionState !== "connected"
+    ) {
+      setTeamCatalog({
+        agents: [],
+        offices: [],
+        officeStatus:
+          connectionState === "connecting" ? "loading" : "unavailable",
+        status: connectionState === "connecting" ? "loading" : "unavailable",
+      });
+      return;
+    }
+    setTeamCatalog({
+      agents: [],
+      offices: [],
+      officeStatus: "loading",
+      status: "loading",
+    });
+    Promise.allSettled([
+      executionTargetClient.listAgentConfigs(teamWorkspaceCwd),
+      executionTargetClient.listOfficeConfigs(teamWorkspaceCwd),
+    ]).then(([agents, offices]) => {
+      if (cancelled) {
+        return;
+      }
+      const agentsAvailable = agents.status === "fulfilled";
+      const officesAvailable = offices.status === "fulfilled";
+      setTeamCatalog({
+        agents: agentsAvailable
+          ? agents.value.data.filter(
+              (record) => !isLegacyGeneratedAgentPlaceholder(record.config),
+            )
+          : [],
+        offices: officesAvailable
+          ? offices.value.data
+              .filter(
+                (record) => !isLegacyGeneratedOfficePlaceholder(record.config),
+              )
+              .map((record) => ({
+                ...record,
+                workspaceCwd: teamWorkspaceCwd,
+              }))
+          : [],
+        officeStatus: officesAvailable ? "ready" : "unavailable",
+        status: agentsAvailable || officesAvailable ? "ready" : "unavailable",
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    connectionState,
+    executionTargetClient,
+    teamRefreshNonce,
+    teamWorkspaceCwd,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPlatformState("loading");
     readAgentPlatformSnapshot()
       .then((snapshot) => {
         if (cancelled) {
           return;
         }
-        setPlatformSnapshot((current) =>
-          mergeAgentPlatformSnapshot(current, snapshot),
-        );
+        setPlatformSnapshot(snapshot);
+        setPlatformState("ready");
       })
-      .catch((reason) => {
+      .catch(() => {
         if (cancelled) {
           return;
         }
-        const error =
-          reason instanceof Error
-            ? reason.message
-            : "agent-platform unavailable";
-        setPlatformSnapshot((current) =>
-          setAgentPlatformResourceState(
-            current,
-            agentPlatformResourceCategories,
-            { status: "error", error },
-          ),
-        );
+        setPlatformSnapshot(emptyAgentPlatformSnapshot);
+        setPlatformState("fallback");
       });
     return () => {
       cancelled = true;
@@ -637,8 +523,109 @@ export function CommandWorkspace({
   }, []);
 
   useEffect(() => {
+    const workspaceCwd = teamWorkspaceCwd.trim();
+    const listAgentConfigs = executionTargetClient?.listAgentConfigs.bind(
+      executionTargetClient,
+    );
+    const saveAgentConfig = executionTargetClient?.saveAgentConfig?.bind(
+      executionTargetClient,
+    );
+    if (
+      connectionState !== "connected" ||
+      platformState !== "ready" ||
+      !workspaceCwd ||
+      !listAgentConfigs ||
+      !saveAgentConfig
+    ) {
+      return;
+    }
+
+    const downloadedAgents = platformSnapshot.agents.filter(
+      (agent) => agent.downloaded,
+    );
+    const syncKey = JSON.stringify({
+      workspaceCwd,
+      agents: downloadedAgents.map((agent) => ({
+        id: agent.id,
+        downloadedAt: agent.downloaded_at ?? null,
+        sourceUpdatedAt: agent.source_updated_at ?? null,
+      })),
+    });
+    if (
+      downloadedAgents.length === 0 ||
+      downloadedAgentSyncKeyRef.current === syncKey
+    ) {
+      return;
+    }
+    downloadedAgentSyncKeyRef.current = syncKey;
+
+    let cancelled = false;
+    void syncDownloadedAgentPlatformConfigs({
+      client: { listAgentConfigs, saveAgentConfig },
+      cwd: workspaceCwd,
+      snapshot: platformSnapshot,
+    }).then(
+      (saved) => {
+        if (!cancelled && saved > 0) {
+          setTeamRefreshNonce((current) => current + 1);
+        }
+      },
+      () => {
+        if (!cancelled && downloadedAgentSyncKeyRef.current === syncKey) {
+          downloadedAgentSyncKeyRef.current = null;
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    connectionState,
+    executionTargetClient,
+    platformSnapshot,
+    platformState,
+    teamWorkspaceCwd,
+  ]);
+
+  useEffect(() => {
     setActiveLinkedThreadId(selectedThreadId);
   }, [selectedThreadId]);
+
+  useEffect(() => {
+    if (selectedThreadId && selectedThreadId !== assistantThread?.id) {
+      lastCommandThreadIdRef.current = selectedThreadId;
+    }
+  }, [assistantThread?.id, selectedThreadId]);
+
+  useEffect(() => {
+    if (activeView === "assist") {
+      if (assistantThread && selectedThreadId !== assistantThread.id) {
+        onSelectLinkedThread?.(assistantThread.id);
+      }
+      return;
+    }
+    if (
+      activeView === "command" &&
+      assistantThread &&
+      selectedThreadId === assistantThread.id
+    ) {
+      const commandThreadId = lastCommandThreadIdRef.current;
+      if (
+        commandThreadId &&
+        linkedThreads.some((thread) => thread.id === commandThreadId)
+      ) {
+        onSelectLinkedThread?.(commandThreadId);
+      } else {
+        onSelectLinkedThread?.(null);
+      }
+    }
+  }, [
+    activeView,
+    assistantThread,
+    linkedThreads,
+    onSelectLinkedThread,
+    selectedThreadId,
+  ]);
 
   const effectiveModelOptions =
     modelOptions.length > 0 ? modelOptions : fallbackCommandModelOptions;
@@ -676,17 +663,10 @@ export function CommandWorkspace({
     () => [
       {
         action: "attach-files",
-        detail: "上传文本、DOCX 或 Excel 并加入本轮会话",
+        detail: "从当前工作空间选择要加入任务的内容",
         kind: "file",
         label: "文件",
         title: "文件和文件夹",
-      },
-      {
-        action: "attach-folder",
-        detail: "选择本机目录，按相对路径读取支持的文件",
-        kind: "file",
-        label: "文件夹",
-        title: "上传文件夹",
       },
       ...contextPaletteItems.filter((item) => item.kind === "knowledge"),
       ...slashPaletteItems.filter(
@@ -696,15 +676,11 @@ export function CommandWorkspace({
     [contextPaletteItems, slashPaletteItems],
   );
   const executionTargets = useMemo(
-    () =>
-      executionTargetOptionsFromDomain({
-        ...executionTargetCatalog,
-        platformAgents: platformSnapshot.agents,
-      }),
-    [executionTargetCatalog, platformSnapshot.agents],
+    () => executionTargetOptionsFromDomain(executionTargetCatalog),
+    [executionTargetCatalog],
   );
   const scenePreset = scenePresets[scene];
-  const workspaceOptions = useMemo<CommandSelectOption[]>(() => {
+  const workspaceOptions = useMemo<CommandComposerSelectOption[]>(() => {
     const paths = [cwd, ...linkedThreads.map((thread) => thread.cwd ?? "")]
       .map((path) => path.trim())
       .filter(
@@ -723,39 +699,32 @@ export function CommandWorkspace({
       })),
     ];
   }, [cwd, linkedThreads]);
+  const teamWorkspaceOptions = useMemo(
+    () =>
+      [
+        teamWorkspaceCwd,
+        cwd,
+        ...linkedThreads.map((thread) => thread.cwd ?? ""),
+      ]
+        .map((path) => path.trim())
+        .filter(
+          (path, index, allPaths) => path && allPaths.indexOf(path) === index,
+        )
+        .map((path) => ({
+          label: basename(path),
+          value: path,
+        })),
+    [cwd, linkedThreads, teamWorkspaceCwd],
+  );
 
   useEffect(() => {
     if (!executionTargets.some((target) => target.value === executionTarget)) {
       setExecutionTarget("crewon");
     }
   }, [executionTarget, executionTargets]);
-
-  useEffect(() => {
-    if (newTaskDraft || !selectedThread) {
-      return;
-    }
-    const restoredTarget = agentPlatformTargetFromThreadSource(
-      selectedThread.threadSource,
-    );
-    setExecutionTarget(
-      restoredTarget &&
-        executionTargets.some((target) => target.value === restoredTarget)
-        ? restoredTarget
-        : "crewon",
-    );
-  }, [executionTargets, newTaskDraft, selectedThread]);
-  const visibleContextItems = useMemo(
-    () => paletteFilter(contextPaletteItems, paletteQuery),
-    [contextPaletteItems, paletteQuery],
-  );
-  const visibleSlashItems = useMemo(
-    () => paletteFilter(slashPaletteItems, paletteQuery),
-    [paletteQuery, slashPaletteItems],
-  );
-  const visibleAddItems = useMemo(
-    () => paletteFilter(addPaletteItems, paletteQuery),
-    [addPaletteItems, paletteQuery],
-  );
+  const visibleContextItems = paletteFilter(contextPaletteItems, paletteQuery);
+  const visibleSlashItems = paletteFilter(slashPaletteItems, paletteQuery);
+  const visibleAddItems = paletteFilter(addPaletteItems, paletteQuery);
   const commandLinkedThreads: CommandLinkedThread[] = useMemo(
     () =>
       linkedThreads.map((thread) => ({
@@ -776,64 +745,47 @@ export function CommandWorkspace({
       platformSnapshot.skills.length +
       platformSnapshot.mcpServers.length +
       platformSnapshot.knowledgeBases.length +
-      platformSnapshot.workflows.length >
+    platformSnapshot.workflows.length >
     0;
-  const platformResourceStates = agentPlatformResourceStates(platformSnapshot);
-  const platformResourceStateValues = Object.values(platformResourceStates);
-  const platformState: PlatformLoadState = platformResourceStateValues.every(
-    (state) => state.status === "loading",
-  )
-    ? "loading"
-    : platformResourceStateValues.every((state) => state.status === "error") &&
-        !platformHasResources
-      ? "fallback"
-      : "ready";
-  const failedResourceCount = platformResourceStateValues.filter(
-    (state) => state.status === "error",
-  ).length;
+  const platformResourceStates = selectAgentPlatformResourceStates(
+    platformSnapshot,
+  );
   const resourceStatus =
     platformState === "loading"
       ? "正在读取当前账号的资源。"
       : platformState === "fallback"
-        ? "Agent Platform 暂不可用，本地会话仍可使用。"
-        : failedResourceCount > 0
-          ? `${failedResourceCount} 类资源加载失败，其他资源和本地工作台仍可使用。`
-          : platformHasResources
-            ? "已读取当前账号的 Agent Platform 资源。"
-            : "当前账号暂无已创建或已授权的资源。";
+        ? "本地 agent-platform 未连接，对话后端不受影响。"
+        : platformHasResources
+          ? "Agent-platform 资源已同步。"
+          : "当前账号暂无已创建或已授权的资源。";
 
-  async function reloadPlatformResources(
-    category?: AgentPlatformResourceCategory,
-  ) {
-    const categories = category ? [category] : agentPlatformResourceCategories;
-    setPlatformSnapshot((current) =>
-      setAgentPlatformResourceState(current, categories, {
-        status: "loading",
-        error: null,
-      }),
-    );
+  async function reloadPlatformResources() {
+    setPlatformState("loading");
     try {
-      const incoming = await readAgentPlatformSnapshot();
-      setPlatformSnapshot((current) =>
-        mergeAgentPlatformSnapshot(current, incoming, categories),
-      );
-    } catch (reason) {
-      const error =
-        reason instanceof Error ? reason.message : "agent-platform unavailable";
-      setPlatformSnapshot((current) =>
-        setAgentPlatformResourceState(current, categories, {
-          status: "error",
-          error,
-        }),
-      );
+      setPlatformSnapshot(await readAgentPlatformSnapshot());
+      setPlatformState("ready");
+    } catch {
+      setPlatformSnapshot(emptyAgentPlatformSnapshot);
+      setPlatformState("fallback");
     }
   }
 
   function switchView(view: CommandShellView) {
+    setOpenPalette(null);
+    setPaletteQuery("");
     setActiveView(view);
     if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", `#view-${view}`);
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}#view-${view}`,
+      );
     }
+  }
+
+  function focusActiveComposer() {
+    const ref = activeView === "assist" ? assistantTextareaRef : textareaRef;
+    ref.current?.focus();
   }
 
   function switchScene(nextScene: CommandScene) {
@@ -852,195 +804,46 @@ export function CommandWorkspace({
     textareaRef.current?.focus();
   }
 
-  function selectPlatformResource(resource: AgentPlatformComposerResource) {
-    const pimTarget = isPimExecutionTarget(executionTarget);
-    const selectedResource: AgentPlatformComposerResource = {
-      ...resource,
-      execution:
-        !pimTarget && resource.type === "skills" ? "local" : "remote",
-    };
-    if (!pimTarget && resource.type === "skills") {
-      const skill = platformSnapshot.skills.find(
-        (candidate) => candidate.id === resource.id,
-      );
-      if (!skill?.downloaded) {
-        setComposerResourceError(
-          `Skill“${resource.name}”需要先下载，才能由本地智能体使用。`,
-        );
-        return;
-      }
-    }
-    const alreadySelected = selectedPlatformResources.some(
-      (item) => item.type === resource.type && item.id === resource.id,
-    );
-    const nextResources = alreadySelected
-      ? selectedPlatformResources
-      : [...selectedPlatformResources, selectedResource];
-    const compatibleAgent = pimTarget
-      ? findCompatibleOnlineAgent(
-          platformSnapshot,
-          nextResources,
-          executionTarget,
-        )
-      : null;
-    if (pimTarget && !compatibleAgent) {
-      setComposerResourceError(
-        `当前 PIM Agent 没有同时绑定所选 ${nextResources
-          .map(platformResourceLabel)
-          .join("、")} 资源。`,
-      );
+  function sendComposerValue(submittedValue = composerValue) {
+    const trimmed = submittedValue.trim();
+    if (isSending || !trimmed) {
       return;
-    }
-
-    setSelectedPlatformResources(nextResources);
-    setComposerResourceError(null);
-    const token = platformResourceToken(resource);
-    if (!composerValue.includes(token)) {
-      onChangeComposerValue(
-        insertTokenIntoComposerValue({
-          prefix: platformResourcePrefix(resource),
-          token: resource.name,
-          value: composerValue,
-        }),
-      );
-    }
-    closeComposerPalette();
-    textareaRef.current?.focus();
-  }
-
-  function sendComposerValue() {
-    const trimmed = composerValue.trim();
-    if (
-      isSending ||
-      (!trimmed && composerImages.length === 0 && composerAttachments.length === 0)
-    ) {
-      return;
-    }
-    const pimTarget = isPimExecutionTarget(executionTarget);
-    if (pimTarget && composerImages.length > 0) {
-      setComposerResourceError(
-        "远程 PIM Agent 当前不接收图片输入，请切换到 CrewON 本地智能体。",
-      );
-      return;
-    }
-    const referencedResources = selectedPlatformResources.filter((resource) =>
-      trimmed.includes(platformResourceToken(resource)),
-    );
-    const compatibleAgent =
-      pimTarget && referencedResources.length > 0
-        ? findCompatibleOnlineAgent(
-            platformSnapshot,
-            referencedResources,
-            executionTarget,
-          )
-        : null;
-    if (pimTarget && referencedResources.length > 0 && !compatibleAgent) {
-      setComposerResourceError(
-        "所选资源未全部绑定到当前 PIM Agent，请减少资源或调整 Agent 绑定。",
-      );
-      return;
-    }
-    const effectiveExecutionTarget = executionTarget;
-    const runtimeSettings = commandComposerRuntimeSettings({
-      executionTarget: effectiveExecutionTarget,
-      model,
-      reasoningEffort: pimTarget ? undefined : reasoningEffort,
-      permission,
-      scene,
-      sceneMode,
-      executionIntent,
-    });
-    runtimeSettings.dynamicTools = pimTarget
-      ? []
-      : buildPimDynamicTools(referencedResources, platformSnapshot);
-    const selectedAgentPlatformSource = agentPlatformTargetFromThreadSource(
-      selectedThread?.threadSource,
-    );
-    const requestedAgentPlatformSource = agentPlatformThreadSource(
-      runtimeSettings.agentPlatformAgentId,
-    );
-    const shouldCreateNewThread =
-      newTaskDraft ||
-      !selectedThread ||
-      (!pimTarget && referencedResources.length > 0) ||
-      ((selectedAgentPlatformSource !== null ||
-        requestedAgentPlatformSource !== null) &&
-        selectedAgentPlatformSource !== requestedAgentPlatformSource);
-    const prompt = `${trimmed || (composerImages.length > 0 ? "请描述这张图片。" : "请分析这些附件。")}${attachmentContext(composerAttachments)}`;
-    if (shouldCreateNewThread && onSendNewThread) {
-      onSendNewThread(prompt, runtimeSettings, cwd || null, composerImages);
-    } else {
-      onSend(prompt, runtimeSettings, composerImages);
     }
     onChangeComposerValue("");
-    setComposerImages([]);
-    setComposerAttachments([]);
-    setSelectedPlatformResources([]);
-    setComposerResourceError(null);
+    const shouldCreateNewThread = newTaskDraft || !selectedThread;
+    (shouldCreateNewThread ? (onSendNewThread ?? onSend) : onSend)(
+      trimmed,
+      commandComposerRuntimeSettings({
+        executionTarget,
+        model,
+        permission,
+        scene,
+        sceneMode,
+        executionIntent,
+      }),
+      cwd || null,
+    );
     setNewTaskDraft(false);
     setExecutionIntent("none");
   }
 
-  async function handleComposerPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const files = Array.from(event.clipboardData.files).filter((file) =>
-      supportedComposerImageTypes.has(file.type),
+  function sendAssistantComposerValue(
+    submittedValue = assistantComposerValue,
+  ) {
+    const trimmed = submittedValue.trim();
+    if (isSending || !trimmed || !onSendAssistant) {
+      return;
+    }
+    setAssistantComposerValue("");
+    onSendAssistant(
+      trimmed,
+      commandComposerRuntimeSettings({
+        executionTarget: "crewon",
+        model,
+        permission,
+        executionIntent: "none",
+      }),
     );
-    if (files.length === 0) {
-      return;
-    }
-    event.preventDefault();
-    const availableSlots = maxComposerImages - composerImages.length;
-    if (availableSlots <= 0) {
-      setComposerResourceError(`每次最多添加 ${maxComposerImages} 张图片。`);
-      return;
-    }
-    const accepted = files.slice(0, availableSlots);
-    const oversized = accepted.find((file) => file.size > maxComposerImageBytes);
-    if (oversized) {
-      setComposerResourceError("图片不能超过 5MB。请压缩后再粘贴。");
-      return;
-    }
-    try {
-      const images = await Promise.all(
-        accepted.map(async (file) => ({
-          detail: "high" as const,
-          url: await imageDataUrl(file),
-        })),
-      );
-      setComposerImages((current) => [...current, ...images].slice(0, maxComposerImages));
-      setComposerResourceError(null);
-    } catch (error) {
-      setComposerResourceError(
-        error instanceof Error ? error.message : "无法读取粘贴的图片。",
-      );
-    }
-  }
-
-  async function addComposerFiles(files: File[]) {
-    try {
-      const attachments = await prepareComposerAttachments(files);
-      setComposerAttachments((current) => {
-        const merged = [...current, ...attachments];
-        const ids = new Set<string>();
-        return merged.filter((attachment) => {
-          if (ids.has(attachment.id)) {
-            return false;
-          }
-          ids.add(attachment.id);
-          return true;
-        });
-      });
-      setComposerResourceError(null);
-    } catch (error) {
-      setComposerResourceError(
-        error instanceof Error ? error.message : "无法读取所选文件。",
-      );
-    }
-  }
-
-  function handleComposerDrop(event: DragEvent<HTMLElement>) {
-    event.preventDefault();
-    void addComposerFiles(Array.from(event.dataTransfer.files));
   }
 
   function openComposerPalette(kind: "add" | "context" | "slash") {
@@ -1089,50 +892,48 @@ export function CommandWorkspace({
   }, [openPalette]);
 
   function insertContextItem(item: PaletteItemWithCommand) {
-    if (item.platformResource) {
-      selectPlatformResource(item.platformResource);
-      return;
-    }
-    onChangeComposerValue(
+    const currentValue =
+      activeView === "assist" ? assistantComposerValue : composerValue;
+    const nextValue =
       insertTokenIntoComposerValue({
         prefix: "@",
         token: item.title,
-        value: composerValue,
-      }),
-    );
+        value: currentValue,
+      });
+    if (activeView === "assist") {
+      setAssistantComposerValue(nextValue);
+    } else {
+      onChangeComposerValue(nextValue);
+    }
     closeComposerPalette();
-    textareaRef.current?.focus();
+    focusActiveComposer();
   }
 
   function insertSlashItem(item: PaletteItemWithCommand) {
-    if (item.platformResource) {
-      selectPlatformResource(item.platformResource);
-      return;
-    }
     if (item.command) {
       onSlashCommandSelect?.(item.command);
     }
-    onChangeComposerValue(
+    const currentValue =
+      activeView === "assist" ? assistantComposerValue : composerValue;
+    const nextValue =
       insertTokenIntoComposerValue({
         prefix: "/",
-        token:
-          item.command?.token ?? (item.token ?? item.title).replace(/^\$/, ""),
-        value: composerValue,
-      }),
-    );
+        token: item.command?.token ?? item.token ?? item.title,
+        value: currentValue,
+      });
+    if (activeView === "assist") {
+      setAssistantComposerValue(nextValue);
+    } else {
+      onChangeComposerValue(nextValue);
+    }
     closeComposerPalette();
-    textareaRef.current?.focus();
+    focusActiveComposer();
   }
 
   function insertAddItem(item: PaletteItemWithCommand) {
     if (item.action === "attach-files") {
       closeComposerPalette();
-      fileInputRef.current?.click();
-      return;
-    }
-    if (item.action === "attach-folder") {
-      closeComposerPalette();
-      folderInputRef.current?.click();
+      onAttachContext(cwd || null);
       return;
     }
     if (item.kind === "skill" || item.kind === "mcp" || item.command) {
@@ -1142,48 +943,173 @@ export function CommandWorkspace({
     insertContextItem(item);
   }
 
-  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    const intent = commandComposerKeyIntent({
-      altKey: event.altKey,
-      composerValue,
-      ctrlKey: event.ctrlKey,
-      hasOpenPalette: Boolean(openPalette),
-      isComposing: event.nativeEvent.isComposing,
-      key: event.key,
-      metaKey: event.metaKey,
-      shiftKey: event.shiftKey,
-    });
+  async function openRuntimeOffice(record: OfficeConfigRecordReference) {
+    const key = officeRecordKey(record);
+    if (!key || !officeRoomAdapter) {
+      return;
+    }
+    const previousKey = selectedOfficeRecord
+      ? officeRecordKey(selectedOfficeRecord)
+      : null;
+    const requestId = officeOpenRequestRef.current + 1;
+    officeOpenRequestRef.current = requestId;
+    setSelectedOfficeRecord(record);
+    setOfficeRoomId(key);
+    setOfficeRoomError(null);
+    setOfficeRoomWarning(null);
+    if (previousKey === key) {
+      return;
+    }
+    try {
+      await officeRoomAdapter.open(record);
+    } catch (error) {
+      if (officeOpenRequestRef.current === requestId) {
+        setOfficeRoomError(
+          error instanceof Error ? error.message : "无法打开办公室",
+        );
+      }
+    }
+  }
 
-    if (intent === "closePalette") {
-      event.preventDefault();
-      closeComposerPalette();
+  function closeRuntimeOffice() {
+    const closedRecordKey = selectedOfficeRecord
+      ? officeRecordKey(selectedOfficeRecord)
+      : null;
+    officeOpenRequestRef.current += 1;
+    setOfficeRoomId(null);
+    setOfficeRoomError(null);
+    setOfficeRoomWarning(null);
+    setSelectedOfficeRecord(null);
+    setTeamRefreshNonce((current) => current + 1);
+    if (typeof document !== "undefined") {
+      window.requestAnimationFrame(() => {
+        Array.from(
+          document.querySelectorAll<HTMLButtonElement>("[data-office-open]"),
+        )
+          .find((button) => button.dataset.officeRecordKey === closedRecordKey)
+          ?.focus();
+      });
+    }
+  }
+
+  function changeTeamWorkspace(nextCwd: string) {
+    const normalizedCwd = nextCwd.trim();
+    if (!normalizedCwd || normalizedCwd === teamWorkspaceCwd) {
       return;
     }
-    if (intent === "send") {
-      event.preventDefault();
-      sendComposerValue();
+    officeOpenRequestRef.current += 1;
+    setTeamWorkspaceCwd(normalizedCwd);
+    persistCommandTeamWorkspaceCwd(normalizedCwd);
+    setOfficeRoomId(null);
+    setOfficeCreateOpen(false);
+    setOfficeCreateError(null);
+    setOfficeRoomWarning(null);
+    setSelectedOfficeRecord(null);
+    setOfficeRoomError(null);
+  }
+
+  async function createRuntimeOffice(input: CommandOfficeCreationInput) {
+    if (!executionTargetClient || !teamWorkspaceCwd || !officeRoomAdapter) {
       return;
     }
-    if (intent === "openContext") {
-      event.preventDefault();
-      openComposerPalette("context");
-      return;
-    }
-    if (intent === "openSlash") {
-      event.preventDefault();
-      openComposerPalette("slash");
+    setOfficeCreateBusy(true);
+    setOfficeCreateError(null);
+    try {
+      const result = await createCommandOffice(
+        executionTargetClient,
+        teamWorkspaceCwd,
+        input,
+        locale,
+      );
+      const recordKey = officeRecordKey(result.record);
+      setTeamCatalog((current) => ({
+        ...current,
+        offices: [
+          ...current.offices.filter(
+            (record) => officeRecordKey(record) !== recordKey,
+          ),
+          result.record,
+        ],
+        officeStatus: "ready",
+        status: "ready",
+      }));
+      setOfficeCreateOpen(false);
+      await openRuntimeOffice(result.record);
+      setOfficeRoomWarning(
+        result.warnings.length > 0 ? result.warnings.join("；") : null,
+      );
+    } catch (error) {
+      setOfficeCreateError(
+        error instanceof Error ? error.message : "无法创建办公室",
+      );
+    } finally {
+      setOfficeCreateBusy(false);
     }
   }
 
   const currentWorkspace = basename(cwd || "工作空间");
-  const activeOfficeRoom =
-    officeRooms.find((room) => room.id === officeRoomId) ?? officeRooms[0];
-  const activeWorkflowRoom =
-    workflowRooms.find((room) => room.id === workflowRoomId) ??
-    workflowRooms[0];
+  const selectedOfficeRecordKey = selectedOfficeRecord
+    ? officeRecordKey(selectedOfficeRecord)
+    : null;
+  const canCreateOffice = Boolean(
+    officeRoomAdapter &&
+      executionTargetClient &&
+      teamWorkspaceCwd &&
+      connectionState === "connected",
+  );
+  const officeRuntime = officeRoomAdapter
+    ? {
+        records: teamCatalog.offices,
+        room: selectedOfficeRecord ? (
+          officeRoomError ? (
+            <div className="team-office-room-error" role="alert">
+              {officeRoomError}
+            </div>
+          ) : (
+            <>
+              {officeRoomWarning ? (
+                <div className="team-office-room-warning" role="status">
+                  {officeRoomWarning}
+                </div>
+              ) : null}
+              {officeRoomAdapter.render(
+                selectedOfficeRecord,
+                closeRuntimeOffice,
+                () => {
+                  const deletedKey = officeRecordKey(selectedOfficeRecord);
+                  setTeamCatalog((current) => ({
+                    ...current,
+                    offices: current.offices.filter(
+                      (record) => officeRecordKey(record) !== deletedKey,
+                    ),
+                  }));
+                  setSelectedOfficeRecord(null);
+                  closeRuntimeOffice();
+                },
+              )}
+            </>
+          )
+        ) : null,
+        selectedRecordKey: selectedOfficeRecordKey,
+        status: teamCatalog.officeStatus,
+        workspaceCwd: teamWorkspaceCwd,
+        onCreate: canCreateOffice
+          ? () => {
+              setOfficeCreateError(null);
+              setOfficeCreateOpen(true);
+            }
+          : undefined,
+        onOpen: (record: OfficeConfigRecordReference) => {
+          void openRuntimeOffice(record);
+        },
+        onRetry: onRetryConnection,
+      }
+    : null;
   const showCommandThread =
     activeView === "command" && Boolean(selectedThread) && !newTaskDraft;
-  const commandThreadRunning = Boolean(activeTurnId);
+  const commandThreadRunning =
+    Boolean(activeTurnId) ||
+    Boolean(selectedThread?.turns.some((turn) => turn.status === "inProgress"));
   const connectionStatusLabel =
     connectionState === "connected"
       ? "App Server 已连接"
@@ -1233,8 +1159,6 @@ export function CommandWorkspace({
           onNewThread={(workspaceCwd) => {
             setActiveLinkedThreadId(null);
             setNewTaskDraft(true);
-            setSelectedPlatformResources([]);
-            setComposerResourceError(null);
             onChangeWorkspaceCwd?.(workspaceCwd);
             onChangeComposerValue("");
             switchView("command");
@@ -1243,8 +1167,6 @@ export function CommandWorkspace({
           onOpenLinkedThread={(threadId) => {
             setActiveLinkedThreadId(threadId);
             setNewTaskDraft(false);
-            setSelectedPlatformResources([]);
-            setComposerResourceError(null);
             switchView("command");
             onSelectLinkedThread?.(threadId);
           }}
@@ -1254,7 +1176,6 @@ export function CommandWorkspace({
             setSidebarCollapsed((collapsed) => !collapsed)
           }
           onToggleSearch={() => setSidebarSearchOpen((open) => !open)}
-          workspaceClient={executionTargetClient}
         />
 
         <section className="command-canvas" data-od-id="desktop-main-pane">
@@ -1275,13 +1196,13 @@ export function CommandWorkspace({
               className={classNames(
                 "hero-center",
                 showCommandThread && "has-command-thread",
-                showCommandThread && "conversation-shell",
               )}
               data-od-id="primary-work-area"
             >
               {showCommandThread && selectedThread ? (
                 <CommandThreadRoom
                   activeTurnId={activeTurnId}
+                  cwd={cwd}
                   locale={locale}
                   selectedThread={selectedThread}
                   streamingText={streamingText}
@@ -1301,132 +1222,62 @@ export function CommandWorkspace({
                 </>
               )}
 
-              <section
+              <CommandComposer
+                actions={
+                  <>
+                    <CommandComposerSelect
+                      ariaLabel="执行主体"
+                      className="execution-target-dropdown"
+                      options={executionTargets}
+                      value={executionTarget}
+                      onChange={setExecutionTarget}
+                    />
+                    <CommandComposerSelect
+                      ariaLabel="模型选择"
+                      className="model-dropdown"
+                      options={effectiveModelOptions}
+                      value={model}
+                      onChange={(nextModel) => {
+                        setModelSelectionTouched(true);
+                        setModel(nextModel);
+                      }}
+                    />
+                  </>
+                }
+                afterTextarea={
+                  <>
+                    <button
+                      aria-hidden="true"
+                      className="shortcut-proxy"
+                      data-context-open=""
+                      data-palette-trigger="context"
+                      hidden
+                      tabIndex={-1}
+                      type="button"
+                      onClick={() => openComposerPalette("context")}
+                    />
+                    <button
+                      aria-hidden="true"
+                      className="shortcut-proxy"
+                      data-slash-open=""
+                      data-palette-trigger="slash"
+                      hidden
+                      tabIndex={-1}
+                      type="button"
+                      onClick={() => openComposerPalette("slash")}
+                    />
+                  </>
+                }
+                ariaDescribedBy="composer-status composer-error"
+                ariaLabel="任务输入"
                 className={classNames(
                   "command-input",
                   showCommandThread && "thread-command-input",
-                  showCommandThread && "conversation-frame",
                 )}
-                data-od-id="ai-composer"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={handleComposerDrop}
-              >
-                <label className="visually-hidden" htmlFor="desktop-task-input">
-                  任务输入
-                </label>
-                {composerImages.length > 0 ? (
-                  <div className="composer-image-chips" aria-label="已添加的图片">
-                    {composerImages.map((image, index) => (
-                      <div className="composer-image-chip" key={image.url}>
-                        <img alt={`待发送图片 ${index + 1}`} src={image.url} />
-                        <button
-                          aria-label={`移除图片 ${index + 1}`}
-                          title="移除图片"
-                          type="button"
-                          onClick={() =>
-                            setComposerImages((current) =>
-                              current.filter((_, itemIndex) => itemIndex !== index),
-                            )
-                          }
-                        >
-                          <X aria-hidden="true" size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {composerAttachments.length > 0 ? (
-                  <div className="composer-attachment-chips" aria-label="已添加的文件">
-                    {composerAttachments.map((attachment) => (
-                      <div className="composer-attachment-chip" key={attachment.id}>
-                        <FileText aria-hidden="true" size={14} />
-                        <span title={attachment.relativePath}>{attachment.relativePath}</span>
-                        <button
-                          aria-label={`移除文件 ${attachment.name}`}
-                          title="移除文件"
-                          type="button"
-                          onClick={() =>
-                            setComposerAttachments((current) =>
-                              current.filter((item) => item.id !== attachment.id),
-                            )
-                          }
-                        >
-                          <X aria-hidden="true" size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                <input
-                  accept=".txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.ts,.tsx,.js,.jsx,.py,.rs,.java,.sql,.docx,.xlsx,.xls"
-                  className="composer-file-input"
-                  multiple
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={(event) => {
-                    void addComposerFiles(Array.from(event.currentTarget.files ?? []));
-                    event.currentTarget.value = "";
-                  }}
-                />
-                <input
-                  className="composer-file-input"
-                  multiple
-                  ref={folderInputRef}
-                  type="file"
-                  {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
-                  onChange={(event) => {
-                    void addComposerFiles(Array.from(event.currentTarget.files ?? []));
-                    event.currentTarget.value = "";
-                  }}
-                />
-                <textarea
-                  aria-describedby="composer-status composer-error"
-                  data-composer=""
-                  data-od-id="composer-input"
-                  id="desktop-task-input"
-                  placeholder={scenePreset.placeholder}
-                  ref={textareaRef}
-                  value={composerValue}
-                  onChange={(event) =>
-                    onChangeComposerValue(event.currentTarget.value)
-                  }
-                  onKeyDown={handleComposerKeyDown}
-                  onPaste={handleComposerPaste}
-                />
-                {composerResourceError ? (
-                  <p className="composer-error" id="composer-error" role="alert">
-                    {composerResourceError}
-                  </p>
-                ) : null}
-                <button
-                  aria-hidden="true"
-                  className="shortcut-proxy"
-                  data-context-open=""
-                  data-palette-trigger="context"
-                  hidden
-                  tabIndex={-1}
-                  type="button"
-                  onClick={() => openComposerPalette("context")}
-                />
-                <button
-                  aria-hidden="true"
-                  className="shortcut-proxy"
-                  data-slash-open=""
-                  data-palette-trigger="slash"
-                  hidden
-                  tabIndex={-1}
-                  type="button"
-                  onClick={() => openComposerPalette("slash")}
-                />
-
-                <div className="input-tools" data-od-id="composer-tools">
-                  <div
-                    className="composer-controls"
-                    data-od-id="composer-control-row"
-                  >
+                controls={
+                  <>
                     <button
                       aria-label="添加上下文"
-                      title="添加上下文；也可直接粘贴图片"
                       className="icon-action composer-plus-action"
                       data-palette-trigger="add"
                       type="button"
@@ -1434,9 +1285,6 @@ export function CommandWorkspace({
                     >
                       <Plus aria-hidden="true" />
                     </button>
-                    <span className="visually-hidden">
-                      <ImagePlus aria-hidden="true" /> 可直接粘贴 PNG、JPEG 或 WebP 图片
-                    </span>
                     <CommandComposerSelect
                       ariaLabel="权限选择"
                       className="permission-dropdown"
@@ -1481,179 +1329,266 @@ export function CommandWorkspace({
                         <span>计划</span>
                       </button>
                     </div>
-                  </div>
-
-                  <div
-                    className="composer-actions"
-                    data-od-id="composer-action-row"
-                  >
-                    <CommandComposerSelect
-                      ariaLabel="执行主体"
-                      className="execution-target-dropdown"
-                      options={executionTargets}
-                      value={executionTarget}
-                      onChange={(value) => {
-                        setExecutionTarget(value);
-                        setSelectedPlatformResources([]);
-                        setComposerResourceError(null);
-                      }}
+                  </>
+                }
+                dataOdId="ai-composer"
+                disabled={isSending}
+                id="desktop-task-input"
+                palettes={
+                  <>
+                    <Palette
+                      id="add-search-panel"
+                      inputId="add-search"
+                      items={visibleAddItems}
+                      kind="add"
+                      open={openPalette === "add"}
+                      placeholder="添加文件、知识库、Skill 或 MCP"
+                      query={paletteQuery}
+                      onClose={closeComposerPalette}
+                      onQueryChange={setPaletteQuery}
+                      onSelect={insertAddItem}
                     />
-                    <CommandComposerSelect
-                      ariaLabel="模型选择"
-                      className="model-dropdown"
-                      options={effectiveModelOptions}
-                      value={model}
-                      onChange={(nextModel) => {
-                        setModelSelectionTouched(true);
-                        setModel(nextModel);
-                      }}
+                    <Palette
+                      id="context-search-panel"
+                      inputId="context-search"
+                      items={visibleContextItems}
+                      kind="context"
+                      open={openPalette === "context"}
+                      placeholder="搜索文件、会话或工作空间"
+                      query={paletteQuery}
+                      onClose={closeComposerPalette}
+                      onQueryChange={setPaletteQuery}
+                      onSelect={insertContextItem}
                     />
-                    {!isPimExecutionTarget(executionTarget) ? (
+                    <Palette
+                      id="slash-search-panel"
+                      inputId="slash-search"
+                      items={visibleSlashItems}
+                      kind="slash"
+                      open={openPalette === "slash"}
+                      placeholder="搜索 Skill 或 MCP，例如 页面审阅、Filesystem"
+                      query={paletteQuery}
+                      onClose={closeComposerPalette}
+                      onQueryChange={setPaletteQuery}
+                      onSelect={insertSlashItem}
+                    />
+                  </>
+                }
+                paletteOpen={Boolean(openPalette)}
+                placeholder={scenePreset.placeholder}
+                sendLabel={showCommandThread ? composerSendLabel : "开始任务"}
+                state={
+                  <>
+                    {showCommandThread ? (
+                      <span
+                        className="workspace-label"
+                        data-od-id="workspace-picker"
+                      >
+                        {currentWorkspace}
+                      </span>
+                    ) : (
                       <CommandComposerSelect
-                        ariaLabel="推理强度"
-                        className="reasoning-dropdown"
-                        options={[
-                          { label: "轻度", value: "low" },
-                          { label: "中", value: "medium" },
-                          { label: "高", value: "high" },
-                          { label: "极高", value: "xhigh" },
-                        ]}
-                        value={reasoningEffort}
-                        onChange={setReasoningEffort}
+                        ariaLabel="工作空间选择"
+                        className="workspace-dropdown"
+                        options={workspaceOptions}
+                        value={cwd || noWorkspaceValue}
+                        onChange={(nextWorkspace) =>
+                          onChangeWorkspaceCwd?.(
+                            nextWorkspace === noWorkspaceValue
+                              ? null
+                              : nextWorkspace,
+                          )
+                        }
                       />
+                    )}
+                    {composerActivityLabel ? (
+                      <span className="composer-state">
+                        {composerActivityLabel}
+                      </span>
                     ) : null}
-                    <button
-                      aria-busy={isSending && !commandThreadRunning}
-                      aria-label={
-                        commandThreadRunning
-                          ? "停止任务"
-                          : showCommandThread
-                            ? composerSendLabel
-                            : "开始任务"
-                      }
-                      className="send-button"
-                      data-action={commandThreadRunning ? "stop" : "send"}
-                      disabled={
-                        commandThreadRunning
-                          ? !onStop
-                          : isSending || !composerValue.trim()
-                      }
-                      title={
-                        commandThreadRunning
-                          ? "停止任务"
-                          : showCommandThread
-                            ? composerSendLabel
-                            : "开始任务"
-                      }
-                      type="button"
-                      onClick={commandThreadRunning ? onStop : sendComposerValue}
-                    >
-                      {commandThreadRunning ? (
-                        <Square aria-hidden="true" />
-                      ) : (
-                        <ArrowUp aria-hidden="true" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <Palette
-                  id="add-search-panel"
-                  inputId="add-search"
-                  items={visibleAddItems}
-                  kind="add"
-                  open={openPalette === "add"}
-                  placeholder="添加文件、知识库、Skill 或 MCP"
-                  query={paletteQuery}
-                  onClose={closeComposerPalette}
-                  onQueryChange={setPaletteQuery}
-                  onSelect={insertAddItem}
-                />
-                <Palette
-                  id="context-search-panel"
-                  inputId="context-search"
-                  items={visibleContextItems}
-                  kind="context"
-                  open={openPalette === "context"}
-                  placeholder="搜索文件、会话或工作空间"
-                  query={paletteQuery}
-                  onClose={closeComposerPalette}
-                  onQueryChange={setPaletteQuery}
-                  onSelect={insertContextItem}
-                />
-                <Palette
-                  id="slash-search-panel"
-                  inputId="slash-search"
-                  items={visibleSlashItems}
-                  kind="slash"
-                  open={openPalette === "slash"}
-                  placeholder="搜索 Skill 或 MCP，例如 页面审阅、Filesystem"
-                  query={paletteQuery}
-                  onClose={closeComposerPalette}
-                  onQueryChange={setPaletteQuery}
-                  onSelect={insertSlashItem}
-                />
-
-                <div
-                  className="composer-state-row"
-                  data-od-id="composer-state-row"
-                  id="composer-status"
-                >
-                  {showCommandThread ? (
+                    {connectionState === "disconnected" ? (
+                      <button
+                        className="button compact"
+                        type="button"
+                        onClick={onRetryConnection}
+                      >
+                        重试 app-server
+                      </button>
+                    ) : null}
                     <span
-                      className="workspace-label"
-                      data-od-id="workspace-picker"
-                    >
-                      {currentWorkspace}
-                    </span>
-                  ) : (
-                    <CommandComposerSelect
-                      ariaLabel="工作空间选择"
-                      className="workspace-dropdown"
-                      options={workspaceOptions}
-                      value={cwd || noWorkspaceValue}
-                      onChange={(nextWorkspace) =>
-                        onChangeWorkspaceCwd?.(
-                          nextWorkspace === noWorkspaceValue
-                            ? null
-                            : nextWorkspace,
-                        )
-                      }
+                      aria-label={connectionStatusLabel}
+                      className="connection-indicator"
+                      data-state={connectionState}
+                      role="status"
+                      title={connectionStatusLabel}
                     />
-                  )}
-                  {composerActivityLabel ? (
-                    <span className="composer-state">
-                      {composerActivityLabel}
-                    </span>
-                  ) : null}
-                  {connectionState === "disconnected" ? (
-                    <button
-                      className="button compact"
-                      type="button"
-                      onClick={onRetryConnection}
-                    >
-                      重试 app-server
-                    </button>
-                  ) : null}
-                  <span
-                    aria-label={connectionStatusLabel}
-                    className="connection-indicator"
-                    data-state={connectionState}
-                    role="status"
-                    title={connectionStatusLabel}
-                  />
-                </div>
-              </section>
+                  </>
+                }
+                stateDataOdId="composer-state-row"
+                stateId="composer-status"
+                submitBehavior="enter"
+                submitting={isSending}
+                textareaDataOdId="composer-input"
+                textareaRef={textareaRef}
+                value={composerValue}
+                onChange={onChangeComposerValue}
+                onClosePalette={closeComposerPalette}
+                onOpenPalette={openComposerPalette}
+                onSubmit={sendComposerValue}
+              />
             </section>
-
           </section>
 
-          <AssistView
+          <CommandWorkspaceAssistant
             active={activeView === "assist"}
-            composerValue={composerValue}
-            connectionState={connectionState}
-            onChangeComposerValue={onChangeComposerValue}
-            onSend={sendComposerValue}
+            activeTurnId={assistantActiveTurnId}
+            composer={
+              <CommandComposer
+                actions={
+                  <CommandComposerSelect
+                    ariaLabel="模型选择"
+                    className="model-dropdown"
+                    options={effectiveModelOptions}
+                    value={model}
+                    onChange={(nextModel) => {
+                      setModelSelectionTouched(true);
+                      setModel(nextModel);
+                    }}
+                  />
+                }
+                afterTextarea={
+                  <>
+                    <button
+                      aria-hidden="true"
+                      className="shortcut-proxy"
+                      data-context-open=""
+                      data-palette-trigger="context"
+                      hidden
+                      tabIndex={-1}
+                      type="button"
+                      onClick={() => openComposerPalette("context")}
+                    />
+                    <button
+                      aria-hidden="true"
+                      className="shortcut-proxy"
+                      data-slash-open=""
+                      data-palette-trigger="slash"
+                      hidden
+                      tabIndex={-1}
+                      type="button"
+                      onClick={() => openComposerPalette("slash")}
+                    />
+                  </>
+                }
+                ariaDescribedBy="assistant-composer-status"
+                ariaLabel="助理输入"
+                className="command-input thread-command-input assistant-home-composer"
+                controls={
+                  <>
+                    <button
+                      aria-label="添加附件或能力"
+                      className="icon-action composer-plus-action"
+                      data-palette-trigger="add"
+                      type="button"
+                      onClick={() => toggleComposerPalette("add")}
+                    >
+                      <Plus aria-hidden="true" />
+                    </button>
+                    <CommandComposerSelect
+                      ariaLabel="权限选择"
+                      className="permission-dropdown"
+                      icon={<ShieldCheck aria-hidden="true" />}
+                      options={permissionOptions}
+                      value={permission}
+                      onChange={setPermission}
+                    />
+                  </>
+                }
+                dataOdId="assistant-composer"
+                disabled={isSending}
+                id="assistant-task-input"
+                palettes={
+                  <>
+                    <Palette
+                      id="assistant-add-search-panel"
+                      inputId="assistant-add-search"
+                      items={visibleAddItems}
+                      kind="add"
+                      open={openPalette === "add"}
+                      placeholder="添加附件、知识库、Skill 或 MCP"
+                      query={paletteQuery}
+                      onClose={closeComposerPalette}
+                      onQueryChange={setPaletteQuery}
+                      onSelect={insertAddItem}
+                    />
+                    <Palette
+                      id="assistant-context-search-panel"
+                      inputId="assistant-context-search"
+                      items={visibleContextItems}
+                      kind="context"
+                      open={openPalette === "context"}
+                      placeholder="搜索可引用的上下文"
+                      query={paletteQuery}
+                      onClose={closeComposerPalette}
+                      onQueryChange={setPaletteQuery}
+                      onSelect={insertContextItem}
+                    />
+                    <Palette
+                      id="assistant-slash-search-panel"
+                      inputId="assistant-slash-search"
+                      items={visibleSlashItems}
+                      kind="slash"
+                      open={openPalette === "slash"}
+                      placeholder="搜索 Skill 或 MCP"
+                      query={paletteQuery}
+                      onClose={closeComposerPalette}
+                      onQueryChange={setPaletteQuery}
+                      onSelect={insertSlashItem}
+                    />
+                  </>
+                }
+                paletteOpen={Boolean(openPalette)}
+                placeholder="告诉助理你想了解、整理或持续跟进的事情…"
+                running={Boolean(assistantActiveTurnId)}
+                sendLabel={assistantActiveTurnId ? "发送补充指令" : "发送"}
+                state={
+                  <>
+                    <span
+                      className="composer-state"
+                      id="assistant-composer-status"
+                    >
+                      单一会话 · 默认执行环境 · 上下文自动压缩
+                    </span>
+                    <span
+                      aria-label={connectionStatusLabel}
+                      className="connection-indicator"
+                      data-state={connectionState}
+                      role="status"
+                      title={connectionStatusLabel}
+                    />
+                  </>
+                }
+                stopLabel="停止"
+                submitBehavior="enter"
+                submitting={isSending}
+                textareaDataOdId="assistant-composer-input"
+                textareaRef={assistantTextareaRef}
+                value={assistantComposerValue}
+                onChange={setAssistantComposerValue}
+                onClosePalette={closeComposerPalette}
+                onOpenPalette={openComposerPalette}
+                onStop={onStop}
+                onSubmit={sendAssistantComposerValue}
+              />
+            }
+            locale={locale}
+            streamingText={assistantStreamingText}
+            thread={assistantThread}
+            workMode={workMode}
+            clearAvailable={connectionState === "connected"}
+            onClearThread={onClearAssistantThread}
+            onModeChange={onModeChange}
+            onStop={onStop}
           />
           <ProjectsView
             active={activeView === "projects"}
@@ -1679,6 +1614,8 @@ export function CommandWorkspace({
           />
           <ScheduleView
             active={activeView === "schedule"}
+            client={scheduleClient}
+            cwd={cwd}
             modalOpen={scheduleModalOpen}
             scheduleMode={scheduleMode}
             scheduleSource={scheduleSource}
@@ -1686,28 +1623,48 @@ export function CommandWorkspace({
             onModeChange={setScheduleMode}
             onOpenModal={() => setScheduleModalOpen(true)}
             onSourceChange={setScheduleSource}
+            onOpenThread={onSelectLinkedThread}
           />
           <TeamView
             active={activeView === "team"}
-            activeOfficeRoom={activeOfficeRoom}
-            activeWorkflowRoom={activeWorkflowRoom}
+            officeRuntime={officeRuntime}
             officeRoomId={officeRoomId}
-            officeTab={officeTab}
+            singleChatWorkspaceCwd={cwd}
             teamMode={teamMode}
-            workflowRoomId={workflowRoomId}
-            workflowTab={workflowTab}
-            onBackOffice={() => setOfficeRoomId(null)}
-            onBackWorkflow={() => setWorkflowRoomId(null)}
-            onOfficeTabChange={setOfficeTab}
-            onOpenOffice={setOfficeRoomId}
-            onOpenWorkflow={setWorkflowRoomId}
+            teamWorkspaceCwd={teamWorkspaceCwd}
+            teamWorkspaceOptions={teamWorkspaceOptions}
+            onCreateOffice={
+              canCreateOffice
+                ? () => {
+                    setOfficeCreateError(null);
+                    setOfficeCreateOpen(true);
+                  }
+                : undefined
+            }
+            onRefresh={() => setTeamRefreshNonce((current) => current + 1)}
+            onTeamWorkspaceChange={changeTeamWorkspace}
             onTeamModeChange={(mode) => {
               setTeamMode(mode);
               setOfficeRoomId(null);
-              setWorkflowRoomId(null);
+              setOfficeRoomError(null);
+              setOfficeRoomWarning(null);
             }}
-            onWorkflowTabChange={setWorkflowTab}
           />
+          {officeCreateOpen ? (
+            <CommandOfficeCreateDialog
+              agents={teamCatalog.agents}
+              busy={officeCreateBusy}
+              error={officeCreateError}
+              locale={locale}
+              onClose={() => {
+                if (!officeCreateBusy) {
+                  setOfficeCreateOpen(false);
+                  setOfficeCreateError(null);
+                }
+              }}
+              onSubmit={createRuntimeOffice}
+            />
+          ) : null}
         </section>
       </section>
     </section>

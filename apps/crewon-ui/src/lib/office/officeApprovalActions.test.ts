@@ -76,6 +76,19 @@ function panel(workspaceConfig: OfficeWorkspace = workspace()): LibraryPanel {
   };
 }
 
+function threadResolution(threadId = "office-thread") {
+  return {
+    config: officeConfig(
+      workspace({
+        threadId,
+        recordRevision: `revision-${threadId}`,
+      }),
+    ),
+    filePath: `/offices/${threadId}.json`,
+    threadId,
+  };
+}
+
 function state(initialPanel: LibraryPanel | null = panel()): CapturedOfficeApprovalState {
   return {
     ensuredThreads: 0,
@@ -101,7 +114,7 @@ describe("office approval actions", () => {
       decision: "denied",
       ensureOfficeThread: async () => {
         captured.ensuredThreads += 1;
-        return "office-thread";
+        return threadResolution();
       },
       id: "approval-1",
       isConnected: false,
@@ -142,19 +155,22 @@ describe("office approval actions", () => {
     const handled = await handleOfficeApprovalDecisionAction({
       decideOfficeApproval: async (
         _panel,
-        _workspace,
+        canonicalWorkspace,
         _threadId,
         approvalId,
         decision,
         message,
       ) => {
+        expect(canonicalWorkspace.recordRevision).toBe(
+          "revision-saved-thread",
+        );
         captured.lastDecision = { approvalId, decision, message };
         return officeConfig(savedWorkspace);
       },
       decision: "approved",
       ensureOfficeThread: async () => {
         captured.ensuredThreads += 1;
-        return "saved-thread";
+        return threadResolution("saved-thread");
       },
       id: "approval-1",
       isConnected: true,
@@ -199,7 +215,7 @@ describe("office approval actions", () => {
       decision: "approved",
       ensureOfficeThread: async () => {
         captured.ensuredThreads += 1;
-        return "office-thread";
+        return threadResolution();
       },
       id: "missing-approval",
       isConnected: true,
@@ -226,7 +242,7 @@ describe("office approval actions", () => {
         throw new Error("approval failed");
       },
       decision: "approved",
-      ensureOfficeThread: async () => "office-thread",
+      ensureOfficeThread: async () => threadResolution(),
       id: "approval-1",
       isConnected: true,
       locale: "en",

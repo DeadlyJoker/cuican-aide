@@ -117,7 +117,20 @@ async function runAction(
         title: targetPanel.title,
         workspaceThreadId: workspaceOverride?.threadId,
       });
-      return workspaceOverride?.threadId ?? "office-thread";
+      const threadId = workspaceOverride?.threadId ?? "office-thread";
+      return {
+        config: {
+          title: targetPanel.title,
+          subtitle: targetPanel.subtitle,
+          workspace: {
+            ...(workspaceOverride ?? workspace()),
+            threadId,
+            recordRevision: "revision-bound",
+          },
+        },
+        filePath: "/offices/office.json",
+        threadId,
+      };
     },
     isConnected: true,
     isUnsupportedRpcError: (error) =>
@@ -193,6 +206,7 @@ describe("office detail actions", () => {
       title: "Latest Office",
       subtitle: "Latest Workspace",
       workspace: {
+        recordRevision: "revision-bound",
         threadId: "latest-thread",
         messages: [{ text: "Existing" }, { text: "Backend update" }],
       },

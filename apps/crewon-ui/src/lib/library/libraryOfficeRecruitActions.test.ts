@@ -171,7 +171,18 @@ async function handleAction(
         forceNew,
         workspaceThreadId: workspaceOverride?.threadId,
       });
-      return forceNew ? "replacement-thread" : "office-thread";
+      const threadId = forceNew ? "replacement-thread" : "office-thread";
+      return {
+        config: officeConfig({
+          ...(workspaceOverride ?? workspace()),
+          threadId,
+          recordRevision: forceNew
+            ? "revision-replacement"
+            : "revision-current",
+        }),
+        filePath: `/offices/${threadId}.json`,
+        threadId,
+      };
     },
     isConnected: options.isConnected ?? true,
     isDemo: options.isDemo ?? false,
@@ -231,14 +242,18 @@ describe("library office recruit actions", () => {
     expect(state.startedTurns).toEqual([]);
   });
 
-  it("updates demo office panels locally", async () => {
+  it("does not invent members when the backend is unavailable", async () => {
     const { handled, state } = await handleAction(
       { id: "recruit-agent", label: "Recruit" },
       { isConnected: false, isDemo: true },
     );
 
     expect(handled).toBe(true);
-    expect(state.libraryPanel?.workspace?.members).toHaveLength(1);
+    expect(state.libraryPanel).toEqual(panel());
+    expect(state.notice).toEqual({
+      text: "Connect to the App Server to recruit a real agent; the Office will not create demo members.",
+      tone: "warning",
+    });
     expect(state.startedTurns).toEqual([]);
   });
 

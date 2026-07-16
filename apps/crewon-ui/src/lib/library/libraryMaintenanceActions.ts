@@ -22,11 +22,13 @@ export type LibraryMaintenanceActionParams = {
     cwd: string,
     serverName: string,
   ) => Promise<string | null>;
+  domainConfigCwd?: string;
   fallbackLibraryKind: LibraryKind;
   locale: Locale;
   openLibrary: (kind: LibraryKind) => Promise<void>;
   reloadMcpServers: () => Promise<void>;
   resolveBackendCwd: () => Promise<string | null>;
+  onDomainConfigDeleted?: () => void | Promise<void>;
   setNotice: (notice: NoticeState | null) => void;
 };
 
@@ -35,11 +37,13 @@ export async function handleLibraryMaintenanceAction({
   deleteDomainConfigFile,
   deleteMcpServerConfig,
   deleteMcpToolConfigRecord,
+  domainConfigCwd,
   fallbackLibraryKind,
   locale,
   openLibrary,
   reloadMcpServers,
   resolveBackendCwd,
+  onDomainConfigDeleted,
   setNotice,
 }: LibraryMaintenanceActionParams): Promise<boolean> {
   if (action.id === "reload-tools") {
@@ -57,7 +61,7 @@ export async function handleLibraryMaintenanceAction({
     if (!action.pathToOpen) {
       return true;
     }
-    const configCwd = await resolveBackendCwd();
+    const configCwd = domainConfigCwd?.trim() || (await resolveBackendCwd());
     if (!configCwd) {
       throwNotConnected(locale);
     }
@@ -67,7 +71,11 @@ export async function handleLibraryMaintenanceAction({
       action.domainConfigKind,
     );
     setNotice(domainConfigDeletedNoticeState(action.pathToOpen, locale));
-    await openLibrary(fallbackLibraryKind);
+    if (onDomainConfigDeleted) {
+      await onDomainConfigDeleted();
+    } else {
+      await openLibrary(fallbackLibraryKind);
+    }
     return true;
   }
 

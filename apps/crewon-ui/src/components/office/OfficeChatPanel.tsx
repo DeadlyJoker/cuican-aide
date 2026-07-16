@@ -1,7 +1,67 @@
 import type { ReactNode, RefObject } from "react";
 
-import type { OfficeWorkspace } from "../../lib/domain/crewonDomain";
+import type {
+  OfficeMessage,
+  OfficeWorkspace,
+} from "../../lib/domain/crewonDomain";
+import type {
+  OfficeMessageSubmitMention,
+  PendingOfficeMessageDelivery,
+} from "../../lib/domain/officeMessageDelivery";
+import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
+import type { OfficeComposerRuntimeMode } from "../../lib/office/officeComposerRuntime";
+import { OfficeComposer } from "./OfficeComposer";
+
+export function isLegacyOfficeRuntimePrompt(message: OfficeMessage): boolean {
+  if (
+    message.kind ||
+    message.clientOnly ||
+    message.clientUserMessageId ||
+    message.text.length < 1_000
+  ) {
+    return false;
+  }
+  const author = message.author.trim().toLocaleLowerCase();
+  return (
+    (author === "you" || author === "你") &&
+    message.text.includes("runtimeThreadId=") &&
+    message.text.includes("contextPolicy=") &&
+    message.text.includes("memoryScope=") &&
+    message.text.includes("officeUpdate")
+  );
+}
+
+function isRoutineOfficeRunStatus(message: OfficeMessage): boolean {
+  if (message.kind !== "system") {
+    return false;
+  }
+  const text = message.text.trimStart();
+  if (
+    text.startsWith("已启动团队执行：") ||
+    text.startsWith("Started team run:")
+  ) {
+    return true;
+  }
+  if (message.event !== "runSync") {
+    return false;
+  }
+  return (
+    message.accent === "green" ||
+    text.startsWith("团队执行已完成：") ||
+    text.startsWith("Team run completed:")
+  );
+}
+
+export function visibleOfficeMessages(
+  messages: OfficeMessage[],
+): OfficeMessage[] {
+  return messages.filter(
+    (message) =>
+      !isLegacyOfficeRuntimePrompt(message) &&
+      !isRoutineOfficeRunStatus(message),
+  );
+}
 
 function renderOfficeMessageText(
   text: string,
@@ -47,34 +107,48 @@ export function OfficeChatPanel({
   draft,
   streamRef,
   isSubmitting,
+  isStopping,
   onDraftChange,
+  onAttachContext,
+  onStop,
   onSubmit,
+  pendingDelivery,
+  runtimeMode,
+  slashCommands,
 }: {
   workspace: OfficeWorkspace;
   locale: Locale;
   draft: string;
   streamRef: RefObject<HTMLDivElement | null>;
   isSubmitting?: boolean;
+  isStopping?: boolean;
   onDraftChange: (draft: string) => void;
-  onSubmit: () => void;
+  onAttachContext?: (onSelectPath: (path: string) => void) => void;
+  onStop?: () => void | Promise<void>;
+  onSubmit: (
+    draft: string,
+    mentions: OfficeMessageSubmitMention[],
+  ) => void | Promise<void>;
+  pendingDelivery: PendingOfficeMessageDelivery | null;
+  runtimeMode: OfficeComposerRuntimeMode;
+  slashCommands?: ComposerSlashCommand[];
 }) {
   const memberNames = workspace.members.map((member) => member.name);
+  const visibleMessages = visibleOfficeMessages(workspace.messages);
 
   return (
     <section
       className="office-chat"
       aria-label={locale === "zh" ? "群聊" : "Group chat"}
     >
-      <div className="office-chat-head">
-        <strong>{locale === "zh" ? "群聊协作" : "Group chat"}</strong>
-        <span>
-          {locale === "zh"
-            ? `${workspace.messages.length} 条消息`
-            : `${workspace.messages.length} messages`}
-        </span>
-      </div>
-      <div className="office-chat-stream" ref={streamRef}>
-        {workspace.messages.map((message, index) =>
+      <div
+        aria-live="polite"
+        aria-relevant="additions text"
+        className="office-chat-stream"
+        ref={streamRef}
+        role="log"
+      >
+        {visibleMessages.map((message, index) =>
           message.kind === "system" ? (
             <div className="office-system" key={index}>
               {message.text}
@@ -91,7 +165,11 @@ export function OfficeChatPanel({
                 data-accent={message.accent}
                 aria-hidden="true"
               >
-                {message.glyph}
+                {message.glyph === "@"
+                  ? locale === "zh"
+                    ? "你"
+                    : "You"
+                  : message.glyph}
               </span>
               <div className="office-bubble-body">
                 <div className="office-bubble-head">
@@ -104,46 +182,20 @@ export function OfficeChatPanel({
           ),
         )}
       </div>
-      <form
-        className="office-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-      >
-        <textarea
-          value={draft}
-          rows={2}
-          disabled={isSubmitting}
-          spellCheck={false}
-          placeholder={
-            locale === "zh"
-              ? "告诉主控智能体目标、背景或下一步…"
-              : "Tell the manager agent the goal, context, or next step…"
-          }
-          aria-label={locale === "zh" ? "群聊输入" : "Group chat input"}
-          onChange={(event) => onDraftChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              onSubmit();
-            }
-          }}
-        />
-        <button
-          type="button"
-          disabled={isSubmitting || !draft.trim()}
-          onClick={onSubmit}
-        >
-          {isSubmitting
-            ? locale === "zh"
-              ? "发送中"
-              : "Sending"
-            : locale === "zh"
-              ? "发送"
-              : "Send"}
-        </button>
-      </form>
+      <OfficeComposer
+        draft={draft}
+        isSubmitting={Boolean(isSubmitting)}
+        isStopping={Boolean(isStopping)}
+        locale={locale}
+        members={workspace.members}
+        onAttachContext={onAttachContext}
+        onDraftChange={onDraftChange}
+        onStop={onStop}
+        onSubmit={onSubmit}
+        pendingDelivery={pendingDelivery}
+        runtimeMode={runtimeMode}
+        slashCommands={slashCommands}
+      />
     </section>
   );
 }

@@ -6,6 +6,7 @@ import type {
   OfficeWorkspace,
 } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
+import type { OfficeThreadResolution } from "./officeThreadActions";
 import {
   officeApprovalDecisionNotice,
   officeApprovalFailureNotice,
@@ -34,7 +35,7 @@ export type OfficeApprovalDecisionActionParams = {
   ensureOfficeThread: (
     panel: LibraryPanel,
     workspace: OfficeWorkspace,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   id: string;
   isConnected: boolean;
   locale: Locale;
@@ -91,14 +92,14 @@ export async function handleOfficeApprovalDecisionAction({
   );
 
   try {
-    const threadId = await ensureOfficeThread(panel, baseWorkspace);
-    if (!threadId) {
+    const thread = await ensureOfficeThread(panel, baseWorkspace);
+    if (!thread) {
       return true;
     }
     const savedConfig = await decideOfficeApproval(
       panel,
-      baseWorkspace,
-      threadId,
+      thread.config.workspace,
+      thread.threadId,
       id,
       decision,
       systemMessage,
@@ -109,7 +110,7 @@ export async function handleOfficeApprovalDecisionAction({
     setLibraryPanel((currentPanel) =>
       officeApprovalSavedPanel(currentPanel, {
         config: savedConfig,
-        threadId,
+        threadId: thread.threadId,
       }),
     );
   } catch (error) {

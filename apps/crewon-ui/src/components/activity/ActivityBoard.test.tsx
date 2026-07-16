@@ -225,6 +225,37 @@ describe("ActivityBoard", () => {
     expect(markup).not.toContain("Usage &amp; budget");
   });
 
+  it("keeps conversation-only manager replies out of the task run board", () => {
+    const markup = renderToStaticMarkup(
+      <ActivityBoard
+        data={{
+          approvals: [],
+          artifacts: [],
+          runs: [
+            {
+              id: "office-conversation-1",
+              messageIntent: "conversation",
+              status: "completed",
+              title: "现在进度怎么样？",
+            },
+            {
+              id: "office-task-1",
+              messageIntent: "task",
+              status: "running",
+              title: "补齐发布测试",
+            },
+          ],
+        }}
+        locale="zh"
+        onArtifact={vi.fn()}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    expect(markup).not.toContain("现在进度怎么样？");
+    expect(markup).toContain("补齐发布测试");
+  });
+
   it("renders artifact provenance without opening member transcripts", () => {
     const markup = renderToStaticMarkup(
       <ActivityBoard

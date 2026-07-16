@@ -173,7 +173,10 @@ async fn thread_delete_with_non_local_thread_store_does_not_create_local_persist
 
     let calls = thread_store.calls().await;
     assert_eq!(calls.create_thread, 2);
-    assert_eq!(calls.list_threads, 1);
+    // One list comes from the startup personality migration probe and one from
+    // the explicit thread/list request above. Both must stay on the configured
+    // non-local store.
+    assert_eq!(calls.list_threads, 2);
     assert_eq!(calls.delete_thread, 2);
     assert!(
         calls.append_items > 0,

@@ -1,5 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
+import { isAssistantThread } from "./assistantThread";
+
 import { userMessageText } from "./threadModel";
 
 const DOMAIN_THREAD_SOURCES = new Set([
@@ -7,7 +9,9 @@ const DOMAIN_THREAD_SOURCES = new Set([
   "automation",
   "office",
   "office_automation_runtime",
+  "office_manager_runtime_v1",
   "office_member_runtime",
+  "office_member_runtime_repair_v2",
   "tool",
 ]);
 
@@ -46,7 +50,11 @@ function hasOfficeThreadMarker(thread: Thread): boolean {
 }
 
 export function isSingleConversationThread(thread: Thread): boolean {
-  if (isDomainThread(thread) || hasOfficeThreadMarker(thread)) {
+  if (
+    isAssistantThread(thread) ||
+    isDomainThread(thread) ||
+    hasOfficeThreadMarker(thread)
+  ) {
     return false;
   }
 

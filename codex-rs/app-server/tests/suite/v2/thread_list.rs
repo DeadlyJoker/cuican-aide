@@ -21,6 +21,7 @@ use crewon_app_server_protocol::ThreadListCwdFilter;
 use crewon_app_server_protocol::ThreadListResponse;
 use crewon_app_server_protocol::ThreadSearchResponse;
 use crewon_app_server_protocol::ThreadSortKey;
+use crewon_app_server_protocol::ThreadSource as ApiThreadSource;
 use crewon_app_server_protocol::ThreadSourceKind;
 use crewon_app_server_protocol::ThreadStartParams;
 use crewon_app_server_protocol::ThreadStartResponse;
@@ -36,6 +37,7 @@ use crewon_protocol::protocol::RolloutItem;
 use crewon_protocol::protocol::RolloutLine;
 use crewon_protocol::protocol::SessionSource as CoreSessionSource;
 use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::ThreadSource as CoreThreadSource;
 use pretty_assertions::assert_eq;
 use std::cmp::Reverse;
 use std::fs;
@@ -884,6 +886,7 @@ sqlite = true
         .await?
         .expect("thread should be repaired into sqlite");
     metadata.cwd = stale_cwd.clone();
+    metadata.thread_source = Some(CoreThreadSource::Feature("assistant".to_string()));
     state_db.upsert_thread(&metadata).await?;
 
     let request_id = mcp
@@ -914,6 +917,10 @@ sqlite = true
         .map(|thread| thread.id.as_str())
         .collect();
     assert_eq!(ids, vec![thread_id.as_str()]);
+    assert_eq!(
+        state_db_only_response.data[0].thread_source,
+        Some(ApiThreadSource::Feature("assistant".to_string()))
+    );
 
     let request_id = mcp
         .send_thread_list_request(crewon_app_server_protocol::ThreadListParams {

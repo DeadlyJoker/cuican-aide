@@ -1,5 +1,178 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`command workspace conversation style > snapshots the assistant and home conversation alignment contract 1`] = `
+"/* Assistant uses the same real thread transcript and composer as the home chat. */
+.shell-page-view.assistant-only-view {
+  background: oklch(99% 0.002 235);
+}
+.assistant-single-conversation {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: min(1180px, calc(100% - 88px));
+  height: calc(100% - 38px);
+  min-height: 0;
+  margin: 19px auto;
+  padding: 0;
+  gap: 12px;
+}
+.assistant-conversation-actions {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  width: min(780px, 100%);
+  justify-content: flex-end;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+.assistant-clear-conversation {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 0.76);
+  color: oklch(48% 0.018 235);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 620;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.assistant-clear-conversation svg {
+  width: 14px;
+  height: 14px;
+}
+.assistant-clear-conversation:hover:not(:disabled),
+.assistant-clear-conversation:focus-visible:not(:disabled) {
+  border-color: oklch(88% 0.018 25);
+  background: oklch(97% 0.012 25);
+  color: oklch(48% 0.12 25);
+  outline: 0;
+}
+.assistant-clear-conversation:focus-visible {
+  box-shadow: 0 0 0 3px oklch(72% 0.08 25 / 0.16);
+}
+.assistant-clear-conversation:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+.assistant-empty-state {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  width: min(620px, 100%);
+  margin: 0 auto;
+  color: oklch(49% 0.014 235);
+  text-align: center;
+  gap: 10px;
+}
+.assistant-empty-state > span {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid oklch(88% 0.012 235);
+  border-radius: 16px;
+  background: oklch(100% 0 0);
+  color: oklch(40% 0.06 225);
+  box-shadow: 0 12px 30px rgb(18 26 38 / 0.05);
+}
+.assistant-empty-state svg {
+  width: 22px;
+  height: 22px;
+}
+.assistant-empty-state strong {
+  color: oklch(24% 0.018 235);
+  font-size: 17px;
+  font-weight: 720;
+}
+.assistant-empty-state p {
+  max-width: 520px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.assistant-single-conversation .command-thread-room {
+  min-height: 0;
+}
+.assistant-thread-room .message[data-kind="userMessage"] {
+  display: grid;
+  justify-content: stretch;
+}
+.assistant-thread-room .message[data-kind="userMessage"] .message-body {
+  width: fit-content;
+  max-width: min(620px, 82%);
+  justify-self: end;
+}
+.assistant-thread-room
+  .message:is([data-kind="userMessage"], [data-kind="agentMessage"])
+  .markdown-content {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.assistant-composer-zone {
+  display: grid;
+  justify-self: center;
+  width: min(780px, 100%);
+  gap: 0;
+}
+.assistant-home-composer {
+  width: 100%;
+  margin: 0;
+  border-color: oklch(88.5% 0.01 235);
+  border-radius: 20px;
+  background: oklch(100% 0 0);
+  box-shadow: 0 14px 34px rgb(18 26 38 / 0.06);
+}
+.assistant-home-composer textarea {
+  height: 84px;
+  min-height: 84px;
+  max-height: 160px;
+  padding: 18px 16px 8px;
+  font-size: 15px;
+}
+.assistant-home-composer .input-tools {
+  min-height: 56px;
+  height: auto;
+  padding: 0 12px 0 16px;
+}
+.assistant-home-composer .composer-state-row {
+  min-height: 34px;
+  padding: 7px 12px;
+}
+@media (max-width: 860px) {
+  .assistant-single-conversation {
+    width: calc(100% - 28px);
+    height: calc(100% - 28px);
+    min-height: 0;
+    margin: 14px auto;
+    padding: 0;
+  }
+  .assistant-home-composer .input-tools {
+    padding: 8px 10px;
+  }
+}
+@media (max-width: 560px) {
+  .assistant-clear-conversation {
+    width: 30px;
+    justify-content: center;
+    padding: 0;
+  }
+  .assistant-clear-conversation span {
+    display: none;
+  }
+}"
+`;
+
 exports[`command workspace conversation style > snapshots the compact Codex-inspired transcript contract 1`] = `
 "/* Keep active conversations close to Codex's quiet transcript hierarchy. */
 .screen-shell.command-screen .command-thread-room .message-list {
@@ -21,6 +194,11 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .screen-shell.command-screen .command-thread-room .message {
   grid-template-columns: minmax(0, 1fr);
   column-gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .screen-shell.command-screen .command-thread-room .message::before {
@@ -72,10 +250,10 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .command-thread-room
   .message[data-kind="userMessage"]
   .markdown-content {
-  padding: 9px 13px;
+  padding: 0;
   border: 0;
-  border-radius: 16px;
-  background: oklch(96% 0.006 235);
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
   color: oklch(24% 0.014 235);
   font-size: 14.5px;
@@ -115,4 +293,26 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
     line-height: 1.66;
   }
 }"
+`;
+
+exports[`command workspace conversation style > snapshots the markdown table sizing contract 1`] = `
+{
+  "baseContract": ".markdown-content table {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow: auto;
+  border-spacing: 0;
+  border-collapse: separate;
+  color: inherit;
+  font-size: 12px;
+}",
+  "commandContract": ".message[data-kind="agentMessage"]
+  .markdown-content
+  table {
+  overflow: auto;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px oklch(90% 0.008 235);
+}",
+}
 `;

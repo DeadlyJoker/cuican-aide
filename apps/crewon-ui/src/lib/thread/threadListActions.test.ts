@@ -5,6 +5,7 @@ import type { AppView } from "../shared/appView";
 import type { NoticeState } from "../shared/noticeState";
 import {
   archiveThreadAction,
+  clearAssistantThreadAction,
   deleteArchivedThreadAction,
   renameThreadAction,
   selectThreadAction,
@@ -329,6 +330,79 @@ describe("thread list actions", () => {
 
     expect(deleted).toBe(false);
     expect(state.threads).toEqual([thread()]);
+  });
+
+  it("clears a confirmed assistant thread through the backend", async () => {
+    const assistant = thread({
+      id: "assistant-thread",
+      threadSource: "assistant",
+    });
+    const remaining = thread({ id: "thread-2" });
+    const state = threadState([assistant, remaining]);
+    const deleted: string[] = [];
+    const confirmations: string[] = [];
+
+    await clearAssistantThreadAction({
+      client: {
+        async deleteThread(threadId) {
+          deleted.push(threadId);
+        },
+        async listThreads(showArchived) {
+          expect(showArchived).toBe(false);
+          return [remaining];
+        },
+      },
+      confirm: (message) => {
+        confirmations.push(message);
+        return true;
+      },
+      isConnected: true,
+      locale: "zh",
+      setNotice: state.setNotice,
+      setSelectedThreadId: state.setSelectedThreadId,
+      setThreads: state.setThreads,
+      thread: assistant,
+    });
+
+    expect(confirmations).toEqual([
+      "清理助理会话？当前消息和上下文将被永久删除，且无法恢复。",
+    ]);
+    expect(deleted).toEqual(["assistant-thread"]);
+    expect(state.threads).toEqual([remaining]);
+    expect(state.notice).toEqual({
+      text: "助理会话已清理",
+      tone: "success",
+    });
+  });
+
+  it("does not fake a local assistant clear while disconnected", async () => {
+    const assistant = thread({
+      id: "assistant-thread",
+      threadSource: "assistant",
+    });
+    const state = threadState([assistant]);
+    let confirmed = false;
+
+    await clearAssistantThreadAction({
+      client: null,
+      confirm: () => {
+        confirmed = true;
+        return true;
+      },
+      isConnected: false,
+      locale: "zh",
+      setNotice: state.setNotice,
+      setSelectedThreadId: state.setSelectedThreadId,
+      setThreads: state.setThreads,
+      thread: assistant,
+    });
+
+    expect(confirmed).toBe(false);
+    expect(state.threads).toEqual([assistant]);
+    expect(state.notice).toEqual({
+      text: "连接 App Server 后才能清理助理会话",
+      tone: "warning",
+    });
   });
 
   it("renames a connected thread", async () => {

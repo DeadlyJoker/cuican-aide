@@ -1,19 +1,18 @@
 import {
-  ArrowLeft,
-  ArrowUp,
   BookOpen,
   Bot,
   Layers3,
-  Mic,
   Search,
-  Settings2,
   Wrench,
   X,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
-import { officeRooms, workflowRooms } from "./commandWorkspaceData";
-import { classNames, connectionLabel } from "./commandWorkspaceUtils";
+import {
+  CommandOfficeRoom,
+  type CommandOfficeRoomProps,
+} from "./CommandOfficeRoom";
+import { classNames } from "./commandWorkspaceUtils";
 import { CatalogResourceDialog } from "../catalog/CatalogResourceDialog";
 import {
   downloadCatalogResource,
@@ -25,7 +24,6 @@ import type {
   AgentPlatformResourceStates,
   AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
-import type { ConnectionState } from "../../lib/shared/connectionState";
 
 type FilterOption = {
   label: string;
@@ -440,179 +438,6 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
     };
   });
   return [...employees, ...skills, ...services];
-}
-
-export function AssistView({
-  active,
-  composerValue,
-  connectionState,
-  onChangeComposerValue,
-  onSend,
-}: {
-  active: boolean;
-  composerValue: string;
-  connectionState: ConnectionState;
-  onChangeComposerValue: (value: string) => void;
-  onSend: () => void;
-}) {
-  return (
-    <section
-      className={classNames(
-        "shell-view shell-page-view assistant-only-view",
-        active && "active",
-      )}
-      data-od-id="shell-view-assist"
-      data-shell-view="assist"
-      hidden={!active}
-    >
-      <div className="assistant-canvas" data-od-id="assistant-canvas">
-        <div className="assistant-top-status" data-od-id="assistant-top-status">
-          <span>已连接：</span>
-          <strong>
-            <span aria-hidden="true" />
-            <span>Crewon 助理</span>
-          </strong>
-          <span className="visually-hidden">
-            {connectionLabel(connectionState)}
-          </span>
-          <button
-            className="icon-action compact"
-            type="button"
-            aria-label="连接设置"
-          >
-            <Settings2 aria-hidden="true" />
-          </button>
-        </div>
-
-        <div
-          className="assistant-log-canvas"
-          id="assist-log"
-          aria-live="polite"
-          data-od-id="assistant-log-canvas"
-        />
-
-        <div className="assistant-bottom-zone">
-          <section
-            className="command-input assistant-home-composer"
-            data-od-id="assistant-composer"
-          >
-            <label className="visually-hidden" htmlFor="assist-input">
-              助理输入
-            </label>
-            <textarea
-              id="assist-input"
-              aria-describedby="assist-composer-status"
-              data-composer=""
-              data-od-id="assistant-composer-input"
-              placeholder="把这个需求拆成 Workflow 节点、角色分工和 Stage Gate。 @ 引用上下文，/ 搜索 Skill 和 MCP。"
-              value={composerValue}
-              onChange={(event) => onChangeComposerValue(event.target.value)}
-            />
-            <button
-              className="shortcut-proxy"
-              type="button"
-              data-context-open=""
-              hidden
-              aria-hidden="true"
-              tabIndex={-1}
-            />
-            <button
-              className="shortcut-proxy"
-              type="button"
-              data-slash-open=""
-              hidden
-              aria-hidden="true"
-              tabIndex={-1}
-            />
-            <div className="input-tools" data-od-id="assistant-composer-tools">
-              <div
-                className="composer-controls"
-                data-od-id="assistant-composer-control-row"
-              >
-                <div
-                  className="control-select mode-dropdown"
-                  aria-label="任务类型"
-                >
-                  <select
-                    data-task-mode=""
-                    aria-label="任务类型"
-                    defaultValue="plan"
-                  >
-                    <option value="plan">计划</option>
-                    <option value="goal">目标</option>
-                    <option value="agent">智能体</option>
-                  </select>
-                </div>
-                <div
-                  className="control-select model-dropdown"
-                  aria-label="模型选择"
-                >
-                  <select
-                    data-model-select=""
-                    aria-label="模型选择"
-                    defaultValue="gpt-5.6-sol"
-                  >
-                    <option value="gpt-5.6-sol">gpt-5.6-sol</option>
-                    <option value="gpt-5.6">gpt-5.6</option>
-                    <option value="gpt-5.5">gpt-5.5</option>
-                    <option value="gpt-5-codex">gpt-5-codex</option>
-                  </select>
-                </div>
-                <div
-                  className="control-select permission-dropdown"
-                  aria-label="权限选择"
-                >
-                  <select
-                    data-permission-select=""
-                    aria-label="权限选择"
-                    defaultValue="approve-for-me"
-                  >
-                    <option value="approve-for-me">替我审批</option>
-                    <option value="request-approval">请求批准</option>
-                    <option value="full-access">完全访问</option>
-                  </select>
-                </div>
-              </div>
-              <div className="composer-actions">
-                <button
-                  className="icon-action prompt-action"
-                  type="button"
-                  aria-label="优化提示词"
-                >
-                  Aa
-                </button>
-                <button
-                  className="icon-action"
-                  type="button"
-                  aria-label="语音输入"
-                >
-                  <Mic aria-hidden="true" />
-                </button>
-                <button
-                  className="send-button"
-                  type="button"
-                  aria-label="发送"
-                  onClick={onSend}
-                >
-                  <ArrowUp aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-            <div className="composer-state-row assistant-state-row">
-              <span
-                id="assist-composer-status"
-                className="composer-state"
-                role="status"
-                aria-live="polite"
-              >
-                内容由 AI 生成，请核实重要信息
-              </span>
-            </div>
-          </section>
-        </div>
-      </div>
-    </section>
-  );
 }
 
 const projectCatalog: CatalogItem[] = [
@@ -1528,46 +1353,93 @@ export function ScheduleView({
   );
 }
 
+function TeamCapabilityUnavailable({
+  boundary,
+  description,
+  title,
+  workspaceCwd,
+}: {
+  boundary: string;
+  description: string;
+  title: string;
+  workspaceCwd: string;
+}) {
+  return (
+    <section
+      className="team-office-empty team-capability-unavailable"
+      data-team-capability-state="backend-unavailable"
+    >
+      <header className="team-office-empty-head">
+        <span className="team-office-empty-kicker">REAL RUNTIME REQUIRED</span>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </header>
+      <div className="team-office-capability-grid" aria-label="接入要求">
+        <article className="team-office-capability">
+          <div>
+            <strong>真实定义</strong>
+            <p>只展示服务端返回的配置、成员和授权资源。</p>
+          </div>
+        </article>
+        <article className="team-office-capability">
+          <div>
+            <strong>真实运行态</strong>
+            <p>创建、执行、恢复和状态更新全部经过 App Server。</p>
+          </div>
+        </article>
+        <article className="team-office-capability">
+          <div>
+            <strong>{boundary}</strong>
+            <p title={workspaceCwd}>{workspaceCwd || "使用默认执行环境"}</p>
+          </div>
+        </article>
+      </div>
+      <footer className="team-office-empty-footer">
+        <span
+          className="team-office-connection-state"
+          data-state="unavailable"
+          role="status"
+        >
+          未展示演示数据，创建入口已安全关闭
+        </span>
+      </footer>
+    </section>
+  );
+}
+
 export function TeamView({
   active,
-  activeOfficeRoom,
-  activeWorkflowRoom,
+  officeRuntime,
   officeRoomId,
-  officeTab,
+  singleChatWorkspaceCwd,
   teamMode,
-  workflowRoomId,
-  workflowTab,
-  onBackOffice,
-  onBackWorkflow,
-  onOfficeTabChange,
-  onOpenOffice,
-  onOpenWorkflow,
+  teamWorkspaceCwd,
+  teamWorkspaceOptions,
+  onCreateOffice,
+  onRefresh,
   onTeamModeChange,
-  onWorkflowTabChange,
+  onTeamWorkspaceChange,
 }: {
   active: boolean;
-  activeOfficeRoom: (typeof officeRooms)[number];
-  activeWorkflowRoom: (typeof workflowRooms)[number];
+  officeRuntime: Omit<CommandOfficeRoomProps, "isOpen"> | null;
   officeRoomId: string | null;
-  officeTab: string;
+  singleChatWorkspaceCwd: string;
   teamMode: TeamMode;
-  workflowRoomId: string | null;
-  workflowTab: string;
-  onBackOffice: () => void;
-  onBackWorkflow: () => void;
-  onOfficeTabChange: (tab: string) => void;
-  onOpenOffice: (roomId: string) => void;
-  onOpenWorkflow: (roomId: string) => void;
+  teamWorkspaceCwd: string;
+  teamWorkspaceOptions: Array<{ label: string; value: string }>;
+  onCreateOffice?: () => void;
+  onRefresh?: () => void;
   onTeamModeChange: (mode: TeamMode) => void;
-  onWorkflowTabChange: (tab: string) => void;
+  onTeamWorkspaceChange: (cwd: string) => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const officeStatus = officeRuntime?.status ?? "unavailable";
   return (
     <section
       className={classNames(
         "shell-view shell-page-view",
         active && "active",
         officeRoomId && "office-room-active",
-        workflowRoomId && "workflow-room-active",
       )}
       data-filter-scope=""
       data-od-id="shell-view-team"
@@ -1591,20 +1463,30 @@ export function TeamView({
             onChange={(value) => onTeamModeChange(value as TeamMode)}
           />
           <div className="catalog-header-actions">
-            <CatalogSearch
-              label="搜索团队"
-              placeholder="搜索办公室、协作流、专家团"
-              value=""
-              onChange={() => undefined}
-            />
-            <button className="button" type="button">
-              同步能力库
+            {teamMode === "office" ? (
+              <CatalogSearch
+                label="搜索办公室"
+                placeholder="搜索办公室、目标或成员"
+                value={searchQuery}
+                onChange={setSearchQuery}
+              />
+            ) : null}
+            <button
+              className="button"
+              type="button"
+              disabled={!onRefresh || officeStatus === "loading"}
+              hidden={teamMode !== "office"}
+              onClick={onRefresh}
+            >
+              {officeStatus === "loading" ? "同步中…" : "同步真实数据"}
             </button>
             <button
               className="button primary"
               type="button"
               data-team-action="office"
+              disabled={!onCreateOffice}
               hidden={teamMode !== "office"}
+              onClick={onCreateOffice}
             >
               创建办公室
             </button>
@@ -1612,7 +1494,9 @@ export function TeamView({
               className="button primary"
               type="button"
               data-team-action="workflow"
+              disabled
               hidden={teamMode !== "workflow"}
+              title="等待 Workflow 后端列表、创建与运行接口接入"
             >
               创建协作流
             </button>
@@ -1620,7 +1504,9 @@ export function TeamView({
               className="button primary"
               type="button"
               data-team-action="experts"
+              disabled
               hidden={teamMode !== "experts"}
+              title="等待专家团定义与单聊运行接口接入"
             >
               创建专家团
             </button>
@@ -1631,8 +1517,53 @@ export function TeamView({
           className="catalog-source-bar"
           data-od-id="team-filters-inline"
         >
-          <span className="catalog-context-note">
-            团队能力来自左侧智能体页 · 办公室可 @ 任意员工 · 专家团只和组长对话
+          {teamMode === "experts" ? (
+            <div className="team-workspace-scope is-single-chat">
+              <span className="team-workspace-scope-label">
+                专家团工作空间
+              </span>
+              <strong title={singleChatWorkspaceCwd}>
+                {singleChatWorkspaceCwd || "无工作空间"}
+              </strong>
+            </div>
+          ) : (
+            <label className="team-workspace-scope">
+              <span className="team-workspace-scope-label">
+                {teamMode === "office"
+                  ? "办公室工作空间"
+                  : "协作流工作空间"}
+              </span>
+              <span className="team-workspace-picker">
+                <select
+                  aria-label={
+                    teamMode === "office"
+                      ? "办公室群聊工作空间"
+                      : "协作流运行工作空间"
+                  }
+                  title={teamWorkspaceCwd}
+                  value={teamWorkspaceCwd}
+                  onChange={(event) =>
+                    onTeamWorkspaceChange(event.target.value)
+                  }
+                >
+                  {teamWorkspaceOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="team-workspace-path" title={teamWorkspaceCwd}>
+                  {teamWorkspaceCwd || "未选择工作空间"}
+                </span>
+              </span>
+            </label>
+          )}
+          <span className="catalog-context-note team-workspace-note">
+            {teamMode === "office"
+              ? "群聊空间 · 可 @ 任意员工 · 不影响主页单聊"
+              : teamMode === "workflow"
+                ? "群聊协作 · 工作空间归属本次运行"
+                : "单聊模式 · 只与团长对话"}
           </span>
         </section>
 
@@ -1646,114 +1577,37 @@ export function TeamView({
           data-od-id="team-office-shell"
           hidden={teamMode !== "office" && !officeRoomId}
         >
-          <div
-            className="office-card-grid"
-            data-office-list=""
-            aria-label="办公室卡片"
-            hidden={Boolean(officeRoomId)}
-          >
-            {officeRooms.map((room) => (
-              <button
-                className={classNames(
-                  "office-card office-card-button",
-                  officeRoomId === room.id && "is-active",
-                )}
-                data-office-open=""
-                key={room.id}
-                type="button"
-                onClick={() => onOpenOffice(room.id)}
-              >
-                <span className="office-card-head">
-                  <strong>{room.title}</strong>
-                  <em className={classNames("status", room.statusTone)}>
-                    {room.status}
-                  </em>
-                </span>
-                <span className="office-card-copy">{room.subtitle}</span>
-                <span className="office-card-foot">
-                  <em>{room.current}</em>
-                  <b>进入群聊</b>
-                </span>
-              </button>
-            ))}
-          </div>
-          <RoomInline
-            active={Boolean(officeRoomId)}
-            messages={activeOfficeRoom.messages}
-            subtitle={activeOfficeRoom.subtitle}
-            tab={officeTab}
-            title={activeOfficeRoom.title}
-            type="office"
-            onBack={onBackOffice}
-            onTabChange={onOfficeTabChange}
-          />
+          {officeRuntime ? (
+            <CommandOfficeRoom
+              {...officeRuntime}
+              isOpen={Boolean(officeRoomId)}
+              query={searchQuery}
+            />
+          ) : (
+            <CommandOfficeRoom
+              isOpen={false}
+              query={searchQuery}
+              records={[]}
+              room={null}
+              selectedRecordKey={null}
+              status="unavailable"
+              onOpen={() => undefined}
+            />
+          )}
         </section>
 
         <section
-          className={classNames(
-            "team-workflow-shell",
-            workflowRoomId && "is-room-open",
-          )}
+          className="team-workflow-shell"
           data-card-filter="workflow"
           data-od-id="team-workflow-shell"
           data-workflow-shell=""
-          hidden={teamMode !== "workflow" && !workflowRoomId}
+          hidden={teamMode !== "workflow"}
         >
-          <div
-            className="workflow-list"
-            data-workflow-list=""
-            aria-label="协作流列表"
-            hidden={Boolean(workflowRoomId)}
-          >
-            {workflowRooms.map((room) => (
-              <button
-                className={classNames(
-                  "workflow-list-item",
-                  workflowRoomId === room.id && "is-active",
-                )}
-                data-workflow-open=""
-                key={room.id}
-                type="button"
-                onClick={() => onOpenWorkflow(room.id)}
-              >
-                <span className="workflow-list-main">
-                  <strong>{room.title}</strong>
-                  <em className={classNames("status", room.statusTone)}>
-                    {room.status}
-                  </em>
-                </span>
-                <span className="workflow-list-meta">
-                  <span className="workflow-list-copy">{room.stage}</span>
-                  <span
-                    className="workflow-member-strip"
-                    aria-label="协作流成员"
-                  >
-                    {room.members.map((member) => (
-                      <small key={member}>{member}</small>
-                    ))}
-                    <em>{room.members.length} 成员</em>
-                  </span>
-                </span>
-                <span className="workflow-list-foot">
-                  <span className="workflow-list-progress" aria-hidden="true">
-                    {room.progress.map((state, index) => (
-                      <i className={state} key={`${room.id}-${index}`} />
-                    ))}
-                  </span>
-                  <b>进入群聊</b>
-                </span>
-              </button>
-            ))}
-          </div>
-          <RoomInline
-            active={Boolean(workflowRoomId)}
-            messages={activeWorkflowRoom.messages}
-            subtitle={activeWorkflowRoom.stage}
-            tab={workflowTab}
-            title={activeWorkflowRoom.title}
-            type="workflow"
-            onBack={onBackWorkflow}
-            onTabChange={onWorkflowTabChange}
+          <TeamCapabilityUnavailable
+            boundary="协作流运行工作空间"
+            description="当前 App Server 尚未提供协作流的列表、创建和运行接口。前端不会再用静态节点、假进度或本地消息模拟成功。"
+            title="协作流真实运行态尚未接入"
+            workspaceCwd={teamWorkspaceCwd}
           />
         </section>
 
@@ -1763,382 +1617,16 @@ export function TeamView({
           data-od-id="team-experts-shell"
           hidden={teamMode !== "experts"}
         >
-          <div className="expert-team-grid" aria-label="专家团卡片">
-            {[
-              [
-                "主页可选",
-                "产品交付专家团",
-                "用户只和组长智能体多轮澄清；员工在后台协作，不展示办公室群聊。",
-                "设为主页可选",
-              ],
-              [
-                "后台执行",
-                "代码审查专家团",
-                "组长接收需求，后台调度 Code Review Skill、Filesystem MCP 和 GitHub MCP。",
-                "后台执行",
-              ],
-              [
-                "草稿",
-                "会议准备专家团",
-                "组长负责澄清会议目标，后台员工整理议程、参会人上下文和材料清单。",
-                "继续配置",
-              ],
-            ].map(([label, title, detail, action]) => (
-              <article className="expert-team-card" key={title}>
-                <div className="catalog-card-head">
-                  <span>{label}</span>
-                  <strong>{title}</strong>
-                </div>
-                <p>{detail}</p>
-                <div className="expert-member-stack">
-                  <span>组长：产品审阅智能体</span>
-                  <span>员工：开发交付智能体</span>
-                  <span>服务：Filesystem / GitHub</span>
-                </div>
-                <button className="button compact" type="button">
-                  {action}
-                </button>
-              </article>
-            ))}
-          </div>
+          <TeamCapabilityUnavailable
+            boundary="专家团单聊工作空间"
+            description="专家团属于单聊执行目标，但当前还没有真实的专家团定义、团长会话和后台成员运行接口。前端不会生成罐头回复或虚构后台协作。"
+            title="专家团真实单聊运行态尚未接入"
+            workspaceCwd={singleChatWorkspaceCwd}
+          />
         </section>
 
         <div id="team-log" className="sr-log" aria-live="polite" />
       </div>
     </section>
-  );
-}
-
-function RoomInline({
-  active,
-  messages,
-  subtitle,
-  tab,
-  title,
-  type,
-  onBack,
-  onTabChange,
-}: {
-  active: boolean;
-  messages: string[];
-  subtitle: string;
-  tab: string;
-  title: string;
-  type: "office" | "workflow";
-  onBack: () => void;
-  onTabChange: (tab: string) => void;
-}) {
-  const tabNames = [
-    ["chat", type === "office" ? "群聊" : "对话"],
-    ["run", type === "office" ? "运行台" : "运行"],
-    ["memory", "记忆"],
-    ["members", "成员"],
-  ];
-  const isWorkflow = type === "workflow";
-  return (
-    <section
-      className={isWorkflow ? "workflow-room-inline" : "office-room-inline"}
-      data-od-id={
-        isWorkflow ? "team-workflow-room-inline" : "team-office-room-inline"
-      }
-      data-office-room={isWorkflow ? undefined : ""}
-      data-workflow-room={isWorkflow ? "" : undefined}
-      hidden={!active}
-      tabIndex={-1}
-    >
-      <header className={isWorkflow ? "workflow-room-top" : "office-room-top"}>
-        <button className="button compact" type="button" onClick={onBack}>
-          <ArrowLeft aria-hidden="true" />
-          返回
-        </button>
-        <div
-          className={
-            isWorkflow ? "workflow-room-title-block" : "office-room-title-block"
-          }
-        >
-          <span>{isWorkflow ? "协作流群聊" : "办公室群聊"}</span>
-          <h3>{title}</h3>
-          <p>{subtitle}</p>
-        </div>
-        <div
-          className={
-            isWorkflow ? "workflow-room-actions" : "office-room-actions"
-          }
-        >
-          <span className={classNames("status", isWorkflow && "warn")}>
-            {isWorkflow ? "按节点推进" : "执行中"}
-          </span>
-          <button
-            className="button compact"
-            type="button"
-            onClick={() => onTabChange("members")}
-          >
-            成员
-          </button>
-        </div>
-      </header>
-
-      {isWorkflow ? (
-        <main className="workflow-room-stage">
-          <section
-            className="workflow-execution-strip"
-            data-od-id="workflow-execution-strip"
-            aria-label="执行步节点流"
-          >
-            {[
-              ["01", "接收目标", "协作流组长智能体", "完成", "is-done"],
-              ["02", "界面风险审阅", "产品审阅智能体", "运行中", "is-running"],
-              ["03", "实现拆解", "开发交付智能体", "排队", ""],
-              ["04", "人工 Gate", "真实员工 · 设计负责人", "待确认", ""],
-            ].map(([step, stepTitle, owner, state, className]) => (
-              <article
-                className={classNames("workflow-step-node", className)}
-                key={step}
-              >
-                <span>{step}</span>
-                <div>
-                  <strong>{stepTitle}</strong>
-                  <p>{owner}</p>
-                </div>
-                <em
-                  className={classNames(
-                    "status",
-                    className === "is-done" && "success",
-                    className === "is-running" && "warn",
-                  )}
-                >
-                  {state}
-                </em>
-              </article>
-            ))}
-          </section>
-          <RoomPanels
-            isWorkflow
-            messages={messages}
-            tab={tab}
-            tabNames={tabNames}
-            onTabChange={onTabChange}
-          />
-        </main>
-      ) : (
-        <RoomPanels
-          isWorkflow={false}
-          messages={messages}
-          tab={tab}
-          tabNames={tabNames}
-          onTabChange={onTabChange}
-        />
-      )}
-    </section>
-  );
-}
-
-function RoomPanels({
-  isWorkflow,
-  messages,
-  tab,
-  tabNames,
-  onTabChange,
-}: {
-  isWorkflow: boolean;
-  messages: string[];
-  tab: string;
-  tabNames: string[][];
-  onTabChange: (tab: string) => void;
-}) {
-  const prefix = isWorkflow ? "workflow" : "office";
-  return (
-    <main className={isWorkflow ? "workflow-chat-panel" : "office-room-main"}>
-      <div className="office-room-tabs" data-tab-scope="">
-        {tabNames.map(([name, label]) => (
-          <button
-            aria-selected={tab === name}
-            className={classNames(tab === name && "active")}
-            data-tab-target={`#${prefix}-${name}-panel`}
-            key={name}
-            type="button"
-            onClick={() => onTabChange(name)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <section
-        className={
-          isWorkflow
-            ? "workflow-tab-panel office-chat-panel"
-            : "office-tab-panel office-chat-panel"
-        }
-        data-tab-panel=""
-        hidden={tab !== "chat"}
-        id={`${prefix}-chat-panel`}
-      >
-        <div
-          className={isWorkflow ? "workflow-room-thread" : "office-room-thread"}
-          role="log"
-          aria-label="团队群聊"
-        >
-          {messages.map((message, index) => (
-            <article
-              className={classNames(
-                "office-room-message",
-                index === 0 && "is-user",
-              )}
-              key={message}
-            >
-              <span className="team-avatar">
-                {index === 0 ? "你" : isWorkflow ? "流" : "组"}
-              </span>
-              <div>
-                <strong>
-                  {index === 0
-                    ? "你"
-                    : isWorkflow
-                      ? "协作流组长智能体"
-                      : "办公室组长智能体"}
-                </strong>
-                <p>{message}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-        <section
-          className={classNames(
-            "command-input",
-            isWorkflow ? "workflow-global-composer" : "office-global-composer",
-          )}
-        >
-          <textarea
-            data-composer=""
-            placeholder={
-              isWorkflow
-                ? "@ 指定阶段 Agent；/ 调用 Skill 或 MCP"
-                : "@ 指定员工；留空默认交给办公室组长"
-            }
-            defaultValue={
-              isWorkflow
-                ? "继续推进这个协作流..."
-                : "告诉组长目标、背景或下一步..."
-            }
-          />
-          <div className="input-tools">
-            <div className="composer-controls">
-              <div
-                className="control-select mode-dropdown"
-                aria-label="任务类型"
-              >
-                <select defaultValue="plan">
-                  <option value="plan">计划</option>
-                  <option value="goal">目标</option>
-                  <option value="agent">智能体</option>
-                </select>
-              </div>
-              <div
-                className="control-select permission-dropdown"
-                aria-label="权限选择"
-              >
-                <select defaultValue="request-approval">
-                  <option value="request-approval">请求批准</option>
-                  <option value="approve-for-me">替我审批</option>
-                  <option value="full-access">完全访问</option>
-                </select>
-              </div>
-            </div>
-            <div className="composer-actions">
-              <button
-                className="icon-action prompt-action"
-                type="button"
-                aria-label="优化提示词"
-              >
-                Aa
-              </button>
-              <button className="send-button" type="button" aria-label="发送">
-                <ArrowUp aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-          <div className="composer-state-row">
-            <span className="composer-state">
-              {isWorkflow ? "协作流 · 等待输入" : "办公室 · 等待输入"}
-            </span>
-          </div>
-        </section>
-      </section>
-
-      <section
-        className="office-tab-panel office-run-panel"
-        data-tab-panel=""
-        hidden={tab !== "run"}
-        id={`${prefix}-run-panel`}
-      >
-        <div className="office-kanban-board" aria-label="运行台看板">
-          {[
-            ["待接收", "补齐验收口径", "Human Gate"],
-            ["执行中", "PRD 风险清单", "产品审阅"],
-            ["Gate", "权限边界确认", "请求批准"],
-            ["完成", "界面验收口径", "已归档"],
-          ].map(([column, task, state]) => (
-            <section className="office-kanban-column" key={column}>
-              <header>
-                <strong>{column}</strong>
-                <span>1</span>
-              </header>
-              <article>
-                <b>{task}</b>
-                <p>状态同步到当前房间</p>
-                <em>{state}</em>
-              </article>
-            </section>
-          ))}
-        </div>
-      </section>
-
-      <section
-        className="office-tab-panel office-memory-panel"
-        data-tab-panel=""
-        hidden={tab !== "memory"}
-        id={`${prefix}-memory-panel`}
-      >
-        <div className="office-memory-list">
-          {[
-            "页面交付先保留蓝灰轻工作台语言",
-            "高风险输出必须进入人工确认 Gate",
-          ].map((memory) => (
-            <article className="office-memory-card" key={memory}>
-              <span>决策</span>
-              <strong>{memory}</strong>
-              <p>来源：团队页群聊 · 可见：组长、产品审阅、开发交付</p>
-              <button type="button">查看来源</button>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section
-        className="office-tab-panel office-memory-panel"
-        data-tab-panel=""
-        hidden={tab !== "members"}
-        id={`${prefix}-members-panel`}
-      >
-        <div className="office-memory-list">
-          {[
-            "办公室组长智能体",
-            "产品审阅智能体",
-            "开发交付智能体",
-            "真实员工 · 设计负责人",
-          ].map((member) => (
-            <article className="office-room-member" key={member}>
-              <span className="team-avatar">{member.slice(0, 1)}</span>
-              <div>
-                <strong>{member}</strong>
-                <p>当前任务成员</p>
-              </div>
-              <em>Member</em>
-            </article>
-          ))}
-        </div>
-      </section>
-    </main>
   );
 }

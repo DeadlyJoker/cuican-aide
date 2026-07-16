@@ -72,6 +72,46 @@ export function threadDeleteFailureNotice(
   );
 }
 
+export function assistantThreadClearConfirmMessage(locale: Locale): string {
+  return locale === "zh"
+    ? "清理助理会话？当前消息和上下文将被永久删除，且无法恢复。"
+    : "Clear the assistant conversation? Its messages and context will be permanently deleted and cannot be recovered.";
+}
+
+export function assistantThreadClearedNotice(locale: Locale): NoticeState {
+  return {
+    text:
+      locale === "zh"
+        ? "助理会话已清理"
+        : "Assistant conversation cleared",
+    tone: "success",
+  };
+}
+
+export function assistantThreadClearFailureNotice(
+  error: unknown,
+  locale: Locale,
+): NoticeState {
+  return warningNotice(
+    error,
+    locale === "zh"
+      ? "清理助理会话失败"
+      : "Unable to clear the assistant conversation",
+  );
+}
+
+export function assistantThreadClearUnavailableNotice(
+  locale: Locale,
+): NoticeState {
+  return {
+    text:
+      locale === "zh"
+        ? "连接 App Server 后才能清理助理会话"
+        : "Connect to the App Server before clearing the assistant conversation",
+    tone: "warning",
+  };
+}
+
 export function threadRenamePromptLabel(locale: Locale): string {
   return locale === "zh" ? "重命名会话" : "Rename session";
 }

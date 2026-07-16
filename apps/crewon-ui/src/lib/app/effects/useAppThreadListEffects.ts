@@ -12,6 +12,7 @@ import { pollLoadedThreadIdsAction } from "../appConnectionActions";
 import type { NoticeState } from "../appRuntimeState";
 import type { Locale } from "../../i18n";
 import { runThreadSearchEffectAction } from "../../thread/threadSearchActions";
+import type { EmptyThreadSelectionBehavior } from "../../thread/threadModel";
 
 type SelectedThreadSetter = (
   updater: (currentThreadId: string | null) => string | null,
@@ -19,6 +20,7 @@ type SelectedThreadSetter = (
 
 export type AppThreadListEffectsParams = {
   client: AppServerClient | null;
+  emptySelectionBehavior: EmptyThreadSelectionBehavior;
   isConnected: boolean;
   isDemoPreview: boolean;
   localeRef: MutableRefObject<Locale>;
@@ -35,6 +37,7 @@ export type AppThreadListEffectsParams = {
 
 export function useAppThreadListEffects({
   client,
+  emptySelectionBehavior,
   isConnected,
   isDemoPreview,
   localeRef,
@@ -72,6 +75,7 @@ export function useAppThreadListEffects({
       clearTimeout: (timeoutId) => window.clearTimeout(timeoutId),
       client,
       currentRequestId: () => searchRequestRef.current,
+      emptySelectionBehavior,
       isConnected,
       isDemoPreview,
       locale: localeRef.current,
@@ -87,6 +91,7 @@ export function useAppThreadListEffects({
     });
   }, [
     client,
+    emptySelectionBehavior,
     isConnected,
     isDemoPreview,
     localeRef,

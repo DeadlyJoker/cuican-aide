@@ -11,6 +11,7 @@ import type {
   SkillFileAction,
 } from "../../domain/crewonDomain";
 import type { Locale } from "../../i18n";
+import type { OfficeThreadResolution } from "../../office/officeThreadActions";
 import {
   listBackendAutomationRuns,
   readBackendAgentConfig,
@@ -33,7 +34,7 @@ export function createAppLibraryItemOpenHandlers(params: {
     panel: LibraryPanel,
     workspaceOverride?: OfficeWorkspace,
     forceNew?: boolean,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   isConnected: boolean;
   isUnsupportedRpcError: (error: unknown) => boolean;
   locale: Locale;

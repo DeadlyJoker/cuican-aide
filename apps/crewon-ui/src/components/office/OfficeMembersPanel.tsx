@@ -10,6 +10,8 @@ import type {
   OfficeWorkspace,
 } from "../../lib/domain/crewonDomain";
 import type { Locale } from "../../lib/i18n";
+import { officeManagerPresentation } from "../../lib/office/officeManagerPresentation";
+import { CommandComposerSelect } from "../composer/CommandComposer";
 import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
 
 export function OfficeMembersPanel({
@@ -20,6 +22,7 @@ export function OfficeMembersPanel({
   recruitableAgents,
   workspace,
   locale,
+  onClose,
   onMemberContextPreview,
   onPanelAction,
   onRefreshRecruitableAgents,
@@ -31,6 +34,7 @@ export function OfficeMembersPanel({
   recruitableAgents?: AgentConfig[];
   workspace: OfficeWorkspace;
   locale: Locale;
+  onClose?: () => void;
   onMemberContextPreview?: (
     run: OfficeRunActivity,
     member: OfficeMember,
@@ -47,16 +51,39 @@ export function OfficeMembersPanel({
     error: string | null;
   } | null>(null);
   const isZh = locale === "zh";
-  const recruitAction = actions?.find((action) => action.id === "recruit-agent");
-  const secondaryActions = actions?.filter(
-    (action) => action.id !== "recruit-agent",
+  const manager = officeManagerPresentation(workspace, locale);
+  const recruitAction = actions?.find(
+    (action) => action.id === "recruit-agent",
   );
+  const secondaryActions = actions?.flatMap((action) => {
+    if (
+      action.id === "recruit-agent" ||
+      action.id === "open-thread" ||
+      action.id === "open-path"
+    ) {
+      return [];
+    }
+    return action.id === "delete-config-file"
+      ? [
+          {
+            ...action,
+            label: isZh ? "删除办公室" : "Delete office",
+          },
+        ]
+      : [action];
+  });
   const agents = (recruitableAgents ?? []).filter(
     (agent): agent is AgentConfig & { agentId: string } =>
       Boolean(agent.agentId),
   );
   const selectedAgent =
     agents.find((agent) => agent.agentId === selectedAgentId) ?? agents[0];
+  const identityUpgradeMember = selectedAgent
+    ? workspace.members.find(
+        (member) =>
+          member.agentId === selectedAgent.agentId && !member.memberId?.trim(),
+      )
+    : undefined;
 
   useEffect(() => {
     if (agents.length === 0) {
@@ -114,8 +141,11 @@ export function OfficeMembersPanel({
       await onPanelAction({
         ...recruitAction,
         agentConfig: selectedAgent,
-        label:
-          locale === "zh"
+        label: identityUpgradeMember
+          ? locale === "zh"
+            ? `升级 ${selectedAgent.name} 的成员身份`
+            : `Upgrade ${selectedAgent.name}'s member identity`
+          : locale === "zh"
             ? `招募 ${selectedAgent.name}`
             : `Recruit ${selectedAgent.name}`,
       });
@@ -132,7 +162,40 @@ export function OfficeMembersPanel({
     >
       <div className="office-rail-head">
         <strong>{locale === "zh" ? "成员" : "Members"}</strong>
-        <span>{workspace.members.length}</span>
+        {onClose ? (
+          <div className="office-rail-head-actions">
+            <span>{workspace.members.length + 1}</span>
+            <button
+              type="button"
+              aria-label={isZh ? "关闭成员面板" : "Close members panel"}
+              title={isZh ? "关闭" : "Close"}
+              onClick={onClose}
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          </div>
+        ) : (
+          <span>{workspace.members.length + 1}</span>
+        )}
+      </div>
+      <div className="office-member office-manager-member" data-office-manager="true">
+        <span
+          className="office-avatar"
+          data-accent={manager.accent}
+          aria-hidden="true"
+        >
+          {manager.glyph}
+          <i
+            className="office-presence"
+            data-online={Boolean(workspace.threadId)}
+          />
+        </span>
+        <span className="office-member-text">
+          <strong>{manager.name}</strong>
+          <span>{manager.role}</span>
+          <em>{manager.status}</em>
+        </span>
+        <span className="office-manager-badge">Leader</span>
       </div>
       {workspace.members.map((member, index) => {
         const memberKey = member.agentId ?? `${member.name}:${index}`;
@@ -159,7 +222,8 @@ export function OfficeMembersPanel({
                 <strong>{member.name}</strong>
                 <span>{member.role}</span>
                 <em>{member.status}</em>
-                {member.runtime?.contextPolicy || member.runtime?.memoryScope ? (
+                {member.runtime?.contextPolicy ||
+                member.runtime?.memoryScope ? (
                   <small>
                     {[
                       member.runtime?.contextPolicy,
@@ -174,9 +238,7 @@ export function OfficeMembersPanel({
                 <button
                   type="button"
                   className="office-member-context-button"
-                  title={
-                    isZh ? "预览成员上下文" : "Preview member context"
-                  }
+                  title={isZh ? "预览成员上下文" : "Preview member context"}
                   aria-label={
                     isZh ? "预览成员上下文" : "Preview member context"
                   }
@@ -221,19 +283,39 @@ export function OfficeMembersPanel({
           {recruitableAgentError ? (
             <p className="office-recruit-error">{recruitableAgentError}</p>
           ) : null}
+          {identityUpgradeMember ? (
+            <p className="office-recruit-upgrade-note" role="status">
+              {isZh
+                ? `${identityUpgradeMember.name} 是旧成员；升级后会获得稳定 memberId 和办公室专属 Runtime，才可安全 @。`
+                : `${identityUpgradeMember.name} is a legacy member. Upgrade it to provision a stable memberId and Office-scoped runtime before using @mentions.`}
+            </p>
+          ) : null}
           {agents.length > 0 ? (
-            <select
-              value={selectedAgent?.agentId ?? ""}
+            <CommandComposerSelect
+              ariaLabel={isZh ? "可招募智能体" : "Recruitable agents"}
+              className="office-agent-select"
               disabled={pendingActionId !== null}
-              aria-label={isZh ? "可招募智能体" : "Recruitable agents"}
-              onChange={(event) => setSelectedAgentId(event.target.value)}
-            >
-              {agents.map((agent) => (
-                <option key={agent.agentId} value={agent.agentId}>
-                  {agent.name} · {agent.role}
-                </option>
-              ))}
-            </select>
+              options={agents.map((agent) => {
+                const needsIdentityUpgrade = workspace.members.some(
+                  (member) =>
+                    member.agentId === agent.agentId &&
+                    !member.memberId?.trim(),
+                );
+                return {
+                  detail: `${agent.role}${
+                    needsIdentityUpgrade
+                      ? isZh
+                        ? " · 需升级身份"
+                        : " · identity upgrade"
+                      : ""
+                  }`,
+                  label: agent.name,
+                  value: agent.agentId,
+                };
+              })}
+              value={selectedAgent?.agentId ?? agents[0]?.agentId ?? ""}
+              onChange={setSelectedAgentId}
+            />
           ) : (
             <p className="office-recruit-empty">
               {isLoadingRecruitableAgents
@@ -262,8 +344,12 @@ export function OfficeMembersPanel({
                   ? "招募中..."
                   : "Recruiting..."
                 : isZh
-                  ? "加入成员"
-                  : "Add member"}
+                  ? identityUpgradeMember
+                    ? "升级成员身份"
+                    : "加入成员"
+                  : identityUpgradeMember
+                    ? "Upgrade identity"
+                    : "Add member"}
             </button>
           ) : null}
         </div>
@@ -285,7 +371,9 @@ export function OfficeMembersPanel({
                 }
               }}
             >
-              {pendingActionId === action.id ? `${action.label}…` : action.label}
+              {pendingActionId === action.id
+                ? `${action.label}…`
+                : action.label}
             </button>
           ))}
         </div>

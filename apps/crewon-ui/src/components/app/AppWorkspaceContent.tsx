@@ -6,6 +6,7 @@ import { AppWorkspaceSettingsContent } from "./AppWorkspaceSettingsContent";
 import type { AppView } from "../../lib/shared/appView";
 import type { CapabilityPanel } from "../../lib/capability/capabilityPanelTypes";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
+import type { OfficeMessageSendResult } from "../../lib/office/officeMessageActions";
 import type {
   CommandModelOption,
   ThreadRuntimeSettings,
@@ -31,6 +32,7 @@ import type { PlatformKind } from "../../lib/platform";
 import type { WorkMode } from "../../lib/workMode";
 
 type AppWorkspaceContentProps = {
+  activeTurnByThread?: Record<string, string>;
   activeTurnId: string | null;
   appView: AppView;
   capabilityPanel: CapabilityPanel | null;
@@ -103,7 +105,10 @@ type AppWorkspaceContentProps = {
   onSaveAgentConfig: () => void;
   onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
   onSlashCommandSelect: (command: ComposerSlashCommand) => void;
-  onSendOfficeMessage: (text: string) => void | Promise<void>;
+  onSendOfficeMessage: (
+    text: string,
+    clientUserMessageId: string,
+  ) => OfficeMessageSendResult | Promise<OfficeMessageSendResult>;
   onStop: () => void;
   onThreadSettings: () => void;
   onToggleAgentCapability: (group: "mcp" | "skills", id: string) => void;
@@ -111,6 +116,7 @@ type AppWorkspaceContentProps = {
 };
 
 export function AppWorkspaceContent({
+  activeTurnByThread = {},
   activeTurnId,
   appView,
   capabilityPanel,
@@ -176,6 +182,7 @@ export function AppWorkspaceContent({
   if (appView === "library" && libraryPanel) {
     return (
       <AppWorkspaceLibraryContent
+        activeTurnByThread={activeTurnByThread}
         libraryPanel={libraryPanel}
         locale={locale}
         onApprovalDecision={onApprovalDecision}

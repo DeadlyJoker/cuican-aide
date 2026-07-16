@@ -19,7 +19,7 @@ export type BackendWorkspaceParams<TFallback> = {
   run: (workspace: BackendWorkspace) => Promise<TFallback>;
 };
 
-export type BackendDomainThreadSource = "agent" | "automation" | "office";
+export type BackendDomainThreadSource = "agent" | "automation";
 
 export function isPlaceholderBackendCwd(cwd: string | null | undefined): boolean {
   return Boolean(cwd?.includes("/Users/me/"));

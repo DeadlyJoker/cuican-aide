@@ -46,9 +46,7 @@ export function officeCreateTurnPrompt(params: {
   const { locale, title, workspace } = params;
   return [
     locale === "zh" ? `创建办公室：${title}` : `Create office: ${title}`,
-    locale === "zh"
-      ? "后端记录：即将提交到 office/create"
-      : "Backend record: pending office/create",
+    locale === "zh" ? "状态：准备创建" : "Status: ready to create",
     locale === "zh" ? `目标：${workspace.goal}` : `Goal: ${workspace.goal}`,
   ].join("\n");
 }
@@ -68,8 +66,8 @@ export function buildOfficeCreatePanel(params: {
     configPath: configPath ?? undefined,
     body: configPath
       ? locale === "zh"
-        ? `后端记录：${configPath}`
-        : `Backend record: ${configPath}`
+        ? "办公室已保存。"
+        : "Office saved."
       : undefined,
     items: [],
     actions: [
@@ -117,53 +115,22 @@ export function officeCreateFailurePanel(
     : panel;
 }
 
-export function demoOfficeRecruitWorkspace(
-  workspace: OfficeWorkspace,
-  locale: Locale,
-): OfficeWorkspace {
-  const newMember: OfficeMember =
-    locale === "zh"
-      ? {
-          name: "新成员",
-          role: "自定义智能体",
-          glyph: "✦",
-          accent: "rose",
-          status: "刚加入群聊",
-          online: true,
-        }
-      : {
-          name: "New",
-          role: "Custom agent",
-          glyph: "✦",
-          accent: "rose",
-          status: "Just joined",
-          online: true,
-        };
-  return {
-    ...officeWorkspaceWithRecruitMessage(
-      workspace,
-      demoOfficeRecruitMessage(locale),
-    ),
-    members: [...workspace.members, newMember],
-  };
-}
-
-export function demoOfficeRecruitPanel(
-  panel: LibraryPanel | null,
-  locale: Locale,
-): LibraryPanel | null {
-  return panel?.workspace
-    ? {
-        ...panel,
-        workspace: demoOfficeRecruitWorkspace(panel.workspace, locale),
-      }
-    : panel;
-}
-
 export function officeRecruitMissingAgentNotice(locale: Locale): string {
   return locale === "zh"
     ? "没有可招募的后端智能体。请先在智能体库中新建并保存智能体，再招募进办公室。"
     : "No backend agent is available to recruit. Create and save an agent in the agent library first, then recruit it into the office.";
+}
+
+export function officeRecruitUnavailableNoticeState(
+  locale: Locale,
+): NoticeState {
+  return {
+    text:
+      locale === "zh"
+        ? "连接 App Server 后才能招募真实智能体；当前办公室不会创建演示成员。"
+        : "Connect to the App Server to recruit a real agent; the Office will not create demo members.",
+    tone: "warning",
+  };
 }
 
 export function officeRecruitMissingAgentNoticeState(
@@ -309,16 +276,12 @@ export function officeRecruitTurnPrompt(params: {
     locale,
     member,
     officeTitle,
-    threadId,
   } = params;
   return [
     locale === "zh"
       ? `办公室「${officeTitle}」招募智能体：${member.name}，角色：${member.role}。模型：${agent.model}。MCP：${enabledMcp}。Skill：${enabledSkills}。请把它纳入后续协作。`
       : `Office "${officeTitle}" recruited agent: ${member.name}, role: ${member.role}. Model: ${agent.model}. MCP: ${enabledMcp}. Skills: ${enabledSkills}. Include it in future collaboration.`,
-    locale === "zh"
-      ? "后端记录：已提交到 office/member/add"
-      : "Backend record: submitted to office/member/add",
-    locale === "zh" ? `执行线程：${threadId}` : `Execution thread: ${threadId}`,
+    locale === "zh" ? "状态：成员已加入办公室" : "Status: member added",
   ].join("\n");
 }
 
@@ -398,13 +361,17 @@ export function officeThreadBoundPatch(params: {
   workspace: OfficeWorkspace;
 }): Partial<LibraryPanel> {
   const { locale, subtitle, threadId, workspace } = params;
+  const normalizedSubtitle = subtitle
+    .replace(" · 已绑定后端线程", "")
+    .replace(" · backend thread bound", "");
   return {
     subtitle:
-      subtitle.includes("后端线程") || subtitle.includes("backend thread")
-        ? subtitle
+      normalizedSubtitle.includes("运行已连接") ||
+      normalizedSubtitle.includes("runtime connected")
+        ? normalizedSubtitle
         : locale === "zh"
-          ? `${subtitle} · 已绑定后端线程`
-          : `${subtitle} · backend thread bound`,
+          ? `${normalizedSubtitle} · 运行已连接`
+          : `${normalizedSubtitle} · runtime connected`,
     workspace: officeWorkspaceConnected(workspace, threadId),
   };
 }
@@ -412,6 +379,8 @@ export function officeThreadBoundPatch(params: {
 export function officeThreadBoundPanel(
   panel: LibraryPanel | null,
   params: {
+    config?: OfficeConfig;
+    filePath?: string | null;
     locale: Locale;
     threadId: string;
   },
@@ -419,12 +388,14 @@ export function officeThreadBoundPanel(
   return panel?.workspace
     ? {
         ...panel,
+        ...(params.filePath ? { configPath: params.filePath } : {}),
         ...officeThreadBoundPatch({
           locale: params.locale,
-          subtitle: panel.subtitle,
+          subtitle: params.config?.subtitle ?? panel.subtitle,
           threadId: params.threadId,
-          workspace: panel.workspace,
+          workspace: params.config?.workspace ?? panel.workspace,
         }),
+        title: params.config?.title ?? panel.title,
       }
     : panel;
 }
@@ -435,18 +406,12 @@ export function officeBindThreadTurnPrompt(params: {
   officeConfigPath: string | null | undefined;
   panel: Pick<LibraryPanel, "title">;
 }): string {
-  const { config, locale, officeConfigPath, panel } = params;
+  const { config, locale, panel } = params;
   return [
     locale === "zh"
       ? `绑定办公室：${panel.title}`
       : `Bind office: ${panel.title}`,
-    officeConfigPath
-      ? locale === "zh"
-        ? `后端记录：${officeConfigPath}`
-        : `Backend record: ${officeConfigPath}`
-      : locale === "zh"
-        ? "后端记录：已提交到 office/save"
-        : "Backend record: submitted to office/save",
+    locale === "zh" ? "状态：办公室已保存" : "Status: office saved",
     locale === "zh"
       ? `目标：${config.workspace.goal}`
       : `Goal: ${config.workspace.goal}`,
@@ -619,8 +584,9 @@ export function buildOfficeDetailPanel(
     title,
     subtitle,
     configPath: action.configPath,
+    workspaceCwd: action.workspaceCwd,
     body: workspace ? undefined : action.body,
-    actions: officeDetailActions(action, workspace?.threadId, locale),
+    actions: officeDetailActions(action, locale),
     items: action.items,
     workspace,
   };
@@ -744,57 +710,24 @@ export function officeDetailBindFailurePanel(
 
 function officeDetailActions(
   action: OfficeDetailAction,
-  threadId: string | undefined,
   locale: Locale,
 ): LibraryPanelAction[] {
-  const actions: LibraryPanelAction[] = [];
-
-  if (threadId) {
-    actions.push({
-      id: "open-thread",
-      label: locale === "zh" ? "打开后端线程" : "Open backend thread",
-      threadId,
-    });
-  }
-
-  actions.push({
+  const actions: LibraryPanelAction[] = [{
     id: "recruit-agent",
     label: locale === "zh" ? "招募智能体" : "Recruit agent",
     tone: "primary",
-  });
+  }];
 
   if (action.configPath) {
-    actions.push(
-      {
-        id: "open-path",
-        label: locale === "zh" ? "打开后端记录" : "Open backend record",
-        pathToOpen: action.configPath,
-        pathKind: "file",
-      },
-      {
-        id: "delete-config-file",
-        label: locale === "zh" ? "删除后端记录" : "Delete backend record",
-        pathToOpen: action.configPath,
-        pathKind: "file",
-        domainConfigKind: "office",
-        tone: "danger",
-      },
-    );
+    actions.push({
+      id: "delete-config-file",
+      label: locale === "zh" ? "删除办公室" : "Delete office",
+      pathToOpen: action.configPath,
+      pathKind: "file",
+      domainConfigKind: "office",
+      tone: "danger",
+    });
   }
 
   return actions;
-}
-
-function demoOfficeRecruitMessage(locale: Locale): OfficeMessage {
-  return {
-    author: locale === "zh" ? "系统" : "System",
-    glyph: "⌗",
-    accent: "slate",
-    time: locale === "zh" ? "现在" : "now",
-    kind: "system",
-    text:
-      locale === "zh"
-        ? "新成员已加入办公室群聊，可被 @ 指派任务"
-        : "New member joined the office group chat and can be @mentioned for tasks",
-  };
 }

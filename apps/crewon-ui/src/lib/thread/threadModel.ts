@@ -2,6 +2,8 @@ import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
 import type { Turn } from "@crewon-protocol/v2/Turn";
 
+export type EmptyThreadSelectionBehavior = "preserve" | "selectFirst";
+
 type ThreadUpdater = (thread: Thread) => Thread;
 type FileChangeChanges = Extract<ThreadItem, { type: "fileChange" }>["changes"];
 type McpToolCall = Extract<ThreadItem, { type: "mcpToolCall" }>;

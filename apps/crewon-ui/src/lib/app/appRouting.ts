@@ -35,8 +35,6 @@ export function libraryViewFromSearch(search: string): LibraryKind | null {
       return "tools";
     case "agents":
       return "agents";
-    case "office":
-      return "office";
     case "automation":
       return "automation";
     case "knowledge":
@@ -55,6 +53,20 @@ export function appViewFromSearch(search: string): AppView {
     return "library";
   }
   return "chat";
+}
+
+export function legacyOfficeCommandShellUrl(currentHref: string): string | null {
+  const nextUrl = new URL(currentHref);
+  if (nextUrl.searchParams.get("view") !== "office") {
+    return null;
+  }
+  nextUrl.searchParams.delete("view");
+  const cwd = nextUrl.searchParams.get("cwd")?.trim();
+  if (cwd && !nextUrl.searchParams.get("teamCwd")?.trim()) {
+    nextUrl.searchParams.set("teamCwd", cwd);
+  }
+  nextUrl.hash = "#view-team";
+  return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
 }
 
 export function settingsSectionFromSearch(search: string): SettingsSection {

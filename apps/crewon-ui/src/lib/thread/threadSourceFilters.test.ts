@@ -59,8 +59,31 @@ describe("thread source filters", () => {
     expect(isSingleConversationThread(thread({ threadSource: "worktree" }))).toBe(true);
   });
 
+  it("keeps the singleton assistant out of workspace conversations", () => {
+    expect(isSingleConversationThread(thread({ threadSource: "assistant" }))).toBe(
+      false,
+    );
+  });
+
   it("excludes office source threads from single conversations", () => {
     expect(isSingleConversationThread(thread({ threadSource: "office" }))).toBe(false);
+  });
+
+  it("excludes server-owned Office manager runtimes from single conversations", () => {
+    expect(
+      isSingleConversationThread(
+        thread({ threadSource: "office_manager_runtime_v1" }),
+      ),
+    ).toBe(false);
+  });
+
+  it("excludes office member runtime sources from single conversations", () => {
+    expect(isSingleConversationThread(thread({ threadSource: "office_member_runtime" }))).toBe(
+      false,
+    );
+    expect(
+      isSingleConversationThread(thread({ threadSource: "office_member_runtime_repair_v2" })),
+    ).toBe(false);
   });
 
   it("excludes office group chat prompt threads from single conversations", () => {

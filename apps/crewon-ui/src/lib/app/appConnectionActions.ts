@@ -1,6 +1,9 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
-import { upsertThread } from "../thread/threadModel";
+import {
+  type EmptyThreadSelectionBehavior,
+  upsertThread,
+} from "../thread/threadModel";
 import { connectionLostNotice } from "./appNotificationPresentation";
 import type { ConnectionState, NoticeState } from "./appRuntimeState";
 import type { AccountStatus } from "./appStatusTypes";
@@ -69,6 +72,7 @@ export function runConnectionBootstrapEffectAction<
 >(params: {
   createClient: (onConnectionLost: () => void) => Client;
   currentClient: () => Client | null | undefined;
+  emptySelectionBehavior: EmptyThreadSelectionBehavior;
   isDemoPreview: boolean;
   preserveThreadsAfterConnectionLoss: (showConnectionNotice?: boolean) => void;
   restoreThread?: (client: Client, thread: Thread) => Promise<Thread>;
@@ -76,6 +80,7 @@ export function runConnectionBootstrapEffectAction<
   setClient: (client: Client) => void;
   setConnectionState: ConnectionStateSetter;
   setNotice: NoticeSetter;
+  selectedThreadId: string | null;
   setSelectedThreadId: SelectedThreadSetter;
   setThreads: ThreadListSetter;
   showArchivedThreads: boolean;
@@ -115,7 +120,13 @@ export function runConnectionBootstrapEffectAction<
             if (!isMounted || params.currentClient() !== client) {
               return;
             }
-            const selectedThread = serverThreads[0] ?? null;
+            const selectedThread =
+              serverThreads.find(
+                (thread) => thread.id === params.selectedThreadId,
+              ) ??
+              (params.emptySelectionBehavior === "selectFirst"
+                ? (serverThreads[0] ?? null)
+                : null);
             params.setThreads(serverThreads);
             params.setSelectedThreadId(selectedThread?.id ?? null);
             refreshSelectedThreadAfterBootstrap({

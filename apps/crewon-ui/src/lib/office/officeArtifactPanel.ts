@@ -21,8 +21,8 @@ export function officeArtifactDisconnectedPanel(
     subtitle: locale === "zh" ? "办公室产物" : "Office artifact",
     body:
       locale === "zh"
-        ? "连接 app-server 后会从当前工作区搜索并读取这个产物。"
-        : "Connect app-server to search and read this artifact from the current workspace.",
+        ? "连接运行服务后会从当前工作区搜索并读取这个产物。"
+        : "Connect the runtime to search and read this artifact from the current workspace.",
   };
 }
 
@@ -159,9 +159,7 @@ export function officeArtifactTurnPrompt(params: {
     locale === "zh"
       ? `办公室「${officeTitle}」创建产物：${artifact.title}`
       : `Office "${officeTitle}" created artifact: ${artifact.title}`,
-    locale === "zh"
-      ? "后端记录：已提交到 office/artifact/upsert"
-      : "Backend record: submitted to office/artifact/upsert",
+    locale === "zh" ? "状态：产物已保存" : "Status: artifact saved",
     "",
     body,
   ].join("\n");
@@ -208,8 +206,8 @@ export function officeArtifactLoadedPanelBody(params: {
       : fileText || (locale === "zh" ? "文件为空" : "Empty file");
   return [
     locale === "zh"
-      ? "办公室产物已从后端工作区读取。"
-      : "Office artifact loaded from the backend workspace.",
+      ? "办公室产物已从当前工作区读取。"
+      : "Office artifact loaded from the current workspace.",
     metadataText,
     bodyText,
   ]

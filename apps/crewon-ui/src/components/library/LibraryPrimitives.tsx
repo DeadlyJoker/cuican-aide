@@ -8,7 +8,7 @@ import type { Locale } from "../../lib/i18n";
 
 export type LibraryPanelActionCallback = (
   action: LibraryPanelAction,
-) => void | Promise<void>;
+) => boolean | void | Promise<boolean | void>;
 
 export function libraryLabel(locale: Locale, zh: string, en: string) {
   return locale === "zh" ? zh : en;

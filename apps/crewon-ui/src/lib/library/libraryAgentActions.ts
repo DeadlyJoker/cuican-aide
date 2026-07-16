@@ -3,7 +3,6 @@ import type { Locale } from "../i18n";
 import {
   agentCreateCapabilityFallbackError,
   agentCreateErrorMessage,
-  agentCreateRecordFallbackError,
   buildAgentCreateLoadingPanel,
   buildAgentCreatePanel,
 } from "../agent-config/agentConfigPanel";
@@ -12,18 +11,12 @@ type LibraryPanelSetter = (
   updater: (panel: LibraryPanel | null) => LibraryPanel | null,
 ) => void;
 
-type AgentConfigWriteResult = {
-  filePath: string;
-  agentId?: string;
-} | null;
-
 export type LibraryAgentActionParams = {
   action: LibraryPanelAction;
   createAgentConfig: () => Promise<AgentConfig>;
   defaultAgentConfig: () => AgentConfig;
   locale: Locale;
   setLibraryPanel: LibraryPanelSetter;
-  writeAgentConfig: (config: AgentConfig) => Promise<AgentConfigWriteResult>;
 };
 
 export async function handleLibraryAgentAction({
@@ -32,7 +25,6 @@ export async function handleLibraryAgentAction({
   defaultAgentConfig,
   locale,
   setLibraryPanel,
-  writeAgentConfig,
 }: LibraryAgentActionParams): Promise<boolean> {
   if (action.id !== "create-agent") {
     return false;
@@ -44,7 +36,6 @@ export async function handleLibraryAgentAction({
 
   let config: AgentConfig;
   let configError: string | undefined;
-  let configPath: string | null = null;
   try {
     config = await createAgentConfig();
   } catch (error) {
@@ -55,27 +46,11 @@ export async function handleLibraryAgentAction({
     );
   }
 
-  try {
-    const writeResult = await writeAgentConfig(config);
-    if (writeResult) {
-      config = {
-        ...config,
-        agentId: writeResult.agentId ?? config.agentId,
-      };
-      configPath = writeResult.filePath;
-    }
-  } catch (error) {
-    configError = agentCreateErrorMessage(
-      error,
-      agentCreateRecordFallbackError(locale),
-    );
-  }
-
   setLibraryPanel((currentPanel) =>
     buildAgentCreatePanel(currentPanel, {
       config,
       configError,
-      configPath,
+      configPath: null,
       locale,
     }),
   );

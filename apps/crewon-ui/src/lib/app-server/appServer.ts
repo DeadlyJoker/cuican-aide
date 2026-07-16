@@ -119,7 +119,18 @@ import type {
   ToolConfig,
   ToolConfigKind,
 } from "../domain/domainTypes";
+import type {
+  OfficeMessageProcessingPhase,
+  OfficeMessageSubmitDelivery,
+  OfficeMessageSubmitMention,
+} from "../domain/officeMessageDelivery";
 import type { ThreadRuntimeSettings } from "../thread/threadRuntimeSettings";
+
+export type {
+  OfficeMessageProcessingPhase,
+  OfficeMessageSubmitDelivery,
+  OfficeMessageSubmitMention,
+} from "../domain/officeMessageDelivery";
 
 type JsonRpcRequest = {
   id: number | string;
@@ -304,6 +315,10 @@ export type DomainConfigSaveResponse = {
   filePath: string;
 };
 
+export type OfficeSaveResponse = DomainConfigSaveResponse & {
+  config: OfficeConfig;
+};
+
 export type AgentSaveResponse = DomainConfigSaveResponse & {
   agentId: string;
 };
@@ -327,10 +342,210 @@ export type OfficeCreateResponse = DomainConfigSaveResponse & {
   config: OfficeConfig;
 };
 
+export type OfficeManagerEnsureResponse = DomainConfigSaveResponse & {
+  config: OfficeConfig;
+  threadId: string;
+  status: "created" | "reusedServerOwned" | "reusedLegacy";
+};
+
 export type OfficeMessageSendResponse = {
   filePath: string;
   config: OfficeConfig;
 };
+
+export type OfficeMessageSubmitResponse = {
+  filePath: string;
+  config: OfficeConfig;
+  receiptId: string;
+  clientUserMessageId: string;
+  replayed: boolean;
+  delivery: OfficeMessageSubmitDelivery;
+};
+
+export function parseOfficeMessageSubmitResponse(
+  value: unknown,
+): OfficeMessageSubmitResponse {
+  const response = officeMessageSubmitRecord(value, "response");
+  const config = officeMessageSubmitRecord(response.config, "config");
+  officeMessageSubmitString(config.title, "config.title");
+  officeMessageSubmitString(config.subtitle, "config.subtitle");
+  officeMessageSubmitRecord(config.workspace, "config.workspace");
+  const delivery = parseOfficeMessageSubmitDelivery(response.delivery);
+  return {
+    filePath: officeMessageSubmitString(response.filePath, "filePath"),
+    config: config as OfficeConfig,
+    receiptId: officeMessageSubmitString(response.receiptId, "receiptId"),
+    clientUserMessageId: officeMessageSubmitString(
+      response.clientUserMessageId,
+      "clientUserMessageId",
+    ),
+    replayed: officeMessageSubmitBoolean(response.replayed, "replayed"),
+    delivery,
+  };
+}
+
+function parseOfficeMessageSubmitDelivery(
+  value: unknown,
+): OfficeMessageSubmitDelivery {
+  const delivery = officeMessageSubmitRecord(value, "delivery");
+  const type = officeMessageSubmitString(delivery.type, "delivery.type");
+  switch (type) {
+    case "processing": {
+      const phase = officeMessageSubmitString(
+        delivery.phase,
+        "delivery.phase",
+      );
+      if (!isOfficeMessageProcessingPhase(phase)) {
+        throw new Error(
+          "Invalid office/message/submit response: delivery.phase",
+        );
+      }
+      return {
+        type,
+        phase,
+        retryAfterMs: officeMessageSubmitNonnegativeInteger(
+          delivery.retryAfterMs,
+          "delivery.retryAfterMs",
+        ),
+      };
+    }
+    case "runStarted": {
+      return {
+        type,
+        runId: officeMessageSubmitString(delivery.runId, "delivery.runId"),
+        threadId: officeMessageSubmitString(
+          delivery.threadId,
+          "delivery.threadId",
+        ),
+        turn: officeMessageSubmitTurn(delivery.turn),
+      };
+    }
+    case "interactionStarted":
+      return {
+        type,
+        interactionId: officeMessageSubmitString(
+          delivery.interactionId,
+          "delivery.interactionId",
+        ),
+        threadId: officeMessageSubmitString(
+          delivery.threadId,
+          "delivery.threadId",
+        ),
+        turn: officeMessageSubmitTurn(delivery.turn),
+      };
+    case "steered":
+      return {
+        type,
+        runId: officeMessageSubmitString(delivery.runId, "delivery.runId"),
+        threadId: officeMessageSubmitString(
+          delivery.threadId,
+          "delivery.threadId",
+        ),
+        turnId: officeMessageSubmitString(
+          delivery.turnId,
+          "delivery.turnId",
+        ),
+      };
+    case "queued": {
+      const position = officeMessageSubmitNonnegativeInteger(
+        delivery.position,
+        "delivery.position",
+      );
+      if (position < 1) {
+        throw new Error(
+          "Invalid office/message/submit response: delivery.position",
+        );
+      }
+      return {
+        type,
+        afterRunId: officeMessageSubmitString(
+          delivery.afterRunId,
+          "delivery.afterRunId",
+        ),
+        position,
+      };
+    }
+    case "answered":
+      return {
+        type,
+        interactionId: officeMessageSubmitString(
+          delivery.interactionId,
+          "delivery.interactionId",
+        ),
+        threadId: officeMessageSubmitString(
+          delivery.threadId,
+          "delivery.threadId",
+        ),
+        turnId: officeMessageSubmitString(
+          delivery.turnId,
+          "delivery.turnId",
+        ),
+      };
+    case "failed":
+      return {
+        type,
+        code: officeMessageSubmitString(delivery.code, "delivery.code"),
+        message: officeMessageSubmitString(
+          delivery.message,
+          "delivery.message",
+        ),
+        retryable: officeMessageSubmitBoolean(
+          delivery.retryable,
+          "delivery.retryable",
+        ),
+      };
+    default:
+      throw new Error(
+        `Invalid office/message/submit response: unsupported delivery type ${type}`,
+      );
+  }
+}
+
+function officeMessageSubmitTurn(value: unknown): Turn {
+  const turn = officeMessageSubmitRecord(value, "delivery.turn");
+  officeMessageSubmitString(turn.id, "delivery.turn.id");
+  return turn as Turn;
+}
+
+function isOfficeMessageProcessingPhase(
+  value: string,
+): value is OfficeMessageProcessingPhase {
+  return value === "reserved" || value === "dispatching" || value === "recovering";
+}
+
+function officeMessageSubmitRecord(
+  value: unknown,
+  field: string,
+): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Invalid office/message/submit response: ${field}`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function officeMessageSubmitString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Invalid office/message/submit response: ${field}`);
+  }
+  return value;
+}
+
+function officeMessageSubmitBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`Invalid office/message/submit response: ${field}`);
+  }
+  return value;
+}
+
+function officeMessageSubmitNonnegativeInteger(
+  value: unknown,
+  field: string,
+): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error(`Invalid office/message/submit response: ${field}`);
+  }
+  return Number(value);
+}
 
 export type OfficeRunResponse = {
   filePath: string;
@@ -1051,6 +1266,7 @@ export class AppServerClient {
   ): Promise<Thread> {
     const response = await this.request<ThreadStartResponse>("thread/start", {
       approvalPolicy: settings.approvalPolicy ?? undefined,
+      config: settings.config,
       cwd: cwd || undefined,
       model: settings.model || undefined,
       sandbox: settings.sandboxMode ?? undefined,
@@ -1563,8 +1779,8 @@ export class AppServerClient {
   async saveOfficeConfig(
     cwd: string,
     config: OfficeConfig,
-  ): Promise<DomainConfigSaveResponse> {
-    return this.request<DomainConfigSaveResponse>("office/save", {
+  ): Promise<OfficeSaveResponse> {
+    return this.request<OfficeSaveResponse>("office/save", {
       cwd,
       config,
     });
@@ -1585,6 +1801,18 @@ export class AppServerClient {
       subtitle: params.subtitle ?? null,
       threadId: params.threadId ?? null,
       goal: params.goal ?? null,
+    });
+  }
+
+  async ensureOfficeManagerConfig(
+    cwd: string,
+    officeRecordId: string,
+    expectedRecordRevision: string,
+  ): Promise<OfficeManagerEnsureResponse> {
+    return this.request<OfficeManagerEnsureResponse>("office/manager/ensure", {
+      cwd,
+      officeRecordId,
+      expectedRecordRevision,
     });
   }
 
@@ -1615,6 +1843,36 @@ export class AppServerClient {
       locale: locale ?? null,
       workspace: workspace ?? null,
     });
+  }
+
+  async submitOfficeMessageConfig(
+    cwd: string,
+    config: OfficeConfig,
+    text: string,
+    clientUserMessageId: string,
+    params?: {
+      locale?: "zh" | "en" | null;
+      threadId?: string | null;
+      mentions?: OfficeMessageSubmitMention[] | null;
+    },
+  ): Promise<OfficeMessageSubmitResponse> {
+    const response = parseOfficeMessageSubmitResponse(
+      await this.request<unknown>("office/message/submit", {
+        cwd,
+        config,
+        text,
+        clientUserMessageId,
+        locale: params?.locale ?? null,
+        threadId: params?.threadId ?? null,
+        mentions: params?.mentions ?? null,
+      }),
+    );
+    if (response.clientUserMessageId !== clientUserMessageId) {
+      throw new Error(
+        "Invalid office/message/submit response: clientUserMessageId mismatch",
+      );
+    }
+    return response;
   }
 
   async runOfficeConfig(
@@ -2105,12 +2363,13 @@ export class AppServerClient {
   async listAutomationRuns(
     cwd: string,
     threadId?: string | null,
+    limit = 100,
   ): Promise<AutomationRunsListResponse> {
     return this.request<AutomationRunsListResponse>("automation/runs/list", {
       cwd,
       threadId: threadId ?? null,
       cursor: null,
-      limit: 24,
+      limit,
     });
   }
 

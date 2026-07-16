@@ -202,7 +202,7 @@ describe("backend workspace helpers", () => {
         client: null,
         missingWorkspaceMessage: "missing workspace",
         resolveBackendCwd: async () => "/repo",
-        threadSource: "office",
+        threadSource: "automation",
       }),
     ).resolves.toBeNull();
   });
@@ -241,9 +241,9 @@ describe("backend workspace helpers", () => {
       client: appClient,
       cwd: "/repo",
     });
-    await expect(access.startDomainThread("office")).resolves.toMatchObject({
+    await expect(access.startDomainThread("agent")).resolves.toMatchObject({
       cwd: "/repo",
-      id: "thread-office",
+      id: "thread-agent",
     });
 
     currentClient = null;

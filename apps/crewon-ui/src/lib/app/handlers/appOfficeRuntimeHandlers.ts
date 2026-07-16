@@ -1,7 +1,10 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
-import type { AppServerClient } from "../../app-server/appServer";
-import { appendOfficeUserMessage } from "../../demo/demoContent";
+import {
+  isUnsupportedRpcError,
+  type AppServerClient,
+  type OfficeMessageSubmitMention,
+} from "../../app-server/appServer";
 import type {
   LibraryPanel,
   OfficeMember,
@@ -25,17 +28,23 @@ import {
   retryAppOfficeVerification,
   retryAppOfficeRun,
   runAppOfficeMessage,
+  submitAppOfficeMessage,
 } from "../../domain/domainOfficeBackend";
 import type { Locale } from "../../i18n";
 import type { OfficeRunTurnRecord } from "../../office/officeRunPanel";
 import {
   ensureOfficeThreadAction,
-  type EnsureOfficeThreadActionParams,
+  type OfficeThreadResolution,
 } from "../../office/officeThreadActions";
 import {
   sendOfficeMessageAction,
   type OfficeMessageActionParams,
+  type OfficeMessageSendResult,
 } from "../../office/officeMessageActions";
+import {
+  confirmLegacyOfficeIdle as confirmLegacyOfficeIdleFromRuntime,
+} from "../../office/officeComposerRuntime";
+import { officeMessageMentionsFromText } from "../../office/officeMessageMentions";
 import {
   handleOfficeDelegationCancelAction,
   handleOfficeDelegationDispatchAction,
@@ -61,7 +70,7 @@ export type AppOfficeRuntimeHandlers = {
     panel: LibraryPanel,
     workspaceOverride?: OfficeWorkspace,
     forceNew?: boolean,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   handleOfficeDelegationDispatch: (
     run: OfficeRunActivity,
     delegation: OfficeRunDelegationActivity,
@@ -98,26 +107,28 @@ export type AppOfficeRuntimeHandlers = {
     member: OfficeMember,
   ) => ReturnType<typeof previewAppOfficeMemberContext>;
   recordOfficeRunTurn: (turnId: string, record: OfficeRunTurnRecord) => void;
-  sendOfficeMessage: (text: string) => Promise<void>;
+  sendOfficeMessage: (
+    text: string,
+    clientUserMessageId?: string,
+    mentions?: OfficeMessageSubmitMention[],
+  ) => Promise<OfficeMessageSendResult>;
 };
 
 export type AppOfficeRuntimeHandlersParams = {
   client: AppServerClient | null;
+  getActiveTurnByThread: () => Record<string, string>;
   getLibraryPanel: () => LibraryPanel | null;
   isConnected: boolean;
   isMissingThreadError: (error: unknown) => boolean;
+  isUnsupportedRpcError?: (error: unknown) => boolean;
   locale: Locale;
   persistOfficeMessage: OfficeMessageActionParams["persistOfficeMessage"];
-  persistOfficeWorkspace: EnsureOfficeThreadActionParams["persistOfficeWorkspace"];
   recordOfficeRunTurn: (turnId: string, record: OfficeRunTurnRecord) => void;
   resolveBackendCwd: () => Promise<string>;
   setActiveTurnByThread: ActiveTurnSetter;
   setLibraryPanel: LibraryPanelSetter;
   setNotice: (notice: NoticeState | null) => void;
   setThreads: ThreadSetter;
-  startBackendDomainThread: (
-    source: "agent" | "automation" | "office",
-  ) => Promise<Thread | null>;
   uniqueOfficeRunId?: () => string;
 };
 
@@ -135,29 +146,43 @@ export function createAppOfficeRuntimeHandlers(
       isMissingThreadError: params.isMissingThreadError,
       locale: params.locale,
       panel,
-      persistOfficeWorkspace: params.persistOfficeWorkspace,
+      ensureOfficeManager: async (officeRecordId, expectedRecordRevision) => {
+        const cwd = panel.workspaceCwd?.trim() || (await params.resolveBackendCwd());
+        return (
+          (await params.client?.ensureOfficeManagerConfig(
+            cwd,
+            officeRecordId,
+            expectedRecordRevision,
+          )) ?? null
+        );
+      },
       readThread: (threadId) =>
         params.client?.readThread(threadId) ?? Promise.resolve(null),
-      renameThread: async (threadId, title) => {
-        await params.client?.renameThread(threadId, title);
-      },
       setLibraryPanel: params.setLibraryPanel,
-      setThreadGoal: async (threadId, goal, tokenBudget) => {
-        await params.client?.setThreadGoal(threadId, goal, tokenBudget);
-      },
       setThreads: params.setThreads,
-      startOfficeThread: () => params.startBackendDomainThread("office"),
-      startTurn: (threadId, text) =>
-        params.client?.startTurn(threadId, text) ?? Promise.resolve(null),
       workspaceOverride,
     });
 
-  const sendOfficeMessage = async (text: string) => {
-    await sendOfficeMessageAction({
-      appendDisconnectedMessage: appendOfficeUserMessage,
+  const sendOfficeMessage = async (
+    text: string,
+    clientUserMessageId = `office-message-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`}`,
+    mentions: OfficeMessageSubmitMention[] = [],
+  ) => {
+    return sendOfficeMessageAction({
+      clientUserMessageId,
+      confirmLegacyOfficeIdle: (workspace) =>
+        confirmLegacyOfficeIdleFromRuntime({
+          activeTurnByThread: params.getActiveTurnByThread(),
+          isMissingThreadError: params.isMissingThreadError,
+          readThread: (threadId) =>
+            params.client?.readThread(threadId) ?? Promise.resolve(null),
+          workspace,
+        }),
       ensureOfficeThread,
       isConnected: params.isConnected,
       isMissingThreadError: params.isMissingThreadError,
+      isUnsupportedRpcError:
+        params.isUnsupportedRpcError ?? isUnsupportedRpcError,
       locale: params.locale,
       panel: params.getLibraryPanel(),
       persistOfficeMessage: params.persistOfficeMessage,
@@ -169,9 +194,11 @@ export function createAppOfficeRuntimeHandlers(
         messageText,
         threadId,
         fallbackWorkspace,
+        messageClientUserMessageId,
       ) =>
         runAppOfficeMessage({
           client: params.client,
+          clientUserMessageId: messageClientUserMessageId,
           fallbackWorkspace,
           locale: params.locale,
           message,
@@ -186,6 +213,28 @@ export function createAppOfficeRuntimeHandlers(
       setThreads: params.setThreads,
       startTurn: (threadId, input) =>
         params.client?.startTurn(threadId, input) ?? Promise.resolve(null),
+      submitOfficeMessage: (
+        targetPanel,
+        workspace,
+        messageText,
+        messageClientUserMessageId,
+      ) =>
+        submitAppOfficeMessage({
+          client: params.client,
+          clientUserMessageId: messageClientUserMessageId,
+          locale: params.locale,
+          mentions:
+            mentions.length > 0
+              ? mentions
+              : officeMessageMentionsFromText(
+                  messageText,
+                  workspace.members,
+                ),
+          panel: targetPanel,
+          resolveBackendCwd: params.resolveBackendCwd,
+          text: messageText,
+          workspace,
+        }),
       text,
     });
   };
@@ -242,7 +291,9 @@ export function createAppOfficeRuntimeHandlers(
           workspace,
         }),
       run,
-      sendOfficeMessage,
+      sendOfficeMessage: async (text) => {
+        await sendOfficeMessage(text);
+      },
       setActiveTurnByThread: params.setActiveTurnByThread,
       setLibraryPanel: params.setLibraryPanel,
       setNotice: params.setNotice,

@@ -744,7 +744,7 @@ async fn turn_start_sends_service_tier_id_to_model_request() -> Result<()> {
 }
 
 #[tokio::test]
-async fn thread_start_omits_empty_instruction_overrides_from_model_request() -> Result<()> {
+async fn thread_start_does_not_forward_empty_instruction_overrides() -> Result<()> {
     let server = responses::start_mock_server().await;
     let body = responses::sse(vec![
         responses::ev_response_created("resp-1"),
@@ -820,13 +820,16 @@ async fn thread_start_omits_empty_instruction_overrides_from_model_request() -> 
         .filter_map(|content| content.get("text").and_then(serde_json::Value::as_str))
         .filter(|text| text.is_empty())
         .collect::<Vec<_>>();
+    let instructions = request_body["instructions"]
+        .as_str()
+        .expect("runtime model identity instructions");
     assert_eq!(
         json!({
-            "hasInstructions": request_body.get("instructions").is_some(),
+            "instructionsAreEmpty": instructions.is_empty(),
             "emptyDeveloperInputTexts": empty_developer_input_texts,
         }),
         json!({
-            "hasInstructions": false,
+            "instructionsAreEmpty": false,
             "emptyDeveloperInputTexts": [],
         })
     );

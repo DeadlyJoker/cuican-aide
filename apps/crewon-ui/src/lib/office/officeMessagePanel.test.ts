@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { OfficeWorkspace } from "../domain/crewonDomain";
+import type { LibraryPanel, OfficeWorkspace } from "../domain/crewonDomain";
+import type { OfficeMessageSubmitResponse } from "../app-server/appServer";
 import {
   appendOfficeUserOnlyMessage,
   buildOfficeUserMessage,
@@ -9,6 +10,7 @@ import {
   officeMessageFallbackError,
   officeMessageTurnPrompt,
   optimisticOfficeMessagePanel,
+  officeMessageSubmitResponsePanel,
   officeWorkspaceWithMessageError,
   optimisticOfficeBackendStatus,
 } from "./officeMessagePanel";
@@ -29,6 +31,7 @@ function workspace(overrides: Partial<OfficeWorkspace> = {}): OfficeWorkspace {
     messages: [],
     tasks: [],
     backendStatus: "connected",
+    threadId: "thread-1",
     ...overrides,
   };
 }
@@ -101,12 +104,11 @@ describe("office message panel helpers", () => {
         threadId: "thread-1",
         locale: "en",
       }),
-      ).toBe(
+    ).toBe(
       [
         'Office "Frontend Office" group chat message: Ship it',
         "Manager agent: first decide whether this message is a question, status nudge, added context, or new actionable goal before planning or delegating tasks.",
-        "Backend record: submitted to office/message/send",
-        "Execution thread: thread-1",
+        "Status: message sent",
       ].join("\n"),
     );
     expect(
@@ -114,9 +116,11 @@ describe("office message panel helpers", () => {
         workspace({ threadId: "thread-1", backendStatus: "binding" }),
       ),
     ).toBe("connected");
-    expect(optimisticOfficeBackendStatus(workspace({ backendStatus: "error" }))).toBe(
-      "error",
-    );
+    expect(
+      optimisticOfficeBackendStatus(
+        workspace({ backendStatus: "error", threadId: undefined }),
+      ),
+    ).toBe("error");
     expect(
       optimisticOfficeMessagePanel(
         {
@@ -140,6 +144,7 @@ describe("office message panel helpers", () => {
             ],
           }),
           backendStatus: "binding",
+          expectedIdentity: { kind: "threadId", value: "thread-1" },
         },
       ),
     ).toMatchObject({
@@ -157,7 +162,11 @@ describe("office message panel helpers", () => {
           items: [],
           workspace: workspace(),
         },
-        { workspace: workspace(), threadId: "thread-1" },
+        {
+          expectedIdentity: { kind: "threadId", value: "thread-1" },
+          workspace: workspace(),
+          threadId: "thread-1",
+        },
       ),
     ).toMatchObject({
       workspace: {
@@ -207,6 +216,7 @@ describe("office message panel helpers", () => {
         },
         null,
         "en",
+        { kind: "threadId", value: "thread-1" },
       ),
     ).toMatchObject({
       workspace: {
@@ -214,5 +224,51 @@ describe("office message panel helpers", () => {
         messages: [{ text: "Unable to send office message to backend" }],
       },
     });
+  });
+
+  it("does not apply optimistic, canonical, or failure state to another Office", () => {
+    const officeB: LibraryPanel = {
+      kind: "office",
+      title: "Frontend Office",
+      subtitle: "Refactor desk",
+      items: [],
+      workspace: workspace({ threadId: "thread-b" }),
+    };
+    const expectedIdentity = { kind: "threadId", value: "thread-a" } as const;
+    const response: OfficeMessageSubmitResponse = {
+      filePath: "/repo/office-a.json",
+      config: {
+        title: "Office A",
+        subtitle: "A",
+        workspace: workspace({ threadId: "thread-a" }),
+      },
+      receiptId: "receipt-a",
+      clientUserMessageId: "message-a",
+      replayed: false,
+      delivery: {
+        type: "queued",
+        afterRunId: "run-a",
+        position: 1,
+      },
+    };
+
+    expect(
+      optimisticOfficeMessagePanel(officeB, {
+        backendStatus: "connected",
+        expectedIdentity,
+        workspace: workspace({ threadId: "thread-a" }),
+      }),
+    ).toBe(officeB);
+    expect(
+      officeMessageSubmitResponsePanel(officeB, response, expectedIdentity),
+    ).toBe(officeB);
+    expect(
+      officeMessageFailurePanel(
+        officeB,
+        new Error("Office A failed"),
+        "en",
+        expectedIdentity,
+      ),
+    ).toBe(officeB);
   });
 });

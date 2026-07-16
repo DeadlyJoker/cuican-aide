@@ -110,48 +110,48 @@ export function backendOfficeCollectionContent(params: {
   return {
     subtitle:
       locale === "zh"
-        ? `${items.length} 个后端办公室`
-        : `${items.length} backend offices`,
+        ? `${items.length} 个办公室`
+        : items.length === 1
+          ? "1 office"
+          : `${items.length} offices`,
     body:
       locale === "zh"
-        ? "办公室来自 app-server office/list。新建后会创建真实后端线程和 office/create 记录。"
-        : "Offices are loaded from app-server office/list. Creating one creates a real backend thread and office/create record.",
-    actions: [
-      collectionAction("create-office", locale === "zh" ? "新建办公室" : "New office"),
-    ],
+        ? "这里显示当前工作空间中已保存的办公室。请在团队页填写名称、目标和真实成员后创建。"
+        : "Saved offices in the current workspace appear here. Create one from Team after defining its name, goal, and real members.",
+    actions: [],
     items:
       items.length > 0
         ? [
             {
-              title: locale === "zh" ? "后端办公室" : "Backend offices",
+              title: locale === "zh" ? "办公室" : "Offices",
               meta:
                 locale === "zh"
                   ? `${items.length} 个已创建`
                   : `${items.length} created`,
               description:
                 locale === "zh"
-                  ? "这些办公室来自 app-server office/list，可继续群聊协作。"
-                  : "These offices come from app-server office/list and can continue group-chat work.",
+                  ? "打开办公室后可以继续群聊协作。"
+                  : "Open an office to continue group-chat work.",
               section: true,
             },
             ...items,
           ]
         : [
             {
-              title: locale === "zh" ? "暂无后端办公室" : "No backend offices",
-              meta: "office/list",
+              title: locale === "zh" ? "暂无办公室" : "No offices yet",
+              meta: locale === "zh" ? "当前工作空间" : "Current workspace",
               description:
                 locale === "zh"
-                  ? "点击新建办公室创建真实后端线程和办公室记录。"
-                  : "Create an office to write a real backend thread and office record.",
+                  ? "前往团队页创建办公室；不会自动生成默认名称、目标或成员。"
+                  : "Create an Office from Team; no default name, goal, or members will be generated.",
               glyph: "◷",
               accent: "slate",
             },
           ],
     error: listUnsupported
       ? locale === "zh"
-        ? "当前 app-server 不支持 office/list，无法读取后端办公室。"
-        : "The current app-server does not support office/list."
+        ? "当前版本暂时无法读取办公室，请升级后重试。"
+        : "This version cannot load offices yet. Upgrade and try again."
       : undefined,
   };
 }
@@ -228,8 +228,8 @@ export function backendAgentCollectionContent(params: {
         : `${storedItems.length} backend agents · ${detectedItems.length} importable items`,
     body:
       locale === "zh"
-        ? "智能体来自 app-server agent/list。新建会读取模型、权限、MCP 和 Skill 后写入 agent/create 或 agent/update。"
-        : "Agents are loaded from app-server agent/list. Creating one reads models, permissions, MCP, and Skills before writing agent/create or agent/update.",
+        ? "智能体来自 app-server agent/list。新建只会打开配置草稿，填写真实名称和职责并保存后才写入后端。"
+        : "Agents are loaded from app-server agent/list. Creating one opens a draft; the backend is written only after a real name and role are saved.",
     actions: [
       collectionAction("create-agent", locale === "zh" ? "新建智能体" : "New agent"),
     ],

@@ -4,6 +4,21 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@modelcontextprotocol/sdk': 1.26.0
+  braces: ^3.0.3
+  flatted: 3.4.2
+  glob@10.4.5: 10.5.0
+  handlebars: 4.7.9
+  micromatch: ^4.0.8
+  minimatch@3.1.2: 3.1.4
+  minimatch@9.0.5: 9.0.7
+  path-to-regexp: 8.4.0
+  picomatch@2.3.1: 2.3.2
+  picomatch@4.0.3: 4.0.4
+  rollup: 4.59.0
+  semver: ^7.7.1
+
 importers:
 
   .:
@@ -1083,7 +1098,7 @@ packages:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
     engines: {node: '>=12.0.0'}
     peerDependencies:
-      picomatch: ^3 || ^4
+      picomatch: 4.0.4
     peerDependenciesMeta:
       picomatch:
         optional: true
@@ -1475,8 +1490,9 @@ packages:
   scheduler@0.27.0:
     resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
 
-  semver@6.3.1:
-    resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
+  semver@7.8.5:
+    resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
+    engines: {node: '>=10'}
     hasBin: true
 
   setimmediate@1.0.5:
@@ -1730,7 +1746,7 @@ snapshots:
       debug: 4.4.3
       gensync: 1.0.0-beta.2
       json5: 2.2.3
-      semver: 6.3.1
+      semver: 7.8.5
     transitivePeerDependencies:
       - supports-color
 
@@ -1748,7 +1764,7 @@ snapshots:
       '@babel/helper-validator-option': 7.29.7
       browserslist: 4.28.2
       lru-cache: 5.1.1
-      semver: 6.3.1
+      semver: 7.8.5
 
   '@babel/helper-globals@7.29.7': {}
 
@@ -3311,7 +3327,7 @@ snapshots:
 
   scheduler@0.27.0: {}
 
-  semver@6.3.1: {}
+  semver@7.8.5: {}
 
   setimmediate@1.0.5: {}
 

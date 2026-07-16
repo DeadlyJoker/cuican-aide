@@ -50,8 +50,8 @@ async function flushAsyncWork() {
   await Promise.resolve();
 }
 
-function state() {
-  let selectedThreadId: string | null = "thread-1";
+function state(initialSelectedThreadId: string | null = "thread-1") {
+  let selectedThreadId = initialSelectedThreadId;
   return {
     isSearchingValues: [] as boolean[],
     notices: [] as Array<NoticeState | null>,
@@ -81,6 +81,7 @@ describe("thread search actions", () => {
       clearTimeout: () => {},
       client: null,
       currentRequestId: () => 1,
+      emptySelectionBehavior: "selectFirst",
       isConnected: false,
       isDemoPreview: true,
       locale: "en",
@@ -115,6 +116,7 @@ describe("thread search actions", () => {
         },
       },
       currentRequestId: () => 2,
+      emptySelectionBehavior: "selectFirst",
       isConnected: true,
       isDemoPreview: false,
       locale: "en",
@@ -135,6 +137,42 @@ describe("thread search actions", () => {
     expect(captured.isSearchingValues).toEqual([true, false]);
   });
 
+  it("preserves an explicit draft workspace instead of selecting the first thread", async () => {
+    const captured = state(null);
+
+    runThreadSearchEffectAction({
+      clearTimeout: () => {},
+      client: {
+        async listThreads() {
+          return [thread("thread-from-another-workspace")];
+        },
+        async searchThreads() {
+          return [];
+        },
+      },
+      currentRequestId: () => 7,
+      emptySelectionBehavior: "preserve",
+      isConnected: true,
+      isDemoPreview: false,
+      locale: "en",
+      requestId: 7,
+      searchTerm: "",
+      setIsSearchingThreads: captured.setIsSearchingThreads.bind(captured),
+      setNotice: captured.setNotice.bind(captured),
+      setSelectedThreadId: captured.setSelectedThreadId,
+      setThreads: captured.setThreads.bind(captured),
+      setTimeout,
+      showArchivedThreads: false,
+      showDemoThreads: () => {},
+    });
+    await flushAsyncWork();
+
+    expect(captured.threads.map((item) => item.id)).toEqual([
+      "thread-from-another-workspace",
+    ]);
+    expect(captured.selectedThreadId()).toBeNull();
+  });
+
   it("preserves loaded turns when empty search refreshes summary threads", async () => {
     const captured = state();
     const loadedTurn = turn();
@@ -151,6 +189,7 @@ describe("thread search actions", () => {
         },
       },
       currentRequestId: () => 6,
+      emptySelectionBehavior: "selectFirst",
       isConnected: true,
       isDemoPreview: false,
       locale: "en",
@@ -192,6 +231,7 @@ describe("thread search actions", () => {
         },
       },
       currentRequestId: () => 3,
+      emptySelectionBehavior: "selectFirst",
       isConnected: true,
       isDemoPreview: false,
       locale: "en",
@@ -232,6 +272,7 @@ describe("thread search actions", () => {
         },
       },
       currentRequestId: () => 99,
+      emptySelectionBehavior: "selectFirst",
       isConnected: true,
       isDemoPreview: false,
       locale: "en",
@@ -265,6 +306,7 @@ describe("thread search actions", () => {
         },
       },
       currentRequestId: () => 5,
+      emptySelectionBehavior: "selectFirst",
       isConnected: true,
       isDemoPreview: false,
       locale: "en",

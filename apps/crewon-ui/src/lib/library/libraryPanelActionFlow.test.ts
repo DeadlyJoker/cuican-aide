@@ -187,7 +187,7 @@ describe("library panel action flow", () => {
         locale: "en",
         setLibraryPanel: state.setLibraryPanel,
       }),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
     expect(connected).not.toHaveBeenCalled();
     expect(state.panel).toEqual(panel());
   });
@@ -230,7 +230,7 @@ describe("library panel action flow", () => {
         locale: "en",
         setLibraryPanel: state.setLibraryPanel,
       }),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
     expect(state.panel?.body).toBe("Refreshing tools...");
     expect(state.panel?.error).toBe("denied");
   });

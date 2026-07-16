@@ -2,7 +2,14 @@ import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
 
 import { activeTurnByThreadAfterTurn } from "../thread/threadRuntimeState";
-import type { OfficeRunResponse } from "../app-server/appServer";
+import type {
+  OfficeMessageSubmitResponse,
+  OfficeRunResponse,
+} from "../app-server/appServer";
+import type {
+  OfficeMessageSendResult,
+  OfficeMessageSubmitDelivery,
+} from "../domain/officeMessageDelivery";
 import type {
   LibraryPanel,
   OfficeConfig,
@@ -14,6 +21,7 @@ import {
   appendOfficeUserOnlyMessage,
   officeMessageConnectedPanel,
   officeMessageFailurePanel,
+  officeMessageSubmitResponsePanel,
   officeMessageTurnPrompt,
   optimisticOfficeBackendStatus,
   optimisticOfficeMessagePanel,
@@ -25,6 +33,17 @@ import {
   type OfficeRunTurnRecord,
 } from "./officeRunPanel";
 import { upsertTurnInThread } from "../thread/threadModel";
+import type { OfficeThreadResolution } from "./officeThreadActions";
+import { officeWorkspaceHasNonterminalRun } from "./officeComposerRuntime";
+import type { LegacyOfficeIdleConfirmation } from "./officeComposerRuntime";
+import type { OfficeIdentity } from "./officeIdentity";
+import {
+  officeIdentityFromPanel,
+  officePanelMatchesIdentity,
+  officeResponseMatchesIdentity,
+} from "./officeIdentity";
+
+export type { OfficeMessageSendResult } from "../domain/officeMessageDelivery";
 
 type StateSetter<T> = (updater: (current: T) => T) => void;
 type LibraryPanelSetter = (
@@ -38,18 +57,18 @@ export type OfficeMessageRunResult = {
 };
 
 export type OfficeMessageActionParams = {
-  appendDisconnectedMessage: (
+  clientUserMessageId: string;
+  confirmLegacyOfficeIdle: (
     workspace: OfficeWorkspace,
-    text: string,
-    locale: Locale,
-  ) => OfficeWorkspace;
+  ) => Promise<LegacyOfficeIdleConfirmation>;
   ensureOfficeThread: (
     panel: LibraryPanel,
     workspace: OfficeWorkspace,
     forceNew?: boolean,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   isConnected: boolean;
   isMissingThreadError: (error: unknown) => boolean;
+  isUnsupportedRpcError: (error: unknown) => boolean;
   locale: Locale;
   panel: LibraryPanel | null;
   persistOfficeMessage: (
@@ -68,7 +87,17 @@ export type OfficeMessageActionParams = {
     text: string,
     threadId: string,
     fallbackWorkspace: OfficeWorkspace,
+    clientUserMessageId: string,
   ) => Promise<OfficeMessageRunResult | null>;
+  submitOfficeMessage: (
+    panel: LibraryPanel,
+    workspace: OfficeWorkspace,
+    text: string,
+    clientUserMessageId: string,
+  ) => Promise<{
+    cwd: string;
+    response: OfficeMessageSubmitResponse;
+  } | null>;
   setActiveTurnByThread: StateSetter<Record<string, string>>;
   setLibraryPanel: LibraryPanelSetter;
   setThreads: StateSetter<Thread[]>;
@@ -80,10 +109,12 @@ export type OfficeMessageActionParams = {
 };
 
 export async function sendOfficeMessageAction({
-  appendDisconnectedMessage,
+  clientUserMessageId,
+  confirmLegacyOfficeIdle,
   ensureOfficeThread,
   isConnected,
   isMissingThreadError,
+  isUnsupportedRpcError,
   locale,
   panel,
   persistOfficeMessage,
@@ -93,57 +124,127 @@ export async function sendOfficeMessageAction({
   setLibraryPanel,
   setThreads,
   startTurn,
+  submitOfficeMessage,
   text,
-}: OfficeMessageActionParams): Promise<boolean> {
+}: OfficeMessageActionParams): Promise<OfficeMessageSendResult> {
   if (!panel?.workspace) {
-    return false;
+    return { delivery: null, disposition: "retainOutbox" };
   }
-  const workspaceBeforeMessage = panel.workspace;
-  const nextWorkspace = isConnected
-    ? appendOfficeUserOnlyMessage({
-        workspace: workspaceBeforeMessage,
-        rawText: text,
-        locale,
-      })
-    : appendDisconnectedMessage(workspaceBeforeMessage, text, locale);
-  const message = nextWorkspace.messages[nextWorkspace.messages.length - 1];
+  const expectedIdentity = officeIdentityFromPanel(panel);
+  if (!expectedIdentity) {
+    throw new Error("Cannot safely identify the target Office");
+  }
+  if (!isConnected) {
+    return { delivery: null, disposition: "retainOutbox" };
+  }
+  let workspaceBeforeMessage = panel.workspace;
+  if (!workspaceBeforeMessage.threadId) {
+    try {
+      const ensured = await ensureOfficeThread(panel, workspaceBeforeMessage);
+      if (!ensured) {
+        throw new Error(
+          locale === "zh"
+            ? "无法创建办公室主控运行线程"
+            : "Unable to provision the Office manager runtime",
+        );
+      }
+      workspaceBeforeMessage = ensured.config.workspace;
+    } catch (error) {
+      setLibraryPanel((currentPanel) =>
+        officeMessageFailurePanel(
+          currentPanel,
+          error,
+          locale,
+          expectedIdentity,
+        ),
+      );
+      throw error;
+    }
+  }
+  const nextWorkspace = appendOfficeUserOnlyMessage({
+    clientUserMessageId,
+    workspace: workspaceBeforeMessage,
+    rawText: text,
+    locale,
+  });
+  const message = nextWorkspace.messages.find(
+    (candidate) =>
+      candidate.clientUserMessageId === clientUserMessageId &&
+      candidate.kind !== "system",
+  );
   if (!message) {
-    return true;
+    throw new Error("Unable to resolve the submitted Office user message");
   }
 
   setLibraryPanel((currentPanel) =>
     optimisticOfficeMessagePanel(currentPanel, {
       workspace: nextWorkspace,
       backendStatus: optimisticOfficeBackendStatus(workspaceBeforeMessage),
+      expectedIdentity,
     }),
   );
 
-  if (!isConnected) {
-    return true;
-  }
-
   try {
-    const initialThreadId = await ensureOfficeThread(panel, nextWorkspace);
-    if (!initialThreadId) {
-      return true;
+    let useLegacyIdleFallback = false;
+    try {
+      const submitted = await submitOfficeMessage(
+        panel,
+        workspaceBeforeMessage,
+        text,
+        clientUserMessageId,
+      );
+      if (!submitted) {
+        throw new Error("Office message submit did not return a response");
+      }
+      applyOfficeMessageSubmitResponse({
+        cwd: submitted.cwd,
+        response: submitted.response,
+        expectedIdentity,
+        recordOfficeRunTurn,
+        setActiveTurnByThread,
+        setLibraryPanel,
+        setThreads,
+      });
+      return {
+        delivery: submitted.response.delivery,
+        disposition: officeMessageDeliveryDisposition(
+          submitted.response.delivery,
+        ),
+      };
+    } catch (error) {
+      if (!isUnsupportedRpcError(error)) {
+        throw error;
+      }
+      if (officeWorkspaceHasNonterminalRun(workspaceBeforeMessage)) {
+        throw error;
+      }
+      const idleConfirmation = await confirmLegacyOfficeIdle(
+        workspaceBeforeMessage,
+      );
+      if (idleConfirmation === "deny") throw error;
+      useLegacyIdleFallback = true;
     }
-    let threadId = initialThreadId;
+
+    if (!useLegacyIdleFallback) {
+      return { delivery: null, disposition: "retainOutbox" };
+    }
+    let thread = await ensureOfficeThread(panel, workspaceBeforeMessage);
+    if (!thread) {
+      return { delivery: null, disposition: "retainOutbox" };
+    }
 
     let runApiHandled = false;
     const runResponse = await runOfficeMessageWithThreadRetry({
       ensureOfficeThread,
       isMissingThreadError,
       message,
-      nextWorkspace,
       panel,
       runOfficeMessage,
-      setThreadId: (nextThreadId) => {
-        threadId = nextThreadId;
-      },
       text,
-      threadId,
-      workspaceBeforeMessage,
+      thread,
+      clientUserMessageId,
     });
+    thread = runResponse.thread;
     runApiHandled = runResponse.runApiHandled;
 
     const officeRunResponse = runResponse.response;
@@ -163,120 +264,248 @@ export async function sendOfficeMessageAction({
         officeRunActiveTurnByThread(current, officeRunResponse),
       );
       setLibraryPanel((currentPanel) =>
-        officeRunResponsePanel(currentPanel, officeRunResponse),
+        officePanelMatchesIdentity(currentPanel, expectedIdentity)
+          ? officeRunResponsePanel(currentPanel, officeRunResponse)
+          : currentPanel,
       );
-      return true;
+      return {
+        delivery: null,
+        disposition: "clearOutbox",
+      };
     }
 
     const response = await startOfficeTurnWithThreadRetry({
       ensureOfficeThread,
       isMissingThreadError,
       locale,
-      nextWorkspace,
       officeTitle: panel.title,
       panel,
-      setThreadId: (nextThreadId) => {
-        threadId = nextThreadId;
-      },
       startTurn,
       text,
-      threadId,
+      thread,
     });
-    if (response) {
+    thread = response.thread;
+    const startedTurn = response.response;
+    if (startedTurn) {
       setThreads((current) =>
-        upsertTurnInThread(current, threadId, response.turn),
+        upsertTurnInThread(
+          current,
+          thread.threadId,
+          startedTurn.turn,
+        ),
       );
       setActiveTurnByThread((current) =>
-        activeTurnByThreadAfterTurn(current, threadId, response.turn),
+        activeTurnByThreadAfterTurn(
+          current,
+          thread.threadId,
+          startedTurn.turn,
+        ),
       );
     }
+    const fallbackWorkspace = {
+      ...thread.config.workspace,
+      messages: [...thread.config.workspace.messages, message],
+    };
     const savedConfig = runApiHandled
       ? null
       : await persistOfficeMessage(
           panel,
-          workspaceBeforeMessage,
+          thread.config.workspace,
           message,
           text,
-          threadId,
-          nextWorkspace,
+          thread.threadId,
+          fallbackWorkspace,
         );
     setLibraryPanel((currentPanel) =>
       officeMessageConnectedPanel(currentPanel, {
-        workspace: savedConfig?.workspace ?? currentPanel?.workspace ?? nextWorkspace,
-        threadId,
+        expectedIdentity,
+        workspace:
+          savedConfig?.workspace ?? currentPanel?.workspace ?? fallbackWorkspace,
+        threadId: thread.threadId,
       }),
     );
   } catch (error) {
     setLibraryPanel((currentPanel) =>
-      officeMessageFailurePanel(currentPanel, error, locale),
+      officeMessageFailurePanel(
+        currentPanel,
+        error,
+        locale,
+        expectedIdentity,
+      ),
     );
+    throw error;
   }
-  return true;
+  return { delivery: null, disposition: "clearOutbox" };
 }
 
 async function runOfficeMessageWithThreadRetry(params: {
+  clientUserMessageId: string;
   ensureOfficeThread: OfficeMessageActionParams["ensureOfficeThread"];
   isMissingThreadError: (error: unknown) => boolean;
   message: OfficeMessage;
-  nextWorkspace: OfficeWorkspace;
   panel: LibraryPanel;
   runOfficeMessage: OfficeMessageActionParams["runOfficeMessage"];
-  setThreadId: (threadId: string) => void;
   text: string;
-  threadId: string;
-  workspaceBeforeMessage: OfficeWorkspace;
+  thread: OfficeThreadResolution;
 }): Promise<{
   cwd: string;
   response: OfficeRunResponse | null;
   runApiHandled: boolean;
+  thread: OfficeThreadResolution;
 }> {
-  const runWithThread = async (targetThreadId: string) => {
+  const runWithThread = async (targetThread: OfficeThreadResolution) => {
     const result = await params.runOfficeMessage(
       params.panel,
-      params.workspaceBeforeMessage,
+      targetThread.config.workspace,
       params.message,
       params.text,
-      targetThreadId,
-      params.nextWorkspace,
+      targetThread.threadId,
+      {
+        ...targetThread.config.workspace,
+        messages: [...targetThread.config.workspace.messages, params.message],
+      },
+      params.clientUserMessageId,
     );
     return {
       cwd: result?.cwd ?? "",
       response: result?.response ?? null,
       runApiHandled: Boolean(result?.handled),
+      thread: targetThread,
     };
   };
 
   try {
-    return await runWithThread(params.threadId);
+    return await runWithThread(params.thread);
   } catch (error) {
     if (!params.isMissingThreadError(error)) {
       throw error;
     }
-    const threadId = await params.ensureOfficeThread(
+    const thread = await params.ensureOfficeThread(
       params.panel,
-      params.nextWorkspace,
+      params.thread.config.workspace,
       true,
     );
-    if (!threadId) {
-      return { cwd: "", response: null, runApiHandled: false };
+    if (!thread) {
+      return {
+        cwd: "",
+        response: null,
+        runApiHandled: false,
+        thread: params.thread,
+      };
     }
-    params.setThreadId(threadId);
-    return runWithThread(threadId);
+    return runWithThread(thread);
   }
+}
+
+function applyOfficeMessageSubmitResponse(params: {
+  cwd: string;
+  expectedIdentity: OfficeIdentity;
+  response: OfficeMessageSubmitResponse;
+  recordOfficeRunTurn: OfficeMessageActionParams["recordOfficeRunTurn"];
+  setActiveTurnByThread: OfficeMessageActionParams["setActiveTurnByThread"];
+  setLibraryPanel: OfficeMessageActionParams["setLibraryPanel"];
+  setThreads: OfficeMessageActionParams["setThreads"];
+}) {
+  const { delivery } = params.response;
+  const deliveryThreadId =
+    delivery.type === "runStarted" ||
+    delivery.type === "steered" ||
+    delivery.type === "interactionStarted" ||
+    delivery.type === "answered"
+      ? delivery.threadId
+      : null;
+  if (
+    !officeResponseMatchesIdentity(
+      params.response.config,
+      params.response.filePath,
+      params.expectedIdentity,
+      deliveryThreadId,
+      params.cwd,
+    )
+  ) {
+    throw new Error("Office message response identity does not match the target");
+  }
+  params.setLibraryPanel((currentPanel) =>
+    officeMessageSubmitResponsePanel(
+      currentPanel,
+      params.response,
+      params.expectedIdentity,
+    ),
+  );
+  if (delivery.type === "failed") {
+    throw new Error(officeMessageSubmitFailureText(delivery));
+  }
+  if (delivery.type === "runStarted") {
+    const runResponse: OfficeRunResponse = {
+      filePath: params.response.filePath,
+      config: params.response.config,
+      threadId: delivery.threadId,
+      runId: delivery.runId,
+      turn: delivery.turn,
+    };
+    params.recordOfficeRunTurn(
+      delivery.turn.id,
+      officeRunTurnRecord(params.cwd, runResponse),
+    );
+    params.setThreads((current) =>
+      upsertTurnInThread(current, delivery.threadId, delivery.turn),
+    );
+    params.setActiveTurnByThread((current) =>
+      officeRunActiveTurnByThread(current, runResponse),
+    );
+  } else if (delivery.type === "steered") {
+    params.setActiveTurnByThread((current) => ({
+      ...current,
+      [delivery.threadId]: delivery.turnId,
+    }));
+  } else if (delivery.type === "interactionStarted") {
+    params.setThreads((current) =>
+      upsertTurnInThread(current, delivery.threadId, delivery.turn),
+    );
+    params.setActiveTurnByThread((current) =>
+      activeTurnByThreadAfterTurn(
+        current,
+        delivery.threadId,
+        delivery.turn,
+      ),
+    );
+  } else if (delivery.type === "answered") {
+    params.setActiveTurnByThread((current) => {
+      if (current[delivery.threadId] !== delivery.turnId) return current;
+      const next = { ...current };
+      delete next[delivery.threadId];
+      return next;
+    });
+  }
+}
+
+function officeMessageSubmitFailureText(
+  delivery: Extract<OfficeMessageSubmitDelivery, { type: "failed" }>,
+): string {
+  return delivery.message;
+}
+
+function officeMessageDeliveryDisposition(
+  delivery: OfficeMessageSubmitDelivery,
+): OfficeMessageSendResult["disposition"] {
+  return delivery.type === "queued" || delivery.type === "processing"
+    ? "retainOutbox"
+    : "clearOutbox";
 }
 
 async function startOfficeTurnWithThreadRetry(params: {
   ensureOfficeThread: OfficeMessageActionParams["ensureOfficeThread"];
   isMissingThreadError: (error: unknown) => boolean;
   locale: Locale;
-  nextWorkspace: OfficeWorkspace;
   officeTitle: string;
   panel: LibraryPanel;
-  setThreadId: (threadId: string) => void;
   startTurn: OfficeMessageActionParams["startTurn"];
   text: string;
-  threadId: string;
-}): Promise<TurnStartResponse | null | undefined> {
+  thread: OfficeThreadResolution;
+}): Promise<{
+  response: TurnStartResponse | null | undefined;
+  thread: OfficeThreadResolution;
+}> {
   const turnInput = (targetThreadId: string) =>
     officeMessageTurnPrompt({
       officeTitle: params.officeTitle,
@@ -286,20 +515,31 @@ async function startOfficeTurnWithThreadRetry(params: {
     });
 
   try {
-    return await params.startTurn(params.threadId, turnInput(params.threadId));
+    return {
+      response: await params.startTurn(
+        params.thread.threadId,
+        turnInput(params.thread.threadId),
+      ),
+      thread: params.thread,
+    };
   } catch (error) {
     if (!params.isMissingThreadError(error)) {
       throw error;
     }
-    const threadId = await params.ensureOfficeThread(
+    const thread = await params.ensureOfficeThread(
       params.panel,
-      params.nextWorkspace,
+      params.thread.config.workspace,
       true,
     );
-    if (!threadId) {
-      return null;
+    if (!thread) {
+      return { response: null, thread: params.thread };
     }
-    params.setThreadId(threadId);
-    return params.startTurn(threadId, turnInput(threadId));
+    return {
+      response: await params.startTurn(
+        thread.threadId,
+        turnInput(thread.threadId),
+      ),
+      thread,
+    };
   }
 }

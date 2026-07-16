@@ -32,12 +32,12 @@ describe("app domain backend coordinator", () => {
       client,
       cwd: "/repo",
     });
-    await expect(coordinator.startBackendDomainThread("office")).resolves.toEqual(
+    await expect(coordinator.startBackendDomainThread("agent")).resolves.toEqual(
       {
         id: "thread-2",
         cwd: "/repo",
       },
     );
-    expect(startedThreads).toEqual([{ cwd: "/repo", source: "office" }]);
+    expect(startedThreads).toEqual([{ cwd: "/repo", source: "agent" }]);
   });
 });

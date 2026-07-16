@@ -12,14 +12,14 @@ export type AppLibraryPanelDispatchHandlerParams = Omit<
 
 export function createAppLibraryPanelDispatchHandler(
   params: AppLibraryPanelDispatchHandlerParams,
-): (action: LibraryPanelAction) => Promise<void> {
+): (action: LibraryPanelAction) => Promise<boolean> {
   return async (action) => {
     const libraryActionHandlers = createAppLibraryPanelActionHandlers({
       ...params,
       action,
     });
 
-    await handleLibraryPanelActionDispatch({
+    return handleLibraryPanelActionDispatch({
       action,
       ...libraryActionHandlers,
       isConnected: params.isConnected,

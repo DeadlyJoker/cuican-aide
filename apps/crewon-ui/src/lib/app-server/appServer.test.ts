@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AppServerClient,
-  AppServerRpcError,
+  parseOfficeMessageSubmitResponse,
   turnInputFromComposer,
 } from "./appServer";
 import type { OfficeConfig } from "../domain/crewonDomain";
@@ -92,28 +92,6 @@ describe("app server composer input", () => {
       },
     ]);
   });
-
-  it("keeps pasted images in v2 turn input items", () => {
-    expect(
-      turnInputFromComposer(
-        "Describe this image",
-        [],
-        [
-          {
-            detail: "high",
-            url: "data:image/png;base64,aW1hZ2U=",
-          },
-        ],
-      ),
-    ).toEqual([
-      { type: "text", text: "Describe this image", text_elements: [] },
-      {
-        type: "image",
-        detail: "high",
-        url: "data:image/png;base64,aW1hZ2U=",
-      },
-    ]);
-  });
 });
 
 describe("app server client connection lifecycle", () => {
@@ -146,226 +124,374 @@ describe("app server client connection lifecycle", () => {
   });
 });
 
-describe("Agent Platform stream client", () => {
-  it("bounds notifications that arrive before their run is registered", () => {
+describe("app server Office revisions", () => {
+  it("ensures the server-owned manager by canonical Office identity", async () => {
     const client = new AppServerClient("ws://app-server", () => undefined);
-    const harness = client as unknown as {
-      handleAgentPlatformEvent: (
-        runId: string,
-        event: {
-          runId: string;
-          threadId: string;
-          agentId: string;
-          delta: string;
+    const socket = await connectFakeClient(client);
+
+    const ensurePromise = client.ensureOfficeManagerConfig(
+      "/workspace",
+      "office-record-1",
+      "revision-1",
+    );
+    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: Record<string, unknown>;
+    };
+    expect(request).toMatchObject({
+      method: "office/manager/ensure",
+      params: {
+        cwd: "/workspace",
+        officeRecordId: "office-record-1",
+        expectedRecordRevision: "revision-1",
+      },
+    });
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        id: request.id,
+        result: {
+          filePath: "/workspace/.crewon/offices/platform.json",
+          config: {
+            title: "Platform Office",
+            workspace: {
+              goal: "Ship safely",
+              members: [],
+              messages: [],
+              tasks: [],
+              recordId: "office-record-1",
+              recordRevision: "revision-2",
+              threadId: "office-manager-1",
+            },
+          },
+          threadId: "office-manager-1",
+          status: "created",
         },
-      ) => void;
-      orphanAgentPlatformEvents: Map<string, unknown[]>;
+      }),
+    );
+
+    await expect(ensurePromise).resolves.toMatchObject({
+      threadId: "office-manager-1",
+      status: "created",
+      config: {
+        workspace: { recordRevision: "revision-2" },
+      },
+    });
+  });
+
+  it("uses only the canonical revision supplied by the caller", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+    const config: OfficeConfig = {
+      title: "Platform Office",
+      subtitle: "Team workspace",
+      workspace: {
+        goal: "Ship safely",
+        threadId: "office-thread-1",
+        members: [],
+        messages: [],
+        tasks: [],
+      },
     };
 
-    for (let index = 0; index <= 100; index += 1) {
-      const runId = `run-${index}`;
-      harness.handleAgentPlatformEvent(runId, {
-        runId,
-        threadId: "thread-1",
-        agentId: "7",
-        delta: "chunk",
-      });
-    }
-
-    expect(harness.orphanAgentPlatformEvents.size).toBe(100);
-    expect(harness.orphanAgentPlatformEvents.has("run-0")).toBe(false);
-    expect(harness.orphanAgentPlatformEvents.has("run-100")).toBe(true);
-  });
-
-  it("collects delta and completed notifications for a run", async () => {
-    const notifications: unknown[] = [];
-    const client = new AppServerClient("ws://app-server", (notification) => {
-      notifications.push(notification);
-    });
-    const socket = await connectFakeClient(client);
-    const deltas: string[] = [];
-    const resourceEvents: unknown[] = [];
-    const pending = client.runAgentPlatformChat(
-      "access-token",
-      "thread-1",
-      "7",
-      "hello",
-      (delta) => deltas.push(delta),
-      (event) => resourceEvents.push(event),
-    );
-    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as { id: number };
-    const handleMessage = (
-      client as unknown as { handleMessage: (rawData: string) => void }
-    ).handleMessage.bind(client);
-    handleMessage(
-      JSON.stringify({ id: request.id, result: { runId: "run-1" } }),
-    );
-    await Promise.resolve();
-    handleMessage(
+    const savePromise = client.saveOfficeConfig("/workspace", config);
+    const saveRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      params: { config: OfficeConfig };
+    };
+    expect(saveRequest.params.config.workspace.recordRevision).toBeUndefined();
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
       JSON.stringify({
-        method: "agentPlatform/chat/resourceEvent",
-        params: {
-          runId: "run-1",
-          threadId: "thread-1",
-          agentId: "7",
-          event: {
-            type: "mcp",
-            status: "succeeded",
-            name: "echo",
-            inputSummary: { message: "hello" },
-            outputSummary: "hello",
-            error: null,
+        id: saveRequest.id,
+        result: {
+          filePath: "/workspace/.crewon/offices/platform.json",
+          config: {
+            ...config,
+            workspace: {
+              ...config.workspace,
+              recordRevision: "revision-1",
+            },
           },
         },
       }),
     );
-    handleMessage(
-      JSON.stringify({
-        method: "agentPlatform/chat/delta",
-        params: {
-          runId: "run-1",
-          threadId: "thread-1",
-          agentId: "7",
-          delta: "你",
-        },
-      }),
-    );
-    handleMessage(
-      JSON.stringify({
-        method: "agentPlatform/chat/completed",
-        params: {
-          runId: "run-1",
-          threadId: "thread-1",
-          agentId: "7",
-          message: "你好",
-          thoughts: [],
-          skillsUsed: ["skill-12"],
-          tokens: { promptTokens: 3, completionTokens: 2, totalTokens: 5 },
-          durationMs: 42,
-        },
-      }),
-    );
+    const saved = await savePromise;
 
-    await expect(pending).resolves.toEqual({
-      agentId: "7",
-      message: "你好",
-      thoughts: [],
-      skillsUsed: ["skill-12"],
-      resourceEvents: [
-        {
-          type: "mcp",
-          status: "succeeded",
-          name: "echo",
-          inputSummary: { message: "hello" },
-          outputSummary: "hello",
-          error: null,
+    const staleMessagePromise = client.sendOfficeMessageConfig(
+      "/workspace",
+      config,
+      {
+        author: "User",
+        glyph: "@",
+        accent: "slate",
+        time: "09:10",
+        text: "Continue",
+      },
+    );
+    const messageRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      params: { config: OfficeConfig };
+    };
+    expect(messageRequest.params.config.workspace.recordRevision).toBeUndefined();
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        id: messageRequest.id,
+        error: {
+          code: -32602,
+          message: "office config is stale",
         },
-      ],
-      tokens: { promptTokens: 3, completionTokens: 2, totalTokens: 5 },
-      durationMs: 42,
+      }),
+    );
+    await expect(staleMessagePromise).rejects.toMatchObject({
+      message: "office config is stale",
     });
-    expect(deltas).toEqual(["你"]);
-    expect(resourceEvents).toHaveLength(1);
-    expect(notifications).toHaveLength(3);
-  });
 
-  it("best-effort cancels the remote run when a stream times out", async () => {
-    vi.useFakeTimers();
-    try {
-      const client = new AppServerClient("ws://app-server", () => undefined);
-      const socket = await connectFakeClient(client);
-      const pending = client.runAgentPlatformChat(
-        "access-token",
-        "thread-timeout",
-        "7",
-        "hello",
-        () => undefined,
-      );
-      const startRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
-        id: number;
-      };
-      const handleMessage = (
-        client as unknown as { handleMessage: (rawData: string) => void }
-      ).handleMessage.bind(client);
-      handleMessage(
-        JSON.stringify({
-          id: startRequest.id,
-          result: { runId: "run-timeout" },
-        }),
-      );
-      await vi.advanceTimersByTimeAsync(0);
-
-      const timeoutRejection = expect(pending).rejects.toThrow(
-        "Agent Platform stream timed out",
-      );
-      await vi.advanceTimersByTimeAsync(5 * 60_000 + 30_000);
-      await timeoutRejection;
-
-      const cancelRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
-        id: number;
-        method: string;
-        params: unknown;
-      };
-      expect(cancelRequest).toMatchObject({
-        method: "agentPlatform/run/cancel",
-        params: { runId: "run-timeout" },
-      });
-      handleMessage(
-        JSON.stringify({
-          id: cancelRequest.id,
-          error: { code: -32000, message: "cancel failed" },
-        }),
-      );
-      await Promise.resolve();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it.each([
-    { cancelled: false, eventCode: -32042, expectedCode: -32042 },
-    { cancelled: true, eventCode: -32042, expectedCode: 499 },
-  ])(
-    "maps a failed notification to error code $expectedCode when cancelled is $cancelled",
-    async ({ cancelled, eventCode, expectedCode }) => {
-      const client = new AppServerClient("ws://app-server", () => undefined);
-      const socket = await connectFakeClient(client);
-      const pending = client.runAgentPlatformChat(
-        "access-token",
-        "thread-1",
-        "7",
-        "hello",
-        () => undefined,
-      );
-      const request = JSON.parse(socket.sent.at(-1) ?? "{}") as { id: number };
-      const handleMessage = (
-        client as unknown as { handleMessage: (rawData: string) => void }
-      ).handleMessage.bind(client);
-      handleMessage(
-        JSON.stringify({ id: request.id, result: { runId: "run-1" } }),
-      );
-      await Promise.resolve();
-      handleMessage(
-        JSON.stringify({
-          method: "agentPlatform/chat/failed",
-          params: {
-            runId: "run-1",
-            threadId: "thread-1",
-            agentId: "7",
-            error: "Agent Platform failed",
-            code: eventCode,
-            cancelled,
+    const canonicalMessagePromise = client.sendOfficeMessageConfig(
+      "/workspace",
+      saved.config,
+      {
+        author: "User",
+        glyph: "@",
+        accent: "slate",
+        time: "09:11",
+        text: "Continue safely",
+      },
+    );
+    const canonicalMessageRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      params: { config: OfficeConfig };
+    };
+    expect(canonicalMessageRequest.params.config.workspace.recordRevision).toBe(
+      "revision-1",
+    );
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        id: canonicalMessageRequest.id,
+        result: {
+          filePath: "/workspace/.crewon/offices/platform.json",
+          config: {
+            ...saved.config,
+            workspace: {
+              ...saved.config.workspace,
+              recordRevision: "revision-2",
+            },
           },
-        }),
-      );
+        },
+      }),
+    );
+    await canonicalMessagePromise;
+  });
+});
 
-      await expect(pending).rejects.toEqual(
-        new AppServerRpcError("Agent Platform failed", expectedCode, {
-          cancelled,
-        }),
-      );
+describe("app server Office message submit", () => {
+  const config: OfficeConfig = {
+    title: "Platform Office",
+    subtitle: "Team workspace",
+    workspace: {
+      goal: "Ship safely",
+      threadId: "office-thread-1",
+      members: [],
+      messages: [],
+      tasks: [],
     },
-  );
+  };
+
+  it("sends the stable message receipt inputs and parses queued delivery", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+
+    const submitPromise = client.submitOfficeMessageConfig(
+      "/workspace",
+      config,
+      "Continue safely",
+      "message-1",
+      {
+        locale: "en",
+        threadId: "office-thread-1",
+        mentions: [{ memberId: "reviewer" }],
+      },
+    );
+    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+    expect(request).toMatchObject({
+      method: "office/message/submit",
+      params: {
+        cwd: "/workspace",
+        config,
+        text: "Continue safely",
+        clientUserMessageId: "message-1",
+        locale: "en",
+        threadId: "office-thread-1",
+        mentions: [{ memberId: "reviewer" }],
+      },
+    });
+
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        id: request.id,
+        result: {
+          filePath: "/workspace/.crewon/offices/platform.json",
+          config,
+          receiptId: "receipt-1",
+          clientUserMessageId: "message-1",
+          replayed: false,
+          delivery: {
+            type: "queued",
+            afterRunId: "run-active",
+            position: 2,
+          },
+        },
+      }),
+    );
+
+    await expect(submitPromise).resolves.toMatchObject({
+      receiptId: "receipt-1",
+      clientUserMessageId: "message-1",
+      delivery: { type: "queued", position: 2 },
+    });
+  });
+
+  it("fails closed for an unknown delivery type", () => {
+    expect(() =>
+      parseOfficeMessageSubmitResponse({
+        filePath: "/workspace/.crewon/offices/platform.json",
+        config,
+        receiptId: "receipt-1",
+        clientUserMessageId: "message-1",
+        replayed: false,
+        delivery: { type: "directMemberSteer" },
+      }),
+    ).toThrow("unsupported delivery type directMemberSteer");
+  });
+
+  it("parses the exact processing, interaction, answered, and failed wire shapes", () => {
+    const base = {
+      filePath: "/workspace/.crewon/offices/platform.json",
+      config,
+      receiptId: "receipt-1",
+      clientUserMessageId: "message-1",
+      replayed: false,
+    };
+    const interactionTurn = {
+      id: "interaction-turn",
+      items: [],
+      itemsView: "full",
+      status: "inProgress",
+      error: null,
+      startedAt: 1,
+      completedAt: null,
+      durationMs: null,
+    };
+
+    expect(
+      parseOfficeMessageSubmitResponse({
+        ...base,
+        delivery: {
+          type: "processing",
+          phase: "recovering",
+          retryAfterMs: 250,
+        },
+      }).delivery,
+    ).toEqual({ type: "processing", phase: "recovering", retryAfterMs: 250 });
+    expect(
+      parseOfficeMessageSubmitResponse({
+        ...base,
+        delivery: {
+          type: "interactionStarted",
+          interactionId: "interaction-1",
+          threadId: "office-thread-1",
+          turn: interactionTurn,
+        },
+      }).delivery,
+    ).toEqual({
+      type: "interactionStarted",
+      interactionId: "interaction-1",
+      threadId: "office-thread-1",
+      turn: interactionTurn,
+    });
+    expect(
+      parseOfficeMessageSubmitResponse({
+        ...base,
+        delivery: {
+          type: "answered",
+          interactionId: "interaction-1",
+          threadId: "office-thread-1",
+          turnId: "interaction-turn",
+        },
+      }).delivery,
+    ).toEqual({
+      type: "answered",
+      interactionId: "interaction-1",
+      threadId: "office-thread-1",
+      turnId: "interaction-turn",
+    });
+    expect(
+      parseOfficeMessageSubmitResponse({
+        ...base,
+        delivery: {
+          type: "failed",
+          code: "officeMessageDispatchFailed",
+          message: "Dispatch failed",
+          retryable: false,
+        },
+      }).delivery,
+    ).toEqual({
+      type: "failed",
+      code: "officeMessageDispatchFailed",
+      message: "Dispatch failed",
+      retryable: false,
+    });
+  });
+
+  it("rejects malformed processing and failed deliveries", () => {
+    const base = {
+      filePath: "/workspace/.crewon/offices/platform.json",
+      config,
+      receiptId: "receipt-1",
+      clientUserMessageId: "message-1",
+      replayed: false,
+    };
+    expect(() =>
+      parseOfficeMessageSubmitResponse({
+        ...base,
+        delivery: { type: "processing", phase: "dispatching" },
+      }),
+    ).toThrow("delivery.retryAfterMs");
+    expect(() =>
+      parseOfficeMessageSubmitResponse({
+        ...base,
+        delivery: {
+          type: "failed",
+          code: "failed",
+          message: "Failed",
+          retryable: "no",
+        },
+      }),
+    ).toThrow("delivery.retryable");
+  });
 });
 
 describe("app server execution intent", () => {

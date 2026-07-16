@@ -236,7 +236,7 @@ describe("openLibraryAction", () => {
 
     expect(harness.panel()).toMatchObject({
       kind: "office",
-      error: "The current app-server does not support office/list.",
+      error: "This version cannot load offices yet. Upgrade and try again.",
     });
   });
 

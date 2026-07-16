@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "bindingId": {
+      "type": "string"
+    },
+    "config": true,
+    "deleted": {
+      "type": "boolean"
+    },
+    "filePath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "bindingId",
+    "config",
+    "deleted",
+    "filePath"
+  ],
+  "title": "OfficeAutomationBindingDeleteResponse",
+  "type": "object"
+}

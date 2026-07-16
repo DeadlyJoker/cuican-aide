@@ -24,6 +24,16 @@ describe("selectedThreadWorkspaceCwd", () => {
     ).toBe("/repo/frontend");
   });
 
+  it("keeps an explicit draft workspace when other workspaces have history", () => {
+    expect(
+      selectedThreadWorkspaceCwd({
+        draftWorkspaceCwd: "/repo/frontend",
+        selectedThread: null,
+        threads: [{ cwd: "/repo/backend" } as unknown as Thread],
+      }),
+    ).toBe("/repo/frontend");
+  });
+
   it("keeps an explicitly workspace-less draft unbound", () => {
     expect(
       selectedThreadWorkspaceCwd({

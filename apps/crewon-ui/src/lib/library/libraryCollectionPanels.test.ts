@@ -138,15 +138,15 @@ describe("library collection panel helpers", () => {
         locale: "en",
       }),
     ).toEqual({
-      subtitle: "1 backend offices",
-      body: "Offices are loaded from app-server office/list. Creating one creates a real backend thread and office/create record.",
-      actions: [{ id: "create-office", label: "New office", tone: "primary" }],
+      subtitle: "1 office",
+      body: "Saved offices in the current workspace appear here. Create one from Team after defining its name, goal, and real members.",
+      actions: [],
       items: [
         {
-          title: "Backend offices",
+          title: "Offices",
           meta: "1 created",
           description:
-            "These offices come from app-server office/list and can continue group-chat work.",
+            "Open an office to continue group-chat work.",
           section: true,
         },
         item("Planning Office"),
@@ -163,12 +163,12 @@ describe("library collection panel helpers", () => {
         locale: "zh",
       }),
     ).toMatchObject({
-      subtitle: "0 个后端办公室",
-      error: "当前 app-server 不支持 office/list，无法读取后端办公室。",
+      subtitle: "0 个办公室",
+      error: "当前版本暂时无法读取办公室，请升级后重试。",
       items: [
         {
-          title: "暂无后端办公室",
-          meta: "office/list",
+          title: "暂无办公室",
+          meta: "当前工作空间",
           glyph: "◷",
           accent: "slate",
         },
@@ -228,7 +228,7 @@ describe("library collection panel helpers", () => {
       }),
     ).toEqual({
       subtitle: "1 backend agents · 1 importable items",
-      body: "Agents are loaded from app-server agent/list. Creating one reads models, permissions, MCP, and Skills before writing agent/create or agent/update.",
+      body: "Agents are loaded from app-server agent/list. Creating one opens a draft; the backend is written only after a real name and role are saved.",
       actions: [{ id: "create-agent", label: "New agent", tone: "primary" }],
       items: [
         {

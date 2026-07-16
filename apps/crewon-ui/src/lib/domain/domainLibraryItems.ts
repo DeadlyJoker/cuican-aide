@@ -1,5 +1,7 @@
 import type { DomainConfigListResponse } from "../app-server/appServer";
+import { isLegacyGeneratedAgentPlaceholder } from "../agent-config/legacyAgentPlaceholder";
 import type { Locale } from "../i18n";
+import { isLegacyGeneratedOfficePlaceholder } from "../office/legacyOfficePlaceholder";
 import {
   MCP_GLYPHS,
   PLUGIN_GLYPHS,
@@ -71,6 +73,18 @@ function backendRecordMeta(
     : `Backend record · ${savedAt ? new Date(savedAt).toLocaleString("en-US") : pathBaseName(filePath)}`;
 }
 
+function savedItemMeta(
+  locale: Locale,
+  savedAt: string | null | undefined,
+): string {
+  if (!savedAt) {
+    return locale === "zh" ? "已保存" : "Saved";
+  }
+  return locale === "zh"
+    ? `已保存 · ${new Date(savedAt).toLocaleString("zh-CN")}`
+    : `Saved · ${new Date(savedAt).toLocaleString("en-US")}`;
+}
+
 function sourceOfTruthLabel(
   locale: Locale,
   source: "skill-file" | "runtime-mcp" | "workspace-tool-record",
@@ -95,55 +109,59 @@ export function officeConfigRecordsToLibraryItems(
   records: Array<DomainConfigRecord<OfficeConfig>>,
   locale: Locale,
 ): LibraryItem[] {
-  return records.map(({ filePath, savedAt, config }) => ({
-    title: config.title,
-    meta: backendRecordMeta(locale, filePath, savedAt),
-    description:
-      config.workspace.goal ||
-      (locale === "zh"
-        ? "从后端记录恢复的办公室。"
-        : "Office restored from a backend record."),
-    glyph: "⌘",
-    accent: "green",
-    badge: { label: locale === "zh" ? "记录" : "record", tone: "planning" },
-    tags: [
-      `${config.workspace.tasks.length} ${locale === "zh" ? "任务" : "tasks"}`,
-      `${config.workspace.members.length} ${locale === "zh" ? "成员" : "members"}`,
-    ],
-    action: {
-      type: "office-detail",
+  return records
+    .filter(({ config }) => !isLegacyGeneratedOfficePlaceholder(config))
+    .map(({ filePath, savedAt, config }) => ({
       title: config.title,
-      subtitle: config.subtitle,
-      body: config.workspace.goal,
-      items: [],
-      workspace: config.workspace,
-      configPath: filePath,
-    },
-  }));
+      meta: savedItemMeta(locale, savedAt),
+      description:
+        config.workspace.goal ||
+        (locale === "zh"
+          ? "已保存的办公室。"
+          : "Saved office."),
+      glyph: "⌘",
+      accent: "green",
+      badge: { label: locale === "zh" ? "办公室" : "office", tone: "planning" },
+      tags: [
+        `${config.workspace.tasks.length} ${locale === "zh" ? "任务" : "tasks"}`,
+        `${config.workspace.members.length} ${locale === "zh" ? "成员" : "members"}`,
+      ],
+      action: {
+        type: "office-detail",
+        title: config.title,
+        subtitle: config.subtitle,
+        body: config.workspace.goal,
+        items: [],
+        workspace: config.workspace,
+        configPath: filePath,
+      },
+    }));
 }
 
 export function agentConfigRecordsToLibraryItems(
   records: Array<DomainConfigRecord<AgentConfig>>,
   locale: Locale,
 ): LibraryItem[] {
-  return records.map(({ filePath, savedAt, config }) => ({
-    title: config.name,
-    meta: backendRecordMeta(locale, filePath, savedAt),
-    description: `${config.role} · ${config.model} · ${config.permission}`,
-    glyph: config.glyph,
-    accent: config.accent,
-    badge: { label: locale === "zh" ? "记录" : "record", tone: "planning" },
-    tags: [
-      config.model,
-      `${config.mcp.length} MCP`,
-      `${config.skills.length} ${locale === "zh" ? "技能" : "skills"}`,
-    ],
-    action: {
-      type: "agent-config",
-      config,
-      configPath: filePath,
-    },
-  }));
+  return records
+    .filter(({ config }) => !isLegacyGeneratedAgentPlaceholder(config))
+    .map(({ filePath, savedAt, config }) => ({
+      title: config.name,
+      meta: backendRecordMeta(locale, filePath, savedAt),
+      description: `${config.role} · ${config.model} · ${config.permission}`,
+      glyph: config.glyph,
+      accent: config.accent,
+      badge: { label: locale === "zh" ? "记录" : "record", tone: "planning" },
+      tags: [
+        config.model,
+        `${config.mcp.length} MCP`,
+        `${config.skills.length} ${locale === "zh" ? "技能" : "skills"}`,
+      ],
+      action: {
+        type: "agent-config",
+        config,
+        configPath: filePath,
+      },
+    }));
 }
 
 export function automationConfigRecordToLibraryItem(

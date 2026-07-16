@@ -23,6 +23,11 @@ export type AgentConfigWriteResult = {
   agentId?: string;
 };
 
+export type OfficeConfigWriteResult = {
+  config: OfficeConfig;
+  filePath: string;
+};
+
 const MAX_CONFIG_RECORDS = 24;
 
 export function joinDomainPath(basePath: string, childName: string): string {
@@ -69,8 +74,12 @@ export async function writeOfficeConfigFile(
   client: AppServerClient,
   cwd: string,
   config: OfficeConfig,
-): Promise<string> {
-  return (await client.saveOfficeConfig(cwd, config)).filePath;
+): Promise<OfficeConfigWriteResult> {
+  const response = await client.saveOfficeConfig(cwd, config);
+  return {
+    config: response.config ?? config,
+    filePath: response.filePath,
+  };
 }
 
 export async function readAgentConfigFiles(

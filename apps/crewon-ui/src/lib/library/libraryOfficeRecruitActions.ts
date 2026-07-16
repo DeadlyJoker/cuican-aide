@@ -12,8 +12,8 @@ import type {
   OfficeWorkspace,
 } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
+import type { OfficeThreadResolution } from "../office/officeThreadActions";
 import {
-  demoOfficeRecruitPanel,
   officeRecruitCapabilitySummary,
   officeRecruitFailureNotice,
   officeRecruitJoinMessage,
@@ -22,6 +22,7 @@ import {
   officeRecruitSavedPanel,
   officeRecruitSuccessNoticeState,
   officeRecruitTurnPrompt,
+  officeRecruitUnavailableNoticeState,
   officeWorkspaceWithRecruitMessage,
 } from "../office/officeDetailPanel";
 import { upsertTurnInThread } from "../thread/threadModel";
@@ -37,7 +38,7 @@ export type LibraryOfficeRecruitActionParams = {
     panel: LibraryPanel,
     workspaceOverride?: OfficeWorkspace,
     forceNew?: boolean,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   isConnected: boolean;
   isDemo: boolean;
   isMissingThreadError: (error: unknown) => boolean;
@@ -81,14 +82,12 @@ export async function handleLibraryOfficeRecruitAction({
     return false;
   }
 
-  if (isDemo) {
-    setLibraryPanel((currentPanel) =>
-      demoOfficeRecruitPanel(currentPanel, locale),
-    );
+  if (isDemo || !isConnected) {
+    setNotice(officeRecruitUnavailableNoticeState(locale));
     return true;
   }
 
-  if (!isConnected || !libraryPanel) {
+  if (!libraryPanel) {
     return false;
   }
 
@@ -117,19 +116,22 @@ export async function handleLibraryOfficeRecruitAction({
       locale,
       member: newMember,
     });
-    const workspaceWithJoinMessage = officeWorkspaceWithRecruitMessage(
-      workspace,
-      joinMessage,
-    );
+    let canonicalWorkspace = workspace;
     let threadId = workspace.threadId ?? null;
     if (threadId) {
-      threadId = await ensureOfficeThread(panel, workspace);
-      if (!threadId) {
+      const thread = await ensureOfficeThread(panel, workspace);
+      if (!thread) {
         return true;
       }
+      canonicalWorkspace = thread.config.workspace;
+      threadId = thread.threadId;
     }
 
-    const savedConfig = await persistOfficeMember(
+    const workspaceWithJoinMessage = officeWorkspaceWithRecruitMessage(
+      canonicalWorkspace,
+      joinMessage,
+    );
+    let savedConfig = await persistOfficeMember(
       panel,
       workspaceWithJoinMessage,
       recruitConfig.agentId,
@@ -142,9 +144,10 @@ export async function handleLibraryOfficeRecruitAction({
     }
 
     if (!threadId) {
+      const canonicalSavedConfig = savedConfig;
       setLibraryPanel((currentPanel) =>
         officeRecruitSavedPanel(currentPanel, {
-          config: savedConfig,
+          config: canonicalSavedConfig,
           threadId: null,
         }),
       );
@@ -169,10 +172,12 @@ export async function handleLibraryOfficeRecruitAction({
       if (!isMissingThreadError(error)) {
         throw error;
       }
-      threadId = await ensureOfficeThread(panel, savedConfig.workspace, true);
-      if (!threadId) {
+      const thread = await ensureOfficeThread(panel, savedConfig.workspace, true);
+      if (!thread) {
         return true;
       }
+      savedConfig = thread.config;
+      threadId = thread.threadId;
       response = await startTurn(threadId, recruitTurnInput(threadId));
     }
 

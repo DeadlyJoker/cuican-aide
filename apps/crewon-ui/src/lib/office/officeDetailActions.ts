@@ -7,6 +7,7 @@ import type {
   OfficeWorkspace,
 } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
+import type { OfficeThreadResolution } from "./officeThreadActions";
 import {
   buildOfficeDetailPanel,
   matchingOfficeDetailPanel,
@@ -25,7 +26,7 @@ export type OpenOfficeDetailActionParams = {
   ensureOfficeThread: (
     panel: LibraryPanel,
     workspaceOverride?: OfficeWorkspace,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   isConnected: boolean;
   isUnsupportedRpcError: (error: unknown) => boolean;
   locale: Locale;
@@ -76,16 +77,26 @@ export async function openOfficeDetailAction({
       }
     }
 
-    const threadId = await ensureOfficeThread(latestPanel, latestPanel.workspace);
-    if (!threadId) {
+    const threadResolution = await ensureOfficeThread(
+      latestPanel,
+      latestPanel.workspace,
+    );
+    if (!threadResolution) {
       return true;
     }
-    const thread = await readThread(threadId);
+    latestPanel = {
+      ...latestPanel,
+      configPath: threadResolution.filePath ?? latestPanel.configPath,
+      title: threadResolution.config.title,
+      subtitle: threadResolution.config.subtitle,
+      workspace: threadResolution.config.workspace,
+    };
+    const thread = await readThread(threadResolution.threadId);
     if (!thread) {
       return true;
     }
     setLibraryPanel((currentPanel) =>
-      officeDetailHydratedThreadPanel(currentPanel, threadId, {
+      officeDetailHydratedThreadPanel(currentPanel, threadResolution.threadId, {
         fallbackWorkspace: action.workspace,
         latestPanel,
         locale,

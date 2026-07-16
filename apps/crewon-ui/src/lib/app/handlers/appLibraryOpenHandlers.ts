@@ -24,6 +24,7 @@ import {
   type OpenLibraryActionParams,
 } from "../../library/libraryOpenActions";
 import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { OfficeThreadResolution } from "../../office/officeThreadActions";
 
 type LibraryPanelSetter = OpenLibraryActionParams["setLibraryPanel"];
 type ThreadSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
@@ -43,7 +44,7 @@ export type AppLibraryOpenHandlersParams = {
     panel: LibraryPanel,
     workspaceOverride?: OfficeWorkspace,
     forceNew?: boolean,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   isConnected: boolean;
   isDemo: boolean;
   isDemoPreview: boolean;

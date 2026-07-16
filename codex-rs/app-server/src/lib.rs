@@ -80,6 +80,7 @@ const SQLITE_RECOVERY_CONFIG_WARNING_SUMMARY: &str = "Crewon rebuilt its local d
 mod analytics_utils;
 mod app_server_tracing;
 mod attestation;
+mod automation_scheduler;
 mod bespoke_event_handling;
 mod command_exec;
 mod config;

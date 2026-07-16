@@ -47,7 +47,7 @@ describe("office artifact panel helpers", () => {
     expect(officeArtifactDisconnectedPanel(artifact, "en")).toEqual({
       title: "Client brief",
       subtitle: "Office artifact",
-      body: "Connect app-server to search and read this artifact from the current workspace.",
+      body: "Connect the runtime to search and read this artifact from the current workspace.",
     });
     expect(officeArtifactLocatingPanel(artifact, "zh")).toEqual({
       title: "Client brief",
@@ -151,7 +151,7 @@ describe("office artifact panel helpers", () => {
     ).toBe(
       [
         'Office "Frontend Office" created artifact: Client brief',
-        "Backend record: submitted to office/artifact/upsert",
+        "Status: artifact saved",
         "",
         body,
       ].join("\n"),
@@ -240,7 +240,7 @@ describe("office artifact panel helpers", () => {
       }),
     ).toBe(
       [
-        "Office artifact loaded from the backend workspace.",
+        "Office artifact loaded from the current workspace.",
         "Type: file",
         "Empty file",
       ].join("\n\n"),
@@ -254,7 +254,7 @@ describe("office artifact panel helpers", () => {
       }),
     ).toBe(
       [
-        "办公室产物已从后端工作区读取。",
+        "办公室产物已从当前工作区读取。",
         `${"a".repeat(12000)}\n...`,
       ].join("\n\n"),
     );
@@ -273,7 +273,7 @@ describe("office artifact panel helpers", () => {
       title: "Client brief",
       subtitle: "/repo/client-brief.md",
       body: [
-        "Office artifact loaded from the backend workspace.",
+        "Office artifact loaded from the current workspace.",
         "Type: file",
         "file body",
       ].join("\n\n"),
@@ -317,7 +317,7 @@ describe("office artifact panel helpers", () => {
       searchRoot: "/repo",
     });
 
-    expect(panel.body).toContain("Backend content record:");
+    expect(panel.body).toContain("Saved content:");
     expect(panel.body).toContain("- Content: file verified");
     expect(panel.body).toContain(
       "- SHA-256: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
@@ -325,7 +325,7 @@ describe("office artifact panel helpers", () => {
     expect(panel.body).toContain(
       "- Current read SHA-256: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
     );
-    expect(panel.body).toContain("- Fingerprint: matches backend record");
+    expect(panel.body).toContain("- Fingerprint: matches saved version");
     expect(panel.body).toContain("- Bytes: 2048");
     expect(panel.body).toContain("- Observed: 2026-06-20T08:00:00.000Z");
     expect(panel.body).toContain("- Producer: Engineer/agent-engineer");
@@ -345,6 +345,6 @@ describe("office artifact panel helpers", () => {
         metadataText: "Type: file",
         searchRoot: "/repo",
       }).body,
-    ).toContain("- Fingerprint: differs from backend record");
+    ).toContain("- Fingerprint: differs from saved version");
   });
 });

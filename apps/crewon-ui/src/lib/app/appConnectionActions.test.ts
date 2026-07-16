@@ -166,6 +166,7 @@ describe("app connection actions", () => {
         },
       }),
       currentClient: () => currentClient,
+      emptySelectionBehavior: "selectFirst",
       isDemoPreview: false,
       preserveThreadsAfterConnectionLoss: () => {},
       setAccountStatus: (status) => {
@@ -180,6 +181,7 @@ describe("app connection actions", () => {
       setNotice: (nextNotice) => {
         notice = nextNotice;
       },
+      selectedThreadId: null,
       setSelectedThreadId: (threadId) => {
         selectedThreadId = threadId;
       },
@@ -199,6 +201,88 @@ describe("app connection actions", () => {
     expect(threads).toEqual(serverThreads);
     expect(selectedThreadId).toBe("thread-1");
     expect(refreshedAccount).toEqual(account);
+  });
+
+  it("keeps an explicit workspace draft unselected during bootstrap", async () => {
+    const serverThreads = [thread("thread-1")];
+    let selectedThreadId: string | null = "stale";
+    let currentClient: TestConnectionClient | null = null;
+
+    runConnectionBootstrapEffectAction({
+      createClient: () => ({
+        close: vi.fn(),
+        async connect() {},
+        async getAccount() {
+          return accountStatus();
+        },
+        async listThreads() {
+          return serverThreads;
+        },
+      }),
+      currentClient: () => currentClient,
+      emptySelectionBehavior: "preserve",
+      isDemoPreview: false,
+      preserveThreadsAfterConnectionLoss: () => {},
+      setAccountStatus: () => {},
+      setClient: (client) => {
+        currentClient = client;
+      },
+      setConnectionState: () => {},
+      setNotice: () => {},
+      selectedThreadId: null,
+      setSelectedThreadId: (threadId) => {
+        selectedThreadId = threadId;
+      },
+      setThreads: () => {},
+      showArchivedThreads: false,
+      showDemoThreads: () => {},
+      switchToDemoThreads: () => {},
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(selectedThreadId).toBeNull();
+  });
+
+  it("preserves an existing selected thread across reconnect bootstrap", async () => {
+    const serverThreads = [thread("thread-1"), thread("thread-2")];
+    let selectedThreadId: string | null = null;
+    let currentClient: TestConnectionClient | null = null;
+
+    runConnectionBootstrapEffectAction({
+      createClient: () => ({
+        close: vi.fn(),
+        async connect() {},
+        async getAccount() {
+          return accountStatus();
+        },
+        async listThreads() {
+          return serverThreads;
+        },
+      }),
+      currentClient: () => currentClient,
+      emptySelectionBehavior: "preserve",
+      isDemoPreview: false,
+      preserveThreadsAfterConnectionLoss: () => {},
+      selectedThreadId: "thread-2",
+      setAccountStatus: () => {},
+      setClient: (client) => {
+        currentClient = client;
+      },
+      setConnectionState: () => {},
+      setNotice: () => {},
+      setSelectedThreadId: (threadId) => {
+        selectedThreadId = threadId;
+      },
+      setThreads: () => {},
+      showArchivedThreads: false,
+      showDemoThreads: () => {},
+      switchToDemoThreads: () => {},
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(selectedThreadId).toBe("thread-2");
   });
 
   it("keeps the app-server connected when thread listing fails", async () => {
@@ -221,6 +305,7 @@ describe("app connection actions", () => {
         },
       }),
       currentClient: () => currentClient,
+      emptySelectionBehavior: "selectFirst",
       isDemoPreview: false,
       preserveThreadsAfterConnectionLoss,
       setAccountStatus: () => {},
@@ -233,6 +318,7 @@ describe("app connection actions", () => {
       setNotice: (nextNotice) => {
         notice = nextNotice;
       },
+      selectedThreadId: "existing",
       setSelectedThreadId: (threadId) => {
         selectedThreadId = threadId;
       },
@@ -275,6 +361,7 @@ describe("app connection actions", () => {
         },
       }),
       currentClient: () => currentClient,
+      emptySelectionBehavior: "selectFirst",
       isDemoPreview: false,
       preserveThreadsAfterConnectionLoss: () => {},
       restoreThread: async (_client, nextThread) => {
@@ -287,6 +374,7 @@ describe("app connection actions", () => {
       },
       setConnectionState: () => {},
       setNotice: () => {},
+      selectedThreadId: null,
       setSelectedThreadId: () => {},
       setThreads: (nextThreads) => {
         threads = nextThreads;
@@ -317,6 +405,7 @@ describe("app connection actions", () => {
         },
       }),
       currentClient: () => null,
+      emptySelectionBehavior: "selectFirst",
       isDemoPreview: true,
       preserveThreadsAfterConnectionLoss: () => {},
       setAccountStatus: () => {},
@@ -325,6 +414,7 @@ describe("app connection actions", () => {
         actions.push("connected");
       },
       setNotice: () => {},
+      selectedThreadId: null,
       setSelectedThreadId: () => {
         actions.push("selected-server-thread");
       },
@@ -362,6 +452,7 @@ describe("app connection actions", () => {
         },
       }),
       currentClient: () => null,
+      emptySelectionBehavior: "selectFirst",
       isDemoPreview: false,
       preserveThreadsAfterConnectionLoss: (showConnectionNotice) => {
         fallbacks.push(showConnectionNotice);
@@ -370,6 +461,7 @@ describe("app connection actions", () => {
       setClient: () => {},
       setConnectionState: () => {},
       setNotice: () => {},
+      selectedThreadId: null,
       setSelectedThreadId: () => {},
       setThreads: () => {},
       showArchivedThreads: false,
@@ -402,6 +494,7 @@ describe("app connection actions", () => {
         },
       }),
       currentClient: () => null,
+      emptySelectionBehavior: "selectFirst",
       isDemoPreview: false,
       preserveThreadsAfterConnectionLoss: () => {},
       setAccountStatus: () => {},
@@ -410,6 +503,7 @@ describe("app connection actions", () => {
         states.push(state);
       },
       setNotice: () => {},
+      selectedThreadId: null,
       setSelectedThreadId: () => {},
       setThreads: () => {},
       showArchivedThreads: false,
@@ -447,6 +541,7 @@ describe("app connection actions", () => {
         return staleClient;
       },
       currentClient: () => currentClient,
+      emptySelectionBehavior: "selectFirst",
       isDemoPreview: false,
       preserveThreadsAfterConnectionLoss: () => {
         fallbackCount += 1;
@@ -460,6 +555,7 @@ describe("app connection actions", () => {
       },
       setConnectionState: () => {},
       setNotice: () => {},
+      selectedThreadId: null,
       setSelectedThreadId: () => {},
       setThreads: () => {},
       showArchivedThreads: false,

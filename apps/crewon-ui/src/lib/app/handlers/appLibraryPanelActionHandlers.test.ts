@@ -114,6 +114,27 @@ describe("app library panel action handlers", () => {
     expect(capturedParams().mcp.resourceContextThreadId).toBeUndefined();
   });
 
+  it("scopes Office record deletion to the Office group-chat workspace", async () => {
+    const setLibraryPanel = vi.fn();
+    createHandlers({
+      libraryPanel: {
+        actions: [],
+        items: [],
+        kind: "office",
+        subtitle: "Office",
+        title: "Office",
+        workspaceCwd: "/repo/team",
+      },
+      resolveBackendCwd: async () => "/repo/single-chat",
+      setLibraryPanel,
+    });
+
+    const maintenance = capturedParams().maintenance;
+    expect(maintenance.domainConfigCwd).toBe("/repo/team");
+    await maintenance.onDomainConfigDeleted?.();
+    expect(setLibraryPanel).toHaveBeenCalledWith(null);
+  });
+
   it("wires MCP draft and maintenance mutations to the current client", async () => {
     const calls: unknown[] = [];
     createHandlers({
@@ -231,10 +252,41 @@ describe("app library panel action handlers", () => {
 
   it("runs automation actions through the bound target office", async () => {
     const calls: unknown[] = [];
+    const canonicalOffice: OfficeConfig = {
+      title: "Canonical Office",
+      subtitle: "Current workspace",
+      workspace: {
+        goal: "Canonical goal",
+        members: [],
+        messages: [],
+        recordId: "office-record-1",
+        recordRevision: "revision-2",
+        tasks: [],
+        threadId: "office-thread",
+      },
+    };
     createHandlers({
       client: client({
+        async readOfficeConfig(cwd, params) {
+          calls.push({ cwd, method: "readOfficeConfig", params });
+          return {
+            record: {
+              config: canonicalOffice,
+              filePath: "/repo/.crewon/offices/office.json",
+              savedAt: "2026-07-13T00:00:00Z",
+            },
+          };
+        },
         async runOfficeConfig(cwd, config, message, text, locale, threadId) {
-          calls.push({ config, cwd, locale, message, text, threadId });
+          calls.push({
+            config,
+            cwd,
+            locale,
+            message,
+            method: "runOfficeConfig",
+            text,
+            threadId,
+          });
           return {
             filePath: "/repo/.crewon/offices/office.json",
             config,
@@ -259,9 +311,11 @@ describe("app library panel action handlers", () => {
       title: "Office",
       subtitle: "Workspace",
       workspace: {
-        goal: "Deliver",
+        goal: "Stale goal",
         members: [],
         messages: [],
+        recordId: "office-record-1",
+        recordRevision: "revision-1",
         tasks: [],
         threadId: "office-thread",
       },
@@ -283,21 +337,21 @@ describe("app library panel action handlers", () => {
     expect(result?.cwd).toBe("/repo");
     expect(result?.response?.runId).toBe("office-run-1");
     expect(calls).toEqual([
+      {
+        cwd: "/repo",
+        method: "readOfficeConfig",
+        params: { threadId: "office-thread", title: null },
+      },
       expect.objectContaining({
+        config: canonicalOffice,
         cwd: "/repo",
         locale: "en",
+        method: "runOfficeConfig",
         text: "Run office",
         threadId: "office-thread",
       }),
     ]);
-    expect(calls[0]).toMatchObject({
-      config: {
-        title: "Office",
-        workspace: {
-          backendStatus: "connected",
-          threadId: "office-thread",
-        },
-      },
+    expect(calls[1]).toMatchObject({
       message: {
         author: "Nightly",
         glyph: "A",
@@ -306,6 +360,65 @@ describe("app library panel action handlers", () => {
         kind: "task",
       },
     });
+  });
+
+  it("does not run an office automation when the canonical record identity changed", async () => {
+    const runOfficeConfig = vi.fn();
+    createHandlers({
+      client: client({
+        async readOfficeConfig() {
+          return {
+            record: {
+              config: {
+                title: "Replacement Office",
+                subtitle: "Workspace",
+                workspace: {
+                  goal: "Different record",
+                  members: [],
+                  messages: [],
+                  recordId: "office-record-2",
+                  recordRevision: "revision-1",
+                  tasks: [],
+                  threadId: "office-thread",
+                },
+              },
+              filePath: "/repo/.crewon/offices/replacement.json",
+              savedAt: "2026-07-13T00:00:00Z",
+            },
+          };
+        },
+        runOfficeConfig,
+      }),
+    });
+
+    const automationConfig: AutomationConfig = {
+      title: "Nightly",
+      subtitle: "Manual",
+      body: "Body",
+      prompt: "Prompt",
+      targetOffice: {
+        title: "Office",
+        subtitle: "Workspace",
+        workspace: {
+          goal: "Stale goal",
+          members: [],
+          messages: [],
+          recordId: "office-record-1",
+          recordRevision: "revision-1",
+          tasks: [],
+          threadId: "office-thread",
+        },
+      },
+      executionAgent: null,
+    };
+
+    await expect(
+      capturedParams().automationRun.runOfficeAutomation?.(
+        automationConfig,
+        "Run office",
+      ),
+    ).rejects.toThrow("Canonical Office recordId does not match the target");
+    expect(runOfficeConfig).not.toHaveBeenCalled();
   });
 
   it("passes tool records through draft persistence without changing shape", async () => {

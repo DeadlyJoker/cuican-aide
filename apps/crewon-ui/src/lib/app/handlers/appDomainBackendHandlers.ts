@@ -40,6 +40,7 @@ import {
   persistAppOfficeWorkspace,
   writeAppOfficeConfig,
 } from "../../domain/domainOfficeBackend";
+import type { OfficeConfigWriteResult } from "../../domain/domainPersistence";
 import {
   loadAppToolLibraryItems,
   refreshAppToolActionFromBackend,
@@ -52,7 +53,7 @@ export type AppDomainBackendHandlers = {
     panel: Pick<LibraryPanel, "title" | "subtitle">,
     workspace: OfficeWorkspace,
     threadId?: string | null,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeConfigWriteResult | null>;
   persistOfficeMessage: (
     panel: Pick<LibraryPanel, "title" | "subtitle">,
     workspaceBeforeMessage: OfficeWorkspace,
@@ -68,7 +69,9 @@ export type AppDomainBackendHandlers = {
     member: OfficeMember,
     threadId?: string | null,
   ) => Promise<OfficeConfig | null>;
-  writeOfficeConfigFile: (config: OfficeConfig) => Promise<string | null>;
+  writeOfficeConfigFile: (
+    config: OfficeConfig,
+  ) => Promise<OfficeConfigWriteResult | null>;
   writeAgentConfigFile: (
     config: AgentConfig,
   ) => Promise<{ filePath: string; agentId?: string } | null>;

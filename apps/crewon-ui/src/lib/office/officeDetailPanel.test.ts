@@ -12,8 +12,6 @@ import type {
 import {
   buildOfficeCreatePanel,
   buildOfficeDetailPanel,
-  demoOfficeRecruitPanel,
-  demoOfficeRecruitWorkspace,
   officeBindThreadTurnPrompt,
   officeApprovalDecisionLabel,
   officeApprovalDecisionNotice,
@@ -49,6 +47,7 @@ import {
   officeRecruitSuccessNotice,
   officeRecruitSuccessNoticeState,
   officeRecruitTurnPrompt,
+  officeRecruitUnavailableNoticeState,
   matchingOfficeWorkspaceConnectedPanel,
   officeThreadBindingPanel,
   officeThreadBindingPatch,
@@ -216,7 +215,7 @@ describe("office detail panel content", () => {
     ).toBe(
       [
         "Create office: New office 14:30",
-        "Backend record: pending office/create",
+        "Status: ready to create",
         "Goal: Coordinate frontend refactors.",
       ].join("\n"),
     );
@@ -238,7 +237,7 @@ describe("office detail panel content", () => {
       title: "新办公室 14:30",
       subtitle: "新建办公室 · 已绑定后端线程",
       configPath: "/repo/.crewon/offices/frontend.json",
-      body: "后端记录：/repo/.crewon/offices/frontend.json",
+      body: "办公室已保存。",
       items: [],
       actions: [
         {
@@ -441,7 +440,7 @@ describe("office detail panel content", () => {
         workspace: officeWorkspace,
       }),
     ).toEqual({
-      subtitle: "Refactor desk · backend thread bound",
+      subtitle: "Refactor desk · runtime connected",
       workspace: {
         ...officeWorkspace,
         threadId: "thread-2",
@@ -460,7 +459,7 @@ describe("office detail panel content", () => {
         { locale: "en", threadId: "thread-2" },
       ),
     ).toMatchObject({
-      subtitle: "Refactor desk · backend thread bound",
+      subtitle: "Refactor desk · runtime connected",
       workspace: {
         threadId: "thread-2",
         backendStatus: "connected",
@@ -473,7 +472,7 @@ describe("office detail panel content", () => {
         threadId: "thread-2",
         workspace: officeWorkspace,
       }).subtitle,
-    ).toBe("重构办公室 · 已绑定后端线程");
+    ).toBe("重构办公室 · 运行已连接");
     expect(
       officeBindThreadTurnPrompt({
         config: officeConfig(),
@@ -484,7 +483,7 @@ describe("office detail panel content", () => {
     ).toBe(
       [
         "Bind office: Frontend Office",
-        "Backend record: /repo/.crewon/offices/frontend.json",
+        "Status: office saved",
         "Goal: Coordinate frontend refactors.",
       ].join("\n"),
     );
@@ -498,57 +497,10 @@ describe("office detail panel content", () => {
         panel: { title: "前端办公室" },
       }),
     ).toBe(
-      ["绑定办公室：前端办公室", "后端记录：已提交到 office/save", "目标：协调前端重构。"].join(
+      ["绑定办公室：前端办公室", "状态：办公室已保存", "目标：协调前端重构。"].join(
         "\n",
       ),
     );
-  });
-
-  it("builds demo recruit workspace updates", () => {
-    expect(demoOfficeRecruitWorkspace(workspace(), "en")).toMatchObject({
-      members: [
-        {
-          name: "New",
-          role: "Custom agent",
-          glyph: "✦",
-          accent: "rose",
-          status: "Just joined",
-          online: true,
-        },
-      ],
-      messages: [
-        {
-          author: "System",
-          glyph: "⌗",
-          accent: "slate",
-          time: "now",
-          kind: "system",
-          text: "New member joined the office group chat and can be @mentioned for tasks",
-        },
-      ],
-    });
-    expect(
-      demoOfficeRecruitPanel(
-        {
-          kind: "office",
-          title: "Frontend Office",
-          subtitle: "Refactor desk",
-          items: [],
-          workspace: workspace(),
-        },
-        "zh",
-      )?.workspace?.members,
-    ).toEqual([
-      {
-        name: "新成员",
-        role: "自定义智能体",
-        glyph: "✦",
-        accent: "rose",
-        status: "刚加入群聊",
-        online: true,
-      },
-    ]);
-    expect(demoOfficeRecruitPanel(null, "en")).toBeNull();
   });
 
   it("builds office recruit copy and prompts", () => {
@@ -565,6 +517,10 @@ describe("office detail panel content", () => {
     );
     expect(officeRecruitMissingAgentNoticeState("en")).toEqual({
       text: "No backend agent is available to recruit. Create and save an agent in the agent library first, then recruit it into the office.",
+      tone: "warning",
+    });
+    expect(officeRecruitUnavailableNoticeState("zh")).toEqual({
+      text: "连接 App Server 后才能招募真实智能体；当前办公室不会创建演示成员。",
       tone: "warning",
     });
     expect(officeRecruitPersistenceWarning("zh")).toBe(
@@ -617,8 +573,7 @@ describe("office detail panel content", () => {
     ).toBe(
       [
         'Office "Frontend Office" recruited agent: Planner, role: Plan work. Model: gpt-5. MCP: Git. Skills: Review. Include it in future collaboration.',
-        "Backend record: submitted to office/member/add",
-        "Execution thread: thread-1",
+        "Status: member added",
       ].join("\n"),
     );
   });
@@ -876,7 +831,7 @@ describe("office detail panel content", () => {
     });
   });
 
-  it("adds thread and backend record actions when available", () => {
+  it("keeps storage details private and exposes only user actions", () => {
     expect(
       buildOfficeDetailPanel(
         officeAction({
@@ -888,24 +843,13 @@ describe("office detail panel content", () => {
       ).actions,
     ).toEqual([
       {
-        id: "open-thread",
-        label: "打开后端线程",
-        threadId: "thread-1",
-      },
-      {
         id: "recruit-agent",
         label: "招募智能体",
         tone: "primary",
       },
       {
-        id: "open-path",
-        label: "打开后端记录",
-        pathToOpen: "/repo/.crewon/offices/frontend.json",
-        pathKind: "file",
-      },
-      {
         id: "delete-config-file",
-        label: "删除后端记录",
+        label: "删除办公室",
         pathToOpen: "/repo/.crewon/offices/frontend.json",
         pathKind: "file",
         domainConfigKind: "office",
@@ -933,11 +877,6 @@ describe("office detail panel content", () => {
       body: undefined,
       workspace: refreshedWorkspace,
       actions: [
-        {
-          id: "open-thread",
-          label: "Open backend thread",
-          threadId: "thread-2",
-        },
         {
           id: "recruit-agent",
           label: "Recruit agent",

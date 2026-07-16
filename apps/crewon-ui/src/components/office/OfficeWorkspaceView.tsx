@@ -1,8 +1,8 @@
 import { Check, ChevronDown, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ActivityBoard } from "../activity/ActivityBoard";
 import type { Locale } from "../../lib/i18n";
+import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type {
   AgentConfig,
   ArtifactItem,
@@ -16,50 +16,125 @@ import type {
   OfficeRunDelegationActivity,
   OfficeRunVerificationCheckActivity,
 } from "../../lib/domain/crewonDomain";
+import type {
+  OfficeMessageSendResult,
+  OfficeMessageSubmitMention,
+  PendingOfficeMessageDelivery,
+} from "../../lib/domain/officeMessageDelivery";
 import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
+import { deriveOfficeComposerRuntimeState } from "../../lib/office/officeComposerRuntime";
+import { latestOfficeTaskRun } from "../../lib/office/latestOfficeTaskRun";
+import type { OfficeIdentity } from "../../lib/office/officeIdentity";
+import {
+  officeIdentityFromPanel,
+  officeIdentitySnapshotFromPanel,
+  officeIdentitySnapshotsMatch,
+  officePanelMatchesIdentity,
+} from "../../lib/office/officeIdentity";
 import { OfficeChatPanel } from "./OfficeChatPanel";
 import { OfficeMembersPanel } from "./OfficeMembersPanel";
-import { OfficeTasksPanel } from "./OfficeTasksPanel";
-import { OfficeWorkspaceHeader } from "./OfficeWorkspaceHeader";
+import {
+  OfficeWorkspaceHeader,
+  type OfficeWorkspaceTab,
+} from "./OfficeWorkspaceHeader";
 
-function verificationCheckActionKey(
-  run: OfficeRunActivity,
-  check: OfficeRunVerificationCheckActivity,
-) {
+export async function submitOfficeDraft({
+  draft,
+  isSubmitting,
+  onSend,
+  onSuccess,
+}: {
+  draft: string;
+  isSubmitting: boolean;
+  onSend: (
+    text: string,
+  ) => OfficeMessageSendResult | Promise<OfficeMessageSendResult>;
+  onSuccess: () => void;
+}) {
+  const text = draft.trim();
+  if (!text || isSubmitting) {
+    return false;
+  }
+  const result = await onSend(text);
+  if (result.disposition === "clearOutbox") onSuccess();
+  return result;
+}
+
+export type OfficeMessageOutbox = {
+  clientUserMessageId: string;
+  mentions: OfficeMessageSubmitMention[];
+  officeIdentity: OfficeIdentity;
+  text: string;
+};
+
+export function resolveOfficeMessageOutbox(
+  current: OfficeMessageOutbox | null,
+  draft: string,
+  panel: LibraryPanel,
+  createId: () => string = createOfficeMessageClientUserMessageId,
+  mentions: OfficeMessageSubmitMention[] = [],
+): OfficeMessageOutbox | null {
+  const text = draft.trim();
+  const officeIdentity = officeIdentityFromPanel(panel);
+  if (!text || !officeIdentity) return null;
+  return current?.text === text &&
+    officeMessageMentionsEqual(current.mentions, mentions) &&
+    officePanelMatchesIdentity(panel, current.officeIdentity)
+    ? current
+    : {
+        clientUserMessageId: createId(),
+        mentions: mentions.map((mention) => ({ ...mention })),
+        officeIdentity,
+        text,
+      };
+}
+
+function officeMessageMentionsEqual(
+  left: OfficeMessageSubmitMention[],
+  right: OfficeMessageSubmitMention[],
+): boolean {
   return (
-    check.itemId ??
-    check.automationRunId ??
-    check.automationId ??
-    `${run.id}:verification:${check.check}`
+    left.length === right.length &&
+    left.every((mention, index) => mention.memberId === right[index]?.memberId)
   );
 }
 
+export function createOfficeMessageClientUserMessageId(): string {
+  const randomId = globalThis.crypto?.randomUUID?.();
+  return randomId
+    ? `office-message-${randomId}`
+    : `office-message-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export function OfficeWorkspaceView({
+  activeTurnByThread = {},
   panel,
   locale,
   onBack,
+  onAttachContext,
   onPanelAction,
   onSendMessage,
-  onDecision,
-  onArtifact,
-  onDelegationCancel,
-  onDelegationDispatch,
-  onDelegationDispatchNext,
-  onDelegationRetry,
-  onVerificationCancel,
-  onVerificationRetry,
   onMemoryDecision,
   onMemoryList,
   onMemberContextPreview,
   onRecruitableAgentList,
   onRunCancel,
-  onRunRetry,
+  slashCommands = [],
 }: {
+  activeTurnByThread?: Record<string, string>;
   panel: LibraryPanel;
   locale: Locale;
   onBack: () => void;
+  onAttachContext?: (
+    workspaceCwd: string | undefined,
+    onSelectPath: (path: string) => void,
+  ) => void;
   onPanelAction: LibraryPanelActionCallback;
-  onSendMessage: (text: string) => void | Promise<void>;
+  onSendMessage: (
+    text: string,
+    clientUserMessageId: string,
+    mentions: OfficeMessageSubmitMention[],
+  ) => OfficeMessageSendResult | Promise<OfficeMessageSendResult>;
   onDecision: (id: string, decision: "approved" | "denied") => void;
   onArtifact: (artifact: ArtifactItem) => void;
   onDelegationCancel: (
@@ -100,10 +175,12 @@ export function OfficeWorkspaceView({
   ) => void | Promise<void>;
   onRunCancel: (run: OfficeRunActivity) => void | Promise<void>;
   onRunRetry: (run: OfficeRunActivity) => void | Promise<void>;
+  slashCommands?: ComposerSlashCommand[];
 }) {
   const workspace = panel.workspace;
   const [draft, setDraft] = useState("");
-  const [tab, setTab] = useState<"chat" | "activity" | "memory">("chat");
+  const [tab, setTab] = useState<OfficeWorkspaceTab>("chat");
+  const [membersOpen, setMembersOpen] = useState(false);
   const [memoryStatus, setMemoryStatus] =
     useState<OfficeMemoryStatus>("pending");
   const [officeMemories, setOfficeMemories] = useState<OfficeMemoryRecord[]>(
@@ -118,26 +195,41 @@ export function OfficeWorkspaceView({
     memoryId: string;
     status: OfficeMemoryStatus;
   } | null>(null);
-  const [recruitableAgents, setRecruitableAgents] = useState<AgentConfig[]>(
-    [],
-  );
+  const [recruitableAgents, setRecruitableAgents] = useState<AgentConfig[]>([]);
   const [isLoadingRecruitableAgents, setIsLoadingRecruitableAgents] =
     useState(false);
   const [recruitableAgentError, setRecruitableAgentError] = useState<
     string | null
   >(null);
   const [isSendingOfficeMessage, setIsSendingOfficeMessage] = useState(false);
+  const [pendingMessageDelivery, setPendingMessageDelivery] =
+    useState<PendingOfficeMessageDelivery | null>(null);
   const [pendingRunAction, setPendingRunAction] = useState<{
-    action: "cancel" | "retry";
     runId: string;
   } | null>(null);
-  const [pendingDelegationId, setPendingDelegationId] = useState<string | null>(
-    null,
-  );
-  const [pendingVerificationCheckId, setPendingVerificationCheckId] = useState<
-    string | null
-  >(null);
   const streamRef = useRef<HTMLDivElement | null>(null);
+  const messageOutboxRef = useRef<OfficeMessageOutbox | null>(null);
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
+  const officeIdentityRef = useRef(officeIdentitySnapshotFromPanel(panel));
+
+  useEffect(() => {
+    const previous = officeIdentityRef.current;
+    const next = officeIdentitySnapshotFromPanel(panel);
+    const changedOffice = !officeIdentitySnapshotsMatch(previous, next);
+    officeIdentityRef.current = next;
+    if (changedOffice) {
+      messageOutboxRef.current = null;
+      setPendingMessageDelivery(null);
+      setDraft("");
+    }
+  }, [
+    panel,
+    panel.configPath,
+    panel.title,
+    panel.workspace?.recordId,
+    panel.workspace?.threadId,
+  ]);
 
   useEffect(() => {
     const stream = streamRef.current;
@@ -194,157 +286,100 @@ export function OfficeWorkspaceView({
   }, [loadOfficeMemories, memoryStatus, onMemoryList, tab]);
 
   useEffect(() => {
-    if (tab === "chat" && onRecruitableAgentList) {
+    if (tab === "chat" && membersOpen && onRecruitableAgentList) {
       void loadRecruitableAgents();
     }
-  }, [loadRecruitableAgents, onRecruitableAgentList, tab]);
+  }, [loadRecruitableAgents, membersOpen, onRecruitableAgentList, tab]);
+
+  useEffect(() => {
+    if (tab !== "chat") {
+      setMembersOpen(false);
+    }
+  }, [tab]);
 
   if (!workspace) {
     return null;
   }
-  const memberContextRun = latestOfficeRun(workspace.activity?.runs);
+  const memberContextRun = latestOfficeTaskRun(workspace.activity?.runs);
+  const composerRuntime = deriveOfficeComposerRuntimeState(
+    workspace,
+    activeTurnByThread,
+  );
+  const composerRun = composerRuntime.run;
 
-  async function submit() {
-    const text = draft.trim();
-    if (!text || isSendingOfficeMessage) {
+  async function submit(
+    submittedDraft = draft,
+    mentions: OfficeMessageSubmitMention[] = [],
+  ) {
+    const outbox = resolveOfficeMessageOutbox(
+      messageOutboxRef.current,
+      submittedDraft,
+      panel,
+      createOfficeMessageClientUserMessageId,
+      mentions,
+    );
+    if (!outbox) {
       return;
     }
+    messageOutboxRef.current = outbox;
     setIsSendingOfficeMessage(true);
     try {
-      await onSendMessage(text);
-      setDraft("");
-      setTab("activity");
+      const result = await submitOfficeDraft({
+        draft: outbox.text,
+        isSubmitting: isSendingOfficeMessage,
+        onSend: (text) =>
+          onSendMessage(text, outbox.clientUserMessageId, outbox.mentions),
+        onSuccess: () => {
+          if (
+            !officePanelMatchesIdentity(panelRef.current, outbox.officeIdentity)
+          ) {
+            return;
+          }
+          messageOutboxRef.current = null;
+          setPendingMessageDelivery(null);
+          setDraft("");
+        },
+      });
+      if (
+        result !== false &&
+        result.disposition === "retainOutbox" &&
+        result.delivery &&
+        (result.delivery.type === "queued" ||
+          result.delivery.type === "processing") &&
+        officePanelMatchesIdentity(panelRef.current, outbox.officeIdentity)
+      ) {
+        setPendingMessageDelivery(result.delivery);
+      }
+    } catch {
+      // The Office action already reconciles the canonical config and visible
+      // error state. Keep the draft/outbox without leaking a rejected promise
+      // from the UI event boundary.
     } finally {
       setIsSendingOfficeMessage(false);
     }
   }
 
-  async function runOfficeAction(
-    run: OfficeRunActivity,
-    action: "cancel" | "retry",
-  ) {
-    if (pendingRunAction || pendingDelegationId || pendingVerificationCheckId) {
+  function changeDraft(nextDraft: string) {
+    setDraft(nextDraft);
+    if (messageOutboxRef.current?.text !== nextDraft.trim()) {
+      messageOutboxRef.current = null;
+      setPendingMessageDelivery(null);
+    }
+  }
+
+  async function cancelOfficeRun(run: OfficeRunActivity) {
+    if (pendingRunAction) {
       return;
     }
-    setPendingRunAction({ action, runId: run.id });
+    setPendingRunAction({ runId: run.id });
     try {
-      if (action === "cancel") {
-        await onRunCancel(run);
-      } else {
-        await onRunRetry(run);
-      }
+      await onRunCancel(run);
     } finally {
       setPendingRunAction(null);
     }
   }
 
-  async function dispatchOfficeDelegation(
-    run: OfficeRunActivity,
-    delegation: OfficeRunDelegationActivity,
-  ) {
-    if (pendingRunAction || pendingDelegationId || pendingVerificationCheckId) {
-      return;
-    }
-    const delegationId =
-      delegation.id ??
-      `${run.id}:${delegation.agentId ?? delegation.member ?? "agent"}:${delegation.task ?? 0}`;
-    setPendingDelegationId(delegationId);
-    try {
-      await onDelegationDispatch(run, delegation);
-    } finally {
-      setPendingDelegationId(null);
-    }
-  }
-
-  async function dispatchNextOfficeDelegation(run: OfficeRunActivity) {
-    if (
-      pendingRunAction ||
-      pendingDelegationId ||
-      pendingVerificationCheckId ||
-      !onDelegationDispatchNext
-    ) {
-      return;
-    }
-    setPendingDelegationId(`${run.id}:next`);
-    try {
-      await onDelegationDispatchNext(run);
-    } finally {
-      setPendingDelegationId(null);
-    }
-  }
-
-  async function cancelOfficeDelegation(
-    run: OfficeRunActivity,
-    delegation: OfficeRunDelegationActivity,
-  ) {
-    if (pendingRunAction || pendingDelegationId || pendingVerificationCheckId) {
-      return;
-    }
-    const delegationId =
-      delegation.id ??
-      `${run.id}:${delegation.agentId ?? delegation.member ?? "agent"}:${delegation.task ?? 0}`;
-    setPendingDelegationId(delegationId);
-    try {
-      await onDelegationCancel(run, delegation);
-    } finally {
-      setPendingDelegationId(null);
-    }
-  }
-
-  async function retryOfficeDelegation(
-    run: OfficeRunActivity,
-    delegation: OfficeRunDelegationActivity,
-  ) {
-    if (pendingRunAction || pendingDelegationId || pendingVerificationCheckId) {
-      return;
-    }
-    const delegationId =
-      delegation.id ??
-      `${run.id}:${delegation.agentId ?? delegation.member ?? "agent"}:${delegation.task ?? 0}`;
-    setPendingDelegationId(delegationId);
-    try {
-      await onDelegationRetry(run, delegation);
-    } finally {
-      setPendingDelegationId(null);
-    }
-  }
-
-  async function cancelOfficeVerification(
-    run: OfficeRunActivity,
-    check: OfficeRunVerificationCheckActivity,
-  ) {
-    if (pendingRunAction || pendingDelegationId || pendingVerificationCheckId) {
-      return;
-    }
-    const checkId = verificationCheckActionKey(run, check);
-    setPendingVerificationCheckId(checkId);
-    try {
-      await onVerificationCancel(run, check);
-    } finally {
-      setPendingVerificationCheckId(null);
-    }
-  }
-
-  async function retryOfficeVerification(
-    run: OfficeRunActivity,
-    check: OfficeRunVerificationCheckActivity,
-  ) {
-    if (pendingRunAction || pendingDelegationId || pendingVerificationCheckId) {
-      return;
-    }
-    const checkId = verificationCheckActionKey(run, check);
-    setPendingVerificationCheckId(checkId);
-    try {
-      await onVerificationRetry(run, check);
-    } finally {
-      setPendingVerificationCheckId(null);
-    }
-  }
-
-  async function decideMemory(
-    memoryId: string,
-    status: OfficeMemoryStatus,
-  ) {
+  async function decideMemory(memoryId: string, status: OfficeMemoryStatus) {
     if (!onMemoryDecision || pendingMemoryDecision) {
       return;
     }
@@ -369,47 +404,16 @@ export function OfficeWorkspaceView({
   return (
     <main className="office-workspace" aria-label={panel.title}>
       <OfficeWorkspaceHeader
+        activeTab={tab}
+        membersOpen={membersOpen}
         panel={panel}
         workspace={workspace}
         locale={locale}
+        showMemory={Boolean(onMemoryList)}
         onBack={onBack}
+        onMembersToggle={() => setMembersOpen((open) => !open)}
+        onTabChange={setTab}
       />
-
-      <div
-        className="office-tabs"
-        role="tablist"
-        aria-label={locale === "zh" ? "办公室视图" : "Office views"}
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "chat"}
-          data-active={tab === "chat"}
-          onClick={() => setTab("chat")}
-        >
-          {locale === "zh" ? "群聊" : "Group chat"}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "activity"}
-          data-active={tab === "activity"}
-          onClick={() => setTab("activity")}
-        >
-          {locale === "zh" ? "运行台" : "Activity"}
-        </button>
-        {onMemoryList ? (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "memory"}
-            data-active={tab === "memory"}
-            onClick={() => setTab("memory")}
-          >
-            {locale === "zh" ? "记忆" : "Memory"}
-          </button>
-        ) : null}
-      </div>
 
       {tab === "memory" ? (
         <OfficeMemoryReviewPanel
@@ -426,86 +430,65 @@ export function OfficeWorkspaceView({
           onStatusChange={changeMemoryStatus}
           onDecision={(memoryId, status) => void decideMemory(memoryId, status)}
         />
-      ) : tab === "activity" ? (
-        workspace.activity ? (
-          <ActivityBoard
-            data={workspace.activity}
-            locale={locale}
-            onDecision={onDecision}
-            onArtifact={onArtifact}
-            onDelegationDispatch={(run, delegation) =>
-              void dispatchOfficeDelegation(run, delegation)
-            }
-            onDelegationCancel={(run, delegation) =>
-              void cancelOfficeDelegation(run, delegation)
-            }
-            onDelegationDispatchNext={
-              onDelegationDispatchNext
-                ? (run) => void dispatchNextOfficeDelegation(run)
-                : undefined
-            }
-            onDelegationRetry={(run, delegation) =>
-              void retryOfficeDelegation(run, delegation)
-            }
-            onVerificationCancel={(run, check) =>
-              void cancelOfficeVerification(run, check)
-            }
-            onVerificationRetry={(run, check) =>
-              void retryOfficeVerification(run, check)
-            }
-            onRunCancel={(run) => void runOfficeAction(run, "cancel")}
-            onRunRetry={(run) => void runOfficeAction(run, "retry")}
-            pendingDelegationId={pendingDelegationId}
-            pendingVerificationCheckId={pendingVerificationCheckId}
-            pendingRunAction={pendingRunAction?.action ?? null}
-            pendingRunId={pendingRunAction?.runId ?? null}
-          />
-        ) : (
-          <p className="activity-empty">
-            {locale === "zh" ? "暂无运行记录。" : "No activity yet."}
-          </p>
-        )
       ) : (
-        <div className="office-grid">
-          <OfficeMembersPanel
-            actions={panel.actions}
-            workspace={workspace}
-            locale={locale}
-            contextRun={memberContextRun}
-            isLoadingRecruitableAgents={isLoadingRecruitableAgents}
-            recruitableAgentError={recruitableAgentError}
-            recruitableAgents={recruitableAgents}
-            onMemberContextPreview={onMemberContextPreview}
-            onPanelAction={onPanelAction}
-            onRefreshRecruitableAgents={loadRecruitableAgents}
-          />
+        <div
+          className="office-room-body"
+          data-members-open={membersOpen || undefined}
+        >
           <OfficeChatPanel
             workspace={workspace}
             locale={locale}
+            onAttachContext={
+              onAttachContext
+                ? (onSelectPath) =>
+                    onAttachContext(panel.workspaceCwd, onSelectPath)
+                : undefined
+            }
             draft={draft}
             streamRef={streamRef}
             isSubmitting={isSendingOfficeMessage}
-            onDraftChange={setDraft}
-            onSubmit={() => void submit()}
+            isStopping={
+              pendingRunAction?.runId === composerRun?.id
+            }
+            onDraftChange={changeDraft}
+            onStop={
+              composerRun
+                ? () => cancelOfficeRun(composerRun)
+                : undefined
+            }
+            onSubmit={submit}
+            pendingDelivery={pendingMessageDelivery}
+            runtimeMode={composerRuntime.mode}
+            slashCommands={slashCommands}
           />
-          <OfficeTasksPanel workspace={workspace} locale={locale} />
+          <button
+            type="button"
+            className="office-members-backdrop"
+            aria-label={
+              locale === "zh" ? "关闭成员面板" : "Close members panel"
+            }
+            hidden={!membersOpen}
+            onClick={() => setMembersOpen(false)}
+          />
+          <div className="office-members-drawer" hidden={!membersOpen}>
+            <OfficeMembersPanel
+              actions={panel.actions}
+              workspace={workspace}
+              locale={locale}
+              contextRun={memberContextRun}
+              isLoadingRecruitableAgents={isLoadingRecruitableAgents}
+              recruitableAgentError={recruitableAgentError}
+              recruitableAgents={recruitableAgents}
+              onClose={() => setMembersOpen(false)}
+              onMemberContextPreview={onMemberContextPreview}
+              onPanelAction={onPanelAction}
+              onRefreshRecruitableAgents={loadRecruitableAgents}
+            />
+          </div>
         </div>
       )}
     </main>
   );
-}
-
-function latestOfficeRun(runs: OfficeRunActivity[] | undefined) {
-  if (!runs?.length) {
-    return null;
-  }
-  return [...runs].sort((left, right) =>
-    officeRunTimestamp(right).localeCompare(officeRunTimestamp(left)),
-  )[0];
-}
-
-function officeRunTimestamp(run: OfficeRunActivity) {
-  return run.updatedAt ?? run.completedAt ?? run.createdAt ?? "";
 }
 
 export function OfficeMemoryReviewPanel({

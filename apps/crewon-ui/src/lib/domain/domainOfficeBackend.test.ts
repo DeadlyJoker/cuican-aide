@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AppServerRpcError, type AppServerClient } from "../app-server/appServer";
 import type {
@@ -25,6 +25,7 @@ import {
   retryAppOfficeVerification,
   retryAppOfficeRun,
   runAppOfficeMessage,
+  submitAppOfficeMessage,
   writeAppOfficeConfig,
 } from "./domainOfficeBackend";
 
@@ -104,29 +105,44 @@ describe("domain office backend", () => {
 
   it("writes an app office config through the resolved backend workspace", async () => {
     const config = officeConfig();
+    const savedConfig = officeConfig({
+      workspace: workspace({ recordRevision: "revision-2" }),
+    });
     const captures: unknown[] = [];
     const result = await writeAppOfficeConfig({
       client: client({
-        async saveOfficeConfig(cwd, nextConfig) {
-          captures.push({ cwd, nextConfig });
-          return { filePath: ".crewon/offices/frontend.json" };
-        },
+          async saveOfficeConfig(cwd, nextConfig) {
+            captures.push({ cwd, nextConfig });
+            return {
+              config: savedConfig,
+              filePath: ".crewon/offices/frontend.json",
+            };
+          },
       }),
       config,
       resolveBackendCwd: async () => "/repo",
     });
 
     expect(captures).toEqual([{ cwd: "/repo", nextConfig: config }]);
-    expect(result).toBe(".crewon/offices/frontend.json");
+    expect(result).toEqual({
+      config: savedConfig,
+      filePath: ".crewon/offices/frontend.json",
+    });
   });
 
   it("persists an app office workspace with the panel identity", async () => {
+    const savedConfig = officeConfig({
+      workspace: workspace({ recordRevision: "revision-2" }),
+    });
     const captures: unknown[] = [];
     const result = await persistAppOfficeWorkspace({
       client: client({
         async saveOfficeConfig(cwd, config) {
           captures.push({ cwd, config });
-          return { filePath: ".crewon/offices/frontend.json" };
+          return {
+            config: savedConfig,
+            filePath: ".crewon/offices/frontend.json",
+          };
         },
       }),
       panel: { title: "Frontend Office", subtitle: "Architecture" },
@@ -145,7 +161,38 @@ describe("domain office backend", () => {
         },
       },
     ]);
-    expect(result).toBe(".crewon/offices/frontend.json");
+    expect(result).toEqual({
+      config: savedConfig,
+      filePath: ".crewon/offices/frontend.json",
+    });
+  });
+
+  it("keeps Office runtime writes bound to the Office workspace instead of the single-chat workspace", async () => {
+    const resolveBackendCwd = vi.fn(async () => "/repo/single-chat");
+    const captures: unknown[] = [];
+
+    await persistAppOfficeWorkspace({
+      client: client({
+        async saveOfficeConfig(cwd, config) {
+          captures.push({ cwd, config });
+          return {
+            config,
+            filePath: ".crewon/offices/frontend.json",
+          };
+        },
+      }),
+      panel: {
+        title: "Frontend Office",
+        subtitle: "Architecture",
+        workspaceCwd: "/repo/office-group",
+      },
+      resolveBackendCwd,
+      threadId: "thread-1",
+      workspace: workspace(),
+    });
+
+    expect(captures).toMatchObject([{ cwd: "/repo/office-group" }]);
+    expect(resolveBackendCwd).not.toHaveBeenCalled();
   });
 
   it("persists an app office message through the backend workspace", async () => {
@@ -182,6 +229,53 @@ describe("domain office backend", () => {
       },
     ]);
     expect(result).toBe(nextConfig);
+  });
+
+  it("returns the canonical save config when office message RPC is unavailable", async () => {
+    const fallbackWorkspace = workspace({ messages: [message()] });
+    const savedConfig = officeConfig({
+      workspace: workspace({
+        messages: fallbackWorkspace.messages,
+        recordRevision: "revision-fallback",
+      }),
+    });
+    const savedRequests: unknown[] = [];
+
+    const result = await persistAppOfficeMessage({
+      client: client({
+        async sendOfficeMessageConfig() {
+          throw new AppServerRpcError("unsupported", -32601);
+        },
+        async saveOfficeConfig(cwd, config) {
+          savedRequests.push({ cwd, config });
+          return {
+            config: savedConfig,
+            filePath: ".crewon/offices/frontend.json",
+          };
+        },
+      }),
+      fallbackWorkspace,
+      locale: "en",
+      message: message(),
+      panel: { title: "Frontend Office", subtitle: "Architecture" },
+      resolveBackendCwd: async () => "/repo",
+      text: "Keep the UI clean",
+      threadId: "thread-1",
+      workspaceBeforeMessage: workspace(),
+    });
+
+    expect(savedRequests).toMatchObject([
+      {
+        cwd: "/repo",
+        config: {
+          workspace: {
+            messages: [{ text: "Keep the UI clean" }],
+            threadId: "thread-1",
+          },
+        },
+      },
+    ]);
+    expect(result).toBe(savedConfig);
   });
 
   it("runs an app office message through the backend workspace", async () => {
@@ -229,6 +323,82 @@ describe("domain office backend", () => {
       cwd: "/repo",
       handled: true,
       response: { runId: "run-1", threadId: "thread-1" },
+    });
+  });
+
+  it("submits a stable receipt without echoing the same-id optimistic bubble", async () => {
+    const captures: unknown[] = [];
+    const canonicalConfig = officeConfig({
+      workspace: workspace({ recordRevision: "revision-submit" }),
+    });
+    const result = await submitAppOfficeMessage({
+      client: client({
+        async submitOfficeMessageConfig(
+          cwd,
+          config,
+          text,
+          clientUserMessageId,
+          params,
+        ) {
+          captures.push({ cwd, config, text, clientUserMessageId, params });
+          return {
+            filePath: ".crewon/offices/frontend.json",
+            config: canonicalConfig,
+            receiptId: "receipt-1",
+            clientUserMessageId,
+            replayed: false,
+            delivery: {
+              type: "queued",
+              afterRunId: "run-active",
+              position: 1,
+            },
+          };
+        },
+      }),
+      clientUserMessageId: "message-1",
+      locale: "en",
+      mentions: [{ memberId: "reviewer" }],
+      panel: { title: "Frontend Office", subtitle: "Architecture" },
+      resolveBackendCwd: async () => "/repo",
+      text: "Continue safely",
+      workspace: workspace({
+        messages: [
+          message({ clientOnly: true, text: "temporary error" }),
+          message({
+            clientUserMessageId: "message-1",
+            text: "Continue safely",
+          }),
+          message({ clientUserMessageId: "message-0", text: "Earlier" }),
+        ],
+      }),
+    });
+
+    expect(captures).toEqual([
+      {
+        cwd: "/repo",
+        config: officeConfig({
+          workspace: workspace({
+            backendStatus: "connected",
+            messages: [
+              message({ clientUserMessageId: "message-0", text: "Earlier" }),
+            ],
+          }),
+        }),
+        text: "Continue safely",
+        clientUserMessageId: "message-1",
+        params: {
+          locale: "en",
+          threadId: "thread-1",
+          mentions: [{ memberId: "reviewer" }],
+        },
+      },
+    ]);
+    expect(result).toMatchObject({
+      cwd: "/repo",
+      response: {
+        config: canonicalConfig,
+        receiptId: "receipt-1",
+      },
     });
   });
 

@@ -1,4 +1,5 @@
 import type { AppServerClient } from "../app-server/appServer";
+import { isLegacyGeneratedAgentPlaceholder } from "../agent-config/legacyAgentPlaceholder";
 import type { BackendWorkspace } from "../backend/backendWorkspace";
 import type { AgentConfig, AutomationConfig, OfficeConfig } from "../domain/crewonDomain";
 
@@ -55,7 +56,9 @@ export async function listBackendAgentConfigs(
   workspaceProvider: BackendWorkspaceProvider,
 ): Promise<Array<BackendConfigRecord<AgentConfig>>> {
   const { client, cwd } = await workspaceProvider();
-  return (await client.listAgentConfigs(cwd)).data;
+  return (await client.listAgentConfigs(cwd)).data.filter(
+    (record) => !isLegacyGeneratedAgentPlaceholder(record.config),
+  );
 }
 
 export async function listBackendOfficeConfigs(

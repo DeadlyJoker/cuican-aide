@@ -26,6 +26,8 @@ export function useAppThreadState() {
   const [activeTurnByThread, setActiveTurnByThread] = useState<
     Record<string, string>
   >({});
+  const activeTurnByThreadRef = useRef<Record<string, string>>({});
+  activeTurnByThreadRef.current = activeTurnByThread;
   const [streamingTextByThread, setStreamingTextByThreadState] =
     useState<StreamingTextByThread>({});
   const streamingTextBufferRef = useRef<ReturnType<
@@ -61,6 +63,7 @@ export function useAppThreadState() {
 
   return {
     activeTurnByThread,
+    activeTurnByThreadRef,
     appendStreamingTextDelta,
     isSearchingThreads,
     loadedThreadIds,

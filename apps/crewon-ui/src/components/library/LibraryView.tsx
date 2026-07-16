@@ -1,6 +1,6 @@
 import { AgentConfigView } from "../agents/AgentConfigView";
-import { OfficeWorkspaceView } from "../office/OfficeWorkspaceView";
 import type { LibraryPanelActionCallback } from "./LibraryPrimitives";
+import type { OfficeMessageSendResult } from "../../lib/office/officeMessageActions";
 import type { Locale } from "../../lib/i18n";
 import type {
   AgentConfig,
@@ -20,13 +20,17 @@ import { GenericLibraryPage } from "./GenericLibraryPage";
 import { KnowledgeView } from "./KnowledgeView";
 
 type LibraryViewProps = {
+  activeTurnByThread?: Record<string, string>;
   panel: LibraryPanel;
   locale: Locale;
   onBack: () => void;
   onItemAction: (item: LibraryItem) => void;
   onPanelAction: LibraryPanelActionCallback;
   onPanelFieldChange: (fieldId: string, value: string) => void;
-  onSendOfficeMessage: (text: string) => void | Promise<void>;
+  onSendOfficeMessage: (
+    text: string,
+    clientUserMessageId: string,
+  ) => OfficeMessageSendResult | Promise<OfficeMessageSendResult>;
   onUpdateAgentConfig: (patch: Partial<AgentConfig>) => void;
   onToggleAgentCapability: (group: "mcp" | "skills", id: string) => void;
   onSaveAgentConfig: () => void;
@@ -75,6 +79,7 @@ type LibraryViewProps = {
 };
 
 export function LibraryView({
+  activeTurnByThread = {},
   panel,
   locale,
   onBack,
@@ -127,32 +132,6 @@ export function LibraryView({
             threadId,
           })
         }
-      />
-    );
-  }
-
-  if (panel.workspace) {
-    return (
-      <OfficeWorkspaceView
-        panel={panel}
-        locale={locale}
-        onBack={onBack}
-        onPanelAction={onPanelAction}
-        onSendMessage={onSendOfficeMessage}
-        onDecision={onApprovalDecision}
-        onArtifact={onArtifact}
-        onDelegationDispatch={onOfficeDelegationDispatch}
-        onDelegationCancel={onOfficeDelegationCancel}
-        onDelegationRetry={onOfficeDelegationRetry}
-        onDelegationDispatchNext={onOfficeDelegationDispatchNext}
-        onVerificationCancel={onOfficeVerificationCancel}
-        onVerificationRetry={onOfficeVerificationRetry}
-        onMemoryDecision={onOfficeMemoryDecision}
-        onMemoryList={onOfficeMemoryList}
-        onMemberContextPreview={onOfficeMemberContextPreview}
-        onRecruitableAgentList={onRecruitableAgentList}
-        onRunCancel={onOfficeRunCancel}
-        onRunRetry={onOfficeRunRetry}
       />
     );
   }

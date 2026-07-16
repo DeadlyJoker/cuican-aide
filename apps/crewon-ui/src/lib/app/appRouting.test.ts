@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appViewFromSearch,
   isCommandShellHash,
+  legacyOfficeCommandShellUrl,
   libraryViewFromSearch,
   shouldRenderCommandShellView,
   settingsSectionFromSearch,
@@ -22,12 +23,32 @@ describe("app routing search parsing", () => {
 
   it("falls back to chat for missing or unknown views", () => {
     expect(appViewFromSearch("")).toBe("chat");
+    expect(appViewFromSearch("?view=office")).toBe("chat");
     expect(appViewFromSearch("?view=unknown")).toBe("chat");
+  });
+
+  it("migrates legacy Office deep links to the Team shell", () => {
+    const migrated = legacyOfficeCommandShellUrl(
+      "http://127.0.0.1:5175/?cwd=%2Frepo%2Foffice&view=office",
+    );
+    const parsed = new URL(migrated ?? "", "http://127.0.0.1:5175");
+
+    expect({
+      cwd: parsed.searchParams.get("cwd"),
+      hash: parsed.hash,
+      teamCwd: parsed.searchParams.get("teamCwd"),
+      view: parsed.searchParams.get("view"),
+    }).toEqual({
+      cwd: "/repo/office",
+      hash: "#view-team",
+      teamCwd: "/repo/office",
+      view: null,
+    });
   });
 
   it("returns the concrete library kind when supported", () => {
     expect(libraryViewFromSearch("?view=plugins")).toBe("plugins");
-    expect(libraryViewFromSearch("?view=office")).toBe("office");
+    expect(libraryViewFromSearch("?view=office")).toBeNull();
     expect(libraryViewFromSearch("?view=settings")).toBeNull();
   });
 

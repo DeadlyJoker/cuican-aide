@@ -6,7 +6,6 @@ import type { AppServerClient } from "../app-server/appServer";
 import type {
   LibraryPanel,
   OfficeConfig,
-  OfficeWorkspace,
 } from "../domain/crewonDomain";
 import type { OfficeRunTurnRecord } from "../office/officeRunPanel";
 import type { AppOfficeRuntimeCoordinatorParams } from "./appOfficeRuntimeCoordinator";
@@ -33,7 +32,10 @@ const officeRuntimeHandlerSpy = vi.hoisted(() => ({
         listOfficeMemories: vi.fn(async () => null),
         previewOfficeMemberContext: vi.fn(async () => null),
         recordOfficeRunTurn: vi.fn(),
-        sendOfficeMessage: vi.fn(async () => undefined),
+        sendOfficeMessage: vi.fn(async () => ({
+          delivery: null,
+          disposition: "clearOutbox" as const,
+        })),
       };
     },
   ),
@@ -92,23 +94,18 @@ function createParams(
 ): AppOfficeRuntimeCoordinatorParams {
   return {
     client: null as AppServerClient | null,
+    getActiveTurnByThread: () => ({}),
     isConnected: true,
     isMissingThreadError: () => false,
     libraryPanelRef: { current: null },
     locale: "en",
     officeRunByTurnRef: { current: {} },
     persistOfficeMessage: async () => null,
-    persistOfficeWorkspace: async (
-      _panel: Pick<LibraryPanel, "title" | "subtitle">,
-      _workspace: OfficeWorkspace,
-      _threadId?: string | null,
-    ) => null,
     resolveBackendCwd: async () => "/repo",
     setActiveTurnByThread: () => {},
     setLibraryPanel: () => {},
     setNotice: () => {},
     setThreads: () => {},
-    startBackendDomainThread: async () => null as Thread | null,
     ...overrides,
   };
 }

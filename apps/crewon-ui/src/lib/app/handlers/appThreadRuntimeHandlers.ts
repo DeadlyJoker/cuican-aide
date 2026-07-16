@@ -16,6 +16,7 @@ import {
 } from "../../thread/threadRuntimeSettings";
 import {
   archiveThreadAction,
+  clearAssistantThreadAction,
   deleteArchivedThreadAction,
   renameThreadAction,
   selectThreadAction,
@@ -47,6 +48,7 @@ type SetCapabilityPanel = (
 
 export type AppThreadRuntimeHandlers = {
   archiveThread: (thread: Thread) => Promise<void>;
+  clearAssistantThread: (thread: Thread) => Promise<void>;
   createDemoThread: (initialPrompt?: string) => Thread;
   createThread: (
     initialPrompt?: string,
@@ -63,6 +65,11 @@ export type AppThreadRuntimeHandlers = {
     threadSettings?: ThreadRuntimeSettings,
     images?: ComposerImageInput[],
   ) => Promise<void>;
+  sendMessageToThread: (
+    text: string,
+    thread: Thread,
+    threadSettings?: ThreadRuntimeSettings,
+  ) => Promise<void>;
   sendMessageInNewThread: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
@@ -76,6 +83,7 @@ export type AppThreadRuntimeHandlers = {
 };
 
 export type AppThreadRuntimeHandlersParams = {
+  activeTurnByThread?: Record<string, string>;
   activeTurnId: string | null;
   busyToolId: ToolId | null;
   client: AppServerClient | null;
@@ -179,7 +187,8 @@ export function createAppThreadRuntimeHandlers(
       createThread: (initialPrompt) =>
         createThread(
           initialPrompt,
-          agentPlatformThreadSource(threadSettings?.agentPlatformAgentId) ??
+          threadSettings?.threadSource ??
+            agentPlatformThreadSource(threadSettings?.agentPlatformAgentId) ??
             "app_server",
           threadSettings,
           workspaceCwd,
@@ -217,6 +226,17 @@ export function createAppThreadRuntimeHandlers(
         setSelectedThreadId: params.setSelectedThreadId,
         setThreads: params.setThreads,
         showArchivedThreads: params.getShowArchivedThreads(),
+        thread,
+      }),
+    clearAssistantThread: (thread) =>
+      clearAssistantThreadAction({
+        client: params.client,
+        confirm: params.confirm,
+        isConnected: params.isConnected,
+        locale: params.locale,
+        setNotice: params.setNotice,
+        setSelectedThreadId: params.setSelectedThreadId,
+        setThreads: params.setThreads,
         thread,
       }),
     createDemoThread,
@@ -284,6 +304,17 @@ export function createAppThreadRuntimeHandlers(
         selectedThread: params.selectedThread,
         selectedThreadId: params.selectedThreadId,
       }, undefined, images),
+    sendMessageToThread: (text, thread, threadSettings) => {
+      params.setSelectedThreadId(thread.id);
+      return sendMessageWithThreadContext(text, threadSettings, {
+        activeTurnId:
+          params.activeTurnByThread?.[thread.id] ??
+          thread.turns.find((turn) => turn.status === "inProgress")?.id ??
+          null,
+        selectedThread: thread,
+        selectedThreadId: thread.id,
+      });
+    },
     sendMessageInNewThread: (text, threadSettings, workspaceCwd, images) =>
       sendMessageWithThreadContext(
         text,

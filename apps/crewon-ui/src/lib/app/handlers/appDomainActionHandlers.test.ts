@@ -158,7 +158,18 @@ function createParams(
   return {
     busyToolId: null,
     client: client(),
-    ensureOfficeThread: async () => "office-thread-1",
+    ensureOfficeThread: async () => ({
+      config: {
+        title: "Office",
+        subtitle: "Workspace",
+        workspace: {
+          ...workspace(),
+          threadId: "office-thread-1",
+        },
+      },
+      filePath: "/offices/office.json",
+      threadId: "office-thread-1",
+    }),
     handleCapabilityPanelItem: async () => {},
     isConnected: true,
     isMissingThreadError: () => false,

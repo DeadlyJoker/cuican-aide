@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createAppCommandShellHandlers } from "./appCommandShellHandlers";
+import {
+  commandShellWorkspaceUrl,
+  createAppCommandShellHandlers,
+} from "./appCommandShellHandlers";
 
 describe("createAppCommandShellHandlers", () => {
   it("switches draft conversations into a selected workspace", () => {
@@ -26,7 +29,7 @@ describe("createAppCommandShellHandlers", () => {
     expect(setComposerFocusSignal).toHaveBeenCalledWith(expect.any(Function));
   });
 
-  it("starts a blank command-shell draft", () => {
+  it("starts an explicitly workspace-less command-shell draft", () => {
     const setWorkMode = vi.fn();
     const setDraftWorkspaceCwd = vi.fn();
     const startDraftThread = vi.fn();
@@ -40,11 +43,28 @@ describe("createAppCommandShellHandlers", () => {
       startDraftThread,
     });
 
-    handlers.startCommandShellDraftThread();
+    handlers.startCommandShellDraftThread(null);
 
     expect(setWorkMode).toHaveBeenCalledWith("code");
     expect(setDraftWorkspaceCwd).toHaveBeenCalledWith(null);
     expect(startDraftThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the current workspace when starting a new command-shell draft", () => {
+    const setDraftWorkspaceCwd = vi.fn();
+    const handlers = createAppCommandShellHandlers({
+      selectThread: vi.fn(),
+      sendMessageInNewThread: vi.fn(),
+      setComposerFocusSignal: vi.fn(),
+      setDraftWorkspaceCwd,
+      setSelectedThreadId: vi.fn(),
+      setWorkMode: vi.fn(),
+      startDraftThread: vi.fn(),
+    });
+
+    handlers.startCommandShellDraftThread(" /repo/frontend ");
+
+    expect(setDraftWorkspaceCwd).toHaveBeenCalledWith("/repo/frontend");
   });
 
   it("forwards the selected workspace when sending a new task", () => {
@@ -66,5 +86,27 @@ describe("createAppCommandShellHandlers", () => {
       undefined,
       "/repo/frontend",
     );
+  });
+});
+
+describe("commandShellWorkspaceUrl", () => {
+  it("keeps the team workspace while restoring the single-chat workspace", () => {
+    expect(
+      commandShellWorkspaceUrl(
+        "http://127.0.0.1:5175/?cwd=%2Frepo%2Fold&teamCwd=%2Frepo%2Fteam#view-team",
+        " /repo/frontend ",
+      ),
+    ).toBe(
+      "/?cwd=%2Frepo%2Ffrontend&teamCwd=%2Frepo%2Fteam#view-command",
+    );
+  });
+
+  it("requires an explicit empty workspace without dropping team state", () => {
+    expect(
+      commandShellWorkspaceUrl(
+        "http://127.0.0.1:5175/?cwd=%2Frepo%2Ffrontend&teamCwd=%2Frepo%2Fteam#view-team",
+        null,
+      ),
+    ).toBe("/?cwd=&teamCwd=%2Frepo%2Fteam#view-command");
   });
 });

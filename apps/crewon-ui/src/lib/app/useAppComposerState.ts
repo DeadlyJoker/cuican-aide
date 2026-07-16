@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
 import type { WorkMode } from "../workMode";
@@ -16,11 +16,15 @@ export function useAppComposerState() {
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [isSending, setIsSending] = useState(false);
   const [slashCommandRefreshKey, setSlashCommandRefreshKey] = useState(0);
+  const officeAttachmentConsumerRef = useRef<
+    ((path: string) => void) | null
+  >(null);
 
   return {
     composerFocusSignal,
     composerValue,
     isSending,
+    officeAttachmentConsumerRef,
     pendingComposerMentions,
     pendingContextFile,
     setSlashCommandRefreshKey,

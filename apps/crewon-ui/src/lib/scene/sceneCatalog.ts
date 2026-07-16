@@ -257,18 +257,32 @@ export function executionTargetOptionsFromDomain({
       value: `agent:${id}`,
     }];
   });
+  const officeTitleCounts = offices.reduce((counts, record) => {
+    const title = record.config.title.trim();
+    counts.set(title, (counts.get(title) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
   const teamOptions = offices.map((record) => {
     const members = record.config.workspace?.members ?? [];
-    const ready = members.length > 0;
+    const title = record.config.title.trim();
+    const duplicateTitle = (officeTitleCounts.get(title) ?? 0) > 1;
+    const ready = members.length > 0 && !duplicateTitle;
+    const unavailableId = encodeURIComponent(
+      record.config.workspace.recordId?.trim() || record.filePath,
+    );
     return {
-      detail: ready
-        ? `${members.length} 名成员 · 服务端有界 Team Runtime`
-        : "小队尚未配置成员，不能开始任务",
+      detail: duplicateTitle
+        ? "存在同名办公室，需先在办公室配置中改为唯一名称"
+        : ready
+          ? `${members.length} 名成员 · 服务端有界 Team Runtime`
+          : "小队尚未配置成员，不能开始任务",
       disabled: !ready,
       kind: "team" as const,
-      label: `${record.config.title} · Team`,
+      label: `${title} · Team`,
       strategy: "team" as const,
-      value: `team:${record.config.title}`,
+      value: duplicateTitle
+        ? `team:unavailable:${unavailableId}`
+        : `team:${title}`,
     };
   });
   const platformAgentOptions = platformAgents.flatMap((agent) => {

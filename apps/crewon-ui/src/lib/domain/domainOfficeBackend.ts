@@ -8,6 +8,8 @@ import {
   type OfficeDelegationRetryResponse,
   type OfficeMemoryDecideResponse,
   type OfficeMemoryListResponse,
+  type OfficeMessageSubmitMention,
+  type OfficeMessageSubmitResponse,
   type OfficeMemberContextPreviewResponse,
   type OfficeVerificationCancelResponse,
   type OfficeRunResponse,
@@ -29,11 +31,25 @@ import {
   type OfficeRunVerificationCheckActivity,
   type OfficeWorkspace,
 } from "./crewonDomain";
-import { writeOfficeConfigFile as writeStoredOfficeConfigFile } from "./domainPersistence";
+import {
+  writeOfficeConfigFile as writeStoredOfficeConfigFile,
+  type OfficeConfigWriteResult,
+} from "./domainPersistence";
 import type { Locale } from "../i18n";
 import { officeRunRetryText } from "../office/officeRunPanel";
 
-type OfficePanelIdentity = Pick<LibraryPanel, "title" | "subtitle">;
+type OfficePanelIdentity = Pick<
+  LibraryPanel,
+  "title" | "subtitle" | "workspaceCwd"
+>;
+
+function resolveOfficeBackendCwd(
+  panel: OfficePanelIdentity,
+  resolveBackendCwd: () => Promise<string>,
+) {
+  const workspaceCwd = panel.workspaceCwd?.trim();
+  return workspaceCwd ? Promise.resolve(workspaceCwd) : resolveBackendCwd();
+}
 export type OfficeRunSyncClient = {
   syncOfficeRunConfig(
     cwd: string,
@@ -50,6 +66,11 @@ export type AppOfficeMessageRunResult = {
   cwd: string;
   handled: true;
   response: OfficeRunResponse | null;
+};
+
+export type AppOfficeMessageSubmitResult = {
+  cwd: string;
+  response: OfficeMessageSubmitResponse;
 };
 
 export type AppOfficeRunRetryResult = {
@@ -101,7 +122,7 @@ export async function writeOfficeConfig(
   client: AppServerClient,
   cwd: string,
   config: OfficeConfig,
-): Promise<string> {
+): Promise<OfficeConfigWriteResult> {
   return writeStoredOfficeConfigFile(client, cwd, config);
 }
 
@@ -109,7 +130,7 @@ export async function writeAppOfficeConfig(params: {
   client: AppServerClient | null;
   config: OfficeConfig;
   resolveBackendCwd: () => Promise<string>;
-}): Promise<string | null> {
+}): Promise<OfficeConfigWriteResult | null> {
   const { client, config, resolveBackendCwd } = params;
   return withBackendWorkspace({
     client,
@@ -125,7 +146,7 @@ export async function persistOfficeWorkspace(
   panel: OfficePanelIdentity,
   workspace: OfficeWorkspace,
   threadId?: string | null,
-): Promise<string | null> {
+): Promise<OfficeConfigWriteResult> {
   const stableThreadId = threadId ?? workspace.threadId;
   return writeOfficeConfig(
     client,
@@ -151,12 +172,12 @@ export async function persistAppOfficeWorkspace(params: {
   workspace: OfficeWorkspace;
   threadId?: string | null;
   resolveBackendCwd: () => Promise<string>;
-}): Promise<string | null> {
+}): Promise<OfficeConfigWriteResult | null> {
   const { client, panel, workspace, threadId, resolveBackendCwd } = params;
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: ({ client, cwd }) =>
       persistOfficeWorkspace(client, cwd, panel, workspace, threadId),
   });
@@ -191,14 +212,14 @@ export async function persistOfficeMessage(
     if (!isUnsupportedRpcError(error)) {
       throw error;
     }
-    await persistOfficeWorkspace(
+    const saved = await persistOfficeWorkspace(
       client,
       cwd,
       panel,
       fallbackWorkspace,
       threadId,
     );
-    return null;
+    return saved.config;
   }
 }
 
@@ -227,7 +248,7 @@ export async function persistAppOfficeMessage(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: ({ client, cwd }) =>
       persistOfficeMessage(
         client,
@@ -240,6 +261,88 @@ export async function persistAppOfficeMessage(params: {
         locale,
         fallbackWorkspace,
       ),
+  });
+}
+
+export async function submitOfficeMessage(
+  client: AppServerClient,
+  cwd: string,
+  panel: OfficePanelIdentity,
+  workspace: OfficeWorkspace,
+  text: string,
+  clientUserMessageId: string,
+  locale: Locale,
+  mentions: OfficeMessageSubmitMention[] = [],
+): Promise<OfficeMessageSubmitResponse> {
+  const submissionWorkspace = {
+    ...workspace,
+    messages: workspace.messages.filter(
+      (message) =>
+        !message.clientOnly &&
+        message.clientUserMessageId !== clientUserMessageId,
+    ),
+  };
+  return client.submitOfficeMessageConfig(
+    cwd,
+    submissionWorkspace.threadId
+      ? officeConfigForThread(
+          panel.title,
+          panel.subtitle,
+          submissionWorkspace,
+          submissionWorkspace.threadId,
+        )
+      : {
+          title: panel.title,
+          subtitle: panel.subtitle,
+          workspace: submissionWorkspace,
+        },
+    text,
+    clientUserMessageId,
+    {
+      locale,
+      threadId: submissionWorkspace.threadId ?? null,
+      mentions,
+    },
+  );
+}
+
+export async function submitAppOfficeMessage(params: {
+  client: AppServerClient | null;
+  panel: OfficePanelIdentity;
+  workspace: OfficeWorkspace;
+  text: string;
+  clientUserMessageId: string;
+  locale: Locale;
+  mentions?: OfficeMessageSubmitMention[];
+  resolveBackendCwd: () => Promise<string>;
+}): Promise<AppOfficeMessageSubmitResult | null> {
+  const {
+    client,
+    panel,
+    workspace,
+    text,
+    clientUserMessageId,
+    locale,
+    mentions = [],
+    resolveBackendCwd,
+  } = params;
+  return withBackendWorkspace({
+    client,
+    fallback: null,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
+    run: async ({ client, cwd }) => ({
+      cwd,
+      response: await submitOfficeMessage(
+        client,
+        cwd,
+        panel,
+        workspace,
+        text,
+        clientUserMessageId,
+        locale,
+        mentions,
+      ),
+    }),
   });
 }
 
@@ -298,6 +401,7 @@ export async function runAppOfficeMessage(params: {
   threadId: string;
   locale: Locale;
   fallbackWorkspace: OfficeWorkspace;
+  clientUserMessageId?: string | null;
   resolveBackendCwd: () => Promise<string>;
 }): Promise<AppOfficeMessageRunResult | null> {
   const {
@@ -309,12 +413,13 @@ export async function runAppOfficeMessage(params: {
     threadId,
     locale,
     fallbackWorkspace,
+    clientUserMessageId,
     resolveBackendCwd,
   } = params;
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       handled: true,
@@ -328,6 +433,7 @@ export async function runAppOfficeMessage(params: {
         threadId,
         locale,
         fallbackWorkspace,
+        clientUserMessageId,
       ),
     }),
   });
@@ -400,7 +506,7 @@ export async function cancelAppOfficeRun(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: ({ client, cwd }) =>
       cancelOfficeRun(client, cwd, panel, workspace, run, locale),
   });
@@ -467,7 +573,7 @@ export async function cancelAppOfficeDelegation(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await cancelOfficeDelegation(
@@ -535,7 +641,7 @@ export async function cancelAppOfficeVerification(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await cancelOfficeVerification(
@@ -605,7 +711,7 @@ export async function retryAppOfficeRun(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await retryOfficeRun(
@@ -674,7 +780,7 @@ export async function dispatchNextAppOfficeVerification(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await dispatchNextOfficeVerification(
@@ -751,7 +857,7 @@ export async function retryAppOfficeVerification(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await retryOfficeVerification(
@@ -835,7 +941,7 @@ export async function dispatchAppOfficeDelegation(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await dispatchOfficeDelegation(
@@ -917,7 +1023,7 @@ export async function retryAppOfficeDelegation(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await retryOfficeDelegation(
@@ -991,7 +1097,7 @@ export async function dispatchNextAppOfficeDelegation(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await dispatchNextOfficeDelegation(
@@ -1071,7 +1177,7 @@ export async function previewAppOfficeMemberContext(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await previewOfficeMemberContext(
@@ -1154,7 +1260,7 @@ export async function persistAppOfficeMember(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: ({ client, cwd }) =>
       persistOfficeMember(
         client,
@@ -1211,7 +1317,7 @@ export async function decideAppOfficeApproval(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: ({ client, cwd }) =>
       decideOfficeApproval(
         client,
@@ -1297,7 +1403,7 @@ export async function listAppOfficeMemories(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await listOfficeMemories(
@@ -1361,7 +1467,7 @@ export async function decideAppOfficeMemory(params: {
   return withBackendWorkspace({
     client,
     fallback: null,
-    resolveBackendCwd,
+    resolveBackendCwd: () => resolveOfficeBackendCwd(panel, resolveBackendCwd),
     run: async ({ client, cwd }) => ({
       cwd,
       response: await decideOfficeMemory(

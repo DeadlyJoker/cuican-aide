@@ -28,6 +28,7 @@ export type CommandModelOption = {
 
 export type ThreadRuntimeSettings = {
   approvalPolicy?: AskForApproval | null;
+  config?: Record<string, unknown>;
   model?: string | null;
   reasoningEffort?: string | null;
   sandboxMode?: SandboxMode | null;
@@ -35,6 +36,7 @@ export type ThreadRuntimeSettings = {
   executionIntent?: CommandExecutionIntent;
   agentPlatformAgentId?: string;
   dynamicTools?: RuntimeDynamicTool[];
+  threadSource?: string;
 };
 
 export type ThreadSceneSelection = {

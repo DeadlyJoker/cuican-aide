@@ -126,7 +126,6 @@ export function AppWorkspaceNavigation({
       onDeleteThread={onDeleteThread}
       onAgents={() => onLibrary("agents")}
       onAutomation={() => onLibrary("automation")}
-      onOffice={() => onLibrary("office")}
       onPlugins={() => onLibrary("plugins")}
       onKnowledge={() => onLibrary("knowledge")}
       onSearchChange={onSearchChange}

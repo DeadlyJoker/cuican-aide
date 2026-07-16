@@ -16,6 +16,7 @@ import type {
 } from "../../lib/domain/crewonDomain";
 import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
 import { translate, type Locale } from "../../lib/i18n";
+import type { OfficeMessageSendResult } from "../../lib/office/officeMessageActions";
 
 const LibraryView = lazy(() =>
   import("../library/LibraryView").then((module) => ({
@@ -24,6 +25,7 @@ const LibraryView = lazy(() =>
 );
 
 export function AppWorkspaceLibraryContent({
+  activeTurnByThread = {},
   libraryPanel,
   locale,
   onApprovalDecision,
@@ -49,6 +51,7 @@ export function AppWorkspaceLibraryContent({
   onToggleAgentCapability,
   onUpdateAgentConfig,
 }: {
+  activeTurnByThread?: Record<string, string>;
   libraryPanel: LibraryPanel;
   locale: Locale;
   onApprovalDecision: (id: string, decision: "approved" | "denied") => void;
@@ -98,7 +101,10 @@ export function AppWorkspaceLibraryContent({
   onOfficeRunRetry: (run: OfficeRunActivity) => void | Promise<void>;
   onPanelFieldChange: (fieldId: string, value: string) => void;
   onSaveAgentConfig: () => void;
-  onSendOfficeMessage: (text: string) => void | Promise<void>;
+  onSendOfficeMessage: (
+    text: string,
+    clientUserMessageId: string,
+  ) => OfficeMessageSendResult | Promise<OfficeMessageSendResult>;
   onToggleAgentCapability: (group: "mcp" | "skills", id: string) => void;
   onUpdateAgentConfig: (patch: Partial<AgentConfig>) => void;
 }) {
@@ -113,6 +119,7 @@ export function AppWorkspaceLibraryContent({
       }
     >
       <LibraryView
+        activeTurnByThread={activeTurnByThread}
         panel={libraryPanel}
         locale={locale}
         onBack={onBackLibrary}

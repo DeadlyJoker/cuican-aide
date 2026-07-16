@@ -22,12 +22,13 @@ import type {
   GitRemoteDiffSummary,
 } from "../appStatusTypes";
 import type { Locale } from "../../i18n";
-import { restoreAgentPlatformThread } from "../../thread/agentPlatformThreadHistory";
+import type { EmptyThreadSelectionBehavior } from "../../thread/threadModel";
 
 export type AppConnectionEffectsParams = {
   clientRef: MutableRefObject<AppServerClient | null>;
   connectionAttempt: number;
   connectionState: ConnectionState;
+  emptySelectionBehavior: EmptyThreadSelectionBehavior;
   handleNotification: (notification: AppServerNotification) => void;
   handleServerRequest: (request: AppServerRequest) => void;
   isDemo: boolean;
@@ -55,6 +56,7 @@ export function useAppConnectionEffects({
   clientRef,
   connectionAttempt,
   connectionState,
+  emptySelectionBehavior,
   handleNotification,
   handleServerRequest,
   isDemo,
@@ -87,16 +89,16 @@ export function useAppConnectionEffects({
           handleServerRequest,
         ),
       currentClient: () => clientRef.current,
+      emptySelectionBehavior,
       isDemoPreview,
       preserveThreadsAfterConnectionLoss,
-      restoreThread: (client, thread) =>
-        restoreAgentPlatformThread({ client, thread }),
       setAccountStatus,
       setClient: (client) => {
         clientRef.current = client;
       },
       setConnectionState,
       setNotice,
+      selectedThreadId,
       setSelectedThreadId,
       setThreads,
       showArchivedThreads: showArchivedThreadsRef.current,

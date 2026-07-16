@@ -10,6 +10,7 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use crate::attestation::app_server_attestation_provider;
+use crate::automation_scheduler::AutomationScheduler;
 use crate::config_manager::ConfigManager;
 use crate::connection_rpc_gate::ConnectionRpcGate;
 use crate::error_code::internal_error;
@@ -221,6 +222,7 @@ pub(crate) struct MessageProcessor {
     skills_watcher: Arc<SkillsWatcher>,
     account_processor: AccountRequestProcessor,
     agent_platform_processor: AgentPlatformRequestProcessor,
+    automation_scheduler: AutomationScheduler,
     apps_processor: AppsRequestProcessor,
     catalog_processor: CatalogRequestProcessor,
     command_exec_processor: CommandExecRequestProcessor,
@@ -2373,6 +2375,11 @@ impl MessageProcessor {
             Arc::clone(&skills_watcher),
             office_auto_dispatch,
         );
+        let automation_scheduler = AutomationScheduler::new(
+            config.codex_home.to_path_buf(),
+            thread_processor.clone(),
+            turn_processor.clone(),
+        );
         if matches!(plugin_startup_tasks, crate::PluginStartupTasks::Start) {
             // Keep plugin startup warmups aligned at app-server startup.
             let on_effective_plugins_changed =
@@ -2419,6 +2426,7 @@ impl MessageProcessor {
             skills_watcher,
             account_processor,
             agent_platform_processor,
+            automation_scheduler: automation_scheduler.clone(),
             apps_processor,
             catalog_processor,
             command_exec_processor,
@@ -2444,6 +2452,7 @@ impl MessageProcessor {
             windows_sandbox_processor,
             request_serialization_queues: RequestSerializationQueues::default(),
         };
+        automation_scheduler.start();
         if matches!(plugin_startup_tasks, crate::PluginStartupTasks::Start) {
             processor.spawn_office_scheduler_recovery(OFFICE_STARTUP_RECOVERY_CONNECTION_ID);
         }
@@ -4366,31 +4375,41 @@ impl MessageProcessor {
                 .office_delete(params)
                 .await
                 .map(|response| Some(response.into())),
-            ClientRequest::AutomationList { params, .. } => self
-                .crewon_domain_processor
-                .automation_list(params)
-                .await
-                .map(|response| Some(response.into())),
-            ClientRequest::AutomationSave { params, .. } => self
-                .crewon_domain_processor
-                .automation_save(params)
-                .await
-                .map(|response| Some(response.into())),
-            ClientRequest::AutomationCreate { params, .. } => self
-                .crewon_domain_processor
-                .automation_create(params)
-                .await
-                .map(|response| Some(response.into())),
+            ClientRequest::AutomationList { params, .. } => {
+                let cwd = params.cwd.clone();
+                let response = self.crewon_domain_processor.automation_list(params).await?;
+                self.automation_scheduler.remember_workspace(&cwd).await;
+                Ok(Some(response.into()))
+            }
+            ClientRequest::AutomationSave { params, .. } => {
+                let cwd = params.cwd.clone();
+                let response = self.crewon_domain_processor.automation_save(params).await?;
+                self.automation_scheduler.remember_workspace(&cwd).await;
+                Ok(Some(response.into()))
+            }
+            ClientRequest::AutomationCreate { params, .. } => {
+                let cwd = params.cwd.clone();
+                let response = self
+                    .crewon_domain_processor
+                    .automation_create(params)
+                    .await?;
+                self.automation_scheduler.remember_workspace(&cwd).await;
+                Ok(Some(response.into()))
+            }
             ClientRequest::AutomationRead { params, .. } => self
                 .crewon_domain_processor
                 .automation_read(params)
                 .await
                 .map(|response| Some(response.into())),
-            ClientRequest::AutomationUpdate { params, .. } => self
-                .crewon_domain_processor
-                .automation_update(params)
-                .await
-                .map(|response| Some(response.into())),
+            ClientRequest::AutomationUpdate { params, .. } => {
+                let cwd = params.cwd.clone();
+                let response = self
+                    .crewon_domain_processor
+                    .automation_update(params)
+                    .await?;
+                self.automation_scheduler.remember_workspace(&cwd).await;
+                Ok(Some(response.into()))
+            }
             ClientRequest::AutomationRun { params, .. } => self
                 .crewon_domain_processor
                 .automation_run(params)

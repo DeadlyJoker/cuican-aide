@@ -1,8 +1,11 @@
 use std::time::Duration;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use anyhow::Result;
 use app_test_support::TestAppServer;
 use app_test_support::create_final_assistant_message_sse_response;
+use app_test_support::create_mock_responses_server_repeating_assistant;
 use app_test_support::create_mock_responses_server_sequence_unchecked;
 use app_test_support::to_response;
 use app_test_support::write_mock_responses_config_toml_with_chatgpt_base_url;
@@ -3352,6 +3355,122 @@ async fn automation_config_round_trips_through_v2_rpc() -> Result<()> {
     )
     .await?;
     assert_eq!(listed_after_delete.data, Vec::new());
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn personal_schedule_runs_in_background_and_records_terminal_result() -> Result<()> {
+    let server =
+        create_mock_responses_server_repeating_assistant("Scheduled summary is ready.").await;
+    let codex_home = TempDir::new()?;
+    let workspace = TempDir::new()?;
+    write_mock_responses_config_toml_with_chatgpt_base_url(
+        codex_home.path(),
+        &server.uri(),
+        &server.uri(),
+    )?;
+    let mut mcp = initialized_app_server(&codex_home).await?;
+    let thread = start_workspace_thread(&mut mcp, &workspace).await?.thread;
+    let cwd = workspace.path().to_string_lossy().into_owned();
+
+    let created: AutomationCreateResponse = request(
+        &mut mcp,
+        "automation/create",
+        json!({
+            "cwd": cwd,
+            "title": "Personal daily summary",
+            "threadId": thread.id,
+            "targetOffice": null,
+            "executionAgent": null,
+            "prompt": "Prepare my scheduled summary",
+            "enabled": true,
+            "status": "enabled"
+        }),
+    )
+    .await?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+    let mut scheduled_config = created.config;
+    scheduled_config["scope"] = json!("personal");
+    scheduled_config["trigger"] = json!({
+        "type": "schedule",
+        "scheduleType": "daily",
+        "nextRunAt": now - 1,
+        "intervalSeconds": 86_400
+    });
+    let _: AutomationUpdateResponse = request(
+        &mut mcp,
+        "automation/update",
+        json!({
+            "cwd": workspace.path().to_string_lossy(),
+            "filePath": created.file_path,
+            "config": scheduled_config
+        }),
+    )
+    .await?;
+
+    let completed: TurnCompletedNotification = serde_json::from_value(
+        timeout(
+            DEFAULT_TIMEOUT,
+            mcp.read_stream_until_matching_notification(
+                "scheduled automation turn completed",
+                |notification| {
+                    notification.method == "turn/completed"
+                        && notification.params.as_ref().is_some_and(|params| {
+                            serde_json::from_value::<TurnCompletedNotification>(params.clone())
+                                .is_ok_and(|completed| completed.thread_id == thread.id)
+                        })
+                },
+            ),
+        )
+        .await??
+        .params
+        .expect("turn/completed params must be present"),
+    )?;
+    let expected_run_status = match completed.turn.status {
+        TurnStatus::Completed => "completed",
+        TurnStatus::Failed => "failed",
+        TurnStatus::Interrupted => "interrupted",
+        TurnStatus::InProgress => panic!("scheduled turn must be terminal"),
+    };
+
+    let runs: AutomationRunsListResponse = request(
+        &mut mcp,
+        "automation/runs/list",
+        json!({
+            "cwd": workspace.path().to_string_lossy(),
+            "threadId": thread.id,
+            "cursor": null,
+            "limit": 24
+        }),
+    )
+    .await?;
+    assert_eq!(runs.data.len(), 1);
+    assert_eq!(runs.data[0].run.status, expected_run_status);
+    assert_eq!(
+        runs.data[0].run.turn_id.as_deref(),
+        Some(completed.turn.id.as_str())
+    );
+    assert!(
+        runs.data[0]
+            .run
+            .note
+            .as_deref()
+            .is_some_and(|note| note.contains("定时触发"))
+    );
+
+    let listed: AutomationListResponse = request(
+        &mut mcp,
+        "automation/list",
+        json!({
+            "cwd": workspace.path().to_string_lossy(),
+            "cursor": null,
+            "limit": 24
+        }),
+    )
+    .await?;
+    assert_eq!(listed.data.len(), 1);
+    assert_eq!(listed.data[0].config["trigger"]["lastScheduledAt"], now - 1);
+    assert!(listed.data[0].config["trigger"]["nextRunAt"].as_i64() > Some(now));
     Ok(())
 }
 

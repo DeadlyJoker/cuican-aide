@@ -880,3 +880,14 @@ function platformAgentToConfig(
     skills,
   };
 }
+
+export function agentPlatformAgentToConfig(
+  agent: PlatformAgent,
+  snapshot: AgentPlatformSnapshot,
+  index: number,
+): AgentConfig {
+  return {
+    ...platformAgentToConfig(agent, snapshot, index),
+    agentId: `agent-platform:${agent.id}`,
+  };
+}

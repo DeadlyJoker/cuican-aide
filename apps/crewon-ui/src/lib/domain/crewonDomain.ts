@@ -15,6 +15,7 @@ export type LibraryPanel = {
   title: string;
   subtitle: string;
   configPath?: string;
+  workspaceCwd?: string;
   actions?: LibraryPanelAction[];
   body?: string;
   fields?: LibraryPanelField[];
@@ -107,6 +108,7 @@ export type LibraryBadgeTone =
   | "warning";
 
 export type OfficeMember = {
+  memberId?: string;
   agentId?: string;
   name: string;
   role: string;
@@ -124,6 +126,11 @@ export type OfficeMember = {
 };
 
 export type OfficeMessage = {
+  clientUserMessageId?: string;
+  clientOnly?: boolean;
+  delegationId?: string;
+  event?: string;
+  runId?: string;
   author: string;
   glyph: string;
   accent: LibraryAccent;
@@ -142,6 +149,8 @@ export type OfficeTask = {
 export type OfficeWorkspace = {
   goal: string;
   threadId?: string;
+  recordId?: string;
+  recordRevision?: string;
   backendStatus?: "local" | "binding" | "connected" | "error";
   members: OfficeMember[];
   messages: OfficeMessage[];
@@ -190,6 +199,13 @@ export type AutomationConfig = {
   trigger?: {
     type: "manual" | "schedule" | "event" | "file";
     [key: string]: unknown;
+  };
+  scope?: "personal" | "team" | string;
+  delivery?: {
+    destination: "scheduleCenter" | string;
+    recipient: "owner" | string;
+    recipientLabel: string;
+    notifyOn: "always" | "failure" | "actionRequired" | string;
   };
   targetOffice?: OfficeConfig | null;
   executionAgent?: AgentConfig | null;
@@ -428,6 +444,7 @@ export type OfficeRunActivity = {
   retryOf?: string;
   goal?: string;
   locale?: string;
+  messageIntent?: "conversation" | "task" | string;
   loop?: {
     mode?: string;
     iteration?: number;
@@ -716,6 +733,7 @@ export type LibraryItem = {
         items: LibraryItem[];
         workspace?: OfficeWorkspace;
         configPath?: string;
+        workspaceCwd?: string;
       }
     | {
         type: "agent-config";

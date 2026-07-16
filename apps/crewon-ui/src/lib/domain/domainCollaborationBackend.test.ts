@@ -90,6 +90,7 @@ describe("domain collaboration backend app helpers", () => {
         accent: "blue",
         status: "active",
         agentId: "agent-old",
+        memberId: "member-old",
       },
     ];
     const readParams: unknown[] = [];
@@ -138,6 +139,7 @@ describe("domain collaboration backend app helpers", () => {
         accent: "blue",
         status: "active",
         agentId: "agent-old",
+        memberId: "member-old",
       },
     ];
     const readParams: unknown[] = [];
@@ -182,6 +184,60 @@ describe("domain collaboration backend app helpers", () => {
           limit: 24,
         },
       },
+    ]);
+  });
+
+  it("includes an existing legacy member as an explicit identity upgrade candidate", async () => {
+    const existingMembers: OfficeMember[] = [
+      {
+        name: "Legacy Builder",
+        role: "Builder",
+        glyph: "L",
+        accent: "blue",
+        status: "active",
+        agentId: "agent-legacy",
+      },
+    ];
+
+    await expect(
+      listAppRecruitableAgentConfigs({
+        client: client({
+          async listRecruitableAgentConfigs() {
+            return { data: [], nextCursor: null };
+          },
+          async listAgentConfigs() {
+            return {
+              data: [
+                {
+                  filePath: "/repo/legacy.json",
+                  savedAt: "2026-06-17T00:00:00.000Z",
+                  config: agentConfig({
+                    agentId: "agent-legacy",
+                    name: "Legacy Builder",
+                  }),
+                },
+                {
+                  filePath: "/repo/unrelated.json",
+                  savedAt: "2026-06-17T00:00:00.000Z",
+                  config: agentConfig({
+                    agentId: "agent-unrelated",
+                    name: "Unrelated",
+                  }),
+                },
+              ],
+              nextCursor: null,
+            };
+          },
+        }),
+        existingMembers,
+        isConnected: true,
+        resolveBackendCwd: async () => "/repo",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        agentId: "agent-legacy",
+        name: "Legacy Builder",
+      }),
     ]);
   });
 

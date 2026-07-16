@@ -41,7 +41,6 @@ type SidebarProps = {
   onDeleteThread: (thread: Thread) => void;
   onAgents: () => void;
   onAutomation: () => void;
-  onOffice: () => void;
   onPlugins: () => void;
   onKnowledge: () => void;
   onSearchChange?: (value: string) => void;
@@ -81,7 +80,6 @@ export function Sidebar({
   onDeleteThread,
   onAgents,
   onAutomation,
-  onOffice,
   onPlugins,
   onKnowledge,
   onSearchChange,
@@ -175,7 +173,6 @@ export function Sidebar({
         onFocusSearch={focusSearch}
         onKnowledge={onKnowledge}
         onNewThread={onNewThread}
-        onOffice={onOffice}
         onPlugins={onPlugins}
         onTools={onTools}
       />

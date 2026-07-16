@@ -12,6 +12,7 @@ type CapturedMaintenanceState = {
   }>;
   deletedMcpServers: string[];
   deletedToolRecords: Array<{ cwd: string; serverName: string }>;
+  domainDeletesCompleted: number;
   librariesOpened: LibraryKind[];
   mcpReloads: number;
   notice: NoticeState | null;
@@ -21,6 +22,7 @@ async function handleAction(
   action: LibraryPanelAction,
   options: {
     cwd?: string | null;
+    domainConfigCwd?: string;
     fallbackLibraryKind?: LibraryKind;
     deletedToolRecord?: string | null;
   } = {},
@@ -29,6 +31,7 @@ async function handleAction(
     deletedDomainConfigs: [],
     deletedMcpServers: [],
     deletedToolRecords: [],
+    domainDeletesCompleted: 0,
     librariesOpened: [],
     mcpReloads: 0,
     notice: null,
@@ -46,6 +49,7 @@ async function handleAction(
       state.deletedToolRecords.push({ cwd, serverName });
       return options.deletedToolRecord ?? "/repo/.crewon/tools/github.json";
     },
+    domainConfigCwd: options.domainConfigCwd,
     fallbackLibraryKind: options.fallbackLibraryKind ?? "agents",
     locale: "en",
     openLibrary: async (kind) => {
@@ -56,6 +60,11 @@ async function handleAction(
     },
     resolveBackendCwd: async () =>
       Object.hasOwn(options, "cwd") ? (options.cwd ?? null) : "/repo",
+    onDomainConfigDeleted: options.domainConfigCwd
+      ? () => {
+          state.domainDeletesCompleted += 1;
+        }
+      : undefined,
     setNotice: (notice) => {
       state.notice = notice;
     },
@@ -105,6 +114,33 @@ describe("library maintenance actions", () => {
       text: "Deleted backend record: /repo/.crewon/agents/a.json",
       tone: "success",
     });
+  });
+
+  it("deletes an Office record in its group-chat workspace without reopening Library", async () => {
+    const { handled, state } = await handleAction(
+      {
+        id: "delete-config-file",
+        label: "Delete Office",
+        pathToOpen: "/repo/team/.crewon/offices/a.json",
+        domainConfigKind: "office",
+      },
+      {
+        cwd: "/repo/single-chat",
+        domainConfigCwd: "/repo/team",
+        fallbackLibraryKind: "office",
+      },
+    );
+
+    expect(handled).toBe(true);
+    expect(state.deletedDomainConfigs).toEqual([
+      {
+        cwd: "/repo/team",
+        filePath: "/repo/team/.crewon/offices/a.json",
+        kind: "office",
+      },
+    ]);
+    expect(state.domainDeletesCompleted).toBe(1);
+    expect(state.librariesOpened).toEqual([]);
   });
 
   it("deletes MCP config and matching tool records", async () => {

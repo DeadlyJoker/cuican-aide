@@ -7,6 +7,7 @@ import {
   threadSearchFailureNotice,
 } from "./threadActionPresentation";
 import {
+  type EmptyThreadSelectionBehavior,
   mergeThreadListSummaries,
   selectedThreadIdAfterThreadList,
 } from "./threadModel";
@@ -28,6 +29,7 @@ export function runThreadSearchEffectAction(params: {
   isConnected: boolean;
   isDemoPreview: boolean;
   locale: Locale;
+  emptySelectionBehavior: EmptyThreadSelectionBehavior;
   requestId: number;
   searchTerm: string;
   setIsSearchingThreads: (isSearching: boolean) => void;
@@ -82,6 +84,7 @@ export function runThreadSearchEffectAction(params: {
 
 async function runThreadRequest(params: {
   currentRequestId: () => number;
+  emptySelectionBehavior: EmptyThreadSelectionBehavior;
   failureNotice: (error: unknown, locale: Locale) => NoticeState;
   locale: Locale;
   request: () => Promise<Thread[]> | undefined;
@@ -100,9 +103,15 @@ async function runThreadRequest(params: {
     params.setThreads((currentThreads) =>
       mergeThreadListSummaries(currentThreads, serverThreads ?? []),
     );
-    params.setSelectedThreadId((currentThreadId) =>
-      selectedThreadIdAfterThreadList(currentThreadId, serverThreads),
-    );
+    params.setSelectedThreadId((currentThreadId) => {
+      if (
+        currentThreadId === null &&
+        params.emptySelectionBehavior === "preserve"
+      ) {
+        return null;
+      }
+      return selectedThreadIdAfterThreadList(currentThreadId, serverThreads);
+    });
   } catch (error) {
     if (params.currentRequestId() === params.requestId) {
       params.setNotice(params.failureNotice(error, params.locale));

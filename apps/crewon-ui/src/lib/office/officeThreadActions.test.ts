@@ -1,5 +1,4 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { Turn } from "@crewon-protocol/v2/Turn";
 import { describe, expect, it } from "vitest";
 
 import type { LibraryPanel, OfficeWorkspace } from "../domain/crewonDomain";
@@ -9,27 +8,10 @@ import {
 } from "./officeThreadActions";
 
 type CapturedOfficeThreadState = {
+  ensured: Array<{ recordId: string; revision: string }>;
   libraryPanel: LibraryPanel | null;
-  persisted: Array<{ threadId: string | null | undefined; workspaceGoal: string }>;
-  renamed: Array<{ threadId: string; title: string }>;
-  startedTurns: Array<{ text: string; threadId: string }>;
-  threadGoals: Array<{ goal: string; threadId: string; tokenBudget: number | null }>;
   threads: Thread[];
 };
-
-function turn(overrides: Partial<Turn> = {}): Turn {
-  return {
-    id: "turn-1",
-    items: [],
-    itemsView: "full",
-    status: "inProgress",
-    error: null,
-    startedAt: 1,
-    completedAt: null,
-    durationMs: null,
-    ...overrides,
-  };
-}
 
 function thread(overrides: Partial<Thread> = {}): Thread {
   return {
@@ -61,6 +43,8 @@ function workspace(overrides: Partial<OfficeWorkspace> = {}): OfficeWorkspace {
   return {
     goal: "Coordinate office",
     threadId: "office-thread",
+    recordId: "office-record",
+    recordRevision: "revision-office",
     backendStatus: "connected",
     members: [],
     messages: [],
@@ -89,11 +73,8 @@ function panel(workspaceConfig: OfficeWorkspace | null = workspace()): LibraryPa
 
 function state(initialPanel: LibraryPanel | null = panel()): CapturedOfficeThreadState {
   return {
+    ensured: [],
     libraryPanel: initialPanel,
-    persisted: [],
-    renamed: [],
-    startedTurns: [],
-    threadGoals: [],
     threads: [],
   };
 }
@@ -108,30 +89,30 @@ function baseParams(
       error instanceof Error && error.message === "missing-thread",
     locale: "en",
     panel: captured.libraryPanel ?? panel(),
-    persistOfficeWorkspace: async (_panel, targetWorkspace, threadId) => {
-      captured.persisted.push({
-        threadId,
-        workspaceGoal: targetWorkspace.goal,
-      });
-      return threadId ? `/offices/${threadId}.json` : null;
+    ensureOfficeManager: async (recordId, revision) => {
+      captured.ensured.push({ recordId, revision });
+      const targetWorkspace = captured.libraryPanel?.workspace ?? workspace();
+      return {
+        config: {
+          title: captured.libraryPanel?.title ?? "Office",
+          subtitle: captured.libraryPanel?.subtitle ?? "Workspace",
+          workspace: {
+            ...targetWorkspace,
+            recordId,
+            recordRevision: "revision-new-office-thread",
+            threadId: "new-office-thread",
+          },
+        },
+        filePath: "/offices/new-office-thread.json",
+        threadId: "new-office-thread",
+      };
     },
     readThread: async (threadId) => thread({ id: threadId }),
-    renameThread: async (threadId, title) => {
-      captured.renamed.push({ threadId, title });
-    },
     setLibraryPanel: (updater) => {
       captured.libraryPanel = updater(captured.libraryPanel);
     },
-    setThreadGoal: async (threadId, goal, tokenBudget) => {
-      captured.threadGoals.push({ threadId, goal, tokenBudget });
-    },
     setThreads: (updater) => {
       captured.threads = updater(captured.threads);
-    },
-    startOfficeThread: async () => thread({ id: "new-office-thread" }),
-    startTurn: async (threadId, text) => {
-      captured.startedTurns.push({ threadId, text });
-      return { turn: turn({ id: `turn-${threadId}` }) };
     },
     ...overrides,
   };
@@ -140,107 +121,163 @@ function baseParams(
 describe("office thread actions", () => {
   it("returns the existing thread id while disconnected", async () => {
     const captured = state();
-    const threadId = await ensureOfficeThreadAction(
+    const resolution = await ensureOfficeThreadAction(
       baseParams(captured, {
         isConnected: false,
       }),
     );
 
-    expect(threadId).toBe("office-thread");
-    expect(captured.persisted).toEqual([]);
-    expect(captured.renamed).toEqual([]);
+    expect(resolution?.threadId).toBe("office-thread");
+    expect(captured.ensured).toEqual([]);
   });
 
   it("reuses a readable existing backend thread and refreshes panel state", async () => {
     const captured = state();
-    const threadId = await ensureOfficeThreadAction(baseParams(captured));
+    const resolution = await ensureOfficeThreadAction(baseParams(captured));
 
-    expect(threadId).toBe("office-thread");
-    expect(captured.persisted).toEqual([
-      { threadId: "office-thread", workspaceGoal: "Coordinate office" },
-    ]);
-    expect(captured.renamed).toEqual([]);
+    expect(resolution?.threadId).toBe("office-thread");
+    expect(captured.ensured).toEqual([]);
     expect(captured.libraryPanel?.workspace?.backendStatus).toBe("connected");
     expect(captured.libraryPanel?.workspace?.threadId).toBe("office-thread");
   });
 
-  it("creates and binds a new office thread when the saved one is missing", async () => {
+  it("uses the server-owned manager ensure flow when the saved one is missing", async () => {
     const captured = state();
-    const threadId = await ensureOfficeThreadAction(
+    const resolution = await ensureOfficeThreadAction(
       baseParams(captured, {
-        readThread: async () => {
-          throw new Error("missing-thread");
+        readThread: async (threadId) => {
+          if (threadId === "office-thread") {
+            throw new Error("missing-thread");
+          }
+          return thread({ id: threadId });
         },
       }),
     );
 
-    expect(threadId).toBe("new-office-thread");
-    expect(captured.renamed).toEqual([
-      { threadId: "new-office-thread", title: "Office" },
-    ]);
-    expect(captured.threadGoals).toEqual([
-      {
-        threadId: "new-office-thread",
-        goal: "Coordinate office",
-        tokenBudget: null,
+    expect(resolution).toMatchObject({
+      config: {
+        workspace: {
+          recordRevision: "revision-new-office-thread",
+          threadId: "new-office-thread",
+        },
       },
-    ]);
-    expect(captured.persisted).toEqual([
-      { threadId: "new-office-thread", workspaceGoal: "Coordinate office" },
-    ]);
-    expect(captured.startedTurns).toEqual([
+      filePath: "/offices/new-office-thread.json",
+      threadId: "new-office-thread",
+    });
+    expect(captured.ensured).toEqual([
       {
-        threadId: "new-office-thread",
-        text: [
-          "Bind office: Office",
-          "Backend record: /offices/new-office-thread.json",
-          "Goal: Coordinate office",
-        ].join("\n"),
+        recordId: "office-record",
+        revision: "revision-office",
       },
     ]);
     expect(captured.threads).toEqual([
       thread({ id: "new-office-thread", name: "Office" }),
     ]);
     expect(captured.libraryPanel?.workspace?.threadId).toBe("new-office-thread");
+    expect(captured.libraryPanel?.workspace?.recordRevision).toBe(
+      "revision-new-office-thread",
+    );
+    expect(captured.libraryPanel?.configPath).toBe(
+      "/offices/new-office-thread.json",
+    );
   });
 
-  it("forces a new office thread even when the workspace has a thread id", async () => {
+  it("asks the server to repair or reuse the manager when forced", async () => {
     const captured = state();
-    const threadId = await ensureOfficeThreadAction(
+    const resolution = await ensureOfficeThreadAction(
       baseParams(captured, {
         forceNew: true,
       }),
     );
 
-    expect(threadId).toBe("new-office-thread");
-    expect(captured.persisted).toEqual([
-      { threadId: "new-office-thread", workspaceGoal: "Coordinate office" },
+    expect(resolution?.threadId).toBe("new-office-thread");
+    expect(captured.ensured).toEqual([
+      {
+        recordId: "office-record",
+        revision: "revision-office",
+      },
     ]);
-    expect(captured.renamed).toEqual([
-      { threadId: "new-office-thread", title: "Office" },
-    ]);
+  });
+
+  it("does not apply a completed binding after switching offices", async () => {
+    const captured = state();
+    const resolution = await ensureOfficeThreadAction(
+      baseParams(captured, {
+        forceNew: true,
+        ensureOfficeManager: async (recordId, revision) => {
+          captured.ensured.push({ recordId, revision });
+          captured.libraryPanel = panel(
+            workspace({
+              recordId: "office-b-record",
+              threadId: "office-b-thread",
+            }),
+          );
+          return {
+            config: {
+              title: "Office",
+              subtitle: "Workspace",
+              workspace: workspace({
+                recordId,
+                recordRevision: "revision-new-office-thread",
+                threadId: "new-office-thread",
+              }),
+            },
+            filePath: "/offices/new-office-thread.json",
+            threadId: "new-office-thread",
+          };
+        },
+      }),
+    );
+
+    expect(resolution?.threadId).toBe("new-office-thread");
+    expect(captured.libraryPanel?.workspace).toMatchObject({
+      recordId: "office-b-record",
+      threadId: "office-b-thread",
+    });
+    expect(captured.libraryPanel?.configPath).toBeUndefined();
   });
 
   it("returns null without a workspace", async () => {
     const captured = state(panel(null));
-    const threadId = await ensureOfficeThreadAction(baseParams(captured));
+    const resolution = await ensureOfficeThreadAction(baseParams(captured));
 
-    expect(threadId).toBeNull();
-    expect(captured.persisted).toEqual([]);
+    expect(resolution).toBeNull();
+    expect(captured.ensured).toEqual([]);
     expect(captured.threads).toEqual([]);
   });
 
-  it("returns null when starting a new office thread fails", async () => {
+  it("returns null when the manager ensure request cannot produce a runtime", async () => {
     const captured = state();
-    const threadId = await ensureOfficeThreadAction(
+    const resolution = await ensureOfficeThreadAction(
       baseParams(captured, {
         forceNew: true,
-        startOfficeThread: async () => null,
+        ensureOfficeManager: async () => null,
       }),
     );
 
-    expect(threadId).toBeNull();
+    expect(resolution).toBeNull();
     expect(captured.libraryPanel?.workspace?.backendStatus).toBe("binding");
-    expect(captured.persisted).toEqual([]);
+    expect(captured.ensured).toEqual([]);
+  });
+
+  it("rejects an unversioned Office before requesting a manager", async () => {
+    const captured = state(
+      {
+        ...panel(
+          workspace({
+            recordId: undefined,
+            recordRevision: undefined,
+            threadId: undefined,
+          }),
+        ),
+        configPath: "/offices/legacy.json",
+        workspaceCwd: "/repo",
+      },
+    );
+
+    await expect(
+      ensureOfficeThreadAction(baseParams(captured, { forceNew: true })),
+    ).rejects.toThrow("Office state is incomplete");
+    expect(captured.ensured).toEqual([]);
   });
 });

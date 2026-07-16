@@ -19,17 +19,18 @@ import type {
   OfficeMessage,
   ToolConfig,
 } from "../../domain/crewonDomain";
-import { officeConfigForThread } from "../../domain/crewonDomain";
 import {
   deleteMcpToolConfigRecord,
   saveOrUpdateToolConfig,
   syncSkillToolConfig,
 } from "../../domain/domainToolPersistence";
-import { deleteDomainConfigFile } from "../../domain/domainPersistence";
+import {
+  deleteDomainConfigFile,
+  type OfficeConfigWriteResult,
+} from "../../domain/domainPersistence";
 import type { Locale } from "../../i18n";
 import {
   createBackendAutomationConfig,
-  createBackendOfficeConfig,
   listBackendAgentConfigs,
   listBackendOfficeConfigs,
   updateBackendAutomationConfig,
@@ -40,7 +41,9 @@ import {
   type LibraryPanelActionHandlers,
 } from "../../library/libraryPanelActionHandlers";
 import { createDefaultAgentConfig } from "../../agent-config/agentConfigDefaults";
+import { readCanonicalOfficeConfigForMutation } from "../../office/officeCanonicalConfig";
 import type { OfficeRunTurnRecord } from "../../office/officeRunPanel";
+import type { OfficeThreadResolution } from "../../office/officeThreadActions";
 
 type LibraryPanelSetter = (
   panelOrUpdater:
@@ -63,7 +66,7 @@ export type AppLibraryPanelActionHandlersParams = {
     panel: LibraryPanel,
     workspaceOverride?: NonNullable<LibraryPanel["workspace"]>,
     forceNew?: boolean,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   handleCapabilityPanelItem: (
     item: CapabilityPanelItem,
   ) => Promise<void> | void;
@@ -123,7 +126,7 @@ export type AppLibraryPanelActionHandlersParams = {
   setThreads: ThreadSetter;
   selectedThreadId: string | null;
   startBackendDomainThread: (
-    source: "agent" | "automation" | "office",
+    source: "agent" | "automation",
   ) => Promise<Thread | null>;
   updateAutomationRun: Parameters<
     typeof createLibraryPanelActionHandlers
@@ -137,7 +140,7 @@ export type AppLibraryPanelActionHandlersParams = {
   writeKnowledgeMemory: () => Promise<string | null>;
   writeOfficeConfigFile: (
     config: NonNullable<AutomationConfig["targetOffice"]>,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeConfigWriteResult | null>;
 };
 
 export function createAppLibraryPanelActionHandlers(
@@ -171,7 +174,6 @@ export function createAppLibraryPanelActionHandlers(
       defaultAgentConfig: () => createDefaultAgentConfig(params.locale),
       locale: params.locale,
       setLibraryPanel: params.setLibraryPanel,
-      writeAgentConfig: params.writeAgentConfigFile,
     },
     automationCreate: {
       createAutomationConfig: (createParams) =>
@@ -217,12 +219,13 @@ export function createAppLibraryPanelActionHandlers(
           return null;
         }
         const cwd = await params.resolveBackendCwd();
-        const officeConfig = officeConfigForThread(
-          targetOffice.title,
-          targetOffice.subtitle,
-          targetOffice.workspace,
-          officeThreadId,
-        );
+        const officeConfig = (
+          await readCanonicalOfficeConfigForMutation({
+            client: params.client,
+            cwd,
+            reference: targetOffice,
+          })
+        ).config;
         const message: OfficeMessage = {
           author: automationConfig.title,
           glyph: "A",
@@ -335,6 +338,10 @@ export function createAppLibraryPanelActionHandlers(
           cwd,
           serverName,
         ),
+      domainConfigCwd:
+        params.libraryPanel?.kind === "office"
+          ? params.libraryPanel.workspaceCwd
+          : undefined,
       fallbackLibraryKind: params.libraryPanel?.kind ?? "agents",
       locale: params.locale,
       openLibrary: params.openLibrary,
@@ -342,6 +349,10 @@ export function createAppLibraryPanelActionHandlers(
         await params.client?.reloadMcpServers();
       },
       resolveBackendCwd: params.resolveBackendCwd,
+      onDomainConfigDeleted:
+        params.libraryPanel?.kind === "office"
+          ? () => params.setLibraryPanel(null)
+          : undefined,
       setNotice: params.setNotice,
     },
     mcp: {
@@ -363,14 +374,8 @@ export function createAppLibraryPanelActionHandlers(
         params.client?.startMcpOauthLogin(serverName) ?? Promise.resolve(null),
     },
     office: {
-      createOfficeConfig: (createParams) =>
-        createBackendOfficeConfig(params.optionalBackendWorkspace, createParams),
-      isUnsupportedRpcError: params.isUnsupportedRpcError,
       locale: params.locale,
-      now: () => new Date(),
-      setLibraryPanel: params.setLibraryPanel,
       setNotice: params.setNotice,
-      writeOfficeConfig: params.writeOfficeConfigFile,
     },
     officeRecruit: {
       ensureOfficeThread: params.ensureOfficeThread,

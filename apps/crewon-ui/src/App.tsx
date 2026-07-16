@@ -1,138 +1,80 @@
-import { AppCommandShellRoute, AppConfirmDialog, AppShellChromeFrame, AppWorkspaceContent, AppWorkspaceNavigationPanel, AppWorkspaceSidePanels } from "./components/app";
+import { AppCommandShellRoute, AppConfirmDialog, AppShellChromeFrame, AppWorkspaceContent, AppWorkspaceNavigationPanel, AppWorkspaceSidePanels, createAppCommandOfficeRoomAdapter } from "./components/app";
 import { isMissingThreadError, isUnsupportedRpcError } from "./lib/app-server/appServer";
 import {
-  createAppCapabilityPanelHandlers, createAppDomainActionCoordinator, createAppDomainBackendCoordinator,
+  createAppCapabilityPanelHandlers,
+  createAppDomainActionCoordinator,
+  createAppDomainBackendCoordinator,
   createAppCommandShellHandlers,
-  createAppLibraryOpenCoordinator, createAppLibraryPanelDispatchCoordinator, createAppOfficeRuntimeCoordinator,
-  createAppSettingsCoordinator, createAppShellActionHandlers, createAppThreadRuntimeHandlers,
-  createAppWorkspaceCapabilityHandlers, shouldAutoCloseSidebar, shouldAutoCloseInspector, useAppCallbackRefsEffect,
-  useAppChromeEffects, useAppConfirmDialog, useAppConnectionEffects, useAppConnectionHandlerSet, useAppCoordinatorRefs,
-  useAppDocumentPreferenceEffects, useAppEnvironment, useAppKeyboardShortcutEffects, useAppPanelState,
-  useAppPendingServerRequests, useAppChromeState, useAppThreadState, useAppStateRefsEffect, useAppRunTrackingRefs,
-  useAppComposerState, useAppSlashCommands, useAppWorkspaceStatusState, useAppShellRuntimeState, useAppTerminalState,
-  useAppThreadSelection, useAppServerEventHandlerSet, useAppThreadListEffects, useAppThreadMetadataEffects,
-  useAppViewSyncEffects, useAppModelResponseTimeoutEffect, shouldRenderCommandShellView, useAppCommandShellRoute, commandShellRuntimeState,
-  useAppCommandModelOptions, useAppDraftWorkspaceState,
+  createAppLibraryOpenCoordinator,
+  createAppLibraryPanelDispatchCoordinator,
+  createAppOfficeRuntimeCoordinator,
+  createAppSettingsCoordinator,
+  createAppShellActionHandlers,
+  createAppThreadRuntimeHandlers,
+  createAppWorkspaceCapabilityHandlers,
+  shouldAutoCloseSidebar,
+  shouldAutoCloseInspector,
+  useAppCallbackRefsEffect,
+  useAppChromeEffects,
+  useAppConfirmDialog,
+  useAppConnectionEffects,
+  useAppConnectionHandlerSet,
+  useAppCoordinatorRefs,
+  useAppDocumentPreferenceEffects,
+  useAppEnvironment,
+  useAppKeyboardShortcutEffects,
+  useAppPanelState,
+  useAppPendingServerRequests,
+  useAppChromeState,
+  useAppThreadState,
+  useAppStateRefsEffect,
+  useAppRunTrackingRefs,
+  useAppComposerState,
+  useAppSlashCommands,
+  useAppWorkspaceStatusState,
+  useAppShellRuntimeState,
+  useAppTerminalState,
+  useAppThreadSelection,
+  useAppServerEventHandlerSet,
+  useAppThreadListEffects,
+  useAppThreadMetadataEffects,
+  useAppViewSyncEffects,
+  useAppModelResponseTimeoutEffect,
+  shouldRenderCommandShellView,
+  useAppCommandShellRoute,
+  commandShellRuntimeState,
+  useAppCommandModelOptions,
+  useAppDraftWorkspaceState,
 } from "./lib/app";
 import type { ComposerSlashCommand } from "./lib/composer/composerSlashCommands";
+import type { CapabilityPanelItem } from "./lib/capability/capabilityPanelTypes";
 import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
 import { persistLocale, translate } from "./lib/i18n";
 import { upsertPendingComposerMention } from "./lib/shared/composerMentions";
 import { persistTheme } from "./lib/theme";
 import { isSingleConversationThread } from "./lib/thread/threadSourceFilters";
+import {
+  assistantThreadRuntimeSettings,
+  latestAssistantThread,
+} from "./lib/thread/assistantThread";
+import { officeRecordKey } from "./lib/office/officePanelFromRecord";
 export function App() {
   const { isDemoPreview, platform, serverUrl } = useAppEnvironment();
-  const {
-    clientRef,
-    libraryLoadRequestRef,
-    openLibraryRef,
-    openThreadSettingsPanelRef,
-    refreshSettingsSectionRef,
-  } = useAppCoordinatorRefs();
-  const {
-    connectionAttempt,
-    connectionState,
-    locale,
-    localeRef,
-    notice,
-    setConnectionAttempt,
-    setConnectionState,
-    setLocale,
-    setNotice,
-    setTheme,
-    theme,
-  } = useAppShellRuntimeState();
-  const {
-    appView,
-    appViewRef,
-    capabilityPanel,
-    capabilityPanelRef,
-    libraryPanel,
-    libraryPanelRef,
-    setAppView,
-    setCapabilityPanel,
-    setLibraryPanel,
-    setSettingsSection,
-    settingsSection,
-    settingsSectionRef,
-  } = useAppPanelState();
-  const {
-    capabilityDockOpen,
-    inspectorOpen,
-    setCapabilityDockOpen,
-    setInspectorOpen,
-    setSidebarOpen,
-    sidebarOpen,
-  } = useAppChromeState();
-  const {
-    appendStreamingTextDelta, isSearchingThreads, loadedThreadIds,
-    setIsSearchingThreads,
-    setLoadedThreadIds,
-    setShowArchivedThreads,
-    setThreadSearchTerm,
-    setThreads,
-    setActiveTurnByThread,
-    setSelectedThreadId,
-    setStreamingTextByThread,
-    showArchivedThreads,
-    showArchivedThreadsRef,
-    streamingTextByThread,
-    threadSearchTerm,
-    threads,
-    threadsRef,
-    selectedThreadId,
-    selectedThreadIdRef,
-    activeTurnByThread,
-  } = useAppThreadState();
-  const {
-    accountStatus,
-    activeFileWatch,
-    busyToolId,
-    conversationSummary,
-    gitRemoteDiff,
-    setAccountStatus,
-    setActiveFileWatch,
-    setBusyToolId,
-    setConversationSummary,
-    setGitRemoteDiff,
-    setThreadGoal,
-    threadGoal,
-  } = useAppWorkspaceStatusState();
+  const { clientRef, libraryLoadRequestRef, openLibraryRef, openThreadSettingsPanelRef, refreshSettingsSectionRef } = useAppCoordinatorRefs();
+  const { connectionAttempt, connectionState, locale, localeRef, notice, setConnectionAttempt, setConnectionState, setLocale, setNotice, setTheme, theme } = useAppShellRuntimeState();
+  const { appView, appViewRef, capabilityPanel, capabilityPanelRef, libraryPanel, libraryPanelRef, setAppView, setCapabilityPanel, setLibraryPanel, setSettingsSection, settingsSection, settingsSectionRef } = useAppPanelState();
+  const { capabilityDockOpen, inspectorOpen, setCapabilityDockOpen, setInspectorOpen, setSidebarOpen, sidebarOpen } = useAppChromeState();
+  const { appendStreamingTextDelta, isSearchingThreads, loadedThreadIds, setIsSearchingThreads, setLoadedThreadIds, setShowArchivedThreads, setThreadSearchTerm, setThreads, setActiveTurnByThread, setSelectedThreadId, setStreamingTextByThread, showArchivedThreads, showArchivedThreadsRef, streamingTextByThread, threadSearchTerm, threads, threadsRef, selectedThreadId, selectedThreadIdRef, activeTurnByThread, activeTurnByThreadRef } = useAppThreadState();
+  const { accountStatus, activeFileWatch, busyToolId, conversationSummary, gitRemoteDiff, setAccountStatus, setActiveFileWatch, setBusyToolId, setConversationSummary, setGitRemoteDiff, setThreadGoal, threadGoal } = useAppWorkspaceStatusState();
   const { automationRunByTurnRef, officeRunByTurnRef } = useAppRunTrackingRefs();
-  const {
-    pendingApprovalRequest,
-    pendingDynamicToolRequest,
-    pendingExternalSecretRequest,
-    pendingMcpElicitationRequest,
-    pendingUserInputRequest,
-    setPendingApprovalRequest,
-    setPendingDynamicToolRequest,
-    setPendingExternalSecretRequest,
-    setPendingMcpElicitationRequest,
-    setPendingUserInputRequest,
-  } = useAppPendingServerRequests();
+  const { pendingApprovalRequest, pendingDynamicToolRequest, pendingExternalSecretRequest, pendingMcpElicitationRequest, pendingUserInputRequest, setPendingApprovalRequest, setPendingDynamicToolRequest, setPendingExternalSecretRequest, setPendingMcpElicitationRequest, setPendingUserInputRequest } = useAppPendingServerRequests();
   const { setTerminalCommand, terminalCommand, terminalProcessIdRef } = useAppTerminalState();
-  const {
-    composerFocusSignal,
-    composerValue,
-    isSending,
-    pendingComposerMentions,
-    pendingContextFile,
-    setSlashCommandRefreshKey,
-    setComposerFocusSignal,
-    setComposerValue,
-    setIsSending,
-    setPendingComposerMentions,
-    setPendingContextFile,
-    slashCommandRefreshKey,
-    setWorkMode,
-    workMode,
-  } = useAppComposerState();
+  const { composerFocusSignal, composerValue, isSending, officeAttachmentConsumerRef, pendingComposerMentions, pendingContextFile, setSlashCommandRefreshKey, setComposerFocusSignal, setComposerValue, setIsSending, setPendingComposerMentions, setPendingContextFile, slashCommandRefreshKey, setWorkMode, workMode } = useAppComposerState();
   const t = translate(locale);
   const { confirmRequest, requestConfirm, resolveConfirm } = useAppConfirmDialog();
   const { commandShellRouteActive } = useAppCommandShellRoute();
   const renderCommandShell = shouldRenderCommandShellView(appView, commandShellRouteActive);
-  const { draftWorkspaceCwd, setDraftWorkspaceCwd } = useAppDraftWorkspaceState();
+  const { draftWorkspaceCwd, setDraftWorkspaceCwd } = useAppDraftWorkspaceState(() => setSelectedThreadId(null));
 
   const { activeTurnId, cwd, isConnected, isDemo, selectedThread, titlebarTitle } = useAppThreadSelection({
     activeTurnByThread,
@@ -143,7 +85,11 @@ export function App() {
     threads,
     untitledThreadLabel: t.untitledThread,
   });
-  const commandModelOptions = useAppCommandModelOptions({ client: clientRef.current, connectionAttempt, isConnected });
+  const commandModelOptions = useAppCommandModelOptions({
+    client: clientRef.current,
+    connectionAttempt,
+    isConnected,
+  });
   const slashCommands = useAppSlashCommands({
     client: clientRef.current,
     cwd,
@@ -166,8 +112,17 @@ export function App() {
     );
   };
   const conversationThreads = threads.filter(isSingleConversationThread);
+  const assistantThread = latestAssistantThread(threads);
   const sidebarSelectedThreadId = conversationThreads.some((thread) => thread.id === selectedThreadId) ? selectedThreadId : null;
-  const commandShellRuntime = commandShellRuntimeState({ activeTurnByThread, activeTurnId, renderCommandShell, selectedThread, selectedThreadId, streamingTextByThread, threads });
+  const commandShellRuntime = commandShellRuntimeState({
+    activeTurnByThread,
+    activeTurnId,
+    renderCommandShell,
+    selectedThread,
+    selectedThreadId,
+    streamingTextByThread,
+    threads,
+  });
   useAppDocumentPreferenceEffects({
     client: clientRef.current,
     composerValue,
@@ -209,6 +164,7 @@ export function App() {
 
   useAppThreadListEffects({
     client: clientRef.current,
+    emptySelectionBehavior: draftWorkspaceCwd === undefined ? "selectFirst" : "preserve",
     isConnected,
     isDemoPreview,
     localeRef,
@@ -232,8 +188,7 @@ export function App() {
     isDemoPreview,
     locale,
     openLibrary: (kind) => openLibraryRef.current(kind),
-    refreshSettingsSection: (section) =>
-      refreshSettingsSectionRef.current(section),
+    refreshSettingsSection: (section) => refreshSettingsSectionRef.current(section),
     settingsSection,
     setAppView,
     setCapabilityPanel,
@@ -253,38 +208,19 @@ export function App() {
   });
 
   useAppModelResponseTimeoutEffect({
-    activeTurnId, client: clientRef.current, isConnected, locale,
-    selectedThread, selectedThreadId, setActiveTurnByThread, setStreamingTextByThread, setThreads,
-    streamingText: selectedThreadId
-      ? (streamingTextByThread[selectedThreadId] ?? "")
-      : "",
+    activeTurnId,
+    client: clientRef.current,
+    isConnected,
+    locale,
+    selectedThread,
+    selectedThreadId,
+    setActiveTurnByThread,
+    setStreamingTextByThread,
+    setThreads,
+    streamingText: selectedThreadId ? (streamingTextByThread[selectedThreadId] ?? "") : "",
   });
 
-  const {
-    automationConfigRecordsToLibraryItems,
-    createBackendAgentConfig,
-    createBackendKnowledgeData,
-    loadAgentLibraryItems,
-    loadToolLibraryItems,
-    listRecruitableAgentConfigs,
-    persistOfficeMember,
-    persistOfficeMessage,
-    persistOfficeWorkspace,
-    readAutomationRunItems,
-    readLatestOfficeConfig,
-    readRecruitableAgentConfig,
-    refreshToolActionFromBackend,
-    resolveBackendCwd,
-    runAutomationConfig,
-    optionalBackendWorkspace,
-    requireBackendWorkspace,
-    startBackendDomainThread,
-    updateAutomationRun,
-    writeAgentConfigFile,
-    writeAutomationConfigFile,
-    writeKnowledgeMemory,
-    writeOfficeConfigFile,
-  } = createAppDomainBackendCoordinator({
+  const { automationConfigRecordsToLibraryItems, createBackendAgentConfig, createBackendKnowledgeData, loadAgentLibraryItems, loadToolLibraryItems, listRecruitableAgentConfigs, persistOfficeMember, persistOfficeMessage, persistOfficeWorkspace, readAutomationRunItems, readLatestOfficeConfig, readRecruitableAgentConfig, refreshToolActionFromBackend, resolveBackendCwd, runAutomationConfig, optionalBackendWorkspace, requireBackendWorkspace, startBackendDomainThread, updateAutomationRun, writeAgentConfigFile, writeAutomationConfigFile, writeKnowledgeMemory, writeOfficeConfigFile } = createAppDomainBackendCoordinator({
     client: clientRef.current,
     currentCwd: cwd,
     isConnected,
@@ -293,36 +229,20 @@ export function App() {
     selectedThreadId,
     threads,
   });
-  const {
-    ensureOfficeThread,
-    handleOfficeDelegationCancel,
-    handleOfficeDelegationDispatch,
-    handleOfficeDelegationDispatchNext,
-    handleOfficeDelegationRetry,
-    handleOfficeVerificationCancel,
-    handleOfficeVerificationRetry,
-    listOfficeMemories,
-    decideOfficeMemory,
-    handleOfficeRunCancel,
-    handleOfficeRunRetry,
-    recordOfficeRunTurn,
-    sendOfficeMessage,
-    previewOfficeMemberContext,
-  } = createAppOfficeRuntimeCoordinator({
+  const { ensureOfficeThread, handleOfficeDelegationCancel, handleOfficeDelegationDispatch, handleOfficeDelegationDispatchNext, handleOfficeDelegationRetry, handleOfficeVerificationCancel, handleOfficeVerificationRetry, listOfficeMemories, decideOfficeMemory, handleOfficeRunCancel, handleOfficeRunRetry, recordOfficeRunTurn, sendOfficeMessage, previewOfficeMemberContext } = createAppOfficeRuntimeCoordinator({
     client: clientRef.current,
+    getActiveTurnByThread: () => activeTurnByThreadRef.current,
     isConnected,
     isMissingThreadError,
     libraryPanelRef,
     locale,
     officeRunByTurnRef,
     persistOfficeMessage,
-    persistOfficeWorkspace,
     resolveBackendCwd,
     setActiveTurnByThread,
     setLibraryPanel,
     setNotice,
     setThreads,
-    startBackendDomainThread,
   });
   const { openLibrary, openLibraryItem } = createAppLibraryOpenCoordinator({
     connectionHint: t.connectionHints[connectionState],
@@ -354,15 +274,7 @@ export function App() {
     writeAgentConfig: writeAgentConfigFile,
   });
 
-  const {
-    ensureBackendToolThread,
-    handleApprovalDecision,
-    handleOfficeArtifact,
-    recordBackendToolEvent,
-    saveAgentConfig,
-    toggleAgentCapability,
-    updateAgentConfig,
-  } = createAppDomainActionCoordinator({
+  const { ensureBackendToolThread, handleApprovalDecision, handleOfficeArtifact, recordBackendToolEvent, saveAgentConfig, toggleAgentCapability, updateAgentConfig } = createAppDomainActionCoordinator({
     busyToolId,
     client: clientRef.current,
     ensureOfficeThread,
@@ -428,49 +340,50 @@ export function App() {
   });
 
   const { handleNotification, handleServerRequest } = useAppServerEventHandlerSet({
-      appViewRef,
-      automationRunByTurnRef,
-      capabilityPanelRef,
-      clientRef,
-      libraryPanelRef,
-      localeRef,
-      officeRunByTurnRef,
-      openLibraryRef,
-      openThreadSettingsPanelRef,
-      readAutomationRunItems,
-      refreshComposerSlashCommands: () => {
-        setSlashCommandRefreshKey((key) => key + 1);
-      },
-      refreshSettingsSectionRef,
-      selectedThreadIdRef,
-      appendStreamingTextDelta,
-      setAccountStatus,
-      setActiveFileWatch,
-      setActiveTurnByThread,
-      setCapabilityDockOpen,
-      setCapabilityPanel,
-      setInspectorOpen,
-      setLibraryPanel,
-      setNotice,
-      setPendingApprovalRequest,
-      setPendingDynamicToolRequest,
-      setPendingExternalSecretRequest,
-      setPendingMcpElicitationRequest,
-      setPendingUserInputRequest,
-      setSelectedThreadId,
-      setStreamingTextByThread,
-      setThreadGoal,
-      setThreads,
-      settingsSectionRef,
-      showArchivedThreadsRef,
-      syncAutomationRun: updateAutomationRun,
-      terminalProcessIdRef,
-    });
+    appViewRef,
+    automationRunByTurnRef,
+    capabilityPanelRef,
+    clientRef,
+    libraryPanelRef,
+    localeRef,
+    officeRunByTurnRef,
+    openLibraryRef,
+    openThreadSettingsPanelRef,
+    readAutomationRunItems,
+    refreshComposerSlashCommands: () => {
+      setSlashCommandRefreshKey((key) => key + 1);
+    },
+    refreshSettingsSectionRef,
+    selectedThreadIdRef,
+    appendStreamingTextDelta,
+    setAccountStatus,
+    setActiveFileWatch,
+    setActiveTurnByThread,
+    setCapabilityDockOpen,
+    setCapabilityPanel,
+    setInspectorOpen,
+    setLibraryPanel,
+    setNotice,
+    setPendingApprovalRequest,
+    setPendingDynamicToolRequest,
+    setPendingExternalSecretRequest,
+    setPendingMcpElicitationRequest,
+    setPendingUserInputRequest,
+    setSelectedThreadId,
+    setStreamingTextByThread,
+    setThreadGoal,
+    setThreads,
+    settingsSectionRef,
+    showArchivedThreadsRef,
+    syncAutomationRun: updateAutomationRun,
+    terminalProcessIdRef,
+  });
 
   useAppConnectionEffects({
     clientRef,
     connectionAttempt,
     connectionState,
+    emptySelectionBehavior: draftWorkspaceCwd === undefined ? "selectFirst" : "preserve",
     handleNotification,
     handleServerRequest,
     isDemo,
@@ -503,20 +416,8 @@ export function App() {
     sidebarOpen,
   });
 
-  const {
-    archiveThread,
-    createThread,
-    deleteArchivedThread,
-    interruptActiveTurn,
-    renameThread,
-    selectThread,
-    sendMessage,
-    sendMessageInNewThread,
-    startDraftThread,
-    startReview,
-    startSideChat,
-    toggleArchivedThreads,
-  } = createAppThreadRuntimeHandlers({
+  const { archiveThread, clearAssistantThread, createThread, deleteArchivedThread, interruptActiveTurn, renameThread, selectThread, sendMessage, sendMessageInNewThread, sendMessageToThread, startDraftThread, startReview, startSideChat, toggleArchivedThreads } = createAppThreadRuntimeHandlers({
+    activeTurnByThread,
     activeTurnId,
     busyToolId,
     client: clientRef.current,
@@ -557,9 +458,19 @@ export function App() {
     shouldAutoCloseSidebar,
     untitledThreadLabel: t.untitledThread,
   });
-
-  useAppKeyboardShortcutEffects({ isSending, startDraftThread });
-
+  const { changeCommandShellWorkspace, openCommandShellThread, sendCommandShellMessage, startCommandShellDraftThread } = createAppCommandShellHandlers({
+    selectThread,
+    sendMessageInNewThread,
+    setComposerFocusSignal,
+    setDraftWorkspaceCwd,
+    setSelectedThreadId,
+    setWorkMode,
+    startDraftThread,
+  });
+  useAppKeyboardShortcutEffects({
+    isSending,
+    startDraftThread: () => startCommandShellDraftThread(cwd || null),
+  });
   const { attachWorkspaceContext, loadBrowserApps, readWorkspaceFiles, runTerminalStatus } = createAppWorkspaceCapabilityHandlers({
     busyToolId,
     client: clientRef.current,
@@ -579,17 +490,7 @@ export function App() {
     terminalCommand,
   });
 
-  const {
-    openThreadSettingsPanel,
-    refreshAccountPanel,
-    refreshComputerControlSettingsPanel,
-    refreshEnvironmentSettingsPanel,
-    refreshMcpSettingsPanel,
-    refreshWorktreesSettingsPanel,
-    settingsRefreshHandlers,
-    settingsSaveHandlers,
-    settingsSectionRefreshHandlers,
-  } = createAppSettingsCoordinator({
+  const { openThreadSettingsPanel, refreshAccountPanel, refreshComputerControlSettingsPanel, refreshEnvironmentSettingsPanel, refreshMcpSettingsPanel, refreshWorktreesSettingsPanel, settingsRefreshHandlers, settingsSaveHandlers, settingsSectionRefreshHandlers } = createAppSettingsCoordinator({
     accountStatus,
     capabilityPanel,
     client: clientRef.current,
@@ -616,17 +517,7 @@ export function App() {
     threads,
   });
 
-  const {
-    changeLocale,
-    closeLibrary,
-    closeSettings,
-    openSettings,
-    openSettingsSection,
-    refreshSettingsSection,
-    toggleCapabilityDock,
-    toggleInspector,
-    toggleTheme,
-  } = createAppShellActionHandlers({
+  const { changeLocale, closeLibrary, closeSettings, openSettings, openSettingsSection, refreshSettingsSection, toggleCapabilityDock, toggleInspector, toggleTheme } = createAppShellActionHandlers({
     appView,
     capabilityDockOpen,
     capabilityPanel,
@@ -652,16 +543,7 @@ export function App() {
   });
   const changeWorkspaceMode = (mode: "code" | "office") => {
     setWorkMode(mode);
-    if (mode === "office") {
-      void openLibrary("office");
-      return;
-    }
-    closeLibrary();
   };
-  const { changeCommandShellWorkspace, openCommandShellThread, sendCommandShellMessage } = createAppCommandShellHandlers({
-    selectThread, sendMessageInNewThread, setComposerFocusSignal, setDraftWorkspaceCwd,
-    setSelectedThreadId, setWorkMode, startDraftThread,
-  });
 
   useAppCallbackRefsEffect({
     openLibrary,
@@ -672,11 +554,7 @@ export function App() {
     refreshSettingsSectionRef,
   });
 
-  const {
-    handleCapabilityPanelAction,
-    handleCapabilityPanelFieldChange,
-    handleCapabilityPanelItem,
-  } = createAppCapabilityPanelHandlers({
+  const { handleCapabilityPanelAction, handleCapabilityPanelFieldChange, handleCapabilityPanelItem } = createAppCapabilityPanelHandlers({
     activeFileWatch,
     busyToolId,
     capabilityPanel,
@@ -730,46 +608,137 @@ export function App() {
     terminalCommand,
     terminalProcessId: terminalProcessIdRef.current,
   });
-
+  const handleComposerCapabilityPanelItem = async (item: CapabilityPanelItem) => {
+    const officeAttachmentConsumer = officeAttachmentConsumerRef.current;
+    if (
+      officeAttachmentConsumer &&
+      item.intent === "attach-context" &&
+      item.kind !== "directory" &&
+      item.path
+    ) {
+      officeAttachmentConsumer(item.path);
+      officeAttachmentConsumerRef.current = null;
+      setCapabilityDockOpen(false);
+      setCapabilityPanel(null);
+      return;
+    }
+    await handleCapabilityPanelItem(item);
+  };
+  const commandOfficeRoomAdapter = createAppCommandOfficeRoomAdapter({
+    libraryPanel,
+    locale,
+    refreshRecord: async (record) => {
+      const client = clientRef.current;
+      const workspaceCwd = record.workspaceCwd?.trim() || cwd.trim();
+      if (!client || !workspaceCwd) {
+        return null;
+      }
+      const recordKey = officeRecordKey(record);
+      const response = await client.listOfficeConfigs(workspaceCwd);
+      const refreshedRecord = response.data.map((item) => ({ ...item, workspaceCwd })).find((item) => officeRecordKey(item) === recordKey);
+      return refreshedRecord ?? null;
+    },
+    setLibraryPanel,
+    runtimeProps: {
+      activeTurnByThread,
+      locale,
+      onAttachContext: (workspaceCwd, onSelectPath) => {
+        officeAttachmentConsumerRef.current = onSelectPath;
+        void attachWorkspaceContext(workspaceCwd);
+      },
+      onDecision: handleApprovalDecision,
+      onArtifact: handleOfficeArtifact,
+      onDelegationCancel: handleOfficeDelegationCancel,
+      onDelegationDispatch: handleOfficeDelegationDispatch,
+      onDelegationDispatchNext: handleOfficeDelegationDispatchNext,
+      onDelegationRetry: handleOfficeDelegationRetry,
+      onMemoryDecision: async (memoryId, status) => (await decideOfficeMemory(memoryId, status))?.response?.memory ?? null,
+      onMemoryList: async (status, cursor) => (await listOfficeMemories(status, cursor))?.response ?? null,
+      onMemberContextPreview: async (run, member) => (await previewOfficeMemberContext(run, member))?.response ?? null,
+      onPanelAction: handleLibraryPanelAction,
+      onRecruitableAgentList: listRecruitableAgentConfigs,
+      onRunCancel: handleOfficeRunCancel,
+      onRunRetry: handleOfficeRunRetry,
+      onSendMessage: sendOfficeMessage,
+      onVerificationCancel: handleOfficeVerificationCancel,
+      onVerificationRetry: handleOfficeVerificationRetry,
+      slashCommands,
+    },
+  });
   if (renderCommandShell)
     return (
       <AppCommandShellRoute
-        activeTurnId={commandShellRuntime.activeTurnId} composerValue={composerValue} connectionState={connectionState} cwd={cwd} isSending={isSending}
-        linkedThreads={conversationThreads} locale={locale} selectedThread={commandShellRuntime.selectedThread} selectedThreadId={commandShellRuntime.selectedThreadId} slashCommands={slashCommands}
-        streamingText={commandShellRuntime.streamingText} workMode={workMode} modelOptions={commandModelOptions}
-        executionTargetClient={clientRef.current} capabilityDrawer={{ busyToolId, commandValue: terminalCommand, disabled: !isConnected && !isDemo, locale, open: capabilityDockOpen, panel: capabilityPanel, onClose: () => setCapabilityDockOpen(false), onCommandChange: setTerminalCommand, onCommandSubmit: runTerminalStatus, onPanelAction: handleCapabilityPanelAction, onPanelFieldChange: handleCapabilityPanelFieldChange, onPanelItem: handleCapabilityPanelItem }}
-        confirmDialog={{ locale, request: confirmRequest, onCancel: () => resolveConfirm(false), onConfirm: () => resolveConfirm(true) }}
-        onAttachContext={attachWorkspaceContext} onChangeComposerValue={setComposerValue} onModeChange={setWorkMode} onRetryConnection={retryConnection}
+        activeTurnId={commandShellRuntime.activeTurnId}
+        assistantActiveTurnId={assistantThread ? (activeTurnByThread[assistantThread.id] ?? assistantThread.turns.find((turn) => turn.status === "inProgress")?.id ?? null) : null}
+        assistantStreamingText={assistantThread ? (streamingTextByThread[assistantThread.id] ?? "") : ""}
+        assistantThread={assistantThread}
+        composerValue={composerValue}
+        connectionState={connectionState}
+        cwd={cwd}
+        isSending={isSending}
+        linkedThreads={conversationThreads}
+        locale={locale}
+        selectedThread={commandShellRuntime.selectedThread}
+        selectedThreadId={commandShellRuntime.selectedThreadId}
+        slashCommands={slashCommands}
+        streamingText={commandShellRuntime.streamingText}
+        workMode={workMode}
+        modelOptions={commandModelOptions}
+        executionTargetClient={clientRef.current}
+        scheduleClient={clientRef.current}
+        capabilityDrawer={{
+          busyToolId,
+          commandValue: terminalCommand,
+          disabled: !isConnected && !isDemo,
+          locale,
+          open: capabilityDockOpen,
+          panel: capabilityPanel,
+          onClose: () => setCapabilityDockOpen(false),
+          onCommandChange: setTerminalCommand,
+          onCommandSubmit: runTerminalStatus,
+          onPanelAction: handleCapabilityPanelAction,
+          onPanelFieldChange: handleCapabilityPanelFieldChange,
+          onPanelItem: handleComposerCapabilityPanelItem,
+        }}
+        officeRoomAdapter={commandOfficeRoomAdapter}
+        confirmDialog={{
+          locale,
+          request: confirmRequest,
+          onCancel: () => resolveConfirm(false),
+          onConfirm: () => resolveConfirm(true),
+        }}
+        onAttachContext={(workspaceCwd) => {
+          officeAttachmentConsumerRef.current = null;
+          void attachWorkspaceContext(workspaceCwd);
+        }}
+        onChangeComposerValue={setComposerValue}
+        onClearAssistantThread={() => {
+          if (assistantThread) {
+            void clearAssistantThread(assistantThread);
+          }
+        }}
+        onModeChange={setWorkMode}
+        onRetryConnection={retryConnection}
         onChangeWorkspaceCwd={changeCommandShellWorkspace}
-        onSelectLinkedThread={openCommandShellThread} onSend={sendMessage} onSendNewThread={sendCommandShellMessage}
-        onSlashCommandSelect={handleComposerSlashCommand} onStop={interruptActiveTurn}
+        onSelectLinkedThread={openCommandShellThread}
+        onSendAssistant={(text, threadSettings) => {
+          const settings = assistantThreadRuntimeSettings(threadSettings);
+          if (assistantThread) {
+            void sendMessageToThread(text, assistantThread, settings);
+            return;
+          }
+          void sendMessageInNewThread(text, settings, null);
+        }}
+        onSend={sendMessage}
+        onSendNewThread={sendCommandShellMessage}
+        onSlashCommandSelect={handleComposerSlashCommand}
+        onStop={interruptActiveTurn}
       />
     );
-
   return (
-    <AppShellChromeFrame
-      appView={appView}
-      capabilityDockOpen={capabilityDockOpen}
-      hasCapabilityPanel={Boolean(capabilityPanel)}
-      inspectorOpen={inspectorOpen}
-      locale={locale}
-      notice={notice}
-      platform={platform}
-      sidebarOpen={sidebarOpen}
-      theme={theme}
-      title={titlebarTitle}
-      onCloseSidebar={() => setSidebarOpen(false)}
-      onDismissNotice={() => setNotice(null)}
-      onLocaleChange={changeLocale}
-      onToggleCapabilityDock={toggleCapabilityDock}
-      onToggleInspector={toggleInspector}
-      onToggleSidebar={() => setSidebarOpen((open) => !open)}
-      onToggleTheme={toggleTheme}
-    >
+    <AppShellChromeFrame appView={appView} capabilityDockOpen={capabilityDockOpen} hasCapabilityPanel={Boolean(capabilityPanel)} inspectorOpen={inspectorOpen} locale={locale} notice={notice} platform={platform} sidebarOpen={sidebarOpen} theme={theme} title={titlebarTitle} onCloseSidebar={() => setSidebarOpen(false)} onDismissNotice={() => setNotice(null)} onLocaleChange={changeLocale} onToggleCapabilityDock={toggleCapabilityDock} onToggleInspector={toggleInspector} onToggleSidebar={() => setSidebarOpen((open) => !open)} onToggleTheme={toggleTheme}>
       <AppWorkspaceNavigationPanel
-        activeLibraryKind={
-          appView === "library" ? (libraryPanel?.kind ?? null) : null
-        }
+        activeLibraryKind={appView === "library" ? (libraryPanel?.kind ?? null) : null}
         activeSection={settingsSection}
         appView={appView}
         connectionState={connectionState}
@@ -784,12 +753,11 @@ export function App() {
         onBackSettings={closeSettings}
         onDeleteThread={deleteArchivedThread}
         onLibrary={(kind) => {
-          setWorkMode(kind === "office" ? "office" : "code");
+          setWorkMode("code");
           void openLibrary(kind);
         }}
         onNewThread={() => {
-          setWorkMode("code");
-          startDraftThread();
+          startCommandShellDraftThread(cwd || null);
         }}
         onRenameThread={renameThread}
         onSearchChange={setThreadSearchTerm}
@@ -802,6 +770,7 @@ export function App() {
         onToggleArchived={toggleArchivedThreads}
       />
       <AppWorkspaceContent
+        activeTurnByThread={activeTurnByThread}
         activeTurnId={activeTurnId}
         appView={appView}
         capabilityPanel={capabilityPanel}
@@ -837,15 +806,9 @@ export function App() {
         onOfficeDelegationDispatchNext={handleOfficeDelegationDispatchNext}
         onOfficeVerificationCancel={handleOfficeVerificationCancel}
         onOfficeVerificationRetry={handleOfficeVerificationRetry}
-        onOfficeMemoryDecision={async (memoryId, status) =>
-          (await decideOfficeMemory(memoryId, status))?.response?.memory ?? null
-        }
-        onOfficeMemoryList={async (status, cursor) =>
-          (await listOfficeMemories(status, cursor))?.response ?? null
-        }
-        onOfficeMemberContextPreview={async (run, member) =>
-          (await previewOfficeMemberContext(run, member))?.response ?? null
-        }
+        onOfficeMemoryDecision={async (memoryId, status) => (await decideOfficeMemory(memoryId, status))?.response?.memory ?? null}
+        onOfficeMemoryList={async (status, cursor) => (await listOfficeMemories(status, cursor))?.response ?? null}
+        onOfficeMemberContextPreview={async (run, member) => (await previewOfficeMemberContext(run, member))?.response ?? null}
         onRecruitableAgentList={listRecruitableAgentConfigs}
         onOfficeRunCancel={handleOfficeRunCancel}
         onOfficeRunRetry={handleOfficeRunRetry}
@@ -861,39 +824,8 @@ export function App() {
         onToggleAgentCapability={toggleAgentCapability}
         onUpdateAgentConfig={updateAgentConfig}
       />
-      <AppWorkspaceSidePanels
-        accountStatus={accountStatus}
-        appView={appView}
-        busyToolId={busyToolId}
-        capabilityDockOpen={capabilityDockOpen}
-        capabilityPanel={capabilityPanel}
-        conversationSummary={conversationSummary}
-        disabled={!isConnected && !isDemo}
-        gitRemoteDiff={gitRemoteDiff}
-        inspectorOpen={inspectorOpen}
-        loadedThreadIds={loadedThreadIds}
-        locale={locale}
-        serverUrl={serverUrl}
-        terminalCommand={terminalCommand}
-        thread={selectedThread}
-        threadGoal={threadGoal}
-        onCommandChange={setTerminalCommand}
-        onCommandSubmit={runTerminalStatus}
-        onFiles={readWorkspaceFiles}
-        onPanelAction={handleCapabilityPanelAction}
-        onPanelFieldChange={handleCapabilityPanelFieldChange}
-        onPanelItem={handleCapabilityPanelItem}
-        onReview={startReview}
-        onSideChat={startSideChat}
-        onTerminal={runTerminalStatus}
-        onWeb={loadBrowserApps}
-      />
-      <AppConfirmDialog
-        locale={locale}
-        request={confirmRequest}
-        onCancel={() => resolveConfirm(false)}
-        onConfirm={() => resolveConfirm(true)}
-      />
+      <AppWorkspaceSidePanels accountStatus={accountStatus} appView={appView} busyToolId={busyToolId} capabilityDockOpen={capabilityDockOpen} capabilityPanel={capabilityPanel} conversationSummary={conversationSummary} disabled={!isConnected && !isDemo} gitRemoteDiff={gitRemoteDiff} inspectorOpen={inspectorOpen} loadedThreadIds={loadedThreadIds} locale={locale} serverUrl={serverUrl} terminalCommand={terminalCommand} thread={selectedThread} threadGoal={threadGoal} onCommandChange={setTerminalCommand} onCommandSubmit={runTerminalStatus} onFiles={readWorkspaceFiles} onPanelAction={handleCapabilityPanelAction} onPanelFieldChange={handleCapabilityPanelFieldChange} onPanelItem={handleComposerCapabilityPanelItem} onReview={startReview} onSideChat={startSideChat} onTerminal={runTerminalStatus} onWeb={loadBrowserApps} />
+      <AppConfirmDialog locale={locale} request={confirmRequest} onCancel={() => resolveConfirm(false)} onConfirm={() => resolveConfirm(true)} />
     </AppShellChromeFrame>
   );
 }

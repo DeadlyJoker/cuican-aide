@@ -3979,6 +3979,7 @@ textarea:focus-visible {
 
 .markdown-content table {
   display: block;
+  width: fit-content;
   max-width: 100%;
   overflow: auto;
   border-spacing: 0;
@@ -6762,160 +6763,80 @@ button.library-item:hover .library-card-chevron {
 /* Office group-chat workspace */
 .office-workspace {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 16px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  padding: 28px clamp(20px, 5vw, 56px) 24px;
   background: var(--bg);
 }
 
 .office-top {
   display: grid;
-  gap: 14px;
-  max-width: 1200px;
+  grid-template-columns: auto minmax(240px, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 88px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
   width: 100%;
 }
 
 .office-back {
-  justify-self: start;
-  height: 28px;
-  padding: 0 10px;
+  height: 34px;
+  padding: 0 13px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
-  color: var(--text-muted);
+  color: var(--text);
   cursor: pointer;
-  font-size: 12px;
-}
-
-.office-top-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .office-top-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
-.office-top-glyph {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-lg);
-  font-size: 20px;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface-raised));
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+.office-top-title > span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 620;
 }
 
 .office-top-title h1 {
   margin: 0;
-  font-size: 19px;
+  overflow: hidden;
+  font-size: 18px;
   font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .office-top-title p {
-  margin: 3px 0 0;
+  margin: 0;
   color: var(--text-faint);
-  font-size: 12.5px;
-}
-
-.office-avatars {
-  display: flex;
-}
-
-.office-avatars .office-avatar {
-  margin-left: -8px;
-  box-shadow: 0 0 0 2px var(--bg);
-}
-
-.office-avatars .office-avatar:first-child {
-  margin-left: 0;
-}
-
-.office-goal {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised));
-}
-
-.office-goal span {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.office-goal strong {
-  min-width: 0;
-  flex: 1;
-  font-size: 13.5px;
-  font-weight: 620;
-}
-
-.office-goal em {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: rgba(113, 122, 138, 0.14);
-  color: var(--text-faint);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 650;
-}
-
-.office-goal em[data-status="connected"] {
-  background: color-mix(in srgb, var(--success) 16%, transparent);
-  color: var(--success);
-}
-
-.office-goal em[data-status="binding"] {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
-}
-
-.office-goal em[data-status="error"] {
-  background: color-mix(in srgb, var(--danger) 16%, transparent);
-  color: var(--danger);
-}
-
-.office-grid {
-  display: grid;
-  grid-template-columns: 224px minmax(0, 1fr) 248px;
-  gap: 14px;
-  max-width: 1200px;
-  width: 100%;
-  min-height: 0;
+  font-size: 12px;
 }
 
 .office-tabs {
   display: flex;
   gap: 4px;
   padding: 4px;
-  border-radius: var(--radius-lg);
+  border-radius: 12px;
   background: var(--surface-strong);
   border: 1px solid var(--border);
-  width: fit-content;
+  width: min(220px, 100%);
 }
 
 .office-tabs button {
-  padding: 6px 18px;
-  border-radius: var(--radius-md);
+  flex: 1;
+  min-width: 0;
+  padding: 7px 13px;
+  border-radius: 9px;
   font-size: 13px;
   font-weight: 620;
   color: var(--text-muted);
@@ -6934,15 +6855,53 @@ button.library-item:hover .library-card-chevron {
 .office-tabs button[data-active="true"] {
   color: var(--text);
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
 }
 
-.office-workspace .activity-board {
-  max-width: 1200px;
-  width: 100%;
+.office-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.office-top-actions button,
+.office-runtime-status {
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.office-top-actions button {
+  cursor: pointer;
+}
+
+.office-runtime-status {
+  display: inline-flex;
+  align-items: center;
+  cursor: default;
+}
+
+.office-top-actions button[data-active="true"] {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
+}
+
+.office-runtime-status[data-runtime-status="running"],
+.office-runtime-status[data-runtime-status="connected"],
+.office-runtime-status[data-runtime-status="completed"] {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border));
+}
+
+.office-room-body {
+  position: relative;
+  min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  align-content: start;
+  overflow: hidden;
 }
 
 .office-memory-panel {
@@ -6952,6 +6911,7 @@ button.library-item:hover .library-card-chevron {
   max-width: 1200px;
   width: 100%;
   min-height: 0;
+  padding: 20px clamp(18px, 4vw, 56px) 28px;
   overflow: hidden;
 }
 
@@ -7101,8 +7061,7 @@ button.library-item:hover .library-card-chevron {
   align-self: center;
 }
 
-.office-members,
-.office-tasks {
+.office-members {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -7396,15 +7355,138 @@ button.library-item:hover .library-card-chevron {
   cursor: pointer;
 }
 
-.office-recruit select {
+.screen-shell.command-screen .office-recruit .office-agent-select {
+  position: relative;
+  display: flex;
+  width: 100%;
   min-width: 0;
-  height: 32px;
-  padding: 0 8px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.screen-shell.command-screen .office-recruit .office-agent-select:hover,
+.screen-shell.command-screen .office-recruit .office-agent-select:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: var(--surface-raised);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.screen-shell.command-screen .office-recruit .office-agent-select::after {
+  right: 13px;
+  width: 7px;
+  height: 7px;
+  border-color: var(--text-faint);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.screen-shell.command-screen
+  .office-recruit
+  .office-agent-select[data-open="true"]::after {
+  transform: translateY(-30%) rotate(225deg);
+}
+
+.screen-shell.command-screen
+  .office-recruit
+  .office-agent-select
+  .select-trigger {
+  width: 100%;
+  max-width: none;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 36px 0 12px;
+  overflow: hidden;
   color: var(--text);
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 590;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen
+  .office-recruit
+  .office-agent-select
+  .select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.screen-shell.command-screen .office-recruit .office-agent-select .select-menu {
+  top: calc(100% + 6px);
+  right: 0;
+  bottom: auto;
+  left: 0;
+  z-index: 30;
+  min-width: 100%;
+  max-width: 100%;
+  max-height: min(240px, calc(100vh - 160px));
+  padding: 5px;
+  border-color: var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface-raised);
+  box-shadow: 0 16px 36px rgb(15 23 42 / 0.16);
+}
+
+.screen-shell.command-screen
+  .office-recruit
+  .office-agent-select
+  .select-menu
+  .select-option {
+  align-items: flex-start;
+  min-height: 48px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  white-space: normal;
+}
+
+.screen-shell.command-screen
+  .office-recruit
+  .office-agent-select
+  .select-menu
+  .select-option
+  > span {
+  gap: 3px;
+  width: calc(100% - 18px);
+}
+
+.screen-shell.command-screen
+  .office-recruit
+  .office-agent-select
+  .select-menu
+  .select-option
+  strong {
+  color: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen
+  .office-recruit
+  .office-agent-select
+  .select-menu
+  .select-option
+  em {
+  display: -webkit-box;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.screen-shell.command-screen
+  .office-recruit
+  .office-agent-select
+  .select-menu
+  .select-option[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+  color: var(--accent);
 }
 
 .office-recruit > button,
@@ -7427,7 +7509,8 @@ button.library-item:hover .library-card-chevron {
 }
 
 .office-recruit-empty,
-.office-recruit-error {
+.office-recruit-error,
+.office-recruit-upgrade-note {
   margin: 0;
   color: var(--text-faint);
   font-size: 11.5px;
@@ -7438,6 +7521,14 @@ button.library-item:hover .library-card-chevron {
   color: var(--danger);
 }
 
+.office-recruit-upgrade-note {
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+  color: var(--text-muted);
+}
+
 .office-recruit button:disabled,
 .office-rail-actions button:disabled {
   cursor: not-allowed;
@@ -7446,37 +7537,26 @@ button.library-item:hover .library-card-chevron {
 
 .office-chat {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: 100%;
+  height: 100%;
   min-height: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface-raised);
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-raised) 68%, var(--bg)),
+    var(--bg)
+  );
   overflow: hidden;
-}
-
-.office-chat-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.office-chat-head strong {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.office-chat-head span {
-  color: var(--text-faint);
-  font-size: 11.5px;
 }
 
 .office-chat-stream {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px;
+  gap: 16px;
+  width: 100%;
+  padding: 36px max(24px, calc((100% - 980px) / 2)) 18px;
   overflow: auto;
 }
 
@@ -7491,14 +7571,23 @@ button.library-item:hover .library-card-chevron {
 
 .office-bubble {
   display: flex;
-  gap: 10px;
-  max-width: 86%;
+  align-items: flex-start;
+  gap: 12px;
+  width: min(760px, 82%);
+  max-width: 100%;
 }
 
 .office-bubble-body {
   display: grid;
-  gap: 4px;
+  gap: 5px;
+  flex: 1;
   min-width: 0;
+  min-height: 58px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+  box-shadow: none;
 }
 
 .office-bubble-head {
@@ -7519,28 +7608,254 @@ button.library-item:hover .library-card-chevron {
 
 .office-bubble-body p {
   margin: 0;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs) var(--radius-lg) var(--radius-lg)
-    var(--radius-lg);
-  background: color-mix(in srgb, var(--text-faint) 7%, var(--surface));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 1.55;
+  box-shadow: none;
 }
 
 .office-mention {
   color: var(--accent);
   font-weight: 650;
-  padding: 0 3px;
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.office-bubble[data-kind="task"] .office-bubble-body {
+  border-color: color-mix(in srgb, var(--success) 18%, transparent);
+  background: color-mix(in srgb, var(--success) 5%, var(--surface));
 }
 
 .office-bubble[data-kind="task"] .office-bubble-body p {
-  border-color: color-mix(in srgb, var(--success) 36%, transparent);
-  background: color-mix(in srgb, var(--success) 12%, var(--surface));
   color: var(--text);
+}
+
+.office-chat .office-shared-composer.command-input {
+  width: min(780px, calc(100% - 48px));
+  min-height: 156px;
+  margin: 0 auto 18px;
+  border-color: var(--border);
+  background: var(--surface-raised);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgb(31 51 84 / 0.065);
+}
+
+.office-chat .office-shared-composer textarea {
+  min-height: 78px;
+  padding: 18px 18px 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.office-chat .office-shared-composer textarea:read-only {
+  cursor: default;
+  background: var(--surface-strong);
+}
+
+.office-chat .office-shared-composer .input-tools {
+  min-height: 54px;
+  padding: 6px 14px 9px;
+}
+
+.office-chat .office-shared-composer .composer-state-row {
+  min-height: 28px;
+  background: var(--surface-strong);
+}
+
+.office-chat .office-shared-composer .composer-state {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding-left: 16px;
+}
+
+.office-chat .office-shared-composer .office-composer-routing {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.office-chat .office-shared-composer .office-composer-routing[data-directed] {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.office-chat .office-shared-composer .composer-input-budget {
+  margin-left: auto;
+  padding-right: 14px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.office-chat .office-shared-composer .composer-input-budget[data-over-limit] {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.office-chat .office-shared-composer .composer-actions {
+  gap: 8px;
+}
+
+.office-chat .office-shared-composer .composer-controls {
+  gap: 8px;
+  min-width: 0;
+}
+
+.office-composer-member-control,
+.office-composer-routing-control,
+.office-composer-target-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 630;
+  white-space: nowrap;
+}
+
+.office-composer-member-control {
+  cursor: pointer;
+}
+
+.office-composer-member-control:hover,
+.office-composer-member-control[aria-expanded="true"] {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.office-composer-member-control svg:first-child,
+.office-composer-member-control svg:last-child {
+  width: 14px;
+  height: 14px;
+}
+
+.office-composer-target-control {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.office-composer-target-control[data-directed] {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+.office-chat .office-shared-composer .office-stop-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  height: 34px;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, #d97706 34%, var(--border));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, #d97706 10%, var(--surface-raised));
+  color: color-mix(in srgb, #d97706 76%, var(--text));
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.office-chat .office-shared-composer .office-stop-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.office-chat .office-shared-composer .office-stop-button:hover:not(:disabled),
+.office-chat .office-shared-composer .office-stop-button:focus-visible {
+  border-color: color-mix(in srgb, #d97706 54%, var(--border));
+  background: color-mix(in srgb, #d97706 16%, var(--surface-raised));
+  color: color-mix(in srgb, #d97706 86%, var(--text));
+}
+
+.office-chat .office-shared-composer .office-stop-button:disabled {
+  cursor: progress;
+  opacity: 0.58;
+}
+
+.office-chat .office-member-palette {
+  border-color: var(--border);
+  background: var(--surface-raised);
+}
+
+.office-chat .office-slash-palette {
+  border-color: var(--border);
+  background: var(--surface-raised);
+}
+
+.office-composer-palette-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.office-composer-attach-action {
+  color: var(--text-muted);
+}
+
+.office-composer-attach-action:hover:not(:disabled),
+.office-composer-attach-action:focus-visible {
+  color: var(--text);
+}
+
+.office-members-backdrop {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  border: 0;
+  background: rgb(15 23 42 / 0.12);
+  cursor: default;
+}
+
+.office-members-drawer {
+  position: absolute;
+  z-index: 21;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  width: min(340px, calc(100% - 24px));
+}
+
+.office-members-drawer .office-members {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgb(15 23 42 / 0.18);
+}
+
+.office-rail-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.office-rail-head-actions > button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
 }
 
 .office-composer {
@@ -7607,101 +7922,107 @@ button.library-item:hover .library-card-chevron {
   flex-direction: row-reverse;
 }
 
+.office-bubble[data-self="true"] .office-bubble-body {
+  border-radius: 16px;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
 .office-bubble[data-self="true"] .office-bubble-body p {
-  border-radius: var(--radius-lg) var(--radius-xs) var(--radius-lg)
-    var(--radius-lg);
-  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
   color: var(--text);
 }
 
 .office-bubble[data-self="true"] .office-mention {
-  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  background: transparent;
 }
 
-.office-task {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 7px;
-  border-radius: var(--radius-md);
+.office-manager-member {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  padding-bottom: 12px;
 }
 
-.office-task:hover {
-  background: color-mix(in srgb, var(--text-faint) 10%, transparent);
-}
-
-.office-task-dot {
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--text-faint);
-}
-
-.office-task[data-status="doing"] .office-task-dot {
-  background: var(--accent);
-}
-
-.office-task[data-status="done"] .office-task-dot {
-  background: var(--success);
-}
-
-.office-task-text {
-  display: grid;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-
-.office-task-text strong {
-  font-size: 12.5px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.office-task[data-status="done"] .office-task-text strong {
-  color: var(--text-faint);
-  text-decoration: line-through;
-}
-
-.office-task-text span {
-  color: var(--text-faint);
-  font-size: 11px;
-}
-
-.office-task-status {
-  flex-shrink: 0;
-  padding: 2px 8px;
+.office-manager-badge {
+  align-self: start;
+  padding: 3px 7px;
   border-radius: var(--radius-pill);
-  font-size: 10.5px;
-  font-weight: 600;
-  background: color-mix(in srgb, var(--text-faint) 14%, transparent);
-  color: var(--text-muted);
-}
-
-.office-task-status[data-status="doing"] {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
   color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
-.office-task-status[data-status="done"] {
-  background: color-mix(in srgb, var(--success) 16%, transparent);
-  color: var(--success);
+.office-manager-note {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 
 @media (max-width: 1080px) {
-  .office-grid {
-    grid-template-columns: minmax(0, 1fr);
-    grid-auto-rows: min-content;
-    overflow: auto;
+  .office-top {
+    grid-template-columns: auto minmax(220px, 1fr) auto;
   }
 
-  .office-members,
-  .office-tasks {
-    max-height: 280px;
+  .office-tabs {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    width: 100%;
+  }
+
+  .office-top-actions {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .office-top {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .office-tabs,
+  .office-top-actions {
+    grid-column: 1 / -1;
+  }
+
+  .office-tabs {
+    grid-row: 2;
+  }
+
+  .office-top-actions {
+    grid-row: 3;
+    justify-content: flex-end;
+  }
+
+  .office-chat-stream {
+    padding: 24px 14px 14px;
+  }
+
+  .office-bubble {
+    width: min(92%, 760px);
+  }
+
+  .office-chat .office-shared-composer.command-input {
+    width: calc(100% - 24px);
+    margin-bottom: 12px;
+  }
+
+  .office-chat .office-shared-composer .input-tools {
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .office-chat .office-shared-composer .composer-controls {
+    flex-wrap: wrap;
+  }
+
+  .office-composer-routing-control,
+  .office-composer-target-control {
+    display: none;
   }
 }
 
@@ -11755,7 +12076,7 @@ button.library-item:hover .library-card-chevron {
   .message[data-kind="agentMessage"]
   .markdown-content
   table {
-  overflow: hidden;
+  overflow: auto;
   border-radius: 12px;
   box-shadow: inset 0 0 0 1px oklch(90% 0.008 235);
 }

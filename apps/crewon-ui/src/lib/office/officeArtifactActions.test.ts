@@ -39,6 +39,7 @@ type CapturedOfficeArtifactState = {
   upsertedArtifacts: Array<{
     artifact: ArtifactItem;
     message: OfficeMessage;
+    recordRevision?: string;
     root: string;
     threadId: string;
   }>;
@@ -204,7 +205,13 @@ async function runAction(
     client: client(captured, { files: [] }),
     ensureOfficeThread: async () => {
       captured.ensuredThreads += 1;
-      return "office-thread";
+      return {
+        config: officeConfig(
+          workspace({ recordRevision: "revision-current" }),
+        ),
+        filePath: "/offices/office.json",
+        threadId: "office-thread",
+      };
     },
     handleDirectoryItem: async (item) => {
       captured.directoryItems.push(item);
@@ -241,6 +248,7 @@ async function runAction(
       captured.upsertedArtifacts.push({
         artifact: savedArtifact,
         message,
+        recordRevision: workspaceBeforeArtifact.recordRevision,
         root,
         threadId,
       });
@@ -269,7 +277,7 @@ describe("office artifact actions", () => {
     expect(captured.capabilityPanel).toEqual({
       title: "Client brief",
       subtitle: "Office artifact",
-      body: "Connect app-server to search and read this artifact from the current workspace.",
+      body: "Connect the runtime to search and read this artifact from the current workspace.",
     });
     expect(captured.busyToolId).toBeNull();
   });
@@ -305,6 +313,7 @@ describe("office artifact actions", () => {
         meta: "client-demo · saved /repo/.crewon/offices/artifacts/client-brief.md",
       },
       root: "/repo",
+      recordRevision: "revision-current",
       threadId: "office-thread",
     });
     expect(captured.threads[0]?.turns).toEqual([
@@ -391,7 +400,7 @@ describe("office artifact actions", () => {
       "- Current read SHA-256: 9938be87d35f2a7a2b80237e8dc71806b209aaea8252f12c1b12949f61d40476",
     );
     expect(captured.capabilityPanel?.body).toContain(
-      "- Fingerprint: matches backend record",
+      "- Fingerprint: matches saved version",
     );
   });
 

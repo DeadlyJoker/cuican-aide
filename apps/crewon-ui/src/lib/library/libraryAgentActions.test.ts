@@ -4,10 +4,7 @@ import type { AgentConfig, LibraryPanel, LibraryPanelAction } from "../domain/cr
 import { createDefaultAgentConfig } from "../agent-config/agentConfigDefaults";
 import { handleLibraryAgentAction } from "./libraryAgentActions";
 
-type CapturedAgentActionState = {
-  panel: LibraryPanel | null;
-  writtenConfigs: AgentConfig[];
-};
+type CapturedAgentActionState = { panel: LibraryPanel | null };
 
 function agentConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
   return {
@@ -32,13 +29,10 @@ async function handleAction(
   action: LibraryPanelAction,
   options: {
     createError?: unknown;
-    writeError?: unknown;
-    writeResult?: { filePath: string; agentId?: string } | null;
   } = {},
 ): Promise<{ handled: boolean; state: CapturedAgentActionState }> {
   const state: CapturedAgentActionState = {
     panel: panel(),
-    writtenConfigs: [],
   };
 
   const handled = await handleLibraryAgentAction({
@@ -54,34 +48,25 @@ async function handleAction(
     setLibraryPanel: (updater) => {
       state.panel = updater(state.panel);
     },
-    writeAgentConfig: async (config) => {
-      state.writtenConfigs.push(config);
-      if (options.writeError) {
-        throw options.writeError;
-      }
-      return options.writeResult ?? { filePath: "/workspace/.crewon/agents/agent.json", agentId: "agent-1" };
-    },
   });
 
   return { handled, state };
 }
 
 describe("library agent actions", () => {
-  it("creates backend agent configs and writes records", async () => {
+  it("opens a capability-backed draft without writing a placeholder record", async () => {
     const { handled, state } = await handleAction({
       id: "create-agent",
       label: "Create agent",
     });
 
     expect(handled).toBe(true);
-    expect(state.writtenConfigs).toEqual([agentConfig()]);
     expect(state.panel).toMatchObject({
       title: "Backend Agent",
       subtitle: "Agent configuration",
-      body: "Created backend agent record: /workspace/.crewon/agents/agent.json",
+      body: undefined,
       error: undefined,
       agentConfig: {
-        agentId: "agent-1",
         name: "Backend Agent",
       },
     });
@@ -93,36 +78,15 @@ describe("library agent actions", () => {
         id: "create-agent",
         label: "Create agent",
       },
-      { createError: new Error("capability offline"), writeResult: null },
+      { createError: new Error("capability offline") },
     );
 
     expect(handled).toBe(true);
-    expect(state.writtenConfigs).toEqual([createDefaultAgentConfig("en")]);
     expect(state.panel).toMatchObject({
       title: "New Agent",
       error: "capability offline",
       agentConfig: {
         name: "New Agent",
-      },
-    });
-  });
-
-  it("keeps the created config and surfaces record write failures", async () => {
-    const { handled, state } = await handleAction(
-      {
-        id: "create-agent",
-        label: "Create agent",
-      },
-      { writeError: new Error("record write failed") },
-    );
-
-    expect(handled).toBe(true);
-    expect(state.panel).toMatchObject({
-      title: "Backend Agent",
-      body: undefined,
-      error: "record write failed",
-      agentConfig: {
-        name: "Backend Agent",
       },
     });
   });
@@ -134,7 +98,6 @@ describe("library agent actions", () => {
     });
 
     expect(handled).toBe(false);
-    expect(state.writtenConfigs).toEqual([]);
     expect(state.panel).toEqual(panel());
   });
 });

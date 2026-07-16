@@ -202,7 +202,7 @@ export function CommandProjectTree({
         const pinDifference = Number(pinned.has(right.id)) - Number(pinned.has(left.id));
         if (pinDifference) return pinDifference;
       }
-      return right.updatedAt - left.updatedAt;
+      return (right.updatedAt ?? 0) - (left.updatedAt ?? 0);
     });
   }, [linkedThreads, manualRank, pinned, preferences.sort]);
 

@@ -2,6 +2,7 @@ import type { McpServerConfigRecord } from "@crewon-protocol/v2/McpServerConfigR
 import type { McpServerStatus } from "@crewon-protocol/v2/McpServerStatus";
 
 import { isUnsupportedRpcError, type AppServerClient } from "../app-server/appServer";
+import { isLegacyGeneratedAgentPlaceholder } from "../agent-config/legacyAgentPlaceholder";
 import { withBackendWorkspace } from "../backend/backendWorkspace";
 import type { AgentConfig, OfficeConfig, OfficeMember } from "./crewonDomain";
 
@@ -67,6 +68,12 @@ export async function listRecruitableAgentConfigs(
       .map((member) => member.agentId)
       .filter((agentId): agentId is string => Boolean(agentId)),
   );
+  const identityUpgradeAgentIds = new Set(
+    existingMembers.flatMap((member) => {
+      const agentId = member.agentId?.trim();
+      return agentId && !member.memberId?.trim() ? [agentId] : [];
+    }),
+  );
 
   try {
     const response = await client.listRecruitableAgentConfigs(cwd, {
@@ -75,11 +82,30 @@ export async function listRecruitableAgentConfigs(
       existingNames: [...memberNames],
       limit: 24,
     });
-    return response.data
+    const recruitable = response.data
       .map((record) => record.config)
+      .filter((config) => !isLegacyGeneratedAgentPlaceholder(config))
       .filter((config): config is AgentConfig & { agentId: string } =>
         Boolean(config.agentId),
       );
+    if (identityUpgradeAgentIds.size === 0) {
+      return recruitable;
+    }
+    try {
+      const allAgents = await client.listAgentConfigs(cwd);
+      const upgrades = allAgents.data
+        .map((record) => record.config)
+        .filter((config) => !isLegacyGeneratedAgentPlaceholder(config))
+        .filter(
+          (config): config is AgentConfig & { agentId: string } =>
+            Boolean(
+              config.agentId && identityUpgradeAgentIds.has(config.agentId),
+            ),
+        );
+      return mergeAgentConfigs(upgrades, recruitable);
+    } catch {
+      return recruitable;
+    }
   } catch (error) {
     if (!isUnsupportedRpcError(error)) {
       throw error;
@@ -90,13 +116,18 @@ export async function listRecruitableAgentConfigs(
     const response = await client.listAgentConfigs(cwd);
     const candidates = response.data
       .map((record) => record.config)
+      .filter((config) => !isLegacyGeneratedAgentPlaceholder(config))
       .filter((config): config is AgentConfig & { agentId: string } =>
         Boolean(config.agentId),
       );
-    return candidates.filter(
-      (config) =>
-        !memberNames.has(config.name) && !memberAgentIds.has(config.agentId),
-    );
+    return candidates.filter((config) => {
+      if (identityUpgradeAgentIds.has(config.agentId)) {
+        return true;
+      }
+      return (
+        !memberNames.has(config.name) && !memberAgentIds.has(config.agentId)
+      );
+    });
   } catch (error) {
     if (!isUnsupportedRpcError(error)) {
       throw error;
@@ -104,6 +135,19 @@ export async function listRecruitableAgentConfigs(
   }
 
   return [];
+}
+
+function mergeAgentConfigs(
+  preferred: Array<AgentConfig & { agentId: string }>,
+  fallback: Array<AgentConfig & { agentId: string }>,
+): Array<AgentConfig & { agentId: string }> {
+  const byAgentId = new Map<string, AgentConfig & { agentId: string }>();
+  for (const config of [...preferred, ...fallback]) {
+    if (!byAgentId.has(config.agentId)) {
+      byAgentId.set(config.agentId, config);
+    }
+  }
+  return [...byAgentId.values()];
 }
 
 export async function readAppRecruitableAgentConfig(params: {

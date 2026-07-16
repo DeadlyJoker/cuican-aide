@@ -1,0 +1,329 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`command Office room style > snapshots the Team card layout and responsive contract 1`] = `
+{
+  "cardContract": "/* Keep Office card content inside the design artifact's fixed action slot. */
+.shell-page-view .office-card-button {
+  display: grid;
+  align-content: space-between;
+  gap: 9px;
+  min-height: 132px;
+  padding: 13px;
+  border: 1px solid oklch(89% 0.01 235);
+  border-radius: 11px;
+  background: oklch(100% 0 0);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgb(15 23 42 / 0.03);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.shell-page-view .office-card-button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklch, var(--accent) 24%, oklch(89% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 2.5%, white);
+  box-shadow: 0 10px 24px rgb(31 51 84 / 0.06);
+}
+.shell-page-view .office-card-button:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--accent) 62%, white);
+  outline-offset: 3px;
+}
+.shell-page-view .office-card-button.is-active {
+  border-color: color-mix(in oklch, var(--accent) 30%, oklch(89% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 3%, white);
+}
+.shell-page-view .office-card-head,
+.shell-page-view .office-card-foot {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.shell-page-view .office-card-head {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.shell-page-view .office-card-head strong {
+  color: oklch(20% 0.018 235);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.shell-page-view .office-card-copy {
+  color: oklch(48% 0.016 235);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.shell-page-view .office-card-foot {
+  align-items: center;
+  justify-content: space-between;
+  color: oklch(45% 0.017 235);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.shell-page-view .office-card-foot > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-page-view .office-card-foot em {
+  flex: 0 0 auto;
+  color: color-mix(in oklch, var(--accent) 78%, oklch(25% 0.02 235));
+  font-style: normal;
+  font-weight: 620;
+  white-space: nowrap;
+}",
+  "responsiveContract": "/* Match the design artifact's Team responsive density. */
+.shell-page-view .expert-team-card .catalog-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+}
+@media (max-width: 1180px) {
+  .shell-page-view .office-card-grid,
+  .shell-page-view .expert-team-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 860px) {
+  .shell-page-view[data-shell-view="team"] .catalog-market-header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+  }
+  .shell-page-view[data-shell-view="team"] .catalog-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .shell-page-view[data-shell-view="team"] .catalog-source-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 8px;
+  }
+  .shell-page-view[data-shell-view="team"] .catalog-context-note,
+  .shell-page-view[data-shell-view="team"] .team-workspace-scope {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .shell-page-view[data-shell-view="team"] .team-workspace-picker {
+    width: min(100%, 620px);
+    max-width: 100%;
+  }
+  .shell-page-view .office-card-grid,
+  .shell-page-view .expert-team-grid,
+  .shell-page-view .workflow-list-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell-page-view .workflow-list-foot {
+    justify-content: flex-start;
+  }
+}",
+}
+`;
+
+exports[`command Office room style > snapshots the canonical Office workspace embedding contract 1`] = `
+"/* Embed the canonical Office workspace inside Team without a second runtime. */
+.shell-page-view.office-room-active
+  .office-room-inline.team-office-runtime-room {
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+.team-office-runtime-room > .office-workspace {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: oklch(98.8% 0.004 235);
+}
+.team-office-runtime-room
+  > .office-workspace
+  :is(
+    .office-top,
+    .office-room-body,
+    .office-workspace > .activity-board,
+    .office-memory-panel
+  ) {
+  max-width: none;
+}
+.team-office-room-loading,
+.team-office-room-error {
+  display: grid;
+  min-height: 100%;
+  padding: 28px;
+  place-items: center;
+  color: oklch(48% 0.016 235);
+  font-size: 13px;
+}
+.team-office-room-error {
+  color: oklch(48% 0.15 25);
+}"
+`;
+
+exports[`command Office room style > snapshots the visible Office landing contract 1`] = `
+"/* Keep Office visibly discoverable before real records are available. */
+.shell-page-view .team-office-empty {
+  grid-column: 1 / -1;
+  display: grid;
+  align-content: center;
+  gap: 26px;
+  min-height: min(430px, calc(100vh - 190px));
+  margin: 0;
+  padding: clamp(26px, 4vw, 46px);
+  border: 1px solid oklch(87% 0.014 235);
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at 88% 10%,
+      color-mix(in oklch, var(--accent) 8%, transparent),
+      transparent 36%
+    ),
+    oklch(100% 0 0);
+  color: oklch(23% 0.018 235);
+  box-shadow: 0 18px 50px rgb(28 45 72 / 0.055);
+  text-align: left;
+}
+.shell-page-view .team-office-empty-head {
+  display: grid;
+  gap: 8px;
+  max-width: 680px;
+}
+.shell-page-view .team-office-empty-kicker {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: 0.14em;
+}
+.shell-page-view .team-office-empty h3 {
+  margin: 0;
+  color: oklch(19% 0.018 235);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.18;
+}
+.shell-page-view .team-office-empty-head p {
+  max-width: 66ch;
+  margin: 0;
+  color: oklch(47% 0.018 235);
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+.shell-page-view .team-office-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.shell-page-view .team-office-capability {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid oklch(89% 0.012 235);
+  border-radius: 13px;
+  background: rgb(255 255 255 / 0.72);
+}
+.shell-page-view .team-capability-unavailable .team-office-capability {
+  grid-template-columns: minmax(0, 1fr);
+}
+.shell-page-view .office-card-grid > .filter-empty-state {
+  grid-column: 1 / -1;
+}
+.shell-page-view .team-office-capability > span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: color-mix(in oklch, var(--accent) 9%, white);
+  color: var(--accent);
+}
+.shell-page-view .team-office-capability svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+.shell-page-view .team-office-capability div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.shell-page-view .team-office-capability strong {
+  color: oklch(22% 0.018 235);
+  font-size: 14px;
+  font-weight: 640;
+}
+.shell-page-view .team-office-capability p {
+  margin: 0;
+  color: oklch(50% 0.016 235);
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.shell-page-view .team-office-empty-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 2px;
+}
+.shell-page-view .team-office-connection-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: oklch(47% 0.018 235);
+  font-size: 12px;
+  font-weight: 560;
+}
+.shell-page-view .team-office-connection-state::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: oklch(66% 0.01 235);
+  box-shadow: 0 0 0 3px oklch(66% 0.01 235 / 0.1);
+  content: "";
+}
+.shell-page-view .team-office-connection-state[data-state="ready"]::before {
+  background: oklch(63% 0.13 154);
+  box-shadow: 0 0 0 3px oklch(63% 0.13 154 / 0.11);
+}
+.shell-page-view
+  .team-office-connection-state[data-state="unavailable"]::before {
+  background: oklch(61% 0.18 28);
+  box-shadow: 0 0 0 3px oklch(61% 0.18 28 / 0.11);
+}
+.shell-page-view .team-office-connection-state[data-state="loading"]::before {
+  background: oklch(70% 0.13 78);
+  box-shadow: 0 0 0 3px oklch(70% 0.13 78 / 0.12);
+}
+@media (max-width: 860px) {
+  .shell-page-view .team-office-empty {
+    min-height: 0;
+  }
+  .shell-page-view .team-office-capability-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .shell-page-view .team-office-empty-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .shell-page-view .team-office-empty-footer .button {
+    width: 100%;
+  }
+}"
+`;

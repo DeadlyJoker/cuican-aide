@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "kind": "agent",
+  "savedAt": "2026-07-15T19:46:22.567Z",
+  "config": {
+    "accent": "green",
+    "agentId": "agent-platform:8",
+    "glyph": "A",
+    "mcp": [
+      {
+        "accent": "blue",
+        "description": "免费公开 HTTP API，用于测试 MCP Tool 的 HTTP 调用链路（天气、httpbin、jsonplaceholder）",
+        "enabled": false,
+        "glyph": "⌁",
+        "id": "2",
+        "name": "公开 API 工具集"
+      },
+      {
+        "accent": "cyan",
+        "description": "用于验证 MCP 接入的测试 Server。请在「我的 MCP Server」中编辑本记录，填写可访问的接入 URL（SSE/HTTP），Hosted 类型也可使用平台生成的 endpoint。",
+        "enabled": true,
+        "glyph": "◎",
+        "id": "1",
+        "name": "测试 MCP Server"
+      }
+    ],
+    "model": "deepseek-chat",
+    "models": [
+      "deepseek-chat"
+    ],
+    "name": "MCP 工具助手",
+    "permission": "agent-platform-local",
+    "permissions": [
+      "agent-platform-local"
+    ],
+    "role": "使用 MCP Server 工具完成各种任务（连接 mcp-service）",
+    "skills": [
+      {
+        "accent": "green",
+        "description": "自动清洗和标准化各类数据，处理缺失值、异常值和数据格式转换",
+        "enabled": false,
+        "glyph": "✓",
+        "id": "13",
+        "name": "数据清洗"
+      },
+      {
+        "accent": "amber",
+        "description": "URL特殊字符编码",
+        "enabled": false,
+        "glyph": "✦",
+        "id": "12",
+        "name": "URL编码"
+      },
+      {
+        "accent": "violet",
+        "description": "HEX与RGB颜色互转",
+        "enabled": false,
+        "glyph": "⌗",
+        "id": "11",
+        "name": "颜色转换"
+      },
+      {
+        "accent": "rose",
+        "description": "反转输入字符串",
+        "enabled": false,
+        "glyph": "◌",
+        "id": "10",
+        "name": "字符串反转"
+      },
+      {
+        "accent": "slate",
+        "description": "Unix时间戳转换工具",
+        "enabled": false,
+        "glyph": "◇",
+        "id": "9",
+        "name": "时间戳转换"
+      },
+      {
+        "accent": "blue",
+        "description": "格式化JSON字符串",
+        "enabled": false,
+        "glyph": "✓",
+        "id": "8",
+        "name": "JSON格式化"
+      },
+      {
+        "accent": "cyan",
+        "description": "生成随机密码",
+        "enabled": false,
+        "glyph": "✦",
+        "id": "7",
+        "name": "随机密码"
+      },
+      {
+        "accent": "green",
+        "description": "简单的数学计算器",
+        "enabled": false,
+        "glyph": "⌗",
+        "id": "6",
+        "name": "计算器"
+      },
+      {
+        "accent": "amber",
+        "description": "根据代码自动生成单元测试和集成测试用例，提高测试覆盖率",
+        "enabled": false,
+        "glyph": "◌",
+        "id": "5",
+        "name": "测试用例生成"
+      },
+      {
+        "accent": "violet",
+        "description": "智能分析系统日志，快速定位错误和异常，生成诊断报告",
+        "enabled": false,
+        "glyph": "◇",
+        "id": "4",
+        "name": "日志分析"
+      },
+      {
+        "accent": "rose",
+        "description": "根据代码自动生成 API 文档，支持 OpenAPI、Swagger 等多种格式",
+        "enabled": false,
+        "glyph": "✓",
+        "id": "3",
+        "name": "API 文档生成"
+      },
+      {
+        "accent": "slate",
+        "description": "自动清洗和标准化各类数据，处理缺失值、异常值和数据格式转换",
+        "enabled": false,
+        "glyph": "✦",
+        "id": "2",
+        "name": "数据清洗"
+      }
+    ],
+    "systemPrompt": "你是一个 MCP 工具助手，可以使用 MCP Server 上的各种工具完成任务。\n\n## 核心能力\n1. 使用 mcp_list_tools 列出可用的 MCP 工具\n2. 使用 mcp_call_tool 调用指定的 MCP 工具\n\n## 工作流程\n1. 理解用户需求\n2. 使用 mcp_list_tools 查看可用工具\n3. 选择合适的工具并调用\n4. 基于结果回答用户\n\n## 工具使用\n\n### 列出工具\nmcp_list_tools(server_id: 1)\n\n### 调用工具\nmcp_call_tool(server_id: 1, tool_name: \"工具名\", arguments: {{\"参数名\": \"参数值\"}})\n\n## 示例\n用户问时间：先 mcp_list_tools 查看工具，找到 get_time，然后 mcp_call_tool 调用它。"
+  }
+}

@@ -79,6 +79,7 @@ export function showLibraryActionProgress({
   );
 }
 
+/** Returns true only when the requested action completed successfully. */
 export async function handleLibraryPanelActionDispatch({
   action,
   connectedHandlers,
@@ -107,7 +108,7 @@ export async function handleLibraryPanelActionDispatch({
       setLibraryPanel,
     })
   ) {
-    return true;
+    return false;
   }
 
   if (await runLibraryActionHandlers(immediateHandlers)) {
@@ -130,7 +131,7 @@ export async function handleLibraryPanelActionDispatch({
     setLibraryPanel((currentPanel) =>
       libraryActionFailurePanel(currentPanel, error, action.id, locale),
     );
-    return true;
+    return false;
   }
 }
 

@@ -31,6 +31,7 @@ import {
   type OfficeApprovalDecision,
 } from "../../office/officeApprovalActions";
 import { handleOfficeArtifactAction } from "../../office/officeArtifactActions";
+import type { OfficeThreadResolution } from "../../office/officeThreadActions";
 
 type StateSetter<T> = (updater: (current: T) => T) => void;
 type LibraryPanelSetter = (
@@ -73,7 +74,7 @@ export type AppDomainActionHandlersParams = {
     panel: LibraryPanel,
     workspaceOverride?: OfficeWorkspace,
     forceNew?: boolean,
-  ) => Promise<string | null>;
+  ) => Promise<OfficeThreadResolution | null>;
   handleCapabilityPanelItem: (item: CapabilityPanelItem) => Promise<void>;
   isConnected: boolean;
   isMissingThreadError: (error: unknown) => boolean;
@@ -89,7 +90,7 @@ export type AppDomainActionHandlersParams = {
   setNotice: (notice: NoticeState | null) => void;
   setThreads: StateSetter<Thread[]>;
   startBackendDomainThread: (
-    source: "agent" | "automation" | "office",
+    source: "agent" | "automation",
   ) => Promise<Thread | null>;
   threads: Thread[];
   uniqueOfficeArtifactId?: () => string;

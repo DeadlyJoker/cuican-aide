@@ -15,6 +15,27 @@ type CommandShellHandlersParams = {
   startDraftThread: () => void;
 };
 
+export function commandShellWorkspaceUrl(
+  currentHref: string,
+  cwd: string | null,
+): string {
+  const nextUrl = new URL(currentHref);
+  nextUrl.searchParams.set("cwd", cwd?.trim() || "");
+  nextUrl.hash = "#view-command";
+  return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+}
+
+function replaceCommandShellWorkspaceUrl(cwd: string | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.history.replaceState(
+    null,
+    "",
+    commandShellWorkspaceUrl(window.location.href, cwd),
+  );
+}
+
 export function createAppCommandShellHandlers({
   selectThread,
   sendMessageInNewThread,
@@ -31,20 +52,7 @@ export function createAppCommandShellHandlers({
       setSelectedThreadId(null);
       setWorkMode("code");
       setComposerFocusSignal((signal) => signal + 1);
-      if (typeof window !== "undefined") {
-        const nextUrl = new URL(window.location.href);
-        if (trimmedCwd) {
-          nextUrl.searchParams.set("cwd", trimmedCwd);
-        } else {
-          nextUrl.searchParams.delete("cwd");
-        }
-        nextUrl.hash = "#view-command";
-        window.history.replaceState(
-          null,
-          "",
-          `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`,
-        );
-      }
+      replaceCommandShellWorkspaceUrl(trimmedCwd);
     },
     openCommandShellThread(threadId: string | null) {
       if (!threadId) {
@@ -61,13 +69,12 @@ export function createAppCommandShellHandlers({
       setSelectedThreadId(null);
       void sendMessageInNewThread(text, threadSettings, workspaceCwd);
     },
-    startCommandShellDraftThread() {
-      setDraftWorkspaceCwd(null);
+    startCommandShellDraftThread(workspaceCwd: string | null) {
+      const trimmedCwd = workspaceCwd?.trim() || null;
+      setDraftWorkspaceCwd(trimmedCwd);
       setWorkMode("code");
       startDraftThread();
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", "#view-command");
-      }
+      replaceCommandShellWorkspaceUrl(trimmedCwd);
     },
   };
 }

@@ -71,41 +71,47 @@ describe("sceneCatalog", () => {
     ]);
   });
 
-  it("deduplicates offices with the same execution target value", () => {
+  it("keeps duplicate Office titles visible but non-selectable and uniquely keyed", () => {
     const options = executionTargetOptionsFromDomain({
       agents: [],
       offices: [
         {
           filePath: "/repo/.crewon/offices/a.json",
           config: {
-            title: "重复小队",
-            workspace: { members: [{ name: "Agent A" }] },
+            title: "同名办公室",
+            workspace: { members: [{ name: "A" }] },
           } as never,
         },
         {
           filePath: "/repo/.crewon/offices/b.json",
           config: {
-            title: "重复小队",
-            workspace: { members: [{ name: "Agent B" }] },
+            title: "同名办公室",
+            workspace: { members: [{ name: "B" }] },
           } as never,
         },
       ],
       status: "ready",
     });
+    const teams = options.filter((option) => option.kind === "team");
 
-    expect(options.filter((option) => option.value === "team:重复小队")).toHaveLength(1);
+    expect(teams).toHaveLength(2);
+    expect(new Set(teams.map((option) => option.value)).size).toBe(2);
+    expect(teams).toEqual([
+      expect.objectContaining({
+        disabled: true,
+        detail: "存在同名办公室，需先在办公室配置中改为唯一名称",
+      }),
+      expect.objectContaining({
+        disabled: true,
+        detail: "存在同名办公室，需先在办公室配置中改为唯一名称",
+      }),
+    ]);
   });
 
   it("defaults to CrewON and exposes only real active agents", () => {
     const options = executionTargetOptions({
       agents: [
-        {
-          id: 1,
-          api_enabled: true,
-          is_active: true,
-          name: "产品审阅",
-          resource_source: "catalog",
-        },
+        { id: 1, is_active: true, name: "产品审阅" },
         { id: 2, is_active: false, name: "已停用" },
       ],
       knowledgeBases: [],
@@ -124,7 +130,7 @@ describe("sceneCatalog", () => {
         value: "crewon",
       },
       {
-        detail: "智能体定义已同步，Execution Target Runtime 尚未接入",
+        detail: "Agent 尚未开放 Open API",
         disabled: true,
         kind: "agent",
         label: "产品审阅 · 单 Agent",
@@ -140,80 +146,6 @@ describe("sceneCatalog", () => {
         value: "team:unavailable",
       },
     ]);
-    expect(
-      executionTargetOptions(
-        {
-          agents: [
-            {
-              id: 1,
-              api_enabled: true,
-              is_active: true,
-              name: "产品审阅",
-              resource_source: "catalog",
-            },
-          ],
-          knowledgeBases: [],
-          mcpServers: [],
-          mcpTools: [],
-          skills: [],
-          workflows: [],
-        },
-        { agent: true, team: false },
-      )[1],
-    ).toMatchObject({ disabled: false, value: "agent:1" });
-  });
-
-  it("enables active API-enabled platform Agents without requiring a download", () => {
-    const options = executionTargetOptionsFromDomain({
-      agents: [],
-      offices: [],
-      platformAgents: [
-        {
-          id: 1,
-          name: "Local Agent",
-          api_enabled: true,
-          is_active: true,
-          resource_source: "local",
-        },
-        {
-          id: 2,
-          name: "Catalog Agent",
-          api_enabled: true,
-          is_active: true,
-          resource_source: "catalog",
-        },
-        {
-          id: 3,
-          name: "Closed Agent",
-          api_enabled: false,
-          is_active: true,
-          resource_source: "local",
-        },
-        {
-          id: 4,
-          name: "Unknown Agent",
-          resource_source: "local",
-        },
-      ],
-      status: "ready",
-    });
-
-    expect(options.slice(1)).toMatchObject([
-      {
-        detail: "通过 Agent Platform Open API 执行",
-        value: "agent-platform:agents:1",
-      },
-      {
-        detail: "通过 Agent Platform Open API 执行",
-        value: "agent-platform:agents:2",
-      },
-    ]);
-    expect(options).not.toContainEqual(
-      expect.objectContaining({ value: "agent-platform:agents:3" }),
-    );
-    expect(options).not.toContainEqual(
-      expect.objectContaining({ value: "agent-platform:agents:4" }),
-    );
   });
 
   it("marks only write-capable modes for the draft-only risk notice", () => {

@@ -177,7 +177,7 @@ export function workspaceFromBackendThread(
         role: locale === "zh" ? "办公室调度" : "Office coordination",
         glyph: "@",
         accent: "blue",
-        status: locale === "zh" ? "已连接后端线程" : "Backend thread connected",
+        status: locale === "zh" ? "运行已连接" : "Runtime connected",
         online: true,
       },
     ],
@@ -190,8 +190,8 @@ export function workspaceFromBackendThread(
         kind: "system",
         text:
           locale === "zh"
-            ? `已连接办公室后端会话：${title}`
-            : `Connected office backend session: ${title}`,
+            ? `办公室已恢复：${title}`
+            : `Office restored: ${title}`,
       },
       ...officeMessagesFromThread(thread, locale),
     ],
@@ -218,7 +218,7 @@ export function newBackendOfficeWorkspace(
         role: locale === "zh" ? "办公室调度" : "Office coordination",
         glyph: "@",
         accent: "blue",
-        status: locale === "zh" ? "已绑定后端线程" : "Backend thread bound",
+        status: locale === "zh" ? "运行已连接" : "Runtime connected",
         online: true,
       },
     ],
@@ -231,8 +231,8 @@ export function newBackendOfficeWorkspace(
         kind: "system",
         text:
           locale === "zh"
-            ? "办公室已创建，并绑定到真实 app-server 线程。"
-            : "Office created and bound to a real app-server thread.",
+            ? "办公室已创建，可以开始协作。"
+            : "Office created and ready for collaboration.",
       },
     ],
     tasks: [

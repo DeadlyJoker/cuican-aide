@@ -2,7 +2,6 @@ import {
   AtSign,
   BookOpen,
   Bot,
-  BriefcaseBusiness,
   Clock3,
   Plus,
   Search,
@@ -32,7 +31,6 @@ export function SidebarPrimaryNav({
   onFocusSearch,
   onKnowledge,
   onNewThread,
-  onOffice,
   onPlugins,
   onTools,
 }: {
@@ -47,7 +45,6 @@ export function SidebarPrimaryNav({
   onFocusSearch: () => void;
   onKnowledge: () => void;
   onNewThread: () => void;
-  onOffice: () => void;
   onPlugins: () => void;
   onTools: () => void;
 }) {
@@ -94,14 +91,6 @@ export function SidebarPrimaryNav({
       >
         <Bot size={14} />
         <span>{navLabels.agents}</span>
-      </button>
-      <button
-        type="button"
-        data-active={activeLibraryKind === "office"}
-        onClick={onOffice}
-      >
-        <BriefcaseBusiness size={14} />
-        <span>{navLabels.office}</span>
       </button>
       <button
         type="button"

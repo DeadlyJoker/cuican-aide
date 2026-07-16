@@ -67,7 +67,9 @@ export function ActivityBoard({
   const budget = data.budget ?? [];
   const budgetCapUsd = data.budgetCapUsd ?? 0;
   const artifacts = data.artifacts ?? [];
-  const runs = data.runs ?? [];
+  const runs = (data.runs ?? []).filter(
+    (run) => run.messageIntent !== "conversation",
+  );
 
   return (
     <div className="activity-board">

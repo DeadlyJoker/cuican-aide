@@ -2,30 +2,29 @@ import {
   BookOpen,
   Bot,
   CalendarDays,
+  ChevronRight,
   ChevronUp,
+  Folder,
   FolderOpen,
   KeyRound,
   LogOut,
+  MoreHorizontal,
   PanelLeft,
   Plus,
+  SquarePen,
   Search,
   Sparkles,
   Users,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import { shellNavItems } from "./commandWorkspaceData";
 import type {
   CommandHomeSlots,
   CommandPaletteItem,
   CommandShellView,
-  SlotItem,
 } from "./commandWorkspaceState";
 import { classNames } from "./commandWorkspaceUtils";
-import {
-  CommandProjectTree,
-  type CommandWorkspaceClient,
-} from "./CommandProjectTree";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import {
   type AgentPlatformAccount,
@@ -33,7 +32,7 @@ import {
 } from "../auth/AgentPlatformAuthGate";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
-  action?: "attach-files" | "attach-folder";
+  action?: "attach-files";
   command?: ComposerSlashCommand;
 };
 
@@ -42,11 +41,9 @@ export type CommandLinkedThread = {
   id: string;
   preview: string;
   title: string;
-  updatedAt: number;
+  updatedAt?: number;
   updatedLabel: string;
 };
-
-type PlatformLoadState = "loading" | "ready" | "fallback";
 
 type SidebarSearchResult =
   | {
@@ -173,7 +170,6 @@ export function CommandSidebar({
   onSwitchView,
   onToggleCollapse,
   onToggleSearch,
-  workspaceClient,
 }: {
   activeView: CommandShellView;
   cwd: string;
@@ -190,9 +186,67 @@ export function CommandSidebar({
   onSwitchView: (view: CommandShellView) => void;
   onToggleCollapse: () => void;
   onToggleSearch: () => void;
-  workspaceClient: CommandWorkspaceClient | null;
 }) {
   const account = useAgentPlatformAccount();
+  const [workspaceFormOpen, setWorkspaceFormOpen] = useState(false);
+  const [workspaceDraft, setWorkspaceDraft] = useState(cwd);
+  const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<
+    Set<string>
+  >(() => new Set());
+  const currentWorkspaceName = workspaceName(cwd, "无工作空间");
+  const currentWorkspaceThreads = linkedThreads
+    .filter((thread) => Boolean(cwd) && thread.cwd === cwd)
+    .slice(0, 5);
+  const standaloneThreads = linkedThreads
+    .filter((thread) => !thread.cwd)
+    .slice(0, 5);
+  const otherWorkspaceGroups = Array.from(
+    linkedThreads.reduce((groups, thread) => {
+      const threadCwd = thread.cwd?.trim();
+      if (!threadCwd || threadCwd === cwd) {
+        return groups;
+      }
+      const group = groups.get(threadCwd) ?? [];
+      if (group.length < 5) {
+        group.push(thread);
+      }
+      groups.set(threadCwd, group);
+      return groups;
+    }, new Map<string, CommandLinkedThread[]>()),
+  )
+    .slice(0, 8)
+    .map(([path, threads]) => ({ path, threads }));
+
+  useEffect(() => {
+    setWorkspaceDraft(cwd);
+  }, [cwd]);
+
+  function submitWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = workspaceDraft.trim();
+    if (!trimmed) {
+      return;
+    }
+    onCreateWorkspace?.(trimmed);
+    setWorkspaceFormOpen(false);
+  }
+
+  function toggleWorkspaceGroup(groupId: string) {
+    setCollapsedWorkspaceGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }
+
+  const currentWorkspaceCollapsed =
+    Boolean(cwd) && collapsedWorkspaceGroups.has(cwd);
+  const standaloneWorkspaceCollapsed =
+    collapsedWorkspaceGroups.has("standalone");
   const sidebarSearchResults: SidebarSearchResult[] = [
     {
       action: "view" as const,
@@ -360,7 +414,7 @@ export function CommandSidebar({
             type="button"
             onClick={() => {
               if (item.key === "command") {
-                onNewThread(null);
+                onNewThread(cwd || null);
                 return;
               }
               onSwitchView(item.key);
@@ -388,16 +442,219 @@ export function CommandSidebar({
         </button>
       </nav>
 
-      <CommandProjectTree
-        account={account}
-        client={workspaceClient}
-        cwd={cwd}
-        linkedThreads={linkedThreads}
-        selectedThreadId={selectedLinkedThreadId}
-        onCreateWorkspace={onCreateWorkspace}
-        onNewThread={onNewThread}
-        onOpenThread={onOpenLinkedThread}
-      />
+      <section
+        className="space-tree"
+        data-od-id="desktop-workspace-tree"
+        aria-label="工作空间和对话"
+      >
+        <div className="tree-head">
+          <button type="button">工作空间</button>
+          <button
+            aria-expanded={workspaceFormOpen}
+            aria-label="新增空间"
+            className="tree-head-action"
+            type="button"
+            onClick={() => setWorkspaceFormOpen((open) => !open)}
+          >
+            <Plus aria-hidden="true" />
+          </button>
+        </div>
+        <form
+          className="sidebar-workspace-form"
+          hidden={!workspaceFormOpen}
+          onSubmit={submitWorkspace}
+        >
+          <label htmlFor="command-workspace-path">文件夹路径</label>
+          <input
+            id="command-workspace-path"
+            placeholder="/Users/me/project"
+            value={workspaceDraft}
+            onChange={(event) => setWorkspaceDraft(event.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={!workspaceDraft.trim() || !onCreateWorkspace}
+          >
+            打开
+          </button>
+        </form>
+        {cwd ? (
+          <div
+            className={classNames(
+              "space-node current real-workspace-node",
+              currentWorkspaceCollapsed && "collapsed",
+            )}
+          >
+            <div className="space-title real-workspace-title">
+              <button
+                aria-controls="current-workspace-thread-list"
+                aria-expanded={!currentWorkspaceCollapsed}
+                className="workspace-title-toggle"
+                type="button"
+                onClick={() => toggleWorkspaceGroup(cwd)}
+              >
+                {currentWorkspaceCollapsed ? (
+                  <Folder aria-hidden="true" />
+                ) : (
+                  <FolderOpen aria-hidden="true" />
+                )}
+                <strong>{currentWorkspaceName}</strong>
+              </button>
+              <span className="workspace-row-actions">
+                <button
+                  aria-expanded={workspaceFormOpen}
+                  aria-label="新增空间"
+                  type="button"
+                  onClick={() => setWorkspaceFormOpen((open) => !open)}
+                >
+                  <MoreHorizontal aria-hidden="true" />
+                </button>
+                <button
+                  aria-label="新建会话"
+                  type="button"
+                  onClick={() => onNewThread(cwd)}
+                >
+                  <SquarePen aria-hidden="true" />
+                </button>
+              </span>
+            </div>
+            <div
+              className="conversation-list recent-thread-list"
+              hidden={currentWorkspaceCollapsed}
+              id="current-workspace-thread-list"
+            >
+              {currentWorkspaceThreads.length > 0 ? (
+                currentWorkspaceThreads.map((thread) => (
+                  <button
+                    className={classNames(
+                      "conversation-item linked-conversation-item recent-thread-item",
+                      selectedLinkedThreadId === thread.id && "active",
+                    )}
+                    data-linked-thread-id={thread.id}
+                    key={thread.id}
+                    title={thread.preview}
+                    type="button"
+                    onClick={() => onOpenLinkedThread(thread.id)}
+                  >
+                    <span>{thread.title}</span>
+                    <em>{thread.updatedLabel}</em>
+                  </button>
+                ))
+              ) : (
+                <p className="sidebar-empty-hint">
+                  开始一次任务后，会话会出现在这个工作空间下。
+                </p>
+              )}
+            </div>
+          </div>
+        ) : standaloneThreads.length === 0 &&
+          otherWorkspaceGroups.length === 0 ? (
+          <p className="sidebar-empty-hint workspace-empty-hint">
+            当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。
+          </p>
+        ) : null}
+        {otherWorkspaceGroups.map((group, index) => {
+          const name = workspaceName(group.path);
+          return (
+            <div className="space-node real-workspace-node" key={group.path}>
+              <div className="space-title real-workspace-title">
+                <button
+                  aria-controls={`other-workspace-thread-list-${index}`}
+                  aria-label={`切换到工作空间 ${name}`}
+                  className="workspace-title-toggle"
+                  type="button"
+                  onClick={() => onCreateWorkspace?.(group.path)}
+                >
+                  <Folder aria-hidden="true" />
+                  <strong>{name}</strong>
+                </button>
+                <span className="workspace-row-actions">
+                  <button
+                    aria-label={`在工作空间 ${name} 中新建会话`}
+                    type="button"
+                    onClick={() => onNewThread(group.path)}
+                  >
+                    <SquarePen aria-hidden="true" />
+                  </button>
+                </span>
+              </div>
+              <div
+                className="conversation-list recent-thread-list"
+                id={`other-workspace-thread-list-${index}`}
+              >
+                {group.threads.map((thread) => (
+                  <button
+                    className={classNames(
+                      "conversation-item linked-conversation-item recent-thread-item",
+                      selectedLinkedThreadId === thread.id && "active",
+                    )}
+                    data-linked-thread-id={thread.id}
+                    key={thread.id}
+                    title={thread.preview}
+                    type="button"
+                    onClick={() => onOpenLinkedThread(thread.id)}
+                  >
+                    <span>{thread.title}</span>
+                    <em>{thread.updatedLabel}</em>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {standaloneThreads.length > 0 ? (
+          <div
+            className={classNames(
+              "space-node standalone-workspace-node",
+              standaloneWorkspaceCollapsed && "collapsed",
+            )}
+          >
+            <div className="space-title standalone-workspace-title">
+              <button
+                aria-controls="standalone-workspace-thread-list"
+                aria-expanded={!standaloneWorkspaceCollapsed}
+                className="workspace-title-toggle standalone-workspace-toggle"
+                type="button"
+                onClick={() => toggleWorkspaceGroup("standalone")}
+              >
+                <ChevronRight aria-hidden="true" />
+                <strong>无工作空间</strong>
+              </button>
+              <span className="workspace-row-actions">
+                <button
+                  aria-label="新建无工作空间会话"
+                  type="button"
+                  onClick={() => onNewThread(null)}
+                >
+                  <SquarePen aria-hidden="true" />
+                </button>
+              </span>
+            </div>
+            <div
+              className="conversation-list recent-thread-list standalone-thread-list"
+              hidden={standaloneWorkspaceCollapsed}
+              id="standalone-workspace-thread-list"
+            >
+              {standaloneThreads.map((thread) => (
+                <button
+                  className={classNames(
+                    "conversation-item linked-conversation-item recent-thread-item",
+                    selectedLinkedThreadId === thread.id && "active",
+                  )}
+                  data-linked-thread-id={thread.id}
+                  key={thread.id}
+                  title={thread.preview}
+                  type="button"
+                  onClick={() => onOpenLinkedThread(thread.id)}
+                >
+                  <span>{thread.title}</span>
+                  <em>{thread.updatedLabel}</em>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       {account ? <SidebarAccount account={account} /> : null}
     </aside>
@@ -426,29 +683,6 @@ export function Palette({
   onQueryChange: (query: string) => void;
   onSelect: (item: PaletteItemWithCommand) => void;
 }) {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      setActiveIndex(0);
-      inputRef.current?.focus();
-    }
-  }, [open, query]);
-
-  useEffect(() => {
-    setActiveIndex((index) => Math.min(index, Math.max(items.length - 1, 0)));
-  }, [items.length]);
-
-  useEffect(() => {
-    if (!open || typeof document === "undefined") {
-      return;
-    }
-    document
-      .getElementById(`${id}-option-${activeIndex}`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex, id, open]);
-
   const addGroups =
     kind === "add"
       ? [
@@ -475,21 +709,15 @@ export function Palette({
         ].filter((group) => group.items.length > 0)
       : [];
 
-  function renderItem(item: PaletteItemWithCommand, index: number) {
-    const itemId = `${id}-option-${index}`;
+  function renderItem(item: PaletteItemWithCommand) {
     return (
       <button
-        aria-selected={activeIndex === index}
         data-context-item={kind === "context" ? "" : undefined}
-        data-active={activeIndex === index ? "true" : undefined}
         data-kind={item.kind}
         data-label={item.title}
         data-slash-item={kind === "slash" ? "" : undefined}
-        id={itemId}
         key={`${item.kind}-${item.title}-${item.token ?? ""}`}
-        role="option"
         type="button"
-        onMouseEnter={() => setActiveIndex(index)}
         onClick={() => onSelect(item)}
       >
         <span>{item.label}</span>
@@ -519,46 +747,30 @@ export function Palette({
         {placeholder}
       </label>
       <input
-        ref={inputRef}
-        aria-activedescendant={items[activeIndex] ? `${id}-option-${activeIndex}` : undefined}
-        aria-controls={`${id}-list`}
         id={inputId}
         placeholder={placeholder}
         type="search"
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
+          const action = paletteSearchKeyAction(event.key, Boolean(items[0]));
+          if (action === "close") {
             event.preventDefault();
             onClose();
-          } else if (event.key === "ArrowDown" && items.length > 0) {
+          } else if (action === "selectFirst") {
             event.preventDefault();
-            setActiveIndex((index) => (index + 1) % items.length);
-          } else if (event.key === "ArrowUp" && items.length > 0) {
+            onSelect(items[0]!);
+          } else if (action === "blockSubmit") {
             event.preventDefault();
-            setActiveIndex((index) => (index - 1 + items.length) % items.length);
-          } else if (event.key === "Home" && items.length > 0) {
-            event.preventDefault();
-            setActiveIndex(0);
-          } else if (event.key === "End" && items.length > 0) {
-            event.preventDefault();
-            setActiveIndex(items.length - 1);
-          } else if (event.key === "Enter" && items[activeIndex]) {
-            event.preventDefault();
-            onSelect(items[activeIndex]);
           }
         }}
       />
-      <div
-        className={kind === "slash" ? "slash-list" : "context-list"}
-        id={`${id}-list`}
-        role="listbox"
-      >
+      <div className={kind === "slash" ? "slash-list" : "context-list"}>
         {kind === "add"
           ? addGroups.map((group) => (
               <section className="add-palette-group" key={group.id}>
                 <div className="add-palette-group-label">{group.label}</div>
-                {group.items.map((item) => renderItem(item, items.indexOf(item)))}
+                {group.items.map(renderItem)}
               </section>
             ))
           : items.map(renderItem)}
@@ -574,42 +786,11 @@ export function Palette({
   );
 }
 
-export function ResourceDock({
-  hidden = false,
-  platformState,
-  resources,
-  slots,
-}: {
-  hidden?: boolean;
-  platformState: PlatformLoadState;
-  resources?: SlotItem[];
-  slots: CommandHomeSlots;
-}) {
-  const visibleResources = resources ?? [
-    slots.agent,
-    slots.skills[0],
-    slots.mcps[0],
-    slots.knowledge,
-    slots.workflow,
-  ];
-  if (hidden || platformState !== "ready" || visibleResources.length === 0) {
-    return null;
-  }
-  return (
-    <section className="resource-dock" data-od-id="capability-dock">
-      <header>
-        <strong>Agent / Skill / MCP / Knowledge / Workflow</strong>
-        <span>资源入口已就绪</span>
-      </header>
-      <div className="resource-grid">
-        {visibleResources.map((resource, index) => (
-          <article className="resource-card" key={`${resource.value}-${index}`}>
-            <span>{resource.label}</span>
-            <strong>{resource.title}</strong>
-            <p>{resource.detail}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
+export function paletteSearchKeyAction(
+  key: string,
+  hasFirstItem: boolean,
+): "close" | "selectFirst" | "blockSubmit" | null {
+  if (key === "Escape") return "close";
+  if (key === "Enter") return hasFirstItem ? "selectFirst" : "blockSubmit";
+  return null;
 }
