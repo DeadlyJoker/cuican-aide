@@ -49,10 +49,6 @@ import type {
   AutomationRunTurnRecord,
   OfficeRunTurnRecord,
 } from "../appTurnCompletionNotificationHandler";
-import {
-  executePimDynamicTool,
-  isPimDynamicToolCall,
-} from "../../agent-platform/pimDynamicTools";
 
 type StateSetter<T> = (updater: (current: T) => T) => void;
 
@@ -102,6 +98,9 @@ export type AppServerEventHandlersParams = {
   ) => Promise<void>;
   terminalProcessId: () => string | null;
   unixNow?: () => number;
+  onResourceBindingUpdated?: (
+    notification: import("@crewon-platform-protocol/v2/ResourceBindingUpdatedNotification").ResourceBindingUpdatedNotification,
+  ) => void;
 };
 
 export function createAppServerEventHandlers(
@@ -112,6 +111,11 @@ export function createAppServerEventHandlers(
       const locale = params.locale();
       const client = params.client();
       const selectedThreadId = params.selectedThreadId();
+
+      if (notification.method === "resource/binding/updated") {
+        params.onResourceBindingUpdated?.(notification.params);
+        return;
+      }
 
       if (
         handleLocalAppNotification({
@@ -254,24 +258,6 @@ export function createAppServerEventHandlers(
       }
     },
     handleServerRequest: (request) => {
-      if (
-        request.method === "item/tool/call" &&
-        isPimDynamicToolCall(request.params)
-      ) {
-        void executePimDynamicTool(request.params)
-          .then((response) =>
-            params.client()?.respondServerRequest(request.id, response),
-          )
-          .catch((reason: unknown) => {
-            const message =
-              reason instanceof Error ? reason.message : "PIM 调用失败";
-            params.client()?.respondServerRequest(request.id, {
-              success: false,
-              contentItems: [{ type: "inputText", text: message }],
-            });
-          });
-        return;
-      }
       handleIncomingServerRequest({
         locale: params.locale(),
         request,

@@ -29,10 +29,14 @@ export type CapabilityPanelAction = {
 };
 
 export type CapabilityPanelField = {
+  commitOnChange?: boolean;
+  description?: string;
   id: string;
+  multiline?: boolean;
   label: string;
   options?: Array<{ label: string; value: string }>;
   placeholder?: string;
+  rows?: number;
   secret?: boolean;
   value: string;
 };

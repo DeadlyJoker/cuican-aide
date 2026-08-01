@@ -2,10 +2,10 @@ use crate::error_code::internal_error;
 use crate::error_code::invalid_request;
 use crate::outgoing_message::ClientRequestResult;
 use crate::outgoing_message::ThreadScopedOutgoingMessageSender;
+use crate::request_processors::CrewonDomainRequestProcessor;
 use crate::request_processors::office_run_updated_notification;
 use crate::request_processors::populate_thread_turns_from_history;
 use crate::request_processors::sync_automation_runs_for_thread_turn;
-use crate::request_processors::sync_office_run_updates_for_thread_turn;
 use crate::request_processors::thread_from_stored_thread;
 use crate::request_processors::thread_settings_from_core_snapshot;
 use crate::server_request_error::is_turn_transition_server_request_error;
@@ -150,6 +150,10 @@ pub(crate) async fn apply_bespoke_event_handling(
     thread_watch_manager: ThreadWatchManager,
     thread_list_state_permit: Arc<tokio::sync::Semaphore>,
     fallback_model_provider: String,
+    office_domain_processor: Option<Arc<CrewonDomainRequestProcessor>>,
+    dynamic_tool_server: Option<
+        Arc<crate::platform_control::thread_dynamic_tool_server::ThreadDynamicToolServer>,
+    >,
 ) {
     let Event {
         id: event_turn_id,
@@ -189,6 +193,9 @@ pub(crate) async fn apply_bespoke_event_handling(
         EventMsg::TurnComplete(turn_complete_event) => {
             // All per-thread requests are bound to a turn, so abort them.
             outgoing.abort_pending_server_requests().await;
+            if let Some(server) = dynamic_tool_server.as_ref() {
+                server.clear_thread(&conversation_id.to_string()).await;
+            }
             respond_to_pending_interrupts(&thread_state, &outgoing).await;
             let turn_failed = thread_state.lock().await.turn_summary.last_error.is_some();
             let thread_id = conversation_id.to_string();
@@ -211,6 +218,7 @@ pub(crate) async fn apply_bespoke_event_handling(
             )
             .await;
             sync_office_runs_for_terminal_turn(
+                office_domain_processor.as_deref(),
                 &office_sync_cwd,
                 &thread_id,
                 &completed_turn,
@@ -844,6 +852,29 @@ pub(crate) async fn apply_bespoke_event_handling(
             outgoing
                 .send_server_notification(ServerNotification::ItemStarted(notification))
                 .await;
+            if crate::platform_control::dynamic_tool_router::registration::is_provider_dynamic_tool_namespace(
+                namespace.as_deref(),
+            ) {
+                tokio::spawn(async move {
+                    let response = match dynamic_tool_server {
+                        Some(server) => server
+                            .dispatch(
+                                &conversation_id.to_string(),
+                                &turn_id,
+                                call_id.clone(),
+                                namespace,
+                                tool,
+                                arguments,
+                            )
+                            .await
+                            .unwrap_or_else(provider_dynamic_tool_unavailable),
+                        None => provider_dynamic_tool_unavailable(),
+                    };
+                    crate::dynamic_tools::submit_call_response(call_id, response, conversation)
+                        .await;
+                });
+                return;
+            }
             let params = DynamicToolCallParams {
                 thread_id: conversation_id.to_string(),
                 turn_id: turn_id.clone(),
@@ -1188,6 +1219,7 @@ pub(crate) async fn apply_bespoke_event_handling(
             )
             .await;
             sync_office_runs_for_terminal_turn(
+                office_domain_processor.as_deref(),
                 &office_sync_cwd,
                 &thread_id,
                 &interrupted_turn,
@@ -1308,6 +1340,17 @@ pub(crate) async fn apply_bespoke_event_handling(
         }
 
         _ => {}
+    }
+}
+
+fn provider_dynamic_tool_unavailable() -> crewon_app_server_protocol::DynamicToolCallResponse {
+    crewon_app_server_protocol::DynamicToolCallResponse {
+        content_items: vec![
+            crewon_app_server_protocol::DynamicToolCallOutputContentItem::InputText {
+                text: "Provider tool runtime is unavailable.".to_string(),
+            },
+        ],
+        success: false,
     }
 }
 
@@ -1686,12 +1729,19 @@ fn plan_step_status_label(status: TurnPlanStepStatus) -> &'static str {
 }
 
 async fn sync_office_runs_for_terminal_turn(
+    domain_processor: Option<&CrewonDomainRequestProcessor>,
     cwd: &str,
     thread_id: &str,
     turn: &Turn,
     outgoing: &ThreadScopedOutgoingMessageSender,
 ) {
-    match sync_office_run_updates_for_thread_turn(cwd, thread_id, turn).await {
+    let Some(domain_processor) = domain_processor else {
+        return;
+    };
+    match domain_processor
+        .sync_office_run_updates_for_thread_turn(cwd, thread_id, turn)
+        .await
+    {
         Ok(updates) => {
             for update in updates {
                 outgoing
@@ -2543,6 +2593,8 @@ mod tests {
                 self.thread_watch_manager.clone(),
                 Arc::new(tokio::sync::Semaphore::new(/*permits*/ 1)),
                 "test-provider".to_string(),
+                /*office_domain_processor*/ None,
+                /*dynamic_tool_server*/ None,
             )
             .await;
         }
@@ -3494,6 +3546,8 @@ mod tests {
             thread_watch_manager,
             Arc::new(tokio::sync::Semaphore::new(/*permits*/ 1)),
             "test-provider".to_string(),
+            /*office_domain_processor*/ None,
+            /*dynamic_tool_server*/ None,
         )
         .await;
 
@@ -3564,6 +3618,8 @@ mod tests {
             thread_watch_manager.clone(),
             Arc::new(tokio::sync::Semaphore::new(/*permits*/ 1)),
             "test-provider".to_string(),
+            /*office_domain_processor*/ None,
+            /*dynamic_tool_server*/ None,
         )
         .await;
 

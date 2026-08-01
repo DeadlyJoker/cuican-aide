@@ -1,0 +1,25 @@
+# W2-07 Tasks
+
+- [x] D0 盘点 Task Worker port、State records 与 Provider Run port。
+- [x] D1 识别 immutable execution spec、run journal 和 cancelled fact 缺口。
+- [x] D2 冻结不安全直接接线并形成 prerequisite amendment。
+- [x] P1 新增 ExecutionSpecRef、Task Contract v2 canonical hash 与 Contract/Snapshot/Dispatch Harness。
+- [x] P2 新增 immutable CloudExecutionSpec record/resolver。
+- [x] P3 新增 Provider Run Journal migration/records/reopen/CAS Harness。
+- [x] P4 新增 WorkerOutcome::Cancelled 与 reducer race Harness。
+- [x] C1 实现未接线 CloudWorker start/journal mapping。
+- [x] C2 实现 event pump、Task Inbox/commit 与 cursor advance。
+- [x] C3 实现 cancel/reconcile same run。
+- [x] C4 同步 Agent Platform credentialRevision claim/verifier/digest/persistence/ownership 与双方 canonical v3。
+- [x] C5a 在 Authenticated Principal Gate 后实现未注册 RS256 service/delegation/discovery token issuer 与真实 verifier smoke。
+- [x] C5b-1 完成 durable owner mapping kernel、CAS/revoke/reopen/concurrency Harness；保持 State internal 和 CloudWorker 未注册。
+- [x] C5b-2a 实现 authenticated principal + exact CredentialOwner + active mapping internal resolver；保持 CloudWorker 未注册。
+- [x] C5b-2b1 接入 Agent Platform exact binding resolve/read、terminal revoke/freshness authority 与 P1c session revoke。
+- [x] C5b-2b2a 完成 durable workspace app-server adapter 与 process-restart/catalog-removal Harness。
+- [x] C5b-2b2b 复用默认关闭的 production endpoint/key-file factory，并在每次 Provider I/O 前从 State 重验 exact grant/mapping/connection/resource authority，创建 task-scoped client。
+- [x] C6 增加 bounded non-terminal Provider Run recovery page；limit 1..100、stable cursor、terminal exclusion，且查询不重放副作用。
+- [ ] C7 由 W2-08 接入 supervised event pump、backoff/关闭/restart 扫描与 scheduler/outbox；本任务不拥有中心生命周期。
+- [ ] R1 发布前补真实部署 key provisioning 与真实云模型 smoke；未通过时不切生产流量。
+- [x] V1 运行 task-runtime/state/app-server targeted tests、dependency scan、scoped fix 与最终 fmt。
+- [x] V2 更新解锁结论：W2-08 可开始默认关闭的中心 composition；W3-01 继续等待 Wave 2 Gate 和 release evidence。
+- [x] V3 完成跨服务 revision amendment 的最终 lint/fmt、完整 Provider Run/Protocol 验证与文档证据。

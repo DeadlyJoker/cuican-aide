@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "2",
+  "identity": {
+    "actorId": "actor-1",
+    "tenantId": "tenant-1",
+    "spaceId": "space-1",
+    "sessionId": "session-1",
+    "traceId": "trace-1"
+  },
+  "workspace": {
+    "workspaceKey": "workspace-1",
+    "bindingId": "binding-workspace-1",
+    "scope": "office",
+    "scopeId": "office-1",
+    "nodeId": "node-1",
+    "environmentId": "local"
+  },
+  "credential": {
+    "credentialId": "credential-1",
+    "providerId": "provider-1",
+    "scope": "space",
+    "status": "available",
+    "expiresAt": 1700003600,
+    "revision": 2
+  },
+  "provider": {
+    "providerId": "provider-1",
+    "kind": "agentPlatform",
+    "status": "connected",
+    "capabilities": [
+      "durableRun",
+      "resumableEvents",
+      "remoteAgent",
+      "remoteKnowledge",
+      "remoteTool"
+    ]
+  },
+  "resourceBinding": {
+    "bindingId": "binding-resource-1",
+    "workspaceKey": "workspace-1",
+    "resource": {
+      "providerId": "provider-1",
+      "resourceId": "agent-1",
+      "revision": "revision-1",
+      "resourceType": "agent"
+    },
+    "mode": "remoteReference",
+    "executionLocation": "provider"
+  },
+  "task": {
+    "taskId": "task-1",
+    "authority": "localAppServer",
+    "strategy": "office",
+    "status": "running",
+    "revision": 3,
+    "streamOffset": 12
+  },
+  "event": {
+    "eventId": "event-1",
+    "taskId": "task-1",
+    "attemptId": "attempt-1",
+    "workerSequence": 7,
+    "streamOffset": 12,
+    "eventType": "progressed",
+    "createdAt": 1700000000
+  },
+  "approval": {
+    "approvalId": "approval-1",
+    "actionDigest": "sha256:action-1",
+    "status": "approved",
+    "expiresAt": 1700000300
+  },
+  "artifact": {
+    "artifactId": "artifact-1",
+    "taskId": "task-1",
+    "kind": "evidence",
+    "revision": 1,
+    "retention": "task",
+    "createdAt": 1700000100
+  },
+  "team": {
+    "teamId": "office-1",
+    "workspaceKey": "workspace-1",
+    "strategy": "office",
+    "leaderAgentId": "leader-1",
+    "revision": 2
+  },
+  "automation": {
+    "automationId": "automation-1",
+    "scheduleRevision": 4,
+    "nextRunAt": 1700007200
+  },
+  "error": {
+    "code": "providerUnavailable",
+    "retryable": true,
+    "traceId": "trace-1"
+  }
+}

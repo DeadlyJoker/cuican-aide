@@ -6,7 +6,9 @@ import type { Locale } from "../i18n";
 export function mcpConfigObject(
   record: McpServerConfigRecord,
 ): Record<string, JsonValue> {
-  return record.config && typeof record.config === "object" && !Array.isArray(record.config)
+  return record.config &&
+    typeof record.config === "object" &&
+    !Array.isArray(record.config)
     ? (record.config as Record<string, JsonValue>)
     : {};
 }
@@ -55,7 +57,7 @@ export function mcpConfigDetailText(
 
   return [
     locale === "zh"
-      ? "已写入 MCP 配置，等待运行态加载或当前线程使用。"
+      ? "已写入服务配置，等待运行态加载或当前线程使用。"
       : "Saved in MCP config; waiting for runtime load or thread use.",
     `Name: ${record.name}`,
     `${locale === "zh" ? "状态" : "Status"}: ${
@@ -86,7 +88,7 @@ export function mcpConfigSummaryText(
 ): string {
   if (records.length === 0) {
     return locale === "zh"
-      ? "暂无持久化 MCP 配置。"
+      ? "暂无持久化服务配置。"
       : "No persisted MCP configs.";
   }
 
@@ -104,7 +106,9 @@ export function mcpConfigSummaryText(
               ? "停用"
               : "disabled"
         }`,
-        endpoint ? `  ${locale === "zh" ? "入口" : "endpoint"}: ${endpoint}` : null,
+        endpoint
+          ? `  ${locale === "zh" ? "入口" : "endpoint"}: ${endpoint}`
+          : null,
       ]
         .filter(Boolean)
         .join("\n");

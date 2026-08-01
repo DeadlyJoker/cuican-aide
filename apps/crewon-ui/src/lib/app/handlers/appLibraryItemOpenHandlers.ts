@@ -24,7 +24,8 @@ import {
 } from "../../library/libraryItemOpenHandlers";
 import type { LibraryItemOpenHandlers } from "../../library/libraryItemActionFlow";
 
-type LibraryPanelSetter = LibraryItemOpenHandlersParams["agentConfig"]["setLibraryPanel"];
+type LibraryPanelSetter =
+  LibraryItemOpenHandlersParams["agentConfig"]["setLibraryPanel"];
 type ThreadSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
 
 export function createAppLibraryItemOpenHandlers(params: {
@@ -68,11 +69,12 @@ export function createAppLibraryItemOpenHandlers(params: {
       isConnected: params.isConnected,
       locale: params.locale,
       readAgentConfig: (requestParams) =>
-        readBackendAgentConfig(
-          params.optionalBackendWorkspace,
-          requestParams,
-        ),
+        readBackendAgentConfig(params.optionalBackendWorkspace, requestParams),
       readThread,
+      setLibraryPanel: params.setLibraryPanel,
+    },
+    capabilityPreset: {
+      locale: params.locale,
       setLibraryPanel: params.setLibraryPanel,
     },
     automationDetail: {
@@ -108,7 +110,8 @@ export function createAppLibraryItemOpenHandlers(params: {
     },
     mcpDetail: {
       isConnected: params.isConnected,
-      listThreads: () => params.client?.listThreads(false) ?? Promise.resolve([]),
+      listThreads: () =>
+        params.client?.listThreads(false) ?? Promise.resolve([]),
       locale: params.locale,
       readThread,
       refreshToolAction: (action) =>
@@ -121,10 +124,7 @@ export function createAppLibraryItemOpenHandlers(params: {
       isUnsupportedRpcError: params.isUnsupportedRpcError,
       locale: params.locale,
       readOfficeConfig: (requestParams) =>
-        readBackendOfficeConfig(
-          params.optionalBackendWorkspace,
-          requestParams,
-        ),
+        readBackendOfficeConfig(params.optionalBackendWorkspace, requestParams),
       readThread,
       setLibraryPanel: params.setLibraryPanel,
     },

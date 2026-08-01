@@ -125,7 +125,7 @@ export function createAppShellActionHandlers(
         demoSettingsPanel,
         isDemo: params.isDemo,
         locale: params.locale,
-        refreshAccountPanel: params.refreshSettingsHandlers.account,
+        refreshDefaultSettingsPanel: params.refreshSettingsHandlers.config,
         setAppView: params.setAppView,
         setCapabilityDockOpen: params.setCapabilityDockOpen,
         setCapabilityPanel: params.setCapabilityPanel,

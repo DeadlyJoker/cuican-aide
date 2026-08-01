@@ -346,6 +346,26 @@ mod thread_processor_behavior_tests {
     }
 
     #[test]
+    fn validate_dynamic_tools_rejects_server_provider_namespace() {
+        let tools = vec![ApiDynamicToolSpec {
+            namespace: Some("crewon_binding_018f0d8e7e6a7cb28b347b2ca4d5c001".to_string()),
+            name: "call".to_string(),
+            description: "test".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+            defer_loading: false,
+        }];
+        let err = validate_dynamic_tools(&tools).expect_err("reserved Provider namespace");
+        assert!(
+            err.contains("server-owned Provider"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
     fn validate_dynamic_tools_rejects_name_not_supported_by_responses() {
         let tools = vec![ApiDynamicToolSpec {
             namespace: None,

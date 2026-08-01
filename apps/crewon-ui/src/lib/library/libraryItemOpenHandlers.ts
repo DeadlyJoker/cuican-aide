@@ -1,4 +1,5 @@
 import type { LibraryItem } from "../domain/crewonDomain";
+import { openCapabilityPresetAction } from "../capability/capabilityPresetActions";
 import {
   openAgentConfigAction,
   type OpenAgentConfigActionParams,
@@ -35,12 +36,19 @@ type WithoutAction<TParams> = Omit<TParams, "action">;
 
 export type LibraryItemOpenHandlersParams = {
   agentConfig: WithoutAction<OpenAgentConfigActionParams>;
+  capabilityPreset: Omit<
+    Parameters<typeof openCapabilityPresetAction>[0],
+    "action"
+  >;
   automationDetail: WithoutAction<OpenAutomationDetailActionParams>;
   externalAgentImport: Omit<OpenExternalAgentImportActionParams, "item">;
   mcpDetail: WithoutAction<OpenMcpDetailActionParams>;
   officeDetail: WithoutAction<OpenOfficeDetailActionParams>;
   plugin: WithoutAction<OpenPluginDetailActionParams>;
-  pluginSkill: Omit<OpenPluginSkillDetailActionParams, "action" | "fallbackTitle">;
+  pluginSkill: Omit<
+    OpenPluginSkillDetailActionParams,
+    "action" | "fallbackTitle"
+  >;
   skillFile: {
     open: WithoutAction<OpenSkillFileDetailActionParams>;
     refreshAction: (
@@ -51,6 +59,7 @@ export type LibraryItemOpenHandlersParams = {
 
 export function createLibraryItemOpenHandlers({
   agentConfig,
+  capabilityPreset,
   automationDetail,
   externalAgentImport,
   mcpDetail,
@@ -61,6 +70,8 @@ export function createLibraryItemOpenHandlers({
 }: LibraryItemOpenHandlersParams): LibraryItemOpenHandlers {
   return {
     agentConfig: (action) => openAgentConfigAction({ action, ...agentConfig }),
+    capabilityPreset: (action) =>
+      openCapabilityPresetAction({ action, ...capabilityPreset }),
     automationDetail: (action) =>
       openAutomationDetailAction({ action, ...automationDetail }),
     externalAgentImport: (action) =>
@@ -69,7 +80,8 @@ export function createLibraryItemOpenHandlers({
         ...externalAgentImport,
       }),
     mcpDetail: (action) => openMcpDetailAction({ action, ...mcpDetail }),
-    officeDetail: (action) => openOfficeDetailAction({ action, ...officeDetail }),
+    officeDetail: (action) =>
+      openOfficeDetailAction({ action, ...officeDetail }),
     plugin: (action) => openPluginDetailAction({ action, ...plugin }),
     pluginSkill: (action, item: LibraryItem) =>
       openPluginSkillDetailAction({

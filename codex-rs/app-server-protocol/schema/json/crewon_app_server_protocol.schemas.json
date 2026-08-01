@@ -1340,13 +1340,13 @@
             },
             "method": {
               "enum": [
-                "agentPlatform/chat"
+                "agentPlatform/workflow/info"
               ],
-              "title": "AgentPlatform/chatRequestMethod",
+              "title": "AgentPlatform/workflow/infoRequestMethod",
               "type": "string"
             },
             "params": {
-              "$ref": "#/definitions/v2/AgentPlatformChatParams"
+              "$ref": "#/definitions/v2/AgentPlatformWorkflowInfoParams"
             }
           },
           "required": [
@@ -1354,7 +1354,7 @@
             "method",
             "params"
           ],
-          "title": "AgentPlatform/chatRequest",
+          "title": "AgentPlatform/workflow/infoRequest",
           "type": "object"
         },
         {
@@ -1364,13 +1364,13 @@
             },
             "method": {
               "enum": [
-                "agentPlatform/chat/start"
+                "agentPlatform/workflow/execute"
               ],
-              "title": "AgentPlatform/chat/startRequestMethod",
+              "title": "AgentPlatform/workflow/executeRequestMethod",
               "type": "string"
             },
             "params": {
-              "$ref": "#/definitions/v2/AgentPlatformChatParams"
+              "$ref": "#/definitions/v2/AgentPlatformWorkflowExecuteParams"
             }
           },
           "required": [
@@ -1378,7 +1378,7 @@
             "method",
             "params"
           ],
-          "title": "AgentPlatform/chat/startRequest",
+          "title": "AgentPlatform/workflow/executeRequest",
           "type": "object"
         },
         {
@@ -1388,13 +1388,13 @@
             },
             "method": {
               "enum": [
-                "agentPlatform/run/cancel"
+                "expertTeam/list"
               ],
-              "title": "AgentPlatform/run/cancelRequestMethod",
+              "title": "ExpertTeam/listRequestMethod",
               "type": "string"
             },
             "params": {
-              "$ref": "#/definitions/v2/AgentPlatformRunCancelParams"
+              "$ref": "#/definitions/v2/ExpertTeamListParams"
             }
           },
           "required": [
@@ -1402,7 +1402,7 @@
             "method",
             "params"
           ],
-          "title": "AgentPlatform/run/cancelRequest",
+          "title": "ExpertTeam/listRequest",
           "type": "object"
         },
         {
@@ -1412,13 +1412,13 @@
             },
             "method": {
               "enum": [
-                "agentPlatform/session/read"
+                "expertTeam/create"
               ],
-              "title": "AgentPlatform/session/readRequestMethod",
+              "title": "ExpertTeam/createRequestMethod",
               "type": "string"
             },
             "params": {
-              "$ref": "#/definitions/v2/AgentPlatformSessionParams"
+              "$ref": "#/definitions/v2/ExpertTeamCreateParams"
             }
           },
           "required": [
@@ -1426,7 +1426,7 @@
             "method",
             "params"
           ],
-          "title": "AgentPlatform/session/readRequest",
+          "title": "ExpertTeam/createRequest",
           "type": "object"
         },
         {
@@ -1436,13 +1436,13 @@
             },
             "method": {
               "enum": [
-                "agentPlatform/session/clear"
+                "expertTeam/read"
               ],
-              "title": "AgentPlatform/session/clearRequestMethod",
+              "title": "ExpertTeam/readRequestMethod",
               "type": "string"
             },
             "params": {
-              "$ref": "#/definitions/v2/AgentPlatformSessionParams"
+              "$ref": "#/definitions/v2/ExpertTeamReadParams"
             }
           },
           "required": [
@@ -1450,7 +1450,7 @@
             "method",
             "params"
           ],
-          "title": "AgentPlatform/session/clearRequest",
+          "title": "ExpertTeam/readRequest",
           "type": "object"
         },
         {
@@ -1532,6 +1532,30 @@
             },
             "method": {
               "enum": [
+                "office/manager/ensure"
+              ],
+              "title": "Office/manager/ensureRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeManagerEnsureParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/manager/ensureRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
                 "office/read"
               ],
               "title": "Office/readRequestMethod",
@@ -1571,6 +1595,30 @@
             "params"
           ],
           "title": "Office/message/sendRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/v2/RequestId"
+            },
+            "method": {
+              "enum": [
+                "office/message/submit"
+              ],
+              "title": "Office/message/submitRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/v2/OfficeMessageSubmitParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Office/message/submitRequest",
           "type": "object"
         },
         {
@@ -6230,80 +6278,20 @@
           "properties": {
             "method": {
               "enum": [
-                "agentPlatform/chat/delta"
+                "resource/binding/updated"
               ],
-              "title": "AgentPlatform/chat/deltaNotificationMethod",
+              "title": "Resource/binding/updatedNotificationMethod",
               "type": "string"
             },
             "params": {
-              "$ref": "#/definitions/v2/AgentPlatformChatDeltaNotification"
+              "$ref": "#/definitions/v2/ResourceBindingUpdatedNotification"
             }
           },
           "required": [
             "method",
             "params"
           ],
-          "title": "AgentPlatform/chat/deltaNotification",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "method": {
-              "enum": [
-                "agentPlatform/chat/resourceEvent"
-              ],
-              "title": "AgentPlatform/chat/resourceEventNotificationMethod",
-              "type": "string"
-            },
-            "params": {
-              "$ref": "#/definitions/v2/AgentPlatformResourceEventNotification"
-            }
-          },
-          "required": [
-            "method",
-            "params"
-          ],
-          "title": "AgentPlatform/chat/resourceEventNotification",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "method": {
-              "enum": [
-                "agentPlatform/chat/completed"
-              ],
-              "title": "AgentPlatform/chat/completedNotificationMethod",
-              "type": "string"
-            },
-            "params": {
-              "$ref": "#/definitions/v2/AgentPlatformChatCompletedNotification"
-            }
-          },
-          "required": [
-            "method",
-            "params"
-          ],
-          "title": "AgentPlatform/chat/completedNotification",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "method": {
-              "enum": [
-                "agentPlatform/chat/failed"
-              ],
-              "title": "AgentPlatform/chat/failedNotificationMethod",
-              "type": "string"
-            },
-            "params": {
-              "$ref": "#/definitions/v2/AgentPlatformChatFailedNotification"
-            }
-          },
-          "required": [
-            "method",
-            "params"
-          ],
-          "title": "AgentPlatform/chat/failedNotification",
+          "title": "Resource/binding/updatedNotification",
           "type": "object"
         },
         {
@@ -7782,385 +7770,6 @@
         "title": "AgentPlatformAuthResponse",
         "type": "object"
       },
-      "AgentPlatformChatCompletedNotification": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "agentId": {
-            "type": "string"
-          },
-          "durationMs": {
-            "format": "uint64",
-            "minimum": 0.0,
-            "type": "integer"
-          },
-          "message": {
-            "type": "string"
-          },
-          "resourceEvents": {
-            "items": {
-              "$ref": "#/definitions/v2/AgentPlatformResourceEvent"
-            },
-            "type": "array"
-          },
-          "runId": {
-            "type": "string"
-          },
-          "skillsUsed": {
-            "items": true,
-            "type": "array"
-          },
-          "thoughts": {
-            "items": true,
-            "type": "array"
-          },
-          "threadId": {
-            "type": "string"
-          },
-          "tokens": {
-            "$ref": "#/definitions/v2/AgentPlatformTokenUsage"
-          }
-        },
-        "required": [
-          "agentId",
-          "durationMs",
-          "message",
-          "resourceEvents",
-          "runId",
-          "skillsUsed",
-          "thoughts",
-          "threadId",
-          "tokens"
-        ],
-        "title": "AgentPlatformChatCompletedNotification",
-        "type": "object"
-      },
-      "AgentPlatformChatDeltaNotification": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "agentId": {
-            "type": "string"
-          },
-          "delta": {
-            "type": "string"
-          },
-          "runId": {
-            "type": "string"
-          },
-          "threadId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "agentId",
-          "delta",
-          "runId",
-          "threadId"
-        ],
-        "title": "AgentPlatformChatDeltaNotification",
-        "type": "object"
-      },
-      "AgentPlatformChatFailedNotification": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "agentId": {
-            "type": "string"
-          },
-          "cancelled": {
-            "type": "boolean"
-          },
-          "code": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "error": {
-            "type": "string"
-          },
-          "runId": {
-            "type": "string"
-          },
-          "threadId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "agentId",
-          "cancelled",
-          "code",
-          "error",
-          "runId",
-          "threadId"
-        ],
-        "title": "AgentPlatformChatFailedNotification",
-        "type": "object"
-      },
-      "AgentPlatformChatParams": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "accessToken": {
-            "type": "string"
-          },
-          "agentId": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "threadId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "accessToken",
-          "agentId",
-          "message",
-          "threadId"
-        ],
-        "title": "AgentPlatformChatParams",
-        "type": "object"
-      },
-      "AgentPlatformChatResponse": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "agentId": {
-            "type": "string"
-          },
-          "durationMs": {
-            "format": "uint64",
-            "minimum": 0.0,
-            "type": "integer"
-          },
-          "message": {
-            "type": "string"
-          },
-          "resourceEvents": {
-            "items": {
-              "$ref": "#/definitions/v2/AgentPlatformResourceEvent"
-            },
-            "type": "array"
-          },
-          "skillsUsed": {
-            "items": true,
-            "type": "array"
-          },
-          "thoughts": {
-            "items": true,
-            "type": "array"
-          },
-          "tokens": {
-            "$ref": "#/definitions/v2/AgentPlatformTokenUsage"
-          }
-        },
-        "required": [
-          "agentId",
-          "durationMs",
-          "message",
-          "resourceEvents",
-          "skillsUsed",
-          "thoughts",
-          "tokens"
-        ],
-        "title": "AgentPlatformChatResponse",
-        "type": "object"
-      },
-      "AgentPlatformChatStartResponse": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "runId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "runId"
-        ],
-        "title": "AgentPlatformChatStartResponse",
-        "type": "object"
-      },
-      "AgentPlatformHistoryMessage": {
-        "properties": {
-          "content": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "content",
-          "role"
-        ],
-        "type": "object"
-      },
-      "AgentPlatformResourceEvent": {
-        "properties": {
-          "error": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "inputSummary": true,
-          "name": {
-            "type": "string"
-          },
-          "outputSummary": true,
-          "status": {
-            "$ref": "#/definitions/v2/AgentPlatformResourceStatus"
-          },
-          "type": {
-            "$ref": "#/definitions/v2/AgentPlatformResourceType"
-          }
-        },
-        "required": [
-          "inputSummary",
-          "name",
-          "outputSummary",
-          "status",
-          "type"
-        ],
-        "type": "object"
-      },
-      "AgentPlatformResourceEventNotification": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "agentId": {
-            "type": "string"
-          },
-          "event": {
-            "$ref": "#/definitions/v2/AgentPlatformResourceEvent"
-          },
-          "runId": {
-            "type": "string"
-          },
-          "threadId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "agentId",
-          "event",
-          "runId",
-          "threadId"
-        ],
-        "title": "AgentPlatformResourceEventNotification",
-        "type": "object"
-      },
-      "AgentPlatformResourceStatus": {
-        "enum": [
-          "started",
-          "succeeded",
-          "failed"
-        ],
-        "type": "string"
-      },
-      "AgentPlatformResourceType": {
-        "enum": [
-          "skill",
-          "mcp",
-          "knowledge"
-        ],
-        "type": "string"
-      },
-      "AgentPlatformRunCancelParams": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "runId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "runId"
-        ],
-        "title": "AgentPlatformRunCancelParams",
-        "type": "object"
-      },
-      "AgentPlatformRunCancelResponse": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "cancelled": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "cancelled"
-        ],
-        "title": "AgentPlatformRunCancelResponse",
-        "type": "object"
-      },
-      "AgentPlatformSessionClearResponse": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "cleared": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "cleared"
-        ],
-        "title": "AgentPlatformSessionClearResponse",
-        "type": "object"
-      },
-      "AgentPlatformSessionParams": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "accessToken": {
-            "type": "string"
-          },
-          "agentId": {
-            "type": "string"
-          },
-          "threadId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "accessToken",
-          "agentId",
-          "threadId"
-        ],
-        "title": "AgentPlatformSessionParams",
-        "type": "object"
-      },
-      "AgentPlatformSessionReadResponse": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "properties": {
-          "messages": {
-            "items": {
-              "$ref": "#/definitions/v2/AgentPlatformHistoryMessage"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "messages"
-        ],
-        "title": "AgentPlatformSessionReadResponse",
-        "type": "object"
-      },
-      "AgentPlatformTokenUsage": {
-        "properties": {
-          "completionTokens": {
-            "format": "uint64",
-            "minimum": 0.0,
-            "type": "integer"
-          },
-          "promptTokens": {
-            "format": "uint64",
-            "minimum": 0.0,
-            "type": "integer"
-          },
-          "totalTokens": {
-            "format": "uint64",
-            "minimum": 0.0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "completionTokens",
-          "promptTokens",
-          "totalTokens"
-        ],
-        "type": "object"
-      },
       "AgentPlatformUser": {
         "properties": {
           "id": {
@@ -8175,6 +7784,160 @@
           "id",
           "username"
         ],
+        "type": "object"
+      },
+      "AgentPlatformWorkflowExecuteParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "input": {
+            "type": "string"
+          },
+          "workflowId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken",
+          "input",
+          "workflowId"
+        ],
+        "title": "AgentPlatformWorkflowExecuteParams",
+        "type": "object"
+      },
+      "AgentPlatformWorkflowExecuteResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "activeConnections": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "durationSeconds": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "executedNodes": {
+            "items": true,
+            "type": "array"
+          },
+          "executionId": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "finishedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nodeResults": true,
+          "outputs": true,
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "workflowId": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "activeConnections",
+          "executedNodes",
+          "executionId",
+          "nodeResults",
+          "outputs",
+          "status",
+          "workflowId"
+        ],
+        "title": "AgentPlatformWorkflowExecuteResponse",
+        "type": "object"
+      },
+      "AgentPlatformWorkflowInfoParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "workflowId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken",
+          "workflowId"
+        ],
+        "title": "AgentPlatformWorkflowInfoParams",
+        "type": "object"
+      },
+      "AgentPlatformWorkflowInfoResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "activeConnections": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inputVariables": {
+            "items": true,
+            "type": "array"
+          },
+          "isPublished": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "maxConcurrency": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "activeConnections",
+          "id",
+          "inputVariables",
+          "isPublished",
+          "maxConcurrency",
+          "name",
+          "version"
+        ],
+        "title": "AgentPlatformWorkflowInfoResponse",
         "type": "object"
       },
       "AgentReadParams": {
@@ -8826,6 +8589,42 @@
       "AppToolsConfig": {
         "type": "object"
       },
+      "ApprovalRef": {
+        "properties": {
+          "actionDigest": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/v2/ApprovalStatus"
+          }
+        },
+        "required": [
+          "actionDigest",
+          "approvalId",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ApprovalStatus": {
+        "enum": [
+          "pending",
+          "approved",
+          "denied",
+          "expired",
+          "consumed"
+        ],
+        "type": "string"
+      },
       "ApprovalsReviewer": {
         "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
         "enum": [
@@ -8925,6 +8724,51 @@
           "data"
         ],
         "title": "AppsListResponse",
+        "type": "object"
+      },
+      "ArtifactKind": {
+        "enum": [
+          "file",
+          "image",
+          "report",
+          "evidence",
+          "toolResult"
+        ],
+        "type": "string"
+      },
+      "ArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/definitions/v2/ArtifactKind"
+          },
+          "retention": {
+            "$ref": "#/definitions/v2/RetentionClass"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactId",
+          "createdAt",
+          "kind",
+          "retention",
+          "revision",
+          "taskId"
+        ],
         "type": "object"
       },
       "AskForApproval": {
@@ -9233,6 +9077,30 @@
           }
         },
         "title": "AutomationReadResponse",
+        "type": "object"
+      },
+      "AutomationRef": {
+        "properties": {
+          "automationId": {
+            "type": "string"
+          },
+          "nextRunAt": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "scheduleRevision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "automationId",
+          "scheduleRevision"
+        ],
         "type": "object"
       },
       "AutomationRunParams": {
@@ -11278,6 +11146,59 @@
         "title": "ContextCompactedNotification",
         "type": "object"
       },
+      "CredentialRef": {
+        "properties": {
+          "credentialId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/definitions/v2/CredentialScope"
+          },
+          "status": {
+            "$ref": "#/definitions/v2/CredentialStatus"
+          }
+        },
+        "required": [
+          "credentialId",
+          "providerId",
+          "revision",
+          "scope",
+          "status"
+        ],
+        "type": "object"
+      },
+      "CredentialScope": {
+        "enum": [
+          "user",
+          "space",
+          "service"
+        ],
+        "type": "string"
+      },
+      "CredentialStatus": {
+        "enum": [
+          "available",
+          "expired",
+          "revoked",
+          "unavailable"
+        ],
+        "type": "string"
+      },
       "CreditsSnapshot": {
         "properties": {
           "balance": {
@@ -11481,6 +11402,13 @@
         "title": "ErrorNotification",
         "type": "object"
       },
+      "ExecutionLocation": {
+        "enum": [
+          "localNode",
+          "provider"
+        ],
+        "type": "string"
+      },
       "ExperimentalFeature": {
         "properties": {
           "announcement": {
@@ -11658,6 +11586,240 @@
             "type": "string"
           }
         ]
+      },
+      "ExpertRole": {
+        "additionalProperties": false,
+        "description": "One bounded local role in an Experts definition.",
+        "properties": {
+          "agentType": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentType",
+          "name",
+          "role"
+        ],
+        "type": "object"
+      },
+      "ExpertTeamConfig": {
+        "additionalProperties": false,
+        "description": "Path-free Experts definition owned by one subject and Conversation workspace.",
+        "properties": {
+          "experts": {
+            "items": {
+              "$ref": "#/definitions/v2/ExpertRole"
+            },
+            "type": "array"
+          },
+          "expertsId": {
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "leader": {
+            "$ref": "#/definitions/v2/ExpertRole"
+          },
+          "ownerSubject": {
+            "type": "string"
+          },
+          "recordRevision": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tenantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "experts",
+          "expertsId",
+          "goal",
+          "leader",
+          "ownerSubject",
+          "recordRevision",
+          "title",
+          "workspaceKey"
+        ],
+        "type": "object"
+      },
+      "ExpertTeamCreateParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "experts": {
+            "items": {
+              "$ref": "#/definitions/v2/ExpertRole"
+            },
+            "type": "array"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "leader": {
+            "$ref": "#/definitions/v2/ExpertRole"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "experts",
+          "goal",
+          "leader",
+          "title",
+          "workspaceKey"
+        ],
+        "title": "ExpertTeamCreateParams",
+        "type": "object"
+      },
+      "ExpertTeamCreateResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "record": {
+            "$ref": "#/definitions/v2/ExpertTeamRecord"
+          }
+        },
+        "required": [
+          "record"
+        ],
+        "title": "ExpertTeamCreateResponse",
+        "type": "object"
+      },
+      "ExpertTeamListParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceKey"
+        ],
+        "title": "ExpertTeamListParams",
+        "type": "object"
+      },
+      "ExpertTeamListResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/definitions/v2/ExpertTeamRecord"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "ExpertTeamListResponse",
+        "type": "object"
+      },
+      "ExpertTeamReadParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "expertsId": {
+            "type": "string"
+          },
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expertsId",
+          "workspaceKey"
+        ],
+        "title": "ExpertTeamReadParams",
+        "type": "object"
+      },
+      "ExpertTeamReadResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "record": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ExpertTeamRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ExpertTeamReadResponse",
+        "type": "object"
+      },
+      "ExpertTeamRecord": {
+        "additionalProperties": false,
+        "description": "Server-owned Experts record projection. The file path is never accepted in create/read params.",
+        "properties": {
+          "config": {
+            "$ref": "#/definitions/v2/ExpertTeamConfig"
+          },
+          "filePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "filePath"
+        ],
+        "type": "object"
       },
       "ExternalActionPolicy": {
         "enum": [
@@ -15959,6 +16121,58 @@
         "title": "OfficeListResponse",
         "type": "object"
       },
+      "OfficeManagerEnsureParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "cwd": {
+            "type": "string"
+          },
+          "expectedRecordRevision": {
+            "type": "string"
+          },
+          "officeRecordId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cwd",
+          "expectedRecordRevision",
+          "officeRecordId"
+        ],
+        "title": "OfficeManagerEnsureParams",
+        "type": "object"
+      },
+      "OfficeManagerEnsureResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "config": true,
+          "filePath": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/v2/OfficeManagerEnsureStatus"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "filePath",
+          "status",
+          "threadId"
+        ],
+        "title": "OfficeManagerEnsureResponse",
+        "type": "object"
+      },
+      "OfficeManagerEnsureStatus": {
+        "enum": [
+          "created",
+          "reusedServerOwned",
+          "reusedLegacy"
+        ],
+        "type": "string"
+      },
       "OfficeMemberAddParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -16284,6 +16498,222 @@
         ],
         "type": "object"
       },
+      "OfficeMessageDelivery": {
+        "oneOf": [
+          {
+            "properties": {
+              "phase": {
+                "$ref": "#/definitions/v2/OfficeMessageProcessingPhase"
+              },
+              "retryAfterMs": {
+                "format": "uint32",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "processing"
+                ],
+                "title": "ProcessingOfficeMessageDeliveryType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "phase",
+              "retryAfterMs",
+              "type"
+            ],
+            "title": "ProcessingOfficeMessageDelivery",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              },
+              "turn": {
+                "$ref": "#/definitions/v2/Turn"
+              },
+              "type": {
+                "enum": [
+                  "runStarted"
+                ],
+                "title": "RunStartedOfficeMessageDeliveryType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "runId",
+              "threadId",
+              "turn",
+              "type"
+            ],
+            "title": "RunStartedOfficeMessageDelivery",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "interactionId": {
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              },
+              "turn": {
+                "$ref": "#/definitions/v2/Turn"
+              },
+              "type": {
+                "enum": [
+                  "interactionStarted"
+                ],
+                "title": "InteractionStartedOfficeMessageDeliveryType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "interactionId",
+              "threadId",
+              "turn",
+              "type"
+            ],
+            "title": "InteractionStartedOfficeMessageDelivery",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              },
+              "turnId": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "steered"
+                ],
+                "title": "SteeredOfficeMessageDeliveryType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "runId",
+              "threadId",
+              "turnId",
+              "type"
+            ],
+            "title": "SteeredOfficeMessageDelivery",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "afterRunId": {
+                "type": "string"
+              },
+              "position": {
+                "format": "uint32",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "queued"
+                ],
+                "title": "QueuedOfficeMessageDeliveryType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "afterRunId",
+              "position",
+              "type"
+            ],
+            "title": "QueuedOfficeMessageDelivery",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "interactionId": {
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              },
+              "turnId": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "answered"
+                ],
+                "title": "AnsweredOfficeMessageDeliveryType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "interactionId",
+              "threadId",
+              "turnId",
+              "type"
+            ],
+            "title": "AnsweredOfficeMessageDelivery",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "type": {
+                "enum": [
+                  "failed"
+                ],
+                "title": "FailedOfficeMessageDeliveryType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable",
+              "type"
+            ],
+            "title": "FailedOfficeMessageDelivery",
+            "type": "object"
+          }
+        ]
+      },
+      "OfficeMessageMention": {
+        "additionalProperties": false,
+        "properties": {
+          "memberId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "memberId"
+        ],
+        "type": "object"
+      },
+      "OfficeMessageProcessingPhase": {
+        "enum": [
+          "reserved",
+          "dispatching",
+          "recovering"
+        ],
+        "type": "string"
+      },
       "OfficeMessageSendParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -16327,6 +16757,82 @@
           "filePath"
         ],
         "title": "OfficeMessageSendResponse",
+        "type": "object"
+      },
+      "OfficeMessageSubmitParams": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "clientUserMessageId": {
+            "type": "string"
+          },
+          "config": true,
+          "cwd": {
+            "type": "string"
+          },
+          "locale": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mentions": {
+            "items": {
+              "$ref": "#/definitions/v2/OfficeMessageMention"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "clientUserMessageId",
+          "config",
+          "cwd",
+          "text"
+        ],
+        "title": "OfficeMessageSubmitParams",
+        "type": "object"
+      },
+      "OfficeMessageSubmitResponse": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "clientUserMessageId": {
+            "type": "string"
+          },
+          "config": true,
+          "delivery": {
+            "$ref": "#/definitions/v2/OfficeMessageDelivery"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "receiptId": {
+            "type": "string"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "clientUserMessageId",
+          "config",
+          "delivery",
+          "filePath",
+          "receiptId",
+          "replayed"
+        ],
+        "title": "OfficeMessageSubmitResponse",
         "type": "object"
       },
       "OfficeReadParams": {
@@ -17083,6 +17589,101 @@
           "unknown"
         ],
         "type": "string"
+      },
+      "PlatformContract": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "approval": {
+            "$ref": "#/definitions/v2/ApprovalRef"
+          },
+          "artifact": {
+            "$ref": "#/definitions/v2/ArtifactRef"
+          },
+          "automation": {
+            "$ref": "#/definitions/v2/AutomationRef"
+          },
+          "credential": {
+            "$ref": "#/definitions/v2/CredentialRef"
+          },
+          "error": {
+            "$ref": "#/definitions/v2/PlatformErrorRef"
+          },
+          "event": {
+            "$ref": "#/definitions/v2/TaskEventRef"
+          },
+          "identity": {
+            "$ref": "#/definitions/v2/RequestIdentityRef"
+          },
+          "provider": {
+            "$ref": "#/definitions/v2/ProviderRef"
+          },
+          "resourceBinding": {
+            "$ref": "#/definitions/v2/ResourceBindingRef"
+          },
+          "schemaVersion": {
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/definitions/v2/TaskRef"
+          },
+          "team": {
+            "$ref": "#/definitions/v2/TeamRef"
+          },
+          "workspace": {
+            "$ref": "#/definitions/v2/WorkspaceRef"
+          }
+        },
+        "required": [
+          "approval",
+          "artifact",
+          "automation",
+          "credential",
+          "error",
+          "event",
+          "identity",
+          "provider",
+          "resourceBinding",
+          "schemaVersion",
+          "task",
+          "team",
+          "workspace"
+        ],
+        "title": "PlatformContract",
+        "type": "object"
+      },
+      "PlatformErrorCode": {
+        "enum": [
+          "invalidRequest",
+          "unauthorized",
+          "forbidden",
+          "notFound",
+          "conflict",
+          "capabilityUnsupported",
+          "providerUnavailable",
+          "timeout",
+          "unknownOutcome",
+          "internal"
+        ],
+        "type": "string"
+      },
+      "PlatformErrorRef": {
+        "properties": {
+          "code": {
+            "$ref": "#/definitions/v2/PlatformErrorCode"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "retryable",
+          "traceId"
+        ],
+        "type": "object"
       },
       "PluginAuthPolicy": {
         "enum": [
@@ -18272,6 +18873,961 @@
         ],
         "type": "object"
       },
+      "ProviderApprovalDecision": {
+        "enum": [
+          "approve",
+          "deny"
+        ],
+        "type": "string"
+      },
+      "ProviderApprovalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actionDigest": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "actionDigest",
+          "approvalId",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
+      "ProviderAuthorization": {
+        "additionalProperties": false,
+        "properties": {
+          "credential": {
+            "$ref": "#/definitions/v2/ProviderCredentialAuthorization"
+          },
+          "delegation": {
+            "$ref": "#/definitions/v2/ProviderDelegationAuthorization"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "serviceAudience": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential",
+          "delegation",
+          "purpose",
+          "scopes",
+          "serviceAudience",
+          "spaceId",
+          "subject",
+          "taskId",
+          "tenantId"
+        ],
+        "type": "object"
+      },
+      "ProviderCapabilityKind": {
+        "enum": [
+          "durableRun",
+          "resumableEvents",
+          "persistentConversation",
+          "remoteAgent",
+          "remoteTool",
+          "remoteKnowledge",
+          "remoteWorkflow",
+          "approval",
+          "toolResult"
+        ],
+        "type": "string"
+      },
+      "ProviderCommand": {
+        "oneOf": [
+          {
+            "properties": {
+              "commandId": {
+                "type": "string"
+              },
+              "idempotencyKey": {
+                "type": "string"
+              },
+              "input": {
+                "$ref": "#/definitions/v2/ProviderRunInput"
+              },
+              "requestDigest": {
+                "type": "string"
+              },
+              "resource": {
+                "$ref": "#/definitions/v2/ResourceRef"
+              },
+              "type": {
+                "enum": [
+                  "start"
+                ],
+                "title": "StartProviderCommandType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "commandId",
+              "idempotencyKey",
+              "input",
+              "requestDigest",
+              "resource",
+              "type"
+            ],
+            "title": "StartProviderCommand",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "commandId": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "read"
+                ],
+                "title": "ReadProviderCommandType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "commandId",
+              "providerRunId",
+              "type"
+            ],
+            "title": "ReadProviderCommand",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "afterCursor": {
+                "$ref": "#/definitions/v2/RequiredNullableString"
+              },
+              "commandId": {
+                "type": "string"
+              },
+              "limit": {
+                "format": "uint32",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "listEvents"
+                ],
+                "title": "ListEventsProviderCommandType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "afterCursor",
+              "commandId",
+              "limit",
+              "providerRunId",
+              "type"
+            ],
+            "title": "ListEventsProviderCommand",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "commandId": {
+                "type": "string"
+              },
+              "expectedRevision": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "cancel"
+                ],
+                "title": "CancelProviderCommandType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "commandId",
+              "expectedRevision",
+              "providerRunId",
+              "reason",
+              "type"
+            ],
+            "title": "CancelProviderCommand",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "actionDigest": {
+                "type": "string"
+              },
+              "approvalId": {
+                "type": "string"
+              },
+              "commandId": {
+                "type": "string"
+              },
+              "decision": {
+                "$ref": "#/definitions/v2/ProviderApprovalDecision"
+              },
+              "idempotencyKey": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "decideApproval"
+                ],
+                "title": "DecideApprovalProviderCommandType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "actionDigest",
+              "approvalId",
+              "commandId",
+              "decision",
+              "idempotencyKey",
+              "providerRunId",
+              "type"
+            ],
+            "title": "DecideApprovalProviderCommand",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "artifact": {
+                "$ref": "#/definitions/v2/ArtifactRef"
+              },
+              "commandId": {
+                "type": "string"
+              },
+              "idempotencyKey": {
+                "type": "string"
+              },
+              "intentDigest": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "resultDigest": {
+                "type": "string"
+              },
+              "toolCallId": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "submitToolResult"
+                ],
+                "title": "SubmitToolResultProviderCommandType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "artifact",
+              "commandId",
+              "idempotencyKey",
+              "intentDigest",
+              "providerRunId",
+              "resultDigest",
+              "toolCallId",
+              "type"
+            ],
+            "title": "SubmitToolResultProviderCommand",
+            "type": "object"
+          }
+        ]
+      },
+      "ProviderConnectionProjection": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/definitions/v2/ProviderCapabilityKind"
+            },
+            "type": "array"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/v2/ProviderKind"
+          },
+          "observedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "projectionEtag": {
+            "type": "string"
+          },
+          "protocolVersion": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "resourceCapabilities": {
+            "items": {
+              "$ref": "#/definitions/v2/ResourceBindingCapability"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/definitions/v2/ProviderConnectionStatus"
+          }
+        },
+        "required": [
+          "capabilities",
+          "connectionId",
+          "kind",
+          "observedAt",
+          "projectionEtag",
+          "protocolVersion",
+          "providerId",
+          "resourceCapabilities",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ProviderConnectionStatus": {
+        "enum": [
+          "connected",
+          "disconnected",
+          "degraded"
+        ],
+        "type": "string"
+      },
+      "ProviderContract": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false,
+        "properties": {
+          "authorization": {
+            "$ref": "#/definitions/v2/ProviderAuthorization"
+          },
+          "commands": {
+            "items": {
+              "$ref": "#/definitions/v2/ProviderCommand"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/definitions/v2/ProviderContractError"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/definitions/v2/ProviderRunEvent"
+            },
+            "type": "array"
+          },
+          "provider": {
+            "$ref": "#/definitions/v2/ProviderContractDescriptor"
+          },
+          "schemaVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization",
+          "commands",
+          "error",
+          "events",
+          "provider",
+          "schemaVersion"
+        ],
+        "title": "ProviderContract",
+        "type": "object"
+      },
+      "ProviderContractDescriptor": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/definitions/v2/ProviderCapabilityKind"
+            },
+            "type": "array"
+          },
+          "providerId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "capabilities",
+          "providerId"
+        ],
+        "type": "object"
+      },
+      "ProviderContractError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/definitions/v2/PlatformErrorCode"
+          },
+          "providerRunId": {
+            "$ref": "#/definitions/v2/RequiredNullableString"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "providerRunId",
+          "retryable",
+          "traceId"
+        ],
+        "type": "object"
+      },
+      "ProviderCredentialAuthorization": {
+        "additionalProperties": false,
+        "properties": {
+          "credentialId": {
+            "type": "string"
+          },
+          "ownerSubject": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "credentialId",
+          "ownerSubject",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "ProviderDelegationAuthorization": {
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "jti": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "audience",
+          "expiresAt",
+          "jti"
+        ],
+        "type": "object"
+      },
+      "ProviderKind": {
+        "enum": [
+          "local",
+          "agentPlatform"
+        ],
+        "type": "string"
+      },
+      "ProviderRef": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/definitions/v2/ProviderCapabilityKind"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/definitions/v2/ProviderKind"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/v2/ProviderConnectionStatus"
+          }
+        },
+        "required": [
+          "capabilities",
+          "kind",
+          "providerId",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ProviderRunEvent": {
+        "oneOf": [
+          {
+            "properties": {
+              "attemptId": {
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "sequence": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "runStarted"
+                ],
+                "title": "RunStartedProviderRunEventType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "attemptId",
+              "createdAt",
+              "cursor",
+              "eventId",
+              "providerRunId",
+              "revision",
+              "sequence",
+              "type"
+            ],
+            "title": "RunStartedProviderRunEvent",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "attemptId": {
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "sequence": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "progress"
+                ],
+                "title": "ProgressProviderRunEventType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "attemptId",
+              "createdAt",
+              "cursor",
+              "eventId",
+              "providerRunId",
+              "sequence",
+              "summary",
+              "type"
+            ],
+            "title": "ProgressProviderRunEvent",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "approval": {
+                "$ref": "#/definitions/v2/ProviderApprovalRequest"
+              },
+              "attemptId": {
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "sequence": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "approvalRequired"
+                ],
+                "title": "ApprovalRequiredProviderRunEventType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "approval",
+              "attemptId",
+              "createdAt",
+              "cursor",
+              "eventId",
+              "providerRunId",
+              "sequence",
+              "type"
+            ],
+            "title": "ApprovalRequiredProviderRunEvent",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "argumentsDigest": {
+                "type": "string"
+              },
+              "attemptId": {
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "expiresAt": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "intentDigest": {
+                "type": "string"
+              },
+              "nonce": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "sequence": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "toolCallId": {
+                "type": "string"
+              },
+              "toolSchemaRevision": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "toolResultRequired"
+                ],
+                "title": "ToolResultRequiredProviderRunEventType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "argumentsDigest",
+              "attemptId",
+              "createdAt",
+              "cursor",
+              "eventId",
+              "expiresAt",
+              "intentDigest",
+              "nonce",
+              "providerRunId",
+              "sequence",
+              "toolCallId",
+              "toolSchemaRevision",
+              "type"
+            ],
+            "title": "ToolResultRequiredProviderRunEvent",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "attemptId": {
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "intentDigest": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "resultDigest": {
+                "type": "string"
+              },
+              "sequence": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "toolCallId": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "toolResultAccepted"
+                ],
+                "title": "ToolResultAcceptedProviderRunEventType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "attemptId",
+              "createdAt",
+              "cursor",
+              "eventId",
+              "intentDigest",
+              "providerRunId",
+              "resultDigest",
+              "sequence",
+              "toolCallId",
+              "type"
+            ],
+            "title": "ToolResultAcceptedProviderRunEvent",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "attemptId": {
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "outputArtifacts": {
+                "items": {
+                  "$ref": "#/definitions/v2/ArtifactRef"
+                },
+                "type": "array"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "sequence": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "completed"
+                ],
+                "title": "CompletedProviderRunEventType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "attemptId",
+              "createdAt",
+              "cursor",
+              "eventId",
+              "outputArtifacts",
+              "providerRunId",
+              "sequence",
+              "type"
+            ],
+            "title": "CompletedProviderRunEvent",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "attemptId": {
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "error": {
+                "$ref": "#/definitions/v2/ProviderContractError"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "sequence": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "failed"
+                ],
+                "title": "FailedProviderRunEventType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "attemptId",
+              "createdAt",
+              "cursor",
+              "error",
+              "eventId",
+              "providerRunId",
+              "sequence",
+              "type"
+            ],
+            "title": "FailedProviderRunEvent",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "attemptId": {
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "eventId": {
+                "type": "string"
+              },
+              "providerRunId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "sequence": {
+                "format": "uint64",
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "cancelled"
+                ],
+                "title": "CancelledProviderRunEventType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "attemptId",
+              "createdAt",
+              "cursor",
+              "eventId",
+              "providerRunId",
+              "reason",
+              "sequence",
+              "type"
+            ],
+            "title": "CancelledProviderRunEvent",
+            "type": "object"
+          }
+        ]
+      },
+      "ProviderRunInput": {
+        "additionalProperties": false,
+        "properties": {
+          "contextRefs": {
+            "items": {
+              "$ref": "#/definitions/v2/ArtifactRef"
+            },
+            "type": "array"
+          },
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "contextRefs",
+          "prompt"
+        ],
+        "type": "object"
+      },
       "RateLimitReachedType": {
         "enum": [
           "rate_limit_reached",
@@ -18722,6 +20278,83 @@
           }
         ]
       },
+      "RequestIdentityClientCapabilitiesRef": {
+        "description": "Client capabilities declared during initialize.\n\nThese fields are negotiation metadata and must not be used as authority.",
+        "properties": {
+          "experimentalApi": {
+            "type": "boolean"
+          },
+          "requestAttestation": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "experimentalApi",
+          "requestAttestation"
+        ],
+        "type": "object"
+      },
+      "RequestIdentityClientRef": {
+        "description": "Client metadata declared during initialize.\n\nThis metadata is intentionally separate from the server-derived identity.",
+        "properties": {
+          "capabilities": {
+            "$ref": "#/definitions/v2/RequestIdentityClientCapabilitiesRef"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "capabilities",
+          "name",
+          "version"
+        ],
+        "type": "object"
+      },
+      "RequestIdentityRef": {
+        "properties": {
+          "actorId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tenantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "traceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "actorId",
+          "sessionId",
+          "traceId"
+        ],
+        "type": "object"
+      },
+      "RequestIdentityTransport": {
+        "description": "Trusted transport category that established the app-server connection.",
+        "enum": [
+          "stdio",
+          "inProcess",
+          "webSocket",
+          "remoteControl"
+        ],
+        "type": "string"
+      },
       "RequestPermissionProfile": {
         "additionalProperties": false,
         "properties": {
@@ -18747,6 +20380,16 @@
           }
         },
         "type": "object"
+      },
+      "RequiredNullableString": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "ResidencyRequirement": {
         "enum": [
@@ -18804,6 +20447,119 @@
         ],
         "type": "object"
       },
+      "ResourceBindingCapability": {
+        "properties": {
+          "executionLocation": {
+            "$ref": "#/definitions/v2/ExecutionLocation"
+          },
+          "mode": {
+            "$ref": "#/definitions/v2/ResourceBindingMode"
+          },
+          "resourceType": {
+            "$ref": "#/definitions/v2/ResourceType"
+          }
+        },
+        "required": [
+          "executionLocation",
+          "mode",
+          "resourceType"
+        ],
+        "type": "object"
+      },
+      "ResourceBindingMode": {
+        "enum": [
+          "remoteReference",
+          "localSnapshot",
+          "localFork",
+          "providerManaged"
+        ],
+        "type": "string"
+      },
+      "ResourceBindingProjection": {
+        "properties": {
+          "binding": {
+            "$ref": "#/definitions/v2/ResourceBindingRef"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/definitions/v2/ResourceBindingStatus"
+          },
+          "updatedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "workspaceScope": {
+            "$ref": "#/definitions/v2/WorkspaceScope"
+          },
+          "workspaceScopeId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding",
+          "connectionId",
+          "revision",
+          "status",
+          "updatedAt",
+          "workspaceScope",
+          "workspaceScopeId"
+        ],
+        "type": "object"
+      },
+      "ResourceBindingRef": {
+        "properties": {
+          "bindingId": {
+            "type": "string"
+          },
+          "executionLocation": {
+            "$ref": "#/definitions/v2/ExecutionLocation"
+          },
+          "mode": {
+            "$ref": "#/definitions/v2/ResourceBindingMode"
+          },
+          "resource": {
+            "$ref": "#/definitions/v2/ResourceRef"
+          },
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bindingId",
+          "executionLocation",
+          "mode",
+          "resource",
+          "workspaceKey"
+        ],
+        "type": "object"
+      },
+      "ResourceBindingStatus": {
+        "enum": [
+          "active",
+          "unbound"
+        ],
+        "type": "string"
+      },
+      "ResourceBindingUpdatedNotification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "binding": {
+            "$ref": "#/definitions/v2/ResourceBindingProjection"
+          }
+        },
+        "required": [
+          "binding"
+        ],
+        "title": "ResourceBindingUpdatedNotification",
+        "type": "object"
+      },
       "ResourceContent": {
         "anyOf": [
           {
@@ -18855,6 +20611,51 @@
         ],
         "description": "Contents returned when reading a resource from an MCP server."
       },
+      "ResourceManifestProjection": {
+        "properties": {
+          "contentDigest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resource": {
+            "$ref": "#/definitions/v2/ResourceRef"
+          },
+          "schemaVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "resource",
+          "schemaVersion"
+        ],
+        "type": "object"
+      },
+      "ResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "providerId": {
+            "type": "string"
+          },
+          "resourceId": {
+            "type": "string"
+          },
+          "resourceType": {
+            "$ref": "#/definitions/v2/ResourceType"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "providerId",
+          "resourceId",
+          "resourceType",
+          "revision"
+        ],
+        "type": "object"
+      },
       "ResourceTemplate": {
         "description": "A template description for resources available on the server.",
         "properties": {
@@ -18889,6 +20690,17 @@
           "uriTemplate"
         ],
         "type": "object"
+      },
+      "ResourceType": {
+        "enum": [
+          "agent",
+          "skill",
+          "mcpServer",
+          "mcpTool",
+          "knowledgeBase",
+          "workflow"
+        ],
+        "type": "string"
       },
       "ResponseItem": {
         "oneOf": [
@@ -19507,6 +21319,15 @@
           }
         ]
       },
+      "RetentionClass": {
+        "enum": [
+          "session",
+          "task",
+          "userManaged",
+          "compliance"
+        ],
+        "type": "string"
+      },
       "ReviewDelivery": {
         "enum": [
           "inline",
@@ -19925,7 +21746,8 @@
         "enum": [
           "crewon",
           "agent",
-          "team"
+          "team",
+          "experts"
         ],
         "type": "string"
       },
@@ -19972,6 +21794,24 @@
               "kind": {
                 "enum": [
                   "team"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "experts"
                 ],
                 "type": "string"
               }
@@ -20750,6 +22590,160 @@
         ],
         "type": "object"
       },
+      "TaskAuthorityKind": {
+        "enum": [
+          "localAppServer",
+          "cloudTaskControl"
+        ],
+        "type": "string"
+      },
+      "TaskEventRef": {
+        "properties": {
+          "attemptId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "eventType": {
+            "$ref": "#/definitions/v2/TaskEventType"
+          },
+          "streamOffset": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "workerSequence": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "createdAt",
+          "eventId",
+          "eventType",
+          "streamOffset",
+          "taskId"
+        ],
+        "type": "object"
+      },
+      "TaskEventType": {
+        "enum": [
+          "accepted",
+          "started",
+          "progressed",
+          "suspended",
+          "resumed",
+          "completed",
+          "failed",
+          "cancelled",
+          "reconcileRequired"
+        ],
+        "type": "string"
+      },
+      "TaskRef": {
+        "properties": {
+          "authority": {
+            "$ref": "#/definitions/v2/TaskAuthorityKind"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/definitions/v2/TaskStatus"
+          },
+          "strategy": {
+            "$ref": "#/definitions/v2/TaskStrategyKind"
+          },
+          "streamOffset": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "authority",
+          "revision",
+          "status",
+          "strategy",
+          "streamOffset",
+          "taskId"
+        ],
+        "type": "object"
+      },
+      "TaskStatus": {
+        "enum": [
+          "created",
+          "queued",
+          "running",
+          "suspended",
+          "completed",
+          "failed",
+          "cancelled",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "TaskStrategyKind": {
+        "enum": [
+          "single",
+          "office",
+          "workflow",
+          "experts",
+          "automation"
+        ],
+        "type": "string"
+      },
+      "TeamRef": {
+        "properties": {
+          "leaderAgentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "strategy": {
+            "$ref": "#/definitions/v2/TaskStrategyKind"
+          },
+          "teamId": {
+            "type": "string"
+          },
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "strategy",
+          "teamId",
+          "workspaceKey"
+        ],
+        "type": "object"
+      },
       "TerminalInteractionNotification": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "properties": {
@@ -21105,6 +23099,86 @@
           "threadId"
         ],
         "title": "ThreadDeletedNotification",
+        "type": "object"
+      },
+      "ThreadExecutionContext": {
+        "description": "Path-free, secret-free projection of a thread's durable execution authority.",
+        "properties": {
+          "createdAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "executionBinding": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ThreadExecutionContextBindingRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resourceBindings": {
+            "items": {
+              "$ref": "#/definitions/v2/ThreadExecutionContextBindingRef"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "workspace": {
+            "$ref": "#/definitions/v2/WorkspaceRef"
+          }
+        },
+        "required": [
+          "createdAt",
+          "resourceBindings",
+          "revision",
+          "threadId",
+          "updatedAt",
+          "workspace"
+        ],
+        "type": "object"
+      },
+      "ThreadExecutionContextBindingRef": {
+        "description": "Exact Provider resource binding revision attached to one thread.",
+        "properties": {
+          "bindingId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bindingId",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "ThreadExecutionContextCreateParams": {
+        "additionalProperties": false,
+        "description": "Server-owned Provider resource selection used when creating a new thread authority.",
+        "properties": {
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceKey"
+        ],
         "type": "object"
       },
       "ThreadForkParams": {
@@ -22988,7 +25062,7 @@
                 "$ref": "#/definitions/v2/Thread"
               }
             ],
-            "description": "The updated thread after applying the rollback, with `turns` populated.\n\nThe ThreadItems stored in each Turn are lossy since we explicitly do not persist all agent interactions, such as command executions. This is the same behavior as `thread/resume`."
+            "description": "The updated thread after applying the rollback, with `turns` populated.\n\nThe ThreadItems stored in each Turn are lossy for some interaction kinds. Agent command executions are retained (with truncated output); user-shell bang commands are still omitted. This matches `thread/resume`."
           }
         },
         "required": [
@@ -24928,6 +27002,91 @@
           "samplePaths"
         ],
         "title": "WindowsWorldWritableWarningNotification",
+        "type": "object"
+      },
+      "WorkspaceAccessMode": {
+        "description": "How the current transport may access server-registered workspace roots.",
+        "enum": [
+          "localProcessServerRoots",
+          "remoteServerRoots"
+        ],
+        "type": "string"
+      },
+      "WorkspaceAvailability": {
+        "description": "Current availability of a root already registered in this connection session.",
+        "enum": [
+          "available",
+          "missing",
+          "unreadable"
+        ],
+        "type": "string"
+      },
+      "WorkspaceRef": {
+        "properties": {
+          "bindingId": {
+            "type": "string"
+          },
+          "environmentId": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/v2/WorkspaceScope"
+          },
+          "scopeId": {
+            "type": "string"
+          },
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bindingId",
+          "environmentId",
+          "nodeId",
+          "scope",
+          "scopeId",
+          "workspaceKey"
+        ],
+        "type": "object"
+      },
+      "WorkspaceScope": {
+        "enum": [
+          "conversation",
+          "office",
+          "workflow",
+          "automation"
+        ],
+        "type": "string"
+      },
+      "WorkspaceSummary": {
+        "description": "Path-free projection of one server-registered workspace root.",
+        "properties": {
+          "availability": {
+            "$ref": "#/definitions/v2/WorkspaceAvailability"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "environmentId": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "workspaceKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "availability",
+          "displayName",
+          "environmentId",
+          "nodeId",
+          "workspaceKey"
+        ],
         "type": "object"
       },
       "WriteStatus": {

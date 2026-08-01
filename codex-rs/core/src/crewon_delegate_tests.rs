@@ -98,7 +98,7 @@ async fn forward_events_cancelled_while_send_blocked_shuts_down_delegate() {
     assert_eq!("full", received.id);
     let mut ops = Vec::new();
     while let Ok(sub) = rx_sub.try_recv() {
-        ops.push(sub.op);
+        ops.push(sub.op.clone());
     }
     assert!(
         ops.iter().any(|op| matches!(op, Op::Interrupt)),
@@ -138,7 +138,7 @@ async fn forward_ops_preserves_submission_trace_context() {
             tracestate: Some("vendor=state".to_string()),
         }),
     };
-    tx_ops.send(submission.clone()).await.unwrap();
+    tx_ops.send(submission.clone().into()).await.unwrap();
     drop(tx_ops);
 
     let forwarded = timeout(Duration::from_secs(1), rx_sub.recv())

@@ -67,6 +67,7 @@ import type { ReasoningSummaryPartAddedNotification } from "@crewon-protocol/v2/
 import type { ReasoningSummaryTextDeltaNotification } from "@crewon-protocol/v2/ReasoningSummaryTextDeltaNotification";
 import type { ReasoningTextDeltaNotification } from "@crewon-protocol/v2/ReasoningTextDeltaNotification";
 import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
+import type { ResourceBindingUpdatedNotification } from "@crewon-platform-protocol/v2/ResourceBindingUpdatedNotification";
 import type { ReviewTarget } from "@crewon-protocol/v2/ReviewTarget";
 import type { SandboxPolicy } from "@crewon-protocol/v2/SandboxPolicy";
 import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
@@ -90,6 +91,8 @@ import type { ThreadNameUpdatedNotification } from "@crewon-protocol/v2/ThreadNa
 import type { ThreadResumeResponse } from "@crewon-protocol/v2/ThreadResumeResponse";
 import type { ThreadSettingsUpdatedNotification } from "@crewon-protocol/v2/ThreadSettingsUpdatedNotification";
 import type { ThreadStartResponse } from "@crewon-protocol/v2/ThreadStartResponse";
+import type { ThreadExecutionContext } from "@crewon-platform-protocol/v2/ThreadExecutionContext";
+import type { ThreadExecutionContextCreateParams } from "@crewon-platform-protocol/v2/ThreadExecutionContextCreateParams";
 import type { ThreadStartedNotification } from "@crewon-protocol/v2/ThreadStartedNotification";
 import type { ThreadStatusChangedNotification } from "@crewon-protocol/v2/ThreadStatusChangedNotification";
 import type { ThreadTokenUsageUpdatedNotification } from "@crewon-protocol/v2/ThreadTokenUsageUpdatedNotification";
@@ -105,7 +108,15 @@ import type { UserInput } from "@crewon-protocol/v2/UserInput";
 import type { ComposerImageInput } from "../shared/composerImages";
 import type { WarningNotification } from "@crewon-protocol/v2/WarningNotification";
 import type { WindowsSandboxReadinessResponse } from "@crewon-protocol/v2/WindowsSandboxReadinessResponse";
+import type {
+  ExpertRole,
+  ExpertTeamRecordReference,
+} from "../experts/expertTeamRecord";
 import type { WindowsSandboxSetupMode } from "@crewon-protocol/v2/WindowsSandboxSetupMode";
+
+type PlatformThreadStartResponse = ThreadStartResponse & {
+  executionContext: ThreadExecutionContext | null;
+};
 import type { WindowsSandboxSetupStartResponse } from "@crewon-protocol/v2/WindowsSandboxSetupStartResponse";
 import type {
   AgentConfig,
@@ -125,6 +136,11 @@ import type {
   OfficeMessageSubmitMention,
 } from "../domain/officeMessageDelivery";
 import type { ThreadRuntimeSettings } from "../thread/threadRuntimeSettings";
+import {
+  ProviderResourceClient,
+  type ProviderResourceRpc,
+  type ProviderResourceRpcMethod,
+} from "../provider-resource/providerResourceClient";
 
 export type {
   OfficeMessageProcessingPhase,
@@ -193,64 +209,6 @@ export type BackgroundTerminal = {
   osPid: number | null;
   cpuPercent: number | null;
   rssKb: number | null;
-};
-
-export type AgentPlatformChatResponse = {
-  agentId: string;
-  message: string;
-  thoughts: unknown[];
-  skillsUsed: unknown[];
-  resourceEvents?: AgentPlatformResourceEvent[];
-  tokens: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  durationMs: number;
-};
-
-export type AgentPlatformResourceEvent = {
-  type: "skill" | "mcp" | "knowledge";
-  status: "started" | "succeeded" | "failed";
-  name: string;
-  inputSummary: unknown;
-  outputSummary: unknown;
-  error: string | null;
-};
-
-type AgentPlatformChatDeltaNotification = {
-  runId: string;
-  threadId: string;
-  agentId: string;
-  delta: string;
-};
-
-type AgentPlatformChatCompletedNotification = {
-  runId: string;
-  threadId: string;
-  agentId: string;
-  message: string;
-  thoughts: unknown[];
-  skillsUsed: unknown[];
-  resourceEvents?: AgentPlatformResourceEvent[];
-  tokens: AgentPlatformChatResponse["tokens"];
-  durationMs: number;
-};
-
-type AgentPlatformResourceEventNotification = {
-  runId: string;
-  threadId: string;
-  agentId: string;
-  event: AgentPlatformResourceEvent;
-};
-
-type AgentPlatformChatFailedNotification = {
-  runId: string;
-  threadId: string;
-  agentId: string;
-  error: string;
-  code: number;
-  cancelled: boolean;
 };
 
 type BackgroundTerminalsListResponse = {
@@ -391,10 +349,7 @@ function parseOfficeMessageSubmitDelivery(
   const type = officeMessageSubmitString(delivery.type, "delivery.type");
   switch (type) {
     case "processing": {
-      const phase = officeMessageSubmitString(
-        delivery.phase,
-        "delivery.phase",
-      );
+      const phase = officeMessageSubmitString(delivery.phase, "delivery.phase");
       if (!isOfficeMessageProcessingPhase(phase)) {
         throw new Error(
           "Invalid office/message/submit response: delivery.phase",
@@ -441,10 +396,7 @@ function parseOfficeMessageSubmitDelivery(
           delivery.threadId,
           "delivery.threadId",
         ),
-        turnId: officeMessageSubmitString(
-          delivery.turnId,
-          "delivery.turnId",
-        ),
+        turnId: officeMessageSubmitString(delivery.turnId, "delivery.turnId"),
       };
     case "queued": {
       const position = officeMessageSubmitNonnegativeInteger(
@@ -476,10 +428,7 @@ function parseOfficeMessageSubmitDelivery(
           delivery.threadId,
           "delivery.threadId",
         ),
-        turnId: officeMessageSubmitString(
-          delivery.turnId,
-          "delivery.turnId",
-        ),
+        turnId: officeMessageSubmitString(delivery.turnId, "delivery.turnId"),
       };
     case "failed":
       return {
@@ -510,7 +459,9 @@ function officeMessageSubmitTurn(value: unknown): Turn {
 function isOfficeMessageProcessingPhase(
   value: string,
 ): value is OfficeMessageProcessingPhase {
-  return value === "reserved" || value === "dispatching" || value === "recovering";
+  return (
+    value === "reserved" || value === "dispatching" || value === "recovering"
+  );
 }
 
 function officeMessageSubmitRecord(
@@ -843,22 +794,6 @@ export type KnownAppServerNotification =
     }
   | { method: "account/updated"; params: AccountUpdatedNotification }
   | { method: "app/list/updated"; params: AppListUpdatedNotification }
-  | {
-      method: "agentPlatform/chat/delta";
-      params: AgentPlatformChatDeltaNotification;
-    }
-  | {
-      method: "agentPlatform/chat/resourceEvent";
-      params: AgentPlatformResourceEventNotification;
-    }
-  | {
-      method: "agentPlatform/chat/completed";
-      params: AgentPlatformChatCompletedNotification;
-    }
-  | {
-      method: "agentPlatform/chat/failed";
-      params: AgentPlatformChatFailedNotification;
-    }
   | { method: "configWarning"; params: ConfigWarningNotification }
   | {
       method: "externalAgentConfig/import/completed";
@@ -914,6 +849,10 @@ export type KnownAppServerNotification =
       params: OfficeRunUpdatedNotification;
     }
   | {
+      method: "resource/binding/updated";
+      params: ResourceBindingUpdatedNotification;
+    }
+  | {
       method: "serverRequest/resolved";
       params: ServerRequestResolvedNotification;
     }
@@ -943,14 +882,16 @@ export type KnownAppServerNotification =
 
 export type AppServerNotification = KnownAppServerNotification;
 
+export type AppServerConnectionOptions = {
+  protocols?: () => Promise<string[] | undefined>;
+};
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 12000;
 const LONG_REQUEST_TIMEOUT_MS = 60000;
 const AGENT_PLATFORM_CONTROL_TIMEOUT_MS = 90000;
-const AGENT_PLATFORM_STREAM_TIMEOUT_MS = 5 * 60_000 + 30_000;
-const MAX_ORPHAN_AGENT_PLATFORM_RUNS = 100;
-const MAX_ORPHAN_AGENT_PLATFORM_EVENTS_PER_RUN = 100;
 
 export class AppServerClient {
+  readonly providerResources: ProviderResourceClient;
   private socket: WebSocket | null = null;
   private closedIntentionally = false;
   private nextId = 1;
@@ -962,29 +903,6 @@ export class AppServerClient {
       timeoutId: number;
     }
   >();
-  private agentPlatformRuns = new Map<
-    string,
-    {
-      threadId: string;
-      resolve: (response: AgentPlatformChatResponse) => void;
-      reject: (error: Error) => void;
-      onDelta: (delta: string) => void;
-      onResourceEvent: (event: AgentPlatformResourceEvent, index: number) => void;
-      resourceEvents: AgentPlatformResourceEvent[];
-      timeoutId: number;
-    }
-  >();
-  private agentPlatformRunByThread = new Map<string, string>();
-  private orphanAgentPlatformEvents = new Map<
-    string,
-    Array<
-      | AgentPlatformChatDeltaNotification
-      | AgentPlatformResourceEventNotification
-      | AgentPlatformChatCompletedNotification
-      | AgentPlatformChatFailedNotification
-    >
-  >();
-
   constructor(
     private readonly url: string,
     private readonly onNotification: (
@@ -992,12 +910,36 @@ export class AppServerClient {
     ) => void,
     private readonly onClose?: () => void,
     private readonly onServerRequest?: (request: AppServerRequest) => void,
-  ) {}
+    private readonly connectionOptions: AppServerConnectionOptions = {},
+  ) {
+    this.providerResources = new ProviderResourceClient({
+      request: <Method extends ProviderResourceRpcMethod>(
+        method: Method,
+        params: ProviderResourceRpc[Method]["params"],
+      ) =>
+        this.request<ProviderResourceRpc[Method]["response"]>(method, params),
+    });
+  }
 
   connect(): Promise<void> {
     this.closedIntentionally = false;
+    const protocols = this.connectionOptions.protocols?.();
+    if (protocols) {
+      return protocols.then((resolvedProtocols) => {
+        if (this.closedIntentionally) {
+          throw new Error("App-server connection closed");
+        }
+        return this.openSocket(resolvedProtocols);
+      });
+    }
+    return this.openSocket();
+  }
+
+  private openSocket(protocols?: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const socket = new WebSocket(this.url);
+      const socket = protocols?.length
+        ? new WebSocket(this.url, protocols)
+        : new WebSocket(this.url);
       this.socket = socket;
 
       socket.addEventListener("open", async () => {
@@ -1024,13 +966,6 @@ export class AppServerClient {
           pending.reject(new Error("App-server connection closed"));
         }
         this.pending.clear();
-        for (const [, run] of this.agentPlatformRuns) {
-          window.clearTimeout(run.timeoutId);
-          run.reject(new Error("App-server connection closed"));
-        }
-        this.agentPlatformRuns.clear();
-        this.agentPlatformRunByThread.clear();
-        this.orphanAgentPlatformEvents.clear();
         if (this.socket === socket) {
           this.socket = null;
         }
@@ -1264,17 +1199,43 @@ export class AppServerClient {
     threadSource = "app_server",
     settings: ThreadRuntimeSettings = {},
   ): Promise<Thread> {
-    const response = await this.request<ThreadStartResponse>("thread/start", {
+    const response = await this.startThreadResponse(
+      cwd,
+      threadSource,
+      settings,
+      null,
+    );
+    return response.thread;
+  }
+
+  async startThreadWithExecutionContext(
+    workspaceKey: string,
+    cwd?: string,
+    threadSource = "app_server",
+    settings: ThreadRuntimeSettings = {},
+  ): Promise<PlatformThreadStartResponse> {
+    return this.startThreadResponse(cwd, threadSource, settings, {
+      workspaceKey,
+    });
+  }
+
+  private startThreadResponse(
+    cwd: string | undefined,
+    threadSource: string,
+    settings: ThreadRuntimeSettings,
+    executionContext: ThreadExecutionContextCreateParams | null,
+  ): Promise<PlatformThreadStartResponse> {
+    return this.request<PlatformThreadStartResponse>("thread/start", {
       approvalPolicy: settings.approvalPolicy ?? undefined,
       config: settings.config,
       cwd: cwd || undefined,
+      executionContext,
       model: settings.model || undefined,
       sandbox: settings.sandboxMode ?? undefined,
       scene: settings.scene,
       threadSource,
       dynamicTools: settings.dynamicTools,
     });
-    return response.thread;
   }
 
   async readThread(threadId: string): Promise<Thread> {
@@ -1423,19 +1384,6 @@ export class AppServerClient {
     );
   }
 
-  async chatAgentPlatform(
-    accessToken: string,
-    threadId: string,
-    agentId: string,
-    message: string,
-  ): Promise<AgentPlatformChatResponse> {
-    return this.request<AgentPlatformChatResponse>(
-      "agentPlatform/chat",
-      { accessToken, threadId, agentId, message },
-      { timeoutMs: AGENT_PLATFORM_CONTROL_TIMEOUT_MS },
-    );
-  }
-
   async authenticateAgentPlatform(accessToken: string): Promise<{
     user: { id: number; username: string };
   }> {
@@ -1460,101 +1408,58 @@ export class AppServerClient {
     );
   }
 
-  async startAgentPlatformChat(
+  async executeAgentPlatformWorkflow(
     accessToken: string,
-    threadId: string,
-    agentId: string,
-    message: string,
-  ): Promise<{ runId: string }> {
+    workflowId: string,
+    input: string,
+  ): Promise<{
+    workflowId: number;
+    executionId: number;
+    status: string;
+    outputs: unknown;
+    executedNodes: unknown[];
+    nodeResults: unknown;
+    error: string | null;
+  }> {
     return this.request(
-      "agentPlatform/chat/start",
-      { accessToken, threadId, agentId, message },
+      "agentPlatform/workflow/execute",
+      { accessToken, workflowId, input },
       { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
     );
   }
 
-  async runAgentPlatformChat(
-    accessToken: string,
-    threadId: string,
-    agentId: string,
-    message: string,
-    onDelta: (delta: string) => void = () => {},
-    onResourceEvent: (
-      event: AgentPlatformResourceEvent,
-      index: number,
-    ) => void = () => {},
-  ): Promise<AgentPlatformChatResponse> {
-    const { runId } = await this.startAgentPlatformChat(
-      accessToken,
-      threadId,
-      agentId,
-      message,
-    );
-    return new Promise((resolve, reject) => {
-      const timeoutId = window.setTimeout(() => {
-        this.agentPlatformRuns.delete(runId);
-        this.agentPlatformRunByThread.delete(threadId);
-        void this.cancelAgentPlatformRun(runId).catch(() => undefined);
-        reject(new Error("Agent Platform stream timed out"));
-      }, AGENT_PLATFORM_STREAM_TIMEOUT_MS);
-      this.agentPlatformRuns.set(runId, {
-        threadId,
-        resolve,
-        reject,
-        onDelta,
-        onResourceEvent,
-        resourceEvents: [],
-        timeoutId,
-      });
-      this.agentPlatformRunByThread.set(threadId, runId);
-      const pendingEvents = this.orphanAgentPlatformEvents.get(runId) ?? [];
-      this.orphanAgentPlatformEvents.delete(runId);
-      for (const event of pendingEvents) {
-        this.handleAgentPlatformEvent(runId, event);
-      }
+  async listExpertTeams(
+    workspaceKey: string,
+  ): Promise<{ data: ExpertTeamRecordReference[]; nextCursor: string | null }> {
+    return this.request("expertTeam/list", {
+      workspaceKey,
+      cursor: null,
+      limit: 100,
     });
   }
 
-  async cancelAgentPlatformRunForThread(threadId: string): Promise<boolean> {
-    const runId = this.agentPlatformRunByThread.get(threadId);
-    if (!runId) return false;
-    return this.cancelAgentPlatformRun(runId);
+  async listRegisteredWorkspaces(): Promise<{
+    data: Array<{ workspaceKey: string; displayName: string }>;
+  }> {
+    return this.providerResources.listWorkspaces({ cursor: null, limit: 100 });
   }
 
-  async cancelAgentPlatformRun(runId: string): Promise<boolean> {
-    const response = await this.request<{ cancelled: boolean }>(
-      "agentPlatform/run/cancel",
-      { runId },
-    );
-    return response.cancelled;
-  }
-
-  async readAgentPlatformSession(
-    accessToken: string,
-    threadId: string,
-    agentId: string,
-  ): Promise<Array<{ role: string; content: string }>> {
-    const response = await this.request<{
-      messages: Array<{ role: string; content: string }>;
-    }>(
-      "agentPlatform/session/read",
-      { accessToken, threadId, agentId },
-      { timeoutMs: AGENT_PLATFORM_CONTROL_TIMEOUT_MS },
-    );
-    return response.messages;
-  }
-
-  async clearAgentPlatformSession(
-    accessToken: string,
-    threadId: string,
-    agentId: string,
-  ): Promise<boolean> {
-    const response = await this.request<{ cleared: boolean }>(
-      "agentPlatform/session/clear",
-      { accessToken, threadId, agentId },
-      { timeoutMs: AGENT_PLATFORM_CONTROL_TIMEOUT_MS },
-    );
-    return response.cleared;
+  async createExpertTeam(
+    workspaceKey: string,
+    input: {
+      title: string;
+      goal: string;
+      leader: ExpertRole;
+      experts: ExpertRole[];
+    },
+  ): Promise<{ record: ExpertTeamRecordReference }> {
+    return this.request("expertTeam/create", {
+      workspaceKey,
+      title: input.title,
+      goal: input.goal,
+      leader: input.leader,
+      experts: input.experts,
+    });
   }
 
   async steerTurn(
@@ -1677,9 +1582,16 @@ export class AppServerClient {
     path: string,
     text: string,
   ): Promise<FsWriteFileResponse> {
+    return this.writeFile(path, textToBase64(text));
+  }
+
+  async writeFile(
+    path: string,
+    dataBase64: string,
+  ): Promise<FsWriteFileResponse> {
     return this.request<FsWriteFileResponse>("fs/writeFile", {
       path,
-      dataBase64: textToBase64(text),
+      dataBase64,
     });
   }
 
@@ -1689,7 +1601,7 @@ export class AppServerClient {
     return this.request<DomainConfigListResponse<AgentConfig>>("agent/list", {
       cwd,
       cursor: null,
-      limit: 24,
+      limit: 100,
     });
   }
 
@@ -2865,73 +2777,8 @@ export class AppServerClient {
     }
 
     if (isKnownNotification(message)) {
-      switch (message.method) {
-        case "agentPlatform/chat/delta":
-        case "agentPlatform/chat/resourceEvent":
-        case "agentPlatform/chat/completed":
-        case "agentPlatform/chat/failed":
-          this.handleAgentPlatformEvent(message.params.runId, message.params);
-      }
       this.onNotification(message);
     }
-  }
-
-  private handleAgentPlatformEvent(
-    runId: string,
-    event:
-      | AgentPlatformChatDeltaNotification
-      | AgentPlatformResourceEventNotification
-      | AgentPlatformChatCompletedNotification
-      | AgentPlatformChatFailedNotification,
-  ): void {
-    const run = this.agentPlatformRuns.get(runId);
-    if (!run) {
-      if (
-        !this.orphanAgentPlatformEvents.has(runId) &&
-        this.orphanAgentPlatformEvents.size >= MAX_ORPHAN_AGENT_PLATFORM_RUNS
-      ) {
-        const oldestRunId = this.orphanAgentPlatformEvents.keys().next().value;
-        if (oldestRunId) {
-          this.orphanAgentPlatformEvents.delete(oldestRunId);
-        }
-      }
-      const pending = this.orphanAgentPlatformEvents.get(runId) ?? [];
-      pending.push(event);
-      this.orphanAgentPlatformEvents.set(
-        runId,
-        pending.slice(-MAX_ORPHAN_AGENT_PLATFORM_EVENTS_PER_RUN),
-      );
-      return;
-    }
-    if ("delta" in event) {
-      run.onDelta(event.delta);
-      return;
-    }
-    if ("event" in event) {
-      run.resourceEvents.push(event.event);
-      run.onResourceEvent(event.event, run.resourceEvents.length - 1);
-      return;
-    }
-    window.clearTimeout(run.timeoutId);
-    this.agentPlatformRuns.delete(runId);
-    this.agentPlatformRunByThread.delete(run.threadId);
-    if ("error" in event) {
-      run.reject(
-        new AppServerRpcError(event.error, event.cancelled ? 499 : event.code, {
-          cancelled: event.cancelled,
-        }),
-      );
-      return;
-    }
-    run.resolve({
-      agentId: event.agentId,
-      message: event.message,
-      thoughts: event.thoughts,
-      skillsUsed: event.skillsUsed,
-      resourceEvents: event.resourceEvents ?? run.resourceEvents,
-      tokens: event.tokens,
-      durationMs: event.durationMs,
-    });
   }
 
   private handleServerRequest(request: JsonRpcRequest): void {
@@ -2979,10 +2826,6 @@ function isKnownNotification(
     message.method === "account/rateLimits/updated" ||
     message.method === "account/updated" ||
     message.method === "app/list/updated" ||
-    message.method === "agentPlatform/chat/delta" ||
-    message.method === "agentPlatform/chat/resourceEvent" ||
-    message.method === "agentPlatform/chat/completed" ||
-    message.method === "agentPlatform/chat/failed" ||
     message.method === "command/exec/outputDelta" ||
     message.method === "configWarning" ||
     message.method === "externalAgentConfig/import/completed" ||
@@ -3001,6 +2844,7 @@ function isKnownNotification(
     message.method === "mcpServer/startupStatus/updated" ||
     message.method === "office/run/updated" ||
     message.method === "remoteControl/status/changed" ||
+    message.method === "resource/binding/updated" ||
     message.method === "serverRequest/resolved" ||
     message.method === "skills/changed" ||
     message.method === "thread/archived" ||

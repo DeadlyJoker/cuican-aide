@@ -4,6 +4,7 @@ use crate::agents_md::LoadedAgentsMd;
 use crate::config::ConstraintError;
 use crate::skills::SkillError;
 use crate::state::ActiveTurn;
+use crate::state::RuntimeTurnOwnership;
 use crewon_extension_api::ExtensionDataInit;
 use crewon_protocol::SessionId;
 use crewon_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
@@ -37,7 +38,10 @@ pub(crate) struct Session {
     pub(super) pending_mcp_server_refresh_config: Mutex<Option<McpServerRefreshConfig>>,
     pub(crate) conversation: Arc<RealtimeConversationManager>,
     pub(crate) active_turn: Mutex<Option<ActiveTurn>>,
+    pub(crate) runtime_turn_ownership: RuntimeTurnOwnership,
     pub(crate) input_queue: InputQueue,
+    #[allow(dead_code)]
+    pub(crate) user_input_once_index: Mutex<user_input_once_index::UserInputOnceIndex>,
     pub(crate) guardian_review_session: GuardianReviewSessionManager,
     pub(crate) services: SessionServices,
     pub(super) next_internal_sub_id: AtomicU64,
@@ -1050,6 +1054,8 @@ impl Session {
             let (out_of_band_elicitation_paused, _out_of_band_elicitation_paused_rx) =
                 watch::channel(false);
 
+            let user_input_once_index =
+                user_input_once_index::UserInputOnceIndex::from_history(&initial_history, thread_id);
             let sess = Arc::new(Session {
                 thread_id,
                 installation_id,
@@ -1063,7 +1069,9 @@ impl Session {
                 pending_mcp_server_refresh_config: Mutex::new(None),
                 conversation: Arc::new(RealtimeConversationManager::new()),
                 active_turn: Mutex::new(None),
+                runtime_turn_ownership: RuntimeTurnOwnership::default(),
                 input_queue: InputQueue::new(),
+                user_input_once_index: Mutex::new(user_input_once_index),
                 guardian_review_session: GuardianReviewSessionManager::default(),
                 services,
                 next_internal_sub_id: AtomicU64::new(0),

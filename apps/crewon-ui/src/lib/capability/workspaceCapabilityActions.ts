@@ -86,7 +86,7 @@ type WorkspaceCapabilityClient = {
   runCommand(
     cwd: string,
     command: string,
-    processId: string,
+    processId?: string,
   ): Promise<TerminalCommandResponse>;
 };
 
@@ -118,6 +118,8 @@ export type RunTerminalStatusActionParams =
 
 export type ReadWorkspaceFilesActionParams =
   BaseWorkspaceCapabilityActionParams;
+
+export type ReadWorkspaceDiffActionParams = BaseWorkspaceCapabilityActionParams;
 
 export type AttachWorkspaceContextActionParams =
   BaseWorkspaceCapabilityActionParams & {
@@ -245,6 +247,112 @@ export async function readWorkspaceFilesAction(
         path: filesCwd,
       }),
     );
+  } finally {
+    setBusyToolId(null);
+  }
+}
+
+export async function readWorkspaceDiffAction(
+  params: ReadWorkspaceDiffActionParams,
+) {
+  const {
+    busyToolId,
+    client,
+    isConnected,
+    isDemo,
+    locale,
+    resolveBackendCwd,
+    setBusyToolId,
+    setCapabilityPanel,
+  } = params;
+
+  if (isDemo) {
+    setCapabilityPanel({
+      title: locale === "zh" ? "当前改动" : "Current changes",
+      subtitle: "git diff HEAD · demo",
+      body:
+        "diff --git a/apps/crewon-ui/src/App.tsx b/apps/crewon-ui/src/App.tsx\n" +
+        "--- a/apps/crewon-ui/src/App.tsx\n" +
+        "+++ b/apps/crewon-ui/src/App.tsx\n" +
+        "@@ -42,6 +42,7 @@\n" +
+        "+  const capabilitySidebar = true;",
+    });
+    return;
+  }
+  if (busyToolId || !isConnected) {
+    return;
+  }
+
+  const diffCwd = await resolveBackendCwd();
+  if (!diffCwd) {
+    return;
+  }
+
+  setBusyToolId("review");
+  setCapabilityPanel({
+    title: locale === "zh" ? "当前改动" : "Current changes",
+    subtitle: diffCwd,
+    body: locale === "zh" ? "正在读取 git diff…" : "Reading git diff…",
+  });
+
+  const command = [
+    "count=$(git status --porcelain=v1 --untracked-files=no | wc -l | tr -d ' ')",
+    'printf "__CREWON_DIFF_COUNT__=%s\\n" "$count"',
+    "git status --porcelain=v1 --untracked-files=no | sed -n '1,24p' | cut -c4- | while IFS= read -r file_path; do case \"$file_path\" in *\" -> \"*) file_path=${file_path##* -> } ;; esac; git diff --no-ext-diff --unified=3 HEAD -- \"$file_path\"; done",
+  ].join("; ");
+  try {
+    const response = await client?.runCommand(diffCwd, command);
+    if (!response) {
+      throw new Error(
+        locale === "zh" ? "未收到 git diff 响应" : "No git diff response",
+      );
+    }
+    if (response.exitCode !== 0) {
+      throw new Error(
+        response.stderr?.trim() ||
+          (locale === "zh" ? "读取 git diff 失败" : "Unable to read git diff"),
+      );
+    }
+
+    const output = response.stdout?.trim() ?? "";
+    const countMatch = output.match(/^__CREWON_DIFF_COUNT__=(\d+)\n?/);
+    const trackedChanges = Number(countMatch?.[1] ?? 0);
+    const diff = output.replace(/^__CREWON_DIFF_COUNT__=\d+\n?/, "");
+    const added = diff.match(/^\+(?!\+\+)/gm)?.length ?? 0;
+    const removed = diff.match(/^-(?!--)/gm)?.length ?? 0;
+    const files = diff.match(/^diff --git /gm)?.length ?? 0;
+    const maxDiffCharacters = 200_000;
+    const body = diff
+      ? diff.length > maxDiffCharacters
+        ? `${diff.slice(0, maxDiffCharacters)}\n\n${
+            locale === "zh"
+              ? "…diff 过大，已截断显示"
+              : "…diff is too large and was truncated"
+          }`
+        : diff
+      : locale === "zh"
+        ? "当前没有已跟踪文件改动。"
+        : "There are no tracked file changes.";
+
+    setCapabilityPanel({
+      title: locale === "zh" ? "当前改动" : "Current changes",
+      subtitle:
+        locale === "zh"
+          ? `${trackedChanges} 个已跟踪改动 · 当前显示 ${files} 个文件 · +${added} / -${removed}`
+          : `${trackedChanges} tracked changes · showing ${files} files · +${added} / -${removed}`,
+      body,
+    });
+  } catch (error) {
+    setCapabilityPanel({
+      title: locale === "zh" ? "当前改动" : "Current changes",
+      subtitle: diffCwd,
+      error:
+        error instanceof Error
+          ? error.message
+          : locale === "zh"
+            ? "读取 git diff 失败"
+            : "Unable to read git diff",
+    });
   } finally {
     setBusyToolId(null);
   }

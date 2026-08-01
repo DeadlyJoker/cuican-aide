@@ -13,6 +13,7 @@ import {
 
 import { renderMarkdown } from "../TranscriptMarkdown";
 import {
+  callCatalogMcpTool,
   downloadCatalogResource,
   readCatalogResourceDetail,
   readCatalogSkillFile,
@@ -109,11 +110,32 @@ const mcpToolResultSchema = {
 };
 
 function declaredMcpOutputSchema(tool: JsonObject): unknown | null {
-  const candidates = [
-    tool.output_schema,
-    objectValue(tool.invocation).output,
-  ];
-  return candidates.find((candidate) => schemaRows(candidate).length > 0) ?? null;
+  const candidates = [tool.output_schema, objectValue(tool.invocation).output];
+  return (
+    candidates.find((candidate) => schemaRows(candidate).length > 0) ?? null
+  );
+}
+
+function defaultSchemaValue(schemaValue: unknown): unknown {
+  const schema = objectValue(schemaValue);
+  const type = stringValue(schema.type);
+  if (type === "boolean") return false;
+  if (type === "integer" || type === "number") return 0;
+  if (type === "array") return [];
+  if (type === "object") return {};
+  return "";
+}
+
+function initialToolArguments(tool: JsonObject): Record<string, unknown> {
+  const schema = objectValue(
+    tool.input_schema ?? objectValue(tool.invocation).input ?? tool.schema,
+  );
+  return Object.fromEntries(
+    Object.entries(objectValue(schema.properties)).map(([name, definition]) => [
+      name,
+      defaultSchemaValue(definition),
+    ]),
+  );
 }
 
 function skillMarkdown(detail: CatalogResourceDetail): string {
@@ -296,14 +318,24 @@ export function SkillDetail({
         ) : markdown ? (
           renderMarkdown(markdown)
         ) : (
-          <p className="catalog-empty-copy">暂无 Skill 文档</p>
+          <p className="catalog-empty-copy">暂无技能文档</p>
         )}
       </article>
     </div>
   );
 }
 
-export function McpDetail({ detail }: { detail: CatalogResourceDetail }) {
+export function McpDetail({
+  detail,
+  resource,
+}: {
+  detail: CatalogResourceDetail;
+  resource: CatalogResourceSummary;
+}) {
+  const [toolInputs, setToolInputs] = useState<Record<string, string>>({});
+  const [toolResults, setToolResults] = useState<Record<string, unknown>>({});
+  const [toolErrors, setToolErrors] = useState<Record<string, string>>({});
+  const [busyTool, setBusyTool] = useState<string | null>(null);
   const tools = Array.isArray(detail.tools)
     ? detail.tools.map(objectValue)
     : [];
@@ -312,13 +344,64 @@ export function McpDetail({ detail }: { detail: CatalogResourceDetail }) {
     stringValue(detail.url) ||
     stringValue(objectValue(detail.invocation).url);
   const upstreamUrl = stringValue(detail.url);
+
+  async function callTool(tool: JsonObject, index: number) {
+    const toolId = Number(tool.id);
+    const key = String(tool.id ?? tool.name ?? index);
+    if (!Number.isInteger(toolId) || toolId <= 0) {
+      setToolErrors((current) => ({
+        ...current,
+        [key]: "该工具缺少可调用的 Tool ID",
+      }));
+      return;
+    }
+    const rawArguments =
+      toolInputs[key] ?? JSON.stringify(initialToolArguments(tool), null, 2);
+    let argumentsValue: unknown;
+    try {
+      argumentsValue = JSON.parse(rawArguments);
+    } catch (error) {
+      setToolErrors((current) => ({
+        ...current,
+        [key]: error instanceof Error ? error.message : "参数 JSON 无效",
+      }));
+      return;
+    }
+    if (
+      !argumentsValue ||
+      Array.isArray(argumentsValue) ||
+      typeof argumentsValue !== "object"
+    ) {
+      setToolErrors((current) => ({
+        ...current,
+        [key]: "工具参数必须是 JSON 对象",
+      }));
+      return;
+    }
+    setBusyTool(key);
+    setToolErrors((current) => ({ ...current, [key]: "" }));
+    try {
+      const result = await callCatalogMcpTool(
+        resource,
+        toolId,
+        argumentsValue as Record<string, unknown>,
+      );
+      setToolResults((current) => ({ ...current, [key]: result }));
+    } catch (error) {
+      setToolErrors((current) => ({
+        ...current,
+        [key]: error instanceof Error ? error.message : "工具调用失败",
+      }));
+    } finally {
+      setBusyTool(null);
+    }
+  }
+
   return (
     <div className="catalog-detail-document">
       <section>
         <h3>服务说明</h3>
-        <p>
-          {stringValue(detail.description) || "该 MCP 服务暂未提供补充说明。"}
-        </p>
+        <p>{stringValue(detail.description) || "该服务暂未提供补充说明。"}</p>
       </section>
       <section>
         <h3>服务地址</h3>
@@ -340,7 +423,7 @@ export function McpDetail({ detail }: { detail: CatalogResourceDetail }) {
             ) : null}
           </dl>
         ) : (
-          <p className="catalog-empty-copy">该 MCP 服务暂未提供访问地址</p>
+          <p className="catalog-empty-copy">该服务暂未提供访问地址</p>
         )}
       </section>
       <section>
@@ -348,18 +431,19 @@ export function McpDetail({ detail }: { detail: CatalogResourceDetail }) {
         <div className="catalog-tool-list">
           {tools.map((tool, index) => {
             const outputSchema = declaredMcpOutputSchema(tool);
+            const key = String(tool.id ?? tool.name ?? index);
+            const toolName =
+              stringValue(tool.alias) ||
+              stringValue(tool.name) ||
+              `工具 ${index + 1}`;
+            const inputValue =
+              toolInputs[key] ??
+              JSON.stringify(initialToolArguments(tool), null, 2);
             return (
-              <details
-                key={String(tool.id ?? tool.name ?? index)}
-                open={index === 0}
-              >
+              <details key={key} open={index === 0}>
                 <summary>
                   <span>
-                    <strong>
-                      {stringValue(tool.alias) ||
-                        stringValue(tool.name) ||
-                        `工具 ${index + 1}`}
-                    </strong>
+                    <strong>{toolName}</strong>
                     <small>
                       {stringValue(tool.description) || stringValue(tool.intro)}
                     </small>
@@ -388,6 +472,48 @@ export function McpDetail({ detail }: { detail: CatalogResourceDetail }) {
                       <SchemaTable schema={mcpToolResultSchema} />
                     </>
                   )}
+                  <div className="catalog-tool-call">
+                    <label>
+                      <span>调用参数（JSON）</span>
+                      <textarea
+                        aria-label={`调用 ${toolName} 的参数`}
+                        spellCheck={false}
+                        value={inputValue}
+                        onChange={(event) =>
+                          setToolInputs((current) => ({
+                            ...current,
+                            [key]: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <button
+                      className="button primary compact"
+                      disabled={busyTool !== null}
+                      type="button"
+                      onClick={() => callTool(tool, index)}
+                    >
+                      {busyTool === key ? (
+                        <LoaderCircle className="spin" aria-hidden="true" />
+                      ) : null}
+                      {busyTool === key ? "调用中…" : "调用工具"}
+                    </button>
+                    {toolErrors[key] ? (
+                      <p className="catalog-tool-call-error" role="alert">
+                        {toolErrors[key]}
+                      </p>
+                    ) : null}
+                    {toolResults[key] !== undefined ? (
+                      <div className="catalog-tool-call-result">
+                        <strong>实际返回</strong>
+                        <pre data-mcp-call-result="">
+                          <code>
+                            {JSON.stringify(toolResults[key], null, 2)}
+                          </code>
+                        </pre>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </details>
             );
@@ -449,16 +575,19 @@ export function KnowledgeDetail({ detail }: { detail: CatalogResourceDetail }) {
 export function CatalogResourceDialog({
   resource,
   onClose,
+  onInstallSkill,
   onRefresh,
 }: {
   resource: CatalogResourceSummary | null;
   onClose: () => void;
+  onInstallSkill?: (resource: CatalogResourceSummary) => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
   const [detail, setDetail] = useState<CatalogResourceDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
+  const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
     if (!resource) {
@@ -469,6 +598,7 @@ export function CatalogResourceDialog({
     setError(null);
     setDetail(null);
     setDownloaded(Boolean(resource.downloaded));
+    setInstalled(false);
     readCatalogResourceDetail(resource).then(
       (value) => !cancelled && setDetail(value),
       (reason: unknown) =>
@@ -482,23 +612,27 @@ export function CatalogResourceDialog({
 
   if (!resource) return null;
   const activeResource = resource;
-  const isCatalogSkill =
-    activeResource.type === "skills" && activeResource.source === "catalog";
+  const isInstallableSkill = activeResource.type === "skills";
 
   async function updateResource() {
-    if (activeResource.type !== "skills" || activeResource.source !== "catalog") {
-      setError("只有目录 Skill 可以下载或更新");
+    if (activeResource.type !== "skills") {
+      setError("只有技能可以安装或更新");
       return;
     }
     setUpdating(true);
     setError(null);
     try {
-      await downloadCatalogResource("skills", activeResource.id);
+      if (onInstallSkill) {
+        await onInstallSkill(activeResource);
+      } else {
+        await downloadCatalogResource("skills", activeResource.id);
+      }
       setDownloaded(true);
-      await onRefresh();
-      setDetail(
-        await readCatalogResourceDetail(activeResource),
-      );
+      setInstalled(Boolean(onInstallSkill));
+      if (!onInstallSkill) {
+        await onRefresh();
+      }
+      setDetail(await readCatalogResourceDetail(activeResource));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "资源更新失败");
     } finally {
@@ -525,16 +659,16 @@ export function CatalogResourceDialog({
               {resource.type === "agents"
                 ? "Agent"
                 : resource.type === "skills"
-                  ? "Skill"
+                  ? "技能"
                   : resource.type === "mcp_servers"
-                    ? "MCP"
+                    ? "服务"
                     : "知识库"}
             </span>
             <h2 id="catalog-resource-title">{resource.name}</h2>
             {resource.description ? <p>{resource.description}</p> : null}
           </div>
           <div>
-            {isCatalogSkill && (!downloaded || resource.update_available) ? (
+            {isInstallableSkill ? (
               <button
                 className="button compact"
                 disabled={updating}
@@ -546,7 +680,13 @@ export function CatalogResourceDialog({
                 ) : (
                   <RefreshCw aria-hidden="true" />
                 )}
-                {resource.update_available ? "更新 Skill" : "下载 Skill"}
+                {updating
+                  ? "安装中…"
+                  : installed
+                    ? "重新安装技能"
+                    : resource.source === "catalog" && !downloaded
+                      ? "下载并安装"
+                      : "安装技能"}
               </button>
             ) : null}
             <button
@@ -582,7 +722,7 @@ export function CatalogResourceDialog({
             />
           ) : null}
           {detail && resource.type === "mcp_servers" ? (
-            <McpDetail detail={detail} />
+            <McpDetail detail={detail} resource={resource} />
           ) : null}
           {detail && resource.type === "knowledge_bases" ? (
             <KnowledgeDetail detail={detail} />
@@ -590,16 +730,22 @@ export function CatalogResourceDialog({
         </div>
         <footer className="catalog-resource-dialog-foot">
           <span>
-            {isCatalogSkill ? (
+            {isInstallableSkill ? (
               <Download aria-hidden="true" />
             ) : (
               <Eye aria-hidden="true" />
             )}
-            {isCatalogSkill
-              ? downloaded
-                ? "Skill 已保存到当前账号"
-                : "目录 Skill · 可下载"
-              : "在线只读 · 运行时由绑定的 Agent 使用"}
+            {isInstallableSkill
+              ? installed
+                ? "技能已安装到当前工作区"
+                : resource.source === "catalog" && downloaded
+                  ? "云端已同步 · 可安装到当前工作区"
+                  : resource.source === "catalog"
+                    ? "目录技能 · 可下载并安装"
+                    : "在线技能 · 可安装到当前工作区"
+              : resource.type === "mcp_servers"
+                ? "云端服务 · 可直接调用工具"
+                : "在线只读 · 运行时由绑定的 Agent 使用"}
           </span>
         </footer>
       </section>

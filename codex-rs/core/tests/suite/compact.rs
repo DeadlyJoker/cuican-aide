@@ -2042,6 +2042,7 @@ async fn auto_compact_runs_after_resume_when_token_usage_is_over_limit() {
         compact_mock.requests().is_empty(),
         "remote compaction should not run before the next user message"
     );
+    initial.crewon.shutdown_and_wait().await.unwrap();
 
     let mut resume_builder = test_crewon().with_config(move |config| {
         set_test_compact_prompt(config);

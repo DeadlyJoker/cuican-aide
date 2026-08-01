@@ -42,6 +42,7 @@ use crewon_protocol::protocol::SessionSource;
 use crewon_protocol::protocol::TurnEnvironmentSelection;
 use crewon_protocol::protocol::TurnEnvironmentSelections;
 use crewon_protocol::user_input::UserInput;
+use crewon_thread_store::ThreadStore;
 use crewon_utils_absolute_path::AbsolutePathBuf;
 use futures::future::BoxFuture;
 use serde_json::Value;
@@ -231,6 +232,7 @@ pub struct TestCrewonBuilder {
     user_shell_override: Option<Shell>,
     exec_server_url: Option<String>,
     extensions: Arc<ExtensionRegistry<Config>>,
+    thread_store: Option<Arc<dyn ThreadStore>>,
 }
 
 impl TestCrewonBuilder {
@@ -317,6 +319,11 @@ impl TestCrewonBuilder {
 
     pub fn with_extensions(mut self, extensions: Arc<ExtensionRegistry<Config>>) -> Self {
         self.extensions = extensions;
+        self
+    }
+
+    pub fn with_thread_store(mut self, thread_store: Arc<dyn ThreadStore>) -> Self {
+        self.thread_store = Some(thread_store);
         self
     }
 
@@ -506,7 +513,10 @@ impl TestCrewonBuilder {
     ) -> anyhow::Result<TestCrewon> {
         let auth = self.auth.clone();
         let state_db = crewon_core::init_state_db(&config).await;
-        let thread_store = thread_store_from_config(&config, state_db.clone());
+        let thread_store = self
+            .thread_store
+            .clone()
+            .unwrap_or_else(|| thread_store_from_config(&config, state_db.clone()));
         let installation_id = resolve_installation_id(&config.codex_home).await?;
         let thread_manager = ThreadManager::new(
             &config,
@@ -1080,6 +1090,7 @@ pub fn test_crewon() -> TestCrewonBuilder {
         user_shell_override: None,
         exec_server_url: None,
         extensions: empty_extension_registry(),
+        thread_store: None,
     }
 }
 

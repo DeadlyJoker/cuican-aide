@@ -1,0 +1,22 @@
+# W2-08 Tasks
+
+- [x] D1 盘点 Provider/Resource、Dynamic Tool、CloudWorker、Task outbox、UI resource layer 与旧 PIM 调用点。
+- [x] D2 冻结 W2-07/W2-08 supervisor 所有权，消除循环 Gate。
+- [x] D3 识别并记录 durable Thread Execution Context 安全前置。
+- [x] A1 Harness Red：Worker outbox filter + bounded query。
+- [x] A2 Harness Red：durable defer/backoff CAS + success-only delivered。
+- [x] A3 实现 deterministic Provider supervisor `run_once` 与 fake executor Harness。
+- [x] A4 接入 CloudWorker、durable journal poll/backoff、timeout、单并发硬上限与 shutdown cancellation。
+- [x] A5 使用独立 `CREWON_PROVIDER_CONTROL_ENABLED` 默认关闭 startup composition，并通过 recoverable shutdown Harness。
+- [x] B1 Thread Execution Context record/migration/validation/reopen Harness。
+- [x] B2 RequestIdentity + WorkspaceRef + binding refs authority adapter。
+- [x] B3 `thread/start`/`thread/fork` 首次 authority、resume owner 验证、既有 context binding update、delete cleanup 与越权/回滚 Harness。
+- [x] C1 exact bindings -> DynamicToolRegistry/Core specs composition。
+- [x] C2 Provider dynamic request server dispatch；非 Provider client passthrough。
+- [x] C3 `App.tsx` 接入 ProviderResourceSession/picker/composer binding。
+- [x] C4 原子删除 UI PIM interceptor/executor/legacy tests，保留通用 dynamic tool。
+- [x] D4 完整 hermetic vertical Gate：真实 request processors、temporary State、production Provider client 与 Fake Provider 串通 connect/list/read/bind → thread authority → Provider dynamic success；同时覆盖 Secret/root path 不外泄。
+- [x] D5a package/targeted tests、UI snapshots/build、dependency/callpoint scan、Bazel lock check。
+- [x] D5b app-server/core/protocol/state/transport/provider scoped fix 与 final fmt。
+- [ ] D5c 需用户授权的完整 workspace `just test` release evidence。
+- [ ] R1 W3-01 前补真实部署 key provisioning 和真实云模型 smoke；旧 Cloud Agent 精确切换清单已冻结在 `../W3-01/`。

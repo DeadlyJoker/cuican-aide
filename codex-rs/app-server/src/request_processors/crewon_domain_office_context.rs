@@ -292,7 +292,7 @@ fn push_recent_messages(lines: &mut Vec<String>, config: &JsonValue, is_zh: bool
                 } else {
                     "Recent message"
                 },
-                truncate_chars(author, 40),
+                truncate_chars(author, /*max_chars*/ 40),
                 truncate_chars(text, MAX_CONTEXT_TEXT_CHARS)
             ))
         })

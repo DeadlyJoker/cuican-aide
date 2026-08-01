@@ -206,6 +206,24 @@
             "kind"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "experts"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -254,6 +272,19 @@
       "required": [
         "id",
         "location"
+      ],
+      "type": "object"
+    },
+    "ThreadExecutionContextCreateParams": {
+      "additionalProperties": false,
+      "description": "Server-owned Provider resource selection used when creating a new thread authority.",
+      "properties": {
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspaceKey"
       ],
       "type": "object"
     },

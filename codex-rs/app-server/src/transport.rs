@@ -1,5 +1,6 @@
 use crate::message_processor::ConnectionSessionState;
 use crate::outgoing_message::OutgoingEnvelope;
+use crate::platform_control::AuthenticatedPrincipalError;
 use crewon_app_server_protocol::ExperimentalApi;
 use crewon_app_server_protocol::ServerRequest;
 use std::collections::HashMap;
@@ -21,6 +22,7 @@ pub(crate) use crewon_app_server_transport::QueuedOutgoingMessage;
 pub(crate) use crewon_app_server_transport::RemoteControlHandle;
 pub(crate) use crewon_app_server_transport::RemoteControlStartConfig;
 pub(crate) use crewon_app_server_transport::RemoteControlUnavailable;
+pub(crate) use crewon_app_server_transport::TransportAuthentication;
 pub(crate) use crewon_app_server_transport::TransportEvent;
 pub(crate) use crewon_app_server_transport::acquire_app_server_startup_lock;
 pub use crewon_app_server_transport::app_server_control_socket_path;
@@ -31,6 +33,7 @@ pub(crate) use crewon_app_server_transport::start_control_socket_acceptor;
 pub(crate) use crewon_app_server_transport::start_remote_control;
 pub(crate) use crewon_app_server_transport::start_stdio_connection;
 pub(crate) use crewon_app_server_transport::start_websocket_acceptor;
+pub(crate) use crewon_app_server_transport::start_websocket_acceptor_with_principal_services;
 
 pub(crate) struct ConnectionState {
     pub(crate) outbound_initialized: Arc<AtomicBool>,
@@ -41,17 +44,26 @@ pub(crate) struct ConnectionState {
 
 impl ConnectionState {
     pub(crate) fn new(
-        _origin: ConnectionOrigin,
+        origin: ConnectionOrigin,
+        authentication: TransportAuthentication,
         outbound_initialized: Arc<AtomicBool>,
         outbound_experimental_api_enabled: Arc<AtomicBool>,
         outbound_opted_out_notification_methods: Arc<RwLock<HashSet<String>>>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, AuthenticatedPrincipalError> {
+        let session = match authentication {
+            TransportAuthentication::ConnectionScoped => {
+                Arc::new(ConnectionSessionState::new(origin))
+            }
+            TransportAuthentication::AuthenticatedPrincipal(principal) => Arc::new(
+                ConnectionSessionState::new_authenticated(origin, *principal)?,
+            ),
+        };
+        Ok(Self {
             outbound_initialized,
             outbound_experimental_api_enabled,
             outbound_opted_out_notification_methods,
-            session: Arc::new(ConnectionSessionState::new()),
-        }
+            session,
+        })
     }
 }
 

@@ -20,6 +20,7 @@ type CapturedDraftActionState = {
   notice: NoticeState | null;
   panel: LibraryPanel | null;
   savedTools: Array<{ cwd: string; record: ToolConfig }>;
+  skillWrites: Array<{ body: string; path: string }>;
 };
 
 function panel(fields: LibraryPanel["fields"] = []): LibraryPanel {
@@ -47,6 +48,7 @@ async function handleAction(
     notice: null,
     panel: panel(options.fields),
     savedTools: [],
+    skillWrites: [],
   };
 
   const handled = await handleLibraryDraftAction({
@@ -75,13 +77,19 @@ async function handleAction(
       Object.hasOwn(options, "cwd") ? (options.cwd ?? null) : "/repo",
     saveOrUpdateToolConfig: async (cwd, toolRecord) => {
       state.savedTools.push({ cwd, record: toolRecord });
-      return { filePath: `${cwd}/.crewon/tools/${toolRecord.name}.json`, operation: "created" };
+      return {
+        filePath: `${cwd}/.crewon/tools/${toolRecord.name}.json`,
+        operation: "created",
+      };
     },
     setLibraryPanel: (updater) => {
       state.panel = updater(state.panel);
     },
     setNotice: (notice) => {
       state.notice = notice;
+    },
+    writeSkillFile: async (path, body) => {
+      state.skillWrites.push({ body, path });
     },
   });
 
@@ -96,7 +104,7 @@ describe("library draft actions", () => {
     });
 
     expect(handled).toBe(true);
-    expect(state.panel?.title).toBe("New MCP");
+    expect(state.panel?.title).toBe("Add MCP service");
     expect(state.panel?.fields?.[0]).toMatchObject({
       id: "mcp-draft-name",
       value: "workspace-mcp-202606171430",
@@ -111,7 +119,7 @@ describe("library draft actions", () => {
 
     expect(handled).toBe(true);
     expect(state.panel?.error).toBe(
-      "No workspace path is available for creating a local skill",
+      "No workspace path is available for creating a skill",
     );
   });
 
@@ -121,13 +129,12 @@ describe("library draft actions", () => {
       {
         fields: [
           { id: "mcp-draft-name", label: "Name", value: "github" },
-          { id: "mcp-draft-command", label: "Command", value: "npx" },
           {
-            id: "mcp-draft-args",
-            label: "Args",
-            value: '["-y", "@modelcontextprotocol/server-github"]',
+            id: "mcp-draft-config",
+            label: "Config",
+            value:
+              '{"command":"npx","args":["-y","@modelcontextprotocol/server-github"],"enabled":false}',
           },
-          { id: "mcp-draft-env", label: "Env", value: "{}" },
         ],
       },
     );
@@ -140,7 +147,7 @@ describe("library draft actions", () => {
     });
     expect(state.libraryOpened).toBe(1);
     expect(state.notice).toEqual({
-      text: "Saved MCP draft: github (backend record: /repo/.crewon/tools/github.json)",
+      text: "Added MCP: github (config record: /repo/.crewon/tools/github.json)",
       tone: "success",
     });
   });
@@ -156,6 +163,35 @@ describe("library draft actions", () => {
     expect(state.panel?.error).toBe(
       "Workspace, name, description, and workflow steps are required",
     );
+  });
+
+  it("writes edited Skill contents back to the original SKILL.md", async () => {
+    const { handled, state } = await handleAction(
+      {
+        id: "save-skill-edit",
+        label: "Save changes",
+        skillName: "docs",
+        skillPath: "/repo/.crewon/skill/docs/SKILL.md",
+      },
+      {
+        fields: [
+          {
+            id: "skill-edit-body",
+            label: "SKILL.md",
+            value: "# Docs\n\nUpdated workflow.",
+          },
+        ],
+      },
+    );
+
+    expect(handled).toBe(true);
+    expect(state.skillWrites).toEqual([
+      {
+        path: "/repo/.crewon/skill/docs/SKILL.md",
+        body: "# Docs\n\nUpdated workflow.\n",
+      },
+    ]);
+    expect(state.libraryOpened).toBe(1);
   });
 
   it("leaves unrelated actions for the app handler", async () => {

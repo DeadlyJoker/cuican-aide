@@ -4,10 +4,27 @@ mod delete_thread;
 mod helpers;
 mod list_threads;
 mod live_writer;
+mod metadata_rollout_path;
 mod read_thread;
 mod search_threads;
 mod unarchive_thread;
 mod update_thread_metadata;
+
+#[cfg(test)]
+#[path = "live_writer_handoff_tests.rs"]
+mod live_writer_handoff_tests;
+
+#[cfg(test)]
+#[path = "live_metadata_writer_tests.rs"]
+mod live_metadata_writer_tests;
+
+#[cfg(test)]
+#[path = "metadata_rollout_scope_tests.rs"]
+mod metadata_rollout_scope_tests;
+
+#[cfg(all(test, feature = "legacy-fence-artifact"))]
+#[path = "legacy_fence_mutation_tests.rs"]
+mod legacy_fence_mutation_tests;
 
 #[cfg(test)]
 mod test_support;
@@ -104,6 +121,34 @@ impl LocalThreadStore {
     /// Return the state DB handle used by local rollout writers.
     pub async fn state_db(&self) -> Option<StateDbHandle> {
         self.state_db.clone()
+    }
+
+    pub(super) async fn cloud_agent_thread_index_active(&self) -> ThreadStoreResult<bool> {
+        let Some(state_db) = self.state_db().await else {
+            return Ok(false);
+        };
+        let active = state_db
+            .has_cloud_agent_thread_summaries()
+            .await
+            .map_err(|_| ThreadStoreError::Internal {
+                message: "failed to resolve Cloud Agent Thread list authority".to_string(),
+            })?;
+        if !active {
+            return Ok(false);
+        }
+        let backfill =
+            state_db
+                .get_backfill_state()
+                .await
+                .map_err(|_| ThreadStoreError::Internal {
+                    message: "failed to verify Cloud Agent Thread index readiness".to_string(),
+                })?;
+        if backfill.status != crewon_state::BackfillStatus::Complete {
+            return Err(ThreadStoreError::Internal {
+                message: "Cloud Agent Thread index is not ready".to_string(),
+            });
+        }
+        Ok(true)
     }
 
     /// Read a local rollout-backed thread by path.

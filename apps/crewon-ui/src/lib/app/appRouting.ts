@@ -18,11 +18,8 @@ export function isCommandShellHash(hash: string): boolean {
   return view !== hash && commandShellViews.has(view);
 }
 
-export function shouldRenderCommandShellView(
-  appView: AppView,
-  commandShellRouteActive = false,
-): boolean {
-  return appView === "chat" || commandShellRouteActive;
+export function shouldRenderCommandShellView(appView: AppView): boolean {
+  return appView === "chat";
 }
 
 export function libraryViewFromSearch(search: string): LibraryKind | null {
@@ -88,6 +85,6 @@ export function settingsSectionFromSearch(search: string): SettingsSection {
     case "worktrees":
       return section;
     default:
-      return "account";
+      return "config";
   }
 }

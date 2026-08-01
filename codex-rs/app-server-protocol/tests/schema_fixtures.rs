@@ -1,6 +1,7 @@
 use anyhow::Context;
 use anyhow::Result;
 use crewon_app_server_protocol::generate_json_with_experimental;
+use crewon_app_server_protocol::generate_platform_experimental_ts;
 use crewon_app_server_protocol::generate_typescript_schema_fixture_subtree_for_tests;
 use crewon_app_server_protocol::read_schema_fixture_subtree;
 use similar::TextDiff;
@@ -17,6 +18,91 @@ fn typescript_schema_fixtures_match_generated() -> Result<()> {
 
     assert_schema_trees_match("typescript", &fixture_tree, &generated_tree)?;
 
+    Ok(())
+}
+
+#[test]
+fn experimental_platform_typescript_schema_fixtures_match_generated() -> Result<()> {
+    assert_schema_fixtures_match_generated("typescript-experimental-platform", |output_dir| {
+        generate_platform_experimental_ts(output_dir, None)
+    })
+}
+
+#[test]
+fn experimental_platform_types_stay_out_of_the_stable_schema() -> Result<()> {
+    let stable_tree = generate_typescript_schema_fixture_subtree_for_tests()
+        .context("generate stable TypeScript schema fixtures")?;
+    let overlay_tree = read_tree(&schema_root()?, "typescript-experimental-platform")?;
+
+    for type_name in [
+        "ProviderConnectParams",
+        "ProviderConnectResponse",
+        "ResourceBindParams",
+        "ResourceBindResponse",
+        "WorkspaceBindParams",
+        "WorkspaceBindResponse",
+    ] {
+        let path = PathBuf::from("v2").join(format!("{type_name}.ts"));
+        assert!(
+            !stable_tree.contains_key(&path),
+            "{type_name} leaked into stable schema"
+        );
+        assert!(
+            overlay_tree.contains_key(&path),
+            "{type_name} is missing from experimental platform overlay"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn generated_typescript_relative_imports_resolve() -> Result<()> {
+    let generated_tree = generate_typescript_schema_fixture_subtree_for_tests()
+        .context("generate in-memory typescript schema fixtures")?;
+    assert_typescript_relative_imports_resolve(&generated_tree)
+}
+
+#[test]
+fn experimental_platform_typescript_relative_imports_resolve() -> Result<()> {
+    let generated_tree = read_tree(&schema_root()?, "typescript-experimental-platform")?;
+    assert_typescript_relative_imports_resolve(&generated_tree)
+}
+
+fn assert_typescript_relative_imports_resolve(
+    generated_tree: &BTreeMap<PathBuf, Vec<u8>>,
+) -> Result<()> {
+    let mut missing_imports = Vec::new();
+
+    for (path, contents) in generated_tree {
+        if path.extension().and_then(|extension| extension.to_str()) != Some("ts") {
+            continue;
+        }
+        let contents = std::str::from_utf8(contents)
+            .with_context(|| format!("read generated TypeScript {}", path.display()))?;
+        for line in contents.lines() {
+            let Some(specifier) = relative_typescript_import_specifier(line) else {
+                continue;
+            };
+            let imported_path = resolve_typescript_import(path, specifier);
+            let imported_index_path = imported_path.with_extension("").join("index.ts");
+            if !generated_tree.contains_key(&imported_path)
+                && !generated_tree.contains_key(&imported_index_path)
+            {
+                missing_imports.push(format!(
+                    "{} imports {specifier}, but {} was not generated",
+                    path.display(),
+                    imported_path.display()
+                ));
+            }
+        }
+    }
+
+    assert!(
+        missing_imports.is_empty(),
+        "generated TypeScript contains unresolved relative imports:\n{}",
+        missing_imports.join("\n")
+    );
     Ok(())
 }
 
@@ -141,4 +227,32 @@ fn read_tree(root: &Path, label: &str) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
             root.display()
         )
     })
+}
+
+fn relative_typescript_import_specifier(line: &str) -> Option<&str> {
+    let line = line.trim();
+    let marker = " from \"";
+    let start = line.find(marker)? + marker.len();
+    let rest = &line[start..];
+    let end = rest.find('"')?;
+    let specifier = &rest[..end];
+    specifier.starts_with('.').then_some(specifier)
+}
+
+fn resolve_typescript_import(importer: &Path, specifier: &str) -> PathBuf {
+    let mut resolved = importer
+        .parent()
+        .unwrap_or_else(|| Path::new(""))
+        .to_path_buf();
+    for component in specifier.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                resolved.pop();
+            }
+            name => resolved.push(name),
+        }
+    }
+    resolved.set_extension("ts");
+    resolved
 }

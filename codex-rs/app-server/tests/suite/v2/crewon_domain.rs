@@ -295,8 +295,22 @@ async fn office_config_round_trips_through_v2_rpc() -> Result<()> {
         }),
     )
     .await?;
+    let mut comparable_created_config = created.config.clone();
+    let created_workspace = comparable_created_config["workspace"]
+        .as_object_mut()
+        .expect("created Office workspace");
+    let record_id = created_workspace
+        .remove("recordId")
+        .and_then(|value| value.as_str().map(str::to_string))
+        .expect("created Office record id");
+    let record_revision = created_workspace
+        .remove("recordRevision")
+        .and_then(|value| value.as_str().map(str::to_string))
+        .expect("created Office record revision");
+    assert!(!record_id.is_empty());
+    assert!(!record_revision.is_empty());
     assert_eq!(
-        created.config,
+        comparable_created_config,
         json!({
             "title": "Created Office",
             "subtitle": "Launch desk",
@@ -875,6 +889,7 @@ async fn office_run_auto_dispatches_safe_delegation_after_terminal_sync() -> Res
             .params
             .expect("office/run/updated params must be present"),
     )?;
+    assert_eq!(auto_started_update.reason, "autoDispatchStarted");
     assert_eq!(
         auto_started_update.source_thread_id.as_deref(),
         Some(member_thread.id.as_str())
@@ -883,6 +898,7 @@ async fn office_run_auto_dispatches_safe_delegation_after_terminal_sync() -> Res
         &auto_started_update.config["workspace"]["activity"]["runs"][0]["delegations"][0];
     assert_eq!(auto_started_delegation["status"], "running");
     assert_eq!(auto_started_delegation["threadId"], member_thread.id);
+    assert!(auto_started_delegation.get("dispatchReceipt").is_none());
     assert_eq!(
         auto_started_delegation["turnId"],
         auto_started_update
@@ -2353,33 +2369,54 @@ async fn office_startup_recovers_auto_dispatch_for_terminal_run_with_pending_del
             }
         }
     });
-    let saved: OfficeSaveResponse = request(
-        &mut setup,
-        "office/save",
-        json!({
-            "cwd": workspace.path().to_string_lossy(),
+    drop(setup);
+
+    let office_dir = workspace.path().join(".crewon").join("offices");
+    tokio::fs::create_dir_all(&office_dir).await?;
+    let saved_file_path = office_dir.join(format!(
+        "startup-scheduler-recovery-office-{}.json",
+        office_thread.id.chars().take(8).collect::<String>()
+    ));
+    tokio::fs::write(
+        &saved_file_path,
+        serde_json::to_vec_pretty(&json!({
+            "version": 1,
+            "kind": "office",
+            "savedAt": "2026-06-19T00:00:00.000Z",
             "config": stale_config
-        }),
+        }))?,
     )
     .await?;
     let scheduler_index_path = codex_home
         .path()
         .join("office-scheduler")
         .join("workspaces.json");
-    let scheduler_index: serde_json::Value =
-        serde_json::from_slice(&tokio::fs::read(&scheduler_index_path).await?)?;
-    assert_eq!(
-        scheduler_index["cwds"][0]["cwd"],
-        workspace.path().to_string_lossy().as_ref()
-    );
-    tokio::fs::remove_file(&scheduler_index_path).await?;
-    drop(setup);
+    tokio::fs::create_dir_all(
+        scheduler_index_path
+            .parent()
+            .expect("scheduler index parent"),
+    )
+    .await?;
+    let scheduler_index = json!({
+        "version": 1,
+        "cwds": [
+            {
+                "cwd": workspace.path().to_string_lossy(),
+                "updatedAt": 1781864660
+            }
+        ]
+    });
+    tokio::fs::write(
+        &scheduler_index_path,
+        serde_json::to_vec_pretty(&scheduler_index)?,
+    )
+    .await?;
 
     let _restarted = initialized_app_server(&codex_home).await?;
     let mut completed_config = None;
     let mut last_config = None;
     for _ in 0..320 {
-        let bytes = tokio::fs::read(&saved.file_path).await?;
+        let bytes = tokio::fs::read(&saved_file_path).await?;
         let record: serde_json::Value = serde_json::from_slice(&bytes)?;
         let config = record["config"].clone();
         let delegation = &config["workspace"]["activity"]["runs"][0]["delegations"][0];
@@ -2401,6 +2438,10 @@ async fn office_startup_recovers_auto_dispatch_for_terminal_run_with_pending_del
     assert_eq!(
         delegation["resultPreview"],
         "Startup recovered delegated task done."
+    );
+    assert_eq!(
+        server.received_requests().await.unwrap_or_default().len(),
+        3
     );
     Ok(())
 }
@@ -2564,7 +2605,27 @@ async fn office_startup_recovers_auto_replan_for_terminal_review() -> Result<()>
         }))?,
     )
     .await?;
-
+    let scheduler_queue_dir = workspace.path().join(".crewon").join("office-runs");
+    tokio::fs::create_dir_all(&scheduler_queue_dir).await?;
+    tokio::fs::write(
+        scheduler_queue_dir.join("scheduler.json"),
+        serde_json::to_vec_pretty(&json!({
+            "version": 1,
+            "intents": [
+                {
+                    "intentId": "office-scheduler-startup-replan",
+                    "sourceThreadId": office_thread.id,
+                    "sourceTurnId": manager_turn.turn.id,
+                    "status": "pending",
+                    "reason": "startupReplanFixture",
+                    "attempts": 0,
+                    "createdAt": "2026-06-19T00:00:00.000Z",
+                    "updatedAt": "2026-06-19T00:00:00.000Z"
+                }
+            ]
+        }))?,
+    )
+    .await?;
     let _restarted = initialized_app_server(&codex_home).await?;
     let mut completed_config = None;
     let mut last_config = None;
@@ -2605,6 +2666,10 @@ async fn office_startup_recovers_auto_replan_for_terminal_review() -> Result<()>
     assert_eq!(
         retry_run["loop"]["review"]["nextAction"],
         "collectVerificationEvidence"
+    );
+    assert_eq!(
+        server.received_requests().await.unwrap_or_default().len(),
+        2
     );
     Ok(())
 }
@@ -2670,6 +2735,7 @@ async fn office_startup_repairs_empty_member_runtime_thread_before_auto_dispatch
     )?;
     assert_eq!(completed.thread_id, office_thread.id);
     assert_eq!(completed.turn.id, manager_turn.turn.id);
+    drop(setup);
 
     let stale_config = json!({
         "title": "Startup Runtime Repair Office",
@@ -2727,22 +2793,72 @@ async fn office_startup_repairs_empty_member_runtime_thread_before_auto_dispatch
             }
         }
     });
-    let saved: OfficeSaveResponse = request(
-        &mut setup,
-        "office/save",
-        json!({
-            "cwd": workspace.path().to_string_lossy(),
+    let office_dir = workspace.path().join(".crewon").join("offices");
+    tokio::fs::create_dir_all(&office_dir).await?;
+    let saved_file_path = office_dir.join(format!(
+        "startup-runtime-repair-office-{}.json",
+        office_thread.id.chars().take(8).collect::<String>()
+    ));
+    tokio::fs::write(
+        &saved_file_path,
+        serde_json::to_vec_pretty(&json!({
+            "version": 1,
+            "kind": "office",
+            "savedAt": "2026-06-19T00:00:00.000Z",
             "config": stale_config
-        }),
+        }))?,
     )
     .await?;
-    drop(setup);
+    let scheduler_index_path = codex_home
+        .path()
+        .join("office-scheduler")
+        .join("workspaces.json");
+    tokio::fs::create_dir_all(
+        scheduler_index_path
+            .parent()
+            .expect("scheduler index parent"),
+    )
+    .await?;
+    tokio::fs::write(
+        &scheduler_index_path,
+        serde_json::to_vec_pretty(&json!({
+            "version": 1,
+            "cwds": [
+                {
+                    "cwd": workspace.path().to_string_lossy(),
+                    "updatedAt": 1781864660
+                }
+            ]
+        }))?,
+    )
+    .await?;
+    let scheduler_queue_dir = workspace.path().join(".crewon").join("office-runs");
+    tokio::fs::create_dir_all(&scheduler_queue_dir).await?;
+    tokio::fs::write(
+        scheduler_queue_dir.join("scheduler.json"),
+        serde_json::to_vec_pretty(&json!({
+            "version": 1,
+            "intents": [
+                {
+                    "intentId": "office-scheduler-startup-runtime-repair",
+                    "sourceThreadId": office_thread.id,
+                    "sourceTurnId": manager_turn.turn.id,
+                    "status": "pending",
+                    "reason": "startupRuntimeRepairFixture",
+                    "attempts": 0,
+                    "createdAt": "2026-06-19T00:00:00.000Z",
+                    "updatedAt": "2026-06-19T00:00:00.000Z"
+                }
+            ]
+        }))?,
+    )
+    .await?;
 
     let _restarted = initialized_app_server(&codex_home).await?;
     let mut completed_config = None;
     let mut last_config = None;
     for _ in 0..100 {
-        let bytes = tokio::fs::read(&saved.file_path).await?;
+        let bytes = tokio::fs::read(&saved_file_path).await?;
         let record: serde_json::Value = serde_json::from_slice(&bytes)?;
         let config = record["config"].clone();
         let delegation = &config["workspace"]["activity"]["runs"][0]["delegations"][0];
@@ -2788,6 +2904,10 @@ async fn office_startup_repairs_empty_member_runtime_thread_before_auto_dispatch
     assert_eq!(
         agent_record["config"]["runtimeRepairSourceThreadId"],
         stale_member_thread.id
+    );
+    assert_eq!(
+        server.received_requests().await.unwrap_or_default().len(),
+        2
     );
     Ok(())
 }
@@ -2860,6 +2980,7 @@ async fn office_startup_repairs_missing_automation_runtime_thread_before_auto_ve
     )?;
     assert_eq!(completed.thread_id, office_thread.id);
     assert_eq!(completed.turn.id, manager_turn.turn.id);
+    drop(setup);
 
     let stale_config = json!({
         "title": "Startup Automation Runtime Repair Office",
@@ -2897,22 +3018,73 @@ async fn office_startup_repairs_missing_automation_runtime_thread_before_auto_ve
             }
         }
     });
-    let saved: OfficeSaveResponse = request(
-        &mut setup,
-        "office/save",
-        json!({
-            "cwd": workspace.path().to_string_lossy(),
+    let office_dir = workspace.path().join(".crewon").join("offices");
+    tokio::fs::create_dir_all(&office_dir).await?;
+    let saved_file_path = office_dir.join(format!(
+        "startup-automation-runtime-repair-office-{}.json",
+        office_thread.id.chars().take(8).collect::<String>()
+    ));
+    tokio::fs::write(
+        &saved_file_path,
+        serde_json::to_vec_pretty(&json!({
+            "version": 1,
+            "kind": "office",
+            "savedAt": "2026-06-19T00:00:00.000Z",
             "config": stale_config
-        }),
+        }))?,
     )
     .await?;
-    drop(setup);
+    let scheduler_index_path = codex_home
+        .path()
+        .join("office-scheduler")
+        .join("workspaces.json");
+    tokio::fs::create_dir_all(
+        scheduler_index_path
+            .parent()
+            .expect("scheduler index parent"),
+    )
+    .await?;
+    tokio::fs::write(
+        &scheduler_index_path,
+        serde_json::to_vec_pretty(&json!({
+            "version": 1,
+            "cwds": [
+                {
+                    "cwd": workspace.path().to_string_lossy(),
+                    "updatedAt": 1781864660
+                }
+            ]
+        }))?,
+    )
+    .await?;
+
+    let scheduler_queue_dir = workspace.path().join(".crewon").join("office-runs");
+    tokio::fs::create_dir_all(&scheduler_queue_dir).await?;
+    tokio::fs::write(
+        scheduler_queue_dir.join("scheduler.json"),
+        serde_json::to_vec_pretty(&json!({
+            "version": 1,
+            "intents": [
+                {
+                    "intentId": "office-scheduler-startup-automation-runtime-repair",
+                    "sourceThreadId": office_thread.id,
+                    "sourceTurnId": manager_turn.turn.id,
+                    "status": "pending",
+                    "reason": "startupAutomationRuntimeRepairFixture",
+                    "attempts": 0,
+                    "createdAt": "2026-06-19T00:00:00.000Z",
+                    "updatedAt": "2026-06-19T00:00:00.000Z"
+                }
+            ]
+        }))?,
+    )
+    .await?;
 
     let _restarted = initialized_app_server(&codex_home).await?;
     let mut completed_config = None;
     let mut last_config = None;
     for _ in 0..200 {
-        let bytes = tokio::fs::read(&saved.file_path).await?;
+        let bytes = tokio::fs::read(&saved_file_path).await?;
         let record: serde_json::Value = serde_json::from_slice(&bytes)?;
         let config = record["config"].clone();
         let check = &config["workspace"]["activity"]["runs"][0]["verificationChecks"][0];
@@ -2951,6 +3123,10 @@ async fn office_startup_repairs_missing_automation_runtime_thread_before_auto_ve
     assert_eq!(
         automation_record["config"]["runtimeRepairSourceThreadId"],
         stale_automation_thread_id
+    );
+    assert_eq!(
+        server.received_requests().await.unwrap_or_default().len(),
+        2
     );
     Ok(())
 }

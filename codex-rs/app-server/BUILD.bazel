@@ -17,5 +17,8 @@ crewon_rust_crate(
     extra_binaries = [
         "//codex-rs/bwrap:bwrap",
     ],
+    test_data_extra = [
+        "//codex-rs/provider-agent-platform:tests/fixtures/provider_rs256_test_private.pem",
+    ],
     test_tags = ["no-sandbox"],
 )

@@ -20,7 +20,10 @@ class FakeWebSocket extends EventTarget {
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
 
-  constructor(readonly url: string) {
+  constructor(
+    readonly url: string,
+    readonly protocols?: string | string[],
+  ) {
     super();
     FakeWebSocket.instances.push(this);
   }
@@ -95,6 +98,158 @@ describe("app server composer input", () => {
 });
 
 describe("app server client connection lifecycle", () => {
+  it("obtains fresh principal session protocols before opening a websocket", async () => {
+    vi.stubGlobal("window", {
+      clearTimeout: globalThis.clearTimeout,
+      setTimeout: globalThis.setTimeout,
+    });
+    FakeWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    const protocols = vi.fn(async () => [
+      "crewon.principal-session.v1",
+      "session.jwt",
+    ]);
+    const client = new AppServerClient(
+      "ws://app-server",
+      () => undefined,
+      undefined,
+      undefined,
+      { protocols },
+    );
+
+    const connected = client.connect();
+    await Promise.resolve();
+    const socket = FakeWebSocket.instances[0];
+    expect(socket.protocols).toEqual([
+      "crewon.principal-session.v1",
+      "session.jwt",
+    ]);
+    socket.open();
+    const initializeRequest = JSON.parse(socket.sent[0] ?? "{}") as {
+      id: number;
+    };
+    (
+      client as unknown as { handleMessage: (rawData: string) => void }
+    ).handleMessage(JSON.stringify({ id: initializeRequest.id, result: {} }));
+    await connected;
+    expect(protocols).toHaveBeenCalledOnce();
+  });
+
+  it("routes generated Provider and Resource RPCs over the initialized websocket", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+    const calls = [
+      () =>
+        client.providerResources.listWorkspaces({ cursor: null, limit: 10 }),
+      () =>
+        client.providerResources.bindWorkspace({
+          workspaceKey: "workspace-1",
+          scope: "conversation",
+          scopeId: "thread-1",
+        }),
+      () =>
+        client.providerResources.connectProvider({
+          providerId: "agent-platform",
+        }),
+      () =>
+        client.providerResources.readProvider({ connectionId: "connection-1" }),
+      () =>
+        client.providerResources.listResources({
+          connectionId: "connection-1",
+          cursor: null,
+          limit: 10,
+          resourceType: "skill",
+        }),
+      () =>
+        client.providerResources.readResource({
+          connectionId: "connection-1",
+          resource: {
+            providerId: "agent-platform",
+            resourceId: "skill-1",
+            revision: "r1",
+            resourceType: "skill",
+          },
+        }),
+      () =>
+        client.providerResources.bindResource({
+          connectionId: "connection-1",
+          workspaceBindingId: "workspace-binding-1",
+          resource: {
+            providerId: "agent-platform",
+            resourceId: "skill-1",
+            revision: "r1",
+            resourceType: "skill",
+          },
+          mode: "remoteReference",
+        }),
+      () =>
+        client.providerResources.unbindResource({
+          bindingId: "resource-binding-1",
+        }),
+      () =>
+        client.providerResources.updateThreadExecutionContext({
+          threadId: "thread-1",
+          workspaceBindingId: "workspace-binding-1",
+          resourceBindingIds: ["resource-binding-1"],
+          executionBindingId: "resource-binding-1",
+          expectedRevision: 1 as unknown as bigint,
+        }),
+    ];
+
+    for (const [index, call] of calls.entries()) {
+      const pending = call();
+      const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+        id: number;
+        method: string;
+        params: unknown;
+      };
+      expect(request.method).toBe(
+        [
+          "workspace/list",
+          "workspace/bind",
+          "provider/connect",
+          "provider/read",
+          "resource/list",
+          "resource/read",
+          "resource/bind",
+          "resource/unbind",
+          "threadExecutionContext/update",
+        ][index],
+      );
+      expect(JSON.stringify(request.params)).not.toMatch(
+        /actorId|tenantId|spaceId|credential|endpoint|rootPath|token|secret/i,
+      );
+      (
+        client as unknown as {
+          handleMessage: (rawData: string) => void;
+        }
+      ).handleMessage(JSON.stringify({ id: request.id, result: {} }));
+      await pending;
+    }
+  });
+
+  it("does not expose removed Agent Platform chat notifications to the UI", async () => {
+    const onNotification = vi.fn();
+    const client = new AppServerClient("ws://app-server", onNotification);
+    await connectFakeClient(client);
+
+    (
+      client as unknown as { handleMessage: (rawData: string) => void }
+    ).handleMessage(
+      JSON.stringify({
+        method: "agentPlatform/chat/completed",
+        params: {
+          runId: "legacy-run",
+          threadId: "thread-1",
+          agentId: "7",
+          message: "legacy result",
+        },
+      }),
+    );
+
+    expect(onNotification).not.toHaveBeenCalled();
+  });
+
   it("does not report connection loss for an intentional close", async () => {
     const onClose = vi.fn();
     const client = new AppServerClient(
@@ -121,6 +276,34 @@ describe("app server client connection lifecycle", () => {
     socket.closeFromServer();
 
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("app server file writes", () => {
+  it("writes browser-selected binary content without converting it to text", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+
+    const writePromise = client.writeFile("/repo/image.png", "AAEC");
+    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: Record<string, unknown>;
+    };
+    expect(request).toMatchObject({
+      method: "fs/writeFile",
+      params: {
+        path: "/repo/image.png",
+        dataBase64: "AAEC",
+      },
+    });
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(JSON.stringify({ id: request.id, result: {} }));
+
+    await expect(writePromise).resolves.toEqual({});
   });
 });
 
@@ -240,7 +423,9 @@ describe("app server Office revisions", () => {
       id: number;
       params: { config: OfficeConfig };
     };
-    expect(messageRequest.params.config.workspace.recordRevision).toBeUndefined();
+    expect(
+      messageRequest.params.config.workspace.recordRevision,
+    ).toBeUndefined();
     (
       client as unknown as {
         handleMessage: (rawData: string) => void;
@@ -532,7 +717,237 @@ describe("app server execution intent", () => {
   });
 });
 
+describe("app server Workflow and Experts RPC contracts", () => {
+  it("sends only the Workflow execution authority and user input", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+
+    const pending = client.executeAgentPlatformWorkflow(
+      "access-token-1",
+      "workflow-42",
+      "生成交付清单",
+    );
+    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+
+    expect(request).toEqual({
+      id: request.id,
+      method: "agentPlatform/workflow/execute",
+      params: {
+        accessToken: "access-token-1",
+        workflowId: "workflow-42",
+        input: "生成交付清单",
+      },
+    });
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        id: request.id,
+        result: {
+          workflowId: 42,
+          executionId: 7,
+          status: "completed",
+          outputs: {},
+          executedNodes: [],
+          nodeResults: {},
+          error: null,
+        },
+      }),
+    );
+
+    await pending;
+  });
+
+  it("lists Experts by workspace key without leaking local path fields", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+
+    const pending = client.listExpertTeams("workspace-key-1");
+    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+
+    expect(request).toEqual({
+      id: request.id,
+      method: "expertTeam/list",
+      params: {
+        workspaceKey: "workspace-key-1",
+        cursor: null,
+        limit: 100,
+      },
+    });
+    expect(JSON.stringify(request.params)).not.toMatch(/cwd|filePath|kind/);
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        id: request.id,
+        result: { data: [], nextCursor: null },
+      }),
+    );
+
+    await pending;
+  });
+
+  it("resolves the Experts workspace through the registered workspace API", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+
+    const pending = client.listRegisteredWorkspaces();
+    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+
+    expect(request).toEqual({
+      id: request.id,
+      method: "workspace/list",
+      params: { cursor: null, limit: 100 },
+    });
+    expect(JSON.stringify(request.params)).not.toMatch(/cwd|rootPath/);
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        id: request.id,
+        result: {
+          data: [
+            { workspaceKey: "workspace-key-1", displayName: "cuican-aide" },
+          ],
+          nextCursor: null,
+        },
+      }),
+    );
+
+    await expect(pending).resolves.toMatchObject({
+      data: [{ workspaceKey: "workspace-key-1", displayName: "cuican-aide" }],
+    });
+  });
+
+  it("creates Experts with the exact server DTO and drops UI-only fields", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+    const input = {
+      kind: "experts",
+      cwd: "/repo/private",
+      filePath: "/repo/.crewon/experts/review.json",
+      title: "代码审阅专家团",
+      goal: "审阅改动并汇总结论",
+      leader: {
+        name: "审阅团长",
+        role: "分派任务并汇总结论",
+        agentType: "worker" as const,
+      },
+      experts: [
+        {
+          name: "风险专家",
+          role: "定位逻辑与安全风险",
+          agentType: "explorer" as const,
+        },
+      ],
+    };
+
+    const pending = client.createExpertTeam("workspace-key-1", input);
+    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+
+    expect(request).toEqual({
+      id: request.id,
+      method: "expertTeam/create",
+      params: {
+        workspaceKey: "workspace-key-1",
+        title: "代码审阅专家团",
+        goal: "审阅改动并汇总结论",
+        leader: {
+          name: "审阅团长",
+          role: "分派任务并汇总结论",
+          agentType: "worker",
+        },
+        experts: [
+          {
+            name: "风险专家",
+            role: "定位逻辑与安全风险",
+            agentType: "explorer",
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(request.params)).not.toMatch(/cwd|filePath|kind/);
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        id: request.id,
+        result: { record: null },
+      }),
+    );
+
+    await pending;
+  });
+});
+
 describe("app server notifications", () => {
+  it("forwards the experimental resource binding projection notification", () => {
+    const notifications: unknown[] = [];
+    const client = new AppServerClient("ws://app-server", (notification) => {
+      notifications.push(notification);
+    });
+
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        method: "resource/binding/updated",
+        params: {
+          binding: {
+            connectionId: "connection-1",
+            binding: {
+              bindingId: "binding-1",
+              workspaceKey: "workspace-1",
+              resource: {
+                providerId: "agent-platform",
+                resourceId: "skill-1",
+                revision: "r1",
+                resourceType: "skill",
+              },
+              mode: "remoteReference",
+              executionLocation: "provider",
+            },
+            workspaceScope: "conversation",
+            workspaceScopeId: "thread-1",
+            status: "active",
+            revision: 1,
+            updatedAt: 2,
+          },
+        },
+      }),
+    );
+
+    expect(notifications).toEqual([
+      expect.objectContaining({ method: "resource/binding/updated" }),
+    ]);
+  });
+
   it("accepts reasoning delta notifications", () => {
     const notifications: unknown[] = [];
     const client = new AppServerClient("ws://app-server", (notification) => {

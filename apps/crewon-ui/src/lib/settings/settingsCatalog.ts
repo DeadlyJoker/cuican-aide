@@ -77,6 +77,8 @@ export type SettingsCatalogItem = {
   id: SettingsSection;
   labelKey: SettingsCopyKey;
   icon: SettingsIconKey;
+  mode: "action" | "editable" | "status";
+  description: Record<Locale, string>;
   backend: SettingsBackendBinding;
 };
 
@@ -109,7 +111,7 @@ const sidebarCopy: Record<Locale, SettingsSidebarCopy> = {
     keyboard: "键盘快捷键",
     mcpServers: "MCP 服务器",
     personal: "个人",
-    personalization: "个性化",
+    personalization: "助理人格与记忆",
     search: "搜索设置...",
     title: "设置",
     worktrees: "工作树",
@@ -131,7 +133,7 @@ const sidebarCopy: Record<Locale, SettingsSidebarCopy> = {
     keyboard: "Keyboard shortcuts",
     mcpServers: "MCP servers",
     personal: "Personal",
-    personalization: "Personalization",
+    personalization: "Assistant profile & memory",
     search: "Search settings...",
     title: "Settings",
     worktrees: "Worktrees",
@@ -142,47 +144,35 @@ export function settingsSidebarCopy(locale: Locale): SettingsSidebarCopy {
   return sidebarCopy[locale];
 }
 
+export function settingsSectionLabel(
+  section: SettingsSection,
+  locale: Locale,
+): string {
+  if (section === "account") {
+    return locale === "zh" ? "账号" : "Account";
+  }
+  const item = settingsCatalogItem(section);
+  return item
+    ? sidebarCopy[locale][item.labelKey]
+    : locale === "zh"
+      ? "设置"
+      : "Settings";
+}
+
 export const settingsCatalog = [
   {
     id: "personal",
     labelKey: "personal",
     items: [
       {
-        id: "account",
-        labelKey: "general",
-        icon: "shield-check",
-        backend: {
-          refreshTarget: "account",
-          scope: "account",
-        },
-      },
-      {
-        id: "appearance",
-        labelKey: "appearance",
-        icon: "palette",
-        backend: {
-          refreshTarget: "appearance-settings",
-          scope: "desktop",
-          fields: [
-            {
-              fieldId: "appearance-locale",
-              configPath: "ui.locale",
-              valueKind: "select",
-              writeActionId: "save-appearance",
-            },
-            {
-              fieldId: "appearance-theme",
-              configPath: "ui.theme",
-              valueKind: "select",
-              writeActionId: "save-appearance",
-            },
-          ],
-        },
-      },
-      {
         id: "config",
-        labelKey: "config",
+        labelKey: "general",
         icon: "sliders-horizontal",
+        mode: "editable",
+        description: {
+          zh: "默认模型、审批策略与本地权限边界",
+          en: "Default model, approval policy, and local permissions",
+        },
         backend: {
           refreshTarget: "config",
           scope: "workspace",
@@ -209,9 +199,42 @@ export const settingsCatalog = [
         },
       },
       {
+        id: "appearance",
+        labelKey: "appearance",
+        icon: "palette",
+        mode: "editable",
+        description: {
+          zh: "语言与明暗主题，保存后立即生效",
+          en: "Language and theme, applied immediately after saving",
+        },
+        backend: {
+          refreshTarget: "appearance-settings",
+          scope: "desktop",
+          fields: [
+            {
+              fieldId: "appearance-locale",
+              configPath: "desktop.uiLocale",
+              valueKind: "select",
+              writeActionId: "save-appearance",
+            },
+            {
+              fieldId: "appearance-theme",
+              configPath: "desktop.appearanceTheme",
+              valueKind: "select",
+              writeActionId: "save-appearance",
+            },
+          ],
+        },
+      },
+      {
         id: "personalization",
         labelKey: "personalization",
         icon: "sparkles",
+        mode: "editable",
+        description: {
+          zh: "角色、原则与长期记忆行为",
+          en: "Role, principles, and long-term memory behavior",
+        },
         backend: {
           refreshTarget: "personalization-settings",
           scope: "desktop",
@@ -228,16 +251,27 @@ export const settingsCatalog = [
               valueKind: "string",
               writeActionId: "save-personalization",
             },
+            {
+              fieldId: "personalization-memory-mode",
+              configPath: "features.memories",
+              valueKind: "select",
+              writeActionId: "save-personalization",
+            },
           ],
         },
       },
       {
-        id: "keyboard",
-        labelKey: "keyboard",
-        icon: "keyboard",
+        id: "account",
+        labelKey: "general",
+        icon: "shield-check",
+        mode: "action",
+        description: {
+          zh: "企业身份、模型账号与授权状态",
+          en: "Enterprise identity, model account, and authorization",
+        },
         backend: {
-          refreshTarget: "keyboard-settings",
-          scope: "desktop",
+          refreshTarget: "account",
+          scope: "account",
         },
       },
     ],
@@ -247,18 +281,14 @@ export const settingsCatalog = [
     labelKey: "integrations",
     items: [
       {
-        id: "app-snapshots",
-        labelKey: "appSnapshots",
-        icon: "app-window",
-        backend: {
-          refreshTarget: "app-snapshots-settings",
-          scope: "integration",
-        },
-      },
-      {
         id: "mcp-servers",
         labelKey: "mcpServers",
         icon: "bot",
+        mode: "action",
+        description: {
+          zh: "已连接的 MCP 服务、工具与重载状态",
+          en: "Connected MCP services, tools, and reload status",
+        },
         backend: {
           refreshTarget: "mcp-settings",
           scope: "integration",
@@ -268,6 +298,11 @@ export const settingsCatalog = [
         id: "browser",
         labelKey: "browser",
         icon: "globe",
+        mode: "status",
+        description: {
+          zh: "当前可用的浏览器应用与授权范围",
+          en: "Available browser apps and authorization scope",
+        },
         backend: {
           refreshTarget: "browser-settings",
           scope: "integration",
@@ -277,6 +312,11 @@ export const settingsCatalog = [
         id: "computer-control",
         labelKey: "computerControl",
         icon: "terminal-square",
+        mode: "action",
+        description: {
+          zh: "远程控制、设备配对与撤销",
+          en: "Remote control, device pairing, and revocation",
+        },
         backend: {
           refreshTarget: "computer-control-settings",
           scope: "integration",
@@ -290,57 +330,64 @@ export const settingsCatalog = [
           ],
         },
       },
-    ],
-  },
-  {
-    id: "coding",
-    labelKey: "coding",
-    items: [
-      {
-        id: "hooks",
-        labelKey: "hooks",
-        icon: "cable",
-        backend: {
-          refreshTarget: "hooks",
-          scope: "workspace",
-        },
-      },
       {
         id: "connections",
         labelKey: "connections",
         icon: "globe",
+        mode: "status",
+        description: {
+          zh: "账号、Provider、插件与应用连接总览",
+          en: "Account, provider, plugin, and app connection overview",
+        },
         backend: {
           refreshTarget: "connections-settings",
           scope: "integration",
         },
       },
       {
-        id: "git",
-        labelKey: "git",
-        icon: "git-branch",
-        backend: {
-          refreshTarget: "git-settings",
-          scope: "source-control",
-        },
-      },
-      {
         id: "environment",
         labelKey: "environment",
         icon: "terminal-square",
+        mode: "status",
+        description: {
+          zh: "沙箱、策略约束与运行时就绪状态",
+          en: "Sandbox, policy constraints, and runtime readiness",
+        },
         backend: {
           refreshTarget: "environment-settings",
           scope: "runtime",
         },
       },
-      {
-        id: "worktrees",
-        labelKey: "worktrees",
-        icon: "app-window",
-        backend: {
-          refreshTarget: "worktrees-settings",
-          scope: "session",
-        },
-      },
     ],
   },
 ] as const satisfies readonly SettingsCatalogGroup[];
+
+export function settingsCatalogItem(
+  section: SettingsSection,
+): SettingsCatalogItem | null {
+  for (const group of settingsCatalog) {
+    const item = group.items.find((candidate) => candidate.id === section);
+    if (item) {
+      return item;
+    }
+  }
+  return null;
+}
+
+export function settingsConfigField(
+  fieldId: string,
+): SettingsConfigField | null {
+  for (const group of settingsCatalog) {
+    for (const item of group.items) {
+      const fields =
+        "fields" in item.backend ? item.backend.fields : undefined;
+      const field = fields?.find(
+        (candidate) => candidate.fieldId === fieldId,
+      );
+      if (field) {
+        return field;
+      }
+    }
+  }
+  return null;
+}

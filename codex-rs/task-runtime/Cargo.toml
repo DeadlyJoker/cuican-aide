@@ -1,0 +1,22 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "crewon-task-runtime"
+version.workspace = true
+
+[lib]
+name = "crewon_task_runtime"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crewon-resource-federation = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

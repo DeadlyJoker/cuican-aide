@@ -1,5 +1,6 @@
 import type { AskForApproval } from "@crewon-protocol/v2/AskForApproval";
 import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
+import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
 
 import {
   DESKTOP_LOCALE_KEY_PATH,
@@ -10,7 +11,7 @@ import type { Locale } from "../i18n";
 
 export type ConfigEdit = {
   keyPath: string;
-  value: string;
+  value: JsonValue;
 };
 
 export type ThreadSettingsPatch = {
@@ -60,6 +61,10 @@ export function buildAppearanceEdits(
 export function buildPersonalizationEdits(
   fieldValue: (fieldId: string) => string,
 ): ConfigEdit[] {
+  const memoryMode = fieldValue("personalization-memory-mode");
+  const memoryEnabled = memoryMode !== "off";
+  const generateMemories = memoryMode === "on" || memoryMode === "learn-only";
+  const useMemories = memoryMode === "on" || memoryMode === "read-only";
   return [
     {
       keyPath: "instructions",
@@ -69,6 +74,9 @@ export function buildPersonalizationEdits(
       keyPath: "developer_instructions",
       value: fieldValue("personalization-developer-instructions"),
     },
+    { keyPath: "features.memories", value: memoryEnabled },
+    { keyPath: "memories.generate_memories", value: generateMemories },
+    { keyPath: "memories.use_memories", value: useMemories },
   ];
 }
 
@@ -121,8 +129,8 @@ export function settingsSaveInProgressBody(
       : "Saving appearance settings...";
   }
   return locale === "zh"
-    ? "正在保存个性化设置..."
-    : "Saving personalization settings...";
+    ? "正在保存助理设置..."
+    : "Saving assistant settings...";
 }
 
 export function settingsSaveSuccessBody(
@@ -140,8 +148,8 @@ export function settingsSaveSuccessBody(
           ? "外观设置已保存"
           : "Appearance saved"
         : locale === "zh"
-          ? "个性化设置已保存"
-          : "Personalization saved";
+          ? "助理设置已保存并热重载"
+          : "Assistant settings saved and hot-reloaded";
   return `${savedMessage}\nversion: ${response?.version ?? "-"}\nstatus: ${
     response?.status ?? "ok"
   }`;
@@ -164,8 +172,8 @@ export function settingsSaveFailureMessage(
       : "Unable to save appearance settings";
   }
   return locale === "zh"
-    ? "保存个性化设置失败"
-    : "Unable to save personalization settings";
+    ? "保存助理设置失败"
+    : "Unable to save assistant settings";
 }
 
 export function configValuesMissingPatch(

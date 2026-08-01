@@ -13,6 +13,7 @@ use crate::config_manager::ConfigManager;
 use crate::outgoing_message::ConnectionId;
 use crate::outgoing_message::OutgoingMessageSender;
 use crate::transport::AppServerTransport;
+use crate::transport::ConnectionOrigin;
 use anyhow::Result;
 use app_test_support::create_mock_responses_server_repeating_assistant;
 use app_test_support::write_mock_responses_config_toml;
@@ -137,7 +138,7 @@ impl TracingHarness {
             _codex_home: codex_home,
             processor,
             outgoing_rx,
-            session: Arc::new(ConnectionSessionState::new()),
+            session: Arc::new(ConnectionSessionState::new(ConnectionOrigin::Stdio)),
             tracing,
         };
 
@@ -600,6 +601,8 @@ async fn build_test_processor(
         rpc_transport: AppServerRpcTransport::Stdio,
         remote_control_handle: None,
         plugin_startup_tasks: crate::PluginStartupTasks::Start,
+        provider_connection_runtime: None,
+        durable_cloud_agent_enabled: false,
     }));
     (processor, outgoing_rx)
 }

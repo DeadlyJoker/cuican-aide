@@ -4,19 +4,17 @@ use futures::StreamExt;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde::Serialize;
-use std::time::Duration;
-use tokio::time::Instant;
-use tokio_util::sync::CancellationToken;
 
 use crate::error_code::internal_error;
 
-use super::AgentAccessRequirement;
 use super::AgentPlatformRequestProcessor;
 use super::MAX_ACCESS_TOKEN_BYTES;
 use super::MAX_REMOTE_JSON_BYTES;
 use super::RemoteAgentStatus;
 use super::RemoteUser;
+use super::RemoteWorkflowStatus;
 use super::validation::validate_agent_id;
+use super::validation::validate_workflow_id;
 
 impl AgentPlatformRequestProcessor {
     pub(super) async fn verify_user(
@@ -75,11 +73,42 @@ impl AgentPlatformRequestProcessor {
         decode_json_response(response).await
     }
 
-    pub(super) async fn verify_agent_access(
+    pub(super) async fn send_workflow_open_api<T, B>(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&B>,
+    ) -> Result<T, JSONRPCErrorError>
+    where
+        T: for<'de> Deserialize<'de>,
+        B: Serialize + ?Sized,
+    {
+        let mut request = self
+            .inner
+            .client
+            .request(method, format!("{}{path}", self.base_url()?))
+            .timeout(self.inner.request_timeout);
+        if let Some(api_key) = self.inner.api_key.as_deref() {
+            request = request.header("X-API-Key", api_key);
+        }
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| internal_error(error.to_string()))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(remote_response_error(status, response).await);
+        }
+        decode_json_response(response).await
+    }
+
+    pub(super) async fn verify_enabled_agent_access(
         &self,
         access_token: &str,
         agent_id: &str,
-        requirement: AgentAccessRequirement,
     ) -> Result<String, JSONRPCErrorError> {
         validate_access_token(access_token)?;
         validate_agent_id(agent_id)?;
@@ -100,7 +129,7 @@ impl AgentPlatformRequestProcessor {
             return Err(remote_response_error(status, response).await);
         }
         let status = decode_json_response::<RemoteAgentStatus>(response).await?;
-        if matches!(requirement, AgentAccessRequirement::Enabled) && status.api_enabled != 1 {
+        if status.api_enabled != 1 {
             return Err(remote_error(
                 StatusCode::FORBIDDEN,
                 "Agent Open API is not enabled",
@@ -109,6 +138,55 @@ impl AgentPlatformRequestProcessor {
         let canonical_id = status.uid.unwrap_or_else(|| status.id.to_string());
         validate_agent_id(&canonical_id)?;
         Ok(canonical_id)
+    }
+
+    pub(super) async fn verify_enabled_workflow_access(
+        &self,
+        access_token: &str,
+        workflow_id: &str,
+    ) -> Result<String, JSONRPCErrorError> {
+        let status = self.read_workflow_status(access_token, workflow_id).await?;
+        if status.api_enabled != 1 {
+            return Err(remote_error(
+                StatusCode::FORBIDDEN,
+                "Workflow Open API is not enabled",
+            ));
+        }
+        canonical_workflow_id(status)
+    }
+
+    pub(super) async fn verify_workflow_access(
+        &self,
+        access_token: &str,
+        workflow_id: &str,
+    ) -> Result<String, JSONRPCErrorError> {
+        canonical_workflow_id(self.read_workflow_status(access_token, workflow_id).await?)
+    }
+
+    async fn read_workflow_status(
+        &self,
+        access_token: &str,
+        workflow_id: &str,
+    ) -> Result<RemoteWorkflowStatus, JSONRPCErrorError> {
+        validate_access_token(access_token)?;
+        validate_workflow_id(workflow_id)?;
+        let response = self
+            .inner
+            .client
+            .get(format!(
+                "{}/api/v1/workflows/{workflow_id}/api-status",
+                self.base_url()?
+            ))
+            .bearer_auth(access_token)
+            .timeout(self.inner.preflight_timeout)
+            .send()
+            .await
+            .map_err(|error| internal_error(error.to_string()))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(remote_response_error(status, response).await);
+        }
+        decode_json_response(response).await
     }
 
     pub(super) fn base_url(&self) -> Result<&str, JSONRPCErrorError> {
@@ -160,26 +238,7 @@ pub(super) async fn remote_response_error(
     response: reqwest::Response,
 ) -> JSONRPCErrorError {
     let detail = read_limited_body(response).await.unwrap_or_default();
-    response_error_from_detail(status, &detail)
-}
-
-pub(super) async fn remote_stream_response_error(
-    status: StatusCode,
-    response: reqwest::Response,
-    cancellation: &CancellationToken,
-    deadline: Instant,
-    idle_timeout: Duration,
-) -> JSONRPCErrorError {
-    let detail =
-        match read_limited_stream_body(response, cancellation, deadline, idle_timeout).await {
-            Ok(detail) => detail,
-            Err(error) => return error,
-        };
-    response_error_from_detail(status, &detail)
-}
-
-fn response_error_from_detail(status: StatusCode, detail: &[u8]) -> JSONRPCErrorError {
-    let message = serde_json::from_slice::<serde_json::Value>(detail)
+    let message = serde_json::from_slice::<serde_json::Value>(&detail)
         .ok()
         .and_then(|value| {
             value.get("detail").map(|detail| {
@@ -194,12 +253,20 @@ fn response_error_from_detail(status: StatusCode, detail: &[u8]) -> JSONRPCError
     remote_error(status, message)
 }
 
-async fn decode_json_response<T>(response: reqwest::Response) -> Result<T, JSONRPCErrorError>
+pub(super) async fn decode_json_response<T>(
+    response: reqwest::Response,
+) -> Result<T, JSONRPCErrorError>
 where
     T: for<'de> Deserialize<'de>,
 {
     let body = read_limited_body(response).await?;
     serde_json::from_slice(&body).map_err(|error| internal_error(error.to_string()))
+}
+
+fn canonical_workflow_id(status: RemoteWorkflowStatus) -> Result<String, JSONRPCErrorError> {
+    let canonical_id = status.id.to_string();
+    validate_workflow_id(&canonical_id)?;
+    Ok(canonical_id)
 }
 
 async fn read_limited_body(response: reqwest::Response) -> Result<Vec<u8>, JSONRPCErrorError> {
@@ -221,44 +288,6 @@ async fn read_limited_body(response: reqwest::Response) -> Result<Vec<u8>, JSONR
     Ok(body)
 }
 
-async fn read_limited_stream_body(
-    response: reqwest::Response,
-    cancellation: &CancellationToken,
-    deadline: Instant,
-    idle_timeout: Duration,
-) -> Result<Vec<u8>, JSONRPCErrorError> {
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_REMOTE_JSON_BYTES as u64)
-    {
-        return Err(internal_error("Agent Platform response body was too large"));
-    }
-    let mut stream = response.bytes_stream();
-    let mut body = Vec::new();
-    loop {
-        let next = tokio::select! {
-            biased;
-            _ = cancellation.cancelled() => {
-                return Err(internal_error("Agent Platform run cancelled"));
-            }
-            _ = tokio::time::sleep_until(deadline) => {
-                return Err(internal_error("Agent Platform stream total time limit reached"));
-            }
-            next = tokio::time::timeout(idle_timeout, stream.next()) => {
-                next.map_err(|_| internal_error("Agent Platform stream timed out"))?
-            }
-        };
-        let Some(chunk) = next else {
-            return Ok(body);
-        };
-        let chunk = chunk.map_err(|error| internal_error(error.to_string()))?;
-        if body.len().saturating_add(chunk.len()) > MAX_REMOTE_JSON_BYTES {
-            return Err(internal_error("Agent Platform response body was too large"));
-        }
-        body.extend_from_slice(&chunk);
-    }
-}
-
 fn validate_access_token(access_token: &str) -> Result<(), JSONRPCErrorError> {
     if access_token.trim().is_empty() || access_token.len() > MAX_ACCESS_TOKEN_BYTES {
         return Err(remote_error(
@@ -267,11 +296,4 @@ fn validate_access_token(access_token: &str) -> Result<(), JSONRPCErrorError> {
         ));
     }
     Ok(())
-}
-
-pub(super) fn json_u64(value: &serde_json::Value, field: &str) -> u64 {
-    value
-        .get(field)
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or_default()
 }

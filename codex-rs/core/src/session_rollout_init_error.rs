@@ -3,8 +3,17 @@ use std::path::Path;
 
 use crate::rollout::SESSIONS_SUBDIR;
 use crewon_protocol::error::CodexErr;
+use crewon_thread_store::ThreadStoreError;
 
 pub(crate) fn map_session_init_error(err: &anyhow::Error, codex_home: &Path) -> CodexErr {
+    if let Some(mapped) = err
+        .chain()
+        .filter_map(|cause| cause.downcast_ref::<ThreadStoreError>())
+        .find_map(map_thread_store_error)
+    {
+        return mapped;
+    }
+
     if let Some(mapped) = err
         .chain()
         .filter_map(|cause| cause.downcast_ref::<std::io::Error>())
@@ -14,6 +23,21 @@ pub(crate) fn map_session_init_error(err: &anyhow::Error, codex_home: &Path) -> 
     }
 
     CodexErr::Fatal(format!("Failed to initialize session: {err:#}"))
+}
+
+fn map_thread_store_error(err: &ThreadStoreError) -> Option<CodexErr> {
+    match err {
+        ThreadStoreError::ThreadNotFound { thread_id } => {
+            Some(CodexErr::ThreadNotFound(*thread_id))
+        }
+        ThreadStoreError::InvalidRequest { message } | ThreadStoreError::Conflict { message } => {
+            Some(CodexErr::InvalidRequest(message.clone()))
+        }
+        ThreadStoreError::Unsupported { operation } => Some(CodexErr::UnsupportedOperation(
+            format!("thread store operation is not supported: {operation}"),
+        )),
+        ThreadStoreError::Internal { .. } => None,
+    }
 }
 
 fn map_rollout_io_error(io_err: &std::io::Error, codex_home: &Path) -> Option<CodexErr> {
@@ -47,3 +71,7 @@ fn map_rollout_io_error(io_err: &std::io::Error, codex_home: &Path) -> Option<Co
         "{hint} (underlying error: {io_err})"
     )))
 }
+
+#[cfg(test)]
+#[path = "session_rollout_init_error_tests.rs"]
+mod tests;

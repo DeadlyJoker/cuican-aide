@@ -1,0 +1,31 @@
+[package]
+name = "crewon-provider-agent-platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "crewon_provider_agent_platform"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crewon-provider-transport = { workspace = true }
+crewon-resource-federation = { workspace = true }
+jsonwebtoken = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["raw_value"] }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true, features = ["v7"] }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+crewon-utils-cargo-bin = { workspace = true }
+pretty_assertions = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock = { workspace = true }

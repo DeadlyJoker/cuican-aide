@@ -3,6 +3,9 @@ use crate::config::ConstraintResult;
 use crate::session::Crewon;
 use crate::session::SessionSettingsUpdate;
 use crate::session::SteerInputError;
+use crate::session::SubmitUserInputOnceError;
+use crate::session::SubmitUserInputOnceOutcome;
+use crate::session::SubmitUserInputOnceRequest;
 use crewon_features::Feature;
 use crewon_otel::SessionTelemetry;
 use crewon_protocol::ThreadId;
@@ -11,6 +14,7 @@ use crewon_protocol::config_types::CollaborationMode;
 use crewon_protocol::config_types::Personality;
 use crewon_protocol::config_types::ReasoningSummary;
 use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::dynamic_tools::DynamicToolSpec;
 use crewon_protocol::error::CodexErr;
 use crewon_protocol::error::Result as CrewonResult;
 use crewon_protocol::mcp::CallToolResult;
@@ -186,6 +190,15 @@ impl CrewonThread {
         }
     }
 
+    /// Returns whether this process currently owns the exact running turn.
+    ///
+    /// Persisted rollout history is intentionally not considered active ownership: after a
+    /// restart, an in-progress history row alone cannot prove that external execution is still
+    /// running.
+    pub async fn is_exact_turn_active(&self, turn_id: &str) -> bool {
+        self.engine.session.owns_exact_runtime_turn(turn_id).await
+    }
+
     pub async fn submit(&self, op: Op) -> CrewonResult<String> {
         self.engine.submit(op).await
     }
@@ -197,6 +210,22 @@ impl CrewonThread {
 
     pub async fn shutdown_and_wait(&self) -> CrewonResult<()> {
         self.engine.shutdown_and_wait().await
+    }
+
+    /// Returns the dynamic tools that will be exposed to subsequent turns.
+    pub async fn dynamic_tools(&self) -> Vec<DynamicToolSpec> {
+        self.engine.session.dynamic_tools().await
+    }
+
+    /// Replaces the dynamic tools exposed to subsequent turns.
+    ///
+    /// Existing turns retain the immutable tool snapshot they started with. App-server uses this
+    /// narrow hook to rebuild server-owned Provider tool projections from durable authority.
+    pub async fn replace_dynamic_tools(&self, dynamic_tools: Vec<DynamicToolSpec>) {
+        self.engine
+            .session
+            .replace_dynamic_tools(dynamic_tools)
+            .await;
     }
 
     /// Wait until the underlying session loop has terminated.
@@ -395,6 +424,23 @@ impl CrewonThread {
     /// Use sparingly: this is intended to be removed soon.
     pub async fn submit_with_id(&self, sub: Submission) -> CrewonResult<()> {
         self.engine.submit_with_id(sub).await
+    }
+
+    pub async fn submit_user_input_once(
+        &self,
+        request: SubmitUserInputOnceRequest,
+    ) -> Result<SubmitUserInputOnceOutcome, SubmitUserInputOnceError> {
+        self.engine.submit_user_input_once(request).await
+    }
+
+    pub async fn submit_user_input_once_with_existing_policy(
+        &self,
+        request: SubmitUserInputOnceRequest,
+        existing_policy: crate::ExistingUserInputOncePolicy,
+    ) -> Result<SubmitUserInputOnceOutcome, SubmitUserInputOnceError> {
+        self.engine
+            .submit_user_input_once_with_existing_policy(request, existing_policy)
+            .await
     }
 
     pub async fn next_event(&self) -> CrewonResult<Event> {

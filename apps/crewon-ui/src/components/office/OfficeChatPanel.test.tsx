@@ -48,6 +48,11 @@ const completedRunMessage: OfficeMessage = {
   text: "团队执行已完成：准备交付",
   time: "10:03",
 };
+const completedRunWithReplyMessage: OfficeMessage = {
+  ...completedRunMessage,
+  runId: "run-completed-with-reply",
+  text: "团队执行已完成：准备交付\n\nOffice 首次消息验收通过",
+};
 const memberReply: OfficeMessage = {
   accent: "blue",
   author: "AI智能助理",
@@ -121,6 +126,7 @@ describe("OfficeChatPanel", () => {
     const visibleMessages = visibleOfficeMessages([
       startedRunMessage,
       completedRunMessage,
+      completedRunWithReplyMessage,
       leaderDispatchMessage,
       memberReply,
       failedRunMessage,
@@ -130,6 +136,10 @@ describe("OfficeChatPanel", () => {
       visibleMessages.map(({ author, text }) => ({ author, text })),
     ).toMatchInlineSnapshot(`
       [
+        {
+          "author": "办公室主控",
+          "text": "Office 首次消息验收通过",
+        },
         {
           "author": "办公室主控",
           "text": "@AI智能助理 只回复：Leader 派发成功。",

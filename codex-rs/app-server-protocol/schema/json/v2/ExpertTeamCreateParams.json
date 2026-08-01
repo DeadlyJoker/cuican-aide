@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ExpertRole": {
+      "additionalProperties": false,
+      "description": "One bounded local role in an Experts definition.",
+      "properties": {
+        "agentType": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentType",
+        "name",
+        "role"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "experts": {
+      "items": {
+        "$ref": "#/definitions/ExpertRole"
+      },
+      "type": "array"
+    },
+    "goal": {
+      "type": "string"
+    },
+    "leader": {
+      "$ref": "#/definitions/ExpertRole"
+    },
+    "title": {
+      "type": "string"
+    },
+    "workspaceKey": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "experts",
+    "goal",
+    "leader",
+    "title",
+    "workspaceKey"
+  ],
+  "title": "ExpertTeamCreateParams",
+  "type": "object"
+}

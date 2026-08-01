@@ -384,6 +384,15 @@ pub(super) async fn spawn_websocket_server_with_args(
     listen_url: &str,
     extra_args: &[String],
 ) -> Result<(Child, SocketAddr)> {
+    spawn_websocket_server_with_env_and_args(codex_home, listen_url, &[], extra_args).await
+}
+
+pub(super) async fn spawn_websocket_server_with_env_and_args(
+    codex_home: &Path,
+    listen_url: &str,
+    env_overrides: &[(&str, Option<&str>)],
+    extra_args: &[String],
+) -> Result<(Child, SocketAddr)> {
     let program = crewon_utils_cargo_bin::cargo_bin("crewon-app-server")
         .context("should find app-server binary")?;
     let mut cmd = Command::new(program);
@@ -394,8 +403,20 @@ pub(super) async fn spawn_websocket_server_with_args(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
+        .env("CREWON_HOME", codex_home)
         .env("CODEX_HOME", codex_home)
+        .env("CODEX_SQLITE_HOME", codex_home)
         .env("RUST_LOG", "warn");
+    for (name, value) in env_overrides {
+        match value {
+            Some(value) => {
+                cmd.env(name, value);
+            }
+            None => {
+                cmd.env_remove(name);
+            }
+        }
+    }
     let mut process = cmd
         .kill_on_drop(true)
         .spawn()
@@ -865,7 +886,10 @@ fn connectable_bind_addr(bind_addr: SocketAddr) -> SocketAddr {
     }
 }
 
-fn signed_bearer_token(shared_secret: &[u8], claims: serde_json::Value) -> Result<String> {
+pub(super) fn signed_bearer_token(
+    shared_secret: &[u8],
+    claims: serde_json::Value,
+) -> Result<String> {
     let header_segment = URL_SAFE_NO_PAD.encode(br#"{"alg":"HS256","typ":"JWT"}"#);
     let claims_segment = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims)?);
     let payload = format!("{header_segment}.{claims_segment}");

@@ -123,6 +123,10 @@ pub enum Feature {
     RuntimeMetrics,
     /// Enable startup memory extraction and file-backed memory consolidation.
     MemoryTool,
+    /// Enable durable idempotent admission for user input.
+    UserInputOnce,
+    /// Enable the Office auto-delegation durable admission canary path.
+    OfficeAutoDelegationDurableAdmission,
     /// Compress cold local thread-store rollout files.
     LocalThreadStoreCompression,
     /// Enable the Chronicle sidecar for passive screen-context memories.
@@ -345,7 +349,7 @@ impl Features {
     }
 
     pub fn enabled(&self, f: Feature) -> bool {
-        self.enabled.contains(&f)
+        !forced_off_for_legacy_fence_artifact(f) && self.enabled.contains(&f)
     }
 
     pub fn apps_enabled_for_auth(&self, has_chatgpt_auth: bool) -> bool {
@@ -357,6 +361,14 @@ impl Features {
     }
 
     pub fn enable(&mut self, f: Feature) -> &mut Self {
+        if forced_off_for_legacy_fence_artifact(f) {
+            self.enabled.remove(&f);
+            tracing::warn!(
+                feature = f.key(),
+                "feature is forced off in the legacy fence artifact"
+            );
+            return self;
+        }
         self.enabled.insert(f);
         self
     }
@@ -513,7 +525,11 @@ impl Features {
     }
 
     pub fn enabled_features(&self) -> Vec<Feature> {
-        self.enabled.iter().copied().collect()
+        self.enabled
+            .iter()
+            .copied()
+            .filter(|feature| !forced_off_for_legacy_fence_artifact(*feature))
+            .collect()
     }
 
     pub fn normalize_dependencies(&mut self) {
@@ -524,6 +540,14 @@ impl Features {
             self.enable(Feature::CodeMode);
         }
     }
+}
+
+const fn forced_off_for_legacy_fence_artifact(feature: Feature) -> bool {
+    cfg!(feature = "legacy-fence-artifact")
+        && matches!(
+            feature,
+            Feature::UserInputOnce | Feature::OfficeAutoDelegationDurableAdmission
+        )
 }
 
 fn legacy_usage_notice(alias: &str, feature: Feature) -> (String, Option<String>) {
@@ -757,6 +781,18 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::ShellZshFork,
         key: "shell_zsh_fork",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::UserInputOnce,
+        key: "user_input_once",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::OfficeAutoDelegationDurableAdmission,
+        key: "office_auto_delegation_durable_admission",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },

@@ -74,13 +74,26 @@ describe("settings save payload helpers", () => {
     const values: Record<string, string> = {
       "personalization-instructions": "",
       "personalization-developer-instructions": "Prefer tests.",
+      "personalization-memory-mode": "on",
     };
 
     expect(buildPersonalizationEdits((fieldId) => values[fieldId] ?? "")).toEqual(
       [
         { keyPath: "instructions", value: "" },
         { keyPath: "developer_instructions", value: "Prefer tests." },
+        { keyPath: "features.memories", value: true },
+        { keyPath: "memories.generate_memories", value: true },
+        { keyPath: "memories.use_memories", value: true },
       ],
+    );
+
+    values["personalization-memory-mode"] = "read-only";
+    expect(buildPersonalizationEdits((fieldId) => values[fieldId] ?? "")).toEqual(
+      expect.arrayContaining([
+        { keyPath: "features.memories", value: true },
+        { keyPath: "memories.generate_memories", value: false },
+        { keyPath: "memories.use_memories", value: true },
+      ]),
     );
   });
 
@@ -143,12 +156,12 @@ describe("settings save payload helpers", () => {
       "Unable to save appearance settings",
     );
     expect(settingsSaveInProgressBody("personalization", "en")).toBe(
-      "Saving personalization settings...",
+      "Saving assistant settings...",
     );
     expect(settingsSaveSuccessBody("personalization", { status: "saved" }, "zh"))
-      .toBe("个性化设置已保存\nversion: -\nstatus: saved");
+      .toBe("助理设置已保存并热重载\nversion: -\nstatus: saved");
     expect(settingsSaveFailureMessage("personalization", null, "zh")).toBe(
-      "保存个性化设置失败",
+      "保存助理设置失败",
     );
   });
 
@@ -188,7 +201,7 @@ describe("settings save payload helpers", () => {
       }),
     ).toEqual({
       subtitle: "Current path",
-      body: "个性化设置已保存\nversion: -\nstatus: ok",
+      body: "助理设置已保存并热重载\nversion: -\nstatus: ok",
       error: undefined,
     });
     expect(settingsSaveFailurePatch("config", null, "zh")).toEqual({
@@ -243,7 +256,7 @@ describe("settings save payload helpers", () => {
     ).toEqual({
       title: "Config",
       subtitle: "Current path",
-      body: "个性化设置已保存\nversion: -\nstatus: ok",
+      body: "助理设置已保存并热重载\nversion: -\nstatus: ok",
       error: undefined,
     });
     expect(settingsSaveFailurePanel(panel, "config", null, "zh")).toEqual({

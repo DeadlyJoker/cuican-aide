@@ -10,6 +10,7 @@ import type {
   SkillFileAction,
 } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
+import { buildSkillEditPanelContent } from "../draft/draftSavePayloads";
 
 type LibraryActionId = LibraryPanelAction["id"];
 type McpOauthLoginResult = { authorizationUrl?: string | null } | null;
@@ -96,10 +97,10 @@ export function libraryDemoBackendDeferredPatch(
     body:
       actionId === "install-plugin"
         ? locale === "zh"
-          ? "演示模式：市场浏览和安装会在接入后端后开启。这里展示已打包的 MCP 连接器与 Skill。"
+          ? "演示模式：市场浏览和安装会在接入后端后开启。这里展示已打包的服务与技能。"
           : "Demo mode: marketplace browse and install open once the backend is connected. Shown here are bundled MCP connectors and skills."
         : locale === "zh"
-          ? "演示模式：工具列表为内置示例，接入 app-server 后会显示真实的运行态 MCP 和 Skill。"
+          ? "演示模式：工具列表为内置示例，接入 app-server 后会显示真实的运行态服务和技能。"
           : "Demo mode: the tool list shows built-in samples. Connect the app-server to see live MCP and skills.",
     error: undefined,
   };
@@ -131,7 +132,7 @@ export function libraryActionProgressText(
       return locale === "zh" ? "正在刷新插件..." : "Refreshing plugins...";
     case "login-mcp-oauth":
       return locale === "zh"
-        ? "正在打开 MCP 授权..."
+        ? "正在打开服务授权..."
         : "Opening MCP authorization...";
     case "run-automation":
       return locale === "zh" ? "正在运行自动化..." : "Running automation...";
@@ -141,24 +142,20 @@ export function libraryActionProgressText(
         : "Reading knowledge file...";
     case "read-mcp-resource":
       return locale === "zh"
-        ? "正在读取 MCP 资源..."
+        ? "正在读取服务资源..."
         : "Reading MCP resource...";
     case "call-mcp-tool":
-      return locale === "zh"
-        ? "正在调用 MCP 工具..."
-        : "Calling MCP tool...";
+      return locale === "zh" ? "正在调用服务工具..." : "Calling MCP tool...";
     case "toggle-skill":
       return locale === "zh"
-        ? "正在更新 Skill 配置..."
+        ? "正在更新技能配置..."
         : "Updating skill config...";
     case "delete-config-file":
       return locale === "zh"
         ? "正在删除后端记录..."
         : "Deleting backend record...";
     case "delete-mcp-config":
-      return locale === "zh"
-        ? "正在删除 MCP 配置..."
-        : "Deleting MCP config...";
+      return locale === "zh" ? "正在删除服务配置..." : "Deleting MCP config...";
     default:
       return locale === "zh" ? "正在卸载插件..." : "Uninstalling plugin...";
   }
@@ -189,11 +186,11 @@ export function libraryActionFallbackErrorText(
       return locale === "zh" ? "刷新工具失败" : "Unable to refresh tools";
     case "read-mcp-resource":
       return locale === "zh"
-        ? "读取 MCP 资源失败"
+        ? "读取服务资源失败"
         : "Unable to read MCP resource";
     case "toggle-skill":
       return locale === "zh"
-        ? "更新 Skill 配置失败"
+        ? "更新技能配置失败"
         : "Unable to update skill config";
     default:
       return locale === "zh" ? "卸载插件失败" : "Unable to uninstall plugin";
@@ -327,9 +324,9 @@ export function mcpOauthLoginPanelBody(
   locale: Locale,
 ): string {
   if (response?.authorizationUrl) {
-    return `${locale === "zh" ? "打开以下链接完成 MCP 授权" : "Open this URL to finish MCP authorization"}\n${response.authorizationUrl}`;
+    return `${locale === "zh" ? "打开以下链接完成服务授权" : "Open this URL to finish MCP authorization"}\n${response.authorizationUrl}`;
   }
-  return locale === "zh" ? "MCP 授权已启动" : "MCP authorization started";
+  return locale === "zh" ? "服务授权已启动" : "MCP authorization started";
 }
 
 export function mcpOauthLoginPanel(
@@ -385,7 +382,7 @@ export function skillToggleNoticeText({
   syncedToolRecord: SkillToolRecordSummary;
   locale: Locale;
 }): string {
-  const name = skillName ?? "Skill";
+  const name = skillName ?? (locale === "zh" ? "技能" : "Skill");
   if (locale === "zh") {
     return `${name} 已${wasEnabled ? "停用" : "启用"}${
       syncedToolRecord ? `（工具记录：${syncedToolRecord.filePath}）` : ""
@@ -431,7 +428,7 @@ export function mcpConfigDeletedNoticeState(params: {
   return {
     text:
       locale === "zh"
-        ? `已删除 MCP 配置：${serverName}${
+        ? `已删除服务配置：${serverName}${
             deletedToolRecord ? `（工具库记录：${deletedToolRecord}）` : ""
           }`
         : `Deleted MCP config: ${serverName}${
@@ -445,7 +442,7 @@ export function mcpConfigDeletedNoticeState(params: {
 
 export function skillDetailLoadingPatch(locale: Locale): Partial<LibraryPanel> {
   return {
-    body: locale === "zh" ? "正在读取 Skill..." : "Reading skill...",
+    body: locale === "zh" ? "正在读取技能..." : "Reading skill...",
     error: undefined,
   };
 }
@@ -463,11 +460,23 @@ export function skillFileDetailPatch(params: {
   locale: Locale;
 }): Partial<LibraryPanel> {
   const { action, body, locale } = params;
-  return {
-    title: action.skillName,
-    subtitle: action.path,
+  const editor = buildSkillEditPanelContent({
     body,
-    actions: skillFileDetailActions(action, locale),
+    locale,
+    path: action.path,
+    skillName: action.skillName,
+  });
+  return {
+    title: editor.title,
+    subtitle: editor.subtitle,
+    body: editor.body,
+    fields: editor.fields,
+    actions: [
+      ...(editor.actions?.filter((item) => item.id === "save-skill-edit") ??
+        []),
+      ...skillFileDetailActions(action, locale),
+    ],
+    items: [],
   };
 }
 
@@ -491,7 +500,7 @@ export function pluginSkillDetailPatch(params: {
   const { contents, fallbackTitle, locale } = params;
   return {
     title: fallbackTitle,
-    subtitle: locale === "zh" ? "Skill 详情" : "Skill details",
+    subtitle: locale === "zh" ? "技能详情" : "Skill details",
     body: contents ?? (locale === "zh" ? "暂无内容" : "No contents"),
   };
 }
@@ -517,7 +526,7 @@ export function skillDetailFailurePatch(
       error instanceof Error
         ? error.message
         : locale === "zh"
-          ? "读取 Skill 失败"
+          ? "读取技能失败"
           : "Unable to read skill",
   };
 }
@@ -558,10 +567,10 @@ function skillFileDetailActions(
       label:
         action.enabled === false
           ? locale === "zh"
-            ? "启用 Skill"
+            ? "启用技能"
             : "Enable skill"
           : locale === "zh"
-            ? "停用 Skill"
+            ? "停用技能"
             : "Disable skill",
       skillEnabled: action.enabled !== false,
       skillName: action.skillName,
@@ -602,9 +611,9 @@ function libraryDraftActionTitle(
     case "create-automation":
       return locale === "zh" ? "新建自动化" : "New automation";
     case "create-mcp":
-      return locale === "zh" ? "新建 MCP" : "New MCP";
+      return locale === "zh" ? "新建服务" : "New MCP";
     case "create-skill":
-      return locale === "zh" ? "新建 Skill" : "New Skill";
+      return locale === "zh" ? "新建技能" : "New Skill";
     case "recruit-agent":
       return locale === "zh" ? "招募智能体" : "Recruit agent";
   }

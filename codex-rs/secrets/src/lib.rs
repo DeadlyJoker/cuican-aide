@@ -13,9 +13,25 @@ use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
 
+mod credential;
 mod local;
 mod sanitizer;
 
+pub use credential::CredentialAccess;
+pub use credential::CredentialAccessRequest;
+pub use credential::CredentialCreateRequest;
+pub use credential::CredentialId;
+pub use credential::CredentialMetadata;
+pub use credential::CredentialOwner;
+pub use credential::CredentialRotateRequest;
+pub use credential::CredentialScopeKind;
+pub use credential::CredentialSecret;
+pub use credential::CredentialStatus;
+pub use credential::CredentialStore;
+pub use credential::CredentialStoreError;
+pub use credential::FakeCredentialStore;
+pub use credential::GrantedCredentialScope;
+pub use credential::LocalCredentialStore;
 pub use local::LocalSecretsBackend;
 pub use sanitizer::redact_secrets;
 

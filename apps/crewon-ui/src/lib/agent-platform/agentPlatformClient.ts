@@ -134,6 +134,8 @@ export type PlatformWorkflow = {
   id: number;
   name: string;
   description?: string | null;
+  edges?: unknown[] | null;
+  nodes?: unknown[] | null;
   status?: string | null;
   is_active?: boolean | number | null;
   created_at?: string | null;
@@ -141,6 +143,17 @@ export type PlatformWorkflow = {
   config?: Record<string, unknown> | null;
   user_id?: number | null;
   resource_source?: AgentPlatformResourceSource;
+};
+
+export type PlatformWorkflowExecution = {
+  id: number;
+  workflow_id: number;
+  status: string;
+  input_data?: Record<string, unknown> | null;
+  output_data?: Record<string, unknown> | string | null;
+  executed_nodes?: unknown[] | null;
+  node_results?: Record<string, unknown> | null;
+  error_message?: string | null;
 };
 
 export type AgentPlatformResourceCategory =
@@ -188,7 +201,9 @@ export const AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY =
 const UNAVAILABLE_RETRY_MS = 30_000;
 
 let cachedToken: string | null = null;
+let cachedTokenExpiresAt = 0;
 let cachedTokenPromise: Promise<string | null> | null = null;
+let cachedBffUser: Record<string, unknown> | null = null;
 let availabilityProbePromise: Promise<void> | null = null;
 let unavailableRetryAt = 0;
 
@@ -213,6 +228,10 @@ export function agentPlatformBaseUrl(): string {
     envValue("VITE_AGENT_PLATFORM_API_BASE_URL") ??
     DEFAULT_BASE_URL
   ).replace(/\/+$/, "");
+}
+
+export function crewonUnifiedSsoEnabled(): boolean {
+  return envValue("VITE_CREWON_UNIFIED_SSO_ENABLED") === "true";
 }
 
 function isUnavailableStatus(status: number): boolean {
@@ -265,17 +284,18 @@ async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const headers: HeadersInit = {};
+  const headers = new Headers(options.init?.headers);
   if (options.auth) {
     const token = await getAgentPlatformToken();
     if (token) {
-      headers.Authorization = `Bearer ${token}`;
+      headers.set("Authorization", `Bearer ${token}`);
     }
   }
 
   const response = await fetch(`${agentPlatformBaseUrl()}${path}`, {
     ...options.init,
     headers,
+    credentials: options.init?.credentials ?? "same-origin",
   });
   if (!response.ok) {
     throw new Error(
@@ -285,21 +305,78 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
+export async function createAgentPlatformWorkflow(input: {
+  description: string;
+  lead: string;
+  name: string;
+}): Promise<PlatformWorkflow> {
+  const workflow = await request<PlatformWorkflow>("/api/v1/workflows", {
+    auth: true,
+    init: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: input.name,
+        description: input.description,
+        nodes: [],
+        edges: [],
+        config: {
+          crewon: {
+            collaboration_mode: "workflow",
+            lead: input.lead,
+          },
+        },
+      }),
+    },
+  });
+  return { ...workflow, resource_source: "online" };
+}
+
 async function getAgentPlatformToken(): Promise<string | null> {
-  if (cachedToken) {
+  if (
+    cachedToken &&
+    tokenMatchesCurrentSessionRequirements(cachedToken) &&
+    Date.now() + 30_000 < cachedTokenExpiresAt
+  ) {
     return cachedToken;
+  }
+
+  if (crewonUnifiedSsoEnabled()) {
+    cachedToken = null;
+    cachedTokenExpiresAt = 0;
+    localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
+    localStorage.removeItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY);
+    if (cachedTokenPromise) {
+      return cachedTokenPromise;
+    }
+    cachedTokenPromise = obtainBffAccessToken().finally(() => {
+      cachedTokenPromise = null;
+    });
+    return cachedTokenPromise;
   }
 
   cachedToken = localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
   if (cachedToken) {
-    return cachedToken;
+    cachedTokenExpiresAt = jwtExpiryMilliseconds(cachedToken);
+    if (tokenMatchesCurrentSessionRequirements(cachedToken)) {
+      if (
+        cachedTokenExpiresAt === 0 ||
+        Date.now() + 30_000 < cachedTokenExpiresAt
+      ) {
+        return cachedToken;
+      }
+    } else {
+      clearAgentPlatformSession();
+    }
   }
 
   if (cachedTokenPromise) {
     return cachedTokenPromise;
   }
 
-  cachedTokenPromise = loginWithConfiguredDevAccount().finally(() => {
+  cachedTokenPromise = restoreAgentPlatformToken().finally(() => {
     cachedTokenPromise = null;
   });
   return cachedTokenPromise;
@@ -307,6 +384,13 @@ async function getAgentPlatformToken(): Promise<string | null> {
 
 export async function getAgentPlatformAccessToken(): Promise<string | null> {
   return getAgentPlatformToken();
+}
+
+export function getAgentPlatformBffUserSnapshot(): Record<
+  string,
+  unknown
+> | null {
+  return crewonUnifiedSsoEnabled() ? cachedBffUser : null;
 }
 
 async function loginWithConfiguredDevAccount(): Promise<string | null> {
@@ -334,7 +418,89 @@ async function loginWithConfiguredDevAccount(): Promise<string | null> {
     return null;
   }
   cachedToken = body.access_token;
+  cachedTokenExpiresAt = jwtExpiryMilliseconds(cachedToken);
   localStorage.setItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY, cachedToken);
+  return cachedToken;
+}
+
+async function restoreAgentPlatformToken(): Promise<string | null> {
+  const refreshed = await refreshStoredAgentPlatformSession();
+  return refreshed ?? loginWithConfiguredDevAccount();
+}
+
+async function refreshStoredAgentPlatformSession(): Promise<string | null> {
+  const refreshToken = localStorage.getItem(
+    AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
+  );
+  if (!refreshToken) {
+    if (
+      cachedTokenExpiresAt > 0 &&
+      cachedTokenExpiresAt <= Date.now() + 30_000
+    ) {
+      clearAgentPlatformSession();
+    }
+    return null;
+  }
+  const form = new URLSearchParams({ refresh_token: refreshToken });
+  const response = await fetch(
+    `${agentPlatformBaseUrl()}/api/v1/auth/refresh`,
+    {
+      method: "POST",
+      body: form,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      credentials: "same-origin",
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    clearAgentPlatformSession();
+    return null;
+  }
+  const body = (await response.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+  };
+  if (
+    !body.access_token ||
+    !tokenMatchesCurrentSessionRequirements(body.access_token)
+  ) {
+    clearAgentPlatformSession();
+    return null;
+  }
+  storeAgentPlatformSession(body.access_token, body.refresh_token);
+  return body.access_token;
+}
+
+async function obtainBffAccessToken(): Promise<string | null> {
+  const response = await fetch(
+    `${agentPlatformBaseUrl()}/sso/client/crewon/token`,
+    {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+    },
+  );
+  if (response.status === 401) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new AgentPlatformUnavailableError(
+      `SSO session token failed: ${response.status}`,
+    );
+  }
+  const body = (await response.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    user?: Record<string, unknown>;
+  };
+  if (!body.access_token) {
+    return null;
+  }
+  cachedToken = body.access_token;
+  cachedTokenExpiresAt =
+    Date.now() + Math.max(0, Number(body.expires_in ?? 0)) * 1000;
+  cachedBffUser = body.user ?? null;
   return cachedToken;
 }
 
@@ -343,6 +509,12 @@ export function storeAgentPlatformSession(
   refreshToken?: string | null,
 ): void {
   cachedToken = accessToken;
+  cachedTokenExpiresAt = jwtExpiryMilliseconds(accessToken);
+  if (crewonUnifiedSsoEnabled()) {
+    localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
+    localStorage.removeItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY);
+    return;
+  }
   localStorage.setItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY, accessToken);
   if (refreshToken) {
     localStorage.setItem(
@@ -354,8 +526,29 @@ export function storeAgentPlatformSession(
 
 export function clearAgentPlatformSession(): void {
   cachedToken = null;
+  cachedTokenExpiresAt = 0;
+  cachedBffUser = null;
+  if (typeof localStorage === "undefined") {
+    return;
+  }
   localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
   localStorage.removeItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY);
+}
+
+export async function clearAgentPlatformBffSession(
+  options: { global?: boolean } = {},
+): Promise<void> {
+  clearAgentPlatformSession();
+  if (!crewonUnifiedSsoEnabled()) {
+    return;
+  }
+  const endpoint = options.global === false ? "logout" : "global-logout";
+  await fetch(`${agentPlatformBaseUrl()}/sso/client/crewon/${endpoint}`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    credentials: "same-origin",
+    cache: "no-store",
+  });
 }
 
 export async function agentPlatformAuthorizedFetch(
@@ -363,12 +556,82 @@ export async function agentPlatformAuthorizedFetch(
   init: RequestInit = {},
 ): Promise<Response> {
   const token = await getAgentPlatformToken();
-  const headers = new Headers(init.headers);
-  headers.set("Accept", headers.get("Accept") ?? "application/json");
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+  const requestWithToken = (accessToken: string | null) => {
+    const headers = new Headers(init.headers);
+    headers.set("Accept", headers.get("Accept") ?? "application/json");
+    if (accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
+    }
+    return fetch(`${agentPlatformBaseUrl()}${path}`, {
+      ...init,
+      headers,
+      credentials: init.credentials ?? "same-origin",
+    });
+  };
+  const response = await requestWithToken(token);
+  if (
+    response.status !== 401 ||
+    crewonUnifiedSsoEnabled() ||
+    !localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)
+  ) {
+    return response;
   }
-  return fetch(`${agentPlatformBaseUrl()}${path}`, { ...init, headers });
+  cachedToken = null;
+  cachedTokenExpiresAt = 0;
+  localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
+  const refreshedToken = await getAgentPlatformToken();
+  return refreshedToken ? requestWithToken(refreshedToken) : response;
+}
+
+function jwtExpiryMilliseconds(token: string): number {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return 0;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = JSON.parse(
+      atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")),
+    ) as { exp?: number };
+    return typeof decoded.exp === "number" ? decoded.exp * 1000 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function tokenMatchesCurrentSessionRequirements(token: string): boolean {
+  if (envValue("VITE_CREWON_PRINCIPAL_SESSION_ENABLED") !== "true") {
+    return true;
+  }
+  const payload = jwtPayload(token);
+  return Boolean(
+    payload &&
+      isPositiveInteger(payload.tenant_id) &&
+      isPositiveInteger(payload.space_id) &&
+      typeof payload.crewon_auth_session_id === "string" &&
+      payload.crewon_auth_session_id.length > 0 &&
+      isPositiveInteger(payload.crewon_auth_epoch),
+  );
+}
+
+function jwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = JSON.parse(
+      atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")),
+    );
+    return isRecord(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function listPage<T>(
@@ -422,10 +685,7 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
         skills?: PlatformSkill[];
         mcp_servers?: PlatformMcpServer[];
       };
-    }>(
-      "/api/v1/crewon/catalog",
-      { auth: true },
-    ),
+    }>("/api/v1/crewon/catalog", { auth: true }),
   ] as const);
 
   const settledItems = <T>(result: PromiseSettledResult<T[]>): T[] | null =>
@@ -507,10 +767,11 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
   >(
     items: T[],
   ): T[] => (catalogIsLiveDatabase ? markOnline(items) : markCatalog(items));
-  const catalogResourceSource: AgentPlatformResourceSource = catalogIsLiveDatabase
-    ? "online"
-    : "catalog";
-  const catalogAgents = markCatalogResource(ownedCatalog(catalogResources?.agents ?? []));
+  const catalogResourceSource: AgentPlatformResourceSource =
+    catalogIsLiveDatabase ? "online" : "catalog";
+  const catalogAgents = markCatalogResource(
+    ownedCatalog(catalogResources?.agents ?? []),
+  );
   const agentsById = new Map(
     onlineAgents.map((agent) => [agent.id, agent] as const),
   );
@@ -519,7 +780,11 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     agentsById.set(
       catalogAgent.id,
       onlineAgent
-        ? { ...onlineAgent, ...catalogAgent, resource_source: catalogResourceSource }
+        ? {
+            ...onlineAgent,
+            ...catalogAgent,
+            resource_source: catalogResourceSource,
+          }
         : catalogAgent,
     );
   });
@@ -528,15 +793,12 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     ownedCatalog(catalogResources?.knowledge_bases ?? []),
   );
   const knowledgeBasesById = new Map(
-    onlineKnowledgeBases.map((knowledgeBase) => [
-      knowledgeBase.id,
-      knowledgeBase,
-    ] as const),
+    onlineKnowledgeBases.map(
+      (knowledgeBase) => [knowledgeBase.id, knowledgeBase] as const,
+    ),
   );
   catalogKnowledgeBases.forEach((catalogKnowledgeBase) => {
-    const onlineKnowledgeBase = knowledgeBasesById.get(
-      catalogKnowledgeBase.id,
-    );
+    const onlineKnowledgeBase = knowledgeBasesById.get(catalogKnowledgeBase.id);
     knowledgeBasesById.set(
       catalogKnowledgeBase.id,
       onlineKnowledgeBase
@@ -561,7 +823,11 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     skillsById.set(
       catalogSkill.id,
       onlineSkill
-        ? { ...onlineSkill, ...catalogSkill, resource_source: catalogResourceSource }
+        ? {
+            ...onlineSkill,
+            ...catalogSkill,
+            resource_source: catalogResourceSource,
+          }
         : catalogSkill,
     );
   });
@@ -578,7 +844,11 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     mcpServersById.set(
       catalogServer.id,
       onlineServer
-        ? { ...onlineServer, ...catalogServer, resource_source: catalogResourceSource }
+        ? {
+            ...onlineServer,
+            ...catalogServer,
+            resource_source: catalogResourceSource,
+          }
         : catalogServer,
     );
   });
@@ -866,7 +1136,6 @@ function platformAgentToConfig(
   );
 
   return {
-    agentId: `agent-platform:agents:${agent.id}`,
     name: agent.name,
     glyph: "A",
     accent: accents[index % accents.length],
@@ -878,16 +1147,5 @@ function platformAgentToConfig(
     systemPrompt: agent.system_prompt || "",
     mcp,
     skills,
-  };
-}
-
-export function agentPlatformAgentToConfig(
-  agent: PlatformAgent,
-  snapshot: AgentPlatformSnapshot,
-  index: number,
-): AgentConfig {
-  return {
-    ...platformAgentToConfig(agent, snapshot, index),
-    agentId: `agent-platform:${agent.id}`,
   };
 }

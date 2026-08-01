@@ -92,14 +92,14 @@ describe("library action presentation", () => {
       error: undefined,
     });
     expect(libraryDemoBackendDeferredPatch("reload-tools", "zh")).toEqual({
-      body: "演示模式：工具列表为内置示例，接入 app-server 后会显示真实的运行态 MCP 和 Skill。",
+      body: "演示模式：工具列表为内置示例，接入 app-server 后会显示真实的运行态服务和技能。",
       error: undefined,
     });
     expect(
       libraryDemoBackendDeferredPanel(panel(), "reload-tools", "zh"),
     ).toEqual({
       ...panel(),
-      body: "演示模式：工具列表为内置示例，接入 app-server 后会显示真实的运行态 MCP 和 Skill。",
+      body: "演示模式：工具列表为内置示例，接入 app-server 后会显示真实的运行态服务和技能。",
       error: undefined,
     });
     expect(
@@ -142,7 +142,12 @@ describe("library action presentation", () => {
       error: "刷新工具失败",
     });
     expect(
-      libraryActionFailurePanel(panel(), new Error("denied"), "reload-tools", "en"),
+      libraryActionFailurePanel(
+        panel(),
+        new Error("denied"),
+        "reload-tools",
+        "en",
+      ),
     ).toEqual({
       ...panel(),
       error: "denied",
@@ -242,7 +247,7 @@ describe("library action presentation", () => {
       "Open this URL to finish MCP authorization\nhttps://example.test/oauth",
     );
 
-    expect(mcpOauthLoginPanelBody(null, "zh")).toBe("MCP 授权已启动");
+    expect(mcpOauthLoginPanelBody(null, "zh")).toBe("服务授权已启动");
     expect(
       mcpOauthLoginPanel(
         panel(),
@@ -342,7 +347,7 @@ describe("library action presentation", () => {
         serverName: "github",
       }),
     ).toEqual({
-      text: "已删除 MCP 配置：github",
+      text: "已删除服务配置：github",
       tone: "success",
     });
   });
@@ -354,7 +359,7 @@ describe("library action presentation", () => {
     });
     expect(skillDetailLoadingPanel(panel(), "zh")).toEqual({
       ...panel(),
-      body: "正在读取 Skill...",
+      body: "正在读取技能...",
       error: undefined,
     });
     expect(
@@ -369,11 +374,24 @@ describe("library action presentation", () => {
         body: "# Docs",
         locale: "zh",
       }),
-    ).toEqual({
-      title: "docs",
+    ).toMatchObject({
+      title: "编辑技能 · docs",
       subtitle: "/repo/.codex/skills/docs/SKILL.md",
-      body: "# Docs",
+      fields: [
+        {
+          id: "skill-edit-body",
+          label: "SKILL.md",
+          value: "# Docs",
+        },
+      ],
       actions: [
+        {
+          id: "save-skill-edit",
+          label: "保存更改",
+          skillName: "docs",
+          skillPath: "/repo/.codex/skills/docs/SKILL.md",
+          tone: "primary",
+        },
         {
           id: "open-path",
           label: "右栏打开源文件",
@@ -382,7 +400,7 @@ describe("library action presentation", () => {
         },
         {
           id: "toggle-skill",
-          label: "启用 Skill",
+          label: "启用技能",
           skillEnabled: false,
           skillName: "docs",
           skillPath: "/repo/.codex/skills/docs/SKILL.md",
@@ -416,10 +434,17 @@ describe("library action presentation", () => {
         locale: "en",
       }),
     ).toMatchObject({
-      ...panel(),
-      title: "docs",
+      kind: "tools",
+      title: "Edit Skill · docs",
       subtitle: "/repo/.codex/skills/docs/SKILL.md",
-      body: "# Docs",
+      body: "Edit SKILL.md directly. Saving writes the original file and refreshes the library.",
+      fields: [
+        {
+          id: "skill-edit-body",
+          value: "# Docs",
+        },
+      ],
+      items: [],
       error: "old error",
     });
     expect(
@@ -458,7 +483,7 @@ describe("library action presentation", () => {
       body: "Skill body",
     });
     expect(skillDetailFailurePatch(null, "zh")).toEqual({
-      error: "读取 Skill 失败",
+      error: "读取技能失败",
     });
     expect(skillDetailFailurePatch(new Error("denied"), "en")).toEqual({
       error: "denied",

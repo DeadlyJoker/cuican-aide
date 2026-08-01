@@ -4,6 +4,8 @@ use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 use super::KnowledgeRequestProcessor;
+use super::MAX_KNOWLEDGE_FILE_BYTES;
+use super::MAX_KNOWLEDGE_NOTE_BYTES;
 
 #[tokio::test]
 async fn lists_workspace_knowledge_sources_and_memories() {
@@ -46,7 +48,8 @@ async fn writes_knowledge_memory_and_returns_updated_data() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let cwd = temp_dir.path().to_string_lossy().into_owned();
 
-    let response = KnowledgeRequestProcessor::new()
+    let processor = KnowledgeRequestProcessor::new();
+    let response = processor
         .knowledge_memory_write(KnowledgeMemoryWriteParams {
             cwd: cwd.clone(),
             title: Some("Demo session".to_string()),
@@ -58,10 +61,75 @@ async fn writes_knowledge_memory_and_returns_updated_data() {
 
     let expected_path = temp_dir.path().join(".crewon").join("knowledge.md");
     assert_eq!(response.file_path, expected_path.to_string_lossy());
-    let knowledge = std::fs::read_to_string(expected_path).expect("read knowledge file");
+    let knowledge = std::fs::read_to_string(&expected_path).expect("read knowledge file");
     assert!(knowledge.contains("# Crewon Knowledge"));
     assert!(knowledge.contains("- Session: Demo session"));
     assert!(knowledge.contains("- Thread: thread-demo"));
     assert!(knowledge.contains("- Note: Remember office recruiting flow."));
     assert_eq!(response.data.memories[0].title, "Crewon Knowledge");
+
+    processor
+        .knowledge_memory_write(KnowledgeMemoryWriteParams {
+            cwd,
+            title: Some("Follow-up session".to_string()),
+            thread_id: None,
+            note: Some("Keep the approved recruiting flow.".to_string()),
+        })
+        .await
+        .expect("append knowledge memory");
+    let knowledge = std::fs::read_to_string(expected_path).expect("read appended knowledge file");
+    assert!(knowledge.contains("- Note: Remember office recruiting flow."));
+    assert!(knowledge.contains("- Note: Keep the approved recruiting flow."));
+}
+
+#[tokio::test]
+async fn rejects_oversized_knowledge_note_without_creating_file() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+
+    let error = KnowledgeRequestProcessor::new()
+        .knowledge_memory_write(KnowledgeMemoryWriteParams {
+            cwd,
+            title: None,
+            thread_id: None,
+            note: Some("n".repeat(MAX_KNOWLEDGE_NOTE_BYTES + 1)),
+        })
+        .await
+        .expect_err("oversized note should be rejected");
+
+    assert!(error.message.contains("note exceeds"));
+    assert!(
+        !temp_dir
+            .path()
+            .join(".crewon")
+            .join("knowledge.md")
+            .exists()
+    );
+}
+
+#[tokio::test]
+async fn rejects_oversized_existing_knowledge_file_without_replacing_it() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let crewon_dir = temp_dir.path().join(".crewon");
+    std::fs::create_dir(&crewon_dir).expect("create .crewon");
+    let knowledge_path = crewon_dir.join("knowledge.md");
+    let original = "k".repeat(MAX_KNOWLEDGE_FILE_BYTES + 1);
+    std::fs::write(&knowledge_path, &original).expect("write oversized knowledge file");
+
+    let error = KnowledgeRequestProcessor::new()
+        .knowledge_memory_write(KnowledgeMemoryWriteParams {
+            cwd,
+            title: None,
+            thread_id: None,
+            note: Some("new note".to_string()),
+        })
+        .await
+        .expect_err("oversized knowledge file should be rejected");
+
+    assert!(error.message.contains("knowledge.md exceeds"));
+    assert_eq!(
+        std::fs::read_to_string(knowledge_path).expect("read unchanged knowledge file"),
+        original
+    );
 }

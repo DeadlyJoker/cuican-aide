@@ -3,6 +3,8 @@ use super::crewon_domain_processor::read_agent_record_by_file_path;
 use super::crewon_domain_processor::read_office_record;
 use super::crewon_domain_processor::read_office_record_by_file_path;
 use super::invalid_request;
+use super::read_expert_team_record;
+use super::read_expert_team_record_by_file_path;
 use crewon_app_server_protocol::JSONRPCErrorError;
 use crewon_app_server_protocol::SceneExecutionTargetSelection;
 use crewon_app_server_protocol::ThreadSceneSelectionParams;
@@ -67,6 +69,7 @@ pub(super) async fn resolve_thread_scene(
             ExecutionTargetKind::Crewon => SceneExecutionTargetKind::Crewon,
             ExecutionTargetKind::Agent => SceneExecutionTargetKind::Agent,
             ExecutionTargetKind::Team => SceneExecutionTargetKind::Team,
+            ExecutionTargetKind::Experts => SceneExecutionTargetKind::Experts,
         },
         execution_target_ref: target_ref,
         execution_target_token: resolved.token,
@@ -134,6 +137,28 @@ pub(super) async fn revalidate_thread_scene(
             }
             ("team", target_ref)
         }
+        SceneExecutionTargetKind::Experts => {
+            if metadata.execution_strategy != SceneExecutionStrategy::Team {
+                return Err(invalid_request(
+                    "invalid persisted Experts execution strategy",
+                ));
+            }
+            let target_ref = metadata.execution_target_ref.as_deref().ok_or_else(|| {
+                invalid_request("persisted Experts target is missing its reference")
+            })?;
+            let record =
+                read_expert_team_record_by_file_path(std::path::Path::new(cwd), target_ref)
+                    .await?
+                    .ok_or_else(|| {
+                        invalid_request("persisted Experts execution target is unavailable")
+                    })?;
+            if record.config.experts.len() < 2 {
+                return Err(invalid_request(
+                    "persisted Experts execution target has fewer than two experts",
+                ));
+            }
+            ("experts", target_ref)
+        }
     };
 
     metadata.execution_target_token = opaque_target_token(cwd, kind, target_ref);
@@ -158,11 +183,15 @@ pub(super) async fn resolve_execution_target_profile(
             let config = &record.config;
             Ok(Some(SceneExecutionTargetProfile {
                 kind: SceneExecutionTargetKind::Agent,
-                display_name: bounded_config_string(config, "name", 128)
+                display_name: bounded_config_string(config, "name", /*max_chars*/ 128)
                     .unwrap_or_else(|| "Agent".to_string()),
-                role: bounded_config_string(config, "role", 512),
-                model: bounded_config_string(config, "model", 256),
-                instructions: bounded_config_string(config, "systemPrompt", 4_000),
+                role: bounded_config_string(config, "role", /*max_chars*/ 512),
+                model: bounded_config_string(config, "model", /*max_chars*/ 256),
+                instructions: bounded_config_string(
+                    config,
+                    "systemPrompt",
+                    /*max_chars*/ 4_000,
+                ),
                 capabilities: configured_capability_names(config),
                 team_members: Vec::new(),
             }))
@@ -180,21 +209,68 @@ pub(super) async fn resolve_execution_target_profile(
                 .flatten()
                 .take(12)
                 .map(|member| SceneTeamMemberProfile {
-                    name: bounded_config_string(member, "name", 96)
+                    name: bounded_config_string(member, "name", /*max_chars*/ 96)
                         .unwrap_or_else(|| "Team member".to_string()),
-                    role: bounded_config_string(member, "role", 160),
-                    agent_id: bounded_config_string(member, "agentId", 128),
+                    role: bounded_config_string(member, "role", /*max_chars*/ 160),
+                    agent_id: bounded_config_string(member, "agentId", /*max_chars*/ 128),
                 })
                 .collect();
             Ok(Some(SceneExecutionTargetProfile {
                 kind: SceneExecutionTargetKind::Team,
-                display_name: bounded_config_string(config, "title", 128)
+                display_name: bounded_config_string(config, "title", /*max_chars*/ 128)
                     .unwrap_or_else(|| "Team".to_string()),
-                role: workspace.and_then(|workspace| bounded_config_string(workspace, "goal", 512)),
+                role: workspace.and_then(|workspace| {
+                    bounded_config_string(workspace, "goal", /*max_chars*/ 512)
+                }),
                 model: None,
                 instructions: None,
                 capabilities: Vec::new(),
                 team_members: members,
+            }))
+        }
+        SceneExecutionTargetKind::Experts => {
+            let record =
+                read_expert_team_record_by_file_path(std::path::Path::new(cwd), target_ref)
+                    .await?
+                    .ok_or_else(|| {
+                        invalid_request("persisted Experts execution target is unavailable")
+                    })?;
+            let config = record.config;
+            let team_members = config
+                .experts
+                .into_iter()
+                .map(|expert| SceneTeamMemberProfile {
+                    name: bounded_text_projection(&expert.name, 120),
+                    role: Some(bounded_text_projection(
+                        &match expert.instructions {
+                            Some(instructions) => {
+                                format!("{}\n{}", expert.role, instructions)
+                            }
+                            None => expert.role,
+                        },
+                        600,
+                    )),
+                    agent_id: Some(expert.agent_type),
+                })
+                .collect();
+            let leader_instructions = match config.leader.instructions {
+                Some(instructions) => format!(
+                    "{}\n{}\nDelegate once to every configured expert. For each spawn_agent call, set agent_type exactly to that member's agentId and set fork_turns to \"none\"; do not pass model or reasoning_effort overrides. Put the goal, assigned role, and necessary context in the child message. If argument validation fails, correct the arguments once instead of spawning replacements repeatedly. Wait for every child result before presenting one synthesis. Do not expose private child transcripts.",
+                    config.leader.role, instructions
+                ),
+                None => format!(
+                    "{}\nDelegate once to every configured expert. For each spawn_agent call, set agent_type exactly to that member's agentId and set fork_turns to \"none\"; do not pass model or reasoning_effort overrides. Put the goal, assigned role, and necessary context in the child message. If argument validation fails, correct the arguments once instead of spawning replacements repeatedly. Wait for every child result before presenting one synthesis. Do not expose private child transcripts.",
+                    config.leader.role
+                ),
+            };
+            Ok(Some(SceneExecutionTargetProfile {
+                kind: SceneExecutionTargetKind::Experts,
+                display_name: bounded_text_projection(&config.title, 120),
+                role: Some(bounded_text_projection(&config.goal, 800)),
+                model: None,
+                instructions: Some(bounded_text_projection(&leader_instructions, 1_500)),
+                capabilities: Vec::new(),
+                team_members,
             }))
         }
     }
@@ -232,11 +308,12 @@ async fn resolve_target_catalog(
         }
         SceneExecutionTargetSelection::Agent { id } => {
             validate_target_id(&id)?;
-            let record = read_agent_record(cwd, Some(&id), None, None)
-                .await?
-                .ok_or_else(|| {
-                    invalid_request(format!("agent execution target not found: {id}"))
-                })?;
+            let record =
+                read_agent_record(cwd, Some(&id), /*thread_id*/ None, /*name*/ None)
+                    .await?
+                    .ok_or_else(|| {
+                        invalid_request(format!("agent execution target not found: {id}"))
+                    })?;
             let target_ref = record.file_path;
             let token = opaque_target_token(cwd, "agent", &target_ref);
             Ok((
@@ -253,7 +330,7 @@ async fn resolve_target_catalog(
         }
         SceneExecutionTargetSelection::Team { id } => {
             validate_target_id(&id)?;
-            let record = read_office_record(cwd, None, Some(&id))
+            let record = read_office_record(cwd, /*thread_id*/ None, Some(&id))
                 .await?
                 .ok_or_else(|| invalid_request(format!("team execution target not found: {id}")))?;
             if !office_has_members(&record.config) {
@@ -268,6 +345,32 @@ async fn resolve_target_catalog(
                 Some(target_ref),
                 vec![ExecutionTargetCatalogRecord {
                     kind: ExecutionTargetKind::Team,
+                    id,
+                    token,
+                    authorization: TargetAuthorization::Authorized,
+                    runtime_availability: TargetRuntimeAvailability::Ready,
+                }],
+            ))
+        }
+        SceneExecutionTargetSelection::Experts { id } => {
+            validate_target_id(&id)?;
+            let record = read_expert_team_record(std::path::Path::new(cwd), &id)
+                .await?
+                .ok_or_else(|| {
+                    invalid_request(format!("experts execution target not found: {id}"))
+                })?;
+            if record.config.experts.len() < 2 {
+                return Err(invalid_request(format!(
+                    "experts execution target has fewer than two experts: {id}"
+                )));
+            }
+            let target_ref = record.file_path;
+            let token = opaque_target_token(cwd, "experts", &target_ref);
+            Ok((
+                ExecutionTargetSelection::Experts { id: id.clone() },
+                Some(target_ref),
+                vec![ExecutionTargetCatalogRecord {
+                    kind: ExecutionTargetKind::Experts,
                     id,
                     token,
                     authorization: TargetAuthorization::Authorized,
@@ -302,13 +405,17 @@ fn configured_capability_names(config: &serde_json::Value) -> Vec<String> {
                         .unwrap_or(false)
                 })
                 .filter_map(|capability| {
-                    ["name", "title", "id"]
-                        .into_iter()
-                        .find_map(|field| bounded_config_string(capability, field, 96))
+                    ["name", "title", "id"].into_iter().find_map(|field| {
+                        bounded_config_string(capability, field, /*max_chars*/ 96)
+                    })
                 })
         })
         .take(16)
         .collect()
+}
+
+fn bounded_text_projection(value: &str, max_chars: usize) -> String {
+    value.chars().take(max_chars).collect()
 }
 
 fn bounded_config_string(

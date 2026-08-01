@@ -7,11 +7,18 @@ export type AppMentionInfo = {
 };
 
 export type PendingComposerMentionKind = "mention" | "skill";
+export type PendingComposerResourceKind =
+  | "file"
+  | "folder"
+  | "knowledge"
+  | "mcp"
+  | "skill";
 
 export type PendingComposerMention = {
   kind?: PendingComposerMentionKind;
   name: string;
   path: string;
+  resourceKind?: PendingComposerResourceKind;
   token?: string;
 };
 
@@ -21,6 +28,20 @@ export function appMentionInfo(appId: string, appName: string): AppMentionInfo {
     path,
     token: `$${appMentionSlug(appName)}`,
   };
+}
+
+export function removeComposerMentionToken(
+  text: string,
+  token: string | undefined,
+): string {
+  if (!token) {
+    return text;
+  }
+  const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text
+    .replace(new RegExp(`(^|\\s)${escapedToken}(?=\\s|$)`, "g"), "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/^\s+/, "");
 }
 
 export function appendAppMentionToken(

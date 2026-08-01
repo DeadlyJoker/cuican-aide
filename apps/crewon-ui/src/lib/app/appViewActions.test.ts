@@ -31,7 +31,7 @@ function defaultPanel(locale: "en" | "zh"): CapabilityPanel {
 }
 
 describe("app view actions", () => {
-  it("opens connected settings and refreshes the account panel", () => {
+  it("opens connected settings and refreshes the general panel", () => {
     const state = {
       appView: "chat" as AppView,
       capabilityDockOpen: true,
@@ -39,13 +39,13 @@ describe("app view actions", () => {
       inspectorOpen: true,
       settingsSection: "config" as SettingsSection,
     };
-    const refreshAccountPanel = vi.fn();
+    const refreshDefaultSettingsPanel = vi.fn();
 
     openSettingsAction({
       demoSettingsPanel: demoPanel,
       isDemo: false,
       locale: "en",
-      refreshAccountPanel,
+      refreshDefaultSettingsPanel,
       setAppView: (view) => {
         state.appView = view;
       },
@@ -68,20 +68,20 @@ describe("app view actions", () => {
       capabilityDockOpen: false,
       capabilityPanel: null,
       inspectorOpen: false,
-      settingsSection: "account",
+      settingsSection: "config",
     });
-    expect(refreshAccountPanel).toHaveBeenCalledOnce();
+    expect(refreshDefaultSettingsPanel).toHaveBeenCalledOnce();
   });
 
   it("opens demo settings using a local panel", () => {
     let capabilityPanel: CapabilityPanel | null = null;
-    const refreshAccountPanel = vi.fn();
+    const refreshDefaultSettingsPanel = vi.fn();
 
     openSettingsAction({
       demoSettingsPanel: demoPanel,
       isDemo: true,
       locale: "en",
-      refreshAccountPanel,
+      refreshDefaultSettingsPanel,
       setAppView: () => {},
       setCapabilityDockOpen: () => {},
       setCapabilityPanel: (panel) => {
@@ -91,8 +91,8 @@ describe("app view actions", () => {
       setSettingsSection: () => {},
     });
 
-    expect(capabilityPanel).toEqual({ title: "Demo account" });
-    expect(refreshAccountPanel).not.toHaveBeenCalled();
+    expect(capabilityPanel).toEqual({ title: "Demo config" });
+    expect(refreshDefaultSettingsPanel).not.toHaveBeenCalled();
   });
 
   it("opens a settings section through either demo content or refresh", () => {

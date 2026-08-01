@@ -1140,6 +1140,7 @@ async fn read_head_summary(path: &Path, head_limit: usize) -> io::Result<HeadTai
             RolloutItem::Compacted(_) => {
                 // Not included in `head`; skip.
             }
+            RolloutItem::UserInputOnceMarker(_) => {}
             RolloutItem::EventMsg(ev) => {
                 if let Some(preview) = event_msg_preview(&ev) {
                     if summary.preview.is_none() {
@@ -1193,7 +1194,8 @@ pub async fn read_head_for_summary(path: &Path) -> io::Result<Vec<serde_json::Va
                 }
                 RolloutItem::Compacted(_)
                 | RolloutItem::TurnContext(_)
-                | RolloutItem::EventMsg(_) => {}
+                | RolloutItem::EventMsg(_)
+                | RolloutItem::UserInputOnceMarker(_) => {}
             }
         }
     }

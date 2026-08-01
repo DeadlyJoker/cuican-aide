@@ -1,52 +1,13 @@
-use crewon_app_server_protocol::AgentPlatformChatParams;
-use crewon_app_server_protocol::AgentPlatformSessionParams;
 use crewon_app_server_protocol::JSONRPCErrorError;
-use crewon_utils_output_truncation::approx_token_count;
+use serde_json::Map;
+use serde_json::Value as JsonValue;
 
 use crate::error_code::invalid_params;
 
 use super::MAX_AGENT_ID_BYTES;
-use super::MAX_CONTEXT_TOKENS;
-use super::MAX_MESSAGE_CHARS;
-use super::MAX_THREAD_ID_BYTES;
-
-pub(super) fn validate_chat_params(
-    params: &AgentPlatformChatParams,
-) -> Result<(), JSONRPCErrorError> {
-    validate_thread_id(&params.thread_id)?;
-    validate_agent_id(&params.agent_id)?;
-    let message = &params.message;
-    if message.trim().is_empty() {
-        return Err(invalid_params("Agent Platform message must not be empty"));
-    }
-    if message.chars().count() > MAX_MESSAGE_CHARS {
-        return Err(invalid_params(format!(
-            "Agent Platform message must not exceed {MAX_MESSAGE_CHARS} characters"
-        )));
-    }
-    if approx_token_count(message) > MAX_CONTEXT_TOKENS {
-        return Err(invalid_params(format!(
-            "Agent Platform message must not exceed {MAX_CONTEXT_TOKENS} approximate tokens"
-        )));
-    }
-    Ok(())
-}
-
-pub(super) fn validate_session_params(
-    params: &AgentPlatformSessionParams,
-) -> Result<(), JSONRPCErrorError> {
-    validate_thread_id(&params.thread_id)?;
-    validate_agent_id(&params.agent_id)
-}
-
-fn validate_thread_id(thread_id: &str) -> Result<(), JSONRPCErrorError> {
-    if thread_id.trim().is_empty() || thread_id.len() > MAX_THREAD_ID_BYTES {
-        return Err(invalid_params(format!(
-            "Agent Platform threadId must contain 1 to {MAX_THREAD_ID_BYTES} bytes"
-        )));
-    }
-    Ok(())
-}
+use super::MAX_WORKFLOW_ID_BYTES;
+use super::MAX_WORKFLOW_INPUT_BYTES;
+use super::MAX_WORKFLOW_INPUT_CHARS;
 
 pub(super) fn validate_agent_id(agent_id: &str) -> Result<(), JSONRPCErrorError> {
     if agent_id.is_empty()
@@ -60,4 +21,45 @@ pub(super) fn validate_agent_id(agent_id: &str) -> Result<(), JSONRPCErrorError>
         ));
     }
     Ok(())
+}
+
+pub(super) fn validate_workflow_id(workflow_id: &str) -> Result<(), JSONRPCErrorError> {
+    let valid_number = workflow_id.parse::<i64>().is_ok_and(|value| value > 0);
+    if workflow_id.is_empty()
+        || workflow_id.len() > MAX_WORKFLOW_ID_BYTES
+        || !workflow_id.bytes().all(|byte| byte.is_ascii_digit())
+        || !valid_number
+    {
+        return Err(invalid_params(
+            "Agent Platform workflowId must be a positive integer URL path segment",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn workflow_input_data(input: &str) -> Result<JsonValue, JSONRPCErrorError> {
+    let input = input.trim();
+    if input.is_empty()
+        || input.len() > MAX_WORKFLOW_INPUT_BYTES
+        || input.chars().count() > MAX_WORKFLOW_INPUT_CHARS
+        || input
+            .chars()
+            .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+    {
+        return Err(invalid_params(
+            "Agent Platform Workflow input is invalid or too large",
+        ));
+    }
+    if input.starts_with('{') {
+        return serde_json::from_str::<JsonValue>(input)
+            .ok()
+            .filter(JsonValue::is_object)
+            .ok_or_else(|| {
+                invalid_params("Agent Platform Workflow JSON input must be a valid object")
+            });
+    }
+    let mut input_data = Map::new();
+    input_data.insert("input".to_string(), JsonValue::String(input.to_string()));
+    input_data.insert("prompt".to_string(), JsonValue::String(input.to_string()));
+    Ok(JsonValue::Object(input_data))
 }

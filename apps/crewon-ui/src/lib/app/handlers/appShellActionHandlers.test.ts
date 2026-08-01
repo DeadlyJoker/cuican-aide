@@ -176,13 +176,13 @@ describe("app shell action handlers", () => {
     ]);
   });
 
-  it("opens settings by selecting account and refreshing account state", () => {
-    const account = vi.fn();
+  it("opens settings on the general panel and refreshes live config", () => {
+    const config = vi.fn();
     const calls: unknown[] = [];
 
     const handlers = createAppShellActionHandlers(
       createParams({
-        refreshSettingsHandlers: refreshHandlers({ account }),
+        refreshSettingsHandlers: refreshHandlers({ config }),
         setAppView: (view) => calls.push({ method: "setAppView", view }),
         setCapabilityDockOpen: (open) =>
           calls.push({ method: "setCapabilityDockOpen", open }),
@@ -195,9 +195,9 @@ describe("app shell action handlers", () => {
 
     handlers.openSettings();
 
-    expect(account).toHaveBeenCalledTimes(1);
+    expect(config).toHaveBeenCalledTimes(1);
     expect(calls).toEqual([
-      { method: "setSettingsSection", section: "account" },
+      { method: "setSettingsSection", section: "config" },
       { method: "setAppView", view: "settings" },
       { method: "setCapabilityDockOpen", open: false },
       { method: "setInspectorOpen", open: false },

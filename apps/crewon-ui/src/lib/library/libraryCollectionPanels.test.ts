@@ -37,7 +37,7 @@ describe("library collection panel helpers", () => {
   it("builds shared library load panels", () => {
     expect(libraryLoadingPanel("tools", "en")).toEqual({
       kind: "tools",
-      title: "Tools",
+      title: "Capabilities",
       subtitle: "Reading from local app-server...",
       items: [],
     });
@@ -76,7 +76,9 @@ describe("library collection panel helpers", () => {
       items: [],
       error: "Unable to load",
     });
-    expect(libraryLoadFailurePanel("automation", new Error("denied"), "zh")).toEqual({
+    expect(
+      libraryLoadFailurePanel("automation", new Error("denied"), "zh"),
+    ).toEqual({
       kind: "automation",
       title: "自动化",
       subtitle: "读取失败",
@@ -145,8 +147,7 @@ describe("library collection panel helpers", () => {
         {
           title: "Offices",
           meta: "1 created",
-          description:
-            "Open an office to continue group-chat work.",
+          description: "Open an office to continue group-chat work.",
           section: true,
         },
         item("Planning Office"),
@@ -185,7 +186,9 @@ describe("library collection panel helpers", () => {
       }),
     ).toMatchObject({
       subtitle: "1 条后端自动化",
-      actions: [{ id: "create-automation", label: "新建自动化", tone: "primary" }],
+      actions: [
+        { id: "create-automation", label: "新建自动化", tone: "primary" },
+      ],
       items: [
         {
           title: "后端自动化",

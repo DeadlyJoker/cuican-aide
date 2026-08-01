@@ -20,6 +20,13 @@ doctest = false
 [lints]
 workspace = true
 
+[features]
+default = []
+legacy-fence-artifact = [
+    "crewon-features/legacy-fence-artifact",
+    "crewon-rollout/legacy-fence-artifact",
+]
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -48,6 +55,9 @@ crewon-file-watcher = { workspace = true }
 crewon-hooks = { workspace = true }
 crewon-otel = { workspace = true }
 crewon-plugin = { workspace = true }
+crewon-policy = { workspace = true }
+crewon-provider-agent-platform = { workspace = true }
+crewon-resource-federation = { workspace = true }
 crewon-shell-command = { workspace = true }
 crewon-skills-extension = { workspace = true }
 crewon-utils-options = { workspace = true }
@@ -67,12 +77,15 @@ crewon-models-manager = { workspace = true }
 crewon-protocol = { workspace = true }
 crewon-app-server-protocol = { workspace = true }
 crewon-app-server-transport = { workspace = true }
+crewon-artifact = { workspace = true }
 crewon-feedback = { workspace = true }
 crewon-rmcp-client = { workspace = true }
 crewon-rollout = { workspace = true }
 crewon-sandboxing = { workspace = true }
 crewon-scene-runtime = { workspace = true }
+crewon-secrets = { workspace = true }
 crewon-state = { workspace = true }
+crewon-task-runtime = { workspace = true }
 crewon-thread-store = { workspace = true }
 crewon-tools = { workspace = true }
 crewon-utils-absolute-path = { workspace = true }
@@ -115,10 +128,12 @@ axum = { workspace = true, default-features = false, features = [
 ] }
 base64 = { workspace = true }
 crewon-model-provider-info = { workspace = true }
+crewon-provider-transport = { workspace = true }
 crewon-utils-cargo-bin = { workspace = true }
 core_test_support = { workspace = true }
 flate2 = { workspace = true }
 hmac = { workspace = true }
+jsonwebtoken = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 pretty_assertions = { workspace = true }

@@ -5,6 +5,11 @@ use crewon_protocol::protocol::MultiAgentVersion;
 use crewon_protocol::protocol::SessionSource;
 use crewon_protocol::protocol::SubAgentSource;
 
+mod office_durable;
+pub(crate) use office_durable::OfficeAutoDelegationAdmissionMode;
+pub(crate) use office_durable::OfficeDurableAdmissionCertainty;
+pub(crate) use office_durable::OfficeDurableTurnParams;
+
 const DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR: &str =
     "direct app-server input is not allowed for multi-agent v2 sub-agents";
 
@@ -17,11 +22,15 @@ pub(crate) struct TurnRequestProcessor {
     arg0_paths: Arg0DispatchPaths,
     config: Arc<Config>,
     config_manager: ConfigManager,
+    pub(super) thread_store: Arc<dyn ThreadStore>,
     pending_thread_unloads: Arc<Mutex<HashSet<ThreadId>>>,
     thread_state_manager: ThreadStateManager,
     thread_watch_manager: ThreadWatchManager,
     thread_list_state_permit: Arc<Semaphore>,
     skills_watcher: Arc<SkillsWatcher>,
+    dynamic_tool_server:
+        Arc<crate::platform_control::thread_dynamic_tool_server::ThreadDynamicToolServer>,
+    office_domain_processor: Arc<CrewonDomainRequestProcessor>,
 }
 
 fn map_additional_context(
@@ -64,6 +73,21 @@ struct ThreadSettingsBuildParams {
 }
 
 impl TurnRequestProcessor {
+    pub(crate) async fn persisted_office_turn_for_receipt(
+        &self,
+        cwd: &str,
+        thread_id: &str,
+        receipt_id: &str,
+    ) -> Result<Option<Turn>, JSONRPCErrorError> {
+        super::office_persisted_turn::for_dispatch_receipt(
+            &self.thread_store,
+            cwd,
+            thread_id,
+            receipt_id,
+        )
+        .await
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         auth_manager: Arc<AuthManager>,
@@ -73,11 +97,16 @@ impl TurnRequestProcessor {
         arg0_paths: Arg0DispatchPaths,
         config: Arc<Config>,
         config_manager: ConfigManager,
+        thread_store: Arc<dyn ThreadStore>,
         pending_thread_unloads: Arc<Mutex<HashSet<ThreadId>>>,
         thread_state_manager: ThreadStateManager,
         thread_watch_manager: ThreadWatchManager,
         thread_list_state_permit: Arc<Semaphore>,
         skills_watcher: Arc<SkillsWatcher>,
+        dynamic_tool_server: Arc<
+            crate::platform_control::thread_dynamic_tool_server::ThreadDynamicToolServer,
+        >,
+        office_domain_processor: Arc<CrewonDomainRequestProcessor>,
     ) -> Self {
         Self {
             auth_manager,
@@ -87,11 +116,14 @@ impl TurnRequestProcessor {
             arg0_paths,
             config,
             config_manager,
+            thread_store,
             pending_thread_unloads,
             thread_state_manager,
             thread_watch_manager,
             thread_list_state_permit,
             skills_watcher,
+            dynamic_tool_server,
+            office_domain_processor,
         }
     }
 
@@ -131,8 +163,11 @@ impl TurnRequestProcessor {
     pub(crate) async fn thread_inject_items(
         &self,
         params: ThreadInjectItemsParams,
+        execution_context_runtime: Option<
+            crate::platform_control::thread_execution_context_runtime::ThreadExecutionContextRequestRuntime,
+        >,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        self.thread_inject_items_response_inner(params)
+        self.thread_inject_items_response_inner(params, execution_context_runtime)
             .await
             .map(|response| Some(response.into()))
     }
@@ -151,8 +186,11 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: TurnSteerParams,
+        execution_context_runtime: Option<
+            crate::platform_control::thread_execution_context_runtime::ThreadExecutionContextRequestRuntime,
+        >,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        self.turn_steer_inner(request_id, params)
+        self.turn_steer_inner(request_id, params, execution_context_runtime)
             .await
             .map(|response| Some(response.into()))
     }
@@ -427,6 +465,11 @@ impl TurnRequestProcessor {
                 .inspect_err(|error| {
                     self.track_error_response(&request_id, error, /*error_type*/ None);
                 })?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "turn/start",
+        )
+        .await?;
         self.ensure_direct_input_allowed(&request_id, thread.as_ref())
             .await?;
         if let Err(error) = Self::validate_v2_input_limit(&params.input) {
@@ -717,6 +760,11 @@ impl TurnRequestProcessor {
         params: ThreadSettingsUpdateParams,
     ) -> Result<ThreadSettingsUpdateResponse, JSONRPCErrorError> {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "thread/settings/update",
+        )
+        .await?;
         let cwd = resolve_request_cwd(params.cwd)?;
         let environments = Self::build_environment_override(
             thread.as_ref(),
@@ -761,8 +809,24 @@ impl TurnRequestProcessor {
     async fn thread_inject_items_response_inner(
         &self,
         params: ThreadInjectItemsParams,
+        execution_context_runtime: Option<
+            crate::platform_control::thread_execution_context_runtime::ThreadExecutionContextRequestRuntime,
+        >,
     ) -> Result<ThreadInjectItemsResponse, JSONRPCErrorError> {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "thread/injectItems",
+        )
+        .await?;
+        if let Some(runtime) = execution_context_runtime.as_ref() {
+            runtime
+                .ensure_operation_supported(
+                    &params.thread_id,
+                    crate::platform_control::thread_execution_context_runtime::CloudAgentThreadOperation::InjectItems,
+                )
+                .await?;
+        }
 
         let items = params
             .items
@@ -808,6 +872,9 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: TurnSteerParams,
+        execution_context_runtime: Option<
+            crate::platform_control::thread_execution_context_runtime::ThreadExecutionContextRequestRuntime,
+        >,
     ) -> Result<TurnSteerResponse, JSONRPCErrorError> {
         let (_, thread) = self
             .load_thread(&params.thread_id)
@@ -815,6 +882,19 @@ impl TurnRequestProcessor {
             .inspect_err(|error| {
                 self.track_error_response(request_id, error, /*error_type*/ None);
             })?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "turn/steer",
+        )
+        .await?;
+        if let Some(runtime) = execution_context_runtime.as_ref() {
+            runtime
+                .ensure_operation_supported(
+                    &params.thread_id,
+                    crate::platform_control::thread_execution_context_runtime::CloudAgentThreadOperation::Steer,
+                )
+                .await?;
+        }
         self.ensure_direct_input_allowed(request_id, thread.as_ref())
             .await?;
 
@@ -919,6 +999,11 @@ impl TurnRequestProcessor {
         thread_id: &str,
     ) -> Result<Option<(ThreadId, Arc<CrewonThread>)>, JSONRPCErrorError> {
         let (thread_id, thread) = self.load_thread(thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "thread/realtime",
+        )
+        .await?;
 
         match self
             .ensure_conversation_listener(
@@ -1238,6 +1323,11 @@ impl TurnRequestProcessor {
         } = params;
 
         let (parent_thread_id, parent_thread) = self.load_thread(&thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            parent_thread.as_ref(),
+            "review/start",
+        )
+        .await?;
         let (review_request, display_text) = Self::review_request_from_target(target)?;
         match delivery.unwrap_or(ApiReviewDelivery::Inline).to_core() {
             CoreReviewDelivery::Inline => {
@@ -1273,6 +1363,11 @@ impl TurnRequestProcessor {
         let is_startup_interrupt = turn_id.is_empty();
 
         let (thread_uuid, thread) = self.load_thread(&thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "turn/interrupt",
+        )
+        .await?;
 
         // Record turn interrupts so we can reply when TurnAborted arrives. Startup
         // interrupts do not have a turn and are acknowledged after submission.
@@ -1340,6 +1435,11 @@ impl TurnRequestProcessor {
         }
 
         let (thread_uuid, thread) = self.load_thread(&thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "turn/interrupt",
+        )
+        .await?;
         let thread_state = self.thread_state_manager.thread_state(thread_uuid).await;
         let is_running = matches!(thread.agent_status().await, AgentStatus::Running);
         {
@@ -1376,12 +1476,13 @@ impl TurnRequestProcessor {
             codex_home: self.config.codex_home.to_path_buf(),
             skills_watcher: Arc::clone(&self.skills_watcher),
             office_auto_dispatch: Some(OfficeAutoDispatchContext {
-                domain_processor: Arc::new(CrewonDomainRequestProcessor::new()),
+                domain_processor: Arc::clone(&self.office_domain_processor),
                 outgoing: Arc::clone(&self.outgoing),
                 thread_manager: Arc::clone(&self.thread_manager),
                 turn_processor: self.clone(),
                 completion_monitors: Arc::new(Mutex::new(HashSet::new())),
             }),
+            dynamic_tool_server: Arc::clone(&self.dynamic_tool_server),
         }
     }
 

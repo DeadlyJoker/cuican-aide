@@ -1,3 +1,5 @@
+import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
+
 import type { NoticeState } from "../shared/noticeState";
 import type {
   LibraryPanel,
@@ -50,12 +52,7 @@ export type LibraryDraftActionParams = {
   now: () => Date;
   openToolsLibrary: () => Promise<void>;
   reloadMcpServerConfig: (params: {
-    config: {
-      args: string[];
-      command: string;
-      enabled: false;
-      env: Record<string, string>;
-    };
+    config: Record<string, JsonValue>;
     name: string;
   }) => Promise<void>;
   resolveBackendCwd: () => Promise<string | null>;
@@ -65,6 +62,7 @@ export type LibraryDraftActionParams = {
   ) => Promise<ToolRecordSaveSummary>;
   setLibraryPanel: LibraryPanelSetter;
   setNotice: (notice: NoticeState | null) => void;
+  writeSkillFile: (path: string, body: string) => Promise<unknown>;
 };
 
 export async function handleLibraryDraftAction({
@@ -79,6 +77,7 @@ export async function handleLibraryDraftAction({
   saveOrUpdateToolConfig,
   setLibraryPanel,
   setNotice,
+  writeSkillFile,
 }: LibraryDraftActionParams): Promise<boolean> {
   if (action.id === "create-mcp") {
     const timestamp = draftTimestamp(now());
@@ -113,7 +112,7 @@ export async function handleLibraryDraftAction({
     return true;
   }
 
-  if (action.id === "save-mcp-draft") {
+  if (action.id === "save-mcp-draft" || action.id === "save-mcp-config") {
     const draftPayload = buildMcpDraftPayload(fields, locale);
     if (draftPayload.type === "error") {
       setLibraryPanel((currentPanel) =>
@@ -210,6 +209,35 @@ export async function handleLibraryDraftAction({
         toolRecord: toolRecordResponse,
       }),
     );
+    return true;
+  }
+
+  if (action.id === "save-skill-edit") {
+    const skillPath = action.skillPath?.trim();
+    const skillBody = fields
+      ?.find((field) => field.id === "skill-edit-body")
+      ?.value.trim();
+    if (!skillPath || !skillBody) {
+      setLibraryPanel((currentPanel) =>
+        draftPayloadErrorPanel(
+          currentPanel,
+          locale === "zh"
+            ? "Skill 路径和内容不能为空"
+            : "Skill path and contents are required",
+        ),
+      );
+      return true;
+    }
+
+    await writeSkillFile(skillPath, `${skillBody}\n`);
+    await openToolsLibrary();
+    setNotice({
+      text:
+        locale === "zh"
+          ? `已更新 Skill：${action.skillName || skillPath}`
+          : `Updated Skill: ${action.skillName || skillPath}`,
+      tone: "success",
+    });
     return true;
   }
 

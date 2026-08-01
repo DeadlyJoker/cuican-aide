@@ -1,0 +1,27 @@
+# W2-05 Tasks
+
+- [x] D1 盘点真实动态工具、Provider、Binding、Policy、Approval、Audit 和 MCP 入口。
+- [x] D2 识别 Provider v3 Tool/Knowledge capability 缺口，禁止旧 API fallback。
+- [x] D3 识别 Local materialization/MCP locator 缺口，禁止客户端编码 locator。
+- [x] D4 冻结路由矩阵、server-owned namespace、幂等和无 fallback 不变量。
+- [x] K1 建立 route kernel Red Harness。
+- [x] K2 实现 registration、exact binding snapshot 与 invocation bounds。
+- [x] K3a 实现 Policy/Approval、server-owned side effect、live Credential 与 move-only journal claim admission。
+- [x] K3b 补齐 claim 的 exact Credential/identity/execution/approval snapshot，实现 consume-only local/provider dispatch 和严格 no fallback。
+- [x] K4a 实现 completion/Audit port contract、timeout/unknown/cancel reconciliation 与 bounded inline/Artifact result Harness。
+- [x] K4b1 完成 `AuditOutcome::Unknown` additive amendment 与 State strict schema Harness。
+- [x] K4b2 实现 State-backed journal、0046 migration、bounded restart recovery 与 atomic ExternalAction Audit adapter。
+- [x] G1a CrewON Provider v3 Tool/Knowledge strict descriptor、manifest、delegation、execute wire/client 与 canonical Harness Green。
+- [x] G1b Provider executor kernel、exact Provider identity claim 与 production Credential resolver Green。
+- [x] G1c Agent Platform 服务端 Tool/Knowledge v3 route/scope/idempotency/Audit、显式 registration、动态 discovery 与 Artifact read/download Green。
+- [x] G2 scope correction：确认 v1 无本地 package/download capability，移除伪 Local adapter，LocalNode registration/claim fail-closed；未来 materialization 独立立项。
+- [x] G3 State execution journal/Audit adapter Green。
+- [x] A1a Provider Artifact importer 与 Agent Platform server Green。
+- [ ] A1b Local production adapter Green。
+- [x] V1 P2a scoped tests/fix/fmt 与 W2-08 handoff Green。
+- [x] V2 P2b Policy 10/10、Dynamic Tool 18/18、app-server 1104/1104、scoped fix/fmt Green；P2b 当时的 K4b2/G3 缺口已由 V4 关闭，production Gate 仍等待 G1-G2/A1。
+- [x] V3 P3a Artifact 10/10、State 199/199、scoped fix/fmt Green。
+- [x] V4 P3b-P3d State 208/208、Dynamic Tool 20/20、app-server 1106/1106 Green；1 skipped、2 slow、1 个既有 Office startup timing case retry Green。
+- [x] V5 Provider contract/executor/credential amendment：Provider 59/59、State 208/208、app-server 1110/1110，scoped fix/fmt 与最终 Gate 证据 Green；1 skipped、6 slow，production 总 Gate 仍等待 G1c/G2/A1。
+- [x] V6 G1c/A1a cross-service amendment：Agent Platform Provider Run 238/238、Ruff/mypy Green；CrewON Provider 61/61、app-server 1112/1112，1 skipped、5 slow；Run/Discovery/Dynamic 三份 canonical contract byte-for-byte + provenance SHA Green。当时总 Gate 仍等待 G2/A1b 与 W2-08 原子切换，后续由 V7 完成 scope correction。
+- [x] V7 Provider-only scope correction：State dynamic_tool_execution 9/9、app-server dynamic_tool 44/44 Green；删除未受 materializer 支撑的 Local target/executor，Local registration、Credential resolution 与 durable claim 全部 fail-closed。W2-05 v1 Gate Green；W2-07 独立组件 Gate Green 后，W2-08 已解锁进入中心 composition。

@@ -1,5 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+// @ts-expect-error Vite runs this file in Node while the browser tsconfig excludes Node globals.
+import { writeFile } from "node:fs/promises";
 
 const AGENT_PLATFORM_UNAVAILABLE_BODY = JSON.stringify({
   error: "agent-platform unavailable",
@@ -16,6 +18,7 @@ const MERMAID_CHUNK_PACKAGES = new Set([
   "cytoscape",
   "cytoscape-cose-bilkent",
   "cytoscape-fcose",
+  "cose-base",
   "d3",
   "d3-sankey",
   "dagre-d3-es",
@@ -24,6 +27,8 @@ const MERMAID_CHUNK_PACKAGES = new Set([
   "es-toolkit",
   "katex",
   "khroma",
+  "layout-base",
+  "lodash-es",
   "marked",
   "mermaid",
   "roughjs",
@@ -32,6 +37,7 @@ const MERMAID_CHUNK_PACKAGES = new Set([
   "uuid",
 ]);
 const REACT_CHUNK_PACKAGES = new Set(["react", "react-dom", "scheduler"]);
+const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 type WebSocketProxy = {
   on(
@@ -47,6 +53,10 @@ type HttpProxyResponse = {
 };
 
 type HttpProxy = {
+  on(
+    event: "proxyReq",
+    callback: (proxyReq: { removeHeader: (name: string) => void }) => void,
+  ): void;
   on(
     event: "error",
     callback: (
@@ -144,6 +154,52 @@ function agentPlatformFallbackPlugin(target: string): Plugin {
   };
 }
 
+function localBackendRecoveryPlugin(requestFile: string | undefined): Plugin {
+  return {
+    name: "crewon-local-backend-recovery",
+    configureServer(server) {
+      if (!requestFile) {
+        return;
+      }
+      server.middlewares.use(
+        "/__crewon/dev/restart-app-server",
+        (request, response) => {
+          const localRequest = request as unknown as {
+            headers: Record<string, string | string[] | undefined>;
+            method?: string;
+            socket: { remoteAddress?: string };
+          };
+          if (localRequest.method !== "POST") {
+            response.statusCode = 405;
+            response.end();
+            return;
+          }
+          if (
+            !LOOPBACK_ADDRESSES.has(localRequest.socket.remoteAddress ?? "") ||
+            localRequest.headers["x-crewon-recovery-request"] !==
+              "office-catalog"
+          ) {
+            response.statusCode = 403;
+            response.end();
+            return;
+          }
+          void writeFile(requestFile, `${Date.now()}\n`, "utf8").then(
+            () => {
+              response.statusCode = 202;
+              response.setHeader("Content-Type", "application/json");
+              response.end(JSON.stringify({ status: "restart-requested" }));
+            },
+            () => {
+              response.statusCode = 500;
+              response.end();
+            },
+          );
+        },
+      );
+    },
+  };
+}
+
 function nodeModulePackageName(id: string): string | null {
   const normalized = id.replace(/\\/g, "/");
   const marker = "/node_modules/";
@@ -163,7 +219,8 @@ function isMermaidChunkModule(id: string): boolean {
   const packageName = nodeModulePackageName(id);
   return Boolean(
     packageName &&
-    (MERMAID_CHUNK_PACKAGES.has(packageName) || packageName.startsWith("d3-")),
+      (MERMAID_CHUNK_PACKAGES.has(packageName) ||
+        packageName.startsWith("d3-")),
   );
 }
 
@@ -173,18 +230,46 @@ function isMermaidChunkDependency(dependency: string): boolean {
   return filename.startsWith("mermaid-") && filename.endsWith(".js");
 }
 
+function appServerHttpTarget(target: string): string {
+  const url = new URL(target);
+  if (url.protocol === "ws:") {
+    url.protocol = "http:";
+  } else if (url.protocol === "wss:") {
+    url.protocol = "https:";
+  }
+  return url.toString();
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
   const appServerTarget = env.CREWON_APP_SERVER_TARGET ?? "ws://127.0.0.1:6176";
   const agentPlatformTarget =
     env.CREWON_AGENT_PLATFORM_TARGET ?? "http://127.0.0.1:8000";
+  const backendRestartRequestFile = env.CREWON_DEV_BACKEND_RESTART_REQUEST_FILE;
 
   return {
-    plugins: [agentPlatformFallbackPlugin(agentPlatformTarget), react()],
+    plugins: [
+      localBackendRecoveryPlugin(backendRestartRequestFile),
+      agentPlatformFallbackPlugin(agentPlatformTarget),
+      react(),
+    ],
     server: {
       port: 5175,
       strictPort: false,
       proxy: {
+        "/app-server/principal-session": {
+          target: appServerHttpTarget(appServerTarget),
+          changeOrigin: false,
+          configure(proxy) {
+            (proxy as unknown as HttpProxy).on(
+              "proxyReq",
+              (proxyReq: { removeHeader: (name: string) => void }) => {
+                proxyReq.removeHeader("origin");
+              },
+            );
+          },
+          rewrite: (path) => path.replace(/^\/app-server/, ""),
+        },
         "/app-server": {
           target: appServerTarget,
           ws: true,
@@ -229,6 +314,9 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            if (id === "\0vite/preload-helper.js") {
+              return "vendor";
+            }
             if (!id.includes("node_modules")) {
               return undefined;
             }

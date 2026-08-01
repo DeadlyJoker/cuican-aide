@@ -7,11 +7,11 @@ use crewon_protocol::protocol::GitInfo;
 use crewon_protocol::protocol::RolloutItem;
 use crewon_protocol::protocol::SessionSource;
 use crewon_protocol::protocol::ThreadMemoryMode;
-use crewon_rollout::ARCHIVED_SESSIONS_SUBDIR;
-use crewon_rollout::append_rollout_item_to_path;
+use crewon_rollout::RolloutMutation;
+use crewon_rollout::RolloutRecorder;
+use crewon_rollout::RolloutWriterLease;
+use crewon_rollout::append_rollout_item_to_path_with_lease;
 use crewon_rollout::append_thread_name;
-use crewon_rollout::find_archived_thread_path_by_id_str;
-use crewon_rollout::find_thread_path_by_id_str;
 use crewon_rollout::read_session_meta_line;
 use crewon_state::ThreadMetadataBuilder;
 use tracing::warn;
@@ -20,6 +20,10 @@ use super::LocalThreadStore;
 use super::helpers::git_info_from_parts;
 use super::helpers::permission_profile_to_metadata_value;
 use super::live_writer;
+use super::metadata_rollout_path::ResolvedRolloutPath;
+use super::metadata_rollout_path::resolve_metadata_rollout_path;
+use super::metadata_rollout_path::resolve_rollout_path;
+use super::metadata_rollout_path::rollout_path_is_archived;
 use crate::GitInfoPatch;
 use crate::ReadThreadParams;
 use crate::StoredThread;
@@ -29,9 +33,9 @@ use crate::ThreadStoreResult;
 use crate::UpdateThreadMetadataParams;
 use crate::local::read_thread;
 
-struct ResolvedRolloutPath {
-    path: PathBuf,
-    archived: bool,
+enum RolloutMetadataWriter<'a> {
+    Live(&'a RolloutRecorder),
+    Cold(&'a RolloutWriterLease),
 }
 
 pub(super) async fn update_thread_metadata(
@@ -53,6 +57,39 @@ pub(super) async fn update_thread_metadata(
     }
 
     let needs_rollout_compat = needs_rollout_compatibility_update(&patch);
+    let live_recorder = store.live_recorder(thread_id).await.ok();
+    if live_recorder.is_some() {
+        // A live recorder already owns this thread lease. It only exists after marker-free resume
+        // admission (or a new create), and its append path rejects durable fence markers. Reacquiring
+        // here would self-conflict, so keep all live metadata writes ordered through that recorder.
+        live_writer::persist_thread(store, thread_id).await?;
+    }
+    let mut resolved_rollout_path = resolve_metadata_rollout_path(
+        store,
+        thread_id,
+        patch.rollout_path.as_deref(),
+        params.include_archived,
+    )
+    .await?;
+    let cold_writer_lease = if live_recorder.is_none() {
+        Some(
+            RolloutWriterLease::acquire_for_existing_mutation(
+                store.config.codex_home.as_path(),
+                resolved_rollout_path.path.as_path(),
+                thread_id,
+                RolloutMutation::Metadata,
+            )
+            .map_err(live_writer::map_recorder_error)?,
+        )
+    } else {
+        None
+    };
+    let rollout_writer = match (&live_recorder, &cold_writer_lease) {
+        (Some(recorder), None) => Some(RolloutMetadataWriter::Live(recorder)),
+        (None, Some(lease)) => Some(RolloutMetadataWriter::Cold(lease)),
+        (None, None) => None,
+        (Some(_), Some(_)) => unreachable!("metadata writer mode must be exclusive"),
+    };
     let require_sqlite_write = sqlite_write_failure_should_block(&patch);
     let updated = apply_metadata_update(
         store,
@@ -66,16 +103,17 @@ pub(super) async fn update_thread_metadata(
         return Ok(updated);
     }
 
-    if live_writer::rollout_path(store, thread_id).await.is_ok() {
-        live_writer::persist_thread(store, thread_id).await?;
-    }
-    let mut resolved_rollout_path =
-        resolve_rollout_path(store, thread_id, params.include_archived).await?;
     let name = patch.name;
     let git_info = patch.git_info;
     if let Some(memory_mode) = patch.memory_mode {
-        apply_thread_memory_mode(resolved_rollout_path.path.as_path(), thread_id, memory_mode)
-            .await?;
+        let writer = required_rollout_metadata_writer(rollout_writer.as_ref())?;
+        apply_thread_memory_mode(
+            writer,
+            resolved_rollout_path.path.as_path(),
+            thread_id,
+            memory_mode,
+        )
+        .await?;
         refresh_resolved_rollout_path(&mut resolved_rollout_path).await;
     }
 
@@ -136,6 +174,7 @@ pub(super) async fn update_thread_metadata(
     };
     if let Some(((sha, branch, origin_url), memory_mode)) = resolved_git_info.as_ref() {
         apply_thread_git_info_to_rollout(
+            required_rollout_metadata_writer(rollout_writer.as_ref())?,
             resolved_rollout_path.path.as_path(),
             thread_id,
             sha,
@@ -173,6 +212,14 @@ pub(super) async fn update_thread_metadata(
         thread.git_info = git_info_from_parts(sha, branch, origin_url);
     }
     Ok(thread)
+}
+
+fn required_rollout_metadata_writer<'writer, 'owner>(
+    writer: Option<&'writer RolloutMetadataWriter<'owner>>,
+) -> ThreadStoreResult<&'writer RolloutMetadataWriter<'owner>> {
+    writer.ok_or_else(|| ThreadStoreError::Internal {
+        message: "rollout compatibility update requires writer ownership".to_string(),
+    })
 }
 
 async fn refresh_resolved_rollout_path(resolved: &mut ResolvedRolloutPath) {
@@ -459,6 +506,7 @@ fn resolve_git_info_patch(
 }
 
 async fn apply_thread_git_info_to_rollout(
+    writer: &RolloutMetadataWriter<'_>,
     rollout_path: &Path,
     thread_id: ThreadId,
     sha: &Option<String>,
@@ -487,11 +535,16 @@ async fn apply_thread_git_info_to_rollout(
         repository_url: origin_url.clone(),
     });
     session_meta.meta.memory_mode = memory_mode.map(str::to_string);
-    append_rollout_item_to_path(rollout_path, &RolloutItem::SessionMeta(session_meta))
-        .await
-        .map_err(|err| ThreadStoreError::Internal {
-            message: format!("failed to set thread git metadata: {err}"),
-        })
+    append_rollout_metadata_item(
+        writer,
+        rollout_path,
+        thread_id,
+        RolloutItem::SessionMeta(session_meta),
+    )
+    .await
+    .map_err(|err| ThreadStoreError::Internal {
+        message: format!("failed to set thread git metadata: {err}"),
+    })
 }
 
 async fn apply_thread_name(
@@ -521,6 +574,7 @@ async fn apply_thread_name(
 }
 
 async fn apply_thread_memory_mode(
+    writer: &RolloutMetadataWriter<'_>,
     rollout_path: &Path,
     thread_id: ThreadId,
     memory_mode: ThreadMemoryMode,
@@ -544,11 +598,33 @@ async fn apply_thread_memory_mode(
     // code will preserve the latest prior git marker when this field is absent.
     session_meta.git = None;
     session_meta.meta.memory_mode = Some(memory_mode_as_str(memory_mode).to_string());
-    append_rollout_item_to_path(rollout_path, &RolloutItem::SessionMeta(session_meta))
-        .await
-        .map_err(|err| ThreadStoreError::Internal {
-            message: format!("failed to set thread memory mode: {err}"),
-        })
+    append_rollout_metadata_item(
+        writer,
+        rollout_path,
+        thread_id,
+        RolloutItem::SessionMeta(session_meta),
+    )
+    .await
+    .map_err(|err| ThreadStoreError::Internal {
+        message: format!("failed to set thread memory mode: {err}"),
+    })
+}
+
+async fn append_rollout_metadata_item(
+    writer: &RolloutMetadataWriter<'_>,
+    rollout_path: &Path,
+    thread_id: ThreadId,
+    item: RolloutItem,
+) -> std::io::Result<()> {
+    match writer {
+        RolloutMetadataWriter::Live(recorder) => {
+            recorder.record_canonical_items(&[item]).await?;
+            recorder.flush().await
+        }
+        RolloutMetadataWriter::Cold(lease) => {
+            append_rollout_item_to_path_with_lease(lease, rollout_path, thread_id, &item).await
+        }
+    }
 }
 
 fn memory_mode_as_str(mode: ThreadMemoryMode) -> &'static str {
@@ -556,59 +632,6 @@ fn memory_mode_as_str(mode: ThreadMemoryMode) -> &'static str {
         ThreadMemoryMode::Enabled => "enabled",
         ThreadMemoryMode::Disabled => "disabled",
     }
-}
-
-async fn resolve_rollout_path(
-    store: &LocalThreadStore,
-    thread_id: ThreadId,
-    include_archived: bool,
-) -> ThreadStoreResult<ResolvedRolloutPath> {
-    if let Ok(path) = live_writer::rollout_path(store, thread_id).await {
-        let archived = rollout_path_is_archived(store, path.as_path());
-        return Ok(ResolvedRolloutPath { path, archived });
-    }
-
-    let state_db_ctx = store.state_db().await;
-    let active_path = find_thread_path_by_id_str(
-        store.config.codex_home.as_path(),
-        &thread_id.to_string(),
-        state_db_ctx.as_deref(),
-    )
-    .await
-    .map_err(|err| ThreadStoreError::InvalidRequest {
-        message: format!("failed to locate thread id {thread_id}: {err}"),
-    })?;
-    if let Some(path) = active_path {
-        return Ok(ResolvedRolloutPath {
-            path,
-            archived: false,
-        });
-    }
-    if !include_archived {
-        return Err(ThreadStoreError::InvalidRequest {
-            message: format!("thread not found: {thread_id}"),
-        });
-    }
-    find_archived_thread_path_by_id_str(
-        store.config.codex_home.as_path(),
-        &thread_id.to_string(),
-        state_db_ctx.as_deref(),
-    )
-    .await
-    .map_err(|err| ThreadStoreError::InvalidRequest {
-        message: format!("failed to locate archived thread id {thread_id}: {err}"),
-    })?
-    .map(|path| ResolvedRolloutPath {
-        path,
-        archived: true,
-    })
-    .ok_or_else(|| ThreadStoreError::InvalidRequest {
-        message: format!("thread not found: {thread_id}"),
-    })
-}
-
-fn rollout_path_is_archived(store: &LocalThreadStore, path: &Path) -> bool {
-    path.starts_with(store.config.codex_home.join(ARCHIVED_SESSIONS_SUBDIR))
 }
 
 #[cfg(test)]

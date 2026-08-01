@@ -24,6 +24,7 @@ use tokio::sync::oneshot;
 use tracing::Instrument;
 use tracing::Span;
 use tracing::warn;
+use uuid::Uuid;
 
 use crate::error_code::internal_error;
 use crate::server_request_error::TURN_TRANSITION_PENDING_REQUEST_ERROR_REASON;
@@ -73,6 +74,32 @@ impl RequestContext {
 
     pub(crate) fn span(&self) -> Span {
         self.span.clone()
+    }
+
+    pub(crate) fn trace_id(&self) -> String {
+        self.request_trace()
+            .and_then(|trace| trace.traceparent)
+            .and_then(|traceparent| {
+                let (version, rest) = traceparent.split_once('-')?;
+                let (trace_id, rest) = rest.split_once('-')?;
+                let (parent_id, trace_flags) = rest.split_once('-')?;
+                let is_lower_hex = |value: &str| {
+                    value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                };
+                (version == "00"
+                    && trace_id.len() == 32
+                    && parent_id.len() == 16
+                    && trace_flags.len() == 2
+                    && is_lower_hex(trace_id)
+                    && is_lower_hex(parent_id)
+                    && is_lower_hex(trace_flags)
+                    && trace_id.bytes().any(|byte| byte != b'0')
+                    && parent_id.bytes().any(|byte| byte != b'0'))
+                .then(|| trace_id.to_string())
+            })
+            .unwrap_or_else(|| Uuid::now_v7().simple().to_string())
     }
 
     fn record_turn_id(&self, turn_id: &str) {
@@ -724,6 +751,46 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+
+    #[test]
+    fn request_context_trace_id_uses_valid_traceparent_and_safe_fallback() {
+        let propagated_trace_id = "00000000000000000000000000000011";
+        let propagated = RequestContext::new(
+            ConnectionRequestId {
+                connection_id: ConnectionId(1),
+                request_id: RequestId::Integer(1),
+            },
+            Span::none(),
+            Some(W3cTraceContext {
+                traceparent: Some(format!("00-{propagated_trace_id}-0000000000000022-01")),
+                tracestate: None,
+            }),
+        );
+        let invalid = RequestContext::new(
+            ConnectionRequestId {
+                connection_id: ConnectionId(1),
+                request_id: RequestId::Integer(2),
+            },
+            Span::none(),
+            Some(W3cTraceContext {
+                traceparent: Some(
+                    "invalid-00000000000000000000000000000033-0000000000000044-01".to_string(),
+                ),
+                tracestate: None,
+            }),
+        );
+
+        assert_eq!(propagated.trace_id(), propagated_trace_id);
+        let fallback = invalid.trace_id();
+        assert_eq!(
+            (
+                fallback.len(),
+                fallback.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                fallback.bytes().any(|byte| byte != b'0'),
+            ),
+            (32, true, true),
+        );
+    }
 
     #[test]
     fn verify_server_notification_serialization() {

@@ -22,6 +22,13 @@ fn catalog() -> Vec<ExecutionTargetCatalogRecord> {
             authorization: TargetAuthorization::Authorized,
             runtime_availability: TargetRuntimeAvailability::Ready,
         },
+        ExecutionTargetCatalogRecord {
+            kind: ExecutionTargetKind::Experts,
+            id: "review-council".to_string(),
+            token: "target.experts.review-council".to_string(),
+            authorization: TargetAuthorization::Authorized,
+            runtime_availability: TargetRuntimeAvailability::Ready,
+        },
     ]
 }
 
@@ -68,6 +75,24 @@ fn defined_team_resolves_to_team_strategy() {
         Ok(ResolvedExecutionTarget {
             kind: ExecutionTargetKind::Team,
             token: "target.team.launch-team".to_string(),
+            execution_strategy: ExecutionStrategy::Team,
+            availability: TargetAvailability::Ready,
+        })
+    );
+}
+
+#[test]
+fn defined_experts_resolves_to_team_strategy() {
+    assert_eq!(
+        resolver().resolve(
+            &ExecutionTargetSelection::Experts {
+                id: "review-council".to_string(),
+            },
+            &catalog(),
+        ),
+        Ok(ResolvedExecutionTarget {
+            kind: ExecutionTargetKind::Experts,
+            token: "target.experts.review-council".to_string(),
             execution_strategy: ExecutionStrategy::Team,
             availability: TargetAvailability::Ready,
         })

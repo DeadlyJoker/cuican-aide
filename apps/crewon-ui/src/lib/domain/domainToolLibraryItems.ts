@@ -4,6 +4,7 @@ import type { SkillsListResponse } from "@crewon-protocol/v2/SkillsListResponse"
 
 import type { Locale } from "../i18n";
 import type { LibraryItem, LibraryPanel } from "./crewonDomain";
+import { capabilityPresetItems } from "../capability/capabilityCatalog";
 import type { McpInventory } from "./domainCollaborationBackend";
 import { libraryToolDecor } from "./domainLibraryItems";
 import { promptPreview } from "../shared/text";
@@ -11,6 +12,7 @@ import {
   mcpConfigDetailText,
   mcpConfigEnabled,
   mcpConfigEndpoint,
+  mcpConfigObject,
 } from "../mcp/mcpConfigFormatters";
 
 function authStatusLabel(authStatus: string, locale: Locale): string {
@@ -81,33 +83,6 @@ function mcpServerDetailText(server: McpServerStatus, locale: Locale): string {
     .join("\n");
 }
 
-function skillSourceLabel(
-  path: string | null | undefined,
-  locale: Locale,
-): string {
-  if (!path) {
-    return locale === "zh" ? "内置" : "built-in";
-  }
-
-  if (
-    path.includes("/.crewon/plugins/") ||
-    path.includes("/.codex/plugins/") ||
-    path.includes("/plugins/cache/")
-  ) {
-    return "Plugin";
-  }
-
-  if (path.includes("/.crewon/skill/.system/")) {
-    return locale === "zh" ? "系统" : "system";
-  }
-
-  if (path.includes("/.crewon/skill/")) {
-    return "Crewon";
-  }
-
-  return locale === "zh" ? "本地" : "local";
-}
-
 function pluginSkillAction(
   skillName: string,
   pluginEntries: Array<{
@@ -169,17 +144,18 @@ export function toolLibraryPanelContent(params: {
     if (!status) {
       if (!config) {
         return {
-          title: "MCP",
+          title: locale === "zh" ? "服务" : "MCP",
           meta: locale === "zh" ? "未知配置" : "unknown config",
           glyph: decor.glyph,
           accent: decor.accent,
+          capabilityKind: "mcp",
         };
       }
       const endpoint = config ? mcpConfigEndpoint(config) : "";
       const enabled = mcpConfigEnabled(config);
       return {
-        title: config?.name ?? "MCP",
-        meta: `MCP · ${
+        title: config?.name ?? (locale === "zh" ? "服务" : "MCP"),
+        meta: `${locale === "zh" ? "服务" : "MCP"} · ${
           enabled
             ? locale === "zh"
               ? "已配置 · 等待加载"
@@ -191,10 +167,11 @@ export function toolLibraryPanelContent(params: {
         description:
           endpoint ||
           (locale === "zh"
-            ? "已保存到 MCP 配置，但当前运行态尚未返回该服务器。"
+            ? "已保存到服务配置，但当前运行态尚未返回该服务。"
             : "Saved in MCP config, but not yet reported by the runtime."),
         glyph: decor.glyph,
         accent: decor.accent,
+        capabilityKind: "mcp",
         badge: {
           label: enabled
             ? locale === "zh"
@@ -206,7 +183,7 @@ export function toolLibraryPanelContent(params: {
           tone: enabled ? "planning" : "warning",
         },
         tags: [
-          "MCP",
+          locale === "zh" ? "服务" : "MCP",
           enabled
             ? locale === "zh"
               ? "已配置"
@@ -221,6 +198,7 @@ export function toolLibraryPanelContent(params: {
               title: config.name,
               subtitle: config.name,
               configName: config.name,
+              config: mcpConfigObject(config),
               body: mcpConfigDetailText(config, locale),
             }
           : undefined,
@@ -247,11 +225,12 @@ export function toolLibraryPanelContent(params: {
       : null;
     return {
       title: serverTitle,
-      meta: `MCP · ${authStatusLabel(status.authStatus, locale)}${
+      meta: `${locale === "zh" ? "服务" : "MCP"} · ${authStatusLabel(status.authStatus, locale)}${
         status.serverInfo?.version ? ` · v${status.serverInfo.version}` : ""
       }`,
       glyph: decor.glyph,
       accent: decor.accent,
+      capabilityKind: "mcp",
       badge:
         status.authStatus === "notLoggedIn"
           ? {
@@ -290,6 +269,7 @@ export function toolLibraryPanelContent(params: {
           .join("\n"),
         authStatus: status.authStatus,
         configName: config?.name,
+        config: config ? mcpConfigObject(config) : undefined,
         tool: firstTool
           ? {
               server: status.name,
@@ -313,13 +293,13 @@ export function toolLibraryPanelContent(params: {
     };
   });
   const skillItems: LibraryItem[] = skills.map((skill, index) => {
-    const source = skillSourceLabel(skill.path, locale);
     const decor = libraryToolDecor("skill", index);
     return {
       title: skill.name,
-      meta: `Skill · ${source}`,
+      meta: locale === "zh" ? "技能" : "Skill",
       glyph: decor.glyph,
       accent: decor.accent,
+      capabilityKind: "skill",
       badge: {
         label: skill.enabled
           ? locale === "zh"
@@ -330,7 +310,7 @@ export function toolLibraryPanelContent(params: {
             : "disabled",
         tone: skill.enabled ? "running" : "warning",
       },
-      tags: ["Skill", source],
+      tags: [locale === "zh" ? "技能" : "Skill"],
       description:
         promptPreview(
           skill.description ||
@@ -352,25 +332,37 @@ export function toolLibraryPanelContent(params: {
         : (pluginSkillAction(skill.name, pluginEntries) ?? undefined),
     };
   });
+  const presetItems = capabilityPresetItems(locale);
+  const presetSkillItems = presetItems.filter(
+    (item) => item.capabilityKind === "skill",
+  );
+  const presetMcpItems = presetItems.filter(
+    (item) => item.capabilityKind === "mcp",
+  );
+  const installedItems = dedupeCapabilityItems([
+    ...mcpItems,
+    ...skillItems,
+    ...workspaceToolItems,
+  ]);
 
   return {
     subtitle:
       locale === "zh"
-        ? `${servers.length} 个 MCP · ${mcpInventory.configs.length} 个配置 · ${skills.length} 个 Skill`
-        : `${servers.length} MCP · ${mcpInventory.configs.length} configs · ${skills.length} skills`,
+        ? `${installedItems.length} 个已添加 · ${presetItems.length} 个预制能力`
+        : `${installedItems.length} added · ${presetItems.length} presets`,
     body:
       locale === "zh"
-        ? "工具库是智能体和办公室的能力市场。MCP 负责连接外部系统，Skill 负责沉淀可复用流程；新建后可以分配给某个智能体或办公室。"
-        : "The tool library is the capability market for agents and offices. MCP connects external systems, while Skills package reusable workflows for assignment.",
+        ? "能力统一分为技能和服务：技能沉淀可复用工作流，服务通过 MCP 协议连接外部系统与数据。预制项会先打开可编辑配置，确认保存后才写入。"
+        : "Capabilities are either Skills or MCP services. Presets open as editable drafts and are written only after confirmation.",
     actions: [
       {
-        id: "create-mcp",
-        label: locale === "zh" ? "新建 MCP" : "New MCP",
+        id: "create-skill",
+        label: locale === "zh" ? "创建技能" : "Create Skill",
         tone: "primary",
       },
       {
-        id: "create-skill",
-        label: locale === "zh" ? "新建 Skill" : "New Skill",
+        id: "create-mcp",
+        label: locale === "zh" ? "创建服务" : "Create MCP service",
       },
       {
         id: "reload-tools",
@@ -378,49 +370,61 @@ export function toolLibraryPanelContent(params: {
       },
     ],
     items: [
-      ...(workspaceToolItems.length > 0
+      ...(installedItems.length > 0
         ? [
             {
-              title: locale === "zh" ? "后端工具记录" : "Backend tool records",
+              title: locale === "zh" ? "已添加" : "Added",
               meta:
                 locale === "zh"
-                  ? `${workspaceToolItems.length} 个草稿`
-                  : `${workspaceToolItems.length} drafts`,
+                  ? `${installedItems.length} 个能力`
+                  : `${installedItems.length} capabilities`,
               description:
                 locale === "zh"
-                  ? "这些 MCP 和 Skill 来自 app-server tool/list，可继续编辑并分配给智能体。"
-                  : "These MCP and Skill entries come from app-server tool/list and can be assigned to agents.",
+                  ? "已添加的技能和服务，可继续编辑、启停或分配给智能体。"
+                  : "Added Skills and MCP services can be edited, toggled, or assigned.",
               section: true,
             },
-            ...workspaceToolItems,
+            ...installedItems,
           ]
         : []),
       {
-        title: "MCP",
+        title: locale === "zh" ? "精选技能" : "Featured Skills",
         meta:
           locale === "zh"
-            ? `${servers.length} 个服务器 · ${mcpInventory.configs.length} 个配置`
-            : `${servers.length} servers · ${mcpInventory.configs.length} configs`,
+            ? `${presetSkillItems.length} 个模板`
+            : `${presetSkillItems.length} templates`,
         description:
           locale === "zh"
-            ? "运行态连接与持久化配置合并展示；未加载或停用的 MCP 也会保留在这里。"
-            : "Runtime connectors merged with persisted config; unloaded or disabled MCPs remain visible here.",
+            ? "参考 WorkBuddy 的办公、内容、研究、数据和开发能力，点击后可先编辑再添加。"
+            : "WorkBuddy-inspired office, content, research, data, and developer workflows.",
         section: true,
       },
-      ...mcpItems,
+      ...presetSkillItems,
       {
-        title: "Skill",
+        title: locale === "zh" ? "服务" : "MCP services",
         meta:
           locale === "zh"
-            ? `${skills.length} 个技能`
-            : `${skills.length} skills`,
+            ? `${presetMcpItems.length} 个预制配置`
+            : `${presetMcpItems.length} presets`,
         description:
           locale === "zh"
-            ? "方法库：代码审查、甲方材料、演示截图、表格分析等流程，招募到办公室后可复用。"
-            : "Method library for review, client materials, demo screenshots, spreadsheet analysis, and reusable office workflows.",
+            ? "基于 MCP 协议和公开文档预制；命令、URL、参数和环境变量都可在保存前编辑。"
+            : "Based on official MCP documentation; edit commands, URLs, arguments, and environment before saving.",
         section: true,
       },
-      ...skillItems,
+      ...presetMcpItems,
     ],
   };
+}
+
+function dedupeCapabilityItems(items: LibraryItem[]): LibraryItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.capabilityKind ?? item.meta}:${item.title}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }

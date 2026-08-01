@@ -47,6 +47,7 @@ use crate::session::Crewon;
 use crate::session::CrewonSpawnArgs;
 use crate::session::CrewonSpawnOk;
 use crate::session::SUBMISSION_CHANNEL_CAPACITY;
+use crate::session::SessionSubmission;
 use crate::session::emit_subagent_session_started;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
@@ -221,12 +222,15 @@ pub(crate) async fn run_crewon_thread_one_shot(
             let _ = tx_bridge.send(event).await;
             if should_shutdown {
                 let _ = ops_tx
-                    .send(Submission {
-                        id: "shutdown".to_string(),
-                        op: Op::Shutdown {},
-                        client_user_message_id: None,
-                        trace: None,
-                    })
+                    .send(
+                        Submission {
+                            id: "shutdown".to_string(),
+                            op: Op::Shutdown {},
+                            client_user_message_id: None,
+                            trace: None,
+                        }
+                        .into(),
+                    )
                     .await;
                 child_cancel.cancel();
                 break;
@@ -426,15 +430,15 @@ async fn forward_event_or_shutdown(
 /// Forward ops from a caller to a sub-agent, respecting cancellation.
 async fn forward_ops(
     engine: Arc<Crewon>,
-    rx_ops: Receiver<Submission>,
+    rx_ops: Receiver<SessionSubmission>,
     cancel_token_ops: CancellationToken,
 ) {
     loop {
-        let submission = match rx_ops.recv().or_cancel(&cancel_token_ops).await {
-            Ok(Ok(submission)) => submission,
+        let envelope = match rx_ops.recv().or_cancel(&cancel_token_ops).await {
+            Ok(Ok(envelope)) => envelope,
             Ok(Err(_)) | Err(_) => break,
         };
-        let _ = engine.submit_with_id(submission).await;
+        let _ = engine.submit_session(envelope).await;
     }
 }
 

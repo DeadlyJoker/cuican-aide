@@ -46,9 +46,11 @@ pub(super) async fn read_thread(
             )
             .await)
     {
+        let cloud_metadata_owned = cloud_agent_summary_owns_metadata(store, thread_id).await?;
         let metadata_sandbox_policy = metadata.sandbox_policy.clone();
         let mut thread = stored_thread_from_sqlite_metadata(store, metadata).await;
-        if !params.include_history
+        if !cloud_metadata_owned
+            && !params.include_history
             && let Some(rollout_path) = thread.rollout_path.clone()
             && let Ok(mut rollout_thread) = read_thread_from_rollout_path(store, rollout_path).await
             && rollout_thread.thread_id == thread_id
@@ -115,6 +117,8 @@ pub(super) async fn read_thread_by_rollout_path(
         });
     }
     if let Some(metadata) = read_sqlite_metadata(store, thread.thread_id).await {
+        let cloud_metadata_owned =
+            cloud_agent_summary_owns_metadata(store, thread.thread_id).await?;
         let existing_git_info = thread.git_info.take();
         let (fallback_sha, fallback_branch, fallback_origin_url) = match existing_git_info {
             Some(info) => (
@@ -129,6 +133,13 @@ pub(super) async fn read_thread_by_rollout_path(
             metadata.git_branch.or(fallback_branch),
             metadata.git_origin_url.or(fallback_origin_url),
         );
+        if cloud_metadata_owned {
+            thread.preview = metadata
+                .preview
+                .or(metadata.first_user_message)
+                .unwrap_or_default();
+            thread.updated_at = metadata.updated_at;
+        }
     }
     attach_history_if_requested(&mut thread, include_history).await?;
     Ok(thread)
@@ -295,6 +306,21 @@ async fn read_sqlite_metadata(
 ) -> Option<ThreadMetadata> {
     let runtime = store.state_db().await?;
     runtime.get_thread(thread_id).await.ok().flatten()
+}
+
+async fn cloud_agent_summary_owns_metadata(
+    store: &LocalThreadStore,
+    thread_id: crewon_protocol::ThreadId,
+) -> ThreadStoreResult<bool> {
+    let Some(runtime) = store.state_db().await else {
+        return Ok(false);
+    };
+    runtime
+        .is_cloud_agent_thread_summary_managed(thread_id)
+        .await
+        .map_err(|_| ThreadStoreError::Internal {
+            message: "failed to resolve Cloud Agent Thread metadata authority".to_string(),
+        })
 }
 
 async fn stored_thread_from_sqlite_metadata(

@@ -1,0 +1,25 @@
+# W2-04 Tasks
+
+- [x] D0 盘点 identity/workspace/credential/provider 真实 authority。
+- [x] D1 证明 connection-scoped actor 与跨连接恢复要求冲突。
+- [x] D2 冻结不安全实现并形成 prerequisite amendment。
+- [x] P0 独立设计 authenticated principal contract 与 threat model；见 `W2-04-authenticated-principal`。
+- [x] P1 实现 verified claims/local principal、reconnect/revoke/source freshness Harness。
+- [x] P2a durable workspace root identity State kernel；不含 path/authority，见 `W2-04-durable-workspace`。
+- [x] P2b authenticated-only app-server durable workspace adapter 与 reconnect/process-restart/catalog-removal Harness。
+- [x] P3 durable Provider connection identity State kernel；见 `W2-04-provider-connection`。
+- [x] A1a 新增 authority-free Provider projection/Resource v2 DTO、exact ResourceType 与直接 schema/TS Harness；client-selected connect DTO 已在 review 中撤回。
+- [x] A1b 在 A2/A3 processor 可真实处理请求后注册 v2 RPC，并生成方法级 JSON/TS fixture；未提前注册空路由。
+- [x] A2a 实现并审查未注册 connect/read prototype；确认 production Credential provisioning 缺失后已撤回，不作为可接线实现。
+- [x] A2b 实现默认关闭的 production Agent Platform descriptor factory/config kernel、显式 endpoint/mode/RS256 key 与真实 strict descriptor Harness。
+- [x] A2c-1 按 `W2-04-provider-access-grant` 实现 Secret-free durable grant State kernel、CAS lifecycle 与 Harness。
+- [x] A2c-2a 实现 verified-principal + fresh mapping + session expiry 的 server-owned exact-scope grant provisioning，并接入 principal-session exchange。
+- [x] A2c-2b 完成无认证/logout 后请求、context-switch/mapping-revoke/source-drift/expiry/restart/replay 的 composite authority Harness。
+- [x] A2c-3a 重建只消费 server-resolved grant authority 的未注册 connect/read processor core，并完成 I/O 前后双检。
+- [x] A2c-3b 实现 deterministic secret-free projection adapter 与 projection hash，移除预公开 CredentialRef，不暴露内部 grant/owner/source。
+- [x] A2d 完成启动组合、restart/config-removal/readiness Harness；后续 A1b 已接入真实 Provider RPC。
+- [x] A3a 实现 live catalog `resource/list` / `resource/read`、experimental wire 与 exact projection。
+- [x] A3b 实现 durable bind/unbind 与 current-connection-only projection notification。
+- [x] V1a 运行 Resource protocol/app-server targeted/full package、方法级 schema、scoped fix/fmt。
+- [ ] V1b 在获得明确授权后运行完整 workspace `just test`。
+- [x] V2 更新 W2-05/W2-06/W2-08 解锁结论：W2-05/W2-06 可进入独立 SDD，W2-08 继续等待 W2-05 至 W2-07。

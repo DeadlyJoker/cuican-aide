@@ -1,9 +1,12 @@
 use chrono::Utc;
+use crewon_rollout::RolloutMutation;
+use crewon_rollout::RolloutWriterLease;
 use crewon_rollout::find_thread_path_by_id_str;
 
 use super::LocalThreadStore;
 use super::helpers::matching_rollout_file_name;
 use super::helpers::scoped_rollout_path;
+use super::live_writer;
 use crate::ArchiveThreadParams;
 use crate::ThreadStoreError;
 use crate::ThreadStoreResult;
@@ -17,7 +20,7 @@ pub(super) async fn archive_thread(
     let rollout_path = find_thread_path_by_id_str(
         store.config.codex_home.as_path(),
         &thread_id.to_string(),
-        state_db_ctx.as_deref(),
+        /*state_db_ctx*/ None,
     )
     .await
     .map_err(|err| ThreadStoreError::InvalidRequest {
@@ -40,6 +43,13 @@ pub(super) async fn archive_thread(
         thread_id,
         rollout_path.as_path(),
     )?;
+    let _writer_lease = RolloutWriterLease::acquire_for_existing_mutation(
+        store.config.codex_home.as_path(),
+        canonical_rollout_path.as_path(),
+        thread_id,
+        RolloutMutation::Archive,
+    )
+    .map_err(live_writer::map_recorder_error)?;
 
     let archive_folder = store
         .config
@@ -68,6 +78,7 @@ mod tests {
     use chrono::Utc;
     use crewon_protocol::ThreadId;
     use crewon_protocol::protocol::SessionSource;
+    use crewon_protocol::protocol::ThreadMemoryMode;
     use crewon_rollout::ARCHIVED_SESSIONS_SUBDIR;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
@@ -75,8 +86,11 @@ mod tests {
 
     use super::*;
     use crate::ListThreadsParams;
+    use crate::ResumeThreadParams;
+    use crate::ThreadPersistenceMetadata;
     use crate::ThreadSortKey;
     use crate::ThreadStore;
+    use crate::ThreadStoreError;
     use crate::local::LocalThreadStore;
     use crate::local::test_support::test_config;
     use crate::local::test_support::write_session_file;
@@ -176,5 +190,61 @@ mod tests {
             .expect("thread metadata should exist");
         assert_eq!(updated.rollout_path, archived_path);
         assert!(updated.archived_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn archive_thread_conflicts_with_another_store_writer_then_succeeds_after_shutdown() {
+        let home = TempDir::new().expect("temp dir");
+        let uuid = Uuid::from_u128(205);
+        let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
+        let active_path =
+            write_session_file(home.path(), "2025-01-03T14-00-00", uuid).expect("session file");
+        let first_store = LocalThreadStore::new(test_config(home.path()), /*state_db*/ None);
+        let second_store = LocalThreadStore::new(test_config(home.path()), /*state_db*/ None);
+        first_store
+            .resume_thread(resume_params(home.path(), thread_id, active_path.clone()))
+            .await
+            .expect("first store should own writer");
+
+        let err = second_store
+            .archive_thread(ArchiveThreadParams { thread_id })
+            .await
+            .expect_err("archive must fail while another writer is active");
+        assert!(matches!(err, ThreadStoreError::Conflict { .. }));
+        assert!(active_path.exists());
+        let archived_path = home
+            .path()
+            .join(ARCHIVED_SESSIONS_SUBDIR)
+            .join(active_path.file_name().expect("file name"));
+        assert!(!archived_path.exists());
+
+        first_store
+            .shutdown_thread(thread_id)
+            .await
+            .expect("release first writer");
+        second_store
+            .archive_thread(ArchiveThreadParams { thread_id })
+            .await
+            .expect("archive after writer shutdown");
+        assert!(!active_path.exists());
+        assert!(archived_path.exists());
+    }
+
+    fn resume_params(
+        cwd: &std::path::Path,
+        thread_id: ThreadId,
+        rollout_path: std::path::PathBuf,
+    ) -> ResumeThreadParams {
+        ResumeThreadParams {
+            thread_id,
+            rollout_path: Some(rollout_path),
+            history: None,
+            include_archived: true,
+            metadata: ThreadPersistenceMetadata {
+                cwd: Some(cwd.to_path_buf()),
+                model_provider: "test-provider".to_string(),
+                memory_mode: ThreadMemoryMode::Enabled,
+            },
+        }
     }
 }

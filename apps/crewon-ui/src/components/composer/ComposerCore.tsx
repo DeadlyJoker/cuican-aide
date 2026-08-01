@@ -2,6 +2,7 @@ import { ArrowUp, Square } from "lucide-react";
 import {
   createContext,
   type FormEvent,
+  type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -213,6 +214,7 @@ type TextareaProps = {
   placeholder: string;
   readOnly?: boolean;
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
 };
 
 function ComposerTextarea({
@@ -225,6 +227,7 @@ function ComposerTextarea({
   placeholder,
   readOnly = false,
   textareaRef,
+  onPaste,
 }: TextareaProps) {
   const core = useCore();
   const localRef = useRef<HTMLTextAreaElement | null>(null);
@@ -288,6 +291,7 @@ function ComposerTextarea({
         rows={2}
         value={core.value}
         onKeyDown={keyDown}
+        onPaste={onPaste}
         onChange={(event) => core.onChange(event.currentTarget.value)}
       />
     </>
@@ -299,9 +303,10 @@ function ComposerSendButton({ sendLabel }: { sendLabel: string }) {
   const label = core.running ? core.stopLabel : sendLabel;
   return (
     <button
-      aria-busy={core.busy}
+      aria-busy={core.busy || undefined}
       aria-label={label}
       className="send-button"
+      data-action={core.running ? "stop" : "send"}
       disabled={
         !core.running && (core.busy || core.submitBlocked || !core.value.trim())
       }
@@ -310,9 +315,9 @@ function ComposerSendButton({ sendLabel }: { sendLabel: string }) {
       onClick={core.running ? core.onStop : undefined}
     >
       {core.running ? (
-        <Square aria-hidden="true" />
+        <Square aria-hidden="true" fill="currentColor" size={12} strokeWidth={0} />
       ) : (
-        <ArrowUp aria-hidden="true" />
+        <ArrowUp aria-hidden="true" size={16} strokeWidth={2.2} />
       )}
     </button>
   );

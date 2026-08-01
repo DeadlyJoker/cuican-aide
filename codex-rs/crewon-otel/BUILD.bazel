@@ -5,3 +5,8 @@ crewon_rust_crate(
     crate_name = "crewon_otel",
     integration_test_args = ["--test-threads=1"],
 )
+
+alias(
+    name = "crewon-otel",
+    actual = ":otel",
+)

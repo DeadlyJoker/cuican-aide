@@ -42,6 +42,7 @@ function configRead(
       tools: null,
       web_search: null,
       analytics: null,
+      apps: null,
       ...overrides,
     },
     layers: [],

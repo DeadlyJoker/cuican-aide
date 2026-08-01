@@ -30,6 +30,7 @@ export function AppWorkspaceConversationContent({
   onAttachContext,
   onChangeComposerValue,
   onModeChange,
+  onSaveCapability,
   onRetryConnection,
   onSend,
   onSlashCommandSelect,
@@ -53,6 +54,7 @@ export function AppWorkspaceConversationContent({
   onAttachContext: () => void;
   onChangeComposerValue: (value: string) => void;
   onModeChange: (mode: WorkMode) => void;
+  onSaveCapability?: import("../../lib/capability/capabilityCatalog").CapabilityEditorSaveHandler;
   onRetryConnection: () => void;
   onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
   onSlashCommandSelect: (command: ComposerSlashCommand) => void;
@@ -83,6 +85,7 @@ export function AppWorkspaceConversationContent({
         onAttachContext={onAttachContext}
         onChangeComposerValue={onChangeComposerValue}
         onModeChange={onModeChange}
+        onSaveCapability={onSaveCapability}
         onRetryConnection={onRetryConnection}
         onSend={onSend}
         onSendNewThread={onSend}

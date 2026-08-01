@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  executionTargetOptions,
   executionTargetOptionsFromDomain,
   modeMayWrite,
   scenePresets,
@@ -108,44 +107,29 @@ describe("sceneCatalog", () => {
     ]);
   });
 
-  it("defaults to CrewON and exposes only real active agents", () => {
-    const options = executionTargetOptions({
-      agents: [
-        { id: 1, is_active: true, name: "产品审阅" },
-        { id: 2, is_active: false, name: "已停用" },
+  it("does not relabel Office records as Experts execution targets", () => {
+    const options = executionTargetOptionsFromDomain({
+      agents: [],
+      offices: [
+        {
+          filePath: "/repo/.crewon/offices/review.json",
+          config: {
+            title: "审阅办公室",
+            workspace: { members: [{ name: "Reviewer" }] },
+          } as never,
+        },
       ],
-      knowledgeBases: [],
-      mcpServers: [],
-      mcpTools: [],
-      skills: [],
-      workflows: [],
+      status: "ready",
     });
 
     expect(options).toEqual([
-      {
-        detail: "本地 Agent，独立完成任务",
-        kind: "crewon",
-        label: "CrewON",
-        strategy: "single",
-        value: "crewon",
-      },
-      {
-        detail: "Agent 尚未开放 Open API",
-        disabled: true,
-        kind: "agent",
-        label: "产品审阅 · 单 Agent",
-        strategy: "single",
-        value: "agent:1",
-      },
-      {
-        detail: "服务端 Team Runtime 与小队目录尚未接入",
-        disabled: true,
+      expect.objectContaining({ kind: "crewon", value: "crewon" }),
+      expect.objectContaining({
         kind: "team",
-        label: "选择已有小队 · 暂不可用",
-        strategy: "team",
-        value: "team:unavailable",
-      },
+        value: "team:审阅办公室",
+      }),
     ]);
+    expect(options.some((option) => option.kind === "experts")).toBe(false);
   });
 
   it("marks only write-capable modes for the draft-only risk notice", () => {

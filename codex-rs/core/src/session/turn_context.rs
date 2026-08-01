@@ -43,6 +43,27 @@ pub(crate) struct TurnEnvironment {
     pub(crate) shell: Option<String>,
 }
 
+/// Preconditions checked against the immutable context snapshot for a new turn admission.
+/// Exact receipt replay returns the existing admission before evaluating this precondition.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum TurnContextPrecondition {
+    /// Accept the current effective turn context.
+    Unconstrained,
+    /// Require the effective turn cwd to match exactly.
+    CwdEquals(AbsolutePathBuf),
+}
+
+pub(crate) struct TurnContextPreconditionMismatch {
+    pub(crate) expected_cwd: AbsolutePathBuf,
+    pub(crate) actual_cwd: AbsolutePathBuf,
+}
+
+pub(crate) struct PreparedDefaultTurnContext {
+    session_configuration: SessionConfiguration,
+    turn_environments: ResolvedTurnEnvironments,
+}
+
 impl TurnEnvironment {
     pub(crate) fn selection(&self) -> TurnEnvironmentSelection {
         TurnEnvironmentSelection {
@@ -840,6 +861,44 @@ impl Session {
             session_configuration,
             /*final_output_json_schema*/ None,
             turn_environments,
+        )
+        .await
+    }
+
+    pub(crate) async fn prepare_default_turn_context(
+        &self,
+        precondition: &TurnContextPrecondition,
+    ) -> Result<PreparedDefaultTurnContext, TurnContextPreconditionMismatch> {
+        let (session_configuration, turn_environments) =
+            self.default_turn_configuration_and_environments().await;
+        let actual_cwd = turn_environments
+            .primary()
+            .map(|environment| environment.cwd.clone())
+            .unwrap_or_else(|| session_configuration.cwd().clone());
+        if let TurnContextPrecondition::CwdEquals(expected_cwd) = precondition
+            && expected_cwd != &actual_cwd
+        {
+            return Err(TurnContextPreconditionMismatch {
+                expected_cwd: expected_cwd.clone(),
+                actual_cwd,
+            });
+        }
+        Ok(PreparedDefaultTurnContext {
+            session_configuration,
+            turn_environments,
+        })
+    }
+
+    pub(crate) async fn new_prepared_default_turn_with_sub_id(
+        &self,
+        sub_id: String,
+        prepared: PreparedDefaultTurnContext,
+    ) -> Arc<TurnContext> {
+        self.new_turn_from_configuration(
+            sub_id,
+            prepared.session_configuration,
+            /*final_output_json_schema*/ None,
+            prepared.turn_environments,
         )
         .await
     }

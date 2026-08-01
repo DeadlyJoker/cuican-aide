@@ -2,6 +2,7 @@ use anyhow::Context;
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::http::header::AUTHORIZATION;
+use axum::http::header::SEC_WEBSOCKET_PROTOCOL;
 use clap::Args;
 use clap::ValueEnum;
 use constant_time_eq::constant_time_eq_32;
@@ -21,8 +22,10 @@ use std::path::PathBuf;
 use time::OffsetDateTime;
 
 const DEFAULT_MAX_CLOCK_SKEW_SECONDS: u64 = 30;
+pub(super) const MAX_SIGNED_BEARER_CLOCK_SKEW_SECONDS: u64 = 5 * 60;
 const MIN_SIGNED_BEARER_SECRET_BYTES: usize = 32;
 const INVALID_AUTHORIZATION_HEADER_MESSAGE: &str = "invalid authorization header";
+pub(super) const PRINCIPAL_SESSION_SUBPROTOCOL: &str = "crewon.principal-session.v1";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
 pub struct AppServerWebsocketAuthArgs {
@@ -85,12 +88,12 @@ pub enum AppServerWebsocketCapabilityTokenSource {
     TokenSha256 { token_sha256: [u8; 32] },
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct WebsocketAuthPolicy {
     pub(crate) mode: Option<WebsocketAuthMode>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) enum WebsocketAuthMode {
     CapabilityToken {
         token_sha256: [u8; 32],
@@ -100,6 +103,9 @@ pub(crate) enum WebsocketAuthMode {
         issuer: Option<String>,
         audience: Option<String>,
         max_clock_skew_seconds: i64,
+    },
+    PrincipalSessionRs256 {
+        config: super::PrincipalSessionRs256AuthConfig,
     },
 }
 
@@ -115,6 +121,8 @@ struct JwtClaims {
     nbf: Option<i64>,
     iss: Option<String>,
     aud: Option<JwtAudienceClaim>,
+    #[serde(flatten)]
+    principal: super::websocket_principal_claims::WebsocketPrincipalClaims,
 }
 
 #[derive(Deserialize)]
@@ -187,6 +195,14 @@ impl AppServerWebsocketAuthArgs {
                 let shared_secret_file = self.ws_shared_secret_file.context(
                     "`--ws-shared-secret-file` is required when `--ws-auth signed-bearer-token` is set",
                 )?;
+                let max_clock_skew_seconds = self
+                    .ws_max_clock_skew_seconds
+                    .unwrap_or(DEFAULT_MAX_CLOCK_SKEW_SECONDS);
+                if max_clock_skew_seconds > MAX_SIGNED_BEARER_CLOCK_SKEW_SECONDS {
+                    anyhow::bail!(
+                        "websocket auth clock skew must not exceed {MAX_SIGNED_BEARER_CLOCK_SKEW_SECONDS} seconds"
+                    );
+                }
                 Some(AppServerWebsocketAuthConfig::SignedBearerToken {
                     shared_secret_file: absolute_path_arg(
                         "--ws-shared-secret-file",
@@ -194,9 +210,7 @@ impl AppServerWebsocketAuthArgs {
                     )?,
                     issuer: normalize(self.ws_issuer),
                     audience: normalize(self.ws_audience),
-                    max_clock_skew_seconds: self
-                        .ws_max_clock_skew_seconds
-                        .unwrap_or(DEFAULT_MAX_CLOCK_SKEW_SECONDS),
+                    max_clock_skew_seconds,
                 })
             }
             None => {
@@ -242,6 +256,14 @@ pub fn policy_from_settings(
             audience,
             max_clock_skew_seconds,
         }) => {
+            if *max_clock_skew_seconds > MAX_SIGNED_BEARER_CLOCK_SKEW_SECONDS {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!(
+                        "websocket auth clock skew must not exceed {MAX_SIGNED_BEARER_CLOCK_SKEW_SECONDS} seconds"
+                    ),
+                ));
+            }
             let shared_secret = read_trimmed_secret(shared_secret_file.as_ref())?.into_bytes();
             validate_signed_bearer_secret(shared_secret_file.as_ref(), &shared_secret)?;
             let max_clock_skew_seconds = i64::try_from(*max_clock_skew_seconds).map_err(|_| {
@@ -263,6 +285,14 @@ pub fn policy_from_settings(
     Ok(WebsocketAuthPolicy { mode })
 }
 
+pub fn principal_session_rs256_policy(
+    config: super::PrincipalSessionRs256AuthConfig,
+) -> WebsocketAuthPolicy {
+    WebsocketAuthPolicy {
+        mode: Some(WebsocketAuthMode::PrincipalSessionRs256 { config }),
+    }
+}
+
 pub(crate) fn is_unauthenticated_non_loopback_listener(
     bind_address: SocketAddr,
     policy: &WebsocketAuthPolicy,
@@ -273,17 +303,17 @@ pub(crate) fn is_unauthenticated_non_loopback_listener(
 pub(crate) fn authorize_upgrade(
     headers: &HeaderMap,
     policy: &WebsocketAuthPolicy,
-) -> Result<(), WebsocketAuthError> {
+) -> Result<super::TransportAuthentication, WebsocketAuthError> {
     let Some(mode) = policy.mode.as_ref() else {
-        return Ok(());
+        return Ok(super::TransportAuthentication::ConnectionScoped);
     };
 
-    let token = bearer_token_from_headers(headers)?;
     match mode {
         WebsocketAuthMode::CapabilityToken { token_sha256 } => {
+            let token = bearer_token_from_headers(headers)?;
             let actual_sha256 = sha256_digest(token.as_bytes());
             if constant_time_eq_32(token_sha256, &actual_sha256) {
-                Ok(())
+                Ok(super::TransportAuthentication::ConnectionScoped)
             } else {
                 Err(unauthorized("invalid websocket bearer token"))
             }
@@ -293,14 +323,31 @@ pub(crate) fn authorize_upgrade(
             issuer,
             audience,
             max_clock_skew_seconds,
-        } => verify_signed_bearer_token(
-            token,
-            shared_secret,
-            issuer.as_deref(),
-            audience.as_deref(),
-            *max_clock_skew_seconds,
-        ),
+        } => {
+            let token = bearer_token_from_headers(headers)?;
+            verify_signed_bearer_token(
+                token,
+                shared_secret,
+                issuer.as_deref(),
+                audience.as_deref(),
+                *max_clock_skew_seconds,
+            )
+        }
+        WebsocketAuthMode::PrincipalSessionRs256 { config } => {
+            let token = principal_session_token_from_headers(headers)?;
+            config
+                .verify(token, OffsetDateTime::now_utc().unix_timestamp())
+                .map_err(|_| unauthorized("invalid principal session jwt"))
+        }
     }
+}
+
+pub(crate) fn principal_session_subprotocol(policy: &WebsocketAuthPolicy) -> Option<&'static str> {
+    matches!(
+        policy.mode,
+        Some(WebsocketAuthMode::PrincipalSessionRs256 { .. })
+    )
+    .then_some(PRINCIPAL_SESSION_SUBPROTOCOL)
 }
 
 fn verify_signed_bearer_token(
@@ -309,9 +356,39 @@ fn verify_signed_bearer_token(
     issuer: Option<&str>,
     audience: Option<&str>,
     max_clock_skew_seconds: i64,
-) -> Result<(), WebsocketAuthError> {
+) -> Result<super::TransportAuthentication, WebsocketAuthError> {
+    verify_signed_bearer_token_at(
+        token,
+        shared_secret,
+        issuer,
+        audience,
+        max_clock_skew_seconds,
+        OffsetDateTime::now_utc().unix_timestamp(),
+    )
+}
+
+fn verify_signed_bearer_token_at(
+    token: &str,
+    shared_secret: &[u8],
+    issuer: Option<&str>,
+    audience: Option<&str>,
+    max_clock_skew_seconds: i64,
+    now: i64,
+) -> Result<super::TransportAuthentication, WebsocketAuthError> {
     let claims = decode_jwt_claims(token, shared_secret)?;
-    validate_jwt_claims(&claims, issuer, audience, max_clock_skew_seconds)
+    validate_jwt_claims_at(&claims, issuer, audience, max_clock_skew_seconds, now)?;
+    claims
+        .principal
+        .into_authentication(
+            super::websocket_principal_claims::VerifiedWebsocketPrincipalAuthority {
+                issuer,
+                audience,
+                expires_at: claims.exp,
+                max_clock_skew_seconds,
+                now,
+            },
+        )
+        .map_err(|_| unauthorized("invalid websocket principal claims"))
 }
 
 fn decode_jwt_claims(token: &str, shared_secret: &[u8]) -> Result<JwtClaims, WebsocketAuthError> {
@@ -326,13 +403,13 @@ fn decode_jwt_claims(token: &str, shared_secret: &[u8]) -> Result<JwtClaims, Web
         .map_err(|_| unauthorized("invalid websocket jwt"))
 }
 
-fn validate_jwt_claims(
+fn validate_jwt_claims_at(
     claims: &JwtClaims,
     issuer: Option<&str>,
     audience: Option<&str>,
     max_clock_skew_seconds: i64,
+    now: i64,
 ) -> Result<(), WebsocketAuthError> {
-    let now = OffsetDateTime::now_utc().unix_timestamp();
     if now > claims.exp.saturating_add(max_clock_skew_seconds) {
         return Err(unauthorized("expired websocket jwt"));
     }
@@ -366,9 +443,13 @@ fn audience_matches(audience: Option<&JwtAudienceClaim>, expected_audience: &str
 }
 
 fn bearer_token_from_headers(headers: &HeaderMap) -> Result<&str, WebsocketAuthError> {
-    let raw_header = headers
-        .get(AUTHORIZATION)
+    let mut authorization_headers = headers.get_all(AUTHORIZATION).iter();
+    let raw_header = authorization_headers
+        .next()
         .ok_or_else(|| unauthorized("missing websocket bearer token"))?;
+    if authorization_headers.next().is_some() {
+        return Err(unauthorized(INVALID_AUTHORIZATION_HEADER_MESSAGE));
+    }
     let header = raw_header
         .to_str()
         .map_err(|_| unauthorized(INVALID_AUTHORIZATION_HEADER_MESSAGE))?;
@@ -383,6 +464,43 @@ fn bearer_token_from_headers(headers: &HeaderMap) -> Result<&str, WebsocketAuthE
         return Err(unauthorized(INVALID_AUTHORIZATION_HEADER_MESSAGE));
     }
     Ok(token)
+}
+
+fn principal_session_token_from_headers(headers: &HeaderMap) -> Result<&str, WebsocketAuthError> {
+    let authorization = if headers.contains_key(AUTHORIZATION) {
+        Some(bearer_token_from_headers(headers)?)
+    } else {
+        None
+    };
+    let mut protocols = Vec::with_capacity(2);
+    for header in headers.get_all(SEC_WEBSOCKET_PROTOCOL) {
+        let value = header
+            .to_str()
+            .map_err(|_| unauthorized("invalid websocket subprotocol"))?;
+        for protocol in value.split(',') {
+            let protocol = protocol.trim();
+            if protocol.is_empty() || protocols.len() == 2 {
+                return Err(unauthorized("invalid websocket subprotocol"));
+            }
+            protocols.push(protocol);
+        }
+    }
+    let subprotocol_token = match protocols.as_slice() {
+        [] => None,
+        [protocol, token]
+            if *protocol == PRINCIPAL_SESSION_SUBPROTOCOL
+                && !token.is_empty()
+                && *token != PRINCIPAL_SESSION_SUBPROTOCOL =>
+        {
+            Some(*token)
+        }
+        _ => return Err(unauthorized("invalid websocket subprotocol")),
+    };
+    match (authorization, subprotocol_token) {
+        (Some(_), Some(_)) => Err(unauthorized("ambiguous websocket principal session")),
+        (Some(token), None) | (None, Some(token)) => Ok(token),
+        (None, None) => Err(unauthorized("missing websocket bearer token")),
+    }
 }
 
 fn validate_signed_bearer_secret(path: &Path, shared_secret: &[u8]) -> io::Result<()> {
@@ -458,6 +576,10 @@ fn unauthorized(message: &'static str) -> WebsocketAuthError {
         message,
     }
 }
+
+#[cfg(test)]
+#[path = "auth_principal_tests.rs"]
+mod principal_tests;
 
 #[cfg(test)]
 mod tests {

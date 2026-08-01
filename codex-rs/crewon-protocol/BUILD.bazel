@@ -5,3 +5,8 @@ crewon_rust_crate(
     crate_name = "crewon_protocol",
     compile_data = glob(["src/prompts/**/*.md"]),
 )
+
+alias(
+    name = "crewon-protocol",
+    actual = ":protocol",
+)

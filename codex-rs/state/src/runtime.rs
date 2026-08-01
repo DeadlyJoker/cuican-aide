@@ -58,14 +58,77 @@ use std::time::Instant;
 use tracing::warn;
 
 mod agent_jobs;
+mod artifacts;
 mod backfill;
+mod cloud_agent_legacy_import;
+#[cfg(test)]
+#[path = "runtime/cloud_agent_legacy_import_tests.rs"]
+mod cloud_agent_legacy_import_tests;
+mod cloud_agent_thread_summary;
+mod cloud_agent_turn;
+mod cloud_agent_turn_authority;
+mod cloud_agent_turn_cancellation_projection;
+#[cfg(test)]
+#[path = "runtime/cloud_agent_turn_cancellation_projection_tests.rs"]
+mod cloud_agent_turn_cancellation_projection_tests;
+mod cloud_agent_turn_finalization;
+mod cloud_agent_turn_finalization_storage;
+mod cloud_agent_turn_page;
+mod cloud_agent_turn_projection;
+#[cfg(test)]
+#[path = "runtime/cloud_agent_turn_tests.rs"]
+mod cloud_agent_turn_tests;
+mod durable_workspace;
+#[cfg(test)]
+#[path = "runtime/durable_workspace_tests.rs"]
+mod durable_workspace_tests;
+mod dynamic_tool_execution;
+mod dynamic_tool_execution_audit;
+mod dynamic_tool_execution_storage;
+#[cfg(test)]
+#[path = "runtime/dynamic_tool_execution_tests.rs"]
+mod dynamic_tool_execution_tests;
 mod goals;
 mod logs;
 mod memories;
+mod office_migration;
+#[cfg(test)]
+#[path = "runtime/office_migration_tests.rs"]
+mod office_migration_tests;
+mod provider_access_grant;
+#[cfg(test)]
+#[path = "runtime/provider_access_grant_tests.rs"]
+mod provider_access_grant_tests;
+mod provider_connection;
+#[cfg(test)]
+#[path = "runtime/provider_connection_tests.rs"]
+mod provider_connection_tests;
+mod provider_execution;
+mod provider_execution_storage;
+mod provider_identity;
+#[cfg(test)]
+#[path = "runtime/provider_identity_tests.rs"]
+mod provider_identity_tests;
+mod provider_resource_binding;
+#[cfg(test)]
+#[path = "runtime/provider_resource_binding_tests.rs"]
+mod provider_resource_binding_tests;
+mod provider_run_event_projection;
+#[cfg(test)]
+#[path = "runtime/provider_run_event_projection_tests.rs"]
+mod provider_run_event_projection_tests;
+mod provider_run_supervision;
 mod recovery;
 mod remote_control;
+mod task_runtime;
+mod task_runtime_read;
+mod task_runtime_recovery;
 #[cfg(test)]
 mod test_support;
+mod thread_execution_context;
+#[cfg(test)]
+#[path = "runtime/thread_execution_context_tests.rs"]
+mod thread_execution_context_tests;
 mod threads;
 
 pub use goals::GoalAccountingMode;
@@ -98,6 +161,7 @@ struct RuntimeDbSpec {
     kind: DbKind,
     open_phase: &'static str,
     migrate_phase: &'static str,
+    secure_delete: bool,
 }
 
 impl RuntimeDbSpec {
@@ -112,6 +176,7 @@ const STATE_DB: RuntimeDbSpec = RuntimeDbSpec {
     kind: DbKind::State,
     open_phase: "open_state",
     migrate_phase: "migrate_state",
+    secure_delete: true,
 };
 
 const LOGS_DB: RuntimeDbSpec = RuntimeDbSpec {
@@ -120,6 +185,7 @@ const LOGS_DB: RuntimeDbSpec = RuntimeDbSpec {
     kind: DbKind::Logs,
     open_phase: "open_logs",
     migrate_phase: "migrate_logs",
+    secure_delete: false,
 };
 
 const GOALS_DB: RuntimeDbSpec = RuntimeDbSpec {
@@ -128,6 +194,7 @@ const GOALS_DB: RuntimeDbSpec = RuntimeDbSpec {
     kind: DbKind::Goals,
     open_phase: "open_goals",
     migrate_phase: "migrate_goals",
+    secure_delete: false,
 };
 
 const MEMORIES_DB: RuntimeDbSpec = RuntimeDbSpec {
@@ -136,6 +203,7 @@ const MEMORIES_DB: RuntimeDbSpec = RuntimeDbSpec {
     kind: DbKind::Memories,
     open_phase: "open_memories",
     migrate_phase: "migrate_memories",
+    secure_delete: false,
 };
 
 const RUNTIME_DBS: [RuntimeDbSpec; 4] = [STATE_DB, LOGS_DB, GOALS_DB, MEMORIES_DB];
@@ -398,7 +466,10 @@ async fn open_sqlite(
     spec: RuntimeDbSpec,
     telemetry_override: Option<&dyn DbTelemetry>,
 ) -> anyhow::Result<SqlitePool> {
-    let options = base_sqlite_options(path).auto_vacuum(SqliteAutoVacuum::Incremental);
+    let mut options = base_sqlite_options(path).auto_vacuum(SqliteAutoVacuum::Incremental);
+    if spec.secure_delete {
+        options = options.pragma("secure_delete", "ON");
+    }
     let started = Instant::now();
     let pool_result = SqlitePoolOptions::new()
         .max_connections(5)

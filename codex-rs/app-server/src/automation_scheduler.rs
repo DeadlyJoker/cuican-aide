@@ -45,7 +45,7 @@ pub(crate) struct AutomationScheduler {
 
 struct AutomationSchedulerInner {
     codex_home: PathBuf,
-    domain_processor: CrewonDomainRequestProcessor,
+    domain_processor: Arc<CrewonDomainRequestProcessor>,
     thread_processor: ThreadRequestProcessor,
     turn_processor: TurnRequestProcessor,
     workspaces: Mutex<Vec<String>>,
@@ -71,13 +71,14 @@ struct AutomationWorkspaceEntry {
 impl AutomationScheduler {
     pub(crate) fn new(
         codex_home: PathBuf,
+        domain_processor: Arc<CrewonDomainRequestProcessor>,
         thread_processor: ThreadRequestProcessor,
         turn_processor: TurnRequestProcessor,
     ) -> Self {
         Self {
             inner: Arc::new(AutomationSchedulerInner {
                 codex_home,
-                domain_processor: CrewonDomainRequestProcessor::new(),
+                domain_processor,
                 thread_processor,
                 turn_processor,
                 workspaces: Mutex::new(Vec::new()),
@@ -338,7 +339,7 @@ impl AutomationScheduler {
                     ..TurnStartParams::default()
                 },
                 Some("app-server-automation-scheduler".to_string()),
-                None,
+                /*app_server_client_version*/ None,
             )
             .await;
         match turn_response {

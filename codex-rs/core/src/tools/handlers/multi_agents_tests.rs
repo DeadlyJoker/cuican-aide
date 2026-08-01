@@ -54,6 +54,17 @@ use crewon_protocol::protocol::SubAgentSource;
 use crewon_protocol::protocol::TurnAbortReason;
 use crewon_protocol::protocol::TurnAbortedEvent;
 use crewon_protocol::protocol::TurnCompleteEvent;
+use crewon_protocol::scene::ExternalActionPolicy;
+use crewon_protocol::scene::LocalWritePolicy;
+use crewon_protocol::scene::SceneDeliverable;
+use crewon_protocol::scene::SceneExecutionStrategy;
+use crewon_protocol::scene::SceneExecutionTargetKind;
+use crewon_protocol::scene::SceneExecutionTargetProfile;
+use crewon_protocol::scene::SceneId;
+use crewon_protocol::scene::SceneInteractionMode;
+use crewon_protocol::scene::SceneTaskContract;
+use crewon_protocol::scene::SceneTeamMemberProfile;
+use crewon_protocol::scene::SceneThreadMetadata;
 use crewon_protocol::user_input::UserInput;
 use crewon_state::DirectionalThreadSpawnEdgeStatus;
 use pretty_assertions::assert_eq;
@@ -2522,6 +2533,96 @@ async fn multi_agent_v2_spawn_agent_ignores_configured_max_depth() {
     assert_eq!(result.task_name, "/root/parent/child");
     assert_eq!(result.nickname, None);
     assert_eq!(success, Some(true));
+}
+
+#[tokio::test]
+async fn experts_spawn_creates_a_single_agent_child_without_team_delegation() {
+    #[derive(Debug, Deserialize)]
+    struct SpawnAgentResult {
+        task_name: String,
+    }
+
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    let extra = config.extra_config.get_or_insert_with(Default::default);
+    extra.scene_runtime = Some(SceneThreadMetadata {
+        version: 1,
+        preset_version: 1,
+        instruction_version: 1,
+        contract: SceneTaskContract {
+            scene: SceneId::Office,
+            mode: SceneInteractionMode::Auto,
+            deliverable: SceneDeliverable::Conversation,
+            local_write_policy: LocalWritePolicy::WorkspaceWrite,
+            external_action_policy: ExternalActionPolicy::DraftOnly,
+        },
+        execution_target_kind: SceneExecutionTargetKind::Experts,
+        execution_target_ref: Some(".crewon/experts/team.json".to_string()),
+        execution_target_token: "experts-token".to_string(),
+        execution_strategy: SceneExecutionStrategy::Team,
+    });
+    extra.scene_execution_target_profile = Some(SceneExecutionTargetProfile {
+        kind: SceneExecutionTargetKind::Experts,
+        display_name: "Delivery council".to_string(),
+        role: Some("Review and deliver".to_string()),
+        model: None,
+        instructions: None,
+        capabilities: Vec::new(),
+        team_members: vec![SceneTeamMemberProfile {
+            name: "Research".to_string(),
+            role: Some("Find risks".to_string()),
+            agent_id: Some("explorer".to_string()),
+        }],
+    });
+    let root = manager
+        .start_thread(config.clone())
+        .await
+        .expect("root thread should start");
+    let agent_control = manager.agent_control();
+    session.services.agent_control = agent_control.clone();
+    session.thread_id = root.thread_id;
+    set_turn_config(&mut turn, config);
+    let parent_source = turn.session_source.clone();
+
+    let output = SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            Arc::new(session),
+            Arc::new(turn),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "Inspect the workflow and report only the result",
+                "task_name": "explorer"
+            })),
+        ))
+        .await
+        .expect("Experts spawn should infer the configured role from task_name");
+    let (content, success) = expect_text_output(output);
+    let result: SpawnAgentResult =
+        serde_json::from_str(&content).expect("spawn_agent result should be json");
+    assert_eq!(success, Some(true));
+
+    let child_thread_id = agent_control
+        .resolve_agent_reference(root.thread_id, &parent_source, &result.task_name)
+        .await
+        .expect("spawned child should resolve by task name");
+    let child = agent_control
+        .get_agent_config_snapshot(child_thread_id)
+        .await
+        .expect("spawned child should have a config snapshot");
+    let runtime = child
+        .scene_runtime
+        .expect("Experts child should retain the parent scene contract");
+    assert_eq!(runtime.execution_strategy, SceneExecutionStrategy::Single);
+    assert_eq!(
+        runtime.execution_target_kind,
+        SceneExecutionTargetKind::Crewon
+    );
+    assert_eq!(runtime.execution_target_ref, None);
 }
 
 #[tokio::test]

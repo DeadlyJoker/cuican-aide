@@ -45,6 +45,33 @@ describe("command Office room style", () => {
     expect(contract).toMatchSnapshot();
   });
 
+  it("snapshots the Workflow and Experts live-runtime layout contract", () => {
+    const styles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    const marker = ".shell-page-view .team-capability-live-layout {";
+    const endMarker = ".shell-page-view .expert-room-inline {";
+    const start = styles.indexOf(marker);
+    const end = styles.indexOf(endMarker, start);
+
+    expect({ start, end }).toEqual({
+      start: expect.any(Number),
+      end: expect.any(Number),
+    });
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+
+    const contract = styles.slice(start, end).trim();
+
+    expect(contract).toContain(".team-capability-definition");
+    expect(contract).toContain(".team-capability-run-panel");
+    expect(contract).toContain(".team-capability-workspace");
+    expect(contract).toContain(".expert-member-stack");
+    expect(contract).toContain("@media (max-width: 860px)");
+    expect(contract).toMatchSnapshot();
+  });
+
   it("snapshots the canonical Office workspace embedding contract", () => {
     const styles = readFileSync(
       new URL("../../styles/original-shell-overrides.css", import.meta.url),
@@ -58,5 +85,28 @@ describe("command Office room style", () => {
       .trim();
 
     expect(contract).toMatchSnapshot();
+  });
+
+  it("snapshots the design-aligned Workflow list and room contract", () => {
+    const styles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    const listStart = styles.indexOf(".shell-page-view .workflow-list {");
+    const listEnd = styles.indexOf(".shell-page-view .team-mode-panel {", listStart);
+    const roomStart = styles.indexOf(
+      ".shell-page-view.workflow-room-active .team-workflow-shell {",
+    );
+    const roomEnd = styles.indexOf(".workflow-execution-strip {", roomStart);
+
+    expect(listStart).toBeGreaterThanOrEqual(0);
+    expect(listEnd).toBeGreaterThan(listStart);
+    expect(roomStart).toBeGreaterThanOrEqual(0);
+    expect(roomEnd).toBeGreaterThan(roomStart);
+
+    expect({
+      list: styles.slice(listStart, listEnd).trim(),
+      room: styles.slice(roomStart, roomEnd).trim(),
+    }).toMatchSnapshot();
   });
 });

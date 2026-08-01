@@ -378,10 +378,16 @@ async fn thread_shell_command_uses_existing_active_turn() -> Result<()> {
 
 fn assert_no_command_executions(items: &[ThreadItem], context: &str) {
     assert!(
-        items
-            .iter()
-            .all(|item| !matches!(item, ThreadItem::CommandExecution { .. })),
-        "{context} should always exclude command executions from returned turns"
+        items.iter().all(|item| {
+            !matches!(
+                item,
+                ThreadItem::CommandExecution {
+                    source: CommandExecutionSource::UserShell,
+                    ..
+                }
+            )
+        }),
+        "{context} should exclude user-shell command executions from returned turns"
     );
 }
 

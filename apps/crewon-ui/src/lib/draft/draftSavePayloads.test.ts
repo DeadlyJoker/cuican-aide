@@ -43,38 +43,25 @@ describe("draft save payload builders", () => {
         serverName: "workspace-mcp-202606171430",
         locale: "en",
       }),
-    ).toEqual({
-      title: "New MCP",
-      subtitle: "Draft · saved to config.toml",
-      body: "Fill in the MCP server name, command, and arguments. Saving writes MCP config and reloads MCP.",
+    ).toMatchObject({
+      title: "Add MCP service",
+      subtitle: "Saved to config.toml and reloaded",
       fields: [
         {
           id: "mcp-draft-name",
-          label: "Server name",
+          label: "MCP name",
           value: "workspace-mcp-202606171430",
         },
         {
-          id: "mcp-draft-command",
-          label: "Command",
-          value: "npx",
-        },
-        {
-          id: "mcp-draft-args",
-          label: "Arguments JSON array",
-          placeholder: "[\"-y\", \"@modelcontextprotocol/server-everything\"]",
-          value: "[\n  \"-y\",\n  \"@modelcontextprotocol/server-everything\"\n]",
-        },
-        {
-          id: "mcp-draft-env",
-          label: "Environment JSON",
-          placeholder: "{\n}",
-          value: "{}",
+          id: "mcp-draft-config",
+          value:
+            '{\n  "command": "npx",\n  "args": [\n    "-y",\n    "@modelcontextprotocol/server-everything"\n  ],\n  "enabled": false\n}',
         },
       ],
       actions: [
         {
           id: "save-mcp-draft",
-          label: "Save MCP",
+          label: "Add MCP",
           tone: "primary",
         },
         {
@@ -91,8 +78,8 @@ describe("draft save payload builders", () => {
         locale: "en",
       }),
     ).toMatchObject({
-      title: "New MCP",
-      subtitle: "Draft · saved to config.toml",
+      title: "Add MCP service",
+      subtitle: "Saved to config.toml and reloaded",
       items: [],
       error: undefined,
     });
@@ -101,7 +88,10 @@ describe("draft save payload builders", () => {
         serverName: "workspace-mcp-202606171430",
         locale: "en",
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      kind: "tools",
+      title: "Add MCP service",
+    });
   });
 
   it("builds skill draft panel content", () => {
@@ -112,19 +102,19 @@ describe("draft save payload builders", () => {
         locale: "zh",
       }),
     ).toEqual({
-      title: "新建 Skill",
+      title: "新建技能",
       subtitle: "/repo · 保存到 .crewon/skill",
-      body: "填写 Skill 名称、描述和工作流步骤。保存后会写入 SKILL.md 并注册 Skill root。",
+      body: "填写技能名称、描述和工作流步骤。保存后会写入 SKILL.md 并注册技能目录。",
       fields: [
         {
           id: "skill-draft-name",
-          label: "Skill 名称",
+          label: "技能名称",
           value: "workspace-skill-202606171430",
         },
         {
           id: "skill-draft-description",
           label: "描述",
-          value: "从 Crewon UI 创建的可复用工作流。",
+          value: "从 CrewON 创建的可复用工作流。",
         },
         {
           id: "skill-draft-workflow",
@@ -136,7 +126,7 @@ describe("draft save payload builders", () => {
       actions: [
         {
           id: "save-skill-draft",
-          label: "保存 Skill",
+          label: "保存技能",
           tone: "primary",
         },
         {
@@ -154,17 +144,17 @@ describe("draft save payload builders", () => {
         locale: "zh",
       }),
     ).toMatchObject({
-      title: "新建 Skill",
+      title: "新建技能",
       subtitle: "/repo · 保存到 .crewon/skill",
       items: [],
       error: undefined,
     });
     expect(skillDraftMissingWorkspaceMessage("en")).toBe(
-      "No workspace path is available for creating a local skill",
+      "No workspace path is available for creating a skill",
     );
     expect(skillDraftMissingWorkspacePanel(toolPanel(), "zh")).toEqual({
       ...toolPanel(),
-      error: "当前没有工作区路径，无法创建本地 Skill",
+      error: "当前没有工作区路径，无法创建技能",
     });
     expect(skillDraftMissingWorkspacePanel(null, "en")).toBeNull();
   });
@@ -174,16 +164,11 @@ describe("draft save payload builders", () => {
       buildMcpDraftPayload(
         [
           { id: "mcp-draft-name", label: "Name", value: "GitHub MCP" },
-          { id: "mcp-draft-command", label: "Command", value: "npx" },
           {
-            id: "mcp-draft-args",
-            label: "Args",
-            value: '["-y","@modelcontextprotocol/server-github"]',
-          },
-          {
-            id: "mcp-draft-env",
-            label: "Env",
-            value: '{"GITHUB_TOKEN":"secret"}',
+            id: "mcp-draft-config",
+            label: "Config",
+            value:
+              '{"command":"npx","args":["-y","@modelcontextprotocol/server-github"],"env":{"GITHUB_TOKEN":"secret"},"enabled":false}',
           },
         ],
         "en",
@@ -202,7 +187,7 @@ describe("draft save payload builders", () => {
           kind: "mcp",
           title: "github-mcp",
           name: "github-mcp",
-          description: "MCP draft created from the Crewon UI.",
+          description: "MCP service config: npx",
           command: "npx",
           args: ["-y", "@modelcontextprotocol/server-github"],
           env: { GITHUB_TOKEN: "secret" },
@@ -220,35 +205,59 @@ describe("draft save payload builders", () => {
       ),
     ).toEqual({
       type: "error",
-      message: "服务器名称和启动命令不能为空",
+      message: "服务名称和配置不能为空",
     });
 
     expect(
       buildMcpDraftPayload(
         [
           { id: "mcp-draft-name", label: "Name", value: "Bad args" },
-          { id: "mcp-draft-command", label: "Command", value: "node" },
-          { id: "mcp-draft-args", label: "Args", value: '{"not":"array"}' },
+          {
+            id: "mcp-draft-config",
+            label: "Config",
+            value: '{"command":"node","args":{"not":"array"}}',
+          },
         ],
         "en",
       ),
     ).toEqual({
       type: "error",
-      message: "Arguments must be an array of strings",
+      message: "args must be an array of strings",
     });
 
     expect(
       buildMcpDraftPayload(
         [
           { id: "mcp-draft-name", label: "Name", value: "Bad env" },
-          { id: "mcp-draft-command", label: "Command", value: "node" },
-          { id: "mcp-draft-env", label: "Env", value: '{"PORT":3000}' },
+          {
+            id: "mcp-draft-config",
+            label: "Config",
+            value: '{"command":"node","env":{"PORT":3000}}',
+          },
         ],
         "en",
       ),
     ).toEqual({
       type: "error",
-      message: "Environment must be an object of string values",
+      message: "env must be an object of string values",
+    });
+
+    expect(
+      buildMcpDraftPayload(
+        [
+          { id: "mcp-draft-name", label: "Name", value: "Cloud service" },
+          {
+            id: "mcp-draft-config",
+            label: "Config",
+            value:
+              '{"command":"npx","args":["-y","mcp-remote","<SERVICE_URL>"],"env":{"TOKEN":"<YOUR_TOKEN>"},"enabled":true}',
+          },
+        ],
+        "zh",
+      ),
+    ).toEqual({
+      type: "error",
+      message: "请先替换服务配置占位符：<SERVICE_URL>、<YOUR_TOKEN>",
     });
   });
 
@@ -273,7 +282,7 @@ describe("draft save payload builders", () => {
         },
       }),
     ).toEqual({
-      text: "已更新 MCP 草稿：github-mcp（后端记录：/repo/.crewon/tools/github-mcp.json）",
+      text: "已更新服务：github-mcp（配置记录：/repo/.crewon/tools/github-mcp.json）",
       tone: "success",
     });
   });
@@ -324,9 +333,11 @@ describe("draft save payload builders", () => {
   });
 
   it("builds skill draft save feedback", () => {
-    expect(skillDraftSavingPanel(toolPanel(), "frontend-cleanup", "zh")).toEqual({
+    expect(
+      skillDraftSavingPanel(toolPanel(), "frontend-cleanup", "zh"),
+    ).toEqual({
       ...toolPanel(),
-      body: "正在写入 Skill：frontend-cleanup",
+      body: "正在写入技能：frontend-cleanup",
       error: undefined,
     });
     expect(skillDraftSavingPanel(null, "frontend-cleanup", "zh")).toBeNull();

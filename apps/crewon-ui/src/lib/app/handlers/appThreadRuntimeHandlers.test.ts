@@ -248,6 +248,26 @@ describe("app thread runtime handlers", () => {
     });
   });
 
+  it("passes Provider execution preparation into the standard thread creator", async () => {
+    const preparation = {
+      workspaceKey: "workspace-1",
+      afterStart: vi.fn(async () => undefined),
+    };
+    const handlers = createAppThreadRuntimeHandlers(
+      createParams({
+        prepareThreadExecutionContext: () => preparation,
+      }),
+    );
+
+    await handlers.sendMessageInNewThread("provider prompt");
+    await threadMessageSpy.sendParams?.createThread("provider prompt");
+
+    expect(threadMessageSpy.createParams).toMatchObject({
+      executionContextPreparation: preparation,
+      threadSource: "app_server",
+    });
+  });
+
   it("wires demo draft creation and active turn interruption", async () => {
     const handlers = createAppThreadRuntimeHandlers(createParams());
 
@@ -315,19 +335,6 @@ describe("app thread runtime handlers", () => {
     await threadMessageSpy.sendParams?.createThread("workspace prompt");
 
     expect(threadMessageSpy.createParams?.workspaceCwd).toBe("/repo/selected");
-  });
-
-  it("persists the Agent Platform target in new thread source metadata", async () => {
-    const handlers = createAppThreadRuntimeHandlers(createParams());
-
-    await handlers.sendMessageInNewThread("external prompt", {
-      agentPlatformAgentId: "7",
-    });
-    await threadMessageSpy.sendParams?.createThread("external prompt");
-
-    expect(threadMessageSpy.createParams?.threadSource).toBe(
-      "agent-platform:agents:7",
-    );
   });
 
   it("shares createThread with review and side chat handlers", async () => {

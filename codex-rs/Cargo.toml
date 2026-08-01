@@ -2,6 +2,7 @@
 members = [
     "aws-auth",
     "analytics",
+    "artifact",
     "agent-graph-store",
     "agent-identity",
     "backend-client",
@@ -63,9 +64,13 @@ members = [
     "network-proxy",
     "ollama",
     "process-hardening",
+    "policy",
+    "provider-agent-platform",
+    "provider-transport",
     "crewon-protocol",
     "realtime-webrtc",
     "prompts",
+    "resource-federation",
     "rollout",
     "rollout-trace",
     "rmcp-client",
@@ -101,6 +106,7 @@ members = [
     "crewon-client",
     "crewon-api",
     "state",
+    "task-runtime",
     "terminal-detection",
     "test-binary-support",
     "thread-store",
@@ -185,10 +191,15 @@ crewon-network-proxy = { path = "network-proxy" }
 crewon-ollama = { path = "ollama" }
 crewon-otel = { path = "crewon-otel" }
 crewon-plugin = { path = "plugin" }
+crewon-artifact = { path = "artifact" }
+crewon-policy = { path = "policy" }
 crewon-model-provider = { path = "model-provider" }
 crewon-process-hardening = { path = "process-hardening" }
+crewon-provider-agent-platform = { path = "provider-agent-platform" }
+crewon-provider-transport = { path = "provider-transport" }
 crewon-protocol = { path = "crewon-protocol" }
 crewon-realtime-webrtc = { path = "realtime-webrtc" }
+crewon-resource-federation = { path = "resource-federation" }
 crewon-scene-runtime = { path = "scene-runtime" }
 crewon-prompts = { path = "prompts" }
 crewon-response-debug-context = { path = "response-debug-context" }
@@ -202,6 +213,7 @@ crewon-shell-escalation = { path = "shell-escalation" }
 crewon-skills-extension = { path = "ext/skills" }
 crewon-skills = { path = "skills" }
 crewon-state = { path = "state" }
+crewon-task-runtime = { path = "task-runtime" }
 crewon-terminal-detection = { path = "terminal-detection" }
 crewon-test-binary-support = { path = "test-binary-support" }
 crewon-thread-store = { path = "thread-store" }

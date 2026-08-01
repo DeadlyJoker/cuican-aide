@@ -220,8 +220,8 @@
   top: 18px;
   left: 18px;
   z-index: 36;
-  width: 42px;
-  min-height: 42px;
+  width: 34px;
+  min-height: 32px;
   justify-content: center;
   align-items: center;
   padding: 0;
@@ -237,18 +237,17 @@
   display: none;
 }
 .command-window.sidebar-collapsed [data-sidebar-collapse] {
-  width: 42px;
-  height: 42px;
-  border-color: color-mix(in oklch, var(--command-sidebar-border), white 12%);
-  border-radius: 13px;
-  background: rgb(255 255 255 / 0.86);
-  box-shadow: 0 14px 34px rgb(16 25 40 / 0.16);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  width: 34px;
+  height: 32px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .command-window.sidebar-collapsed [data-sidebar-collapse] svg {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
   transform: rotate(180deg);
 }
 .screen-shell.command-screen {
@@ -575,6 +574,30 @@
   width: 100%;
   max-width: none;
   margin: 0;
+  container-name: capability-page;
+  container-type: inline-size;
+}
+
+@container capability-page (max-width: 760px) {
+  .screen-shell.command-screen
+    .shell-page-view[data-shell-view="agents"]
+    .catalog-market-header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .screen-shell.command-screen
+    .shell-page-view[data-shell-view="agents"]
+    .catalog-mode-tabs {
+    width: fit-content;
+  }
+
+  .screen-shell.command-screen
+    .shell-page-view[data-shell-view="agents"]
+    .catalog-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 .shell-page-view.office-room-active,
 .shell-page-view.workflow-room-active {
@@ -673,7 +696,6 @@
   outline-offset: 2px;
   box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent) 14%, transparent);
 }
-.shell-page-view .calendar-grid button:focus-visible,
 .frequency-tabs button:focus-visible,
 .space-input:focus-visible,
 .form-field input:focus-visible,
@@ -850,22 +872,30 @@
   align-items: center;
 }
 .shell-page-view .catalog-mode-tabs {
-  gap: 4px;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid oklch(90.5% 0.008 235);
+  border-radius: 10px;
+  background: oklch(96.8% 0.006 235);
 }
 .shell-page-view .mode-tab {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
+  min-height: 26px;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 12px;
   border-color: transparent;
   border-radius: 7px;
   background: transparent;
-  color: oklch(34% 0.014 235);
+  color: oklch(46% 0.016 235);
   box-shadow: none;
-  font-size: 14px;
-  font-weight: 520;
+  font-size: 13px;
+  font-weight: 540;
+}
+.shell-page-view .mode-tab:hover {
+  background: oklch(99.2% 0.002 235);
+  color: oklch(26% 0.016 235);
 }
 .shell-page-view .mode-tab svg,
 .shell-page-view .catalog-header-actions .button svg {
@@ -879,8 +909,12 @@
 }
 .shell-page-view .mode-tab.active {
   border-color: transparent;
-  background: oklch(28% 0.012 235);
-  color: oklch(99% 0.002 235);
+  background: oklch(100% 0 0);
+  color: oklch(20% 0.016 235);
+  font-weight: 620;
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 0.08),
+    0 0 0 1px oklch(91% 0.007 235);
 }
 .shell-page-view .catalog-header-actions {
   justify-content: flex-end;
@@ -1156,106 +1190,6 @@
   background: color-mix(in oklch, var(--success) 8%, white);
   color: oklch(36% 0.09 155);
 }
-.shell-page-view .schedule-calendar-panel {
-  display: grid;
-  grid-template-columns: minmax(270px, 0.82fr) minmax(0, 1.18fr);
-  gap: 10px;
-  margin-bottom: 10px;
-  padding: 14px;
-  border: 1px solid oklch(89% 0.01 235);
-  border-radius: 10px;
-  background: oklch(100% 0 0);
-}
-.shell-page-view .calendar-month {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid oklch(91% 0.006 235);
-  border-radius: 9px;
-  background: oklch(98% 0.004 235);
-}
-.shell-page-view .calendar-month-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.shell-page-view .calendar-month-head strong {
-  color: oklch(20% 0.018 235);
-  font-size: 14px;
-  font-weight: 620;
-}
-.shell-page-view .calendar-month-head span {
-  color: oklch(52% 0.014 235);
-  font-size: 12px;
-  font-weight: 520;
-}
-.shell-page-view .calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
-}
-.shell-page-view .calendar-grid span,
-.shell-page-view .calendar-grid button {
-  display: grid;
-  min-height: 30px;
-  place-items: center;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: oklch(48% 0.014 235);
-  font: 12px/1 var(--font-body);
-  font-weight: 560;
-}
-.shell-page-view .calendar-grid span {
-  min-height: 22px;
-  color: oklch(58% 0.012 235);
-  font-size: 11px;
-}
-.shell-page-view .calendar-grid button.has-event {
-  background: color-mix(in oklch, var(--accent) 7%, white);
-  color: oklch(34% 0.05 245);
-}
-.shell-page-view .calendar-grid button:hover {
-  background: oklch(95.5% 0.008 235);
-  color: oklch(25% 0.02 235);
-}
-.shell-page-view .calendar-grid button.is-selected,
-.shell-page-view .calendar-grid button[aria-current="date"] {
-  background: oklch(28% 0.012 235);
-  color: oklch(99% 0.002 235);
-}
-.shell-page-view .calendar-agenda {
-  display: grid;
-  gap: 8px;
-  align-content: start;
-}
-.shell-page-view .agenda-item {
-  display: grid;
-  grid-template-columns: 58px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: start;
-  min-height: 72px;
-  padding: 10px;
-  border: 1px solid oklch(90% 0.008 235);
-  border-radius: 9px;
-  background: oklch(99% 0.002 235);
-}
-.shell-page-view .agenda-item strong {
-  color: oklch(22% 0.018 235);
-  font-size: 13.5px;
-  font-weight: 620;
-}
-.shell-page-view .agenda-item p {
-  margin-top: 3px;
-  color: oklch(50% 0.016 235);
-  font-size: 12.5px;
-  line-height: 1.45;
-  text-wrap: pretty;
-}
-.shell-page-view .schedule-arrangement-catalog {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
 .shell-page-view .team-office-shell {
   display: grid;
   gap: 12px;
@@ -1294,48 +1228,60 @@
   gap: 10px;
   min-width: 0;
   max-width: min(58vw, 620px);
-  padding: 3px 10px 3px 3px;
-  border: 1px solid oklch(89% 0.008 235);
-  border-radius: 10px;
-  background: oklch(98.5% 0.004 235);
 }
 .shell-page-view .team-workspace-scope select {
   min-width: 112px;
   max-width: 190px;
   height: 30px;
-  padding: 0 26px 0 9px;
-  border: 0;
-  border-radius: 7px;
+  padding: 0 26px 0 10px;
+  border: 1px solid oklch(88% 0.01 235);
+  border-radius: 8px;
   background: oklch(100% 0 0);
   color: oklch(25% 0.018 235);
+  cursor: pointer;
   font: inherit;
-  font-weight: 650;
-  outline: 1px solid oklch(90% 0.008 235);
-  outline-offset: -1px;
+  font-weight: 620;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.shell-page-view .team-workspace-scope select:hover {
+  border-color: color-mix(in oklch, var(--accent) 30%, oklch(88% 0.01 235));
 }
 .shell-page-view .team-workspace-scope select:focus-visible {
-  outline: 2px solid color-mix(in oklch, var(--accent) 54%, white);
+  border-color: color-mix(in oklch, var(--accent) 54%, white);
+  outline: 2px solid color-mix(in oklch, var(--accent) 30%, transparent);
   outline-offset: 1px;
 }
 .shell-page-view .team-workspace-path,
 .shell-page-view .team-workspace-scope > strong {
   min-width: 0;
   overflow: hidden;
-  color: oklch(53% 0.012 235);
+  color: oklch(56% 0.012 235);
   font-size: 11.5px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .shell-page-view .team-workspace-scope > strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   max-width: min(58vw, 620px);
-  padding: 7px 10px;
-  border: 1px solid oklch(89% 0.008 235);
-  border-radius: 9px;
-  background: oklch(98.5% 0.004 235);
+  font-weight: 560;
+  color: oklch(38% 0.016 235);
 }
-.shell-page-view .team-workspace-scope.is-single-chat > strong {
-  display: block;
+.shell-page-view .team-workspace-scope > strong::before {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--accent) 72%, white);
+  content: "";
+}
+.shell-page-view .team-workspace-scope.is-single-chat > strong,
+.shell-page-view .team-workspace-scope.is-cloud-runtime > strong {
+  display: inline-flex;
 }
 .shell-page-view .team-workspace-note {
   color: oklch(55% 0.012 235);
@@ -1509,16 +1455,16 @@
 .shell-page-view .office-card-button {
   display: grid;
   align-content: space-between;
-  gap: 9px;
-  min-height: 132px;
-  padding: 13px;
-  border: 1px solid oklch(89% 0.01 235);
-  border-radius: 11px;
+  gap: 10px;
+  min-height: 138px;
+  padding: 14px;
+  border: 1px solid oklch(90% 0.009 235);
+  border-radius: 14px;
   background: oklch(100% 0 0);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 1px 0 rgb(15 23 42 / 0.03);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -1526,17 +1472,17 @@
     box-shadow 0.15s ease;
 }
 .shell-page-view .office-card-button:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklch, var(--accent) 24%, oklch(89% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 2.5%, white);
-  box-shadow: 0 10px 24px rgb(31 51 84 / 0.06);
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--accent) 26%, oklch(89% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 2%, white);
+  box-shadow: 0 12px 28px rgb(31 51 84 / 0.08);
 }
 .shell-page-view .office-card-button:focus-visible {
   outline: 2px solid color-mix(in oklch, var(--accent) 62%, white);
   outline-offset: 3px;
 }
 .shell-page-view .office-card-button.is-active {
-  border-color: color-mix(in oklch, var(--accent) 30%, oklch(89% 0.01 235));
+  border-color: color-mix(in oklch, var(--accent) 34%, oklch(89% 0.01 235));
   background: color-mix(in oklch, var(--accent) 3%, white);
 }
 .shell-page-view .office-card-head,
@@ -1546,14 +1492,36 @@
   min-width: 0;
 }
 .shell-page-view .office-card-head {
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+}
+.shell-page-view .office-card-glyph {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--accent) 10%, white);
+  color: color-mix(in oklch, var(--accent) 72%, oklch(30% 0.02 235));
+  font-size: 14px;
+  font-weight: 680;
+}
+.shell-page-view .office-card-button:hover .office-card-glyph {
+  background: color-mix(in oklch, var(--accent) 15%, white);
 }
 .shell-page-view .office-card-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: oklch(20% 0.018 235);
   font-size: 14px;
   font-weight: 650;
   line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-page-view .office-card-head .status {
+  flex: 0 0 auto;
 }
 .shell-page-view .office-card-copy {
   color: oklch(48% 0.016 235);
@@ -1564,6 +1532,11 @@
 .shell-page-view .office-card-foot {
   align-items: center;
   justify-content: space-between;
+  margin: 0 -14px -14px;
+  padding: 9px 14px;
+  border-top: 1px solid oklch(93% 0.006 235);
+  background: oklch(98.9% 0.003 235);
+  border-radius: 0 0 13px 13px;
   color: oklch(45% 0.017 235);
   font-size: 12px;
   line-height: 1.35;
@@ -1575,11 +1548,21 @@
   white-space: nowrap;
 }
 .shell-page-view .office-card-foot em {
+  display: inline-flex;
   flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
   color: color-mix(in oklch, var(--accent) 78%, oklch(25% 0.02 235));
   font-style: normal;
   font-weight: 620;
   white-space: nowrap;
+}
+.shell-page-view .office-card-foot em::after {
+  content: "→";
+  transition: transform 0.15s ease;
+}
+.shell-page-view .office-card-button:hover .office-card-foot em::after {
+  transform: translateX(2px);
 }
 .shell-page-view .team-office-shell.is-room-open {
   height: 100%;
@@ -1605,15 +1588,15 @@
   grid-template-columns: minmax(0, 1fr) minmax(240px, 0.55fr) auto;
   gap: 14px;
   align-items: center;
-  min-height: 74px;
-  padding: 12px 14px;
-  border: 1px solid oklch(89% 0.01 235);
-  border-radius: 11px;
+  min-height: 76px;
+  padding: 13px 16px;
+  border: 1px solid oklch(90% 0.009 235);
+  border-radius: 14px;
   background: oklch(100% 0 0);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 1px 0 rgb(15 23 42 / 0.03);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -1621,10 +1604,10 @@
     box-shadow 0.15s ease;
 }
 .shell-page-view .workflow-list-item:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklch, var(--accent) 22%, oklch(89% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 2.5%, white);
-  box-shadow: 0 10px 24px rgb(31 51 84 / 0.06);
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--accent) 24%, oklch(89% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 2%, white);
+  box-shadow: 0 12px 28px rgb(31 51 84 / 0.08);
 }
 .shell-page-view .workflow-list-item:focus-visible {
   outline: 2px solid color-mix(in oklch, var(--accent) 62%, white);
@@ -1642,11 +1625,13 @@
 }
 .shell-page-view .workflow-list-main strong {
   min-width: 0;
+  overflow: hidden;
   color: oklch(20% 0.018 235);
   font-size: 14px;
   font-weight: 650;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .shell-page-view .workflow-list-meta {
   display: grid;
@@ -1654,33 +1639,39 @@
   gap: 6px;
 }
 .shell-page-view .workflow-list-copy {
+  display: -webkit-box;
+  overflow: hidden;
   color: oklch(48% 0.016 235);
   font-size: 12.5px;
   line-height: 1.45;
   text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 .shell-page-view .workflow-member-strip {
   display: flex;
   align-items: center;
-  gap: 4px;
   min-width: 0;
   color: oklch(54% 0.014 235);
   font-size: 11.5px;
 }
 .shell-page-view .workflow-member-strip small {
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   place-items: center;
-  border: 1px solid oklch(87% 0.01 235);
-  border-radius: 7px;
-  background: oklch(97% 0.004 235);
-  color: oklch(36% 0.022 235);
-  font-size: 10px;
-  font-weight: 650;
+  border: 2px solid oklch(100% 0 0);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--accent) 9%, oklch(96% 0.006 235));
+  color: color-mix(in oklch, var(--accent) 62%, oklch(32% 0.02 235));
+  font-size: 10.5px;
+  font-weight: 680;
+}
+.shell-page-view .workflow-member-strip small + small {
+  margin-left: -7px;
 }
 .shell-page-view .workflow-member-strip em {
-  margin-left: 2px;
+  margin-left: 8px;
   color: oklch(52% 0.014 235);
   font-style: normal;
   font-weight: 560;
@@ -1701,27 +1692,37 @@
   white-space: nowrap;
 }
 .shell-page-view .workflow-list-foot b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: color-mix(in oklch, var(--accent) 78%, oklch(25% 0.02 235));
   font-size: 12px;
   font-weight: 620;
 }
+.shell-page-view .workflow-list-foot b::after {
+  content: "→";
+  transition: transform 0.15s ease;
+}
+.shell-page-view .workflow-list-item:hover .workflow-list-foot b::after {
+  transform: translateX(2px);
+}
 .shell-page-view .workflow-list-progress {
   display: inline-grid;
-  grid-template-columns: repeat(4, 28px);
+  grid-template-columns: repeat(4, 22px);
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 .shell-page-view .workflow-list-progress i {
   display: block;
-  height: 5px;
+  height: 4px;
   border-radius: 999px;
-  background: oklch(90% 0.008 235);
+  background: oklch(91.5% 0.007 235);
 }
 .shell-page-view .workflow-list-progress i.is-done {
-  background: color-mix(in oklch, var(--success) 58%, oklch(90% 0.008 235));
+  background: color-mix(in oklch, var(--success) 62%, oklch(90% 0.008 235));
 }
 .shell-page-view .workflow-list-progress i.is-running {
-  background: color-mix(in oklch, var(--accent) 72%, oklch(90% 0.008 235));
+  background: color-mix(in oklch, var(--accent) 74%, oklch(90% 0.008 235));
 }
 .shell-page-view .team-mode-panel {
   display: grid;
@@ -1823,6 +1824,208 @@
   gap: 10px;
   margin-bottom: 10px;
 }
+.shell-page-view .team-workflow-shell {
+  margin-bottom: 10px;
+}
+.shell-page-view .team-capability-live-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 520px;
+}
+.shell-page-view .team-capability-definition-list,
+.shell-page-view .team-capability-run-panel {
+  min-width: 0;
+  border: 1px solid oklch(89% 0.01 235);
+  border-radius: 12px;
+  background: oklch(100% 0 0);
+}
+.shell-page-view .team-capability-definition-list {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  max-height: min(620px, calc(100vh - 300px));
+  overflow-y: auto;
+  padding: 14px;
+}
+.shell-page-view .team-capability-panel-head,
+.shell-page-view .team-capability-run-header,
+.shell-page-view .team-capability-run-panel > footer,
+.shell-page-view .team-capability-execution-result > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.shell-page-view .team-capability-panel-head {
+  padding: 2px 2px 7px;
+}
+.shell-page-view .team-capability-panel-head span,
+.shell-page-view .team-capability-run-kicker,
+.shell-page-view .team-capability-workspace span,
+.shell-page-view .team-capability-execution-result span {
+  color: oklch(53% 0.018 235);
+  font-size: 11px;
+}
+.shell-page-view .team-capability-panel-head h2,
+.shell-page-view .team-capability-run-panel h2 {
+  margin: 2px 0 0;
+  color: oklch(22% 0.018 235);
+  font-size: 15px;
+}
+.shell-page-view .team-capability-definition {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 13px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: oklch(98% 0.004 238);
+  color: inherit;
+  text-align: left;
+}
+.shell-page-view .team-capability-definition:hover,
+.shell-page-view .team-capability-definition.active {
+  border-color: color-mix(in oklch, var(--accent) 24%, oklch(88% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 5%, white);
+}
+.shell-page-view .team-capability-definition strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-page-view .team-capability-definition span,
+.shell-page-view .team-capability-definition em {
+  color: oklch(51% 0.015 235);
+  font-size: 11.5px;
+  font-style: normal;
+}
+.shell-page-view .team-capability-definition span {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.shell-page-view .team-capability-run-panel {
+  display: grid;
+  align-content: start;
+  grid-template-rows: auto auto auto auto;
+  gap: 16px;
+  padding: 20px;
+}
+.shell-page-view .team-capability-run-header {
+  align-items: start;
+}
+.shell-page-view .team-capability-run-heading {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.shell-page-view .team-capability-run-heading h2 {
+  margin: 0;
+  font-size: clamp(17px, 1.5vw, 21px);
+  font-weight: 660;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.shell-page-view .team-capability-run-heading p {
+  display: -webkit-box;
+  max-width: 92ch;
+  margin: 0;
+  overflow: hidden;
+  color: oklch(48% 0.016 235);
+  font-size: 12.5px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.shell-page-view .team-capability-workspace,
+.shell-page-view .team-capability-execution-result {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid oklch(91% 0.008 235);
+  border-radius: 9px;
+  background: oklch(98% 0.004 235);
+}
+.shell-page-view .team-capability-workspace strong,
+.shell-page-view .team-capability-execution-result strong {
+  color: oklch(31% 0.02 235);
+  font-size: 12px;
+}
+.shell-page-view .team-capability-execution-result pre {
+  max-height: 210px;
+  margin: 4px 0 0;
+  overflow: auto;
+  color: oklch(29% 0.018 235);
+  font:
+    11.5px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre-wrap;
+}
+.shell-page-view .team-capability-run-input {
+  display: grid;
+  gap: 7px;
+  color: oklch(34% 0.018 235);
+  font-size: 12px;
+  font-weight: 600;
+}
+.shell-page-view .team-capability-run-input textarea {
+  min-height: 190px;
+  max-height: 380px;
+  resize: vertical;
+  padding: 13px 14px;
+  border: 1px solid oklch(87% 0.012 235);
+  border-radius: 11px;
+  outline: 0;
+  background: oklch(99.5% 0.002 235);
+  color: oklch(24% 0.018 235);
+  font: 13px/1.55 var(--font-body);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.shell-page-view .team-capability-run-input textarea:focus {
+  border-color: color-mix(in oklch, var(--accent) 42%, oklch(87% 0.012 235));
+  background: white;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 9%, transparent);
+}
+.shell-page-view .team-capability-run-panel > footer {
+  align-items: center;
+  margin-top: auto;
+  padding-top: 2px;
+}
+.shell-page-view .team-capability-run-panel > footer small {
+  max-width: 480px;
+  color: oklch(52% 0.014 235);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.shell-page-view .team-capability-run-panel > footer .button.primary {
+  min-height: 40px;
+  padding-inline: 16px;
+  border-radius: 10px;
+}
+.shell-page-view .team-capability-error,
+.shell-page-view .team-capability-inline-status {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: oklch(43% 0.02 235);
+  background: oklch(96% 0.006 235);
+  font-size: 12px;
+}
+.shell-page-view .team-capability-error,
+.shell-page-view .team-capability-inline-status.is-error {
+  color: var(--danger);
+  background: color-mix(in oklch, var(--danger) 8%, white);
+}
 .shell-page-view .expert-team-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1833,11 +2036,11 @@
   align-content: space-between;
   gap: 10px;
   min-height: 184px;
-  padding: 13px;
-  border: 1px solid oklch(89% 0.01 235);
-  border-radius: 11px;
+  padding: 14px;
+  border: 1px solid oklch(90% 0.009 235);
+  border-radius: 14px;
   background: oklch(100% 0 0);
-  box-shadow: 0 1px 0 rgb(15 23 42 / 0.03);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -1845,10 +2048,10 @@
     box-shadow 0.15s ease;
 }
 .shell-page-view .expert-team-card:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklch, var(--accent) 22%, oklch(89% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 2.5%, white);
-  box-shadow: 0 10px 24px rgb(31 51 84 / 0.06);
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--accent) 24%, oklch(89% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 2%, white);
+  box-shadow: 0 12px 28px rgb(31 51 84 / 0.08);
 }
 /* Match the design artifact's Team responsive density. */
 .shell-page-view .expert-team-card .catalog-card-head {
@@ -1857,6 +2060,13 @@
   align-items: baseline;
   gap: 6px;
   margin: 0;
+}
+.shell-page-view .expert-team-card .catalog-card-head > span {
+  color: color-mix(in oklch, var(--accent) 68%, oklch(40% 0.02 235));
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 @media (max-width: 1180px) {
   .shell-page-view .office-card-grid,
@@ -1894,23 +2104,66 @@
   .shell-page-view .workflow-list-item {
     grid-template-columns: minmax(0, 1fr);
   }
+  .shell-page-view .team-capability-live-layout {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+  .shell-page-view .team-capability-definition-list {
+    max-height: 320px;
+  }
+  .shell-page-view .team-capability-run-panel {
+    padding: 16px;
+  }
+  .shell-page-view .team-capability-run-panel > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .shell-page-view .team-capability-run-panel > footer .button.primary {
+    width: 100%;
+  }
   .shell-page-view .workflow-list-foot {
     justify-content: flex-start;
   }
 }
 .shell-page-view .expert-member-stack {
   display: grid;
-  gap: 6px;
+  gap: 3px;
 }
 .shell-page-view .expert-member-stack span {
-  min-height: 28px;
-  padding: 6px 8px;
-  border: 1px solid oklch(90% 0.008 235);
-  border-radius: 8px;
-  background: oklch(100% 0 0);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding: 2px 0;
   color: oklch(42% 0.018 235);
   font-size: 12px;
   font-weight: 520;
+}
+.shell-page-view .expert-member-stack span::before {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: oklch(82% 0.01 235);
+  content: "";
+}
+.shell-page-view .expert-member-stack span:first-child::before {
+  background: color-mix(in oklch, var(--accent) 68%, white);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 12%, transparent);
+}
+.shell-page-view .expert-member-stack svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+@media (max-width: 860px) {
+  .shell-page-view .team-capability-live-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell-page-view .team-capability-run-panel > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 .shell-page-view .expert-room-inline {
   display: grid;
@@ -2515,9 +2768,19 @@
   letter-spacing: -0.01em;
 }
 .workflow-room-title-block p {
+  display: -webkit-box;
+  max-width: 90ch;
+  overflow: hidden;
   color: oklch(49% 0.016 235);
   font-size: 12px;
   line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.workflow-room-top > .button:first-child svg,
+.workflow-room-actions .button svg {
+  width: 14px;
+  height: 14px;
 }
 .workflow-room-actions {
   display: flex;
@@ -2544,6 +2807,31 @@
   border-bottom: 1px solid oklch(90% 0.008 235);
   background: oklch(99.4% 0.003 235);
   overflow-x: auto;
+}
+.workflow-execution-strip.is-empty {
+  display: block;
+  min-height: 68px;
+  padding: 10px 16px;
+}
+.workflow-stage-empty {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px dashed oklch(87% 0.012 235);
+  border-radius: 11px;
+  background: rgb(255 255 255 / 0.64);
+}
+.workflow-stage-empty strong {
+  color: oklch(32% 0.018 235);
+  font-size: 12px;
+  font-weight: 620;
+}
+.workflow-stage-empty p {
+  margin: 0;
+  color: oklch(54% 0.014 235);
+  font-size: 11.5px;
 }
 .workflow-step-node {
   position: relative;
@@ -2630,17 +2918,74 @@
   border-color: color-mix(in oklch, var(--accent) 20%, oklch(90% 0.008 235));
   background: color-mix(in oklch, var(--accent) 5%, white);
 }
-.workflow-global-composer.command-input {
+.workflow-room-thread .office-room-message > div > small {
+  display: block;
+  margin-top: 7px;
+  color: oklch(57% 0.012 235);
+  font-size: 10.5px;
+}
+.workflow-room-thread .office-room-message.is-pending > div {
+  background: oklch(99% 0.003 235);
+}
+.workflow-room-thread .office-room-message.is-error > div {
+  border-color: color-mix(in oklch, var(--danger) 22%, oklch(90% 0.008 235));
+  background: color-mix(in oklch, var(--danger) 4%, white);
+}
+.workflow-thread-empty {
+  display: grid;
+  justify-self: center;
+  width: min(420px, 100%);
+  margin-top: clamp(28px, 10vh, 92px);
+  gap: 7px;
+  text-align: center;
+}
+.workflow-thread-empty strong {
+  color: oklch(34% 0.018 235);
+  font-size: 14px;
+  font-weight: 640;
+}
+.workflow-thread-empty p {
+  color: oklch(54% 0.014 235);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.screen-shell.command-screen .workflow-global-composer.command-input {
   width: min(920px, calc(100% - 48px));
+  max-width: 920px;
   margin: 0 auto 18px;
   position: relative;
   min-height: 148px;
   box-shadow: 0 18px 44px rgb(31 51 84 / 0.08);
 }
-.workflow-global-composer textarea {
+.workflow-composer-capabilities {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: oklch(47% 0.016 235);
+  font-size: 12px;
+  font-weight: 560;
+}
+.workflow-composer-capabilities b {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid oklch(88% 0.012 235);
+  border-radius: 7px;
+  background: oklch(98% 0.004 235);
+  color: oklch(32% 0.02 235);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.workflow-composer-capabilities i {
+  color: oklch(70% 0.008 235);
+  font-style: normal;
+}
+.screen-shell.command-screen .workflow-global-composer textarea {
   min-height: 72px;
 }
-.workflow-global-composer .composer-state-row {
+.screen-shell.command-screen .workflow-global-composer .composer-state-row {
   min-height: 28px;
 }
 .office-kanban-board {
@@ -3693,7 +4038,7 @@ body.modal-open {
 }
 .scene-pills button,
 .quick-row button,
-.input-tools button,
+.input-tools button:not(.send-button),
 .control-select,
 .workspace-picker {
   min-height: 32px;
@@ -3708,7 +4053,7 @@ body.modal-open {
 }
 .scene-pills button:hover,
 .quick-row button:hover,
-.input-tools button:hover,
+.input-tools button:not(.send-button):hover,
 .control-select:hover,
 .workspace-picker:hover,
 .workspace-pill:hover {
@@ -3717,11 +4062,10 @@ body.modal-open {
 }
 .scene-pills button:active,
 .quick-row button:active,
-.input-tools button:active,
+.input-tools button:not(.send-button):active,
 .control-select:active,
 .workspace-picker:active,
-.workspace-pill:active,
-.send-button:active {
+.workspace-pill:active {
   transform: translateY(1px);
 }
 .scene-pills button {
@@ -3762,15 +4106,33 @@ body.modal-open {
 }
 .command-input textarea {
   width: 100%;
-  min-height: 88px;
+  min-height: 80px;
   resize: none;
   border: 0;
   outline: 0;
-  padding: 17px 14px 8px;
+  padding: 15px 15px 7px;
   background: transparent;
-  color: oklch(23% 0.018 235);
-  font-size: 14px;
-  line-height: 1.55;
+  color: inherit;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-wrap: pretty;
+  -webkit-font-smoothing: antialiased;
+}
+.command-input textarea::placeholder {
+  color: #8a8f98;
+  font-weight: 400;
+  opacity: 1;
 }
 .command-input textarea:focus,
 .command-input textarea:focus-visible {
@@ -4137,37 +4499,56 @@ body.modal-open {
 .context-palette {
   right: 14px;
 }
-.context-palette.add-palette {
-  right: auto;
-  left: 14px;
-}
-.add-palette .context-list {
+.screen-shell.command-screen .context-palette.add-palette {
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 100%;
   gap: 0;
+  padding: 7px;
+  border-radius: 16px;
 }
-.add-palette-group {
+
+.screen-shell.command-screen .add-palette .context-list {
+  gap: 0;
+  max-height: min(390px, 52vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+.screen-shell.command-screen .add-palette-group {
   display: grid;
-  gap: 3px;
-  padding: 7px 0;
+  gap: 1px;
+  padding: 5px 0;
 }
-.add-palette-group:first-child {
-  padding-top: 1px;
+.screen-shell.command-screen .add-palette-group:first-child {
+  padding-top: 2px;
 }
-.add-palette-group:last-child {
-  padding-bottom: 1px;
+.screen-shell.command-screen .add-palette-group:last-child {
+  padding-bottom: 2px;
 }
-.add-palette-group + .add-palette-group {
+.screen-shell.command-screen .add-palette-group + .add-palette-group {
   border-top: 1px solid oklch(90% 0.012 235);
 }
-.add-palette-group-label {
-  padding: 1px 8px 3px;
+.screen-shell.command-screen .add-palette-group-label {
+  padding: 5px 10px 4px;
   color: oklch(54% 0.018 235);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: 0.02em;
 }
 .slash-palette[hidden],
 .context-palette[hidden] {
   display: none;
+}
+
+@media (max-width: 620px) {
+  .screen-shell.command-screen .context-palette.add-palette {
+    right: 0;
+    left: 0;
+    width: 100%;
+  }
 }
 .slash-palette input,
 .context-palette input {
@@ -4246,28 +4627,276 @@ body.modal-open {
   font-size: 12px;
   font-style: normal;
 }
+
+.screen-shell.command-screen .add-palette > input {
+  min-height: 36px;
+  padding: 0 9px;
+  border-color: transparent;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.screen-shell.command-screen .add-palette .context-list .add-palette-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.screen-shell.command-screen .add-palette .context-list .add-palette-item-icon {
+  grid-row: auto;
+  display: grid;
+  width: 22px;
+  min-height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: currentColor;
+}
+
+.screen-shell.command-screen .add-palette-item-icon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.8;
+}
+
+.screen-shell.command-screen .add-palette .context-list .add-palette-item-copy {
+  grid-row: auto;
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  align-items: baseline;
+  gap: 10px;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  place-items: unset;
+}
+
+.screen-shell.command-screen .add-palette-item-copy strong {
+  min-width: 0;
+  max-width: min(42%, 260px);
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 610;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .add-palette-item-copy em {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .add-palette-item[data-selected="true"] {
+  background: oklch(36% 0.012 235);
+  color: oklch(96% 0.004 235);
+}
+
+@media (max-width: 620px) {
+  .screen-shell.command-screen .add-palette-item-copy {
+    display: grid;
+    gap: 0;
+  }
+
+  .screen-shell.command-screen .add-palette-item-copy strong {
+    max-width: 100%;
+  }
+}
+/* Cursor-like primary action: high-contrast filled circle. */
+.screen-shell.command-screen .input-tools .send-button,
 .input-tools .send-button {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
   flex: 0 0 auto;
   border: 0;
   border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: #171717;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
   cursor: pointer;
   transition:
-    background 0.16s ease,
-    transform 0.16s ease;
+    background 0.14s ease,
+    color 0.14s ease,
+    opacity 0.14s ease,
+    transform 0.14s ease;
 }
+
+.screen-shell.command-screen .input-tools .send-button:hover,
+.screen-shell.command-screen .input-tools .send-button:focus-visible,
 .input-tools .send-button:hover,
 .input-tools .send-button:focus-visible {
   border-color: transparent;
-  background: color-mix(in oklch, var(--accent), black 12%);
-  color: var(--accent-ink);
+  background: #000000;
+  color: #ffffff;
   outline: 0;
-  transform: translateY(-1px);
+  transform: none;
+}
+
+.screen-shell.command-screen .input-tools .send-button:disabled,
+.input-tools .send-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  background: #171717;
+  color: #ffffff;
+  box-shadow: none;
+  transform: none;
+}
+
+.screen-shell.command-screen .input-tools .send-button svg,
+.input-tools .send-button svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.2;
+}
+
+.screen-shell.command-screen .input-tools .send-button[data-action="stop"],
+.input-tools .send-button[data-action="stop"] {
+  background: #171717;
+  color: #ffffff;
+  border: 0;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+  transform: none;
+}
+
+.screen-shell.command-screen .input-tools .send-button[data-action="stop"] svg,
+.input-tools .send-button[data-action="stop"] svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.screen-shell.command-screen
+  .input-tools
+  .send-button[data-action="stop"]:hover,
+.screen-shell.command-screen
+  .input-tools
+  .send-button[data-action="stop"]:focus-visible,
+.input-tools .send-button[data-action="stop"]:hover,
+.input-tools .send-button[data-action="stop"]:focus-visible {
+  background: #000000;
+  color: #ffffff;
+  border-color: transparent;
+  outline: 0;
+  transform: none;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .input-tools
+  .send-button,
+:root:not([data-theme="light"]) .input-tools .send-button {
+  background: #f4f4f5;
+  color: #171717;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .input-tools
+  .send-button:hover,
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .input-tools
+  .send-button:focus-visible,
+:root:not([data-theme="light"]) .input-tools .send-button:hover,
+:root:not([data-theme="light"]) .input-tools .send-button:focus-visible {
+  background: #ffffff;
+  color: #111111;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .input-tools
+  .send-button:disabled,
+:root:not([data-theme="light"]) .input-tools .send-button:disabled {
+  background: #f4f4f5;
+  color: #171717;
+  opacity: 0.34;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .input-tools
+  .send-button[data-action="stop"],
+:root:not([data-theme="light"]) .input-tools .send-button[data-action="stop"] {
+  background: #f4f4f5;
+  color: #171717;
+  border-color: transparent;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .input-tools
+  .send-button[data-action="stop"]:hover,
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .input-tools
+  .send-button[data-action="stop"]:focus-visible,
+:root:not([data-theme="light"]) .input-tools .send-button[data-action="stop"]:hover,
+:root:not([data-theme="light"])
+  .input-tools
+  .send-button[data-action="stop"]:focus-visible {
+  background: #ffffff;
+  color: #111111;
+}
+
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .input-tools
+  .send-button,
+:root[data-theme="light"] .input-tools .send-button,
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .input-tools
+  .send-button[data-action="stop"],
+:root[data-theme="light"] .input-tools .send-button[data-action="stop"] {
+  background: #171717;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .input-tools
+  .send-button:hover,
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .input-tools
+  .send-button:focus-visible,
+:root[data-theme="light"] .input-tools .send-button:hover,
+:root[data-theme="light"] .input-tools .send-button:focus-visible,
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .input-tools
+  .send-button[data-action="stop"]:hover,
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .input-tools
+  .send-button[data-action="stop"]:focus-visible {
+  background: #000000;
+  color: #ffffff;
 }
 .composer-state-row {
   display: grid;
@@ -4578,11 +5207,690 @@ body.modal-open {
   }
   .shell-page-view .capability-catalog,
   .shell-page-view .metric-grid,
-  .shell-page-view .office-card-grid,
-  .schedule-arrangement-catalog {
+  .shell-page-view .office-card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Codex screenshots show dark mode; the workbench still follows CrewON theme state. */
+:root[data-theme="light"] .command-shell-route,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-window,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-canvas,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .shell-page-view {
+  background: oklch(98.5% 0.006 235);
+  color: oklch(22% 0.018 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen {
+  --command-sidebar-bg: oklch(97.6% 0.006 238);
+  --command-sidebar-border: oklch(89% 0.012 238);
+  --command-sidebar-hover: oklch(94.5% 0.014 240);
+  --command-sidebar-active: oklch(91.8% 0.034 246);
+  --command-control-bg: oklch(99% 0.003 238);
+  --command-control-border: oklch(86.5% 0.014 238);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .sidebar-brand,
+    .sidebar-brand small,
+    .space-tree,
+    .sidebar-nav em,
+    .sidebar-empty-hint,
+    .conversation-item em,
+    .scene-subtitle,
+    .capability-summary,
+    .command-thread-identity > span,
+    .command-thread-cwd,
+    .command-thread-room .message-type,
+    .composer-state-row
+  ) {
+  color: oklch(51% 0.02 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .sidebar-nav a,
+    .sidebar-nav button,
+    .sidebar-tool,
+    .tree-head button,
+    .space-title button,
+    .conversation-item,
+    .sidebar-account summary,
+    .space-title strong,
+    .sidebar-account strong,
+    .tree-head strong,
+    .home-title h1,
+    .home-title h1 span:first-child,
+    .command-thread-identity > strong,
+    .command-thread-room .message-role,
+    .command-input textarea,
+    .command-thread-runtime strong
+  ) {
+  color: oklch(25% 0.02 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-identity
+  > strong {
+  color: #3f3f46;
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-runtime
+  strong {
+  color: #71717a;
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-cwd,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-runtime
+  em {
+  color: #8a8f98;
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .sidebar-nav a,
+    .sidebar-nav button,
+    .sidebar-tool,
+    .space-title button,
+    .conversation-item,
+    .sidebar-account summary
+  ):hover,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .sidebar-nav
+  button.active,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .conversation-item.active {
+  background: var(--command-sidebar-hover);
+  color: oklch(20% 0.022 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .scene-pills,
+    .scene-pills button,
+    .quick-row button,
+    .input-tools button:not(.send-button),
+    .workspace-pill,
+    .command-input,
+    .control-select .select-trigger,
+    .workspace-picker .select-trigger
+  ) {
+  border-color: var(--command-control-border);
+  background: var(--command-control-bg);
+  color: oklch(31% 0.018 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(.context-palette, .slash-palette) {
+  border-color: oklch(84% 0.016 235);
+  background: rgb(255 255 255 / 0.985);
+  color: oklch(25% 0.02 235);
+  box-shadow: 0 18px 48px rgb(24 34 48 / 0.16);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(.context-palette, .slash-palette)
+  input {
+  border-color: oklch(87% 0.014 235);
+  background: oklch(99% 0.004 235);
+  color: oklch(24% 0.02 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette
+  > input {
+  border-color: transparent;
+  background: oklch(96.8% 0.008 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(.context-palette, .slash-palette)
+  input::placeholder {
+  color: oklch(56% 0.016 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette-group
+  + .add-palette-group {
+  border-color: oklch(91% 0.012 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette-group-label {
+  color: oklch(50% 0.018 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(.context-list, .slash-list)
+  button {
+  color: oklch(25% 0.02 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(.context-list, .slash-list)
+  button:hover,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(.context-list, .slash-list)
+  button:focus-visible {
+  background: oklch(95% 0.012 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(.context-list, .slash-list)
+  button:not(.add-palette-item)
+  > span {
+  border-color: oklch(82% 0.018 235);
+  background: oklch(97% 0.008 235);
+  color: oklch(42% 0.026 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(.context-list, .slash-list)
+  em {
+  color: oklch(49% 0.018 235);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette-item[data-selected="true"] {
+  background: oklch(92.5% 0.018 235);
+  color: oklch(24% 0.025 235);
+}
+
+:root[data-theme="dark"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette-group
+  + .add-palette-group {
+  border-color: #393939;
+}
+
+:root[data-theme="dark"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette-group-label,
+:root[data-theme="dark"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette-item-copy
+  em {
+  color: #999;
+}
+
+:root[data-theme="dark"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette
+  > input {
+  border-color: transparent;
+  background: #292929;
+  color: #f1f1f1;
+}
+
+:root[data-theme="dark"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette-item:hover,
+:root[data-theme="dark"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette-item:focus-visible {
+  background: #333;
+  color: #f1f1f1;
+}
+
+:root[data-theme="dark"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .add-palette-item[data-selected="true"] {
+  background: #3b3b3b;
+  color: #fff;
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-room
+  :is(
+    .message[data-kind="agentMessage"],
+    .message[data-kind="plan"],
+    .message[data-kind="userMessage"]
+  )
+  .markdown-content,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-details {
+  color: #1c1f24;
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content {
+  border-color: transparent;
+  background: #f1f2f4;
+}
+
+:root[data-theme="light"] .command-workbench {
+  border-color: oklch(88.5% 0.009 235);
+  background: oklch(98.8% 0.002 235);
+  color: oklch(25% 0.018 235);
+}
+
+:root[data-theme="light"] .command-workbench-tabbar,
+:root[data-theme="light"] .command-workbench-file-preview,
+:root[data-theme="light"] .command-workbench-generic-surface {
+  border-color: oklch(90% 0.008 235);
+  background: oklch(98.8% 0.002 235);
+}
+
+:root[data-theme="light"] .command-workbench-tab {
+  background: oklch(95.5% 0.006 235);
+  color: oklch(46% 0.014 235);
+}
+
+:root[data-theme="light"] .command-workbench-tab[data-active="true"] {
+  border-color: oklch(87% 0.01 235);
+  background: oklch(92.8% 0.009 235);
+  color: oklch(22% 0.018 235);
+}
+
+:root[data-theme="light"]
+  :is(
+    .command-workbench-tab-close,
+    .command-workbench-add,
+    .command-workbench-close
+  ) {
+  color: oklch(50% 0.014 235);
+}
+
+:root[data-theme="light"]
+  :is(
+    .command-workbench-tab-close,
+    .command-workbench-add,
+    .command-workbench-close
+  ):hover {
+  background: oklch(92.5% 0.009 235);
+  color: oklch(20% 0.02 235);
+}
+
+:root[data-theme="light"] .command-workbench-launcher-menu {
+  border-color: oklch(84% 0.012 235);
+  background: rgb(255 255 255 / 0.98);
+  box-shadow: 0 18px 46px rgb(22 31 43 / 0.16);
+}
+
+:root[data-theme="light"] .command-workbench-launcher > button {
+  background: oklch(96% 0.006 235);
+  color: oklch(29% 0.018 235);
+}
+
+:root[data-theme="light"]
+  .command-workbench-launcher-menu
+  .command-workbench-launcher
+  > button {
+  background: transparent;
+}
+
+:root[data-theme="light"] .command-workbench-launcher > button:hover,
+:root[data-theme="light"]
+  .command-workbench-launcher
+  > button:focus-visible {
+  background: oklch(91.8% 0.01 235);
+  color: oklch(18% 0.022 235);
+}
+
+:root[data-theme="light"] .command-workbench-launcher > button svg,
+:root[data-theme="light"] .command-workbench-launcher > button kbd,
+:root[data-theme="light"] .command-workbench-context-bar,
+:root[data-theme="light"] .command-workbench-file-empty,
+:root[data-theme="light"] .command-workbench-tool-empty {
+  color: oklch(52% 0.014 235);
+}
+
+:root[data-theme="light"]
+  :is(
+    .command-workbench-file-empty strong,
+    .command-workbench-tool-empty strong
+  ) {
+  color: oklch(30% 0.018 235);
+}
+
+:root[data-theme="light"] .command-workbench-context-bar {
+  border-color: oklch(90% 0.008 235);
+}
+
+:root[data-theme="light"] .command-workbench-file-explorer {
+  border-color: oklch(89% 0.009 235);
+  background: oklch(97.5% 0.004 235);
+}
+
+:root[data-theme="light"]
+  :is(
+    .command-workbench-file-search input,
+    .command-workbench-file-search select
+  ) {
+  border-color: oklch(86% 0.012 235);
+  background: white;
+  color: oklch(28% 0.018 235);
+}
+
+:root[data-theme="light"] .command-workbench-file-actions button {
+  border-color: oklch(86% 0.012 235);
+  background: oklch(94.5% 0.007 235);
+  color: oklch(39% 0.018 235);
+}
+
+:root[data-theme="light"] .command-workbench-file-row {
+  color: oklch(35% 0.018 235);
+}
+
+:root[data-theme="light"] .command-workbench-file-row:hover,
+:root[data-theme="light"] .command-workbench-file-row:focus-visible {
+  background: oklch(92.8% 0.009 235);
+  color: oklch(18% 0.022 235);
+}
+
+:root[data-theme="light"] .command-workbench-file-row svg {
+  color: oklch(52% 0.018 235);
+}
+
+:root[data-theme="light"] .command-workbench-file-preview pre,
+:root[data-theme="light"]
+  .command-workbench-generic-surface
+  .capability-result,
+:root[data-theme="light"]
+  .command-workbench-generic-surface
+  .capability-result-output {
+  color: oklch(28% 0.018 235);
+}
+
+:root[data-theme="light"]
+  .command-workbench-generic-surface
+  :is(
+    .capability-command-form input,
+    .capability-field-list input,
+    .capability-field-list select
+  ) {
+  border-color: oklch(86% 0.012 235);
+  background: white;
+  color: oklch(28% 0.018 235);
+}
+
+:root[data-theme="light"]
+  .command-workbench-generic-surface
+  :is(.capability-command-form button, .capability-result-actions button) {
+  border-color: oklch(86% 0.012 235);
+  background: oklch(94.5% 0.007 235);
+  color: oklch(32% 0.018 235);
+}
+
+:root[data-theme="light"] .command-workbench-trigger {
+  color: oklch(47% 0.016 235);
+}
+
+:root[data-theme="light"] .command-workbench-trigger:hover {
+  background: oklch(92.5% 0.009 235);
+  color: oklch(20% 0.02 235);
+}
+
+/* The Codex reference uses one continuous dark desktop material. */
+:root:not([data-theme="light"]) .command-shell-route,
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen,
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen .command-window,
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen .command-canvas,
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen .shell-page-view {
+  background: #171717;
+  color: #ededed;
+}
+
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen {
+  --command-sidebar-bg: #202020;
+  --command-sidebar-border: #303030;
+  --command-sidebar-hover: #292929;
+  --command-sidebar-active: #343434;
+  --command-control-bg: #242424;
+  --command-control-border: #3a3a3a;
+}
+
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen .command-sidebar {
+  border-color: var(--command-sidebar-border);
+  background: var(--command-sidebar-bg);
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .sidebar-brand,
+    .sidebar-brand small,
+    .space-tree,
+    .sidebar-nav em,
+    .sidebar-empty-hint,
+    .conversation-item em,
+    .scene-subtitle,
+    .capability-summary,
+    .command-thread-identity > span,
+    .command-thread-cwd,
+    .command-thread-room .message-type,
+    .composer-state-row
+  ) {
+  color: #9b9b9b;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .sidebar-nav a,
+    .sidebar-nav button,
+    .sidebar-tool,
+    .tree-head button,
+    .space-title button,
+    .conversation-item,
+    .sidebar-account summary
+  ) {
+  color: #d6d6d6;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  :is(.space-title strong, .sidebar-account strong, .tree-head strong) {
+  color: #ededed;
+}
+
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen .sidebar-nav :is(a, button) {
+  background: transparent;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .sidebar-nav a,
+    .sidebar-nav button,
+    .sidebar-tool,
+    .space-title button,
+    .conversation-item,
+    .sidebar-account summary
+  ):hover,
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen .sidebar-nav button.active,
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen .conversation-item.active {
+  background: var(--command-sidebar-hover);
+  color: #f5f5f5;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .home-title h1,
+    .home-title h1 span:first-child,
+    .command-thread-identity > strong,
+    .command-thread-room .message-role,
+    .command-input textarea,
+    .command-thread-runtime strong
+  ) {
+  color: #f1f1f1;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .scene-pills,
+    .scene-pills button,
+    .quick-row button,
+    .input-tools button:not(.send-button),
+    .workspace-pill,
+    .command-input,
+    .control-select .select-trigger,
+    .workspace-picker .select-trigger
+  ) {
+  border-color: #393939;
+  background: #242424;
+  color: #dcdcdc;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .scene-pills button,
+    .quick-row button,
+    .input-tools button:not(.send-button),
+    .control-select .select-trigger,
+    .workspace-picker .select-trigger
+  ):hover {
+  border-color: #505050;
+  background: #303030;
+  color: #fff;
+}
+
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen .command-thread-toolbar {
+  border-color: #303030;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-room
+  :is(.message[data-kind="agentMessage"], .message[data-kind="plan"])
+  .markdown-content,
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content,
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-details {
+  color: #e8e8ea;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content {
+  border-color: transparent;
+  background: #2a2a2c;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  .command-input
+  textarea::placeholder,
+:root:not([data-theme="light"]) .command-shell-route .screen-shell.command-screen input::placeholder {
+  color: #7a7a7e;
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .sidebar-search-panel,
+    .sidebar-workspace-form,
+    .sidebar-account-popover,
+    .context-palette,
+    .select-menu
+  ) {
+  border-color: #393939;
+  background: #242424;
+  color: #ededed;
+  box-shadow: 0 16px 44px rgb(0 0 0 / 0.34);
+}
+
+:root:not([data-theme="light"]) .command-shell-route
+  .screen-shell.command-screen
+  :is(
+    .sidebar-search-field,
+    .sidebar-workspace-form input,
+    .context-palette input
+  ) {
+  border-color: #3c3c3c;
+  background: #1d1d1d;
+  color: #ededed;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .scene-pills button,
   .quick-row button,
@@ -4590,7 +5898,6 @@ body.modal-open {
   .shell-page-view .button,
   .shell-page-view .filter-chip,
   .shell-page-view .tab-button,
-  .shell-page-view .calendar-grid button,
   .frequency-tabs button,
   .space-input,
   .workspace-select,
@@ -4609,7 +5916,6 @@ body.modal-open {
   .shell-page-view .button:active,
   .shell-page-view .filter-chip:active,
   .shell-page-view .tab-button:active,
-  .shell-page-view .calendar-grid button:active,
   .frequency-tabs button:active,
   .space-input:active,
   .icon-action:active,
@@ -4741,12 +6047,19 @@ body.modal-open {
   justify-self: end;
 }
 .assistant-thread-room
-  .message:is([data-kind="userMessage"], [data-kind="agentMessage"])
+  .message[data-kind="agentMessage"]
   .markdown-content {
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
+  box-shadow: none;
+}
+
+.assistant-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content {
+  border-radius: 20px;
   box-shadow: none;
 }
 .assistant-composer-zone {
@@ -4764,11 +6077,24 @@ body.modal-open {
   box-shadow: 0 14px 34px rgb(18 26 38 / 0.06);
 }
 .assistant-home-composer textarea {
-  height: 84px;
-  min-height: 84px;
+  height: 80px;
+  min-height: 80px;
   max-height: 160px;
-  padding: 18px 16px 8px;
-  font-size: 15px;
+  padding: 15px 15px 7px;
+  color: inherit;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-size: 13.5px;
+  line-height: 1.45;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
 }
 .assistant-home-composer .input-tools {
   min-height: 56px;
@@ -5132,8 +6458,15 @@ body.modal-open {
 }
 
 /* Personal schedule: calm, content-first planning with visible delivery and run history. */
-.schedule-page {
-  gap: 16px;
+.screen-shell.command-screen .shell-page-view[data-shell-view="schedule"] {
+  padding: clamp(24px, 2.4vw, 38px) clamp(26px, 3vw, 48px) 72px;
+}
+.screen-shell.command-screen
+  .shell-page-view[data-shell-view="schedule"]
+  .page-stack.schedule-page {
+  gap: clamp(20px, 1.6vw, 28px);
+  container-name: schedule-page;
+  container-type: inline-size;
 }
 .schedule-header,
 .schedule-header-actions,
@@ -5150,47 +6483,13 @@ body.modal-open {
   align-items: center;
 }
 .schedule-header {
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  min-height: 72px;
-  padding-top: 2px;
-}
-.schedule-heading {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-.schedule-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: oklch(49% 0.025 238);
-  font-size: 12px;
-  font-weight: 600;
-}
-.schedule-kicker svg {
-  width: 14px;
-  height: 14px;
-}
-.schedule-heading h2,
-.schedule-heading p {
-  margin: 0;
-}
-.schedule-heading h2 {
-  color: oklch(21% 0.02 238);
-  font-size: 22px;
-  line-height: 1.25;
-}
-.schedule-heading p {
-  color: oklch(52% 0.02 238);
-  font-size: 12px;
-  line-height: 1.5;
+  justify-content: flex-end;
 }
 .schedule-header-actions {
   flex: 0 0 auto;
+  width: 100%;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 12px;
 }
 .schedule-header-actions .button,
 .schedule-run-row .button {
@@ -5200,8 +6499,9 @@ body.modal-open {
   gap: 6px;
 }
 .schedule-header-actions .button {
-  min-height: 36px;
-  border-radius: 9px;
+  min-height: 42px;
+  padding-inline: 16px;
+  border-radius: 11px;
   white-space: nowrap;
 }
 .schedule-header-actions svg,
@@ -5214,20 +6514,20 @@ body.modal-open {
   height: 15px;
 }
 .shell-page-view .schedule-search {
-  width: min(280px, 26vw);
-  min-width: 220px;
-  min-height: 36px;
-  border-radius: 9px;
+  width: min(340px, 28vw);
+  min-width: 260px;
+  min-height: 42px;
+  border-radius: 11px;
 }
 .schedule-refresh {
   display: inline-grid;
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
   padding: 0;
   place-items: center;
   border: 1px solid oklch(87% 0.014 235);
-  border-radius: 9px;
+  border-radius: 11px;
   color: oklch(38% 0.02 238);
   background: white;
 }
@@ -5236,24 +6536,24 @@ body.modal-open {
   background: oklch(97% 0.006 238);
 }
 .schedule-subnav {
-  gap: 14px;
-  min-height: 46px;
+  gap: 18px;
+  min-height: 58px;
   border-bottom: 1px solid oklch(90% 0.008 235);
 }
 .schedule-scope-tabs {
   align-self: stretch;
-  gap: 20px;
+  gap: 26px;
 }
 .schedule-scope-tabs button {
   position: relative;
-  min-height: 46px;
+  min-height: 58px;
   padding: 0;
   border: 0;
   border-radius: 0;
   color: oklch(45% 0.02 238);
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 560;
   cursor: pointer;
 }
@@ -5276,20 +6576,20 @@ body.modal-open {
   background: oklch(88% 0.01 238);
 }
 .schedule-view-tabs {
-  gap: 2px;
-  padding: 3px;
-  border-radius: 9px;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 11px;
   background: oklch(95.5% 0.008 238);
 }
 .schedule-view-tabs button {
-  min-height: 28px;
-  padding: 0 10px;
+  min-height: 34px;
+  padding: 0 13px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   color: oklch(48% 0.02 238);
   background: transparent;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 560;
   cursor: pointer;
 }
@@ -5299,38 +6599,330 @@ body.modal-open {
   box-shadow: 0 1px 2px oklch(30% 0.02 238 / 0.12);
 }
 .schedule-delivery-note {
-  gap: 6px;
+  gap: 8px;
   margin-left: auto;
   color: oklch(52% 0.02 238);
-  font-size: 12px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .schedule-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 16px;
 }
 .schedule-summary article {
   display: grid;
-  gap: 4px;
-  min-height: 96px;
-  padding: 14px 16px;
+  gap: 7px;
+  min-height: 112px;
+  padding: 17px 20px;
   border: 1px solid oklch(89% 0.01 235);
-  border-radius: 14px;
+  border-radius: 16px;
   background: white;
 }
 .schedule-summary span,
 .schedule-summary small {
   color: oklch(52% 0.02 238);
-  font-size: 12px;
+  font-size: 13px;
 }
 .schedule-summary strong {
   color: oklch(25% 0.025 238);
-  font-size: 26px;
+  font-size: 28px;
   line-height: 1.1;
 }
 .schedule-summary .schedule-next-run {
-  font-size: 18px;
+  font-size: 20px;
+}
+/* Spacious calendar layout for wide desktop workspaces. */
+.schedule-calendar-shell {
+  display: grid;
+  grid-template-columns: minmax(480px, 1.02fr) minmax(420px, 0.98fr);
+  min-height: 620px;
+  overflow: hidden;
+  border: 1px solid oklch(88.5% 0.012 235);
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 18px 44px rgb(21 32 46 / 0.055);
+}
+.schedule-calendar-pane,
+.schedule-agenda-pane {
+  min-width: 0;
+  padding: clamp(24px, 2vw, 30px);
+}
+.schedule-calendar-pane {
+  border-right: 1px solid oklch(91% 0.008 235);
+  background: linear-gradient(180deg, oklch(99.4% 0.004 238), white 38%), white;
+}
+.schedule-calendar-toolbar,
+.schedule-calendar-controls,
+.schedule-agenda-header,
+.schedule-agenda-title,
+.schedule-agenda-actions,
+.schedule-calendar-legend {
+  display: flex;
+  align-items: center;
+}
+.schedule-calendar-toolbar,
+.schedule-agenda-header {
+  justify-content: space-between;
+  gap: 20px;
+}
+.schedule-calendar-toolbar > div:first-child,
+.schedule-agenda-header > div {
+  display: grid;
+  gap: 5px;
+}
+.schedule-calendar-toolbar span,
+.schedule-agenda-header span {
+  color: oklch(52% 0.02 238);
+  font-size: 12px;
+  font-weight: 570;
+}
+.schedule-calendar-toolbar strong,
+.schedule-agenda-header strong {
+  color: oklch(22% 0.022 238);
+  font-size: 20px;
+}
+.schedule-calendar-controls {
+  gap: 8px;
+}
+.schedule-calendar-controls .button,
+.schedule-calendar-controls .icon-action,
+.schedule-agenda-actions .button,
+.schedule-agenda-actions .icon-action {
+  min-height: 38px;
+  border-radius: 10px;
+}
+.schedule-calendar-controls .icon-action,
+.schedule-agenda-actions .icon-action {
+  width: 38px;
+  height: 38px;
+}
+.schedule-calendar-controls svg,
+.schedule-agenda-actions svg,
+.schedule-agenda-time svg,
+.schedule-agenda-empty svg {
+  width: 14px;
+  height: 14px;
+}
+.schedule-calendar-weekdays,
+.schedule-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.schedule-calendar-weekdays {
+  gap: 8px;
+  margin-top: 28px;
+  padding-bottom: 12px;
+}
+.schedule-calendar-weekdays span {
+  color: oklch(59% 0.014 238);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+.schedule-calendar-grid {
+  gap: 8px;
+}
+.schedule-calendar-day {
+  position: relative;
+  display: grid;
+  min-height: clamp(62px, 5.2vw, 76px);
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  padding: 8px 5px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  color: oklch(35% 0.018 238);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease,
+    transform 0.14s ease;
+}
+.schedule-calendar-day:hover {
+  border-color: oklch(88% 0.02 238);
+  background: oklch(97% 0.009 238);
+  transform: translateY(-1px);
+}
+.schedule-calendar-day > span {
+  font-size: 14px;
+  font-weight: 620;
+  line-height: 1;
+}
+.schedule-calendar-day.outside {
+  color: oklch(70% 0.01 238);
+}
+.schedule-calendar-day.has-events {
+  background: oklch(97.5% 0.014 242);
+}
+.schedule-calendar-day[aria-current="date"]:not(.selected) {
+  border-color: oklch(73% 0.08 245);
+  color: var(--accent);
+}
+.schedule-calendar-day.selected {
+  border-color: oklch(32% 0.035 238);
+  background: oklch(27% 0.025 238);
+  color: white;
+  box-shadow: 0 6px 14px rgb(22 33 47 / 0.16);
+}
+.schedule-calendar-day > i {
+  display: flex;
+  min-height: 4px;
+  align-items: center;
+  gap: 3px;
+  font-style: normal;
+}
+.schedule-calendar-day > i b {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.schedule-calendar-day.selected > i b {
+  background: oklch(92% 0.055 225);
+}
+.schedule-calendar-legend {
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  color: oklch(57% 0.016 238);
+  font-size: 11px;
+}
+.schedule-calendar-legend span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.schedule-calendar-legend i {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.schedule-agenda-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  gap: 22px;
+  background: oklch(99.4% 0.003 238);
+}
+.schedule-agenda-count {
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: oklch(94.5% 0.012 238);
+  color: oklch(41% 0.02 238) !important;
+}
+.schedule-agenda-list {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 3px;
+}
+.schedule-agenda-item {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 104px;
+  padding: 16px 18px;
+  border: 1px solid oklch(89.5% 0.009 235);
+  border-radius: 15px;
+  background: white;
+  box-shadow: 0 1px 0 rgb(18 28 42 / 0.025);
+}
+.schedule-agenda-item:hover {
+  border-color: oklch(78% 0.045 242);
+}
+.schedule-agenda-time {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  color: oklch(50% 0.035 242);
+}
+.schedule-agenda-time strong {
+  color: oklch(28% 0.03 242);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.schedule-agenda-main {
+  min-width: 0;
+}
+.schedule-agenda-title {
+  gap: 9px;
+}
+.schedule-agenda-title > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: oklch(24% 0.022 238);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.schedule-agenda-title > span {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: oklch(47% 0.02 238);
+  background: oklch(95.5% 0.008 238);
+  font-size: 10px;
+  font-weight: 650;
+}
+.schedule-agenda-title > span.enabled {
+  color: oklch(41% 0.11 155);
+  background: oklch(96% 0.025 155);
+}
+.schedule-agenda-main p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 7px 0 8px;
+  color: oklch(52% 0.018 238);
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.schedule-agenda-main small {
+  color: oklch(58% 0.018 238);
+  font-size: 11px;
+}
+.schedule-agenda-actions {
+  gap: 8px;
+}
+.schedule-agenda-actions .button {
+  gap: 5px;
+  padding-inline: 12px;
+  font-size: 11px;
+}
+.schedule-agenda-empty {
+  display: grid;
+  min-height: 430px;
+  place-items: center;
+  align-content: center;
+  gap: 11px;
+  padding: 42px;
+  color: oklch(54% 0.018 238);
+  text-align: center;
+}
+.schedule-agenda-empty > svg {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 3px;
+  color: var(--accent);
+}
+.schedule-agenda-empty strong {
+  color: oklch(25% 0.022 238);
+  font-size: 16px;
+}
+.schedule-agenda-empty p {
+  max-width: 290px;
+  margin: 0 0 7px;
+  font-size: 12px;
 }
 .schedule-alert {
   display: flex;
@@ -5350,49 +6942,6 @@ body.modal-open {
   background: transparent;
   cursor: pointer;
 }
-.schedule-task-list {
-  display: grid;
-  gap: 10px;
-}
-.schedule-task-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid oklch(89% 0.01 235);
-  border-radius: 14px;
-  background: white;
-}
-.schedule-task-card:hover {
-  border-color: oklch(75% 0.07 245);
-}
-.schedule-task-icon {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border-radius: 11px;
-  color: var(--accent);
-  background: oklch(96% 0.025 245);
-}
-.schedule-task-icon svg {
-  width: 19px;
-  height: 19px;
-}
-.schedule-task-main {
-  min-width: 0;
-}
-.schedule-task-title {
-  gap: 7px;
-  margin-bottom: 5px;
-}
-.schedule-task-title h3 {
-  margin: 0;
-  color: oklch(25% 0.025 238);
-  font-size: 14px;
-}
-.schedule-task-title > span,
 .schedule-run-row em {
   display: inline-flex;
   align-items: center;
@@ -5404,49 +6953,17 @@ body.modal-open {
   font-size: 11px;
   font-style: normal;
 }
-.schedule-task-title .enabled,
-.schedule-task-title .run-success,
 .schedule-run-row .run-success {
   color: oklch(42% 0.12 155);
   background: oklch(96% 0.025 155);
 }
-.schedule-task-title .run-running,
 .schedule-run-row .run-running {
   color: var(--accent);
   background: oklch(96% 0.025 245);
 }
-.schedule-task-title .run-danger,
 .schedule-run-row .run-danger {
   color: var(--danger);
   background: oklch(97% 0.02 25);
-}
-.schedule-task-main > p {
-  overflow: hidden;
-  margin: 0 0 9px;
-  color: oklch(52% 0.02 238);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.schedule-task-meta {
-  flex-wrap: wrap;
-  gap: 12px;
-  color: oklch(52% 0.02 238);
-  font-size: 11px;
-}
-.schedule-task-meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.schedule-task-actions {
-  gap: 6px;
-}
-.schedule-task-actions .button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
 }
 .schedule-history {
   display: grid;
@@ -5597,6 +7114,104 @@ body.modal-open {
     transform: rotate(360deg);
   }
 }
+@container schedule-page (max-width: 760px) {
+  .schedule-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .schedule-header-actions {
+    justify-content: stretch;
+  }
+  .shell-page-view .schedule-search {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .schedule-subnav {
+    flex-wrap: wrap;
+    padding-top: 4px;
+  }
+  .schedule-delivery-note {
+    width: 100%;
+    margin: -2px 0 10px;
+  }
+  .schedule-calendar-shell {
+    grid-template-columns: minmax(330px, 1.18fr) minmax(230px, 0.82fr);
+  }
+  .schedule-calendar-pane,
+  .schedule-agenda-pane {
+    padding: 14px;
+  }
+  .schedule-calendar-grid {
+    gap: 3px;
+  }
+  .schedule-calendar-day {
+    min-height: 42px;
+    border-radius: 8px;
+  }
+  .schedule-calendar-legend > span:last-child {
+    display: none;
+  }
+  .schedule-agenda-item {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .schedule-agenda-time {
+    display: flex;
+    align-items: center;
+  }
+  .schedule-agenda-actions {
+    justify-content: flex-start;
+  }
+  .schedule-agenda-actions .button {
+    flex: 1 1 auto;
+  }
+}
+@container schedule-page (max-width: 560px) {
+  .schedule-calendar-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .schedule-calendar-pane {
+    border-right: 0;
+    border-bottom: 1px solid oklch(91% 0.008 235);
+  }
+  .schedule-agenda-pane {
+    min-height: 320px;
+  }
+  .schedule-agenda-list {
+    max-height: none;
+  }
+  .schedule-agenda-item {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+  .schedule-agenda-time {
+    display: grid;
+  }
+  .schedule-agenda-actions {
+    grid-column: 2;
+  }
+}
+@container schedule-page (max-width: 520px) {
+  .schedule-header-actions {
+    flex-wrap: wrap;
+  }
+  .shell-page-view .schedule-search {
+    flex-basis: 100%;
+  }
+  .schedule-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .schedule-nav-divider {
+    display: none;
+  }
+  .schedule-view-tabs {
+    margin-left: auto;
+  }
+  .schedule-delivery-note {
+    white-space: normal;
+  }
+}
 @media (max-width: 980px) {
   .schedule-header {
     align-items: stretch;
@@ -5622,12 +7237,15 @@ body.modal-open {
   .schedule-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .schedule-task-card {
-    grid-template-columns: auto minmax(0, 1fr);
+  .schedule-calendar-shell {
+    grid-template-columns: 1fr;
   }
-  .schedule-task-actions {
-    grid-column: 2;
-    justify-content: flex-start;
+  .schedule-calendar-pane {
+    border-right: 0;
+    border-bottom: 1px solid oklch(91% 0.008 235);
+  }
+  .schedule-agenda-list {
+    max-height: none;
   }
   .schedule-run-table {
     overflow-x: auto;
@@ -5655,23 +7273,752 @@ body.modal-open {
   .schedule-summary {
     grid-template-columns: 1fr;
   }
+  .schedule-calendar-pane,
+  .schedule-agenda-pane {
+    padding: 14px;
+  }
+  .schedule-calendar-day {
+    min-height: 42px;
+    border-radius: 8px;
+  }
+  .schedule-calendar-legend > span:last-child {
+    display: none;
+  }
+  .schedule-agenda-item {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+  .schedule-agenda-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+}
+
+/* Resource attachments stay compact in the composer, while Skill and MCP remain visible in the sent message. */
+.composer-resource-tags {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.command-input > .composer-resource-tags {
+  padding: 14px 14px 0;
+}
+
+.command-input:has(> .composer-resource-tags) textarea {
+  min-height: 62px;
+  padding-top: 9px;
+}
+
+.screen-shell.command-screen
+  .command-input:has(> .composer-resource-tags)
+  textarea {
+  height: 62px;
+  min-height: 62px;
+  max-height: 120px;
+  padding-top: 9px;
+}
+
+.composer-resource-tag {
+  display: inline-flex;
+  max-width: min(100%, 320px);
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid oklch(88% 0.012 235);
+  border-radius: 8px;
+  background: oklch(98% 0.006 235);
+  color: oklch(36% 0.018 235);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.composer-resource-tag > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.composer-resource-tag > small {
+  color: oklch(51% 0.024 235);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.composer-resource-tag > strong {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-resource-tag > button {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: oklch(54% 0.02 235);
+  cursor: pointer;
+}
+
+.composer-resource-tag > button:hover {
+  background: oklch(92% 0.012 235);
+  color: oklch(28% 0.018 235);
+}
+
+.composer-resource-tag > button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.composer-resource-tag[data-resource-kind="file"] {
+  border-color: oklch(86% 0.04 245);
+  background: oklch(97% 0.018 245);
+  color: oklch(39% 0.07 245);
+}
+
+.composer-resource-tag[data-resource-kind="folder"] {
+  border-color: oklch(86% 0.045 85);
+  background: oklch(97% 0.022 85);
+  color: oklch(40% 0.07 75);
+}
+
+.composer-resource-tag[data-resource-kind="image"] {
+  border-color: oklch(87% 0.045 315);
+  background: oklch(97% 0.018 315);
+  color: oklch(42% 0.075 315);
+}
+
+.composer-resource-tag[data-resource-kind="knowledge"] {
+  border-color: oklch(86% 0.04 205);
+  background: oklch(97% 0.018 205);
+  color: oklch(39% 0.07 205);
+}
+
+.composer-resource-tag[data-resource-kind="skill"] {
+  border-color: oklch(86% 0.045 275);
+  background: oklch(97% 0.018 275);
+  color: oklch(40% 0.08 275);
+}
+
+.composer-resource-tag[data-resource-kind="mcp"] {
+  border-color: oklch(85% 0.045 155);
+  background: oklch(97% 0.018 155);
+  color: oklch(38% 0.07 155);
+}
+
+.message-body > .composer-resource-tags {
+  margin-top: 8px;
+}
+
+/* Command workspace keeps the CrewON conversation beside a Codex-style workbench. */
+.command-shell-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: oklch(98.5% 0.006 235);
+  transition: grid-template-columns 180ms ease;
+}
+
+.command-shell-route[data-capability-sidebar-open="true"] {
+  grid-template-columns: minmax(820px, 0.86fr) minmax(560px, 1fr);
+}
+
+.command-shell-route > .screen-shell.command-screen {
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.command-shell-route > .screen-shell.command-screen .command-window {
+  width: 100%;
+  min-width: 0;
+}
+
+.command-capability-sidebar {
+  position: relative;
+  z-index: 30;
+  display: grid;
+  min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  grid-template-rows: 44px minmax(0, 1fr);
+  overflow: hidden;
+  border-left: 1px solid oklch(89% 0.009 235);
+  background: oklch(98.8% 0.002 235);
+  box-shadow: none;
+}
+
+.command-capability-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 8px 0 13px;
+  border-bottom: 1px solid oklch(90% 0.008 235);
+}
+
+.command-capability-sidebar-header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: oklch(24% 0.016 235);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-capability-sidebar-close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+}
+
+.command-capability-sidebar-close svg {
+  transform: scaleX(-1);
+}
+
+.command-shell-route[data-capability-sidebar-open="false"] {
+  grid-template-columns: minmax(0, 1fr) 44px;
+}
+
+.command-capability-sidebar-trigger {
+  position: relative;
+  z-index: 45;
+  align-self: start;
+  justify-self: center;
+  margin-top: 10px;
+  width: 34px;
+  height: 32px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.command-capability-sidebar-trigger svg {
+  width: 18px;
+  height: 18px;
+  transform: scaleX(-1) rotate(180deg);
+}
+
+.command-capability-sidebar .capability-dock {
+  position: static;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  min-height: 0;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.command-capability-sidebar .capability-tool-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 38px;
+  padding: 4px 8px;
+  border-bottom: 1px solid oklch(91% 0.007 235);
+}
+
+.command-capability-sidebar .capability-tool-tabs > button {
+  display: inline-grid;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: oklch(46% 0.014 235);
+}
+
+.command-capability-sidebar .capability-tool-tabs > button:hover,
+.command-capability-sidebar .capability-tool-tabs > button:focus-visible,
+.command-capability-sidebar .capability-tool-tabs > button[data-active="true"] {
+  border-color: oklch(89% 0.009 235);
+  background: oklch(94.8% 0.007 235);
+  color: oklch(24% 0.02 235);
+  outline: 0;
+}
+
+.command-capability-sidebar .capability-tool-tabs .capability-label {
+  display: inline-grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+  font-size: 0;
+}
+
+.command-capability-sidebar .capability-tool-tabs svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.75;
+}
+
+.command-capability-sidebar .capability-tool-tabs kbd {
+  display: none;
+}
+
+.command-capability-sidebar .capability-dock-content {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.command-capability-sidebar .capability-result {
+  display: grid;
+  max-height: none;
+  gap: 11px;
+  margin: 0;
+  padding: 10px 12px 20px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: oklch(31% 0.016 235);
+  font-size: 12px;
+}
+
+.command-capability-sidebar .capability-result-header {
+  display: grid;
+  align-items: start;
+  justify-content: stretch;
+  gap: 0;
+  padding: 0 2px 8px;
+  border-bottom: 0;
+}
+
+.command-capability-sidebar .capability-result-header strong {
+  display: none;
+}
+
+.command-capability-sidebar .capability-result-header span {
+  color: oklch(54% 0.016 235);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.command-capability-sidebar .capability-result-summary {
+  margin: -2px 2px 0;
+  color: oklch(48% 0.014 235);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.command-capability-sidebar .capability-command-form input,
+.command-capability-sidebar .capability-field-list input,
+.command-capability-sidebar .capability-field-list select {
+  height: 32px;
+  border: 1px solid oklch(88.5% 0.009 235);
+  border-radius: 7px;
+  background: oklch(99% 0.003 235);
+  color: oklch(31% 0.016 235);
+}
+
+.command-capability-sidebar .capability-field-list {
+  gap: 9px;
+}
+
+.command-capability-sidebar .capability-field-list label {
+  gap: 5px;
+}
+
+.command-capability-sidebar .capability-field-list span {
+  color: oklch(51% 0.014 235);
+  font-size: 11px;
+}
+
+.command-capability-sidebar .capability-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.command-capability-sidebar .capability-command-form button,
+.command-capability-sidebar .capability-result-actions button {
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid oklch(88% 0.01 235);
+  border-radius: 7px;
+  background: oklch(96% 0.007 235);
+  color: oklch(32% 0.018 235);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.command-capability-sidebar .capability-result-actions button:hover,
+.command-capability-sidebar .capability-result-actions button:focus-visible,
+.command-capability-sidebar .capability-command-form button:hover,
+.command-capability-sidebar .capability-command-form button:focus-visible {
+  border-color: oklch(82% 0.014 235);
+  background: oklch(92.5% 0.009 235);
+  outline: 0;
+}
+
+.command-capability-sidebar .capability-result-output {
+  max-height: none;
+  padding: 10px 11px;
+  border: 1px solid oklch(90% 0.007 235);
+  border-radius: 7px;
+  background: oklch(97.2% 0.004 235);
+  color: oklch(31% 0.018 235);
+}
+
+.command-capability-sidebar
+  .capability-result:is(
+    [data-panel-kind="terminal"],
+    [data-panel-kind="review"]
+  )
+  .capability-result-output {
+  max-height: calc(100dvh - 248px);
+  overflow: auto;
+  border-color: oklch(90% 0.007 235);
+  background: oklch(97.2% 0.004 235);
+  color: oklch(31% 0.018 235);
+  overscroll-behavior: contain;
+}
+
+.command-capability-sidebar .capability-result-list {
+  gap: 0;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid oklch(91% 0.007 235);
+  border-radius: 8px;
+  background: oklch(99.2% 0.002 235);
+}
+
+.command-capability-sidebar .capability-result-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: oklch(31% 0.018 235);
+  font-family: inherit;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.command-capability-sidebar .capability-result-item:hover,
+.command-capability-sidebar .capability-result-item:focus-visible {
+  background: oklch(94.8% 0.007 235);
+  color: oklch(20% 0.022 235);
+  outline: 0;
+  text-decoration: none;
+}
+
+.command-capability-sidebar .capability-result-item.is-static {
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.command-capability-sidebar
+  .capability-result-item:not([data-has-icon="true"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.command-capability-sidebar
+  .capability-result-item.is-static:not([data-has-icon="true"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.command-capability-sidebar .capability-result-item-icon {
+  display: grid;
+  color: oklch(54% 0.012 235);
+  place-items: center;
+}
+
+.command-capability-sidebar .capability-result-item-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.6;
+}
+
+.command-capability-sidebar
+  .capability-result[data-panel-kind="files"]
+  .capability-result-item-icon {
+  color: oklch(54% 0.012 235);
+}
+
+.command-capability-sidebar .capability-result-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme="light"]
+  .command-capability-sidebar
+  .capability-result-item {
+  background: transparent;
+  color: oklch(31% 0.018 235);
+}
+
+:root[data-theme="light"]
+  .command-capability-sidebar
+  .capability-result-item:hover,
+:root[data-theme="light"]
+  .command-capability-sidebar
+  .capability-result-item:focus-visible {
+  background: oklch(94.8% 0.007 235);
+  color: oklch(20% 0.022 235);
+}
+
+.command-capability-sidebar-empty {
+  position: static;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-height: 220px;
+  padding: 24px 28px;
+  color: oklch(52% 0.016 235);
+  text-align: center;
+}
+
+.command-capability-sidebar-empty strong {
+  color: oklch(36% 0.018 235);
+  font-size: 13px;
+}
+
+.command-capability-sidebar-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 1080px) {
+  .command-shell-route[data-capability-sidebar-open="true"] {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+}
+
+@media (max-width: 880px) {
+  .command-shell-route[data-capability-sidebar-open="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .command-capability-sidebar {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(380px, calc(100vw - 32px));
+    box-shadow: -24px 0 70px rgb(22 31 43 / 0.2);
+  }
+
+  .command-shell-route[data-capability-sidebar-open="true"]
+    .command-capability-sidebar::before {
+    position: fixed;
+    z-index: -1;
+    inset: 0;
+    background: rgb(21 30 42 / 0.16);
+    content: "";
+    pointer-events: none;
+    backdrop-filter: blur(1.5px);
+  }
+}
+
+@media (max-width: 520px) {
+  .command-capability-sidebar {
+    width: 100vw;
+  }
 }
 
 /* Keep active conversations close to Codex's quiet transcript hierarchy. */
-.screen-shell.command-screen .command-thread-room .message-list {
-  gap: 20px;
-  padding: 26px 12px 24px;
+/* Home chat + Assist share one top-aligned column — never vertically float mid-page. */
+.screen-shell.command-screen .hero-center.has-command-thread,
+.assistant-single-conversation {
+  top: 0;
+  left: 50%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-content: stretch;
+  justify-items: stretch;
+  width: min(1180px, calc(100% - 88px));
+  height: calc(100% - 38px);
+  margin: 0;
+  transform: translateX(-50%);
+  gap: 12px;
+}
+
+.assistant-single-conversation {
+  position: relative;
+  left: auto;
+  margin: 19px auto;
+  transform: none;
+}
+
+.screen-shell.command-screen .command-thread-room .message-list,
+.assistant-thread-room .message-list {
+  gap: 16px;
+  padding: 22px 12px 22px;
   scrollbar-gutter: stable both-edges;
 }
 
-.screen-shell.command-screen .command-input.thread-command-input {
+.screen-shell.command-screen .command-input.thread-command-input,
+.assistant-single-conversation .command-input {
   width: min(780px, 100%);
 }
 
+.screen-shell.command-screen .command-thread-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: min(780px, 100%);
+  min-height: 36px;
+  padding: 8px 2px 11px;
+  border-bottom: 1px solid rgba(24, 24, 27, 0.08);
+  color: #71717a;
+}
+
+.screen-shell.command-screen .command-thread-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0;
+}
+
+.screen-shell.command-screen .command-thread-identity > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #3f3f46;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .command-thread-cwd {
+  max-width: min(160px, 20vw);
+  min-height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #8a8f98;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.screen-shell.command-screen .command-thread-cwd::before {
+  content: "·";
+  margin: 0 8px;
+  color: #c4c4c8;
+}
+
+.screen-shell.command-screen .command-thread-runtime {
+  gap: 6px;
+  color: #8a8f98;
+}
+
+.screen-shell.command-screen .command-thread-runtime strong {
+  gap: 6px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.screen-shell.command-screen .command-thread-runtime strong::before {
+  width: 6px;
+  height: 6px;
+  background: #c4c4c8;
+}
+
+.screen-shell.command-screen .command-thread-runtime em {
+  min-height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #8a8f98;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.screen-shell.command-screen .command-thread-runtime em::before {
+  content: "·";
+  margin-right: 6px;
+  color: #c4c4c8;
+}
+
+:root[data-theme="dark"] .screen-shell.command-screen .command-thread-toolbar {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  color: #a1a1aa;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-identity
+  > strong {
+  color: #d4d4d8;
+}
+
+:root[data-theme="dark"] .screen-shell.command-screen .command-thread-cwd,
+:root[data-theme="dark"] .screen-shell.command-screen .command-thread-runtime,
+:root[data-theme="dark"] .screen-shell.command-screen .command-thread-runtime em {
+  color: #a1a1aa;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-runtime
+  strong {
+  color: #a1a1aa;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-cwd::before,
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-runtime
+  em::before {
+  color: #52525b;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-runtime
+  strong::before {
+  background: #52525b;
+}
+
 .screen-shell.command-screen .command-thread-room .turn-group,
-.screen-shell.command-screen .command-thread-room .message-list > .message {
+.screen-shell.command-screen .command-thread-room .message-list > .message,
+.assistant-thread-room .turn-group,
+.assistant-thread-room .message-list > .message {
   width: min(780px, 100%);
   max-width: 780px;
+}
+
+.screen-shell.command-screen .command-thread-room .turn-group,
+.assistant-thread-room .turn-group {
+  gap: 12px;
 }
 
 .screen-shell.command-screen .command-thread-room .message {
@@ -5699,6 +8046,7 @@ body.modal-open {
   display: none;
 }
 
+/* Cursor agent chat: dense body, tight lists, quiet inline code. */
 .screen-shell.command-screen
   .command-thread-room
   .message[data-kind="agentMessage"]
@@ -5706,20 +8054,449 @@ body.modal-open {
 .screen-shell.command-screen
   .command-thread-room
   .message[data-kind="plan"]
-  .markdown-content {
-  max-width: 760px;
-  color: oklch(30% 0.014 235);
-  font-size: 15px;
+  .markdown-content,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content,
+.assistant-thread-room .message[data-kind="plan"] .markdown-content {
+  max-width: 720px;
+  gap: 0;
+  /* Theme colors are set by data-theme rules below. */
+  color: inherit;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-size: 13.5px;
   font-weight: 400;
-  line-height: 1.68;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-wrap: pretty;
+  -webkit-font-smoothing: antialiased;
 }
 
 .screen-shell.command-screen
   .command-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content
+  :is(p, li),
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(p, li) {
+  color: inherit;
+  line-height: 1.45;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  > :is(p, ul, ol, blockquote, pre, figure, table),
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
   > :is(p, ul, ol, blockquote, pre, figure, table) {
-  margin-bottom: 12px;
+  margin: 0 0 9px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  > :last-child,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  > :last-child {
+  margin-bottom: 0;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(h1, h2, h3, h4),
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(h1, h2, h3, h4) {
+  margin: 14px 0 5px;
+  color: inherit;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  > :is(h1, h2, h3, h4):first-child,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  > :is(h1, h2, h3, h4):first-child {
+  margin-top: 0;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  h1,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  h1 {
+  font-size: 14px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  h2,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  h2 {
+  font-size: 13.5px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(h3, h4),
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(h3, h4) {
+  font-size: 13px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(ul, ol),
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(ul, ol) {
+  gap: 3px;
+  padding-left: 18px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  li,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  li {
+  padding-left: 1px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  li > :is(ul, ol),
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  li > :is(ul, ol) {
+  margin: 2px 0 0;
+  gap: 2px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  li > p,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  li > p {
+  margin: 0;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  li::marker,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  li::marker {
+  color: #8a8f98;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :not(pre) > code,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :not(pre) > code {
+  padding: 0 3.5px;
+  border: 0;
+  border-radius: 3px;
+  background: rgba(24, 24, 27, 0.06);
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  line-height: 1.35;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  strong,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  strong {
+  font-weight: 600;
+  color: inherit;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  blockquote,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  blockquote {
+  padding: 0 0 0 12px;
+  border-left: 2px solid #d4d4d8;
+  color: #52525b;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  table,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  table {
+  border: 1px solid rgba(24, 24, 27, 0.09);
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(th, td),
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(th, td) {
+  min-width: 56px;
+  padding: 5px 9px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  th,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  th {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  table {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content,
+:root:not([data-theme="light"])
+  .assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content {
+  color: #e8e8ea;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(h1, h2, h3, h4, strong),
+:root:not([data-theme="light"])
+  .assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(h1, h2, h3, h4, strong) {
+  color: #f0f0f0;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  blockquote,
+:root:not([data-theme="light"])
+  .assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  blockquote {
+  border-left-color: #3d3d3d;
+  color: #a8a8a8;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :not(pre)
+  > code,
+:root:not([data-theme="light"])
+  .assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :not(pre)
+  > code {
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content,
+:root:not([data-theme="light"])
+  .assistant-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content {
+  background: #2a2a2c;
+  color: #e8e8ea;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .command-input
+  textarea,
+:root:not([data-theme="light"]) .assistant-home-composer textarea,
+:root:not([data-theme="light"])
+  .assistant-single-conversation
+  .command-input
+  textarea {
+  color: #f1f1f1;
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .command-input
+  textarea::placeholder,
+:root:not([data-theme="light"]) .assistant-home-composer textarea::placeholder {
+  color: #7a7a7e;
+}
+
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content,
+:root[data-theme="light"]
+  .assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content {
+  color: #1a1a1a;
+}
+
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(h1, h2, h3, h4, strong),
+:root[data-theme="light"]
+  .assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :is(h1, h2, h3, h4, strong) {
+  color: #111111;
+}
+
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :not(pre)
+  > code,
+:root[data-theme="light"]
+  .assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :not(pre)
+  > code {
+  background: rgba(24, 24, 27, 0.06);
+  color: #1a1a1a;
+}
+
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content,
+:root[data-theme="light"]
+  .assistant-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content {
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+:root[data-theme="light"]
+  .screen-shell.command-screen
+  .command-input
+  textarea,
+:root[data-theme="light"] .assistant-home-composer textarea,
+:root[data-theme="light"]
+  .assistant-single-conversation
+  .command-input
+  textarea {
+  color: #1a1a1a;
 }
 
 .screen-shell.command-screen
@@ -5732,31 +8509,324 @@ body.modal-open {
 .screen-shell.command-screen
   .command-thread-room
   .message[data-kind="userMessage"]
-  .markdown-content {
-  padding: 0;
+  .markdown-content,
+.assistant-thread-room .message[data-kind="userMessage"] .markdown-content {
+  padding: 8px 13px;
   border: 0;
-  border-radius: 0;
-  background: transparent;
+  border-radius: 14px;
   box-shadow: none;
-  color: oklch(24% 0.014 235);
-  font-size: 14.5px;
+  /* Theme bubble fill/text set by data-theme rules above. */
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-size: 13.5px;
   font-weight: 400;
-  line-height: 1.58;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-wrap: pretty;
+  -webkit-font-smoothing: antialiased;
+}
+
+.screen-shell.command-screen .command-input textarea,
+.assistant-home-composer textarea,
+.assistant-single-conversation .command-input textarea {
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.screen-shell.command-screen .command-input textarea::placeholder,
+.assistant-home-composer textarea::placeholder,
+.assistant-single-conversation .command-input textarea::placeholder {
+  color: #8a8f98;
+  opacity: 1;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content
+  > :first-child {
+  margin-top: 0;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content
+  > :last-child {
+  margin-bottom: 0;
 }
 
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
   .message[data-transcript-variant="process"] {
-  grid-template-columns: 10px minmax(0, 1fr);
-  column-gap: 9px;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 0;
 }
 
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
   .message[data-transcript-variant="process"]::before {
+  display: none;
+}
+
+/* Tool cards self-describe; the duplicated role header only adds noise. */
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-transcript-variant="process"]
+  .message-header {
+  display: none;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-transcript-variant="process"]
+  .message-body {
+  grid-column: 1;
+  padding-left: 0;
+}
+
+/* The turn status owns the execution disclosure; tool batches stay inside it. */
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-details {
+  justify-items: stretch;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-summary {
+  width: 100%;
+  max-width: none;
+  min-height: 38px;
+  justify-self: stretch;
+  justify-content: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 0 0 12px;
+  border: 0;
+  border-bottom: 1px solid #e4e6e9;
+  border-radius: 0;
+  background: transparent;
+  color: #7b818a;
+  transform: none;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-summary::before {
+  order: 3;
+  width: 7px;
+  height: 7px;
+  margin-left: 2px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-summary-main {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-title,
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-summary
+  em {
+  color: inherit;
+  font-size: 14px;
+  font-weight: 570;
+  line-height: 1.4;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-summary:hover,
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-summary:focus-visible {
+  border-color: #d9dce1;
+  background: transparent;
+  color: #555b64;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-details[data-state="expanded"]
+  .turn-process-summary,
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-details[data-state="collapsing"]
+  .turn-process-summary {
+  margin-bottom: 18px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items {
+  gap: 18px;
+  padding: 2px 0 4px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-process-note="true"] {
+  margin: 0;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-process-note="true"]
+  .markdown-content {
+  max-width: 100%;
+  color: #22252a;
+  font-size: 14.5px;
+  font-weight: 430;
+  line-height: 1.65;
+  letter-spacing: -0.009em;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-has-icon="true"] {
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 8px;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-has-icon="true"]
+  .message-icon {
+  display: grid;
+  width: 20px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #8a9098;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-has-icon="true"]
+  .message-body {
+  grid-column: 2;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .tool-card-header,
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .process-card
+  summary {
+  min-height: 26px;
+  padding: 0;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  :is(.tool-action-verb, .reasoning-card-headline),
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  :is(.command-card-header, .file-read-header, .file-change-header, .tool-call-header, .action-card-header)
+  code {
+  color: #777d85;
+  font-size: 13px;
+  font-weight: 480;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .tool-action-verb {
+  font-weight: 570;
+}
+
+.process-action-group {
   display: block;
+  width: 100%;
+  color: #777d85;
+}
+
+.process-action-group > summary {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.process-action-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.process-action-group > summary::after {
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  opacity: 0.72;
+  content: "";
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.process-action-group[open] > summary::after {
+  transform: translateY(2px) rotate(225deg);
+}
+
+.process-action-group-icon {
+  display: grid;
+  width: 20px;
+  height: 24px;
+  place-items: center;
+  color: #8a9098;
+}
+
+.process-action-group-items {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0 10px;
+  padding: 2px 0 2px 20px;
+  border-left: 1px solid #e1e3e6;
+}
+
+.screen-shell.command-screen
+  .command-thread-room
+  .turn-process-details
+  + .message[data-kind="agentMessage"] {
+  margin-top: 6px;
 }
 
 @media (max-width: 860px) {
@@ -5771,8 +8841,948 @@ body.modal-open {
   .screen-shell.command-screen
     .command-thread-room
     .message[data-kind="plan"]
+    .markdown-content,
+  .assistant-thread-room
+    .message[data-kind="agentMessage"]
     .markdown-content {
-    font-size: 14.5px;
-    line-height: 1.66;
+    font-size: 13px;
+    line-height: 1.42;
+  }
+
+  .screen-shell.command-screen .command-input textarea,
+  .assistant-home-composer textarea {
+    font-size: 13px;
+    line-height: 1.42;
+  }
+}
+
+/* Keep the whole command shell on the same appearance preference. */
+:root[data-theme="dark"] .screen-shell.command-screen {
+  --command-sidebar-bg: #202020;
+  --command-sidebar-border: #303030;
+  --command-sidebar-hover: #292929;
+  --command-sidebar-active: #343434;
+  --command-control-bg: #242424;
+  --command-control-border: #3a3a3a;
+  background: #171717;
+  color: #ededed;
+}
+
+:root[data-theme="dark"] .command-shell-route,
+:root[data-theme="dark"] .screen-shell.command-screen .command-window,
+:root[data-theme="dark"] .screen-shell.command-screen .command-canvas,
+:root[data-theme="dark"] .screen-shell.command-screen .shell-page-view {
+  background: #171717;
+  color: #ededed;
+}
+
+:root[data-theme="dark"] .screen-shell.command-screen .command-sidebar {
+  border-color: var(--command-sidebar-border);
+  background: var(--command-sidebar-bg);
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  :is(
+    .sidebar-brand,
+    .sidebar-brand small,
+    .space-tree,
+    .sidebar-nav em,
+    .sidebar-empty-hint,
+    .conversation-item em
+  ) {
+  color: #9b9b9b;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  :is(
+    .sidebar-nav a,
+    .sidebar-nav button,
+    .sidebar-tool,
+    .tree-head button,
+    .space-title button,
+    .conversation-item,
+    .sidebar-account summary
+  ) {
+  color: #d6d6d6;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .sidebar-nav
+  :is(a, button) {
+  background: transparent;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  :is(
+    .sidebar-nav a,
+    .sidebar-nav button,
+    .sidebar-tool,
+    .space-title button,
+    .conversation-item,
+    .sidebar-account summary
+  ):hover,
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .sidebar-nav
+  button.active,
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .conversation-item.active {
+  background: var(--command-sidebar-hover);
+  color: #f5f5f5;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  :is(
+    .sidebar-search-panel,
+    .sidebar-workspace-form,
+    .sidebar-account-popover
+  ) {
+  border-color: #393939;
+  background: #242424;
+  color: #ededed;
+  box-shadow: 0 16px 44px rgb(0 0 0 / 0.34);
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  :is(.sidebar-search-field, .sidebar-workspace-form input) {
+  border-color: #3c3c3c;
+  background: #1d1d1d;
+  color: #ededed;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  :is(
+    .home-title h1,
+    .home-title h1 span:first-child,
+    .command-thread-room .message-role,
+    .command-input textarea
+  ) {
+  color: #f1f1f1;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  :is(
+    .scene-subtitle,
+    .capability-summary,
+    .command-thread-identity > span,
+    .command-thread-cwd,
+    .command-thread-room .message-type,
+    .composer-state-row
+  ) {
+  color: #a3a3a3;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  :is(
+    .scene-pills,
+    .scene-pills button,
+    .quick-row button,
+    .input-tools button:not(.send-button),
+    .workspace-pill,
+    .command-input,
+    .control-select .select-trigger,
+    .workspace-picker .select-trigger
+  ) {
+  border-color: #393939;
+  background: #242424;
+  color: #dcdcdc;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  :is(
+    .scene-pills button,
+    .quick-row button,
+    .input-tools button:not(.send-button),
+    .control-select .select-trigger,
+    .workspace-picker .select-trigger
+  ):hover {
+  border-color: #505050;
+  background: #303030;
+  color: #fff;
+}
+
+:root[data-theme="dark"] .screen-shell.command-screen .command-thread-toolbar {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .screen-shell.command-screen .command-thread-cwd {
+  background: transparent;
+  color: #a1a1aa;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  :is(.message[data-kind="agentMessage"], .message[data-kind="plan"])
+  .markdown-content,
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content,
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-details {
+  color: #dedede;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-summary {
+  border-bottom-color: #303030;
+  color: #a0a0a0;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-summary:hover,
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-summary:focus-visible {
+  border-bottom-color: #3a3a3a;
+  background: transparent;
+  color: #b8b8b8;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-process-note="true"]
+  .markdown-content,
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-process-note="true"]
+  .markdown-content
+  :is(p, li, strong, em, code) {
+  color: #f0f0f0;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message[data-process-note="true"]
+  .markdown-content
+  :not(pre)
+  > code {
+  border-color: #363636;
+  background: #2a2a2a;
+  color: #ededed;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  .message-icon,
+:root[data-theme="dark"] .process-action-group-icon {
+  color: #a0a0a0;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  :is(.tool-action-verb, .reasoning-card-headline),
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .turn-process-items
+  :is(.command-card-header, .file-read-header, .file-change-header, .tool-call-header, .action-card-header)
+  code,
+:root[data-theme="dark"] .process-action-group {
+  color: #a8a8a8;
+}
+
+:root[data-theme="dark"] .process-action-group-items {
+  border-left-color: #343434;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content {
+  border-color: #3b3b3b;
+  background: #242424;
+}
+
+:root[data-theme="dark"] .command-capability-sidebar {
+  border-color: #303030;
+  background: #1e1e1e;
+  color: #ededed;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .command-capability-sidebar-header,
+:root[data-theme="dark"] .command-capability-sidebar .capability-tool-tabs,
+:root[data-theme="dark"] .command-capability-sidebar .capability-result-header,
+:root[data-theme="dark"] .command-capability-sidebar .capability-result-list,
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-result-list
+  li {
+  border-color: #303030;
+}
+
+:root[data-theme="dark"] .command-capability-sidebar-header span,
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-result-header
+  span,
+:root[data-theme="dark"] .command-capability-sidebar-empty {
+  color: #9b9b9b;
+}
+
+:root[data-theme="dark"] .command-capability-sidebar-header strong,
+:root[data-theme="dark"] .command-capability-sidebar-empty strong,
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-result-header
+  strong,
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-tool-tabs
+  > button,
+:root[data-theme="dark"] .command-capability-sidebar .capability-result-item {
+  color: #dedede;
+}
+
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-tool-tabs
+  > button:hover,
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-tool-tabs
+  > button:focus-visible,
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-tool-tabs
+  > button[data-active="true"],
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-result-item:hover,
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-result-item:focus-visible {
+  border-color: #3f3f3f;
+  background: #2b2b2b;
+  color: #fff;
+}
+
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  :is(
+    .capability-result,
+    .capability-result pre,
+    .capability-command-form input,
+    .capability-field-list input,
+    .capability-field-list select,
+    .capability-command-form button,
+    .capability-result-actions button,
+    .capability-dock kbd,
+    .capability-result-output
+  ) {
+  border-color: #3b3b3b;
+  background: #242424;
+  color: #dedede;
+}
+
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-result:is(
+    [data-panel-kind="terminal"],
+    [data-panel-kind="review"]
+  )
+  .capability-result-output {
+  border-color: #383838;
+  background: #242424;
+  color: #dedede;
+}
+
+:root[data-theme="dark"] .command-capability-sidebar .capability-result-list {
+  border-color: #303030;
+  background: #202020;
+}
+
+:root[data-theme="dark"] .command-capability-sidebar .capability-result-summary,
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-result-item-icon,
+:root[data-theme="dark"]
+  .command-capability-sidebar
+  .capability-result-item-chevron {
+  color: #9b9b9b;
+}
+
+:root[data-theme="dark"] .command-capability-sidebar-empty {
+  border-color: #404040;
+}
+
+/* The command tools are a peer workbench, not a narrow inspector sidebar. */
+.command-workbench {
+  position: relative;
+  z-index: 30;
+  display: grid;
+  min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border-left: 1px solid #2d2d2d;
+  background: #171717;
+  color: #ededed;
+}
+
+.command-workbench[data-empty="true"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.command-workbench-tabbar {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 8px 4px 10px;
+  border-bottom: 1px solid #2b2b2b;
+  background: #181818;
+}
+
+.command-workbench-tabs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.command-workbench-tab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  min-width: 112px;
+  max-width: 210px;
+  height: 32px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #202020;
+  color: #b7b7b7;
+}
+
+.command-workbench-tab[data-active="true"] {
+  border-color: #353535;
+  background: #292929;
+  color: #f4f4f4;
+}
+
+.command-workbench-tab > button:first-child {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.command-workbench-tab > button:first-child span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 570;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-workbench-tab svg,
+.command-workbench-add svg,
+.command-workbench-close svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke-width: 1.7;
+}
+
+.command-workbench-tab-close,
+.command-workbench-add,
+.command-workbench-close {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+}
+
+.command-workbench-tab-close {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.command-workbench-tab-close:hover,
+.command-workbench-add:hover,
+.command-workbench-close:hover {
+  background: #343434;
+  color: #fff;
+}
+
+.command-workbench-launcher-anchor {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.command-workbench-add {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: #dedede;
+}
+
+.command-workbench-close {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+}
+
+.command-workbench-close.is-floating {
+  position: absolute;
+  z-index: 5;
+  top: 8px;
+  right: 8px;
+}
+
+.command-workbench-launcher-menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 284px;
+  padding: 5px;
+  border: 1px solid #414141;
+  border-radius: 13px;
+  background: #2a2a2a;
+  box-shadow: 0 18px 46px rgb(0 0 0 / 0.38);
+}
+
+.command-workbench-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.command-workbench[data-empty="true"] .command-workbench-content {
+  display: grid;
+  place-items: center;
+}
+
+.command-workbench-launcher {
+  display: grid;
+  width: min(320px, calc(100% - 48px));
+  gap: 5px;
+}
+
+.command-workbench-launcher-menu .command-workbench-launcher {
+  width: 100%;
+}
+
+.command-workbench-launcher > button {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #202020;
+  color: #e5e5e5;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.command-workbench-launcher-menu .command-workbench-launcher > button {
+  background: transparent;
+}
+
+.command-workbench-launcher > button:hover,
+.command-workbench-launcher > button:focus-visible {
+  background: #414141;
+  color: #fff;
+  outline: 0;
+}
+
+.command-workbench-launcher > button:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.command-workbench-launcher > button span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  font-weight: 560;
+}
+
+.command-workbench-launcher > button svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: #bdbdbd;
+  stroke-width: 1.65;
+}
+
+.command-workbench-launcher > button kbd {
+  color: #999;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.command-workbench-context-bar {
+  min-width: 0;
+  min-height: 34px;
+  overflow: hidden;
+  padding: 9px 14px 7px;
+  border-bottom: 1px solid #292929;
+  color: #bcbcbc;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-workbench-files {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.command-workbench-file-preview {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #181818;
+}
+
+.command-workbench-file-preview > section {
+  min-width: 0;
+  min-height: 100%;
+}
+
+.command-workbench-file-preview pre {
+  min-height: 100%;
+  margin: 0;
+  padding: 18px 20px 40px;
+  overflow: auto;
+  color: #d8d8d8;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre-wrap;
+}
+
+.command-workbench-file-empty,
+.command-workbench-tool-empty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  color: #8c8c8c;
+  text-align: center;
+}
+
+.command-workbench-file-empty svg,
+.command-workbench-tool-empty svg {
+  width: 26px;
+  height: 26px;
+  margin-bottom: 4px;
+  stroke-width: 1.5;
+}
+
+.command-workbench-file-empty strong,
+.command-workbench-tool-empty strong {
+  color: #dedede;
+  font-size: 13px;
+  font-weight: 590;
+}
+
+.command-workbench-file-empty span {
+  font-size: 11px;
+}
+
+.command-workbench-file-explorer {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid #2c2c2c;
+  background: #1b1b1b;
+}
+
+.command-workbench-file-search {
+  display: grid;
+  gap: 7px;
+  padding: 8px 8px 5px;
+}
+
+.command-workbench-file-search label {
+  display: grid;
+  gap: 4px;
+}
+
+.command-workbench-file-search label > span {
+  display: none;
+}
+
+.command-workbench-file-search input,
+.command-workbench-file-search select {
+  width: 100%;
+  height: 27px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid #353535;
+  border-radius: 8px;
+  outline: 0;
+  background: #222;
+  color: #ddd;
+  font: inherit;
+  font-size: 11px;
+}
+
+.command-workbench-file-search input:focus,
+.command-workbench-file-search select:focus {
+  border-color: #555;
+}
+
+.command-workbench-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px 6px;
+}
+
+.command-workbench-file-actions button {
+  height: 25px;
+  padding: 0 7px;
+  border: 1px solid #343434;
+  border-radius: 7px;
+  background: #232323;
+  color: #bdbdbd;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+}
+
+.command-workbench-file-actions button:hover {
+  background: #303030;
+  color: #fff;
+}
+
+.command-workbench-file-tree {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 2px 5px 12px;
+  scrollbar-width: thin;
+}
+
+.command-workbench-file-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  width: 100%;
+  min-height: 27px;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #c5c5c5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.command-workbench-file-row:hover,
+.command-workbench-file-row:focus-visible {
+  background: #2c2c2c;
+  color: #fff;
+  outline: 0;
+}
+
+.command-workbench-file-row:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.command-workbench-file-row svg {
+  width: 14px;
+  height: 14px;
+  color: #aaa;
+  stroke-width: 1.55;
+}
+
+.command-workbench-file-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-workbench-error {
+  margin: 16px;
+  color: #ef9b9b;
+  font-size: 12px;
+}
+
+.command-workbench-generic-surface {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  background: #181818;
+}
+
+.command-workbench-generic-surface .capability-result {
+  display: grid;
+  min-height: 100%;
+  align-content: start;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 16px 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #dcdcdc;
+}
+
+.command-workbench-generic-surface .capability-result-header {
+  display: none;
+}
+
+.command-workbench-generic-surface .capability-command-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.command-workbench-generic-surface
+  :is(
+    .capability-command-form input,
+    .capability-field-list input,
+    .capability-field-list select
+  ) {
+  border-color: #393939;
+  background: #222;
+  color: #e4e4e4;
+}
+
+.command-workbench-generic-surface
+  :is(.capability-command-form button, .capability-result-actions button) {
+  border-color: #3c3c3c;
+  background: #292929;
+  color: #ddd;
+}
+
+.command-workbench-generic-surface .capability-result-output {
+  max-height: calc(100dvh - 150px);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #d7d7d7;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.command-workbench-generic-surface[data-tool-id="terminal"]
+  .capability-result-output {
+  color: #d8d8d8;
+}
+
+.command-workbench-trigger {
+  position: relative;
+  z-index: 45;
+  align-self: start;
+  justify-self: center;
+  width: 34px;
+  height: 32px;
+  margin-top: 8px;
+  border: 0;
+  background: transparent;
+  color: #aaa;
+  box-shadow: none;
+}
+
+.command-workbench-trigger:hover {
+  background: #2b2b2b;
+  color: #fff;
+}
+
+.command-workbench-trigger svg {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 1379px) {
+  .command-shell-route[data-capability-sidebar-open="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .command-workbench {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(760px, calc(100vw - 80px));
+    box-shadow: -28px 0 70px rgb(0 0 0 / 0.38);
+  }
+}
+
+@media (max-width: 760px) {
+  .command-workbench {
+    width: 100vw;
+  }
+
+  .command-workbench-files {
+    grid-template-columns: minmax(0, 1fr) minmax(210px, 38%);
   }
 }

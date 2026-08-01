@@ -136,6 +136,13 @@ pub(crate) struct PreparedOfficeMessageSubmit {
     pub(crate) action: OfficeMessageSubmitAction,
 }
 
+#[derive(Debug)]
+pub(crate) struct ResolvedOfficeMessageSubmit {
+    pub(crate) params: OfficeMessageSubmitParams,
+    pub(crate) expected_office_record_id: String,
+    pub(crate) manager_thread_id: String,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum OfficeMessageSubmitAction {
     Respond(OfficeMessageDelivery),
@@ -158,8 +165,13 @@ pub(crate) enum OfficeMessageDispatchMode {
 }
 
 pub(crate) async fn prepare(
-    params: OfficeMessageSubmitParams,
+    resolved: ResolvedOfficeMessageSubmit,
 ) -> Result<PreparedOfficeMessageSubmit, JSONRPCErrorError> {
+    let ResolvedOfficeMessageSubmit {
+        params,
+        expected_office_record_id,
+        manager_thread_id,
+    } = resolved;
     let input = validate_submit(params)?;
     let now = Utc::now();
     let lease_id = format!("office-message-lease-{}", Uuid::now_v7());
@@ -170,6 +182,11 @@ pub(crate) async fn prepare(
             &input.cwd,
             &input.config,
             move |latest| {
+                ensure_resolved_manager_authority(
+                    latest,
+                    &expected_office_record_id,
+                    &manager_thread_id,
+                )?;
                 decide_and_apply(latest, &mutation_input, now, &lease_id, &lease_expires_at)
             },
         )
@@ -187,6 +204,21 @@ pub(crate) async fn prepare(
         message,
         action,
     })
+}
+
+fn ensure_resolved_manager_authority(
+    latest: &JsonValue,
+    expected_office_record_id: &str,
+    expected_manager_thread_id: &str,
+) -> Result<(), JSONRPCErrorError> {
+    if office_record_id(latest) != Some(expected_office_record_id)
+        || office_thread_id(latest) != Some(expected_manager_thread_id)
+    {
+        return Err(invalid_params(
+            "Office manager authority changed; reload and retry",
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) async fn prepare_next_queued_message(

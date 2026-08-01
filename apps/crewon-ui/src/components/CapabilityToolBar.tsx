@@ -49,11 +49,13 @@ function capabilityTools(locale: Locale): ToolOption[] {
 }
 
 export function CapabilityToolBar({
+  activeToolId,
   locale,
   disabled,
   busyToolId,
   onToolClick,
 }: {
+  activeToolId: ToolId | null;
   locale: Locale;
   disabled: boolean;
   busyToolId: ToolId | null;
@@ -65,9 +67,20 @@ export function CapabilityToolBar({
     <>
       {tools.map((tool) => (
         <button
+          aria-label={
+            busyToolId === tool.id
+              ? locale === "zh"
+                ? `${tool.label}启动中`
+                : `Starting ${tool.label}`
+              : tool.label
+          }
+          aria-pressed={activeToolId === tool.id}
+          data-active={activeToolId === tool.id ? "true" : undefined}
+          data-tool-id={tool.id}
           type="button"
           key={tool.id}
           disabled={disabled || busyToolId === tool.id}
+          title={`${tool.label}${shortcuts[tool.id] ? ` · ${shortcuts[tool.id]}` : ""}`}
           onClick={() => onToolClick(tool.id)}
         >
           <span className="capability-label">

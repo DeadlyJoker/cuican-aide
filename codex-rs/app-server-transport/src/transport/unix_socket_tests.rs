@@ -1,5 +1,6 @@
 use super::AppServerTransport;
 use super::CHANNEL_CAPACITY;
+use super::TransportAuthentication;
 use super::TransportEvent;
 use super::acquire_app_server_startup_lock;
 use super::app_server_control_socket_path;
@@ -81,7 +82,14 @@ async fn control_socket_acceptor_upgrades_and_forwards_websocket_text_messages_a
         .expect("connection opened event should arrive")
         .expect("connection opened event");
     let connection_id = match opened {
-        TransportEvent::ConnectionOpened { connection_id, .. } => connection_id,
+        TransportEvent::ConnectionOpened {
+            connection_id,
+            authentication,
+            ..
+        } => {
+            assert_eq!(authentication, TransportAuthentication::ConnectionScoped);
+            connection_id
+        }
         _ => panic!("expected connection opened event"),
     };
 

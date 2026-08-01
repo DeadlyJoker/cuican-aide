@@ -29,6 +29,7 @@ import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import type { Locale } from "../../lib/i18n";
 import type { PlatformKind } from "../../lib/platform";
+import type { SettingsSection } from "../../lib/settings/settingsCatalog";
 import type { WorkMode } from "../../lib/workMode";
 
 type AppWorkspaceContentProps = {
@@ -42,6 +43,7 @@ type AppWorkspaceContentProps = {
   cwd: string;
   disabled: boolean;
   isSending: boolean;
+  isDemo?: boolean;
   libraryPanel: LibraryPanel | null;
   locale: Locale;
   modelOptions?: CommandModelOption[];
@@ -49,6 +51,7 @@ type AppWorkspaceContentProps = {
   selectedThread: Thread | null;
   selectedThreadId: string | null;
   slashCommands: ComposerSlashCommand[];
+  settingsSection?: SettingsSection;
   streamingTextByThread: Record<string, string>;
   workMode: WorkMode;
   onApprovalDecision: (id: string, decision: "approved" | "denied") => void;
@@ -59,6 +62,7 @@ type AppWorkspaceContentProps = {
   onItemAction: (item: LibraryItem) => void;
   onLibraryPanelAction: LibraryPanelActionCallback;
   onModeChange: (mode: WorkMode) => void;
+  onSaveCapability?: import("../../lib/capability/capabilityCatalog").CapabilityEditorSaveHandler;
   onOfficeDelegationDispatch: (
     run: OfficeRunActivity,
     delegation: OfficeRunDelegationActivity,
@@ -100,6 +104,7 @@ type AppWorkspaceContentProps = {
   onOfficeRunCancel: (run: OfficeRunActivity) => void | Promise<void>;
   onOfficeRunRetry: (run: OfficeRunActivity) => void | Promise<void>;
   onPanelAction: (actionId: string) => void;
+  onPanelFieldCommit?: (fieldId: string, value: string) => void;
   onPanelFieldChange: (fieldId: string, value: string) => void;
   onRetryConnection: () => void;
   onSaveAgentConfig: () => void;
@@ -126,6 +131,7 @@ export function AppWorkspaceContent({
   cwd,
   disabled,
   isSending,
+  isDemo = false,
   libraryPanel,
   locale,
   modelOptions,
@@ -133,6 +139,7 @@ export function AppWorkspaceContent({
   selectedThread,
   selectedThreadId,
   slashCommands,
+  settingsSection = "account",
   streamingTextByThread,
   workMode,
   onApprovalDecision,
@@ -143,6 +150,7 @@ export function AppWorkspaceContent({
   onItemAction,
   onLibraryPanelAction,
   onModeChange,
+  onSaveCapability,
   onOfficeDelegationDispatch,
   onOfficeDelegationCancel,
   onOfficeDelegationRetry,
@@ -156,6 +164,7 @@ export function AppWorkspaceContent({
   onOfficeRunCancel,
   onOfficeRunRetry,
   onPanelAction,
+  onPanelFieldCommit = () => {},
   onPanelFieldChange,
   onRetryConnection,
   onSaveAgentConfig,
@@ -170,10 +179,19 @@ export function AppWorkspaceContent({
   if (appView === "settings") {
     return (
       <AppWorkspaceSettingsContent
+        activeSection={settingsSection}
         capabilityPanel={capabilityPanel}
-        disabled={disabled}
+        dataMode={
+          isDemo
+            ? "demo"
+            : connectionState === "connected"
+              ? "live"
+              : "disconnected"
+        }
+        disabled={disabled || isDemo}
         locale={locale}
         onPanelAction={onPanelAction}
+        onPanelFieldCommit={onPanelFieldCommit}
         onPanelFieldChange={onPanelFieldChange}
       />
     );
@@ -219,9 +237,9 @@ export function AppWorkspaceContent({
       connectionState={connectionState}
       cwd={cwd}
       isSending={isSending}
-        locale={locale}
-        modelOptions={modelOptions}
-        platform={platform}
+      locale={locale}
+      modelOptions={modelOptions}
+      platform={platform}
       selectedThread={selectedThread}
       selectedThreadId={selectedThreadId}
       slashCommands={slashCommands}
@@ -230,6 +248,7 @@ export function AppWorkspaceContent({
       onAttachContext={onAttachContext}
       onChangeComposerValue={onChangeComposerValue}
       onModeChange={onModeChange}
+      onSaveCapability={onSaveCapability}
       onRetryConnection={onRetryConnection}
       onSend={onSend}
       onSlashCommandSelect={onSlashCommandSelect}

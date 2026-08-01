@@ -1,0 +1,122 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`command workspace catalog style > snapshots the shared four-column capability catalog 1`] = `
+"/* Agents, skills, services, and knowledge share one four-column catalog. */
+.screen-shell.command-screen .capability-catalog[data-catalog-filter] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card {
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  min-height: 128px;
+  gap: 10px;
+  padding: 14px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-body {
+  display: contents;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-icon {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-head {
+  grid-row: 1;
+  grid-column: 2;
+  align-self: center;
+  margin-bottom: 0;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card
+  > .button,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card
+  > .catalog-card-action,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card
+  > .status,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-actions {
+  grid-row: 1;
+  grid-column: 3;
+  align-self: start;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-action {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-action
+  svg {
+  width: 15px;
+  height: 15px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-actions {
+  min-width: 30px;
+  align-items: flex-end;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card
+  > p,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-body
+  > p {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  min-height: 38px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-meta,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-resource-meta {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+@container capability-page (max-width: 760px) {
+  .screen-shell.command-screen .capability-catalog[data-catalog-filter] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container capability-page (max-width: 520px) {
+  .screen-shell.command-screen .capability-catalog[data-catalog-filter] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}"
+`;

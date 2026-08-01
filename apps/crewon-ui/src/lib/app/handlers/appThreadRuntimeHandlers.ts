@@ -1,8 +1,6 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
-import type {
-  AppServerClient,
-} from "../../app-server/appServer";
+import type { AppServerClient } from "../../app-server/appServer";
 import type { ComposerImageInput } from "../../shared/composerImages";
 import type { AppView } from "../appRouting";
 import type { PendingComposerMention } from "../../shared/composerMentions";
@@ -10,10 +8,7 @@ import type { ConfirmHandler } from "../../shared/confirmHandler";
 import type { NoticeState } from "../appRuntimeState";
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { Locale, ToolId } from "../../i18n";
-import {
-  agentPlatformThreadSource,
-  type ThreadRuntimeSettings,
-} from "../../thread/threadRuntimeSettings";
+import { type ThreadRuntimeSettings } from "../../thread/threadRuntimeSettings";
 import {
   archiveThreadAction,
   clearAssistantThreadAction,
@@ -29,7 +24,7 @@ import {
   interruptActiveTurnAction,
   sendMessageAction,
 } from "../../thread/threadMessageActions";
-import { restoreAgentPlatformThread } from "../../thread/agentPlatformThreadHistory";
+import type { ThreadExecutionContextPreparation } from "../../thread/threadMessageActions";
 import {
   startReviewAction,
   startSideChatAction,
@@ -69,6 +64,7 @@ export type AppThreadRuntimeHandlers = {
     text: string,
     thread: Thread,
     threadSettings?: ThreadRuntimeSettings,
+    images?: ComposerImageInput[],
   ) => Promise<void>;
   sendMessageInNewThread: (
     text: string,
@@ -126,6 +122,7 @@ export type AppThreadRuntimeHandlersParams = {
   setThreads: ThreadSetter;
   shouldAutoCloseSidebar: () => boolean;
   untitledThreadLabel: string;
+  prepareThreadExecutionContext?: () => ThreadExecutionContextPreparation | null;
 };
 
 export function createAppThreadRuntimeHandlers(
@@ -168,6 +165,8 @@ export function createAppThreadRuntimeHandlers(
       threadSettings,
       threadSource,
       workspaceCwd,
+      executionContextPreparation:
+        params.prepareThreadExecutionContext?.() ?? null,
     });
 
   const sendMessageWithThreadContext = (
@@ -187,9 +186,7 @@ export function createAppThreadRuntimeHandlers(
       createThread: (initialPrompt) =>
         createThread(
           initialPrompt,
-          threadSettings?.threadSource ??
-            agentPlatformThreadSource(threadSettings?.agentPlatformAgentId) ??
-            "app_server",
+          threadSettings?.threadSource ?? "app_server",
           threadSettings,
           workspaceCwd,
         ),
@@ -284,10 +281,6 @@ export function createAppThreadRuntimeHandlers(
         locale: params.locale,
         preserveThreadsAfterConnectionLoss:
           params.preserveThreadsAfterConnectionLoss,
-        restoreThread: (thread) =>
-          params.client
-            ? restoreAgentPlatformThread({ client: params.client, thread })
-            : Promise.resolve(thread),
         setAppView: params.setAppView,
         setInspectorOpen: params.setInspectorOpen,
         setNotice: params.setNotice,
@@ -299,21 +292,33 @@ export function createAppThreadRuntimeHandlers(
       });
     },
     sendMessage: (text, threadSettings, images) =>
-      sendMessageWithThreadContext(text, threadSettings, {
-        activeTurnId,
-        selectedThread: params.selectedThread,
-        selectedThreadId: params.selectedThreadId,
-      }, undefined, images),
-    sendMessageToThread: (text, thread, threadSettings) => {
+      sendMessageWithThreadContext(
+        text,
+        threadSettings,
+        {
+          activeTurnId,
+          selectedThread: params.selectedThread,
+          selectedThreadId: params.selectedThreadId,
+        },
+        undefined,
+        images,
+      ),
+    sendMessageToThread: (text, thread, threadSettings, images) => {
       params.setSelectedThreadId(thread.id);
-      return sendMessageWithThreadContext(text, threadSettings, {
-        activeTurnId:
-          params.activeTurnByThread?.[thread.id] ??
-          thread.turns.find((turn) => turn.status === "inProgress")?.id ??
-          null,
-        selectedThread: thread,
-        selectedThreadId: thread.id,
-      });
+      return sendMessageWithThreadContext(
+        text,
+        threadSettings,
+        {
+          activeTurnId:
+            params.activeTurnByThread?.[thread.id] ??
+            thread.turns.find((turn) => turn.status === "inProgress")?.id ??
+            null,
+          selectedThread: thread,
+          selectedThreadId: thread.id,
+        },
+        undefined,
+        images,
+      );
     },
     sendMessageInNewThread: (text, threadSettings, workspaceCwd, images) =>
       sendMessageWithThreadContext(

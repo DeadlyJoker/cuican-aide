@@ -4,7 +4,7 @@ import {
   useState,
   type MutableRefObject,
 } from "react";
-import { Code2, Sparkles } from "lucide-react";
+import { ArrowDown, Code2, ListTree, Sparkles, Terminal } from "lucide-react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
 import type { Turn } from "@crewon-protocol/v2/Turn";
@@ -19,7 +19,12 @@ import {
   combineAgentMessages,
   type TranscriptItemLabels,
 } from "./TranscriptMessage";
-import { hasDisplayableReasoning } from "./transcriptReasoning";
+import {
+  aggregateReasoningItems,
+  hasDisplayableReasoning,
+  hasProcessReasoning,
+  isActionProcessItem,
+} from "./transcriptReasoning";
 
 type TranscriptProps = {
   activeTurnId?: string | null;
@@ -145,58 +150,79 @@ function isTurnProcessSourceItem(
   }
 
   if (item.type === "reasoning") {
-    return hasDisplayableReasoning(item);
+    return hasProcessReasoning(item);
   }
 
   return true;
+}
+
+type ProcessEntry = { index: number; item: ThreadItem };
+
+function collapseReasoningEntries(entries: ProcessEntry[]): ProcessEntry[] {
+  const collapsed: ProcessEntry[] = [];
+  let reasoningBatch: Array<Extract<ThreadItem, { type: "reasoning" }>> = [];
+  let batchStart = -1;
+
+  const flushReasoning = () => {
+    if (reasoningBatch.length === 0) {
+      return;
+    }
+
+    collapsed.push({
+      index: batchStart,
+      item: aggregateReasoningItems(
+        reasoningBatch,
+        `${reasoningBatch[0].id}-process-thought`,
+      ),
+    });
+    reasoningBatch = [];
+    batchStart = -1;
+  };
+
+  for (const entry of entries) {
+    if (entry.item.type === "reasoning") {
+      if (batchStart < 0) {
+        batchStart = entry.index;
+      }
+      reasoningBatch.push(entry.item);
+      continue;
+    }
+
+    flushReasoning();
+    collapsed.push(entry);
+  }
+
+  flushReasoning();
+  return collapsed;
 }
 
 function turnProcessRenderItems(
   turn: Turn,
   finalAgentSourceIds: Set<string>,
 ): TurnProcessRender {
-  const processEntries: Array<{ index: number; item: ThreadItem }> = [];
-  const progressAgentEntries: Array<{
-    index: number;
-    item: AgentMessageItem;
-  }> = [];
+  const processEntries: ProcessEntry[] = [];
 
   turn.items.forEach((item, index) => {
     if (!isTurnProcessSourceItem(item, finalAgentSourceIds)) {
       return;
     }
 
-    if (isAgentMessageItem(item)) {
-      progressAgentEntries.push({ index, item });
-      return;
-    }
-
     processEntries.push({ index, item });
   });
 
-  if (progressAgentEntries.length > 0) {
-    processEntries.push({
-      index: progressAgentEntries[0].index,
-      item: combineAgentMessages({
-        id: `${turn.id}-progress-agent-messages`,
-        messages: progressAgentEntries.map((entry) => entry.item),
-        phase: "commentary",
-      }),
-    });
-  }
-
   processEntries.sort((left, right) => left.index - right.index);
 
-  return {
-    firstIndex: processEntries[0]?.index ?? -1,
-    items: processEntries.map((entry) => entry.item),
-  };
-}
-
-function hasFinalAgentOutput(turn: Turn, streamingText: string): boolean {
-  return (
-    streamingText.trim().length > 0 || Boolean(finalAgentMessageForTurn(turn))
+  // Merge consecutive reasoning breadcrumbs into one "Thought · N steps" row so
+  // the process pill stays visible without flooding the log.
+  const visibleEntries = collapseReasoningEntries(processEntries).filter(
+    (entry) =>
+      entry.item.type !== "reasoning" || hasDisplayableReasoning(entry.item),
   );
+
+  return {
+    firstIndex: visibleEntries[0]?.index ?? -1,
+    items: visibleEntries.map((entry) => entry.item),
+  };
 }
 
 function itemActivityKey(item: ThreadItem): string {
@@ -307,7 +333,7 @@ function scheduleTranscriptFollow(
   frameIds.current = [firstFrame];
 }
 
-function turnTimeLabel(turn: Turn, locale: Locale): string {
+function turnTimeLabel(turn: Turn, locale: Locale): string | null {
   if (turn.completedAt) {
     return formatRelativeTime(turn.completedAt, locale);
   }
@@ -316,93 +342,233 @@ function turnTimeLabel(turn: Turn, locale: Locale): string {
     return formatRelativeTime(turn.startedAt, locale);
   }
 
-  return locale === "zh" ? "未开始" : "Not started";
+  return null;
 }
 
-function turnDurationLabel(durationMs: number | null, locale: Locale): string | null {
+function turnDurationLabel(durationMs: number | null): string | null {
   if (!durationMs) {
     return null;
   }
 
   const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts = [
+    hours > 0 ? `${hours}h` : null,
+    minutes > 0 ? `${minutes}m` : null,
+    seconds > 0 || (hours === 0 && minutes === 0) ? `${seconds}s` : null,
+  ];
 
-  if (totalSeconds < 60) {
-    return locale === "zh" ? `${totalSeconds} 秒` : `${totalSeconds}s`;
-  }
-
-  const totalMinutes = Math.round(totalSeconds / 60);
-
-  if (totalMinutes < 60) {
-    return locale === "zh" ? `${totalMinutes} 分钟` : `${totalMinutes}m`;
-  }
-
-  const totalHours = Math.round(totalMinutes / 60);
-
-  return locale === "zh" ? `${totalHours} 小时` : `${totalHours}h`;
+  return parts.filter(Boolean).join(" ");
 }
 
-function processItemBucketLabel(item: ThreadItem, locale: Locale): string {
+function processActionStatus(item: ThreadItem): "completed" | "failed" | "inProgress" {
   switch (item.type) {
-    case "reasoning":
-      return locale === "zh" ? "推理" : "Reasoning";
-    case "plan":
-      return locale === "zh" ? "计划" : "Plan";
     case "commandExecution":
-      return locale === "zh" ? "命令" : "Command";
     case "fileChange":
-      return locale === "zh" ? "文件" : "Files";
+      return item.status === "inProgress"
+        ? "inProgress"
+        : item.status === "failed" || item.status === "declined"
+          ? "failed"
+          : "completed";
     case "mcpToolCall":
-      return "MCP";
     case "dynamicToolCall":
-      return locale === "zh" ? "技能" : "Skill";
     case "collabAgentToolCall":
-    case "subAgentActivity":
-      return "Agent";
-    case "webSearch":
-      return locale === "zh" ? "搜索" : "Search";
-    case "imageView":
+      return item.status;
     case "imageGeneration":
-      return locale === "zh" ? "图片" : "Image";
-    case "hookPrompt":
-      return "Hook";
-    case "enteredReviewMode":
-    case "exitedReviewMode":
-      return locale === "zh" ? "审查" : "Review";
-    case "contextCompaction":
-      return locale === "zh" ? "压缩" : "Compact";
-    case "userMessage":
-    case "agentMessage":
-      return locale === "zh" ? "进展" : "Progress";
+      return item.status === "completed" || item.status === "succeeded"
+        ? "completed"
+        : "inProgress";
+    default:
+      return "completed";
   }
 }
 
-function turnProcessBuckets(items: ThreadItem[], locale: Locale): string {
-  const buckets = new Map<string, number>();
-
-  for (const item of items) {
-    const label = processItemBucketLabel(item, locale);
-    buckets.set(label, (buckets.get(label) ?? 0) + 1);
+function isFileReadAction(item: ThreadItem): boolean {
+  if (item.type !== "mcpToolCall") {
+    return false;
   }
 
-  return Array.from(buckets)
-    .map(([label, count]) => `${label} ${count}`)
+  const server = item.server.toLowerCase();
+  const tool = item.tool.toLowerCase();
+  return (
+    (server.includes("file") || server.includes("filesystem")) &&
+    tool.includes("read") &&
+    (tool.includes("file") || tool === "read")
+  );
+}
+
+function processActionGroupLabel(items: ThreadItem[], locale: Locale): string {
+  const counts = items.reduce(
+    (current, item) => ({
+      commands: current.commands + (item.type === "commandExecution" ? 1 : 0),
+      fileChanges: current.fileChanges + (item.type === "fileChange" ? 1 : 0),
+      fileReads: current.fileReads + (isFileReadAction(item) ? 1 : 0),
+      searches: current.searches + (item.type === "webSearch" ? 1 : 0),
+      other:
+        current.other +
+        (item.type !== "commandExecution" &&
+        item.type !== "fileChange" &&
+        item.type !== "webSearch" &&
+        !isFileReadAction(item)
+          ? 1
+          : 0),
+    }),
+    { commands: 0, fileChanges: 0, fileReads: 0, other: 0, searches: 0 },
+  );
+
+  if (locale === "zh") {
+    return [
+      counts.fileReads > 0
+        ? counts.fileReads === 1
+          ? "读取了文件"
+          : `读取了 ${counts.fileReads} 个文件`
+        : null,
+      counts.commands > 0
+        ? counts.commands === 1
+          ? "运行了命令"
+          : "运行了多个命令"
+        : null,
+      counts.searches > 0
+        ? counts.searches === 1
+          ? "完成了搜索"
+          : `完成了 ${counts.searches} 次搜索`
+        : null,
+      counts.fileChanges > 0
+        ? counts.fileChanges === 1
+          ? "编辑了文件"
+          : `编辑了 ${counts.fileChanges} 批文件`
+        : null,
+      counts.other > 0
+        ? counts.other === 1
+          ? "调用了工具"
+          : `调用了 ${counts.other} 个工具`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("、");
+  }
+
+  return [
+    counts.fileReads > 0
+      ? counts.fileReads === 1
+        ? "Read a file"
+        : `Read ${counts.fileReads} files`
+      : null,
+    counts.commands > 0
+      ? counts.commands === 1
+        ? "Ran a command"
+        : "Ran multiple commands"
+      : null,
+    counts.searches > 0
+      ? counts.searches === 1
+        ? "Searched the web"
+        : `Ran ${counts.searches} searches`
+      : null,
+    counts.fileChanges > 0
+      ? counts.fileChanges === 1
+        ? "Edited files"
+        : `Edited ${counts.fileChanges} file batches`
+      : null,
+    counts.other > 0
+      ? counts.other === 1
+        ? "Called a tool"
+        : `Called ${counts.other} tools`
+      : null,
+  ]
+    .filter(Boolean)
     .join(" · ");
 }
 
-function processDetailsLabel(items: ThreadItem[], locale: Locale): string {
-  if (locale === "zh") {
-    return `执行过程 · ${items.length} 项`;
+type ProcessTimelineEntry =
+  | { item: ThreadItem; type: "item" }
+  | { id: string; items: ThreadItem[]; type: "actionGroup" };
+
+function processTimelineEntries(items: ThreadItem[]): ProcessTimelineEntry[] {
+  const entries: ProcessTimelineEntry[] = [];
+  let actionItems: ThreadItem[] = [];
+
+  const flushActions = () => {
+    if (actionItems.length === 0) {
+      return;
+    }
+
+    if (actionItems.length === 1) {
+      entries.push({ item: actionItems[0], type: "item" });
+    } else {
+      entries.push({
+        id: `${actionItems[0].id}-action-group`,
+        items: actionItems,
+        type: "actionGroup",
+      });
+    }
+    actionItems = [];
+  };
+
+  for (const item of items) {
+    if (isActionProcessItem(item)) {
+      actionItems.push(item);
+      continue;
+    }
+
+    flushActions();
+    entries.push({ item, type: "item" });
   }
 
-  return `Run process · ${items.length} item${items.length === 1 ? "" : "s"}`;
+  flushActions();
+  return entries;
 }
 
-function processToggleLabel(isExpanded: boolean, locale: Locale): string {
-  if (locale === "zh") {
-    return isExpanded ? "收起过程" : "展开过程";
-  }
+function TranscriptProcessActionGroup({
+  itemLabels,
+  items,
+  locale,
+}: {
+  itemLabels: TranscriptItemLabels;
+  items: ThreadItem[];
+  locale: Locale;
+}) {
+  const status = items.reduce<"completed" | "failed" | "inProgress">(
+    (current, item) => {
+      const itemStatus = processActionStatus(item);
+      if (current === "inProgress" || itemStatus === "inProgress") {
+        return "inProgress";
+      }
+      if (current === "failed" || itemStatus === "failed") {
+        return "failed";
+      }
+      return "completed";
+    },
+    "completed",
+  );
+  const commandOnly = items.every((item) => item.type === "commandExecution");
 
-  return isExpanded ? "Collapse process" : "Expand process";
+  return (
+    <details
+      className="process-action-group"
+      data-status={status}
+      {...(status === "inProgress" ? { open: true } : {})}
+    >
+      <summary>
+        <span className="process-action-group-icon" aria-hidden="true">
+          {commandOnly ? <Terminal size={16} /> : <ListTree size={16} />}
+        </span>
+        <span>{processActionGroupLabel(items, locale)}</span>
+      </summary>
+      <div className="process-action-group-items">
+        {items.map((item) => (
+          <TranscriptMessage
+            item={item}
+            itemLabels={itemLabels}
+            key={item.id}
+            locale={locale}
+            variant="process"
+          />
+        ))}
+      </div>
+    </details>
+  );
 }
 
 type TurnProcessPanelState = "collapsed" | "collapsing" | "expanded";
@@ -410,27 +576,30 @@ type TurnProcessPanelState = "collapsed" | "collapsing" | "expanded";
 const TURN_PROCESS_COLLAPSE_MS = 260;
 
 function TranscriptProcessGroup({
-  hasFinalOutput,
+  detailLabel,
   itemLabels,
   items,
+  label,
   locale,
+  status,
   turnId,
 }: {
-  hasFinalOutput: boolean;
+  detailLabel: string | null;
   itemLabels: TranscriptItemLabels;
   items: ThreadItem[];
+  label: string;
   locale: Locale;
+  status: Turn["status"];
   turnId: string;
 }) {
   const [panelState, setPanelState] = useState<TurnProcessPanelState>(() =>
-    hasFinalOutput ? "collapsed" : "expanded",
+    status === "inProgress" ? "expanded" : "collapsed",
   );
-  const [isAutoCollapsed, setIsAutoCollapsed] = useState(hasFinalOutput);
-  const hadFinalOutputRef = useRef(hasFinalOutput);
   const collapseTimerRef = useRef<number | null>(null);
   const processId = `turn-process-${turnId}`;
   const isExpanded = panelState === "expanded";
   const isRendered = panelState !== "collapsed";
+  const timelineEntries = processTimelineEntries(items);
 
   const clearCollapseTimer = () => {
     if (collapseTimerRef.current === null) {
@@ -452,14 +621,6 @@ function TranscriptProcessGroup({
     }, TURN_PROCESS_COLLAPSE_MS);
   };
 
-  useEffect(() => {
-    if (hasFinalOutput && !hadFinalOutputRef.current) {
-      setIsAutoCollapsed(true);
-      collapseWithAnimation();
-    }
-    hadFinalOutputRef.current = hasFinalOutput;
-  }, [hasFinalOutput]);
-
   useEffect(
     () => () => {
       clearCollapseTimer();
@@ -469,38 +630,31 @@ function TranscriptProcessGroup({
 
   const handleToggle = () => {
     if (isRendered) {
-      setIsAutoCollapsed(false);
       collapseWithAnimation();
       return;
     }
 
     clearCollapseTimer();
     setPanelState("expanded");
-    if (isAutoCollapsed) {
-      setIsAutoCollapsed(false);
-    }
   };
 
   return (
     <section
       className="turn-process-details"
-      data-auto-collapsed={isAutoCollapsed ? "true" : "false"}
       data-state={panelState}
+      data-status={status}
     >
       <button
         type="button"
         className="turn-process-summary"
         aria-controls={processId}
-        aria-expanded={isRendered}
+        aria-expanded={isExpanded}
         onClick={handleToggle}
       >
         <span className="turn-process-summary-main">
-          <span className="turn-process-title">
-            {processDetailsLabel(items, locale)}
-          </span>
+          <span className="turn-process-title">{label}</span>
+          {detailLabel ? <em>{detailLabel}</em> : null}
         </span>
-        <em>{turnProcessBuckets(items, locale)}</em>
-        <strong>{processToggleLabel(isExpanded, locale)}</strong>
       </button>
       <div
         className="turn-process-items-shell"
@@ -508,15 +662,24 @@ function TranscriptProcessGroup({
         id={processId}
       >
         <div className="turn-process-items">
-          {items.map((item) => (
-            <TranscriptMessage
-              item={item}
-              itemLabels={itemLabels}
-              key={item.id}
-              locale={locale}
-              variant="process"
-            />
-          ))}
+          {timelineEntries.map((entry) =>
+            entry.type === "actionGroup" ? (
+              <TranscriptProcessActionGroup
+                itemLabels={itemLabels}
+                items={entry.items}
+                key={entry.id}
+                locale={locale}
+              />
+            ) : (
+              <TranscriptMessage
+                item={entry.item}
+                itemLabels={itemLabels}
+                key={entry.item.id}
+                locale={locale}
+                variant="process"
+              />
+            ),
+          )}
         </div>
       </div>
     </section>
@@ -539,10 +702,10 @@ export function Transcript({
   modeTitleLabel,
   mode,
   onModeChange,
-  onStop,
+  onStop: _onStop,
   planLabel,
   reasoningLabel,
-  stopLabel,
+  stopLabel: _stopLabel,
   thread,
   streamingText,
   youLabel,
@@ -551,32 +714,27 @@ export function Transcript({
   const followFrameIdsRef = useRef<number[]>([]);
   const previousThreadIdRef = useRef<string | null>(null);
   const shouldFollowRef = useRef(true);
+  const [isScrolledUp, setIsScrolledUp] = useState(false);
   const items = thread?.turns.flatMap((turn) => turn.items) ?? [];
   const lastTurn = thread?.turns[thread.turns.length - 1] ?? null;
-  const hasVisibleInProgressItem = Boolean(
+  const hasVisibleProcessActivity = Boolean(
     lastTurn?.items.some((item) => {
-      if (
-        item.type === "commandExecution" ||
-        item.type === "fileChange" ||
-        item.type === "mcpToolCall" ||
-        item.type === "dynamicToolCall" ||
-        item.type === "collabAgentToolCall"
-      ) {
-        return item.status === "inProgress";
+      if (isActionProcessItem(item)) {
+        return true;
       }
 
-      return (
-        item.type === "reasoning" &&
-        item.summary.length === 0 &&
-        item.content.length === 0
-      );
+      if (item.type !== "reasoning") {
+        return false;
+      }
+
+      return hasDisplayableReasoning(item);
     }),
   );
   const shouldShowThinking =
     Boolean(thread) &&
     !streamingText &&
     lastTurn?.status === "inProgress" &&
-    !hasVisibleInProgressItem;
+    !hasVisibleProcessActivity;
   const itemLabels: TranscriptItemLabels = {
     commandLabel,
     crewonLabel,
@@ -607,6 +765,9 @@ export function Transcript({
     const previousThreadId = previousThreadIdRef.current;
     const isThreadChange = previousThreadId !== thread.id;
     previousThreadIdRef.current = thread.id;
+    if (isThreadChange) {
+      setIsScrolledUp(false);
+    }
 
     const scroller = transcriptScroller(anchor);
     let isNearBottom = true;
@@ -653,8 +814,10 @@ export function Transcript({
       const distanceFromBottom =
         scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
       shouldFollowRef.current = distanceFromBottom < 180;
+      setIsScrolledUp(distanceFromBottom >= 180);
     };
     scroller.addEventListener("scroll", updateFollowState, { passive: true });
+    updateFollowState();
 
     if (typeof ResizeObserver === "undefined") {
       return () => {
@@ -717,7 +880,7 @@ export function Transcript({
           </div>
         ) : null}
         {thread.turns.map((turn, turnIndex) => {
-          const durationLabel = turnDurationLabel(turn.durationMs, locale);
+          const durationLabel = turnDurationLabel(turn.durationMs);
           const dividerDetailLabel = durationLabel ?? turnTimeLabel(turn, locale);
           const dividerLabel = turnLabel(turn, locale);
           const finalAgentMessage = finalAgentMessageForTurn(turn);
@@ -725,19 +888,16 @@ export function Transcript({
           const processRender = turnProcessRenderItems(turn, finalAgentSourceIds);
           const processItems = processRender.items;
           const firstProcessIndex = processRender.firstIndex;
-          const turnStreamingText = turn.id === lastTurn?.id ? streamingText : "";
-          const processHasFinalOutput = hasFinalAgentOutput(
-            turn,
-            turnStreamingText,
-          );
           const processGroup =
             processItems.length > 0 ? (
               <TranscriptProcessGroup
-                hasFinalOutput={processHasFinalOutput}
+                detailLabel={dividerDetailLabel}
                 itemLabels={itemLabels}
                 items={processItems}
                 key={`${turn.id}-process`}
+                label={dividerLabel}
                 locale={locale}
+                status={turn.status}
                 turnId={turn.id}
               />
             ) : null;
@@ -748,13 +908,19 @@ export function Transcript({
               aria-label={`${dividerLabel} ${turnIndex + 1}`}
               key={turn.id}
             >
-              {shouldShowTurnDivider(turn) ? (
+              {processItems.length === 0 && shouldShowTurnDivider(turn) ? (
                 <div className="turn-divider" data-status={turn.status}>
                   <span>{dividerLabel}</span>
-                  <em>{dividerDetailLabel}</em>
+                  {dividerDetailLabel ? <em>{dividerDetailLabel}</em> : null}
                 </div>
               ) : null}
               {turn.items.map((item, itemIndex) => {
+                // Empty / markup-only reasoning must not leak outside the
+                // process group as a fake "Thinking" message.
+                if (item.type === "reasoning" && !hasProcessReasoning(item)) {
+                  return null;
+                }
+
                 if (isTurnProcessSourceItem(item, finalAgentSourceIds)) {
                   if (itemIndex !== firstProcessIndex) {
                     return null;
@@ -812,8 +978,6 @@ export function Transcript({
           <TranscriptThinkingMessage
             crewonLabel={crewonLabel}
             locale={locale}
-            stopLabel={stopLabel}
-            onStop={onStop}
           />
         ) : null}
         <div
@@ -823,6 +987,25 @@ export function Transcript({
           ref={followAnchorRef}
         />
       </div>
+      {isScrolledUp ? (
+        <button
+          aria-label={locale === "zh" ? "回到底部" : "Scroll to bottom"}
+          className="transcript-scroll-bottom"
+          data-testid="transcript-scroll-bottom"
+          onClick={() => {
+            shouldFollowRef.current = true;
+            setIsScrolledUp(false);
+            const anchor = followAnchorRef.current;
+            if (anchor) {
+              scheduleTranscriptFollow(anchor, followFrameIdsRef);
+            }
+          }}
+          title={locale === "zh" ? "回到底部" : "Scroll to bottom"}
+          type="button"
+        >
+          <ArrowDown size={15} strokeWidth={2} aria-hidden="true" />
+        </button>
+      ) : null}
     </main>
   );
 }

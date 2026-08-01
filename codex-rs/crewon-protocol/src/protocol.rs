@@ -2807,7 +2807,8 @@ fn multi_agent_version_from_items(
             RolloutItem::SessionMeta(_)
             | RolloutItem::ResponseItem(_)
             | RolloutItem::Compacted(_)
-            | RolloutItem::EventMsg(_) => None,
+            | RolloutItem::EventMsg(_)
+            | RolloutItem::UserInputOnceMarker(_) => None,
         })
     })
 }
@@ -2909,6 +2910,42 @@ pub enum RolloutItem {
     Compacted(CompactedItem),
     TurnContext(TurnContextItem),
     EventMsg(EventMsg),
+    UserInputOnceMarker(UserInputOnceMarker),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+/// Durable marker for a default-off experimental writer. Activation requires defined
+/// downgrade/rollback compatibility and an explicit feature or release gate.
+pub struct UserInputOnceMarker {
+    pub version: u8,
+    #[serde(
+        default,
+        skip_serializing_if = "UserInputOnceMarkerPhase::is_admission"
+    )]
+    pub phase: UserInputOnceMarkerPhase,
+    pub thread_id: ThreadId,
+    pub client_id: String,
+    pub payload_hash: String,
+    pub turn_id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum UserInputOnceMarkerPhase {
+    #[default]
+    Admission,
+    ExecutionFence,
+    #[serde(other)]
+    Unknown,
+}
+
+impl UserInputOnceMarkerPhase {
+    fn is_admission(&self) -> bool {
+        matches!(self, Self::Admission)
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, TS)]
@@ -4179,6 +4216,79 @@ mod tests {
         let decoded: SessionMeta =
             serde_json::from_value(legacy).expect("deserialize legacy session meta");
         assert_eq!(decoded.client_version, meta.client_version);
+    }
+
+    #[test]
+    fn user_input_once_marker_phase_deserialization_is_backward_and_forward_compatible() {
+        let thread_id = ThreadId::new();
+        let legacy_admission = json!({
+            "version": 1,
+            "threadId": thread_id,
+            "clientId": "client-1",
+            "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "turnId": "turn-1"
+        });
+        let future_phase = json!({
+            "version": 3,
+            "phase": "futureExecutionPhase",
+            "threadId": thread_id,
+            "clientId": "client-2",
+            "payloadHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "turnId": "turn-2"
+        });
+
+        let admission: UserInputOnceMarker =
+            serde_json::from_value(legacy_admission).expect("deserialize legacy admission");
+        let future: UserInputOnceMarker =
+            serde_json::from_value(future_phase).expect("deserialize future marker phase");
+
+        assert_eq!(admission.phase, UserInputOnceMarkerPhase::Admission);
+        assert_eq!(future.phase, UserInputOnceMarkerPhase::Unknown);
+    }
+
+    #[test]
+    fn user_input_once_marker_phase_serialization_preserves_wire_shape() {
+        let thread_id = ThreadId::new();
+        let admission = UserInputOnceMarker {
+            version: 2,
+            phase: UserInputOnceMarkerPhase::Admission,
+            thread_id,
+            client_id: "client-1".to_string(),
+            payload_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                .to_string(),
+            turn_id: "turn-1".to_string(),
+        };
+        let execution_fence = UserInputOnceMarker {
+            version: 2,
+            phase: UserInputOnceMarkerPhase::ExecutionFence,
+            thread_id,
+            client_id: "client-2".to_string(),
+            payload_hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                .to_string(),
+            turn_id: "turn-2".to_string(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(admission).expect("serialize admission marker"),
+            json!({
+                "version": 2,
+                "threadId": thread_id,
+                "clientId": "client-1",
+                "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "turnId": "turn-1"
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(execution_fence).expect("serialize execution fence"),
+            json!({
+                "version": 2,
+                "phase": "executionFence",
+                "threadId": thread_id,
+                "clientId": "client-2",
+                "payloadHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "turnId": "turn-2"
+            })
+        );
     }
 
     #[test]

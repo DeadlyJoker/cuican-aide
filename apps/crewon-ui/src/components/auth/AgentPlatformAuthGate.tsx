@@ -72,6 +72,7 @@ export function clearWeComCallbackParams(params: URLSearchParams) {
   params.delete("wecom_ticket");
   params.delete("code");
   params.delete("state");
+  params.delete("sso_error");
   const query = params.toString();
   window.history.replaceState(
     {},
@@ -196,9 +197,9 @@ export function AgentPlatformAuthScreen({
           >
             <Building2 aria-hidden="true" />
             {busy
-              ? "正在连接企业微信…"
+              ? `正在连接${wecomConfig.label}…`
               : wecomConfig.enabled
-                ? "使用企业微信登录"
+                ? `使用${wecomConfig.label}登录`
                 : "企业微信（配置后启用）"}
           </button>
           {!wecomConfig.enabled && wecomConfig.reason ? (
@@ -337,6 +338,18 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
         const config = await readWeComLoginConfig();
         if (!cancelled) setWeComConfig(config);
         const params = new URLSearchParams(window.location.search);
+        const ssoError = params.get("sso_error");
+        if (ssoError) {
+          setError(
+            ssoError === "access_denied"
+              ? "企业账号暂时无法进入 CrewON，请重试；如仍失败请联系管理员。"
+              : ssoError === "temporarily_unavailable"
+                ? "企业登录服务暂时不可用，请稍后重试。"
+                : "企业登录未完成，请重新扫码登录。",
+          );
+          clearWeComCallbackParams(params);
+          return;
+        }
         const ticket = params.get("wecom_ticket");
         if (ticket) {
           try {
@@ -465,8 +478,13 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
   const wecomLinked = user.linked_providers?.includes("wecom") ?? false;
   const needsPassword = user.password_login_enabled === false;
   const logout = () => {
-    logoutAgentPlatform();
-    setUser(null);
+    setBusy(true);
+    void logoutAgentPlatform()
+      .catch(() => undefined)
+      .finally(() => {
+        setUser(null);
+        setBusy(false);
+      });
   };
   return (
     <AgentPlatformAccountContext.Provider
@@ -484,7 +502,7 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
     >
       {children}
       <aside className="crewon-session-pill" aria-label="当前企业账号">
-        <span>{user.nickname || user.username}</span>
+        <span>{user.display_name || user.nickname || user.username}</span>
         <small>{wecomLinked ? "企业微信已绑定" : user.role}</small>
         {needsPassword ? (
           <button

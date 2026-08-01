@@ -51,6 +51,7 @@ mod deprecation_notice;
 mod exec;
 mod exec_policy;
 mod fork_thread;
+mod governed_context;
 #[cfg(not(target_os = "windows"))]
 mod guardian_review;
 mod hierarchical_agents;
@@ -118,6 +119,8 @@ mod unified_exec;
 #[cfg(unix)]
 mod unified_exec_zsh_fork_approvals;
 mod unstable_features_warning;
+mod user_input_once;
+mod user_input_once_writer_faults;
 mod user_notification;
 mod user_shell_cmd;
 mod view_image;

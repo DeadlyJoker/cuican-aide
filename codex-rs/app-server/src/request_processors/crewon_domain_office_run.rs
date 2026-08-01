@@ -39,9 +39,30 @@ use sha2::Sha256;
 use std::io;
 use std::path::PathBuf;
 use tokio::fs;
-use tokio::time::Duration;
-use tokio::time::sleep;
 use uuid::Uuid;
+
+#[path = "crewon_domain_office_dispatch_ambiguity.rs"]
+mod dispatch_ambiguity;
+#[path = "crewon_domain_office_run_dispatch_receipt.rs"]
+mod dispatch_receipt;
+#[path = "crewon_domain_office_dispatch_recovery_prepare.rs"]
+mod dispatch_recovery_prepare;
+#[path = "crewon_domain_office_dispatch_recovery_reload.rs"]
+mod dispatch_recovery_reload;
+#[path = "crewon_domain_office_dispatch_recovery_scan.rs"]
+mod dispatch_recovery_scan;
+pub(crate) use dispatch_ambiguity::EXECUTION_UNKNOWN_MESSAGE;
+pub(crate) use dispatch_ambiguity::mark_auto_dispatch_intent_execution_unknown;
+pub(crate) use dispatch_ambiguity::quarantine_dispatch_execution_unknown;
+pub(crate) use dispatch_receipt::commit_delegation_admitted;
+pub(crate) use dispatch_receipt::fail_delegation_starting;
+pub(crate) use dispatch_receipt::quarantine_delegation_execution_unknown;
+pub(crate) use dispatch_receipt::reserve_delegation_starting;
+pub(crate) use dispatch_recovery_prepare::prepare_recovered_delegation_dispatch;
+pub(crate) use dispatch_recovery_reload::ReloadedOfficeDispatchRecovery;
+pub(crate) use dispatch_recovery_reload::reload_exact_office_dispatch_recovery;
+pub(crate) use dispatch_recovery_scan::ScannedOfficeDispatchRecovery;
+pub(crate) use dispatch_recovery_scan::scan_exact_office_dispatch_recovery;
 
 use super::DomainKind;
 use super::OfficeRunSyncUpdate;
@@ -49,10 +70,12 @@ use super::apply_office_artifact_file_fingerprints;
 use super::domain_directory;
 use super::list_records;
 use super::map_io_error;
+use super::office_record_lock;
 use super::office_thread_id;
 use super::read_record;
 use super::resolve_office_member_runtimes;
 use super::save_record;
+use super::update_record;
 use super::validate_record_file_path;
 use crate::error_code::invalid_params;
 
@@ -70,7 +93,6 @@ const MAX_OFFICE_DELEGATIONS: usize = 8;
 const MAX_OFFICE_UPDATE_PARSE_CHARS: usize = 12_000;
 const OFFICE_RUN_INDEX_DIRECTORY: &str = "office-runs";
 const OFFICE_RUN_INDEX_FILE: &str = "index.json";
-const OFFICE_RUN_INDEX_LOCK_FILE: &str = "index.lock";
 const OFFICE_SCHEDULER_FILE: &str = "scheduler.json";
 const OFFICE_CHILD_DISPATCH_LEASE_SECONDS: i64 = 120;
 const MAX_OFFICE_SCHEDULER_INTENTS: usize = 256;
@@ -159,7 +181,7 @@ pub(crate) async fn preview_member_context(
         .and_then(JsonValue::as_str)
         .map(str::trim)
         .filter(|profile| !profile.is_empty())
-        .map(|profile| truncate_chars(profile, 640))
+        .map(|profile| truncate_chars(profile, /*max_chars*/ 640))
         .unwrap_or_else(|| {
             if is_zh {
                 "未保存可用的 Agent profile。".to_string()
@@ -172,7 +194,7 @@ pub(crate) async fn preview_member_context(
         .map(str::trim)
         .filter(|task| !task.is_empty())
         .unwrap_or(&run_id);
-    let memory_context = office_memory::build_member_prompt_context(
+    let memory_context = office_memory::preview_member_prompt_context(
         &cwd,
         &config,
         task,
@@ -215,6 +237,7 @@ pub(crate) struct PreparedOfficeRun {
     pub(crate) run_id: String,
     pub(crate) prompt: String,
     pub(crate) client_user_message_id: Option<String>,
+    pub(crate) dispatch_receipt_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -378,14 +401,14 @@ struct OfficeRunIndexEntry {
     updated_at: String,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OfficeSchedulerQueue {
     version: u32,
     intents: Vec<OfficeSchedulerIntent>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OfficeSchedulerIntent {
     pub(crate) intent_id: String,
@@ -422,6 +445,7 @@ pub(crate) struct OfficeSchedulerIntent {
 
 struct AppendQueuedRunParams<'a> {
     message: JsonValue,
+    message_mode: &'a RunMessageMode,
     text: &'a str,
     locale: Option<&'a str>,
     thread_id: &'a str,
@@ -430,6 +454,14 @@ struct AppendQueuedRunParams<'a> {
     loop_iteration: u64,
     loop_max_iterations: u64,
     memory_refs: Option<JsonValue>,
+}
+
+enum RunMessageMode {
+    Direct,
+    Submitted {
+        client_user_message_id: String,
+        dispatch_receipt_id: String,
+    },
 }
 
 struct AppendQueuedDelegationParams<'a> {
@@ -522,6 +554,31 @@ struct OfficeDelegationPromptParams<'a> {
 pub(crate) async fn prepare(
     params: OfficeRunParams,
 ) -> Result<PreparedOfficeRun, JSONRPCErrorError> {
+    prepare_with_message_mode(params, RunMessageMode::Direct).await
+}
+
+pub(crate) async fn prepare_submitted_message(
+    params: OfficeRunParams,
+    dispatch_receipt_id: String,
+) -> Result<PreparedOfficeRun, JSONRPCErrorError> {
+    let client_user_message_id = params
+        .client_user_message_id
+        .clone()
+        .ok_or_else(|| invalid_params("submitted Office message has no clientUserMessageId"))?;
+    prepare_with_message_mode(
+        params,
+        RunMessageMode::Submitted {
+            client_user_message_id,
+            dispatch_receipt_id,
+        },
+    )
+    .await
+}
+
+async fn prepare_with_message_mode(
+    params: OfficeRunParams,
+    message_mode: RunMessageMode,
+) -> Result<PreparedOfficeRun, JSONRPCErrorError> {
     let OfficeRunParams {
         cwd,
         mut config,
@@ -552,6 +609,7 @@ pub(crate) async fn prepare(
         &mut config,
         AppendQueuedRunParams {
             message,
+            message_mode: &message_mode,
             text: &text,
             locale: locale.as_deref(),
             thread_id: &thread_id,
@@ -583,6 +641,13 @@ pub(crate) async fn prepare(
         run_id,
         prompt,
         client_user_message_id,
+        dispatch_receipt_id: match message_mode {
+            RunMessageMode::Direct => None,
+            RunMessageMode::Submitted {
+                dispatch_receipt_id,
+                ..
+            } => Some(dispatch_receipt_id),
+        },
     })
 }
 
@@ -676,7 +741,7 @@ async fn prepare_retry_with_policy(
         None => retry_message(&text, locale.as_deref()),
     };
 
-    let thread_id = resolve_run_thread_id(&config, None)?;
+    let thread_id = resolve_run_thread_id(&config, /*requested_thread_id*/ None)?;
     let run_id = format!("office-run-{}", Uuid::new_v4());
     let memory_context =
         office_memory::build_prompt_context(&cwd, &config, &text, locale.as_deref()).await?;
@@ -685,6 +750,7 @@ async fn prepare_retry_with_policy(
         &mut config,
         AppendQueuedRunParams {
             message,
+            message_mode: &RunMessageMode::Direct,
             text: &text,
             locale: locale.as_deref(),
             thread_id: &thread_id,
@@ -716,6 +782,7 @@ async fn prepare_retry_with_policy(
         run_id,
         prompt,
         client_user_message_id,
+        dispatch_receipt_id: None,
     })
 }
 
@@ -2121,7 +2188,7 @@ pub(crate) async fn mark_started(
         run_id,
         "running",
         Some(("turnId", JsonValue::String(turn_id.to_string()))),
-        None,
+        /*error*/ None,
     )?;
     let thread_id = office_thread_id(&config).unwrap_or_default().to_string();
     let file_path = save_record(DomainKind::Office, cwd, config.clone()).await?;
@@ -2150,7 +2217,7 @@ pub(crate) async fn mark_failed(
         &mut config,
         run_id,
         "failed",
-        None,
+        /*extra_field*/ None,
         Some(truncate_chars(message, RUN_ERROR_CHARS)),
     )?;
     let workspace = workspace_object_mut(&mut config)?;
@@ -2195,7 +2262,7 @@ pub(crate) async fn mark_delegation_started(
         delegation_id,
         "running",
         Some(turn_id),
-        None,
+        /*error*/ None,
     )?;
     let file_path = save_record(DomainKind::Office, cwd, config.clone()).await?;
     Ok((file_path, config))
@@ -2215,7 +2282,7 @@ pub(crate) async fn mark_delegation_failed(
         run_id,
         delegation_id,
         "failed",
-        None,
+        /*turn_id*/ None,
         Some(message),
     )?;
     save_record(DomainKind::Office, cwd, config).await?;
@@ -2404,14 +2471,16 @@ pub(crate) async fn sync_thread_turn(
     thread_id: &str,
     turn: &Turn,
 ) -> Result<usize, JSONRPCErrorError> {
-    Ok(sync_thread_turn_updates(cwd, thread_id, turn).await?.len())
+    Ok(drain_thread_turn_updates(cwd, thread_id, turn).await?.len())
 }
 
-pub(crate) async fn sync_thread_turn_updates(
+pub(crate) async fn drain_thread_turn_updates(
     cwd: &str,
     thread_id: &str,
     turn: &Turn,
 ) -> Result<Vec<OfficeRunSyncUpdate>, JSONRPCErrorError> {
+    // The caller holds the Office authority guard. Terminal sync only updates existing records,
+    // so persist through their already-resolved paths instead of re-entering save resolution.
     let mut updates = sync_thread_turn_from_index(cwd, thread_id, turn).await?;
     let skip_indexed_run_scan = !updates.is_empty();
 
@@ -2419,9 +2488,6 @@ pub(crate) async fn sync_thread_turn_updates(
     let mut entries = match fs::read_dir(&directory).await {
         Ok(entries) => entries,
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            if !updates.is_empty() {
-                queue_auto_dispatch_intent_after_sync(cwd, thread_id, turn, "terminalSync").await?;
-            }
             return Ok(updates);
         }
         Err(err) => return Err(map_io_error(err)),
@@ -2465,7 +2531,8 @@ pub(crate) async fn sync_thread_turn_updates(
         let mut run_index_entry = None;
         let mut synced_count = 0usize;
         if should_sync_run {
-            let details = sync_run_status(&mut config, None, turn, locale)?;
+            let details =
+                sync_run_status(&mut config, /*requested_run_id*/ None, turn, locale)?;
             office_memory::apply_update_from_turn(cwd, &mut config, &details, turn).await?;
             run_index_entry = Some(OfficeRunIndexEntry {
                 run_id: details.run_id,
@@ -2488,7 +2555,8 @@ pub(crate) async fn sync_thread_turn_updates(
             continue;
         }
         apply_office_artifact_file_fingerprints(cwd, &mut config).await?;
-        let file_path = save_record(DomainKind::Office, cwd, config.clone()).await?;
+        let file_path =
+            update_record(DomainKind::Office, cwd, &record.file_path, config.clone()).await?;
         if let Some(mut entry) = run_index_entry {
             entry.file_path.clone_from(&file_path);
             upsert_run_index(cwd, entry).await?;
@@ -2496,9 +2564,6 @@ pub(crate) async fn sync_thread_turn_updates(
         updates.push(OfficeRunSyncUpdate { file_path, config });
     }
 
-    if !updates.is_empty() {
-        queue_auto_dispatch_intent_after_sync(cwd, thread_id, turn, "terminalSync").await?;
-    }
     Ok(updates)
 }
 
@@ -3014,7 +3079,7 @@ pub(crate) async fn read_automation_record_by_identifier(
     let (records, _) = list_records(
         DomainKind::Automation,
         cwd,
-        None,
+        /*cursor*/ None,
         Some(AUTO_SYNC_OFFICE_SCAN_LIMIT as u32),
     )
     .await?;
@@ -3189,7 +3254,10 @@ async fn latest_sync_config(
         office_thread_id(&config),
     )
     .await?
-        && let Some(config) = read_indexed_office_config(&index_entry).await?
+        && let Some(config) = read_indexed_office_config(cwd, &index_entry).await?
+        && requested_run_id.is_none_or(|run_id| office_has_run_id(&config, run_id))
+        && lookup_turn_id.is_none_or(|turn_id| office_has_turn_id(&config, turn_id))
+        && office_thread_id(&config) == Some(index_entry.thread_id.as_str())
     {
         return Ok(config);
     }
@@ -3247,20 +3315,22 @@ async fn sync_thread_turn_from_index(
     thread_id: &str,
     turn: &Turn,
 ) -> Result<Vec<OfficeRunSyncUpdate>, JSONRPCErrorError> {
-    let entries = matching_index_entries(cwd, None, Some(&turn.id), Some(thread_id)).await?;
+    let entries =
+        matching_index_entries(cwd, /*run_id*/ None, Some(&turn.id), Some(thread_id)).await?;
     let mut updates = Vec::new();
     for entry in entries {
-        let Some(mut config) = read_indexed_office_config(&entry).await? else {
+        let Some(mut config) = read_indexed_office_config(cwd, &entry).await? else {
             continue;
         };
         if office_thread_id(&config) != Some(thread_id) || !office_has_turn_id(&config, &turn.id) {
             continue;
         }
         let locale = infer_office_locale(&config);
-        let details = sync_run_status(&mut config, None, turn, locale)?;
+        let details = sync_run_status(&mut config, /*requested_run_id*/ None, turn, locale)?;
         office_memory::apply_update_from_turn(cwd, &mut config, &details, turn).await?;
         apply_office_artifact_file_fingerprints(cwd, &mut config).await?;
-        let file_path = save_record(DomainKind::Office, cwd, config.clone()).await?;
+        let file_path =
+            update_record(DomainKind::Office, cwd, &entry.file_path, config.clone()).await?;
         upsert_run_index(
             cwd,
             OfficeRunIndexEntry {
@@ -3309,9 +3379,20 @@ async fn matching_index_entries(
 }
 
 async fn read_indexed_office_config(
+    cwd: &str,
     entry: &OfficeRunIndexEntry,
 ) -> Result<Option<JsonValue>, JSONRPCErrorError> {
-    let path = std::path::PathBuf::from(&entry.file_path);
+    let path = validate_record_file_path(cwd, DomainKind::Office, &entry.file_path)?;
+    let metadata = match fs::symlink_metadata(&path).await {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(map_io_error(err)),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(invalid_params(
+            "office run index filePath must reference a regular Office record",
+        ));
+    }
     let Some(record) = read_record(DomainKind::Office, &path).await? else {
         return Ok(None);
     };
@@ -3330,40 +3411,14 @@ async fn upsert_run_index(cwd: &str, entry: OfficeRunIndexEntry) -> Result<(), J
     write_run_index(cwd, &index).await
 }
 
-struct OfficeRunIndexLock {
-    path: PathBuf,
-}
-
-impl Drop for OfficeRunIndexLock {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
-async fn acquire_run_index_lock(cwd: &str) -> Result<OfficeRunIndexLock, JSONRPCErrorError> {
-    let path = office_run_index_lock_path(cwd)?;
+async fn acquire_run_index_lock(
+    cwd: &str,
+) -> Result<office_record_lock::OfficeRecordMutationGuard, JSONRPCErrorError> {
+    let path = office_run_index_path(cwd)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).await.map_err(map_io_error)?;
     }
-
-    for _ in 0..200 {
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .await
-        {
-            Ok(_) => return Ok(OfficeRunIndexLock { path }),
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                sleep(Duration::from_millis(10)).await;
-            }
-            Err(err) => return Err(map_io_error(err)),
-        }
-    }
-
-    Err(crate::error_code::internal_error(
-        "timed out waiting for office run index lock",
-    ))
+    office_record_lock::lock(&path).await.map_err(map_io_error)
 }
 
 async fn read_run_index(cwd: &str) -> Result<OfficeRunIndex, JSONRPCErrorError> {
@@ -3401,7 +3456,7 @@ pub(crate) async fn queue_auto_dispatch_intent(
     source_thread_id: &str,
     source_turn_id: &str,
     reason: &str,
-) -> Result<(), JSONRPCErrorError> {
+) -> Result<String, JSONRPCErrorError> {
     let source_thread_id = source_thread_id.trim();
     let source_turn_id = source_turn_id.trim();
     if source_thread_id.is_empty() || source_turn_id.is_empty() {
@@ -3417,57 +3472,75 @@ pub(crate) async fn queue_auto_dispatch_intent(
     if let Some(intent) = queue.intents.iter_mut().find(|intent| {
         intent.source_thread_id == source_thread_id && intent.source_turn_id == source_turn_id
     }) {
-        if intent.status == OFFICE_SCHEDULER_INTENT_STATUS_DISPATCHED
-            || office_scheduler_intent_has_active_lease(intent, now)
-        {
-            return Ok(());
+        let can_requeue = match intent.status.as_str() {
+            OFFICE_SCHEDULER_INTENT_STATUS_FAILED => true,
+            OFFICE_SCHEDULER_INTENT_STATUS_DISPATCHING => {
+                !office_scheduler_intent_has_active_lease(intent, now)
+            }
+            OFFICE_SCHEDULER_INTENT_STATUS_PENDING | OFFICE_SCHEDULER_INTENT_STATUS_DISPATCHED => {
+                false
+            }
+            _ => false,
+        };
+        if !can_requeue {
+            return Ok(intent.intent_id.clone());
         }
+        let intent_id = intent.intent_id.clone();
         intent.status = OFFICE_SCHEDULER_INTENT_STATUS_PENDING.to_string();
         intent.reason = truncate_chars(reason, MAX_PROMPT_TITLE_CHARS);
         intent.updated_at = now_timestamp;
         intent.last_error = None;
         clear_office_scheduler_intent_lease(intent);
-    } else {
-        queue.intents.insert(
-            0,
-            OfficeSchedulerIntent {
-                intent_id: format!("office-scheduler-{}", Uuid::new_v4()),
-                source_thread_id: source_thread_id.to_string(),
-                source_turn_id: source_turn_id.to_string(),
-                status: OFFICE_SCHEDULER_INTENT_STATUS_PENDING.to_string(),
-                reason: truncate_chars(reason, MAX_PROMPT_TITLE_CHARS),
-                attempts: 0,
-                created_at: now_timestamp.clone(),
-                updated_at: now_timestamp,
-                last_error: None,
-                run_id: None,
-                dispatch_kind: None,
-                delegation_id: None,
-                verification_check_id: None,
-                file_path: None,
-                dispatched_thread_id: None,
-                dispatched_turn_id: None,
-                lease_id: None,
-                lease_started_at: None,
-                lease_expires_at: None,
-            },
-        );
+        write_scheduler_queue(cwd, &mut queue).await?;
+        return Ok(intent_id);
     }
-    write_scheduler_queue(cwd, &mut queue).await
+    let intent_id = format!("office-scheduler-{}", Uuid::new_v4());
+    queue.intents.insert(
+        0,
+        OfficeSchedulerIntent {
+            intent_id: intent_id.clone(),
+            source_thread_id: source_thread_id.to_string(),
+            source_turn_id: source_turn_id.to_string(),
+            status: OFFICE_SCHEDULER_INTENT_STATUS_PENDING.to_string(),
+            reason: truncate_chars(reason, MAX_PROMPT_TITLE_CHARS),
+            attempts: 0,
+            created_at: now_timestamp.clone(),
+            updated_at: now_timestamp,
+            last_error: None,
+            run_id: None,
+            dispatch_kind: None,
+            delegation_id: None,
+            verification_check_id: None,
+            file_path: None,
+            dispatched_thread_id: None,
+            dispatched_turn_id: None,
+            lease_id: None,
+            lease_started_at: None,
+            lease_expires_at: None,
+        },
+    );
+    write_scheduler_queue(cwd, &mut queue).await?;
+    Ok(intent_id)
 }
 
 pub(crate) async fn claim_auto_dispatch_intent(
     cwd: &str,
+    intent_id: &str,
     source_thread_id: &str,
     source_turn_id: &str,
     lease_id: &str,
 ) -> Result<bool, JSONRPCErrorError> {
+    let intent_id = intent_id.trim();
     let source_thread_id = source_thread_id.trim();
     let source_turn_id = source_turn_id.trim();
     let lease_id = lease_id.trim();
-    if source_thread_id.is_empty() || source_turn_id.is_empty() || lease_id.is_empty() {
+    if intent_id.is_empty()
+        || source_thread_id.is_empty()
+        || source_turn_id.is_empty()
+        || lease_id.is_empty()
+    {
         return Err(invalid_params(
-            "scheduler source ids and lease id must not be empty",
+            "scheduler intent, source, and lease ids must not be empty",
         ));
     }
 
@@ -3475,7 +3548,9 @@ pub(crate) async fn claim_auto_dispatch_intent(
     let mut queue = read_scheduler_queue(cwd).await?;
     let now = Utc::now();
     let Some(intent) = queue.intents.iter_mut().find(|intent| {
-        intent.source_thread_id == source_thread_id && intent.source_turn_id == source_turn_id
+        intent.intent_id == intent_id
+            && intent.source_thread_id == source_thread_id
+            && intent.source_turn_id == source_turn_id
     }) else {
         return Ok(false);
     };
@@ -3511,95 +3586,175 @@ pub(crate) async fn pending_auto_dispatch_intents(
 
 pub(crate) async fn mark_auto_dispatch_intent_dispatched(
     cwd: &str,
+    intent_id: &str,
     source_thread_id: &str,
     source_turn_id: &str,
+    lease_id: &str,
     dispatched: AutoDispatchIntentDispatched<'_>,
 ) -> Result<(), JSONRPCErrorError> {
+    let intent_id = intent_id.trim();
+    let source_thread_id = source_thread_id.trim();
+    let source_turn_id = source_turn_id.trim();
+    let lease_id = lease_id.trim();
+    validate_scheduler_dispatch_lease_params(
+        intent_id,
+        source_thread_id,
+        source_turn_id,
+        lease_id,
+    )?;
+
     let _lock = acquire_run_index_lock(cwd).await?;
     let mut queue = read_scheduler_queue(cwd).await?;
     let now = timestamp();
-    if let Some(intent) = queue.intents.iter_mut().find(|intent| {
-        intent.source_thread_id == source_thread_id && intent.source_turn_id == source_turn_id
-    }) {
-        intent.status = OFFICE_SCHEDULER_INTENT_STATUS_DISPATCHED.to_string();
-        intent.updated_at = now;
-        intent.run_id = Some(dispatched.run_id.to_string());
-        intent.dispatch_kind = Some(dispatched.dispatch_kind.to_string());
-        intent.delegation_id = dispatched.delegation_id.map(str::to_string);
-        intent.verification_check_id = dispatched.verification_check_id.map(str::to_string);
-        intent.file_path = Some(dispatched.file_path.to_string());
-        intent.dispatched_thread_id = Some(dispatched.dispatched_thread_id.to_string());
-        intent.dispatched_turn_id = Some(dispatched.dispatched_turn_id.to_string());
-        intent.last_error = None;
-        clear_office_scheduler_intent_lease(intent);
-    } else {
-        queue.intents.insert(
-            0,
-            OfficeSchedulerIntent {
-                intent_id: format!("office-scheduler-{}", Uuid::new_v4()),
-                source_thread_id: source_thread_id.to_string(),
-                source_turn_id: source_turn_id.to_string(),
-                status: OFFICE_SCHEDULER_INTENT_STATUS_DISPATCHED.to_string(),
-                reason: "dispatchResult".to_string(),
-                attempts: 1,
-                created_at: now.clone(),
-                updated_at: now,
-                last_error: None,
-                run_id: Some(dispatched.run_id.to_string()),
-                dispatch_kind: Some(dispatched.dispatch_kind.to_string()),
-                delegation_id: dispatched.delegation_id.map(str::to_string),
-                verification_check_id: dispatched.verification_check_id.map(str::to_string),
-                file_path: Some(dispatched.file_path.to_string()),
-                dispatched_thread_id: Some(dispatched.dispatched_thread_id.to_string()),
-                dispatched_turn_id: Some(dispatched.dispatched_turn_id.to_string()),
-                lease_id: None,
-                lease_started_at: None,
-                lease_expires_at: None,
-            },
-        );
-    }
+    let intent = scheduler_dispatching_intent_for_lease(
+        &mut queue,
+        intent_id,
+        source_thread_id,
+        source_turn_id,
+        lease_id,
+    )?;
+    intent.status = OFFICE_SCHEDULER_INTENT_STATUS_DISPATCHED.to_string();
+    intent.updated_at = now;
+    intent.run_id = Some(dispatched.run_id.to_string());
+    intent.dispatch_kind = Some(dispatched.dispatch_kind.to_string());
+    intent.delegation_id = dispatched.delegation_id.map(str::to_string);
+    intent.verification_check_id = dispatched.verification_check_id.map(str::to_string);
+    intent.file_path = Some(dispatched.file_path.to_string());
+    intent.dispatched_thread_id = Some(dispatched.dispatched_thread_id.to_string());
+    intent.dispatched_turn_id = Some(dispatched.dispatched_turn_id.to_string());
+    intent.last_error = None;
+    clear_office_scheduler_intent_lease(intent);
     write_scheduler_queue(cwd, &mut queue).await
 }
 
 pub(crate) async fn mark_auto_dispatch_intent_failed(
     cwd: &str,
+    intent_id: &str,
     source_thread_id: &str,
     source_turn_id: &str,
+    lease_id: &str,
     message: &str,
 ) -> Result<(), JSONRPCErrorError> {
+    let intent_id = intent_id.trim();
+    let source_thread_id = source_thread_id.trim();
+    let source_turn_id = source_turn_id.trim();
+    let lease_id = lease_id.trim();
+    validate_scheduler_dispatch_lease_params(
+        intent_id,
+        source_thread_id,
+        source_turn_id,
+        lease_id,
+    )?;
+
     let _lock = acquire_run_index_lock(cwd).await?;
     let mut queue = read_scheduler_queue(cwd).await?;
     let now = timestamp();
-    if let Some(intent) = queue.intents.iter_mut().find(|intent| {
-        intent.source_thread_id == source_thread_id && intent.source_turn_id == source_turn_id
-    }) {
-        if intent.status != OFFICE_SCHEDULER_INTENT_STATUS_DISPATCHING {
-            intent.attempts = intent.attempts.saturating_add(1);
-        }
-        intent.status = OFFICE_SCHEDULER_INTENT_STATUS_FAILED.to_string();
-        intent.updated_at = now;
-        intent.last_error = Some(truncate_chars(message, RUN_ERROR_CHARS));
-        clear_office_scheduler_intent_lease(intent);
-    }
+    let intent = scheduler_dispatching_intent_for_lease(
+        &mut queue,
+        intent_id,
+        source_thread_id,
+        source_turn_id,
+        lease_id,
+    )?;
+    intent.status = OFFICE_SCHEDULER_INTENT_STATUS_FAILED.to_string();
+    intent.updated_at = now;
+    intent.last_error = Some(truncate_chars(message, RUN_ERROR_CHARS));
+    clear_office_scheduler_intent_lease(intent);
     write_scheduler_queue(cwd, &mut queue).await
 }
 
 pub(crate) async fn clear_auto_dispatch_intent(
     cwd: &str,
+    intent_id: &str,
     source_thread_id: &str,
     source_turn_id: &str,
+    lease_id: &str,
 ) -> Result<(), JSONRPCErrorError> {
+    let intent_id = intent_id.trim();
+    let source_thread_id = source_thread_id.trim();
+    let source_turn_id = source_turn_id.trim();
+    let lease_id = lease_id.trim();
+    validate_scheduler_dispatch_lease_params(
+        intent_id,
+        source_thread_id,
+        source_turn_id,
+        lease_id,
+    )?;
+
     let _lock = acquire_run_index_lock(cwd).await?;
     let mut queue = read_scheduler_queue(cwd).await?;
-    queue.intents.retain(|intent| {
-        intent.source_thread_id != source_thread_id
-            || intent.source_turn_id != source_turn_id
-            || !matches!(
-                intent.status.as_str(),
-                OFFICE_SCHEDULER_INTENT_STATUS_PENDING | OFFICE_SCHEDULER_INTENT_STATUS_DISPATCHING
-            )
-    });
+    let position = scheduler_dispatching_intent_position_for_lease(
+        &queue,
+        intent_id,
+        source_thread_id,
+        source_turn_id,
+        lease_id,
+    )?;
+    queue.intents.remove(position);
     write_scheduler_queue(cwd, &mut queue).await
+}
+
+fn validate_scheduler_dispatch_lease_params(
+    intent_id: &str,
+    source_thread_id: &str,
+    source_turn_id: &str,
+    lease_id: &str,
+) -> Result<(), JSONRPCErrorError> {
+    if intent_id.is_empty()
+        || source_thread_id.is_empty()
+        || source_turn_id.is_empty()
+        || lease_id.is_empty()
+    {
+        return Err(invalid_params(
+            "scheduler intent, source, and lease ids must not be empty",
+        ));
+    }
+    Ok(())
+}
+
+fn scheduler_dispatching_intent_for_lease<'a>(
+    queue: &'a mut OfficeSchedulerQueue,
+    intent_id: &str,
+    source_thread_id: &str,
+    source_turn_id: &str,
+    lease_id: &str,
+) -> Result<&'a mut OfficeSchedulerIntent, JSONRPCErrorError> {
+    let position = scheduler_dispatching_intent_position_for_lease(
+        queue,
+        intent_id,
+        source_thread_id,
+        source_turn_id,
+        lease_id,
+    )?;
+    Ok(&mut queue.intents[position])
+}
+
+fn scheduler_dispatching_intent_position_for_lease(
+    queue: &OfficeSchedulerQueue,
+    intent_id: &str,
+    source_thread_id: &str,
+    source_turn_id: &str,
+    lease_id: &str,
+) -> Result<usize, JSONRPCErrorError> {
+    let position = queue
+        .intents
+        .iter()
+        .position(|intent| {
+            intent.intent_id == intent_id
+                && intent.source_thread_id == source_thread_id
+                && intent.source_turn_id == source_turn_id
+        })
+        .ok_or_else(|| invalid_params("scheduler dispatch intent was not found"))?;
+    let intent = &queue.intents[position];
+    if intent.status != OFFICE_SCHEDULER_INTENT_STATUS_DISPATCHING {
+        return Err(invalid_params(
+            "scheduler dispatch intent is not dispatching",
+        ));
+    }
+    if intent.lease_id.as_deref() != Some(lease_id) {
+        return Err(invalid_params("scheduler dispatch lease does not match"));
+    }
+    Ok(position)
 }
 
 fn office_scheduler_intent_can_claim(intent: &OfficeSchedulerIntent, now: DateTime<Utc>) -> bool {
@@ -3748,18 +3903,6 @@ fn office_scheduler_path(cwd: &str) -> Result<std::path::PathBuf, JSONRPCErrorEr
         .join(OFFICE_SCHEDULER_FILE))
 }
 
-fn office_run_index_lock_path(cwd: &str) -> Result<std::path::PathBuf, JSONRPCErrorError> {
-    let office_directory = domain_directory(cwd, DomainKind::Office)?;
-    let Some(base_directory) = office_directory.parent() else {
-        return Err(crate::error_code::internal_error(
-            "failed to resolve office run index lock directory",
-        ));
-    };
-    Ok(base_directory
-        .join(OFFICE_RUN_INDEX_DIRECTORY)
-        .join(OFFICE_RUN_INDEX_LOCK_FILE))
-}
-
 fn resolve_run_thread_id(
     config: &JsonValue,
     requested_thread_id: Option<&str>,
@@ -3793,6 +3936,7 @@ fn append_queued_run(
 ) -> Result<(), JSONRPCErrorError> {
     let AppendQueuedRunParams {
         message,
+        message_mode,
         text,
         locale,
         thread_id,
@@ -3820,7 +3964,9 @@ fn append_queued_run(
         JsonValue::String(thread_id.to_string()),
     );
 
-    array_entry(workspace, "messages", "workspace.messages must be an array")?.push(message);
+    if matches!(message_mode, RunMessageMode::Direct) {
+        array_entry(workspace, "messages", "workspace.messages must be an array")?.push(message);
+    }
     array_entry(workspace, "messages", "workspace.messages must be an array")?.push(json!({
         "author": if is_zh { "办公室" } else { "Office" },
         "glyph": "@",
@@ -3874,6 +4020,14 @@ fn append_queued_run(
             "memoryPolicy": "boundedRetrieval"
         }
     });
+    if let RunMessageMode::Submitted {
+        client_user_message_id,
+        dispatch_receipt_id,
+    } = message_mode
+    {
+        run["clientUserMessageId"] = JsonValue::String(client_user_message_id.clone());
+        run["dispatchReceiptId"] = JsonValue::String(dispatch_receipt_id.clone());
+    }
     if let Some(retry_of) = retry_of {
         run["retryOf"] = JsonValue::String(retry_of.to_string());
     }
@@ -4311,6 +4465,9 @@ fn json_boolish(value: &JsonValue, keys: &[&str]) -> bool {
 }
 
 fn delegation_has_started_dispatch(delegation: &JsonValue) -> bool {
+    if delegation.get("dispatchReceipt").is_some() {
+        return true;
+    }
     if delegation
         .get("turnId")
         .and_then(JsonValue::as_str)
@@ -7581,7 +7738,8 @@ fn delegation_route(member: &JsonValue) -> Option<JsonValue> {
         "memoryScope": truncate_chars(memory_scope, MAX_PROMPT_TITLE_CHARS)
     });
     if let Some(agent_profile) = agent_profile {
-        route["agentProfile"] = JsonValue::String(truncate_chars(agent_profile, 640));
+        route["agentProfile"] =
+            JsonValue::String(truncate_chars(agent_profile, /*max_chars*/ 640));
     }
     Some(route)
 }
@@ -7626,7 +7784,7 @@ fn build_office_delegation_prompt(params: OfficeDelegationPromptParams<'_>) -> S
         .and_then(JsonValue::as_str)
         .map(str::trim)
         .filter(|profile| !profile.is_empty())
-        .map(|profile| truncate_chars(profile, 640))
+        .map(|profile| truncate_chars(profile, /*max_chars*/ 640))
         .unwrap_or_else(|| {
             if is_zh {
                 "未保存可用的 Agent profile。".to_string()

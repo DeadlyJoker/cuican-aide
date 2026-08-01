@@ -18,8 +18,9 @@ fn recurring_schedule_catches_up_once_and_advances_from_planned_time() {
         }
     });
 
-    assert!(automation_is_due(&config, 220));
-    let (scheduled_at, claimed) = claim_next_run(config, 220).expect("schedule should be claimed");
+    assert!(automation_is_due(&config, /*now*/ 220));
+    let (scheduled_at, claimed) =
+        claim_next_run(config, /*now*/ 220).expect("schedule should be claimed");
 
     assert_eq!(scheduled_at, 100);
     assert_eq!(claimed["trigger"]["lastScheduledAt"], 100);
@@ -40,10 +41,10 @@ fn one_time_schedule_disables_itself_after_claim() {
         }
     });
 
-    let (_, claimed) = claim_next_run(config, 100).expect("schedule should be claimed");
+    let (_, claimed) = claim_next_run(config, /*now*/ 100).expect("schedule should be claimed");
 
     assert_eq!(claimed["trigger"]["nextRunAt"], serde_json::Value::Null);
     assert_eq!(claimed["enabled"], false);
     assert_eq!(claimed["status"], "disabled");
-    assert!(!automation_is_due(&claimed, 101));
+    assert!(!automation_is_due(&claimed, /*now*/ 101));
 }

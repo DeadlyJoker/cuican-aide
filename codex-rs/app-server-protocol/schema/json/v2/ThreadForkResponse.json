@@ -864,7 +864,8 @@
       "enum": [
         "crewon",
         "agent",
-        "team"
+        "team",
+        "experts"
       ],
       "type": "string"
     },
@@ -1227,6 +1228,73 @@
         "waitingOnUserInput"
       ],
       "type": "string"
+    },
+    "ThreadExecutionContext": {
+      "description": "Path-free, secret-free projection of a thread's durable execution authority.",
+      "properties": {
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "executionBinding": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ThreadExecutionContextBindingRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resourceBindings": {
+          "items": {
+            "$ref": "#/definitions/ThreadExecutionContextBindingRef"
+          },
+          "type": "array"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "workspace": {
+          "$ref": "#/definitions/WorkspaceRef"
+        }
+      },
+      "required": [
+        "createdAt",
+        "resourceBindings",
+        "revision",
+        "threadId",
+        "updatedAt",
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "ThreadExecutionContextBindingRef": {
+      "description": "Exact Provider resource binding revision attached to one thread.",
+      "properties": {
+        "bindingId": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bindingId",
+        "revision"
+      ],
+      "type": "object"
     },
     "ThreadId": {
       "type": "string"
@@ -2425,6 +2493,46 @@
           "type": "object"
         }
       ]
+    },
+    "WorkspaceRef": {
+      "properties": {
+        "bindingId": {
+          "type": "string"
+        },
+        "environmentId": {
+          "type": "string"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/definitions/WorkspaceScope"
+        },
+        "scopeId": {
+          "type": "string"
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bindingId",
+        "environmentId",
+        "nodeId",
+        "scope",
+        "scopeId",
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "WorkspaceScope": {
+      "enum": [
+        "conversation",
+        "office",
+        "workflow",
+        "automation"
+      ],
+      "type": "string"
     }
   },
   "properties": {

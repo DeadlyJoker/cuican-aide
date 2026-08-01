@@ -58,7 +58,9 @@ export type LibraryPanelAction = {
     | "reload-plugins"
     | "reload-tools"
     | "run-automation"
+    | "save-mcp-config"
     | "save-mcp-draft"
+    | "save-skill-edit"
     | "save-skill-draft"
     | "toggle-skill"
     | "uninstall-plugin";
@@ -232,6 +234,8 @@ export type ToolConfig = {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  url?: string;
+  bearerTokenEnvVar?: string;
   path?: string;
   enabled?: boolean;
 };
@@ -682,10 +686,19 @@ export type LibraryItem = {
   description?: string;
   section?: boolean;
   glyph?: string;
+  logo?: string;
   accent?: LibraryAccent;
   badge?: { label: string; tone?: LibraryBadgeTone };
   tags?: string[];
+  capabilityKind?: "mcp" | "skill";
+  capabilityLocation?: "cloud" | "local";
+  catalog?: boolean;
   action?:
+    | {
+        type: "capability-preset";
+        presetId: string;
+        presetKind: "mcp" | "skill";
+      }
     | {
         type: "plugin";
         pluginName: string;
@@ -712,6 +725,10 @@ export type LibraryItem = {
         body: string;
         authStatus?: string;
         configName?: string;
+        config?: Record<
+          string,
+          import("@crewon-protocol/serde_json/JsonValue").JsonValue
+        >;
         resource?: {
           server: string;
           uri: string;

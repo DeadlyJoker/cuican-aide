@@ -5071,7 +5071,11 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
         pending_mcp_server_refresh_config: Mutex::new(None),
         conversation: Arc::new(RealtimeConversationManager::new()),
         active_turn: Mutex::new(None),
+        runtime_turn_ownership: crate::state::RuntimeTurnOwnership::default(),
         input_queue: super::input_queue::InputQueue::new(),
+        user_input_once_index: Mutex::new(
+            super::user_input_once_index::UserInputOnceIndex::default(),
+        ),
         guardian_review_session: crate::guardian::GuardianReviewSessionManager::default(),
         services,
         next_internal_sub_id: AtomicU64::new(0),
@@ -6696,7 +6700,7 @@ async fn shutdown_and_wait_allows_multiple_waiters() {
     let (_tx_event, rx_event) = async_channel::unbounded();
     let (_agent_status_tx, agent_status) = watch::channel(AgentStatus::PendingInit);
     let session_loop_handle = tokio::spawn(async move {
-        let shutdown: Submission = rx_sub.recv().await.expect("shutdown submission");
+        let shutdown: SessionSubmission = rx_sub.recv().await.expect("shutdown submission");
         assert_eq!(shutdown.op, Op::Shutdown);
         tokio::time::sleep(StdDuration::from_millis(50)).await;
     });
@@ -6790,7 +6794,7 @@ async fn shutdown_and_wait_shuts_down_cached_guardian_subagent() {
     let (_child_status_tx, child_agent_status) = watch::channel(AgentStatus::PendingInit);
     let (child_shutdown_tx, child_shutdown_rx) = tokio::sync::oneshot::channel();
     let child_session_loop_handle = tokio::spawn(async move {
-        let shutdown: Submission = child_rx_sub
+        let shutdown: SessionSubmission = child_rx_sub
             .recv()
             .await
             .expect("child shutdown submission");
@@ -6879,7 +6883,7 @@ async fn shutdown_and_wait_shuts_down_tracked_ephemeral_guardian_review() {
     let (_child_status_tx, child_agent_status) = watch::channel(AgentStatus::PendingInit);
     let (child_shutdown_tx, child_shutdown_rx) = tokio::sync::oneshot::channel();
     let child_session_loop_handle = tokio::spawn(async move {
-        let shutdown: Submission = child_rx_sub
+        let shutdown: SessionSubmission = child_rx_sub
             .recv()
             .await
             .expect("child shutdown submission");
@@ -7154,7 +7158,11 @@ where
         pending_mcp_server_refresh_config: Mutex::new(None),
         conversation: Arc::new(RealtimeConversationManager::new()),
         active_turn: Mutex::new(None),
+        runtime_turn_ownership: crate::state::RuntimeTurnOwnership::default(),
         input_queue: super::input_queue::InputQueue::new(),
+        user_input_once_index: Mutex::new(
+            super::user_input_once_index::UserInputOnceIndex::default(),
+        ),
         guardian_review_session: crate::guardian::GuardianReviewSessionManager::default(),
         services,
         next_internal_sub_id: AtomicU64::new(0),

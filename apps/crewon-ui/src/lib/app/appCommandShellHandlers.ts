@@ -1,5 +1,6 @@
 import type { WorkMode } from "../workMode";
 import type { ThreadRuntimeSettings } from "../thread/threadRuntimeSettings";
+import type { ComposerImageInput } from "../shared/composerImages";
 
 type CommandShellHandlersParams = {
   selectThread: (threadId: string) => void | Promise<void>;
@@ -7,6 +8,7 @@ type CommandShellHandlersParams = {
     text: string,
     threadSettings?: ThreadRuntimeSettings,
     workspaceCwd?: string | null,
+    images?: ComposerImageInput[],
   ) => void | Promise<void>;
   setComposerFocusSignal: (updater: (signal: number) => number) => void;
   setDraftWorkspaceCwd: (cwd: string | null) => void;
@@ -65,9 +67,14 @@ export function createAppCommandShellHandlers({
       text: string,
       threadSettings?: ThreadRuntimeSettings,
       workspaceCwd?: string | null,
+      images?: ComposerImageInput[],
     ) {
       setSelectedThreadId(null);
-      void sendMessageInNewThread(text, threadSettings, workspaceCwd);
+      if (images?.length) {
+        void sendMessageInNewThread(text, threadSettings, workspaceCwd, images);
+      } else {
+        void sendMessageInNewThread(text, threadSettings, workspaceCwd);
+      }
     },
     startCommandShellDraftThread(workspaceCwd: string | null) {
       const trimmedCwd = workspaceCwd?.trim() || null;

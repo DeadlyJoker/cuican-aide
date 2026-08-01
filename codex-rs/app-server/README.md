@@ -5,6 +5,7 @@
 ## Table of Contents
 
 - [Protocol](#protocol)
+- [Rollout writer generation compatibility](#rollout-writer-generation-compatibility)
 - [Message Schema](#message-schema)
 - [Core Primitives](#core-primitives)
 - [Lifecycle Overview](#lifecycle-overview)
@@ -36,6 +37,29 @@ When running with `--listen ws://IP:PORT`, the same listener also serves basic H
 
 Websocket transport is currently experimental and unsupported. Do not rely on it for production workloads.
 
+### Websocket authentication
+
+Non-loopback websocket listeners require one of the following authentication modes:
+
+- `--ws-auth capability-token` with exactly one of `--ws-token-file` or `--ws-token-sha256`. A matching token authorizes only the current connection and never creates a durable user principal.
+- `--ws-auth signed-bearer-token` with `--ws-shared-secret-file`. `--ws-issuer`, `--ws-audience`, and `--ws-max-clock-skew-seconds` constrain HS256 JWT verification. Clock skew defaults to 30 seconds and has a hard maximum of 300 seconds.
+
+A signed bearer token containing only the existing `exp` plus optional `nbf`, `iss`, and `aud` claims remains connection-scoped. To establish an authenticated principal, the server must be configured with both `--ws-issuer` and `--ws-audience`, and the JWT must contain all of these additional claims:
+
+- `sub`: stable subject identifier;
+- `tenantId` and `spaceId`: exact authorization scope;
+- `jti`: token/session identifier used for freshness and later revocation work;
+- `iat`: integer Unix issue time;
+- `exp`: integer Unix expiry time no more than one hour after `iat`.
+
+If any principal claim is present—including an explicit `null`—but the complete set is not valid, the websocket upgrade is rejected. Principal identifiers are bounded, non-empty, trimmed, and may not contain control characters. `iat` may not be farther in the future than the configured clock skew, and an authenticated-principal token must have `exp` strictly in the future. Once `exp` is reached, the server actively disconnects that websocket. Raw bearer tokens are not attached to transport events, request identity, logs, or app-server protocol responses.
+
+Embedders with a trusted identity-provider logout or token-revocation feed can use the transport crate's principal-revocation registry and revocation-aware websocket acceptor. They must preload the authoritative unexpired revocation snapshot before opening the listener and mark registry freshness unknown if the source cursor/freshness is lost; that state disconnects authenticated connections and remains fail-closed until a fresh registry/listener is built from an authoritative snapshot. Revocations are exact to source + issuer + JTI, bounded by token expiry, and disconnect every active connection using that token. The CLI does not currently configure such an external feed, so `account/logout` and remote-controller device revocation must not be interpreted as websocket-principal logout.
+
+The opt-in Agent Platform principal-session composition is controlled by `CREWON_PRINCIPAL_SESSION_ENABLED=true` and remains disabled by default. When enabled it exposes `POST /principal-session/exchange`, which accepts only `{ "bootstrapToken": "..." }`, applies a 16 KiB body/token limit and a 32-request concurrency limit, and returns only `{ "token": "...", "expiresAt": 123 }` with `Cache-Control: no-store`. The endpoint must be reached through a trusted same-origin backend proxy that removes the browser `Origin` header; do not place bootstrap or session tokens in URLs.
+
+Non-browser clients can present the returned principal-session JWT with the existing `Authorization: Bearer ...` upgrade header. Browser clients, which cannot set that header, must offer exactly two WebSocket subprotocol values: `crewon.principal-session.v1` followed by the JWT. The server selects and echoes only `crewon.principal-session.v1`, never the JWT. Supplying both Authorization and subprotocol credentials, extra protocol values, or malformed values is rejected. Capability-token, HS256 signed-bearer, unauthenticated loopback, stdio, unix-socket, and RemoteControl behavior is unchanged.
+
 The unix socket transport is intended for local app-server control-plane clients. `crewon-app-server proxy`
 opens exactly one raw stream connection to the legacy `$CODEX_HOME/app-server-control/app-server-control.sock`
 by default, or to `--sock PATH` when provided, and proxies bytes between that socket and stdin/stdout.
@@ -51,6 +75,20 @@ Backpressure behavior:
 - The server uses bounded queues between transport ingress, request processing, and outbound writes.
 - When request ingress is saturated, new requests are rejected with a JSON-RPC error code `-32001` and message `"Server overloaded; retry later."`.
 - Clients should treat this as retryable and use exponential backoff with jitter.
+
+## Rollout writer generation compatibility
+
+Before State or listener initialization, app-server acquires a process-lifetime generation guard
+for its canonical `CREWON_HOME`. The default artifact uses `LeaseAwareShared`, so compatible
+processes may initialize together while per-thread leases serialize one Thread. The
+`legacy-fence-artifact` feature selects `LegacyFenceExclusive`, excluding every other generation
+for that home; an incompatibility fails before State databases, sessions, or listeners are created.
+
+Pre-fence binaries do not honor this guard. Deployment must reject their immutable artifact SHAs
+before execution and keep only the approved legacy-fence artifact as rollback. The standalone
+`scripts/verify-app-server-deployment-artifact.py` verifier currently reports
+`productionWiring:notConnected`; without a production binary/container authority it does not make
+the SHA Gate Green. PID, port, marker, or self-reported version checks are not substitutes.
 
 ## Message Schema
 
@@ -130,9 +168,9 @@ Example with notification opt-out:
 
 ## API Overview
 
-- `thread/start` — create a new thread; emits `thread/started` (including the current `thread.status`) and auto-subscribes you to turn/item events for that thread. Experimental `scene` selects an Office, Code, or Design contract plus an execution target. Omit `scene.executionTarget` (or pass `{ "kind": "crewon" }`) for the default CrewON single-Agent target; `{ "kind": "agent", "id": "..." }` resolves a saved `agent/list` definition, while `{ "kind": "team", "id": "..." }` resolves a saved, non-empty Office definition. The server owns the resulting `single` or `team` strategy: CrewON and Agent targets disable multi-agent tools, and Team targets enable the bounded Team runtime. Invalid scene/mode/deliverable combinations and unavailable targets fail closed. When the request includes a `cwd` and the resolved sandbox is `workspace-write` or full access, app-server also marks that project as trusted in the user `config.toml`. Pass `sessionStartSource: "clear"` when starting a replacement thread after clearing the current session so `SessionStart` hooks receive `source: "clear"` instead of the default `"startup"`. Experimental `runtimeWorkspaceRoots` replaces the thread-scoped runtime workspace roots used to materialize `:workspace_roots`; paths must be absolute. For permissions, prefer experimental `permissions` profile selection by id; the legacy `sandbox` shorthand is still accepted but cannot be combined with `permissions`. Experimental `environments` selects the sticky execution environments for turns on the thread; omit it to use the server default, pass `[]` to disable environments, or pass explicit environment ids with per-environment `cwd`. Experimental `selectedCapabilityRoots` selects environment-owned plugin or standalone-skill roots. Skills found below those roots are listed and read through the owning environment; other plugin capabilities are not activated yet.
-- `thread/resume` — reopen an existing thread by id so subsequent `turn/start` calls append to it. Accepts the same permission override rules as `thread/start`. Persisted Scene identity is immutable on resume; saved Agent and Team targets are revalidated before the thread is loaded, so deleted Agents and empty or deleted Teams are rejected.
-- `thread/fork` — fork an existing thread into a new thread id by copying the stored history; if the source thread is currently mid-turn, the fork records the same interruption marker as `turn/interrupt` instead of inheriting an unmarked partial turn suffix. Scene identity and execution target are inherited and revalidated before the fork is created. The returned `thread.forkedFromId` points at the source thread when known. Accepts `ephemeral: true` for an in-memory temporary fork, emits `thread/started` (including the current `thread.status`), and auto-subscribes you to turn/item events for the new thread. Experimental clients can pass `excludeTurns: true` when they plan to page fork history via `thread/turns/list` instead of receiving the full turn array immediately. Accepts the same permission override rules as `thread/start`.
+- `thread/start` — create a new thread; emits `thread/started` (including the current `thread.status`) and auto-subscribes you to turn/item events for that thread. Experimental `executionContext: { workspaceKey }` establishes the first server-owned Provider authority for a persistent thread; it cannot be combined with `ephemeral: true`. Experimental `scene` selects an Office, Code, or Design contract plus an execution target. Omit `scene.executionTarget` (or pass `{ "kind": "crewon" }`) for the default CrewON single-Agent target; `{ "kind": "agent", "id": "..." }` resolves a saved `agent/list` definition, while `{ "kind": "team", "id": "..." }` resolves a saved, non-empty Office definition. The server owns the resulting `single` or `team` strategy: CrewON and Agent targets disable multi-agent tools, and Team targets enable the bounded Team runtime. Invalid scene/mode/deliverable combinations and unavailable targets fail closed. When the request includes a `cwd` and the resolved sandbox is `workspace-write` or full access, app-server also marks that project as trusted in the user `config.toml`. Pass `sessionStartSource: "clear"` when starting a replacement thread after clearing the current session so `SessionStart` hooks receive `source: "clear"` instead of the default `"startup"`. Experimental `runtimeWorkspaceRoots` replaces the thread-scoped runtime workspace roots used to materialize `:workspace_roots`; paths must be absolute. For permissions, prefer experimental `permissions` profile selection by id; the legacy `sandbox` shorthand is still accepted but cannot be combined with `permissions`. Experimental `environments` selects the sticky execution environments for turns on the thread; omit it to use the server default, pass `[]` to disable environments, or pass explicit environment ids with per-environment `cwd`. Experimental `selectedCapabilityRoots` selects environment-owned plugin or standalone-skill roots. Skills found below those roots are listed and read through the owning environment; other plugin capabilities are not activated yet.
+- `thread/resume` — reopen an existing thread by id so subsequent `turn/start` calls append to it. A persistent thread has exactly one active rollout writer across app-server processes. If another process already owns that writer, resume fails with an invalid-request error; clients may retry only after the owning process has fully shut down or released the thread. If the thread has a durable execution context, resume verifies the authenticated owner before loading and returns a fresh connection-session `WorkspaceRef`; legacy threads without a context remain usable for ordinary chat but cannot be retroactively claimed through the update RPC. Accepts the same permission override rules as `thread/start`. Persisted Scene identity is immutable on resume; saved Agent and Team targets are revalidated before the thread is loaded, so deleted Agents and empty or deleted Teams are rejected.
+- `thread/fork` — fork an existing thread into a new thread id by copying the stored history; if the source thread is currently mid-turn, the fork records the same interruption marker as `turn/interrupt` instead of inheriting an unmarked partial turn suffix. A source execution context is checked for ownership but never inherited. Experimental `executionContext: { workspaceKey }` creates a new empty authority for the persistent fork. Scene identity and execution target are inherited and revalidated before the fork is created. The returned `thread.forkedFromId` points at the source thread when known. Accepts `ephemeral: true` for an in-memory temporary fork only when no execution context is requested, emits `thread/started` (including the current `thread.status`), and auto-subscribes you to turn/item events for the new thread. Experimental clients can pass `excludeTurns: true` when they plan to page fork history via `thread/turns/list` instead of receiving the full turn array immediately. Accepts the same permission override rules as `thread/start`.
 - `thread/start`, `thread/resume`, and `thread/fork` responses include the legacy `sandbox` compatibility projection. Experimental clients can read `sceneRuntime` for the resolved contract, target kind, opaque target token, and server-owned execution strategy; `runtimeWorkspaceRoots` for the thread-scoped runtime roots; and `activePermissionProfile` for the named or implicit built-in profile identity/provenance when known.
 - `thread/list` — page through stored rollouts; supports cursor-based pagination and optional `modelProviders`, `sourceKinds`, `archived`, `cwd`, and `searchTerm` filters. Each returned `thread` includes `status` (`ThreadStatus`), defaulting to `notLoaded` when the thread is not currently loaded. Subagent threads also include `parentThreadId` when the immediate control/spawn parent is known.
 - `thread/loaded/list` — list the thread ids currently loaded in memory.
@@ -212,11 +250,14 @@ Example with notification opt-out:
 - `skills/changed` — notification emitted when watched local skill files change.
 - `app/list` — list available apps.
 - `agent/recruitable/list` — list saved Crewon agent configs for a workspace that are not already assigned to an office by `agentId` or display name; supports `cursor` and `limit` pagination.
-- `office/create` — create and save a normalized office config for an absolute `cwd` from `title`, optional `subtitle`, optional `threadId`, and optional `goal`; returns the saved `filePath` and config without starting a thread.
-- `office/list` / `office/read` — return saved Office configs and perform best-effort history recovery before responding. If a saved Office run, delegation, or automation verification has a non-terminal status plus a known `threadId`/`turnId`, app-server reads the persisted thread history, reconciles terminal turns through the same Office reducer used by live listeners, emits `office/run/updated` with `reason: "historyRecovery"`, and returns the updated config. `office/read` and `office/list` also drain pending auto-dispatch scheduler intents from `.crewon/office-runs/scheduler.json` before falling back to a bounded Office JSON scan. If a saved terminal run still has a safe unstarted auto delegation or automation verification check, app-server reloads that terminal turn and triggers the same safe scheduler path, emitting `office/run/updated` when dispatch starts; clients should apply that notification even when the read/list response was based on the earlier snapshot. Missing or non-terminal persisted turns are ignored so Office listing stays available.
+- `office/create` — create and save a normalized office config for an absolute `cwd` from `title`, optional `subtitle`, optional `threadId`, and optional `goal`; returns the saved `filePath` and config without starting a thread. The returned config includes server-generated `workspace.recordId` and `workspace.recordRevision` values. Subsequent Office mutations carrying that `recordId`, including member recruitment, update the same persisted Office file instead of creating one file per mutation.
+- `office/manager/ensure` — idempotently provision or recover the persistent manager thread for one exact Office record. Params are `{ cwd, officeRecordId, expectedRecordRevision }`. A stale revision fails before thread creation; a successful first call creates a thread with source `office_manager_runtime_v1`, stores it in `workspace.threadId`, and returns `status: "created"`. Authenticated transports require `cwd` to be an exact registered workspace root and additionally create a durable ThreadExecutionContext with `workspace.scope: "office"` and `workspace.scopeId` equal to the Office `recordId`. Existing server-owned threads are reused only when their owner, Office scope, and durable workspace key match; legacy threads may return `reusedLegacy` without silently claiming a new authority. Failed record commit or context creation rolls back the uncommitted thread.
+- `office/list` / `office/read` — return saved Office configs and perform best-effort history recovery before responding. If a saved Office run, delegation, or automation verification has a non-terminal status plus a known `threadId`/`turnId`, app-server reads the persisted thread history, reconciles terminal turns through the same Office reducer used by live listeners, emits `office/run/updated` with `reason: "historyRecovery"`, and returns the updated config. `office/read` and `office/list` also drain pending auto-dispatch scheduler intents from `.crewon/office-runs/scheduler.json` before falling back to a bounded Office JSON scan. If a saved terminal run still has a safe unstarted auto delegation or automation verification check, app-server reloads that terminal turn and triggers the same safe scheduler path, emitting `office/run/updated` when dispatch is admitted or starts; clients should apply that notification even when the read/list response was based on the earlier snapshot. Missing or non-terminal persisted turns are ignored so Office listing stays available.
+- `office/message/submit` — persist a server-authored Office group-chat message and submit it to the canonical manager thread with an idempotency key in `clientUserMessageId`. Authenticated transports validate the registered workspace root before reading the Office record, then require the canonical manager thread owner, Office scope, record ID, and workspace key to match before any message or receipt is written. The server rejects client-forged message fields, stores a bounded receipt, starts a real manager turn for an idle Office, and returns `{ filePath, config, receiptId, clientUserMessageId, replayed, delivery }`. The canonical run keeps the business `clientUserMessageId` distinct from the server-derived dispatch `receiptId`; replay first searches persisted thread history by receipt, repairs the original run without issuing a second model request, and fails closed with `officeMessageRecoveryUnproven` when authoritative history proves no exact turn exists. When another manager run is active, the message is persisted and returned as queued.
 - `office/run` — start a real execution turn for an office that is already bound to `workspace.threadId`. The server appends the user message, creates a bounded office run record under `workspace.activity.runs`, indexes the run under `.crewon/office-runs/index.json`, starts `turn/start` on the bound thread with office-team execution instructions, then returns `{ filePath, config, threadId, runId, turn }`. Stream progress from the normal thread/turn/item notifications for the returned `turn.id`; app-server also best-effort syncs matching office runs on terminal `turn/completed` / interrupted events.
-- `office/run/sync` — explicitly reconcile an office run with a `Turn` after progress, completion, or client recovery. The server validates the run/turn binding, prefers the run index before falling back to a bounded office scan, applies the reducer to the latest matching persisted Office record when one exists, updates `workspace.activity.runs`, updates the matching task, and appends one idempotent office system message for terminal turns. When `turn.id` matches a member delegation under the requested run, the same API applies the member delegation reducer instead of the manager run reducer. The reducer consumes bounded final `officeUpdate` JSON when present to update run `plan`, `acceptanceCriteria`, `verificationChecks`, `evidence`, `risks`, `loop.review`, `delegations`, workspace `goal`, tasks, and artifacts. Verification checks can include bounded `command`, `automationId`, `artifact`, `criterion`, `criterionId`, `acceptanceId`, and `evidence` fields; failed checks block the Loop review, while unclaimed pending checks with `command` or `automationId` increment `review.verification.runnablePending` and set `nextAction: "runVerificationChecks"`. Text-only or already queued/running/canceling/completed pending checks increment `missingRunnablePending` and keep the next action on evidence collection. When a real `commandExecution` item in the same turn matches a verification check's `command` or `itemId`, the reducer marks that check `passed` or `failed` and copies the command item id, exit code, duration, output preview, and `outputSha256` onto the check. If a passed verification check explicitly references an acceptance criterion by `criterion`, `criterionId`, or `acceptanceId`, the reducer marks that criterion `passed` and writes `verifiedByCheck` plus reducer provenance. The reducer also extracts bounded evidence from real `commandExecution` and `fileChange` turn items, including command status, exit code, duration, output preview, `outputSha256`, touched paths, `changesSha256`, and whether the observation verified or blocked the run. Acceptance, verification, evidence, risk, and artifact rows receive reducer-written provenance (`sourceType`, `sourceThreadId`, `sourceTurnId`, `observedAt`, plus member delegation identity when applicable). Completed manager/member/automation-verification syncs persist a safe-scheduler intent under `.crewon/office-runs/scheduler.json` and immediately attempt the same backend auto scheduler path; successful live member dispatch marks the intent `dispatched` and emits `office/run/updated` with `reason: "autoDispatchStarted"`, while successful automation verification dispatch emits `reason: "autoVerificationStarted"`. Later `office/read` / `office/list` can still drain pending intents if dispatch was missed. This is useful after refresh or missed notifications even though terminal turns are also synced server-side.
+- `office/run/sync` — explicitly reconcile an office run with a `Turn` after progress, completion, or client recovery. The server validates the run/turn binding, prefers the run index before falling back to a bounded office scan, applies the reducer to the latest matching persisted Office record when one exists, updates `workspace.activity.runs`, updates the matching task, and appends one idempotent office system message for terminal turns. When `turn.id` matches a member delegation under the requested run, the same API applies the member delegation reducer instead of the manager run reducer. The reducer consumes bounded final `officeUpdate` JSON when present to update run `plan`, `acceptanceCriteria`, `verificationChecks`, `evidence`, `risks`, `loop.review`, `delegations`, workspace `goal`, tasks, and artifacts. Verification checks can include bounded `command`, `automationId`, `artifact`, `criterion`, `criterionId`, `acceptanceId`, and `evidence` fields; failed checks block the Loop review, while unclaimed pending checks with `command` or `automationId` increment `review.verification.runnablePending` and set `nextAction: "runVerificationChecks"`. Text-only or already queued/running/canceling/completed pending checks increment `missingRunnablePending` and keep the next action on evidence collection. When a real `commandExecution` item in the same turn matches a verification check's `command` or `itemId`, the reducer marks that check `passed` or `failed` and copies the command item id, exit code, duration, output preview, and `outputSha256` onto the check. If a passed verification check explicitly references an acceptance criterion by `criterion`, `criterionId`, or `acceptanceId`, the reducer marks that criterion `passed` and writes `verifiedByCheck` plus reducer provenance. The reducer also extracts bounded evidence from real `commandExecution` and `fileChange` turn items, including command status, exit code, duration, output preview, `outputSha256`, touched paths, `changesSha256`, and whether the observation verified or blocked the run. Acceptance, verification, evidence, risk, and artifact rows receive reducer-written provenance (`sourceType`, `sourceThreadId`, `sourceTurnId`, `observedAt`, plus member delegation identity when applicable). Completed manager/member/automation-verification syncs persist a safe-scheduler intent under `.crewon/office-runs/scheduler.json` and immediately attempt the same backend auto scheduler path. The default compatibility path emits `reason: "autoDispatchStarted"` and marks the delegation `running`. When both `user_input_once` and the default-off `office_auto_delegation_durable_admission` feature are enabled, automatic member delegation instead persists a versioned `dispatchReceipt`, emits `reason: "autoDispatchAdmitted"`, and leaves the delegation `queued` with a stable `turnId` until the terminal reducer runs; scheduler `dispatched` means durable admission committed, not that the delegation is already `running`. Core orders a durable start as v2 admission append and flush, matching v2 `executionFence` append and flush, then task start. The fence means the task-start boundary was crossed; it is not proof that a model, tool, MCP server, or remote Agent side effect completed. After the fence, recovery attaches only when the exact receipt turn is terminal in persisted history or is owned by the current runtime. Office may explicitly guarded-resume only one exact v2 `AdmissionOnly` identity that has no execution fence and no matching UserMessage or turn-lifecycle evidence. Legacy v1 markers, unknown or mismatched phases, persisted UserMessage/lifecycle evidence without a matching fence, and fenced identities without exact current-runtime active/terminalizing or persisted terminal evidence are quarantined as `executionUnknown`: child and scheduler leases are cleared, no model replay is attempted, and `office/run/updated` emits `reason: "autoDispatchExecutionUnknown"`. A definitely rejected durable admission emits `autoDispatchFailed`. Automation verification continues to emit `autoVerificationStarted`. Gate-off recovery may drain an existing durable identity but cannot create a new v2 resume or fall back to legacy/model dispatch. Targeted Harnesses cover the v2 admission-only recovery, legacy v1 quarantine, exact active attach, expired lease reclaim, second-restart idempotence, partial Office/scheduler commit convergence, and gate-off draining; the combined durable filter is 9/9 Green. These checks do not establish external exactly-once behavior. Writer fault injection, two-process writer leases, real old-binary downgrade, downstream model/tool/MCP idempotency and reconciliation, real power-loss/fsync, remaining multi-file fault injection, migration races, storage/memory bounds, and app-server/workspace full-suite validation remain unverified, so production clients must keep the durable feature disabled.
 - `automationId` on a verification check is a runnable reference, not evidence that the automation already executed. `office/run/retry` can still carry command and automation references into a normal manager turn prompt, while `office/verification/dispatch/next` is the deterministic backend bridge for checks that reference a saved automation.
+- Durable Office recovery targeted Harnesses also cover two exact convergence seams: an already admitted current-runtime turn is attached without replay or quarantine, and an Office `executionUnknown` commit with a lagging expired scheduler row repairs only the scheduler while leaving Office and rollout bytes unchanged. These checks do not replace real power-loss/fsync or downstream Provider/tool idempotency evidence.
 - `office/run/cancel` — request cancellation for a non-terminal office run with a known `turnId`. The server validates the saved run/thread binding, submits fire-and-forget interrupts to the manager turn plus any known active member delegation turns and active automation verification turns, marks the office run `canceling`, marks matching child rows `canceling`, refreshes the run index, and returns the saved `{ filePath, config }`. Final `interrupted` states arrive through normal manager/member/automation terminal sync.
 - `office/delegation/cancel` — request cancellation for one active member delegation under an office run. The server resolves the latest saved Office record by `runId`, validates `delegationId` plus the saved delegation `threadId`/`turnId`, interrupts only that member turn, marks only that delegation `canceling`, refreshes the run index, and returns `{ filePath, config }`. The parent manager run and sibling delegations continue unless their own turns later fail or are canceled separately.
 - `office/verification/cancel` — request cancellation for one active automation verification check under an office run. The server resolves the latest saved Office record by `runId`, matches `verificationCheckId` against the check `itemId`, `automationRunId`, `automationId`, or check text, validates the saved `automationThreadId`/`automationTurnId`, interrupts only that automation turn, marks only that check `dispatchStatus: "canceling"` and `automationStatus: "canceling"`, refreshes the run index, and returns `{ filePath, config }`.
@@ -227,7 +268,7 @@ Example with notification opt-out:
 - `office/delegation/retry` — start a new member turn from a failed or interrupted delegation without overwriting the original child row. The server resolves the latest saved Office record under the same claim lock, validates that the source delegation is `failed` or `interrupted`, rejects duplicate active retries for the same source delegation, resolves the member route again, appends a new queued delegation with `retryOf: <sourceDelegationId>`, and starts a fresh turn on the member runtime thread. The retry prompt includes the original task plus bounded previous status, `turnId`, error, and result preview so the member can correct the prior attempt through a Loop Engineering observe -> correct -> verify cycle. The response is `{ filePath, config, runId, delegationId, retryOfDelegationId, threadId, turn }`.
 - `office/member/context/preview` — return the resolved member context that would be used for a member dispatch without starting a turn, claiming a delegation, or writing the Office config. Params are `{ cwd, config, runId, task?, member?, agentId?, locale? }`; `member` or `agentId` must match a bounded delegation route. The response includes `{ runId, member, agentId, threadId, contextPolicy, memoryScope, agentProfile, sharedContext, memoryContext }`. `sharedContext` applies the saved `contextPolicy`: `sharedDigest` returns the bounded Office ledger digest, `forkLastN` adds the bounded recent Office message slice, and `isolated` reports that shared Office context is omitted. Clients can use this for member configuration audits and dispatch confirmation without copying private transcripts or consuming a model turn.
 - `office/verification/dispatch/next` — ask the backend to choose the first pending verification check on an Office run that has an `automationId`, resolve that id to a saved automation config by absolute config file path, `threadId`, `title`, `automationId`, or `id`, and start the automation through `automation/run/start`. The Office check is first claimed as `dispatchStatus: "queued"` with a stable `itemId`, then marked `running` with `automationRunFilePath`, `automationRunId`, `automationThreadId`, and `automationTurnId` after the automation turn starts and its run record is created. The response is `{ filePath, config, runId, verificationCheckId, automationId, automationRunFilePath, automationRunId, threadId, turn }`. When that automation turn reaches a terminal state, app-server scans saved Offices for the matching `(automationThreadId, automationTurnId)`, writes the verification result back to the check with `sourceType: "automationRun"`, appends bounded evidence with `evidenceKind: "automationRun"`, refreshes acceptance criteria and `loop.review`, and emits `office/run/updated`. The backend auto scheduler also uses the same deterministic claim/start path after manager/member/verification terminal sync: it tries safe member delegation first, then pending automation verification, but skips verification checks marked `approvalRequired`, `requiresApproval`, `manualDispatch`, `dispatchMode: "manual"`, or high risk. Explicit user-triggered `office/verification/dispatch/next` can still dispatch those checks. Already queued/running/canceling/completed automation checks are not counted as runnable pending, so stale clients or scheduler ticks cannot repeatedly dispatch the same verification turn.
-- `office/run/updated` — notification emitted after app-server writes a new Office run config through `office/run`, `office/run/sync`, `office/run/cancel`, child cancellation, `office/run/retry`, delegation dispatch or retry, verification dispatch or retry, terminal sync, persisted-history recovery, auto-dispatch start, auto-verification start, or auto-dispatch completion. Params are `{ cwd, filePath, config, reason, sourceThreadId, sourceTurnId }`; clients should replace their Office record for the matching `cwd`/`filePath` with `config` and still use normal `turn/*` / `item/*` notifications for transcript streaming.
+- `office/run/updated` — notification emitted after app-server writes a new Office run config through `office/run`, `office/run/sync`, `office/run/cancel`, child cancellation, `office/run/retry`, delegation dispatch or retry, verification dispatch or retry, terminal sync, persisted-history recovery, auto-dispatch admission/start/recovery/failure, auto-verification start, or auto-dispatch completion. Params are `{ cwd, filePath, config, reason, sourceThreadId, sourceTurnId }`; clients should replace their Office record for the matching `cwd`/`filePath` with `config` and still use normal `turn/*` / `item/*` notifications for transcript streaming.
 - `thread/list` / `thread/read` — also trigger a bounded best-effort Office scheduler recovery for the returned thread cwd values. This lets the app recover pending Office scheduler intents or safe unstarted Office work when the client opens the normal thread surfaces before opening the Office panel. The recovery is capped to a small number of distinct cwd values per request and only emits `office/run/updated`; it does not change the thread response payload.
 - `office/memory/list` — list long-term Office memories for the supplied Office `config`. The server derives the Office key from `config.id`, `workspace.threadId`, or title slug, supports `status` filtering (`accepted`, `pending`, or `rejected`), and returns cursor-paginated records with evidence refs, keywords, timestamps, and usage counters. Model-authored memories always enter as review candidates even when the model output labels them accepted.
 - `office/memory/decide` — update one Office memory status to `accepted`, `pending`, or `rejected` for the supplied Office `config`; returns the updated memory record. Clients can use this to review model-authored pending memories before they become retrievable prompt context.
@@ -1294,42 +1335,45 @@ All filesystem paths in this section must be absolute.
 { "id": 45, "result": {} }
 ```
 
-### Agent Platform Agent sessions
+### Agent Platform account and Agent metadata
 
-CrewON can proxy an Agent Platform Open API Agent while keeping conversation
-history in the local app-server. Configure the app-server process with
-`CREWON_AGENT_PLATFORM_BASE_URL` and `CREWON_AGENT_PLATFORM_API_KEY`. The API
-key is never returned to clients. Client access tokens are verified against
-Agent Platform `/api/v1/auth/me`; the verified user ID, CrewON `threadId`, and
-`agentId` form the local history key.
+CrewON can verify an Agent Platform access token and read Open API Agent
+metadata for resource-management surfaces. Configure the app-server process
+with `CREWON_AGENT_PLATFORM_BASE_URL` and `CREWON_AGENT_PLATFORM_API_KEY`. The
+API key is never returned to clients. Client access tokens are verified against
+Agent Platform `/api/v1/auth/me`.
 
 `CREWON_AGENT_PLATFORM_BASE_URL` must use HTTPS for remote deployments. Plain
 HTTP is accepted for loopback development addresses such as `localhost` or
 `127.0.0.1`. A legacy remote deployment without TLS must also set
 `CREWON_AGENT_PLATFORM_ALLOW_INSECURE_HTTP=1`; leave this unset once HTTPS is
 available. Agent Platform responses are never followed through HTTP redirects.
-Synchronous and streaming Agent calls share immediate admission
-limits of 64 active requests globally and 8 per app-server connection.
-
 - `agentPlatform/auth` verifies an Agent Platform access token.
 - `agentPlatform/agent/info` reads Open API Agent status.
-- `agentPlatform/chat` performs a completed synchronous turn.
-- `agentPlatform/chat/start` starts SSE execution and returns a `runId`.
-- `agentPlatform/run/cancel` cancels local waiting for an SSE run.
-- `agentPlatform/session/read` and `agentPlatform/session/clear` manage local
-  derived history without writing Agent Platform conversations.
+- `agentPlatform/workflow/execute` performs one real Agent Platform Workflow execution. The client supplies only its `accessToken`, the positive numeric `workflowId`, and one bounded string `input`. App-server first uses the bearer token to prove ownership of the canonical Workflow, then calls the authenticated Workflow execution endpoint with that same authority; public Open API enablement and a space API key are not required for a signed-in user's own Workflow. A JSON-object string is forwarded as structured Workflow input; other text is mapped only to `input` and `prompt`. Local workspace paths, attachments, arbitrary context, and unrelated credentials are never forwarded. This is a synchronous one-shot adapter for the current Workflow UI; it does not yet provide durable DAG scheduling, restart recovery, or automatic retry.
 
-Streaming runs emit `agentPlatform/chat/delta`,
-`agentPlatform/chat/completed`, or `agentPlatform/chat/failed`. Only completed
-runs are persisted. At most the latest 20 messages are sent, with a 10,000
-approximate-token hard limit including the current message. Individual remote
-answers and local session files are also bounded. A second operation for the
-same verified user, `threadId`, and `agentId` is rejected while the first is
-active instead of being queued indefinitely.
+Agent execution does not use these RPCs. Durable Cloud Agent conversations use
+the standard Thread/Turn API plus Provider Resource Binding and Task Runtime;
+the app-server does not keep a second local Agent Platform chat history.
 
-This history belongs only to the external Agent Platform Open API request. It
-is not injected into CrewON core model context and does not bypass the typed
-`core/context` fragment rules used by CrewON inference requests.
+### Expert teams
+
+`expertTeam/list`, `expertTeam/create`, and `expertTeam/read` manage independent
+Expert Team definitions under a registered workspace. Requests use the
+server-owned `workspaceKey` rather than a browser-supplied filesystem path.
+Authenticated calls are owner, tenant, and space scoped; local stdio and
+in-process clients use the stable local principal. Definitions are bounded,
+atomically written, symlink-safe, and contain one `worker` leader plus two to
+eight `explorer` or `worker` experts.
+
+Selecting `scene.executionTarget: { "kind": "experts", "id": "..." }` starts
+an ordinary Conversation thread with the bounded Team execution strategy. The
+leader receives the saved goal and role roster and can delegate only to the
+configured expert agent types. The definition is revalidated on resume, so a
+missing, changed-owner, or wrong-workspace team fails closed. Experts do not
+reuse Office records, group-chat history, or the Office ledger. The current
+vertical supports local explorer/worker roles; Provider-managed cloud experts
+remain a separate future integration.
 
 ## Events
 
@@ -2053,6 +2097,250 @@ Field notes:
 
 Use `creditType: "credits"` when workspace credits are depleted, or `creditType: "usage_limit"` when the workspace usage limit has been reached. If the owner was already notified recently, the response status is `cooldown_active`.
 
+## Read the effective request identity (experimental)
+
+`identity/read` returns the identity that app-server derived for the current transport connection. It takes no params and requires `capabilities.experimentalApi = true` during `initialize`.
+
+```json
+{ "method": "identity/read", "id": 9 }
+{
+  "id": 9,
+  "result": {
+    "identity": {
+      "actorId": "local-stdio:019...",
+      "tenantId": null,
+      "spaceId": null,
+      "sessionId": "019...",
+      "traceId": "7e2..."
+    },
+    "transport": "stdio",
+    "auditSubject": "localProcess:stdio:019...",
+    "client": {
+      "name": "my_client",
+      "version": "0.1.0",
+      "capabilities": {
+        "experimentalApi": true,
+        "requestAttestation": false
+      }
+    }
+  }
+}
+```
+
+`actorId` and `auditSubject` are currently connection-scoped audit identifiers, not user accounts. `tenantId` and `spaceId` remain `null` until the transport supplies verified subject claims. `client` is declared initialize metadata and must not be used for authorization. `traceId` is observability correlation data and may be propagated by an upstream caller; it is never an authority or uniqueness key. Reconnecting creates a new `sessionId`, `actorId`, and `auditSubject`.
+
+## List and bind server-registered workspaces (experimental)
+
+`workspace/list` exposes opaque keys for roots that app-server already owns through its startup configuration. Clients cannot submit or receive an absolute root path.
+
+```json
+{ "method": "workspace/list", "id": 10, "params": { "limit": 20 } }
+{
+  "id": 10,
+  "result": {
+    "data": [
+      {
+        "workspaceKey": "workspace:019...",
+        "displayName": "my-project",
+        "nodeId": "installation-id",
+        "environmentId": "local",
+        "availability": "available"
+      }
+    ],
+    "nextCursor": null,
+    "accessMode": "localProcessServerRoots"
+  }
+}
+```
+
+Use `workspace/bind` to create a scope-specific binding. Repeating the same `workspaceKey`, `scope`, and `scopeId` in one connection session is idempotent. A Conversation binding and an Office binding may share the same `workspaceKey`, but always have different `bindingId` values.
+
+```json
+{
+  "method": "workspace/bind",
+  "id": 11,
+  "params": {
+    "workspaceKey": "workspace:019...",
+    "scope": "office",
+    "scopeId": "office-record-id"
+  }
+}
+```
+
+For an authenticated stable principal with sqlite State enabled, `workspaceKey` is a durable, owner-scoped reference and is reused after reconnect when the same configured root is still available. Connection-scoped identities receive session-only keys. Every `bindingId` remains connection-session scoped and is refreshed after reconnect. Paths are never written to rollout files, Office records, browser storage, or non-sensitive authority tables. A binding identifies a root and domain scope; it does not by itself authorize file, tool, or Provider execution.
+
+## Bind Provider resources to a Thread Execution Context (experimental)
+
+Provider resources use a durable Thread Execution Context instead of prompt text, `cwd`, client `dynamicTools`, or the most recent Provider connection as authority. The context stores only the authenticated actor/tenant/space, durable workspace identity, exact resource binding ids and revisions, and bounded lifecycle metadata; it never stores a path, credential, token, Secret, resource body, or prompt.
+
+Because the thread id is generated by app-server, a new authority is established inside `thread/start` or `thread/fork` from an already listed opaque `workspaceKey`. The response returns an empty context and a new Conversation `WorkspaceRef` whose `scopeId` equals the new thread id:
+
+```json
+{
+  "method": "thread/start",
+  "id": 11,
+  "params": {
+    "executionContext": { "workspaceKey": "workspace:019..." }
+  }
+}
+```
+
+Use the returned `executionContext.workspace.bindingId` with `resource/bind`. After the server returns one or more exact `resource-binding:<uuid>` ids, replace the thread selection through the thread-serialized update method:
+
+```json
+{
+  "method": "threadExecutionContext/update",
+  "id": 18,
+  "params": {
+    "threadId": "019...",
+    "workspaceBindingId": "binding:019...",
+    "resourceBindingIds": ["resource-binding:019..."],
+    "executionBindingId": "resource-binding:019...",
+    "expectedRevision": 1
+  }
+}
+```
+
+`executionBindingId` is optional and selects one member of `resourceBindingIds` as the Thread's execution target. The server resolves its exact revision; clients never submit a binding revision or raw Provider agent id. A selected execution binding must be an active, Provider-managed Agent whose execution location is the Provider. The returned `ThreadExecutionContext.executionBinding` is either that exact `{ bindingId, revision }` reference or `null`.
+
+The update method never creates or claims a context. It requires the thread to be loaded, the context to exist, the caller to match its durable owner, the session workspace binding to match the same Conversation thread, and every resource binding to be active at its exact revision. Duplicate ids, stale revisions, revoked bindings, non-Agent execution targets, cross-owner access, workspace drift, and missing State fail closed. Repeating an unchanged exact selection is idempotent and does not advance the context revision. Archive/unarchive preserves the context; `thread/delete` removes it with the rest of the thread State.
+
+## Connect and read an external Provider (experimental)
+
+`provider/connect` creates or resolves a server-owned connection to a configured external Provider. The request accepts only `providerId`; clients cannot select a credential, credential revision, owner, endpoint, tenant, space, or authorization scope. App-server derives those values from the authenticated request identity, refreshed identity mappings, and the persisted access grant. The method requires `capabilities.experimentalApi = true`.
+
+```json
+{ "method": "provider/connect", "id": 12, "params": { "providerId": "agent-platform" } }
+{
+  "id": 12,
+  "result": {
+    "provider": {
+      "connectionId": "provider-connection:019...",
+      "providerId": "agent-platform",
+      "kind": "agentPlatform",
+      "protocolVersion": "3.0.0",
+      "status": "connected",
+      "capabilities": ["durableRun", "remoteAgent", "resumableEvents"],
+      "resourceCapabilities": [
+        {
+          "resourceType": "agent",
+          "mode": "providerManaged",
+          "executionLocation": "provider"
+        }
+      ],
+      "projectionEtag": "sha256:...",
+      "observedAt": 1785000101
+    }
+  }
+}
+```
+
+`provider/read` revalidates the current caller, access grant, and live Provider descriptor before returning the same secret-free projection. A connection owned by another actor, tenant, or space is reported as not found; credential and authority details are never returned.
+
+```json
+{
+  "method": "provider/read",
+  "id": 13,
+  "params": { "connectionId": "provider-connection:019..." }
+}
+```
+
+`resource/list` and `resource/read` discover exact, versioned Provider resources through an existing connection. Both methods are experimental and revalidate the connection owner, current identity mapping, and active access grant before and after Provider I/O. Clients cannot supply credentials, endpoints, owners, workspace roots, execution locations, or authorization scopes.
+
+`resource/list` uses opaque cursor pagination. The default limit is 20 and the accepted range is 1 through 100; a Provider may enforce a smaller page. A requested resource type must be one of the closed protocol resource kinds and must be declared by the live Provider descriptor.
+
+```json
+{
+  "method": "resource/list",
+  "id": 14,
+  "params": {
+    "connectionId": "provider-connection:019...",
+    "cursor": null,
+    "limit": 20,
+    "resourceType": "agent"
+  }
+}
+{
+  "id": 14,
+  "result": {
+    "data": [
+      {
+        "providerId": "agent-platform",
+        "resourceId": "agent-demo",
+        "revision": "agent-version:7",
+        "resourceType": "agent"
+      }
+    ],
+    "nextCursor": null,
+    "providerEtag": "sha256:..."
+  }
+}
+```
+
+`resource/read` requires the exact `providerId`, `resourceId`, `revision`, and `resourceType` returned by discovery. It does not resolve `latest` or substitute a compatible revision. The response contains bounded manifest metadata only, not the Provider manifest body or any authority material.
+
+```json
+{
+  "method": "resource/read",
+  "id": 15,
+  "params": {
+    "connectionId": "provider-connection:019...",
+    "resource": {
+      "providerId": "agent-platform",
+      "resourceId": "agent-demo",
+      "revision": "agent-version:7",
+      "resourceType": "agent"
+    }
+  }
+}
+```
+
+`resource/bind` turns one exact resource revision into a durable, server-owned binding. The client submits the current connection-scoped `workspaceBindingId`; app-server resolves it against the initiating connection's `WorkspaceRegistry` and persists only the durable `workspaceKey`, scope, exact resource identity, manifest digest, binding mode, and lifecycle metadata. The session binding id, workspace path, Provider endpoint, credential, owner, token, and Secret are never persisted. The first implementation supports `remoteReference` and `providerManaged`; `localSnapshot` and `localFork` fail closed until a real local materializer supplies verified provenance.
+
+```json
+{
+  "method": "resource/bind",
+  "id": 16,
+  "params": {
+    "connectionId": "provider-connection:019...",
+    "workspaceBindingId": "binding:019...",
+    "resource": {
+      "providerId": "agent-platform",
+      "resourceId": "agent-demo",
+      "revision": "agent-version:7",
+      "resourceType": "agent"
+    },
+    "mode": "providerManaged"
+  }
+}
+```
+
+Repeating the same exact selection is idempotent. Rebinding an unbound selection reuses the original `resource-binding:<uuid>` and advances its revision instead of creating unbounded history. `resource/unbind` accepts only that server-owned binding id. It derives the stable owner from the authenticated request, returns not-found for missing or cross-owner bindings, and remains available for cleanup even when the Provider runtime or grant is no longer usable.
+
+```json
+{
+  "method": "resource/unbind",
+  "id": 17,
+  "params": { "bindingId": "resource-binding:019..." }
+}
+```
+
+Successful bind and unbind mutations emit experimental `resource/binding/updated` with the secret-free `ResourceBindingProjection`. The notification is sent only to the connection that initiated the mutation; it is never broadcast to other app-server connections.
+
+The Agent Platform Provider runtime is disabled by default. Enabling it requires `CREWON_PROVIDER_AGENT_PLATFORM_ENABLED=true`, `CREWON_PROVIDER_AGENT_PLATFORM_URL`, `CREWON_PROVIDER_AGENT_PLATFORM_SIGNING_KEY_ID`, and `CREWON_PROVIDER_AGENT_PLATFORM_SIGNING_PRIVATE_KEY_FILE`. `CREWON_PROVIDER_AGENT_PLATFORM_ENDPOINT_MODE` defaults to `production`; only explicit `development-loopback` permits a loopback HTTP endpoint. Provider startup also requires the principal-session identity authority and sqlite state. When Provider configuration is enabled, app-server refreshes and validates the identity mappings before opening any transport and fails startup if the authority is missing, stale, unavailable, or incompatible. When the Provider runtime is disabled, Provider connect/read and resource list/read/bind fail closed with an internal unavailable error rather than falling back to legacy OpenAPI credentials or client-supplied authority. Resource unbind remains a State-only cleanup operation and still requires an authenticated stable principal.
+
+Provider Task execution supervision has a separate default-off gate: `CREWON_PROVIDER_CONTROL_ENABLED=true`. Enabling it requires the prepared Agent Platform Provider runtime and sqlite State; missing dependencies or an invalid flag fail startup. The supervisor consumes only durable `dispatchAttempt`, `cancelAttempt`, and `reconcileAttempt` outbox decisions, and resumes non-terminal Provider Run event polling from the same database. Authority-only enqueue/retry/resume decisions are not consumed by this worker. Failed calls remain pending with bounded durable backoff, successful outbox delivery is attempt-CAS bound, and shutdown cancels the current bounded tick so an idempotent restart can continue from the outbox/journal. Once the Task is terminal, worker decisions superseded by that terminal fact are acknowledged without a Provider side effect; the exact current `cancelAttempt` for a cancelled Task remains deliverable after restart. This switch does not create Cloud Agent Tasks or enable a client/UI execution path by itself.
+
+Durable Cloud Agent execution has an additional default-off development gate: `CREWON_DURABLE_CLOUD_AGENT_ENABLED=true`. It is accepted only when Provider Control is already prepared; enabling it alone fails startup. For a Thread Execution Context with an exact active Provider-managed Agent `executionBinding`, standard `turn/start` creates one durable `single` Task, accepted event/outbox record, immutable execution spec, and Cloud Agent Turn mapping. A bounded Cloud Agent-only Authority consumer turns its `enqueueAttempt` into one fenced `claimAttempt`, after which the existing Provider supervisor delivers `dispatchAttempt`. The source decision is marked delivered only after the Task command commits; a restart in between reuses the stable command Inbox receipt. Confirmed Provider failure or cancellation is finalized with `failTask`, unknown outcome stays on the same reconcile path, and no automatic retry is scheduled. The consumer query joins the Cloud Agent Turn mapping, so it cannot claim Office or other Task strategies.
+
+The same gate starts a separate bounded Cloud Agent Turn projector. It reads only canonical Provider event projections already committed beside the Provider journal, advances the Turn cursor strictly by contiguous sequence, and never converts progress into chat system messages. A completed event first moves the Turn to durable `finalizing`; each output Artifact read revalidates the current binding, connection, grant, identity, credential revision, Task, Attempt, Worker Run, and exact completed Artifact ref. Verified bytes are imported idempotently into the local Artifact store before the Turn and its output refs are atomically marked completed. Transient finalization failures use durable `attempts`/`availableAt` with a five-attempt bound; permanent or exhausted failures end as `resultUnavailable` without an empty completed Turn. Durable terminal commits enqueue only bounded metadata notices. Before sending standard Turn/Item/status notifications, app-server derives a fresh identity for each initialized connection, re-authorizes the Thread owner, and re-reads the exact Turn revision; a full or closed notice queue only loses the ephemeral notification because durable read remains authoritative. Cloud-backed `thread/read`, `thread/turns/list`, and `thread/resume` project standard Turn/Item history from bounded CloudAgentTurn pages and verified local Artifact content, including restart recovery.
+
+Cloud Agent sidebar metadata is a bounded derived projection, not a second message authority. The server derives a whitespace-normalized preview capped at 1024 bytes from the exact queued prompt or completed verified output. It atomically commits the summary revision acknowledgement together with the local ThreadStore `preview` and non-regressing `updatedAt`; a missing Thread metadata row rolls the transaction back. `thread/list` and `thread/search` run a bounded recovery pass before querying and return unavailable instead of returning a stale page when recovery cannot finish. Once Cloud summaries exist, local list pagination uses the backfilled SQLite Thread index as one total ordering; search merges SQLite title/preview matches with rollout-content matches before pagination and deduplicates by Thread. JSONL remains the history replay source, while user name, archive state, and Git metadata retain their existing ownership.
+
+Standard `turn/interrupt` now recognizes an exact Cloud Agent Turn and commits one stable `CancelTask` command before any Provider cancellation call. The coordinator rechecks the request owner, Conversation Workspace, exact execution binding, Turn-to-Task mapping, `single` strategy, and local Task authority. Concurrent, repeated, and post-restart interrupts reuse the same Inbox receipt; a Provider completion that wins the CAS race is returned as an already-terminal no-op. An owner may still persist cancellation after the Provider grant is revoked, while a cross-owner request is rejected. A queued cancellation supersedes its old enqueue decision, and a running cancellation leaves exactly one durable `cancelAttempt`; stale dispatch is acknowledged without starting the Provider, while the current cancel is delivered by the existing supervisor. Empty-turn startup interrupts and Threads without Cloud execution authority continue through the original Core path. Full user-visible terminal mapping for queued cancellation and the remaining capability guards still belong to W3-01 D-07, so this development gate must remain off outside the scoped harness.
+
+The first slice requires `clientUserMessageId` and exactly one nonblank plain-text input; attachments, images, Skill/MCP/Knowledge inputs, text elements, and per-turn overrides fail closed. Repeating the same client message identity and body returns the same Turn/Task, while changed replays and a second active Turn conflict. A Cloud-bound failure never falls back to the legacy chat path, and a Thread without an execution binding continues to use the Core Turn path. Standard result projection, read/resume recovery, sidebar metadata recovery, and durable cancel authority are available only behind the same development gate; capability closure, complete terminal mapping, UI cutover, and production release evidence remain gated by the later W3-01 stages, so deployments must leave this switch disabled until those stages are complete.
+
 ## Experimental API Opt-in
 
 Some app-server methods and fields are intentionally gated behind an experimental capability with no backwards-compatible guarantees. This lets clients choose between:
@@ -2072,6 +2360,17 @@ crewon-app-server generate-json-schema --out DIR
 # Include experimental API surface
 crewon-app-server generate-ts --out DIR --experimental
 crewon-app-server generate-json-schema --out DIR --experimental
+```
+
+The vendored fixture writer also generates
+`app-server-protocol/schema/typescript-experimental-platform/`. This is a
+narrow, generated overlay for the first-party CrewON UI's experimental
+Workspace, Provider, and Resource control-plane RPCs. It is intentionally kept
+separate from the stable TypeScript index, and does not make those methods part
+of the stable `ClientRequest` union. Regenerate both fixture surfaces with:
+
+```bash
+just write-app-server-schema
 ```
 
 ### How clients opt in at runtime

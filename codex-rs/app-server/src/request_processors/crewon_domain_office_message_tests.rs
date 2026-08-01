@@ -103,6 +103,30 @@ fn same_id_replays_without_duplicate_canonical_message() {
 }
 
 #[test]
+fn resolved_manager_authority_rejects_office_or_thread_rebinding() {
+    let latest = json!({
+        "workspace": {
+            "recordId": "office-1",
+            "threadId": "thread-1"
+        }
+    });
+
+    assert!(ensure_resolved_manager_authority(&latest, "office-1", "thread-1").is_ok());
+    assert_eq!(
+        ensure_resolved_manager_authority(&latest, "office-2", "thread-1")
+            .expect_err("record rebinding must fail")
+            .message,
+        "Office manager authority changed; reload and retry"
+    );
+    assert_eq!(
+        ensure_resolved_manager_authority(&latest, "office-1", "thread-2")
+            .expect_err("thread rebinding must fail")
+            .message,
+        "Office manager authority changed; reload and retry"
+    );
+}
+
+#[test]
 fn replay_uses_the_original_canonical_locale() {
     let mut config = config();
     let original = input("client-1", "Keep the original locale");

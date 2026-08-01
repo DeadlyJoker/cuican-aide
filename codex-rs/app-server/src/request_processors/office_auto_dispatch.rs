@@ -1,3 +1,6 @@
+use super::office_auto_dispatch_durable::DurableAutoDelegationAttempt;
+use super::office_auto_dispatch_durable::DurableAutoDelegationParams;
+use super::office_auto_dispatch_recovery::OfficeAutoDispatchRecovery;
 use super::*;
 use crewon_app_server_protocol::AutomationRunStartParams;
 
@@ -33,7 +36,7 @@ impl OfficeAutoDispatchContext {
         turn: Turn,
         connection_id: ConnectionId,
     ) -> Option<OfficeAutoDispatchStarted> {
-        if let Err(err) = self
+        let intent = match self
             .domain_processor
             .office_auto_dispatch_intent_queue(
                 cwd,
@@ -43,27 +46,103 @@ impl OfficeAutoDispatchContext {
             )
             .await
         {
-            warn!(
+            Ok(intent) => intent,
+            Err(err) => {
+                warn!(
                 thread_id = %source_thread_id,
                 turn_id = %turn.id,
                 error = %err.message,
                 "failed to persist office auto dispatch intent"
-            );
-            return None;
-        }
-        let prepared = match self
+                );
+                return None;
+            }
+        };
+        let lease_id = format!("office-auto-dispatch-{}", Uuid::new_v4());
+        match self
             .domain_processor
-            .office_auto_delegation_dispatch_prepare_after_thread_turn(cwd, source_thread_id, &turn)
+            .office_auto_dispatch_intent_claim(
+                cwd,
+                &intent.intent_id,
+                source_thread_id,
+                &turn.id,
+                &lease_id,
+            )
             .await
         {
-            Ok(Some(prepared)) => prepared,
+            Ok(true) => {}
+            Ok(false) => return None,
+            Err(err) => {
+                warn!(
+                    thread_id = %source_thread_id,
+                    turn_id = %turn.id,
+                    error = %err.message,
+                    "failed to claim office auto dispatch intent"
+                );
+                return None;
+            }
+        }
+        self.dispatch_claimed_after_terminal_turn(
+            cwd,
+            &intent.intent_id,
+            source_thread_id,
+            turn,
+            connection_id,
+            &lease_id,
+        )
+        .await
+    }
+
+    pub(crate) async fn dispatch_claimed_after_terminal_turn(
+        &self,
+        cwd: &str,
+        intent_id: &str,
+        source_thread_id: &str,
+        turn: Turn,
+        connection_id: ConnectionId,
+        lease_id: &str,
+    ) -> Option<OfficeAutoDispatchStarted> {
+        match self
+            .recover_durable_auto_delegation(
+                cwd,
+                intent_id,
+                source_thread_id,
+                &turn.id,
+                lease_id,
+                connection_id,
+            )
+            .await
+        {
+            Ok(OfficeAutoDispatchRecovery::NotFound) => {}
+            Ok(OfficeAutoDispatchRecovery::Handled(recovered)) => return recovered,
+            Err(error) => {
+                warn!(
+                    thread_id = %source_thread_id,
+                    turn_id = %turn.id,
+                    error = %error.message,
+                    "durable Office dispatch recovery failed closed"
+                );
+                return None;
+            }
+        }
+        let permitted = match self
+            .domain_processor
+            .office_auto_delegation_dispatch_prepare_after_thread_turn_permitted(
+                cwd,
+                source_thread_id,
+                &turn,
+            )
+            .await
+        {
+            Ok(Some(permitted)) => permitted,
             Ok(None) => {
                 return self
                     .dispatch_verification_after_terminal_turn(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn,
                         connection_id,
+                        lease_id,
                     )
                     .await;
             }
@@ -78,8 +157,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -94,6 +175,78 @@ impl OfficeAutoDispatchContext {
                 return None;
             }
         };
+        let (prepared_cwd, run_id, delegation_id, thread_id, client_user_message_id, prompt) = {
+            let prepared = permitted.prepared();
+            (
+                prepared.cwd.clone(),
+                prepared.run_id.clone(),
+                prepared.delegation_id.clone(),
+                prepared.thread_id.clone(),
+                prepared.client_user_message_id.clone(),
+                prepared.prompt.clone(),
+            )
+        };
+        match self
+            .turn_processor
+            .resolve_office_auto_delegation_admission_mode(&thread_id)
+            .await
+        {
+            Ok(OfficeAutoDelegationAdmissionMode::Legacy) => {}
+            Ok(OfficeAutoDelegationAdmissionMode::Durable) => {
+                return self
+                    .dispatch_durable_auto_delegation(DurableAutoDelegationParams {
+                        attempt: DurableAutoDelegationAttempt::New,
+                        cwd,
+                        intent_id,
+                        source_thread_id,
+                        source_turn_id: &turn.id,
+                        lease_id,
+                        prepared_cwd,
+                        run_id,
+                        delegation_id,
+                        thread_id,
+                        prompt,
+                        connection_id,
+                        permitted,
+                    })
+                    .await;
+            }
+            Err(error) => {
+                let message = error.to_string();
+                if let Err(mark_error) = self
+                    .domain_processor
+                    .office_delegation_dispatch_mark_failed_permitted(permitted, &message)
+                    .await
+                {
+                    warn!(
+                        run_id = %run_id,
+                        delegation_id = %delegation_id,
+                        error = %mark_error.message,
+                        "failed to mark disabled durable Office dispatch as failed"
+                    );
+                }
+                if let Err(mark_error) = self
+                    .domain_processor
+                    .office_auto_dispatch_intent_failed(
+                        cwd,
+                        intent_id,
+                        source_thread_id,
+                        &turn.id,
+                        lease_id,
+                        &message,
+                    )
+                    .await
+                {
+                    warn!(
+                        thread_id = %source_thread_id,
+                        turn_id = %turn.id,
+                        error = %mark_error.message,
+                        "failed to mark disabled durable Office dispatch intent as failed"
+                    );
+                }
+                return None;
+            }
+        }
         let request_id = ConnectionRequestId {
             connection_id,
             request_id: RequestId::String(format!("office-auto-delegation-{}", Uuid::new_v4())),
@@ -103,17 +256,17 @@ impl OfficeAutoDispatchContext {
             .turn_start_response(
                 request_id,
                 TurnStartParams {
-                    thread_id: prepared.thread_id.clone(),
-                    client_user_message_id: prepared.client_user_message_id.clone(),
+                    thread_id: thread_id.clone(),
+                    client_user_message_id,
                     input: vec![V2UserInput::Text {
-                        text: prepared.prompt.clone(),
+                        text: prompt,
                         text_elements: Vec::new(),
                     }],
-                    cwd: Some(PathBuf::from(prepared.cwd.clone())),
+                    cwd: Some(PathBuf::from(&prepared_cwd)),
                     ..TurnStartParams::default()
                 },
                 Some("app-server-office-auto-dispatch".to_string()),
-                None,
+                /*app_server_client_version*/ None,
             )
             .await
         {
@@ -121,18 +274,12 @@ impl OfficeAutoDispatchContext {
             Err(err) => {
                 if let Err(mark_error) = self
                     .domain_processor
-                    .office_delegation_dispatch_mark_failed(
-                        &prepared.cwd,
-                        prepared.config,
-                        &prepared.run_id,
-                        &prepared.delegation_id,
-                        &err.message,
-                    )
+                    .office_delegation_dispatch_mark_failed_permitted(permitted, &err.message)
                     .await
                 {
                     warn!(
-                        run_id = %prepared.run_id,
-                        delegation_id = %prepared.delegation_id,
+                        run_id = %run_id,
+                        delegation_id = %delegation_id,
                         error = %mark_error.message,
                         "failed to mark office auto delegation dispatch as failed"
                     );
@@ -141,8 +288,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -159,20 +308,14 @@ impl OfficeAutoDispatchContext {
         };
         let (file_path, config) = match self
             .domain_processor
-            .office_delegation_dispatch_mark_started(
-                &prepared.cwd,
-                prepared.config,
-                &prepared.run_id,
-                &prepared.delegation_id,
-                &turn_response.turn.id,
-            )
+            .office_delegation_dispatch_mark_started_permitted(permitted, &turn_response.turn.id)
             .await
         {
             Ok(update) => update,
             Err(err) => {
                 warn!(
-                    run_id = %prepared.run_id,
-                    delegation_id = %prepared.delegation_id,
+                    run_id = %run_id,
+                    delegation_id = %delegation_id,
                     turn_id = %turn_response.turn.id,
                     error = %err.message,
                     "failed to mark office auto delegation dispatch as started"
@@ -181,8 +324,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -202,15 +347,17 @@ impl OfficeAutoDispatchContext {
             .domain_processor
             .office_auto_dispatch_intent_dispatched(
                 cwd,
+                intent_id,
                 source_thread_id,
                 &turn.id,
+                lease_id,
                 OfficeAutoDispatchIntentDispatched {
-                    run_id: &prepared.run_id,
+                    run_id: &run_id,
                     dispatch_kind: "delegation",
-                    delegation_id: Some(&prepared.delegation_id),
+                    delegation_id: Some(&delegation_id),
                     verification_check_id: None,
                     file_path: &started.file_path,
-                    dispatched_thread_id: &prepared.thread_id,
+                    dispatched_thread_id: &thread_id,
                     dispatched_turn_id: &turn_response.turn.id,
                 },
             )
@@ -225,17 +372,17 @@ impl OfficeAutoDispatchContext {
         }
         self.outgoing
             .send_server_notification(office_run_updated_notification(
-                &prepared.cwd,
+                &prepared_cwd,
                 &started.file_path,
                 &started.config,
                 "autoDispatchStarted",
-                Some(&prepared.thread_id),
+                Some(&thread_id),
                 Some(&turn_response.turn.id),
             ))
             .await;
         self.spawn_completion_monitor(
-            prepared.cwd.clone(),
-            prepared.thread_id.clone(),
+            prepared_cwd,
+            thread_id,
             turn_response.turn.id.clone(),
             connection_id,
         );
@@ -245,23 +392,32 @@ impl OfficeAutoDispatchContext {
     async fn dispatch_verification_after_terminal_turn(
         &self,
         cwd: &str,
+        intent_id: &str,
         source_thread_id: &str,
         turn: &Turn,
         connection_id: ConnectionId,
+        lease_id: &str,
     ) -> Option<OfficeAutoDispatchStarted> {
-        let prepared = match self
+        let permitted = match self
             .domain_processor
-            .office_auto_verification_dispatch_prepare_after_thread_turn(
+            .office_auto_verification_dispatch_prepare_after_thread_turn_permitted(
                 cwd,
                 source_thread_id,
                 turn,
             )
             .await
         {
-            Ok(Some(prepared)) => prepared,
+            Ok(Some(permitted)) => permitted,
             Ok(None) => {
                 return self
-                    .dispatch_retry_after_terminal_turn(cwd, source_thread_id, turn, connection_id)
+                    .dispatch_retry_after_terminal_turn(
+                        cwd,
+                        intent_id,
+                        source_thread_id,
+                        turn,
+                        connection_id,
+                        lease_id,
+                    )
                     .await;
             }
             Err(err) => {
@@ -275,8 +431,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -291,14 +449,34 @@ impl OfficeAutoDispatchContext {
                 return None;
             }
         };
+        let (
+            prepared_cwd,
+            run_id,
+            verification_check_id,
+            automation_config,
+            note,
+            locale,
+            client_user_message_id,
+        ) = {
+            let prepared = permitted.prepared();
+            (
+                prepared.cwd.clone(),
+                prepared.run_id.clone(),
+                prepared.verification_check_id.clone(),
+                prepared.automation_config.clone(),
+                prepared.note.clone(),
+                prepared.locale.clone(),
+                prepared.client_user_message_id.clone(),
+            )
+        };
         let automation_prepared = match self
             .domain_processor
             .automation_run_start_prepare(AutomationRunStartParams {
-                cwd: prepared.cwd.clone(),
-                config: prepared.automation_config.clone(),
-                note: Some(prepared.note.clone()),
-                locale: prepared.locale.clone(),
-                client_user_message_id: prepared.client_user_message_id.clone(),
+                cwd: prepared_cwd.clone(),
+                config: automation_config,
+                note: Some(note),
+                locale,
+                client_user_message_id,
             })
             .await
         {
@@ -306,18 +484,12 @@ impl OfficeAutoDispatchContext {
             Err(err) => {
                 if let Err(mark_error) = self
                     .domain_processor
-                    .office_verification_dispatch_mark_failed(
-                        &prepared.cwd,
-                        prepared.config,
-                        &prepared.run_id,
-                        &prepared.verification_check_id,
-                        &err.message,
-                    )
+                    .office_verification_dispatch_mark_failed_permitted(permitted, &err.message)
                     .await
                 {
                     warn!(
-                        run_id = %prepared.run_id,
-                        verification_check_id = %prepared.verification_check_id,
+                        run_id = %run_id,
+                        verification_check_id = %verification_check_id,
                         error = %mark_error.message,
                         "failed to mark office auto verification dispatch as failed"
                     );
@@ -326,8 +498,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -357,11 +531,11 @@ impl OfficeAutoDispatchContext {
                         text: automation_prepared.prompt.clone(),
                         text_elements: Vec::new(),
                     }],
-                    cwd: Some(PathBuf::from(prepared.cwd.clone())),
+                    cwd: Some(PathBuf::from(&prepared_cwd)),
                     ..TurnStartParams::default()
                 },
                 Some("app-server-office-auto-verification".to_string()),
-                None,
+                /*app_server_client_version*/ None,
             )
             .await
         {
@@ -370,29 +544,20 @@ impl OfficeAutoDispatchContext {
                 let mark_result = if office_auto_verification_start_failure_can_retry(&err.message)
                 {
                     self.domain_processor
-                        .office_verification_dispatch_mark_retryable_start_failure(
-                            &prepared.cwd,
-                            prepared.config,
-                            &prepared.run_id,
-                            &prepared.verification_check_id,
+                        .office_verification_dispatch_mark_retryable_start_failure_permitted(
+                            permitted,
                             &err.message,
                         )
                         .await
                 } else {
                     self.domain_processor
-                        .office_verification_dispatch_mark_failed(
-                            &prepared.cwd,
-                            prepared.config,
-                            &prepared.run_id,
-                            &prepared.verification_check_id,
-                            &err.message,
-                        )
+                        .office_verification_dispatch_mark_failed_permitted(permitted, &err.message)
                         .await
                 };
                 if let Err(mark_error) = mark_result {
                     warn!(
-                        run_id = %prepared.run_id,
-                        verification_check_id = %prepared.verification_check_id,
+                        run_id = %run_id,
+                        verification_check_id = %verification_check_id,
                         error = %mark_error.message,
                         "failed to mark office auto verification dispatch start failure"
                     );
@@ -401,8 +566,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -426,18 +593,12 @@ impl OfficeAutoDispatchContext {
             Err(err) => {
                 if let Err(mark_error) = self
                     .domain_processor
-                    .office_verification_dispatch_mark_failed(
-                        &prepared.cwd,
-                        prepared.config,
-                        &prepared.run_id,
-                        &prepared.verification_check_id,
-                        &err.message,
-                    )
+                    .office_verification_dispatch_mark_failed_permitted(permitted, &err.message)
                     .await
                 {
                     warn!(
-                        run_id = %prepared.run_id,
-                        verification_check_id = %prepared.verification_check_id,
+                        run_id = %run_id,
+                        verification_check_id = %verification_check_id,
                         error = %mark_error.message,
                         "failed to mark office auto verification dispatch record failure"
                     );
@@ -446,8 +607,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -464,12 +627,11 @@ impl OfficeAutoDispatchContext {
         };
         let (file_path, config) = match self
             .domain_processor
-            .office_verification_dispatch_mark_started(
-                &prepared.cwd,
-                prepared.config,
+            .office_verification_dispatch_mark_started_permitted(
+                permitted,
                 OfficeVerificationDispatchStarted {
-                    run_id: &prepared.run_id,
-                    verification_check_id: &prepared.verification_check_id,
+                    run_id: &run_id,
+                    verification_check_id: &verification_check_id,
                     automation_run_file_path: &automation_run_response.file_path,
                     automation_run_id: &automation_run_response.run.run_id,
                     automation_thread_id: &automation_prepared.thread_id,
@@ -483,8 +645,8 @@ impl OfficeAutoDispatchContext {
             Ok(update) => update,
             Err(err) => {
                 warn!(
-                    run_id = %prepared.run_id,
-                    verification_check_id = %prepared.verification_check_id,
+                    run_id = %run_id,
+                    verification_check_id = %verification_check_id,
                     turn_id = %turn_response.turn.id,
                     error = %err.message,
                     "failed to mark office auto verification dispatch as started"
@@ -493,8 +655,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -514,13 +678,15 @@ impl OfficeAutoDispatchContext {
             .domain_processor
             .office_auto_dispatch_intent_dispatched(
                 cwd,
+                intent_id,
                 source_thread_id,
                 &turn.id,
+                lease_id,
                 OfficeAutoDispatchIntentDispatched {
-                    run_id: &prepared.run_id,
+                    run_id: &run_id,
                     dispatch_kind: "verification",
                     delegation_id: None,
-                    verification_check_id: Some(&prepared.verification_check_id),
+                    verification_check_id: Some(&verification_check_id),
                     file_path: &started.file_path,
                     dispatched_thread_id: &automation_prepared.thread_id,
                     dispatched_turn_id: &turn_response.turn.id,
@@ -537,7 +703,7 @@ impl OfficeAutoDispatchContext {
         }
         self.outgoing
             .send_server_notification(office_run_updated_notification(
-                &prepared.cwd,
+                &prepared_cwd,
                 &started.file_path,
                 &started.config,
                 "autoVerificationStarted",
@@ -546,7 +712,7 @@ impl OfficeAutoDispatchContext {
             ))
             .await;
         self.spawn_completion_monitor(
-            prepared.cwd.clone(),
+            prepared_cwd,
             automation_prepared.thread_id.clone(),
             turn_response.turn.id.clone(),
             connection_id,
@@ -557,20 +723,28 @@ impl OfficeAutoDispatchContext {
     async fn dispatch_retry_after_terminal_turn(
         &self,
         cwd: &str,
+        intent_id: &str,
         source_thread_id: &str,
         turn: &Turn,
         connection_id: ConnectionId,
+        lease_id: &str,
     ) -> Option<OfficeAutoDispatchStarted> {
-        let prepared = match self
+        let permitted = match self
             .domain_processor
-            .office_auto_retry_prepare_after_thread_turn(cwd, source_thread_id, turn)
+            .office_auto_retry_prepare_after_thread_turn_permitted(cwd, source_thread_id, turn)
             .await
         {
-            Ok(Some(prepared)) => prepared,
+            Ok(Some(permitted)) => permitted,
             Ok(None) => {
                 if let Err(err) = self
                     .domain_processor
-                    .office_auto_dispatch_intent_clear(cwd, source_thread_id, &turn.id)
+                    .office_auto_dispatch_intent_clear(
+                        cwd,
+                        intent_id,
+                        source_thread_id,
+                        &turn.id,
+                        lease_id,
+                    )
                     .await
                 {
                     warn!(
@@ -593,8 +767,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -609,6 +785,16 @@ impl OfficeAutoDispatchContext {
                 return None;
             }
         };
+        let (prepared_cwd, run_id, thread_id, client_user_message_id, prompt) = {
+            let prepared = permitted.prepared();
+            (
+                prepared.cwd.clone(),
+                prepared.run_id.clone(),
+                prepared.thread_id.clone(),
+                prepared.client_user_message_id.clone(),
+                prepared.prompt.clone(),
+            )
+        };
         let request_id = ConnectionRequestId {
             connection_id,
             request_id: RequestId::String(format!("office-auto-replan-{}", Uuid::new_v4())),
@@ -618,17 +804,17 @@ impl OfficeAutoDispatchContext {
             .turn_start_response(
                 request_id,
                 TurnStartParams {
-                    thread_id: prepared.thread_id.clone(),
-                    client_user_message_id: prepared.client_user_message_id.clone(),
+                    thread_id: thread_id.clone(),
+                    client_user_message_id,
                     input: vec![V2UserInput::Text {
-                        text: prepared.prompt.clone(),
+                        text: prompt,
                         text_elements: Vec::new(),
                     }],
-                    cwd: Some(PathBuf::from(prepared.cwd.clone())),
+                    cwd: Some(PathBuf::from(&prepared_cwd)),
                     ..TurnStartParams::default()
                 },
                 Some("app-server-office-auto-replan".to_string()),
-                None,
+                /*app_server_client_version*/ None,
             )
             .await
         {
@@ -636,16 +822,11 @@ impl OfficeAutoDispatchContext {
             Err(err) => {
                 if let Err(mark_error) = self
                     .domain_processor
-                    .office_run_mark_failed(
-                        &prepared.cwd,
-                        prepared.config,
-                        &prepared.run_id,
-                        &err.message,
-                    )
+                    .office_run_mark_failed_permitted(permitted, &err.message)
                     .await
                 {
                     warn!(
-                        run_id = %prepared.run_id,
+                        run_id = %run_id,
                         error = %mark_error.message,
                         "failed to mark office auto replan as failed"
                     );
@@ -654,8 +835,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -672,18 +855,13 @@ impl OfficeAutoDispatchContext {
         };
         let (file_path, config) = match self
             .domain_processor
-            .office_run_mark_started(
-                &prepared.cwd,
-                prepared.config,
-                &prepared.run_id,
-                &turn_response.turn.id,
-            )
+            .office_run_mark_started_permitted(permitted, &turn_response.turn.id)
             .await
         {
             Ok(update) => update,
             Err(err) => {
                 warn!(
-                    run_id = %prepared.run_id,
+                    run_id = %run_id,
                     turn_id = %turn_response.turn.id,
                     error = %err.message,
                     "failed to mark office auto replan as started"
@@ -692,8 +870,10 @@ impl OfficeAutoDispatchContext {
                     .domain_processor
                     .office_auto_dispatch_intent_failed(
                         cwd,
+                        intent_id,
                         source_thread_id,
                         &turn.id,
+                        lease_id,
                         &err.message,
                     )
                     .await
@@ -713,15 +893,17 @@ impl OfficeAutoDispatchContext {
             .domain_processor
             .office_auto_dispatch_intent_dispatched(
                 cwd,
+                intent_id,
                 source_thread_id,
                 &turn.id,
+                lease_id,
                 OfficeAutoDispatchIntentDispatched {
-                    run_id: &prepared.run_id,
+                    run_id: &run_id,
                     dispatch_kind: "replan",
                     delegation_id: None,
                     verification_check_id: None,
                     file_path: &started.file_path,
-                    dispatched_thread_id: &prepared.thread_id,
+                    dispatched_thread_id: &thread_id,
                     dispatched_turn_id: &turn_response.turn.id,
                 },
             )
@@ -736,17 +918,17 @@ impl OfficeAutoDispatchContext {
         }
         self.outgoing
             .send_server_notification(office_run_updated_notification(
-                &prepared.cwd,
+                &prepared_cwd,
                 &started.file_path,
                 &started.config,
                 "autoReplanStarted",
-                Some(&prepared.thread_id),
+                Some(&thread_id),
                 Some(&turn_response.turn.id),
             ))
             .await;
         self.spawn_completion_monitor(
-            prepared.cwd.clone(),
-            prepared.thread_id.clone(),
+            prepared_cwd,
+            thread_id,
             turn_response.turn.id.clone(),
             connection_id,
         );
@@ -843,7 +1025,11 @@ impl OfficeAutoDispatchContext {
             tokio::time::sleep(OFFICE_AUTO_DISPATCH_COMPLETION_POLL_INTERVAL).await;
         };
 
-        match sync_office_run_updates_for_thread_turn(&cwd, &thread_id, &turn).await {
+        match self
+            .domain_processor
+            .sync_office_run_updates_for_thread_turn(&cwd, &thread_id, &turn)
+            .await
+        {
             Ok(updates) => {
                 for update in updates {
                     self.outgoing

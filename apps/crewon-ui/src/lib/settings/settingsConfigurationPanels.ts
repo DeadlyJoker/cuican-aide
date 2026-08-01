@@ -240,6 +240,7 @@ export function configPanel(params: {
       .join("\n\n"),
     fields: [
       {
+        commitOnChange: true,
         id: "config-model",
         label: locale === "zh" ? "默认模型" : "Default model",
         placeholder: "gpt-5-codex",
@@ -247,6 +248,7 @@ export function configPanel(params: {
         options: modelOptions,
       },
       {
+        commitOnChange: true,
         id: "config-approval-policy",
         label: locale === "zh" ? "审批策略" : "Approval policy",
         placeholder: "on-request",
@@ -254,22 +256,12 @@ export function configPanel(params: {
         options: approvalOptions,
       },
       {
+        commitOnChange: true,
         id: "config-sandbox-mode",
         label: locale === "zh" ? "沙箱模式" : "Sandbox mode",
         placeholder: "workspace-write",
         value: currentSandboxMode || sandboxOptions[0]?.value || "",
         options: sandboxOptions,
-      },
-    ],
-    actions: [
-      {
-        id: "save-config",
-        label: locale === "zh" ? "保存配置" : "Save config",
-        tone: "primary",
-      },
-      {
-        id: "refresh-config",
-        label: locale === "zh" ? "刷新配置" : "Refresh config",
       },
     ],
   };
@@ -367,6 +359,7 @@ export function appearancePanel(params: {
     body: appearanceSettingsText(configRead, locale),
     fields: [
       {
+        commitOnChange: true,
         id: "appearance-locale",
         label: locale === "zh" ? "语言" : "Language",
         value: configuredLocale,
@@ -376,6 +369,7 @@ export function appearancePanel(params: {
         ],
       },
       {
+        commitOnChange: true,
         id: "appearance-theme",
         label: locale === "zh" ? "主题" : "Theme",
         value: configuredTheme,
@@ -383,17 +377,6 @@ export function appearancePanel(params: {
           { label: locale === "zh" ? "深色" : "Dark", value: "dark" },
           { label: locale === "zh" ? "浅色" : "Light", value: "light" },
         ],
-      },
-    ],
-    actions: [
-      {
-        id: "save-appearance",
-        label: locale === "zh" ? "保存外观" : "Save appearance",
-        tone: "primary",
-      },
-      {
-        id: "refresh-appearance",
-        label: locale === "zh" ? "刷新外观" : "Refresh appearance",
       },
     ],
   };
@@ -424,9 +407,13 @@ export function personalizationSettingsText(
   const instructions = configRead?.config.instructions?.trim() ?? "";
   const developerInstructions =
     configRead?.config.developer_instructions?.trim() ?? "";
+  const memoryMode = personalizationMemoryMode(configRead);
+  const memoryModeLabel = personalizationMemoryModeOptions(locale).find(
+    (option) => option.value === memoryMode,
+  )?.label;
   return [
-    locale === "zh" ? "个性化" : "Personalization",
-    `${locale === "zh" ? "个人指令" : "Instructions"}: ${
+    locale === "zh" ? "助理人格与记忆" : "Assistant profile & memory",
+    `${locale === "zh" ? "角色定位" : "Role"}: ${
       instructions
         ? locale === "zh"
           ? "已配置"
@@ -435,7 +422,7 @@ export function personalizationSettingsText(
           ? "未配置"
           : "not configured"
     }`,
-    `${locale === "zh" ? "开发者指令" : "Developer instructions"}: ${
+    `${locale === "zh" ? "灵魂与原则" : "Soul & principles"}: ${
       developerInstructions
         ? locale === "zh"
           ? "已配置"
@@ -444,15 +431,85 @@ export function personalizationSettingsText(
           ? "未配置"
           : "not configured"
     }`,
+    `${locale === "zh" ? "长期记忆" : "Long-term memory"}: ${memoryModeLabel}`,
     `${locale === "zh" ? "配置层" : "Config layers"}: ${configRead?.layers?.length ?? 0}`,
     locale === "zh"
-      ? "这些内容会通过 app-server 写入配置，影响新会话和后续任务的默认行为。"
-      : "These values are written through app-server config and affect defaults for new sessions and future tasks.",
+      ? "保存后由 app-server 热重载。角色和灵魂影响新会话；长期记忆会在对话空闲后异步沉淀，并按相关性有限检索。"
+      : "The app-server hot-reloads these settings. Role and soul affect new sessions; long-term memory is consolidated asynchronously after conversations become idle and retrieved with bounded relevance.",
   ].join("\n");
 }
 
+type PersonalizationMemoryMode = "learn-only" | "off" | "on" | "read-only";
+
+function configNestedBoolean(
+  configRead: ConfigReadResponse | null,
+  tableName: string,
+  key: string,
+  fallback: boolean,
+): boolean {
+  const table = configRead?.config[tableName];
+  if (!table || typeof table !== "object" || Array.isArray(table)) {
+    return fallback;
+  }
+  const value = table[key];
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function personalizationMemoryMode(
+  configRead: ConfigReadResponse | null,
+): PersonalizationMemoryMode {
+  const featureEnabled = configNestedBoolean(
+    configRead,
+    "features",
+    "memories",
+    false,
+  );
+  if (!featureEnabled) {
+    return "off";
+  }
+
+  const generateMemories = configNestedBoolean(
+    configRead,
+    "memories",
+    "generate_memories",
+    true,
+  );
+  const useMemories = configNestedBoolean(
+    configRead,
+    "memories",
+    "use_memories",
+    true,
+  );
+  if (generateMemories && useMemories) {
+    return "on";
+  }
+  if (generateMemories) {
+    return "learn-only";
+  }
+  if (useMemories) {
+    return "read-only";
+  }
+  return "off";
+}
+
+function personalizationMemoryModeOptions(locale: Locale) {
+  return locale === "zh"
+    ? [
+        { label: "生成并使用（推荐）", value: "on" },
+        { label: "仅使用已有记忆", value: "read-only" },
+        { label: "仅沉淀，不主动引用", value: "learn-only" },
+        { label: "关闭长期记忆", value: "off" },
+      ]
+    : [
+        { label: "Learn and use (recommended)", value: "on" },
+        { label: "Use existing memories only", value: "read-only" },
+        { label: "Learn without retrieval", value: "learn-only" },
+        { label: "Turn off long-term memory", value: "off" },
+      ];
+}
+
 function personalizationTitle(locale: Locale): string {
-  return locale === "zh" ? "个性化" : "Personalization";
+  return locale === "zh" ? "助理人格与记忆" : "Assistant profile & memory";
 }
 
 export function personalizationDisconnectedPanel(
@@ -478,8 +535,8 @@ export function personalizationLoadingPanel(
     subtitle: configScopedSubtitle(cwd, locale),
     body:
       locale === "zh"
-        ? "正在读取个性化设置..."
-        : "Reading personalization settings...",
+        ? "正在读取助理人格与记忆设置..."
+        : "Reading assistant profile and memory settings...",
   };
 }
 
@@ -496,32 +553,54 @@ export function personalizationPanel(params: {
     fields: [
       {
         id: "personalization-instructions",
-        label: locale === "zh" ? "个人指令" : "Instructions",
+        label: locale === "zh" ? "角色定位" : "Role",
+        description:
+          locale === "zh"
+            ? "定义助理是谁、负责什么、以什么视角工作。保存为系统指令。"
+            : "Define who the assistant is, what it owns, and the perspective it works from. Saved as system instructions.",
+        multiline: true,
         placeholder:
           locale === "zh"
-            ? "例如：回答更简洁，优先给出可执行步骤"
-            : "Example: answer concisely and prioritize actionable steps",
+            ? "例如：你是我的产品与工程助理，负责把模糊想法推进为可验证的交付。"
+            : "Example: You are my product and engineering assistant, turning ambiguous ideas into verified deliverables.",
+        rows: 6,
         value: configRead?.config.instructions ?? "",
       },
       {
         id: "personalization-developer-instructions",
-        label: locale === "zh" ? "开发者指令" : "Developer instructions",
+        label: locale === "zh" ? "灵魂与原则" : "Soul & principles",
+        description:
+          locale === "zh"
+            ? "定义价值取向、表达方式、边界和长期行为原则。保存为开发者指令。"
+            : "Define values, voice, boundaries, and durable behavior principles. Saved as developer instructions.",
+        multiline: true,
         placeholder:
           locale === "zh"
-            ? "团队级默认工程约束"
-            : "Team-level engineering defaults",
+            ? "例如：诚实标注未验证边界；主动推进，但不越过权限；优先使用真实证据。"
+            : "Example: Mark unverified boundaries honestly, move work forward without crossing authority, and prefer real evidence.",
+        rows: 7,
         value: configRead?.config.developer_instructions ?? "",
+      },
+      {
+        id: "personalization-memory-mode",
+        label: locale === "zh" ? "长期记忆" : "Long-term memory",
+        description:
+          locale === "zh"
+            ? "控制是否从对话形成长期记忆，以及是否在新任务中检索已有记忆。"
+            : "Control whether conversations form long-term memories and whether existing memories are retrieved in new tasks.",
+        value: personalizationMemoryMode(configRead),
+        options: personalizationMemoryModeOptions(locale),
       },
     ],
     actions: [
       {
         id: "save-personalization",
-        label: locale === "zh" ? "保存个性化" : "Save personalization",
+        label: locale === "zh" ? "保存助理设置" : "Save assistant settings",
         tone: "primary",
       },
       {
         id: "refresh-personalization",
-        label: locale === "zh" ? "刷新个性化" : "Refresh personalization",
+        label: locale === "zh" ? "刷新助理设置" : "Refresh assistant settings",
       },
     ],
   };
@@ -540,8 +619,8 @@ export function personalizationErrorPanel(params: {
       error instanceof Error
         ? error.message
         : locale === "zh"
-          ? "读取个性化设置失败"
-          : "Unable to read personalization settings",
+          ? "读取助理人格与记忆设置失败"
+          : "Unable to read assistant profile and memory settings",
   };
 }
 

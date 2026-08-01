@@ -11,6 +11,7 @@ pub enum ExecutionTargetKind {
     Crewon,
     Agent,
     Team,
+    Experts,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,6 +20,7 @@ pub enum ExecutionTargetSelection {
     Crewon,
     Agent { id: String },
     Team { id: String },
+    Experts { id: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,6 +133,9 @@ impl ExecutionTargetResolver {
             ExecutionTargetSelection::Team { id } => {
                 self.resolve_catalog_target(ExecutionTargetKind::Team, id, catalog)
             }
+            ExecutionTargetSelection::Experts { id } => {
+                self.resolve_catalog_target(ExecutionTargetKind::Experts, id, catalog)
+            }
         }
     }
 
@@ -152,8 +157,11 @@ impl ExecutionTargetResolver {
             })?;
         validate_token(&record.token)?;
 
-        let runtime_availability = if kind == ExecutionTargetKind::Team
-            && self.team_runtime_availability != TargetRuntimeAvailability::Ready
+        let runtime_availability = if matches!(
+            kind,
+            ExecutionTargetKind::Team | ExecutionTargetKind::Experts
+        ) && self.team_runtime_availability
+            != TargetRuntimeAvailability::Ready
         {
             self.team_runtime_availability
         } else {
@@ -179,7 +187,7 @@ impl ExecutionTargetResolver {
                 ExecutionTargetKind::Crewon | ExecutionTargetKind::Agent => {
                     ExecutionStrategy::Single
                 }
-                ExecutionTargetKind::Team => ExecutionStrategy::Team,
+                ExecutionTargetKind::Team | ExecutionTargetKind::Experts => ExecutionStrategy::Team,
             },
             availability,
         })

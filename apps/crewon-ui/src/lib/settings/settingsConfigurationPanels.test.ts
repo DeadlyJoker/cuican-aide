@@ -50,6 +50,7 @@ describe("settings configuration panels", () => {
       ].join("\n\n"),
       fields: [
         {
+          commitOnChange: true,
           id: "config-model",
           label: "Default model",
           placeholder: "gpt-5-codex",
@@ -57,6 +58,7 @@ describe("settings configuration panels", () => {
           options: [],
         },
         {
+          commitOnChange: true,
           id: "config-approval-policy",
           label: "Approval policy",
           placeholder: "on-request",
@@ -69,6 +71,7 @@ describe("settings configuration panels", () => {
           ],
         },
         {
+          commitOnChange: true,
           id: "config-sandbox-mode",
           label: "Sandbox mode",
           placeholder: "workspace-write",
@@ -79,10 +82,6 @@ describe("settings configuration panels", () => {
             { label: "danger-full-access", value: "danger-full-access" },
           ],
         },
-      ],
-      actions: [
-        { id: "save-config", label: "Save config", tone: "primary" },
-        { id: "refresh-config", label: "Refresh config" },
       ],
     });
     expect(
@@ -140,6 +139,7 @@ describe("settings configuration panels", () => {
       ].join("\n"),
       fields: [
         {
+          commitOnChange: true,
           id: "appearance-locale",
           label: "Language",
           value: "zh",
@@ -149,6 +149,7 @@ describe("settings configuration panels", () => {
           ],
         },
         {
+          commitOnChange: true,
           id: "appearance-theme",
           label: "Theme",
           value: "dark",
@@ -157,10 +158,6 @@ describe("settings configuration panels", () => {
             { label: "Light", value: "light" },
           ],
         },
-      ],
-      actions: [
-        { id: "save-appearance", label: "Save appearance", tone: "primary" },
-        { id: "refresh-appearance", label: "Refresh appearance" },
       ],
     });
     expect(
@@ -249,14 +246,14 @@ describe("settings configuration panels", () => {
 
   it("builds personalization panels", () => {
     expect(personalizationDisconnectedPanel("Disconnected", "en")).toEqual({
-      title: "Personalization",
+      title: "Assistant profile & memory",
       subtitle: "Disconnected",
       error: "Local app-server is not connected",
     });
     expect(personalizationLoadingPanel(null, "zh")).toEqual({
-      title: "个性化",
+      title: "助理人格与记忆",
       subtitle: "全局配置",
-      body: "正在读取个性化设置...",
+      body: "正在读取助理人格与记忆设置...",
     });
     expect(
       personalizationPanel({
@@ -265,39 +262,62 @@ describe("settings configuration panels", () => {
         locale: "en",
       }),
     ).toEqual({
-      title: "Personalization",
+      title: "Assistant profile & memory",
       subtitle: "/repo",
       body: [
-        "Personalization",
-        "Instructions: not configured",
-        "Developer instructions: not configured",
+        "Assistant profile & memory",
+        "Role: not configured",
+        "Soul & principles: not configured",
+        "Long-term memory: Turn off long-term memory",
         "Config layers: 0",
-        "These values are written through app-server config and affect defaults for new sessions and future tasks.",
+        "The app-server hot-reloads these settings. Role and soul affect new sessions; long-term memory is consolidated asynchronously after conversations become idle and retrieved with bounded relevance.",
       ].join("\n"),
       fields: [
         {
           id: "personalization-instructions",
-          label: "Instructions",
+          label: "Role",
+          description:
+            "Define who the assistant is, what it owns, and the perspective it works from. Saved as system instructions.",
+          multiline: true,
           placeholder:
-            "Example: answer concisely and prioritize actionable steps",
+            "Example: You are my product and engineering assistant, turning ambiguous ideas into verified deliverables.",
+          rows: 6,
           value: "",
         },
         {
           id: "personalization-developer-instructions",
-          label: "Developer instructions",
-          placeholder: "Team-level engineering defaults",
+          label: "Soul & principles",
+          description:
+            "Define values, voice, boundaries, and durable behavior principles. Saved as developer instructions.",
+          multiline: true,
+          placeholder:
+            "Example: Mark unverified boundaries honestly, move work forward without crossing authority, and prefer real evidence.",
+          rows: 7,
           value: "",
+        },
+        {
+          id: "personalization-memory-mode",
+          label: "Long-term memory",
+          description:
+            "Control whether conversations form long-term memories and whether existing memories are retrieved in new tasks.",
+          value: "off",
+          options: [
+            { label: "Learn and use (recommended)", value: "on" },
+            { label: "Use existing memories only", value: "read-only" },
+            { label: "Learn without retrieval", value: "learn-only" },
+            { label: "Turn off long-term memory", value: "off" },
+          ],
         },
       ],
       actions: [
         {
           id: "save-personalization",
-          label: "Save personalization",
+          label: "Save assistant settings",
           tone: "primary",
         },
         {
           id: "refresh-personalization",
-          label: "Refresh personalization",
+          label: "Refresh assistant settings",
         },
       ],
     });
@@ -308,9 +328,9 @@ describe("settings configuration panels", () => {
         locale: "en",
       }),
     ).toEqual({
-      title: "Personalization",
+      title: "Assistant profile & memory",
       subtitle: "/repo",
-      error: "Unable to read personalization settings",
+      error: "Unable to read assistant profile and memory settings",
     });
     expect(
       personalizationErrorPanel({
@@ -319,7 +339,7 @@ describe("settings configuration panels", () => {
         locale: "zh",
       }),
     ).toEqual({
-      title: "个性化",
+      title: "助理人格与记忆",
       subtitle: "全局配置",
       error: "denied",
     });

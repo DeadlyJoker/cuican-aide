@@ -6,6 +6,7 @@ import type { CapabilityPanel } from "./capabilityPanelTypes";
 import {
   attachWorkspaceContextAction,
   loadBrowserAppsAction,
+  readWorkspaceDiffAction,
   readWorkspaceFilesAction,
   runTerminalStatusAction,
   type RunTerminalStatusActionParams,
@@ -117,8 +118,11 @@ describe("workspace capability actions", () => {
     const busyStates: Array<string | null> = [];
     const processIds: Array<string | null> = [];
     let currentProcessId: string | null = null;
-    const commands: Array<{ command: string; cwd: string; processId: string }> =
-      [];
+    const commands: Array<{
+      command: string;
+      cwd: string;
+      processId?: string;
+    }> = [];
 
     await runTerminalStatusAction({
       ...baseParams(),
@@ -193,6 +197,56 @@ describe("workspace capability actions", () => {
         { label: "> src", path: "/repo/src", kind: "directory" },
         { label: "  README.md", path: "/repo/README.md", kind: "file" },
       ],
+    });
+  });
+
+  it("renders the current tracked diff without starting a review thread", async () => {
+    const sink = panelSink();
+    const busyStates: Array<string | null> = [];
+    const commands: Array<{
+      command: string;
+      cwd: string;
+      processId?: string;
+    }> = [];
+    const diff = [
+      "diff --git a/src/a.ts b/src/a.ts",
+      "--- a/src/a.ts",
+      "+++ b/src/a.ts",
+      "@@ -1 +1 @@",
+      "-const value = false;",
+      "+const value = true;",
+    ].join("\n");
+
+    await readWorkspaceDiffAction({
+      ...baseParams(),
+      client: baseClient({
+        async runCommand(cwd, command, processId) {
+          commands.push({ command, cwd, processId });
+          return {
+            exitCode: 0,
+            stderr: null,
+            stdout: `__CREWON_DIFF_COUNT__=1\n${diff}`,
+          };
+        },
+      }),
+      setBusyToolId: (toolId) => busyStates.push(toolId),
+      setCapabilityPanel: sink.setCapabilityPanel,
+    });
+
+    expect(commands).toEqual([
+      {
+        command: expect.stringContaining(
+          "git status --porcelain=v1 --untracked-files=no",
+        ),
+        cwd: "/repo",
+        processId: undefined,
+      },
+    ]);
+    expect(busyStates).toEqual(["review", null]);
+    expect(sink.panel).toEqual({
+      body: diff,
+      subtitle: "1 tracked changes · showing 1 files · +1 / -1",
+      title: "Current changes",
     });
   });
 

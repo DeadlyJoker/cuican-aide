@@ -1,3 +1,11 @@
+import {
+  AppWindow,
+  File,
+  Folder,
+  Plug,
+  SquareTerminal,
+} from "lucide-react";
+
 import type {
   CapabilityPanel,
   CapabilityPanelItem,
@@ -14,6 +22,56 @@ function capabilityItemKey(item: CapabilityPanelItem) {
         : item.action?.processId) ??
     item.label
   }`;
+}
+
+function capabilityItemLabel(label: string): string {
+  return label.replace(/^\s*>\s*/, "").trimStart();
+}
+
+function capabilityItemIcon(item: CapabilityPanelItem) {
+  if (item.kind === "directory") {
+    return <Folder aria-hidden="true" />;
+  }
+  if (item.kind === "file") {
+    return <File aria-hidden="true" />;
+  }
+  if (item.action?.type === "app") {
+    return <AppWindow aria-hidden="true" />;
+  }
+  if (item.action?.type === "plugin") {
+    return <Plug aria-hidden="true" />;
+  }
+  if (item.action?.type === "background-terminal") {
+    return <SquareTerminal aria-hidden="true" />;
+  }
+  return null;
+}
+
+function capabilityPanelKind(panel: CapabilityPanel): string {
+  if (
+    panel.commandInput ||
+    panel.items?.some((item) => item.action?.type === "background-terminal") ||
+    /终端|terminal/i.test(panel.title)
+  ) {
+    return "terminal";
+  }
+  if (
+    panel.items?.some(
+      (item) => item.kind === "directory" || item.kind === "file",
+    )
+  ) {
+    return "files";
+  }
+  if (/审查|改动|review|changes/i.test(panel.title)) {
+    return "review";
+  }
+  if (/浏览器|browser|应用与 hooks/i.test(panel.title)) {
+    return "web";
+  }
+  if (/侧边聊天|side chat/i.test(panel.title)) {
+    return "sidechat";
+  }
+  return "generic";
 }
 
 export function CapabilityResultPanel({
@@ -39,8 +97,14 @@ export function CapabilityResultPanel({
   onPanelFieldChange?: (fieldId: string, value: string) => void;
   onPanelItem?: (item: CapabilityPanelItem) => void;
 }) {
+  const panelKind = capabilityPanelKind(panel);
+
   return (
-    <section className="capability-result" aria-live="polite">
+    <section
+      className="capability-result"
+      data-panel-kind={panelKind}
+      aria-live="polite"
+    >
       <div className="capability-result-header">
         <strong>{panel.title}</strong>
         {panel.subtitle ? <span>{panel.subtitle}</span> : null}
@@ -77,7 +141,13 @@ export function CapabilityResultPanel({
         </form>
       ) : null}
       {panel.error ? <p className="capability-result-error">{panel.error}</p> : null}
-      {panel.body ? <pre>{panel.body}</pre> : null}
+      {panel.body ? (
+        panelKind === "terminal" || panelKind === "review" ? (
+          <pre className="capability-result-output">{panel.body}</pre>
+        ) : (
+          <p className="capability-result-summary">{panel.body}</p>
+        )
+      ) : null}
       {panel.fields ? (
         <div className="capability-field-list">
           {panel.fields.map((field) => (
@@ -125,22 +195,46 @@ export function CapabilityResultPanel({
         </div>
       ) : null}
       {panel.items ? (
-        <ul>
-          {panel.items.map((item) => (
-            <li key={capabilityItemKey(item)}>
-              {item.path || item.action ? (
-                <button
-                  type="button"
-                  className="capability-result-item"
-                  onClick={() => onPanelItem?.(item)}
-                >
-                  {item.label}
-                </button>
-              ) : (
-                item.label
-              )}
-            </li>
-          ))}
+        <ul className="capability-result-list">
+          {panel.items.map((item) => {
+            const icon = capabilityItemIcon(item);
+            return (
+              <li key={capabilityItemKey(item)}>
+                {item.path || item.action ? (
+                  <button
+                    type="button"
+                    className="capability-result-item"
+                    data-has-icon={icon ? "true" : undefined}
+                    title={item.path ?? item.label}
+                    onClick={() => onPanelItem?.(item)}
+                  >
+                    {icon ? (
+                      <span className="capability-result-item-icon">
+                        {icon}
+                      </span>
+                    ) : null}
+                    <span className="capability-result-item-label">
+                      {capabilityItemLabel(item.label)}
+                    </span>
+                  </button>
+                ) : (
+                  <div
+                    className="capability-result-item is-static"
+                    data-has-icon={icon ? "true" : undefined}
+                  >
+                    {icon ? (
+                      <span className="capability-result-item-icon">
+                        {icon}
+                      </span>
+                    ) : null}
+                    <span className="capability-result-item-label">
+                      {capabilityItemLabel(item.label)}
+                    </span>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </section>

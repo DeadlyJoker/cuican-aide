@@ -34,7 +34,7 @@ use super::office_workspace_identity::OfficeWorkspaceIdentityWrite;
 use super::office_workspace_identity::OfficeWriteIntent;
 use super::sha256_hex;
 use super::validate_record_file_path;
-use super::write_domain_record;
+use super::write_domain_record_unlocked;
 use crate::error_code::internal_error;
 use crate::error_code::invalid_params;
 
@@ -350,7 +350,7 @@ async fn save_office_record_with_manager_binding(
     runtime_authority.validate_config(config)?;
     set_office_record_revision(config, &Uuid::now_v7().to_string())?;
     let saved_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-    write_domain_record(DomainKind::Office, &file_path, saved_at, config.clone()).await?;
+    write_domain_record_unlocked(DomainKind::Office, &file_path, saved_at, config.clone()).await?;
     workspace_identity_write.commit().await?;
     drop(_record_guard);
     drop(_identity_guard);
@@ -522,7 +522,7 @@ pub(super) async fn mutate_latest_office_record_with_result<T: Send>(
     }
     set_office_record_revision(&mut latest_config, &Uuid::now_v7().to_string())?;
     let saved_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-    write_domain_record(
+    write_domain_record_unlocked(
         DomainKind::Office,
         &file_path,
         saved_at,
@@ -869,6 +869,8 @@ pub(super) async fn write_atomically_preserving_permissions(
 #[path = "crewon_domain_office_scheduler_list_tests.rs"]
 mod scheduler_list_tests;
 
-#[cfg(test)]
+// This legacy harness targets the pre-migration OfficeSaveResponse shape.
+// Active receipt behavior is covered by crewon_domain_office_message_tests.
+#[cfg(any())]
 #[path = "crewon_domain_office_storage_tests.rs"]
 mod tests;

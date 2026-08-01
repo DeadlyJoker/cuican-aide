@@ -52,11 +52,11 @@ describe("app routing search parsing", () => {
     expect(libraryViewFromSearch("?view=settings")).toBeNull();
   });
 
-  it("parses settings sections with account fallback", () => {
+  it("parses settings sections with general settings fallback", () => {
     expect(settingsSectionFromSearch("?section=appearance")).toBe("appearance");
     expect(settingsSectionFromSearch("section=mcp-servers")).toBe("mcp-servers");
-    expect(settingsSectionFromSearch("?section=unknown")).toBe("account");
-    expect(settingsSectionFromSearch("")).toBe("account");
+    expect(settingsSectionFromSearch("?section=unknown")).toBe("config");
+    expect(settingsSectionFromSearch("")).toBe("config");
   });
 
   it("detects command shell hash routes independently from selected threads", () => {
@@ -66,11 +66,17 @@ describe("app routing search parsing", () => {
     expect(isCommandShellHash("")).toBe(false);
   });
 
-  it("uses the command shell for the default chat app view", () => {
-    expect(shouldRenderCommandShellView("chat")).toBe(true);
-    expect(shouldRenderCommandShellView("settings", true)).toBe(true);
-    expect(shouldRenderCommandShellView("library", true)).toBe(true);
-    expect(shouldRenderCommandShellView("settings")).toBe(false);
-    expect(shouldRenderCommandShellView("library")).toBe(false);
+  it("lets top-level settings and library views replace the command shell", () => {
+    expect({
+      chat: shouldRenderCommandShellView("chat"),
+      library: shouldRenderCommandShellView("library"),
+      settings: shouldRenderCommandShellView("settings"),
+    }).toMatchInlineSnapshot(`
+      {
+        "chat": true,
+        "library": false,
+        "settings": false,
+      }
+    `);
   });
 });

@@ -1,11 +1,30 @@
-import { AlertTriangle, Bot, Code2, FilePenLine, Terminal } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  Bot,
+  Code2,
+  Eye,
+  FilePenLine,
+  Search,
+  Sparkles,
+  Terminal,
+} from "lucide-react";
 import type { Turn } from "@crewon-protocol/v2/Turn";
 import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
 
 import type { Locale } from "../lib/i18n";
 import { itemPreview, userInputToText } from "../lib/shared/text";
 import { renderMarkdown } from "./TranscriptMarkdown";
+import {
+  ComposerResourceTags,
+  type ComposerResourceTag,
+} from "./composer/ComposerResourceTags";
 import { transcriptToolRoleLabel } from "./transcriptToolPresentation";
+import {
+  TranscriptImageGenerationCard,
+  TranscriptImageViewCard,
+  TranscriptWebSearchCard,
+} from "./TranscriptActionCards";
 import {
   TranscriptCollabAgentToolCard,
   TranscriptCommandCard,
@@ -40,9 +59,25 @@ function itemIcon(item: ThreadItem) {
       return <Terminal size={16} />;
     case "fileChange":
       return <FilePenLine size={16} />;
-    case "mcpToolCall":
+    case "mcpToolCall": {
+      const server = item.server.toLowerCase();
+      const tool = item.tool.toLowerCase();
+      if (
+        (server.includes("file") || server.includes("filesystem")) &&
+        tool.includes("read")
+      ) {
+        return <BookOpen size={16} />;
+      }
+      return <Code2 size={16} />;
+    }
     case "dynamicToolCall":
       return <Code2 size={16} />;
+    case "webSearch":
+      return <Search size={16} />;
+    case "imageView":
+      return <Eye size={16} />;
+    case "imageGeneration":
+      return <Sparkles size={16} />;
     default:
       return <Bot size={16} />;
   }
@@ -70,6 +105,12 @@ function itemRole(
       return labels.reasoningLabel;
     case "plan":
       return labels.planLabel;
+    case "webSearch":
+      return locale === "zh" ? "搜索" : "Search";
+    case "imageView":
+      return locale === "zh" ? "图片" : "Image";
+    case "imageGeneration":
+      return locale === "zh" ? "生成" : "Generate";
     default:
       return transcriptToolRoleLabel(item, locale) ?? item.type;
   }
@@ -130,6 +171,58 @@ function renderItemText(item: ThreadItem, locale: Locale): string {
 
 function renderMessageContent(item: ThreadItem, locale: Locale) {
   switch (item.type) {
+    case "userMessage": {
+      const text = item.content
+        .filter((input) => input.type === "text")
+        .map((input) => input.text)
+        .join("\n\n");
+      const resources = item.content.flatMap<ComposerResourceTag>((input) => {
+        if (input.type === "skill") {
+          return [
+            {
+              id: `skill-${input.path}`,
+              kind: "skill",
+              label: "Skill",
+              name: input.name,
+            },
+          ];
+        }
+        if (
+          input.type === "mention" &&
+          (input.path.startsWith("mcp://") ||
+            input.path.startsWith("agent-platform://mcp_servers/"))
+        ) {
+          return [
+            {
+              id: `mcp-${input.path}`,
+              kind: "mcp",
+              label: "MCP",
+              name: input.name,
+            },
+          ];
+        }
+        if (
+          input.type === "mention" &&
+          input.path.startsWith("agent-platform://knowledge_bases/")
+        ) {
+          return [
+            {
+              id: `knowledge-${input.path}`,
+              kind: "knowledge",
+              label: "知识库",
+              name: input.name,
+            },
+          ];
+        }
+        return [];
+      });
+      return (
+        <>
+          {text.trim() ? renderMarkdown(text) : null}
+          <ComposerResourceTags resources={resources} />
+        </>
+      );
+    }
     case "commandExecution":
       return <TranscriptCommandCard item={item} locale={locale} />;
     case "fileChange":
@@ -144,6 +237,12 @@ function renderMessageContent(item: ThreadItem, locale: Locale) {
       return <TranscriptCollabAgentToolCard item={item} locale={locale} />;
     case "subAgentActivity":
       return <TranscriptSubAgentActivityCard item={item} locale={locale} />;
+    case "webSearch":
+      return <TranscriptWebSearchCard item={item} locale={locale} />;
+    case "imageView":
+      return <TranscriptImageViewCard item={item} locale={locale} />;
+    case "imageGeneration":
+      return <TranscriptImageGenerationCard item={item} locale={locale} />;
     default:
       return renderMarkdown(renderItemText(item, locale));
   }
@@ -265,13 +364,9 @@ export function TranscriptStreamingMessage({
 export function TranscriptThinkingMessage({
   crewonLabel,
   locale,
-  stopLabel,
-  onStop,
 }: {
   crewonLabel: string;
   locale: Locale;
-  stopLabel: string;
-  onStop: () => void;
 }) {
   return (
     <article
@@ -281,7 +376,11 @@ export function TranscriptThinkingMessage({
       aria-label={crewonLabel}
     >
       <div className="message-body">
-        <div className="process-card reasoning-card thinking-card" data-status="inProgress" role="status">
+        <div
+          className="process-card reasoning-card thinking-card"
+          data-status="inProgress"
+          role="status"
+        >
           <div className="thinking-card-main">
             <span className="process-card-status">
               <span className="status-dot" aria-hidden="true" />
@@ -292,11 +391,10 @@ export function TranscriptThinkingMessage({
                 <span />
               </span>
             </span>
-            <em>{locale === "zh" ? "等待模型响应" : "Waiting for model response"}</em>
+            <em>
+              {locale === "zh" ? "等待模型响应" : "Waiting for model response"}
+            </em>
           </div>
-          <button type="button" className="turn-stop-button" onClick={onStop}>
-            {stopLabel}
-          </button>
         </div>
       </div>
     </article>
@@ -328,7 +426,11 @@ export function TranscriptFailureMessage({
       aria-label={crewonLabel}
     >
       <div className="message-body">
-        <div className="process-card failure-card" data-status="failed" role="status">
+        <div
+          className="process-card failure-card"
+          data-status="failed"
+          role="status"
+        >
           <span className="process-card-status">
             <AlertTriangle size={14} aria-hidden="true" />
             {locale === "zh" ? "模型连接失败" : "Model connection failed"}

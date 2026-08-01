@@ -17,10 +17,12 @@ use crewon_app_server_protocol::CommandExecutionStatus;
 use crewon_app_server_protocol::OfficeApprovalDecideParams;
 use crewon_app_server_protocol::OfficeApprovalDecision;
 use crewon_app_server_protocol::OfficeArtifactUpsertParams;
+use crewon_app_server_protocol::OfficeCreateParams;
 use crewon_app_server_protocol::OfficeDelegationCancelParams;
 use crewon_app_server_protocol::OfficeDelegationDispatchNextParams;
 use crewon_app_server_protocol::OfficeDelegationDispatchParams;
 use crewon_app_server_protocol::OfficeDelegationRetryParams;
+use crewon_app_server_protocol::OfficeListParams;
 use crewon_app_server_protocol::OfficeMemberAddParams;
 use crewon_app_server_protocol::OfficeMemberContextPreviewParams;
 use crewon_app_server_protocol::OfficeMemoryDecideParams;
@@ -6871,6 +6873,65 @@ async fn office_member_add_attaches_agent_id_and_replaces_existing_member() {
         read_response.record.expect("office record").config,
         expected_config
     );
+}
+
+#[tokio::test]
+async fn office_create_with_two_members_persists_one_office_record() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let processor = CrewonDomainRequestProcessor::new();
+    let cwd = temp_dir.path().to_string_lossy().into_owned();
+    let created = processor
+        .office_create(OfficeCreateParams {
+            cwd: cwd.clone(),
+            title: "Contract Office".to_string(),
+            subtitle: Some("Contract delivery".to_string()),
+            thread_id: None,
+            goal: Some("Draft and review contracts".to_string()),
+        })
+        .await
+        .expect("create Office");
+    let record_id = created.config["workspace"]["recordId"]
+        .as_str()
+        .expect("created Office record id")
+        .to_string();
+
+    let first = processor
+        .office_member_add(OfficeMemberAddParams {
+            cwd: cwd.clone(),
+            config: created.config,
+            agent_id: "agent-contract-draft".to_string(),
+            member: json!({"name": "Contract Draft", "role": "Draft contracts"}),
+        })
+        .await
+        .expect("add first Office member");
+    let second = processor
+        .office_member_add(OfficeMemberAddParams {
+            cwd: cwd.clone(),
+            config: first.config,
+            agent_id: "agent-contract-review".to_string(),
+            member: json!({"name": "Contract Review", "role": "Review contracts"}),
+        })
+        .await
+        .expect("add second Office member");
+    let listed = processor
+        .office_list(OfficeListParams {
+            cwd,
+            cursor: None,
+            limit: Some(24),
+        })
+        .await
+        .expect("list Offices");
+
+    assert_eq!(first.file_path, created.file_path);
+    assert_eq!(second.file_path, created.file_path);
+    assert_eq!(second.config["workspace"]["recordId"], record_id);
+    assert_eq!(
+        second.config["workspace"]["members"]
+            .as_array()
+            .map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(listed.data.len(), 1);
 }
 
 #[tokio::test]

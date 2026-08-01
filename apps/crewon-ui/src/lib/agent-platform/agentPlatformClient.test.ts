@@ -1,10 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
+  AGENT_PLATFORM_TOKEN_STORAGE_KEY,
+  agentPlatformAuthorizedFetch,
+  clearAgentPlatformSession,
+  createAgentPlatformWorkflow,
+  getAgentPlatformAccessToken,
   platformAgentsToLibraryItems,
   platformKnowledgeToData,
   platformToolsToLibraryItems,
   readAgentPlatformSnapshot,
+  storeAgentPlatformSession,
   type AgentPlatformSnapshot,
 } from "./agentPlatformClient";
 
@@ -86,7 +93,175 @@ function snapshot(): AgentPlatformSnapshot {
 
 describe("agent-platform client mapping", () => {
   afterEach(() => {
+    clearAgentPlatformSession();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("drops legacy tokens when Principal Session is enabled", async () => {
+    vi.stubEnv("VITE_CREWON_PRINCIPAL_SESSION_ENABLED", "true");
+    const values = new Map<string, string>([
+      [AGENT_PLATFORM_TOKEN_STORAGE_KEY, jwt({ exp: 4_102_444_800 })],
+      [AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY, "legacy-refresh"],
+    ]);
+    vi.stubGlobal("localStorage", storage(values));
+
+    await expect(getAgentPlatformAccessToken()).resolves.toBeNull();
+    expect(values.has(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBe(false);
+    expect(values.has(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)).toBe(false);
+  });
+
+  it("keeps a scoped auth-session token for Principal Session", async () => {
+    vi.stubEnv("VITE_CREWON_PRINCIPAL_SESSION_ENABLED", "true");
+    const token = jwt({
+      exp: 4_102_444_800,
+      tenant_id: 1,
+      space_id: 1,
+      crewon_auth_session_id: "auth-session-1",
+      crewon_auth_epoch: 1,
+    });
+    const values = new Map<string, string>([
+      [AGENT_PLATFORM_TOKEN_STORAGE_KEY, token],
+    ]);
+    vi.stubGlobal("localStorage", storage(values));
+
+    await expect(getAgentPlatformAccessToken()).resolves.toBe(token);
+  });
+
+  it("refreshes an expiring scoped session before cloud resource calls", async () => {
+    vi.stubEnv("VITE_CREWON_PRINCIPAL_SESSION_ENABLED", "true");
+    const expiringToken = jwt({
+      exp: Math.floor(Date.now() / 1000) + 5,
+      tenant_id: 1,
+      space_id: 1,
+      crewon_auth_session_id: "auth-session-1",
+      crewon_auth_epoch: 1,
+    });
+    const refreshedToken = jwt({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      tenant_id: 1,
+      space_id: 1,
+      crewon_auth_session_id: "auth-session-1",
+      crewon_auth_epoch: 1,
+    });
+    const values = new Map<string, string>([
+      [AGENT_PLATFORM_TOKEN_STORAGE_KEY, expiringToken],
+      [AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY, "refresh-one"],
+    ]);
+    vi.stubGlobal("localStorage", storage(values));
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        access_token: refreshedToken,
+        refresh_token: "refresh-two",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getAgentPlatformAccessToken()).resolves.toBe(refreshedToken);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/agent-platform-api/api/v1/auth/refresh",
+      expect.objectContaining({
+        body: new URLSearchParams({ refresh_token: "refresh-one" }),
+        method: "POST",
+      }),
+    );
+    expect(values.get(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBe(refreshedToken);
+    expect(values.get(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)).toBe(
+      "refresh-two",
+    );
+  });
+
+  it("refreshes and retries a cloud request rejected with 401", async () => {
+    vi.stubEnv("VITE_CREWON_PRINCIPAL_SESSION_ENABLED", "true");
+    const accessToken = jwt({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      tenant_id: 1,
+      space_id: 1,
+      crewon_auth_session_id: "auth-session-1",
+      crewon_auth_epoch: 1,
+    });
+    const refreshedToken = jwt({
+      exp: Math.floor(Date.now() / 1000) + 7200,
+      tenant_id: 1,
+      space_id: 1,
+      crewon_auth_session_id: "auth-session-1",
+      crewon_auth_epoch: 1,
+    });
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", storage(values));
+    storeAgentPlatformSession(accessToken, "refresh-one");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: refreshedToken,
+          refresh_token: "refresh-two",
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await agentPlatformAuthorizedFetch("/api/v1/mcp/tools");
+
+    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "/agent-platform-api/api/v1/mcp/tools",
+      "/agent-platform-api/api/v1/auth/refresh",
+      "/agent-platform-api/api/v1/mcp/tools",
+    ]);
+    expect(
+      new Headers(fetchMock.mock.calls[2]?.[1]?.headers).get("Authorization"),
+    ).toBe(`Bearer ${refreshedToken}`);
+  });
+
+  it("creates a real cloud Workflow without sending the local workspace", async () => {
+    const token = jwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", storage(values));
+    storeAgentPlatformSession(token);
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({
+          id: 77,
+          name: "交付协作流",
+          description: "完成审阅和验收",
+          is_active: 1,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      createAgentPlatformWorkflow({
+        description: "完成审阅和验收",
+        lead: "交付负责人",
+        name: "交付协作流",
+      }),
+    ).resolves.toMatchObject({
+      id: 77,
+      name: "交付协作流",
+      resource_source: "online",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toBe("/agent-platform-api/api/v1/workflows");
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("Content-Type")).toBe(
+      "application/json",
+    );
+    expect(JSON.parse(String(init?.body))).toEqual({
+      name: "交付协作流",
+      description: "完成审阅和验收",
+      nodes: [],
+      edges: [],
+      config: {
+        crewon: {
+          collaboration_mode: "workflow",
+          lead: "交付负责人",
+        },
+      },
+    });
+    expect(String(init?.body)).not.toContain("/Users/");
   });
 
   it("keeps healthy resource categories when Agent and Workflow fail", async () => {
@@ -598,7 +773,6 @@ describe("agent-platform client mapping", () => {
       action: {
         type: "agent-config",
         config: {
-          agentId: "agent-platform:agents:101",
           model: "qwen-plus",
           systemPrompt: "Use bound resources.",
           skills: [{ id: "301", enabled: true }],
@@ -606,6 +780,11 @@ describe("agent-platform client mapping", () => {
         },
       },
     });
+    expect(
+      items[0]?.action?.type === "agent-config"
+        ? items[0].action.config.agentId
+        : null,
+    ).toBeUndefined();
   });
 
   it("maps MCP servers and skills into tool library cards", () => {
@@ -653,3 +832,20 @@ describe("agent-platform client mapping", () => {
     ]);
   });
 });
+
+function storage(values: Map<string, string>): Storage {
+  return {
+    get length() {
+      return values.size;
+    },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => values.delete(key),
+    setItem: (key, value) => values.set(key, value),
+  };
+}
+
+function jwt(payload: Record<string, unknown>): string {
+  return ["header", btoa(JSON.stringify(payload)), "signature"].join(".");
+}

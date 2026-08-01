@@ -47,6 +47,7 @@ function configRead(
       tools: null,
       web_search: null,
       analytics: null,
+      apps: null,
       ...overrides,
     },
     layers: [],
@@ -265,7 +266,12 @@ describe("settings configuration actions", () => {
         async readConfig() {
           return configRead({
             developer_instructions: "Use local patterns.",
+            features: { memories: true },
             instructions: "Keep answers short.",
+            memories: {
+              generate_memories: true,
+              use_memories: false,
+            },
           });
         },
       }),
@@ -273,7 +279,7 @@ describe("settings configuration actions", () => {
     });
 
     expect(sink.panel).toMatchObject({
-      title: "Personalization",
+      title: "Assistant profile & memory",
       subtitle: "/repo",
       fields: [
         expect.objectContaining({
@@ -283,6 +289,10 @@ describe("settings configuration actions", () => {
         expect.objectContaining({
           id: "personalization-developer-instructions",
           value: "Use local patterns.",
+        }),
+        expect.objectContaining({
+          id: "personalization-memory-mode",
+          value: "learn-only",
         }),
       ],
     });

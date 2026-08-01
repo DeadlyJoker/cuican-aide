@@ -84,7 +84,14 @@ async fn run_control_socket_acceptor(
                 }
             };
             let (websocket_writer, websocket_reader) = websocket_stream.split();
-            run_websocket_connection(websocket_writer, websocket_reader, transport_event_tx).await;
+            run_websocket_connection(
+                websocket_writer,
+                websocket_reader,
+                transport_event_tx,
+                super::TransportAuthentication::ConnectionScoped,
+                super::principal_revocation::PrincipalRevocationGuard::NotApplicable,
+            )
+            .await;
         });
     }
     info!("control socket acceptor shutting down");

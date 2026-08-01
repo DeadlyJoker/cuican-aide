@@ -41,6 +41,7 @@ function configRead(): ConfigReadResponse {
       tools: null,
       web_search: null,
       analytics: null,
+      apps: null,
     },
     layers: [],
     origins: {},

@@ -38,22 +38,22 @@ export function openSettingsAction(params: {
   demoSettingsPanel: (section: SettingsSection, locale: Locale) => CapabilityPanel;
   isDemo: boolean;
   locale: Locale;
-  refreshAccountPanel: () => void | Promise<void>;
+  refreshDefaultSettingsPanel: () => void | Promise<void>;
   setAppView: AppViewSetter;
   setCapabilityDockOpen: BooleanSetter;
   setCapabilityPanel: CapabilityPanelSetter;
   setInspectorOpen: BooleanSetter;
   setSettingsSection: SettingsSectionSetter;
 }): void {
-  params.setSettingsSection("account");
+  params.setSettingsSection("config");
   params.setAppView("settings");
   params.setCapabilityDockOpen(false);
   params.setInspectorOpen(false);
   if (params.isDemo) {
-    params.setCapabilityPanel(params.demoSettingsPanel("account", params.locale));
+    params.setCapabilityPanel(params.demoSettingsPanel("config", params.locale));
     return;
   }
-  void params.refreshAccountPanel();
+  void params.refreshDefaultSettingsPanel();
 }
 
 export function openSettingsSectionAction(params: {

@@ -3,11 +3,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   beginWeComLogin,
   completeWeComLogin,
+  logoutAgentPlatform,
+  readAgentPlatformCurrentUser,
   readWeComLoginConfig,
   registerAgentPlatform,
   setAgentPlatformPassword,
 } from "./agentPlatformSession";
-import { storeAgentPlatformSession } from "./agentPlatformClient";
+import {
+  AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
+  AGENT_PLATFORM_TOKEN_STORAGE_KEY,
+  clearAgentPlatformSession,
+  storeAgentPlatformSession,
+} from "./agentPlatformClient";
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -25,7 +32,66 @@ function memoryStorage(): Storage {
 
 describe("agent-platform WeCom session", () => {
   afterEach(() => {
+    clearAgentPlatformSession();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("uses the OIDC BFF and keeps mediated tokens out of localStorage", async () => {
+    vi.stubEnv("VITE_CREWON_UNIFIED_SSO_ENABLED", "true");
+    const storage = memoryStorage();
+    storage.setItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY, "legacy-access");
+    storage.setItem(
+      AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
+      "legacy-refresh",
+    );
+    vi.stubGlobal("localStorage", storage);
+    vi.stubGlobal("window", {
+      location: { pathname: "/workspace", search: "?thread=7" },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: "mediated-access",
+          expires_in: 600,
+          user: {
+            id: 7,
+            username: "sso-user",
+            display_name: "企微用户",
+            wecom_display_name: "企微用户",
+            email: "sso@example.com",
+            role: "user",
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await readWeComLoginConfig()).toMatchObject({
+      enabled: true,
+      label: "企业统一登录",
+    });
+    expect(await beginWeComLogin()).toBe(
+      "/agent-platform-api/sso/client/crewon/start?return_to=%2Fworkspace%3Fthread%3D7",
+    );
+    await expect(readAgentPlatformCurrentUser()).resolves.toMatchObject({
+      id: 7,
+      username: "sso-user",
+      display_name: "企微用户",
+      wecom_display_name: "企微用户",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/agent-platform-api/sso/client/crewon/token",
+      expect.objectContaining({
+        credentials: "same-origin",
+        method: "POST",
+      }),
+    );
+    expect(storage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBeNull();
+    expect(
+      storage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY),
+    ).toBeNull();
   });
 
   it("reads the disabled reason and navigates through the backend authorize endpoint", async () => {
@@ -49,6 +115,22 @@ describe("agent-platform WeCom session", () => {
     });
     expect(await beginWeComLogin()).toBe(
       "/agent-platform-api/api/v1/auth/wecom/authorize",
+    );
+  });
+
+  it("uses global logout so the next login requires a fresh enterprise sign-in", async () => {
+    vi.stubEnv("VITE_CREWON_UNIFIED_SSO_ENABLED", "true");
+    vi.stubGlobal("localStorage", memoryStorage());
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await logoutAgentPlatform();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/agent-platform-api/sso/client/crewon/global-logout",
+      expect.objectContaining({ credentials: "same-origin", method: "POST" }),
     );
   });
 

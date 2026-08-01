@@ -31,6 +31,16 @@ pub(crate) struct OfficeMemberRuntimeThreadStart {
     pub(crate) developer_instructions: Option<String>,
 }
 
+pub(crate) struct OfficeManagerRuntimeThreadStart {
+    pub(crate) cwd: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OfficeManagerRuntimeProvenance {
+    ServerOwned,
+    Legacy,
+}
+
 pub(crate) struct OfficeAutomationRuntimeThreadStart {
     pub(crate) cwd: String,
     pub(crate) base_instructions: Option<String>,
@@ -323,6 +333,7 @@ fn validate_dynamic_tools(tools: &[ApiDynamicToolSpec]) -> Result<(), String> {
     const DYNAMIC_TOOL_NAME_MAX_LEN: usize = 128;
     const DYNAMIC_TOOL_NAMESPACE_MAX_LEN: usize = 64;
     const DYNAMIC_TOOL_IDENTIFIER_PATTERN: &str = "^[a-zA-Z0-9_-]+$";
+    const SERVER_PROVIDER_NAMESPACE_PREFIX: &str = "crewon_binding_";
     const RESERVED_RESPONSES_NAMESPACES: &[&str] = &[
         "api_tool",
         "browser",
@@ -407,6 +418,11 @@ fn validate_dynamic_tools(tools: &[ApiDynamicToolSpec]) -> Result<(), String> {
                     "dynamic tool namespace is reserved for {name}: {namespace}"
                 ));
             }
+            if namespace.starts_with(SERVER_PROVIDER_NAMESPACE_PREFIX) {
+                return Err(format!(
+                    "dynamic tool namespace is reserved for server-owned Provider bindings for {name}: {namespace}"
+                ));
+            }
             if RESERVED_RESPONSES_NAMESPACES.contains(&namespace) {
                 return Err(format!(
                     "dynamic tool namespace collides with a reserved Responses API namespace for {name}: {namespace}",
@@ -455,6 +471,8 @@ pub(crate) struct ThreadRequestProcessor {
     pub(super) background_tasks: TaskTracker,
     pub(super) skills_watcher: Arc<SkillsWatcher>,
     pub(super) office_auto_dispatch: Option<OfficeAutoDispatchContext>,
+    pub(super) dynamic_tool_server:
+        Arc<crate::platform_control::thread_dynamic_tool_server::ThreadDynamicToolServer>,
 }
 
 /// Outcome of trying to satisfy a resume request from an already loaded thread.
@@ -487,6 +505,9 @@ impl ThreadRequestProcessor {
         log_db: Option<LogDbLayer>,
         skills_watcher: Arc<SkillsWatcher>,
         office_auto_dispatch: Option<OfficeAutoDispatchContext>,
+        dynamic_tool_server: Arc<
+            crate::platform_control::thread_dynamic_tool_server::ThreadDynamicToolServer,
+        >,
     ) -> Self {
         Self {
             auth_manager,
@@ -506,6 +527,7 @@ impl ThreadRequestProcessor {
             background_tasks: TaskTracker::new(),
             skills_watcher,
             office_auto_dispatch,
+            dynamic_tool_server,
         }
     }
 
@@ -513,6 +535,7 @@ impl ThreadRequestProcessor {
         &self,
         request_id: ConnectionRequestId,
         params: ThreadStartParams,
+        execution_context_runtime: Option<ThreadExecutionContextRequestRuntime>,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
         request_context: RequestContext,
@@ -520,6 +543,7 @@ impl ThreadRequestProcessor {
         self.thread_start_inner(
             request_id,
             params,
+            execution_context_runtime,
             app_server_client_name,
             app_server_client_version,
             request_context,
@@ -542,12 +566,16 @@ impl ThreadRequestProcessor {
         &self,
         request_id: ConnectionRequestId,
         params: ThreadResumeParams,
+        execution_context_runtime: Option<ThreadExecutionContextRequestRuntime>,
+        cloud_agent_projection: Option<CloudAgentThreadResumeProjection>,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         self.thread_resume_inner(
             request_id,
             params,
+            execution_context_runtime,
+            cloud_agent_projection,
             app_server_client_name,
             app_server_client_version,
         )
@@ -559,17 +587,26 @@ impl ThreadRequestProcessor {
         &self,
         request_id: ConnectionRequestId,
         params: ThreadForkParams,
+        execution_context_runtime: Option<ThreadExecutionContextRequestRuntime>,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         self.thread_fork_inner(
             request_id,
             params,
+            execution_context_runtime,
             app_server_client_name,
             app_server_client_version,
         )
         .await
         .map(|()| None)
+    }
+
+    pub(crate) async fn ensure_thread_loaded(
+        &self,
+        thread_id: &str,
+    ) -> Result<(ThreadId, Arc<CrewonThread>), JSONRPCErrorError> {
+        self.load_thread(thread_id).await
     }
 
     pub(crate) async fn thread_archive(
@@ -685,8 +722,9 @@ impl ThreadRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: ThreadCompactStartParams,
+        execution_context_runtime: Option<ThreadExecutionContextRequestRuntime>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
-        self.thread_compact_start_inner(request_id, params)
+        self.thread_compact_start_inner(request_id, params, execution_context_runtime)
             .await
             .map(|response| Some(response.into()))
     }
@@ -884,6 +922,9 @@ impl ThreadRequestProcessor {
     }
 
     async fn finalize_thread_teardown(&self, thread_id: ThreadId) {
+        self.dynamic_tool_server
+            .clear_thread(&thread_id.to_string())
+            .await;
         self.pending_thread_unloads.lock().await.remove(&thread_id);
         self.outgoing
             .cancel_requests_for_thread(thread_id, /*error*/ None)
@@ -959,6 +1000,7 @@ impl ThreadRequestProcessor {
             codex_home: self.config.codex_home.to_path_buf(),
             skills_watcher: Arc::clone(&self.skills_watcher),
             office_auto_dispatch: self.office_auto_dispatch.clone(),
+            dynamic_tool_server: Arc::clone(&self.dynamic_tool_server),
         }
     }
 
@@ -996,11 +1038,13 @@ impl ThreadRequestProcessor {
         &self,
         request_id: ConnectionRequestId,
         params: ThreadStartParams,
+        execution_context_runtime: Option<ThreadExecutionContextRequestRuntime>,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
         request_context: RequestContext,
     ) -> Result<(), JSONRPCErrorError> {
         let ThreadStartParams {
+            execution_context,
             model,
             model_provider,
             service_tier,
@@ -1025,12 +1069,30 @@ impl ThreadRequestProcessor {
             thread_source,
             environments,
         } = params;
+        super::cloud_agent_thread_source_fence::ensure_source_creation_allowed(
+            thread_source.as_ref(),
+        )?;
         if sandbox.is_some() && permissions.is_some() {
             return Err(invalid_request(
                 "`permissions` cannot be combined with `sandbox`",
             ));
         }
+        if execution_context.is_some() && ephemeral == Some(true) {
+            return Err(invalid_request(
+                "Thread execution context requires a persistent thread",
+            ));
+        }
         let environment_selections = self.parse_environment_selections(environments)?;
+        let prepared_execution_context = match execution_context {
+            Some(params) => {
+                let runtime = execution_context_runtime.as_ref().ok_or_else(|| {
+                    internal_error("Thread execution context state is unavailable")
+                })?;
+                Some(runtime.prepare_create(params).await?)
+            }
+            None => None,
+        };
+        let execution_context = execution_context_runtime.zip(prepared_execution_context);
         let runtime_workspace_roots = runtime_workspace_roots.map(resolve_runtime_workspace_roots);
         let mut typesafe_overrides = self.build_thread_config_overrides(
             model,
@@ -1058,16 +1120,25 @@ impl ThreadRequestProcessor {
             codex_home: self.config.codex_home.to_path_buf(),
             skills_watcher: Arc::clone(&self.skills_watcher),
             office_auto_dispatch: self.office_auto_dispatch.clone(),
+            dynamic_tool_server: Arc::clone(&self.dynamic_tool_server),
         };
         let request_trace = request_context.request_trace();
         let config_manager = self.config_manager.clone();
         let outgoing = Arc::clone(&listener_task_context.outgoing);
         let error_request_id = request_id.clone();
+        let execution_context_rollback =
+            super::thread_execution_context_lifecycle::ThreadExecutionContextRollback::new(
+                Arc::clone(&self.thread_manager),
+                Arc::clone(&self.thread_store),
+                self.state_db.clone(),
+            );
         let thread_start_task = async move {
             if let Err(error) = Self::thread_start_task(
                 listener_task_context,
                 config_manager,
                 request_id,
+                execution_context,
+                execution_context_rollback,
                 app_server_client_name,
                 app_server_client_version,
                 config,
@@ -1142,6 +1213,11 @@ impl ThreadRequestProcessor {
         listener_task_context: ListenerTaskContext,
         config_manager: ConfigManager,
         request_id: ConnectionRequestId,
+        execution_context: Option<(
+            ThreadExecutionContextRequestRuntime,
+            PreparedThreadExecutionContextCreate,
+        )>,
+        execution_context_rollback: super::thread_execution_context_lifecycle::ThreadExecutionContextRollback,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
         config_overrides: Option<HashMap<String, serde_json::Value>>,
@@ -1306,6 +1382,33 @@ impl ThreadRequestProcessor {
                 CodexErr::InvalidRequest(message) => invalid_request(message),
                 err => internal_error(format!("error creating thread: {err}")),
             })?;
+        let execution_context = if let Some((runtime, prepared)) = execution_context {
+            match runtime
+                .create(
+                    prepared,
+                    &thread_id.to_string(),
+                    ThreadExecutionContextWorkspaceScope::Conversation,
+                    Utc::now().timestamp(),
+                )
+                .await
+            {
+                Ok(execution_context) => Some(execution_context),
+                Err(error) => {
+                    if let Err(rollback_error) =
+                        execution_context_rollback.rollback(thread_id).await
+                    {
+                        tracing::error!(
+                            thread_id = %thread_id,
+                            error = %rollback_error,
+                            "failed to roll back thread after execution context creation failed"
+                        );
+                    }
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
         let session_telemetry = thread.session_telemetry();
         session_telemetry.record_startup_phase(
             "thread_start_create_thread",
@@ -1385,6 +1488,7 @@ impl ThreadRequestProcessor {
 
         let response = ThreadStartResponse {
             thread: thread.clone(),
+            execution_context,
             model: config_snapshot.model,
             model_provider: config_snapshot.model_provider_id,
             service_tier: config_snapshot.service_tier,
@@ -1510,6 +1614,10 @@ impl ThreadRequestProcessor {
             .await
         {
             Ok(thread) => {
+                super::cloud_agent_thread_source_fence::ensure_thread_source_mutation_allowed(
+                    thread.thread_source.as_ref(),
+                    "thread/archive",
+                )?;
                 if thread.archived_at.is_none() {
                     archive_thread_ids.push(thread_id);
                 }
@@ -1527,6 +1635,10 @@ impl ThreadRequestProcessor {
                 .await
             {
                 Ok(thread) => {
+                    super::cloud_agent_thread_source_fence::ensure_thread_source_mutation_allowed(
+                        thread.thread_source.as_ref(),
+                        "thread/archive",
+                    )?;
                     if thread.archived_at.is_none() {
                         archive_thread_ids.push(descendant_thread_id);
                     }
@@ -1827,6 +1939,20 @@ impl ThreadRequestProcessor {
         let thread_id = ThreadId::from_string(&params.thread_id)
             .map_err(|err| invalid_request(format!("invalid session id: {err}")))?;
 
+        let stored_thread = self
+            .thread_store
+            .read_thread(StoreReadThreadParams {
+                thread_id,
+                include_archived: true,
+                include_history: false,
+            })
+            .await
+            .map_err(|err| thread_store_archive_error("unarchive", err))?;
+        super::cloud_agent_thread_source_fence::ensure_thread_source_mutation_allowed(
+            stored_thread.thread_source.as_ref(),
+            "thread/unarchive",
+        )?;
+
         let fallback_provider = self.config.model_provider_id.clone();
         let stored_thread = self
             .thread_store
@@ -1870,6 +1996,11 @@ impl ThreadRequestProcessor {
         }
 
         let (thread_id, thread) = self.load_thread(&thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "thread/rollback",
+        )
+        .await?;
 
         let request = request_id.clone();
 
@@ -1911,10 +2042,24 @@ impl ThreadRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: ThreadCompactStartParams,
+        execution_context_runtime: Option<ThreadExecutionContextRequestRuntime>,
     ) -> Result<ThreadCompactStartResponse, JSONRPCErrorError> {
         let ThreadCompactStartParams { thread_id } = params;
 
         let (_, thread) = self.load_thread(&thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "thread/compact/start",
+        )
+        .await?;
+        if let Some(runtime) = execution_context_runtime.as_ref() {
+            runtime
+                .ensure_operation_supported(
+                    &thread_id,
+                    crate::platform_control::thread_execution_context_runtime::CloudAgentThreadOperation::Compact,
+                )
+                .await?;
+        }
         self.submit_core_op(request_id, thread.as_ref(), Op::Compact)
             .await
             .map_err(|err| internal_error(format!("failed to start compaction: {err}")))?;
@@ -1929,6 +2074,11 @@ impl ThreadRequestProcessor {
         let ThreadBackgroundTerminalsCleanParams { thread_id } = params;
 
         let (_, thread) = self.load_thread(&thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "thread/backgroundTerminals/clean",
+        )
+        .await?;
         self.submit_core_op(request_id, thread.as_ref(), Op::CleanBackgroundTerminals)
             .await
             .map_err(|err| {
@@ -1981,6 +2131,11 @@ impl ThreadRequestProcessor {
         })?;
 
         let (_, thread) = self.load_thread(&thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "thread/backgroundTerminals/terminate",
+        )
+        .await?;
         let terminated = thread.terminate_background_terminal(process_id).await;
         Ok(ThreadBackgroundTerminalsTerminateResponse { terminated })
     }
@@ -2007,6 +2162,11 @@ impl ThreadRequestProcessor {
         }
 
         let (_, thread) = self.load_thread(&thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "thread/shellCommand",
+        )
+        .await?;
         self.submit_core_op(
             request_id,
             thread.as_ref(),
@@ -2026,6 +2186,11 @@ impl ThreadRequestProcessor {
         let event = serde_json::from_value(event)
             .map_err(|err| invalid_request(format!("invalid Guardian denial event: {err}")))?;
         let (_, thread) = self.load_thread(&thread_id).await?;
+        super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+            thread.as_ref(),
+            "thread/approveGuardianDeniedAction",
+        )
+        .await?;
 
         self.submit_core_op(
             request_id,
@@ -2609,6 +2774,26 @@ impl ThreadRequestProcessor {
         .await
     }
 
+    pub(crate) async fn start_office_manager_runtime_thread(
+        &self,
+        params: OfficeManagerRuntimeThreadStart,
+        connection_id: ConnectionId,
+    ) -> Result<Thread, JSONRPCErrorError> {
+        self.start_office_runtime_thread(
+            OfficeRuntimeThreadStart {
+                cwd: params.cwd,
+                base_instructions: None,
+                developer_instructions: None,
+                thread_source: crate::office_runtime_contract::OFFICE_MANAGER_RUNTIME_THREAD_SOURCE,
+                metrics_service_name: "app-server-office-manager-runtime",
+                listener_label: "office manager runtime thread",
+                error_context: "office manager runtime thread",
+            },
+            connection_id,
+        )
+        .await
+    }
+
     pub(crate) async fn start_office_automation_runtime_thread(
         &self,
         params: OfficeAutomationRuntimeThreadStart,
@@ -2651,7 +2836,7 @@ impl ThreadRequestProcessor {
         typesafe_overrides.ephemeral = Some(false);
         let config = self
             .config_manager
-            .load_with_overrides(/*config_overrides*/ None, typesafe_overrides)
+            .load_with_overrides(/*request_overrides*/ None, typesafe_overrides)
             .await
             .map_err(|err| config_load_error(&err))?;
         let environments = self
@@ -2711,6 +2896,43 @@ impl ThreadRequestProcessor {
             /*has_in_progress_turn*/ false,
         );
         Ok(thread)
+    }
+
+    pub(crate) async fn office_manager_runtime_provenance(
+        &self,
+        thread_id: &str,
+    ) -> Result<OfficeManagerRuntimeProvenance, JSONRPCErrorError> {
+        let stored = self
+            .read_stored_thread_for_resume(
+                thread_id, /*path*/ None, /*include_history*/ false,
+            )
+            .await?;
+        if stored.thread_source.as_ref().is_some_and(|source| {
+            source.as_str() == crate::office_runtime_contract::OFFICE_MANAGER_RUNTIME_THREAD_SOURCE
+        }) {
+            Ok(OfficeManagerRuntimeProvenance::ServerOwned)
+        } else {
+            Ok(OfficeManagerRuntimeProvenance::Legacy)
+        }
+    }
+
+    pub(crate) async fn discard_office_runtime_thread(
+        &self,
+        thread_id: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        let thread_id = ThreadId::from_string(thread_id)
+            .map_err(|error| invalid_request(format!("invalid thread id: {error}")))?;
+        let rollback =
+            super::thread_execution_context_lifecycle::ThreadExecutionContextRollback::new(
+                Arc::clone(&self.thread_manager),
+                Arc::clone(&self.thread_store),
+                self.state_db.clone(),
+            );
+        rollback.rollback(thread_id).await.map_err(|error| {
+            internal_error(format!("failed to discard Office runtime: {error}"))
+        })?;
+        self.finalize_thread_teardown(thread_id).await;
+        Ok(())
     }
 
     pub(crate) async fn connection_initialized(
@@ -3029,9 +3251,7 @@ impl ThreadRequestProcessor {
                 /*parent_trace*/ None,
             )
             .await
-            .map_err(|err| {
-                internal_error(format!("error loading office dispatch thread: {err}"))
-            })?;
+            .map_err(|err| core_thread_write_error("load office dispatch thread", err))?;
         let Some(rollout_path) = session_configured.rollout_path else {
             return Err(internal_error(format!(
                 "rollout path missing for office dispatch thread {thread_id}"
@@ -3094,6 +3314,37 @@ impl ThreadRequestProcessor {
         None
     }
 
+    pub(crate) async fn dispatch_claimed_office_after_terminal_turn(
+        &self,
+        cwd: &str,
+        intent_id: &str,
+        source_thread_id: &str,
+        turn: Turn,
+        connection_id: ConnectionId,
+        lease_id: &str,
+    ) -> Option<OfficeAutoDispatchStarted> {
+        self.ensure_office_auto_verification_runtime_threads(
+            cwd,
+            source_thread_id,
+            &turn,
+            connection_id,
+        )
+        .await;
+        if let Some(office_auto_dispatch) = self.office_auto_dispatch.as_ref() {
+            return office_auto_dispatch
+                .dispatch_claimed_after_terminal_turn(
+                    cwd,
+                    intent_id,
+                    source_thread_id,
+                    turn,
+                    connection_id,
+                    lease_id,
+                )
+                .await;
+        }
+        None
+    }
+
     pub(crate) async fn monitor_office_dispatched_turn_completion(
         &self,
         cwd: &str,
@@ -3130,7 +3381,13 @@ impl ThreadRequestProcessor {
         turn: &Turn,
         connection_id: ConnectionId,
     ) {
-        let domain_processor = CrewonDomainRequestProcessor::new();
+        let Some(domain_processor) = self
+            .office_auto_dispatch
+            .as_ref()
+            .map(|context| Arc::clone(&context.domain_processor))
+        else {
+            return;
+        };
         let records = match domain_processor
             .office_auto_verification_automation_records_after_thread_turn(
                 cwd,
@@ -3185,6 +3442,8 @@ impl ThreadRequestProcessor {
         &self,
         request_id: ConnectionRequestId,
         params: ThreadResumeParams,
+        execution_context_runtime: Option<ThreadExecutionContextRequestRuntime>,
+        cloud_agent_projection: Option<CloudAgentThreadResumeProjection>,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<(), JSONRPCErrorError> {
@@ -3229,6 +3488,8 @@ impl ThreadRequestProcessor {
             .resume_running_thread(
                 &request_id,
                 &params,
+                execution_context_runtime.as_ref(),
+                cloud_agent_projection.as_ref(),
                 app_server_client_name.clone(),
                 app_server_client_version.clone(),
             )
@@ -3283,6 +3544,16 @@ impl ThreadRequestProcessor {
                 self.outgoing.send_error(request_id, error).await;
                 return Ok(());
             }
+        };
+        let execution_context = if let (Some(runtime), Some(source_thread)) = (
+            execution_context_runtime.as_ref(),
+            resume_source_thread.as_ref(),
+        ) {
+            runtime
+                .read_owned(&source_thread.thread_id.to_string())
+                .await?
+        } else {
+            None
         };
         let persisted_scene_runtime = thread_history.get_scene_runtime();
 
@@ -3432,6 +3703,12 @@ impl ThreadRequestProcessor {
                     thread_status,
                     /*has_live_in_progress_turn*/ false,
                 );
+                if let Some(projection) = cloud_agent_projection.as_ref() {
+                    if let Some(turns) = projection.turns.as_ref() {
+                        thread.turns.clone_from(turns);
+                    }
+                    thread.status.clone_from(&projection.status);
+                }
                 let config_snapshot = crewon_thread.config_snapshot().await;
                 let sandbox = thread_response_sandbox_policy(
                     &config_snapshot.permission_profile,
@@ -3440,24 +3717,28 @@ impl ThreadRequestProcessor {
                 let active_permission_profile = thread_response_active_permission_profile(
                     config_snapshot.active_permission_profile,
                 );
-                let token_usage_thread = include_turns.then(|| thread.clone());
-                let mut initial_turns_page = if let Some(params) = initial_turns_page.as_ref() {
-                    match build_thread_resume_initial_turns_page(
-                        &response_history.get_rollout_items(),
-                        thread.status.clone(),
-                        /*has_live_running_thread*/ false,
-                        /*active_turn*/ None,
-                        params,
-                    ) {
-                        Ok(page) => Some(page),
-                        Err(error) => {
-                            self.outgoing.send_error(request_id, error).await;
-                            return Ok(());
+                let token_usage_thread =
+                    (include_turns && cloud_agent_projection.is_none()).then(|| thread.clone());
+                let mut initial_turns_page =
+                    if let Some(projection) = cloud_agent_projection.as_ref() {
+                        projection.initial_turns_page.clone()
+                    } else if let Some(params) = initial_turns_page.as_ref() {
+                        match build_thread_resume_initial_turns_page(
+                            &response_history.get_rollout_items(),
+                            thread.status.clone(),
+                            /*has_live_running_thread*/ false,
+                            /*active_turn*/ None,
+                            params,
+                        ) {
+                            Ok(page) => Some(page),
+                            Err(error) => {
+                                self.outgoing.send_error(request_id, error).await;
+                                return Ok(());
+                            }
                         }
-                    }
-                } else {
-                    None
-                };
+                    } else {
+                        None
+                    };
                 if redact_resume_payloads {
                     redact_thread_resume_payloads(&mut thread.turns);
                     if let Some(initial_turns_page) = initial_turns_page.as_mut() {
@@ -3467,6 +3748,7 @@ impl ThreadRequestProcessor {
 
                 let response = ThreadResumeResponse {
                     thread,
+                    execution_context,
                     model: session_configured.model,
                     model_provider: session_configured.model_provider_id,
                     service_tier: session_configured.service_tier,
@@ -3509,7 +3791,7 @@ impl ThreadRequestProcessor {
                     .await;
             }
             Err(err) => {
-                let error = internal_error(format!("error resuming thread: {err}"));
+                let error = core_thread_write_error("resume thread", err);
                 self.outgoing.send_error(request_id, error).await;
             }
         }
@@ -3539,9 +3821,17 @@ impl ThreadRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: &ThreadResumeParams,
+        execution_context_runtime: Option<&ThreadExecutionContextRequestRuntime>,
+        cloud_agent_projection: Option<&CloudAgentThreadResumeProjection>,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<RunningThreadResumeResult, JSONRPCErrorError> {
+        if params.history.is_none()
+            && params.path.is_none()
+            && let Some(runtime) = execution_context_runtime
+        {
+            runtime.authorize_existing(&params.thread_id).await?;
+        }
         let running_thread = if params.history.is_some() {
             if let Ok(existing_thread_id) = ThreadId::from_string(&params.thread_id)
                 && self
@@ -3558,6 +3848,11 @@ impl ThreadRequestProcessor {
         } else if let Ok(existing_thread_id) = ThreadId::from_string(&params.thread_id)
             && let Ok(existing_thread) = self.thread_manager.get_thread(existing_thread_id).await
         {
+            let execution_context = if let Some(runtime) = execution_context_runtime {
+                runtime.read_owned(&existing_thread_id.to_string()).await?
+            } else {
+                None
+            };
             let source_thread = self
                 .read_stored_thread_for_resume(
                     &params.thread_id,
@@ -3565,7 +3860,12 @@ impl ThreadRequestProcessor {
                     /*include_history*/ true,
                 )
                 .await?;
-            Some((existing_thread_id, existing_thread, source_thread))
+            Some((
+                existing_thread_id,
+                existing_thread,
+                source_thread,
+                execution_context,
+            ))
         } else {
             let source_thread = self
                 .read_stored_thread_for_resume(
@@ -3575,8 +3875,18 @@ impl ThreadRequestProcessor {
                 )
                 .await?;
             let existing_thread_id = source_thread.thread_id;
+            let execution_context = if let Some(runtime) = execution_context_runtime {
+                runtime.read_owned(&existing_thread_id.to_string()).await?
+            } else {
+                None
+            };
             match self.thread_manager.get_thread(existing_thread_id).await {
-                Ok(existing_thread) => Some((existing_thread_id, existing_thread, source_thread)),
+                Ok(existing_thread) => Some((
+                    existing_thread_id,
+                    existing_thread,
+                    source_thread,
+                    execution_context,
+                )),
                 Err(_) => {
                     return Ok(RunningThreadResumeResult::NotRunning(Some(Box::new(
                         source_thread,
@@ -3585,7 +3895,9 @@ impl ThreadRequestProcessor {
             }
         };
 
-        if let Some((existing_thread_id, existing_thread, source_thread)) = running_thread {
+        if let Some((existing_thread_id, existing_thread, source_thread, execution_context)) =
+            running_thread
+        {
             let existing_thread_rollout_path = existing_thread.rollout_path();
             let active_path = existing_thread_rollout_path
                 .as_ref()
@@ -3704,10 +4016,17 @@ impl ThreadRequestProcessor {
                     config_snapshot,
                     instruction_sources,
                     thread_summary,
+                    execution_context,
                     emit_thread_goal_update,
                     thread_goal_state_db,
                     include_turns: !params.exclude_turns,
                     initial_turns_page: params.initial_turns_page.clone(),
+                    projected_turns: cloud_agent_projection
+                        .and_then(|projection| projection.turns.clone()),
+                    projected_initial_turns_page: cloud_agent_projection
+                        .and_then(|projection| projection.initial_turns_page.clone()),
+                    projected_thread_status: cloud_agent_projection
+                        .map(|projection| projection.status.clone()),
                     redact_resume_payloads,
                 }),
             );
@@ -3965,11 +4284,13 @@ impl ThreadRequestProcessor {
         &self,
         request_id: ConnectionRequestId,
         params: ThreadForkParams,
+        execution_context_runtime: Option<ThreadExecutionContextRequestRuntime>,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<(), JSONRPCErrorError> {
         let ThreadForkParams {
             thread_id,
+            execution_context,
             path,
             model,
             model_provider,
@@ -3987,16 +4308,51 @@ impl ThreadRequestProcessor {
             thread_source,
             exclude_turns,
         } = params;
+        super::cloud_agent_thread_source_fence::ensure_source_creation_allowed(
+            thread_source.as_ref(),
+        )?;
         let include_turns = !exclude_turns;
         if sandbox.is_some() && permissions.is_some() {
             return Err(invalid_request(
                 "`permissions` cannot be combined with `sandbox`",
             ));
         }
+        if execution_context.is_some() && ephemeral {
+            return Err(invalid_request(
+                "Thread execution context requires a persistent thread",
+            ));
+        }
+        if path.is_none()
+            && let Some(runtime) = execution_context_runtime.as_ref()
+        {
+            runtime.authorize_existing(&thread_id).await?;
+        }
         let source_thread = self
             .read_stored_thread_for_resume(&thread_id, path.as_ref(), /*include_history*/ true)
             .await?;
+        super::cloud_agent_thread_source_fence::ensure_thread_source_mutation_allowed(
+            source_thread.thread_source.as_ref(),
+            "thread/fork",
+        )?;
         let source_thread_id = source_thread.thread_id;
+        if let Some(runtime) = execution_context_runtime.as_ref() {
+            runtime
+                .ensure_operation_supported(
+                    &source_thread_id.to_string(),
+                    crate::platform_control::thread_execution_context_runtime::CloudAgentThreadOperation::Fork,
+                )
+                .await?;
+        }
+        let prepared_execution_context = match execution_context {
+            Some(params) => {
+                let runtime = execution_context_runtime.as_ref().ok_or_else(|| {
+                    internal_error("Thread execution context state is unavailable")
+                })?;
+                Some(runtime.prepare_create(params).await?)
+            }
+            None => None,
+        };
+        let execution_context = execution_context_runtime.zip(prepared_execution_context);
         let source_thread_name = source_thread
             .name
             .as_deref()
@@ -4095,6 +4451,36 @@ impl ThreadRequestProcessor {
                 CodexErr::InvalidRequest(message) => invalid_request(message),
                 err => internal_error(format!("error forking thread: {err}")),
             })?;
+        let execution_context = if let Some((runtime, prepared)) = execution_context {
+            match runtime
+                .create(
+                    prepared,
+                    &thread_id.to_string(),
+                    ThreadExecutionContextWorkspaceScope::Conversation,
+                    Utc::now().timestamp(),
+                )
+                .await
+            {
+                Ok(execution_context) => Some(execution_context),
+                Err(error) => {
+                    let rollback = super::thread_execution_context_lifecycle::ThreadExecutionContextRollback::new(
+                        Arc::clone(&self.thread_manager),
+                        Arc::clone(&self.thread_store),
+                        self.state_db.clone(),
+                    );
+                    if let Err(rollback_error) = rollback.rollback(thread_id).await {
+                        tracing::error!(
+                            thread_id = %thread_id,
+                            error = %rollback_error,
+                            "failed to roll back fork after execution context creation failed"
+                        );
+                    }
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
 
         Self::set_app_server_client_info(
             forked_thread.as_ref(),
@@ -4193,6 +4579,7 @@ impl ThreadRequestProcessor {
 
         let response = ThreadForkResponse {
             thread: thread.clone(),
+            execution_context,
             model: session_configured.model,
             model_provider: session_configured.model_provider_id,
             service_tier: session_configured.service_tier,
@@ -4796,7 +5183,9 @@ pub(super) fn core_thread_write_error(operation: &str, err: CodexErr) -> JSONRPC
 
 fn thread_store_archive_error(operation: &str, err: ThreadStoreError) -> JSONRPCErrorError {
     match err {
-        ThreadStoreError::InvalidRequest { message } => invalid_request(message),
+        ThreadStoreError::InvalidRequest { message } | ThreadStoreError::Conflict { message } => {
+            invalid_request(message)
+        }
         ThreadStoreError::Unsupported {
             operation: unsupported_operation,
         } => unsupported_thread_store_operation(unsupported_operation),

@@ -83,14 +83,14 @@ function officeCatalogPresentation(status: OfficeCatalogStatus) {
     case "unavailable":
       return {
         description:
-          "连接 App Server 后，这里会展示当前工作空间的真实办公室；不会使用演示数据替代。",
-        stateLabel: "App Server 未连接",
-        title: "办公室运行态暂未连接",
+          "当前工作空间的办公室数据暂时无法读取，系统会自动重试；不会使用演示数据替代。",
+        stateLabel: "等待自动重试",
+        title: "办公室运行态正在恢复",
       };
     case "ready":
       return {
         description:
-          "把组长、员工、任务执行和长期上下文放进同一个可持续协作空间。",
+          "把组长、员工、群聊协作和长期上下文放进同一个可持续协作空间。",
         stateLabel: "当前工作空间还没有办公室",
         title: "创建你的第一个办公室",
       };
@@ -112,7 +112,7 @@ function OfficeCatalogLanding({
     status === "ready" && onCreate
       ? { label: "创建办公室", onClick: onCreate, primary: true }
       : status === "unavailable" && onRetry
-        ? { label: "重新连接", onClick: onRetry, primary: false }
+        ? { label: "立即重试", onClick: onRetry, primary: false }
         : null;
 
   return (
@@ -142,8 +142,8 @@ function OfficeCatalogLanding({
             <ListChecks />
           </span>
           <div>
-            <strong>执行台</strong>
-            <p>查看排队、执行、确认与完成状态，保持任务进度可追踪。</p>
+            <strong>任务协作</strong>
+            <p>通过群聊 @ 组长或员工派发、跟进和确认任务，保持结果可追踪。</p>
           </div>
         </article>
         <article className="team-office-capability">
@@ -242,6 +242,9 @@ export function CommandOfficeRoom({
                 onClick={() => onOpen(record)}
               >
                 <span className="office-card-head">
+                  <span className="office-card-glyph" aria-hidden="true">
+                    {record.config.title.trim().charAt(0) || "办"}
+                  </span>
                   <strong>{record.config.title}</strong>
                   <em
                     className={classNames("status", presentation.status.tone)}

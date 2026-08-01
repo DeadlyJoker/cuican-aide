@@ -14,6 +14,7 @@ use crate::outgoing_message::OutgoingMessage;
 use crate::outgoing_message::QueuedOutgoingMessage;
 use crate::transport::CHANNEL_CAPACITY;
 use crate::transport::ConnectionOrigin;
+use crate::transport::TransportAuthentication;
 use crate::transport::TransportEvent;
 use base64::Engine;
 use crewon_app_server_protocol::AuthMode;
@@ -363,10 +364,12 @@ async fn remote_control_transport_manages_virtual_clients_and_routes_messages() 
         TransportEvent::ConnectionOpened {
             connection_id,
             origin,
+            authentication,
             writer,
             ..
         } => {
             assert_eq!(origin, ConnectionOrigin::RemoteControl);
+            assert_eq!(authentication, TransportAuthentication::ConnectionScoped);
             (connection_id, writer)
         }
         other => panic!("expected connection open event, got {other:?}"),

@@ -46,9 +46,15 @@ describe("skill detail actions", () => {
     expect(handled).toBe(true);
     expect(reads).toEqual(["/repo/.codex/skills/demo/SKILL.md"]);
     expect(currentPanel).toMatchObject({
-      title: "demo-skill",
+      title: "Edit Skill · demo-skill",
       subtitle: "/repo/.codex/skills/demo/SKILL.md",
-      body: "# Demo skill",
+      fields: [
+        {
+          id: "skill-edit-body",
+          label: "SKILL.md",
+          value: "# Demo skill",
+        },
+      ],
     });
     expect(currentPanel?.actions).toEqual(
       expect.arrayContaining([

@@ -1,32 +1,41 @@
 import {
   scenePresets,
+  scenePresetsEn,
   type CommandScene,
   type SceneQuickAction,
 } from "../../lib/scene/sceneCatalog";
+import type { Locale } from "../../lib/i18n";
 import { classNames } from "./commandWorkspaceUtils";
 
 export function CommandSceneHeader({
+  locale = "zh",
   scene,
   onQuickAction,
   onSceneChange,
 }: {
+  locale?: Locale;
   scene: CommandScene;
   onQuickAction: (action: SceneQuickAction) => void;
   onSceneChange: (scene: CommandScene) => void;
 }) {
-  const preset = scenePresets[scene];
+  const localizedPresets = locale === "zh" ? scenePresets : scenePresetsEn;
+  const preset = localizedPresets[scene];
 
   return (
     <>
       <header className="home-title" data-od-id="desktop-command-header">
-        <h1>让 CrewON 完成你的工作</h1>
+        <h1>
+          {locale === "zh"
+            ? "让 CrewON 完成你的工作"
+            : "Put CrewON to work"}
+        </h1>
         <p className="scene-subtitle" data-scene-subtitle="">
           {preset.subtitle}
         </p>
       </header>
 
       <div className="scene-tabs scene-pills" data-od-id="scene-tabs">
-        {Object.values(scenePresets).map((option) => (
+        {Object.values(localizedPresets).map((option) => (
           <button
             aria-pressed={scene === option.scene}
             className={classNames(scene === option.scene && "active")}
@@ -42,7 +51,8 @@ export function CommandSceneHeader({
       </div>
 
       <div className="capability-summary" data-scene-capabilities="">
-        推荐能力：{preset.capabilitySummary}
+        {locale === "zh" ? "推荐能力：" : "Recommended: "}
+        {preset.capabilitySummary}
       </div>
 
       <div className="quick-row" data-od-id="quick-scenarios">

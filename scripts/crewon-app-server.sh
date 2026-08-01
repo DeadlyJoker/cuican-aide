@@ -40,10 +40,12 @@ fi
 
 export CREWON_HOME="$crewon_home"
 export CREWON_APP_SERVER_DISABLE_MANAGED_CONFIG=1
+app_server_host="${CREWON_DEV_BACKEND_HOST:-127.0.0.1}"
+app_server_port="${CREWON_DEV_BACKEND_PORT:-6176}"
 
 exec cargo run \
   --manifest-path "$repo_root/codex-rs/Cargo.toml" \
   -p crewon-app-server \
   --bin crewon-app-server \
   -- \
-  --listen ws://127.0.0.1:6176
+  --listen "ws://${app_server_host}:${app_server_port}"

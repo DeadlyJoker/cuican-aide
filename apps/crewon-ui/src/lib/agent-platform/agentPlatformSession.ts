@@ -1,8 +1,13 @@
 import {
+  AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
   AGENT_PLATFORM_TOKEN_STORAGE_KEY,
   agentPlatformAuthorizedFetch,
   agentPlatformBaseUrl,
+  clearAgentPlatformBffSession,
   clearAgentPlatformSession,
+  crewonUnifiedSsoEnabled,
+  getAgentPlatformAccessToken,
+  getAgentPlatformBffUserSnapshot,
   storeAgentPlatformSession,
 } from "./agentPlatformClient";
 
@@ -12,6 +17,8 @@ export type AgentPlatformUser = {
   email: string;
   role: string;
   nickname?: string;
+  display_name?: string;
+  wecom_display_name?: string;
   approval_status?: string;
   password_login_enabled?: boolean;
   linked_providers?: string[];
@@ -51,8 +58,26 @@ async function responseError(
 }
 
 export async function readAgentPlatformCurrentUser(): Promise<AgentPlatformUser | null> {
-  if (!localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY)) {
+  if (
+    !crewonUnifiedSsoEnabled() &&
+    !localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY) &&
+    !localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)
+  ) {
     return null;
+  }
+  if (crewonUnifiedSsoEnabled()) {
+    const token = await getAgentPlatformAccessToken();
+    if (!token) return null;
+    const snapshot = getAgentPlatformBffUserSnapshot();
+    if (
+      snapshot
+      && typeof snapshot.id === "number"
+      && typeof snapshot.username === "string"
+      && typeof snapshot.email === "string"
+      && typeof snapshot.role === "string"
+    ) {
+      return snapshot as AgentPlatformUser;
+    }
   }
   const response = await agentPlatformAuthorizedFetch("/api/v1/auth/me");
   if (response.status === 401) {
@@ -117,6 +142,13 @@ export async function registerAgentPlatform(input: {
 }
 
 export async function readWeComLoginConfig(): Promise<WeComLoginConfig> {
+  if (crewonUnifiedSsoEnabled()) {
+    return {
+      enabled: true,
+      provider: "wecom",
+      label: "企业统一登录",
+    };
+  }
   const response = await fetch(
     `${agentPlatformBaseUrl()}/api/v1/auth/wecom/config`,
   );
@@ -132,6 +164,10 @@ export async function readWeComLoginConfig(): Promise<WeComLoginConfig> {
 }
 
 export async function beginWeComLogin(): Promise<string> {
+  if (crewonUnifiedSsoEnabled()) {
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    return `${agentPlatformBaseUrl()}/sso/client/crewon/start?${new URLSearchParams({ return_to: returnTo })}`;
+  }
   return `${agentPlatformBaseUrl()}/api/v1/auth/wecom/authorize`;
 }
 
@@ -177,6 +213,10 @@ export async function setAgentPlatformPassword(
   }
 }
 
-export function logoutAgentPlatform(): void {
+export async function logoutAgentPlatform(): Promise<void> {
+  if (crewonUnifiedSsoEnabled()) {
+    await clearAgentPlatformBffSession({ global: true });
+    return;
+  }
   clearAgentPlatformSession();
 }

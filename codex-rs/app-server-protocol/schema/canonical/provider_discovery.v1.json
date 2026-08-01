@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "1.0.0",
+  "authorization": {
+    "serviceAudience": "crewon-task-control",
+    "tenantId": "7",
+    "spaceId": "9",
+    "subject": "user:42",
+    "scopes": [
+      "provider:describe",
+      "resource:list",
+      "resource:read"
+    ],
+    "purpose": "discoverResources",
+    "delegation": {
+      "audience": "agent-platform-provider-discovery",
+      "jti": "discovery-demo-001",
+      "expiresAt": 1784505900
+    }
+  },
+  "commands": [
+    {
+      "type": "readDescriptor",
+      "commandId": "command-descriptor-001"
+    },
+    {
+      "type": "listResources",
+      "commandId": "command-resource-list-001",
+      "resourceType": "agent",
+      "afterCursor": null,
+      "limit": 20
+    },
+    {
+      "type": "readResource",
+      "commandId": "command-resource-read-001",
+      "resource": {
+        "providerId": "agent-platform",
+        "resourceType": "agent",
+        "resourceId": "agent-demo",
+        "revision": "agent-version:7"
+      }
+    }
+  ],
+  "descriptor": {
+    "providerId": "agent-platform",
+    "protocolVersion": "3.0.0",
+    "capabilities": [
+      "durableRun",
+      "remoteAgent",
+      "resumableEvents"
+    ],
+    "resourceCapabilities": [
+      {
+        "resourceType": "agent",
+        "bindingMode": "providerManaged",
+        "executionLocation": "provider"
+      }
+    ]
+  },
+  "page": {
+    "data": [
+      {
+        "resource": {
+          "providerId": "agent-platform",
+          "resourceType": "agent",
+          "resourceId": "agent-demo",
+          "revision": "agent-version:7"
+        },
+        "manifestSchemaVersion": "1.0.0",
+        "contentDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "nextCursor": "agent-version-row:71"
+  },
+  "manifest": {
+    "resource": {
+      "providerId": "agent-platform",
+      "resourceType": "agent",
+      "resourceId": "agent-demo",
+      "revision": "agent-version:7"
+    },
+    "manifestSchemaVersion": "1.0.0",
+    "contentDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

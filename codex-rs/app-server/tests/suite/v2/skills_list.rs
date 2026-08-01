@@ -888,6 +888,7 @@ async fn skills_changed_notification_is_emitted_after_skill_change() -> Result<(
 
     let thread_start_request_id = mcp
         .send_thread_start_request(ThreadStartParams {
+            execution_context: None,
             model: None,
             model_provider: None,
             service_tier: None,

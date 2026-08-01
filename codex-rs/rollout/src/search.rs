@@ -283,7 +283,8 @@ fn conversation_text_from_item(item: &RolloutItem) -> Option<String> {
         | RolloutItem::TurnContext(_)
         | RolloutItem::EventMsg(_)
         | RolloutItem::ResponseItem(_)
-        | RolloutItem::Compacted(_) => None,
+        | RolloutItem::Compacted(_)
+        | RolloutItem::UserInputOnceMarker(_) => None,
     }
 }
 

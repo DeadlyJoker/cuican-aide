@@ -53,14 +53,49 @@ function isRoutineOfficeRunStatus(message: OfficeMessage): boolean {
   );
 }
 
+function officeLeaderReplyFromCompletedRun(
+  message: OfficeMessage,
+): OfficeMessage | null {
+  if (
+    message.kind !== "system" ||
+    message.event !== "runSync" ||
+    message.accent !== "green"
+  ) {
+    return null;
+  }
+  const separator = message.text.indexOf("\n\n");
+  if (separator < 0) {
+    return null;
+  }
+  const result = message.text.slice(separator + 2).trim();
+  if (!result) {
+    return null;
+  }
+  const isZh = message.text.trimStart().startsWith("团队执行已完成：");
+  return {
+    ...message,
+    accent: "blue",
+    author: isZh ? "办公室主控" : "Office Leader",
+    event: "leaderReply",
+    glyph: isZh ? "组" : "L",
+    kind: "message",
+    text: result,
+  };
+}
+
 export function visibleOfficeMessages(
   messages: OfficeMessage[],
 ): OfficeMessage[] {
-  return messages.filter(
-    (message) =>
-      !isLegacyOfficeRuntimePrompt(message) &&
-      !isRoutineOfficeRunStatus(message),
-  );
+  return messages.flatMap((message) => {
+    if (isLegacyOfficeRuntimePrompt(message)) {
+      return [];
+    }
+    const leaderReply = officeLeaderReplyFromCompletedRun(message);
+    if (leaderReply) {
+      return [leaderReply];
+    }
+    return isRoutineOfficeRunStatus(message) ? [] : [message];
+  });
 }
 
 function renderOfficeMessageText(

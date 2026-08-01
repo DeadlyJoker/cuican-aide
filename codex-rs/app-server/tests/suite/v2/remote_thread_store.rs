@@ -8,10 +8,11 @@
 //!
 //! The important failure mode is accidentally materializing local persistence
 //! while a non-local store is configured. After `thread/start` and a simple turn,
-//! the temporary `codex_home` must not contain rollout session files or sqlite
-//! state files. This does not observe read-only probes that leave no artifact; it
-//! is a stop-gap that prevents additional local persistence writes from slipping
-//! in unnoticed.
+//! the temporary `codex_home` must not contain rollout session files or unexpected
+//! sqlite files. The app-server's platform State DB is expected even with a
+//! non-local thread store. This does not observe read-only probes that leave no
+//! artifact; it is a stop-gap that prevents additional local thread persistence
+//! writes from slipping in unnoticed.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -59,6 +60,8 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const ROLLOUT_WRITER_LOCKS_DIR: &str = ".rollout-writer-locks";
+const ROLLOUT_WRITER_GENERATION_LOCK: &str = "generation-v1.lock";
 
 #[tokio::test]
 async fn thread_delete_with_non_local_thread_store_does_not_create_local_persistence() -> Result<()>
@@ -340,9 +343,8 @@ async fn delete_thread(
 
 fn assert_no_local_persistence_artifacts(codex_home: &Path) -> Result<()> {
     // These are the observable tripwires for accidental local persistence. If a
-    // future code path constructs a local rollout/session store or opens the
-    // local thread sqlite database, it should leave one of these artifacts in
-    // the isolated test codex_home.
+    // future code path constructs a local rollout/session store, it should leave
+    // one of these artifacts in the isolated test codex_home.
     assert!(
         !codex_home.join("sessions").exists(),
         "non-local thread persistence should not create local rollout sessions"
@@ -351,9 +353,10 @@ fn assert_no_local_persistence_artifacts(codex_home: &Path) -> Result<()> {
         !codex_home.join("archived_sessions").exists(),
         "non-local thread persistence should not create archived rollout sessions"
     );
+    let state_db_path = crewon_state::state_db_path(codex_home);
     assert!(
-        !crewon_state::state_db_path(codex_home).exists(),
-        "non-local thread persistence should not create local thread sqlite"
+        state_db_path.exists(),
+        "in-process app-server should initialize its platform State DB"
     );
 
     let sqlite_artifacts = std::fs::read_dir(codex_home)?
@@ -368,17 +371,28 @@ fn assert_no_local_persistence_artifacts(codex_home: &Path) -> Result<()> {
                         || name.ends_with(".sqlite-wal")
                 })
         })
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_none_or(|name| !is_platform_sqlite_artifact(name))
+        })
         .collect::<Vec<_>>();
 
     assert!(
         sqlite_artifacts.is_empty(),
         "non-local thread persistence should not create sqlite artifacts: {sqlite_artifacts:?}"
     );
+    assert_only_rollout_writer_generation_fence(codex_home)?;
     let mut entries = codex_home_entries(codex_home)?;
     // Bazel test runs may initialize shell snapshot storage under codex_home.
-    // That is not thread persistence; keep the assertion focused on rollout,
-    // session, sqlite, and other unexpected thread-store artifacts.
+    // The platform State DB is also expected independently of the configured
+    // ThreadStore. The process-lifetime rollout writer generation fence is also
+    // expected for every app-server, including one using a non-local store.
+    // Keep the assertion focused on rollout, session, and other unexpected
+    // thread-store artifacts.
     entries.remove("shell_snapshots");
+    entries.remove(ROLLOUT_WRITER_LOCKS_DIR);
+    entries.retain(|name| !is_platform_sqlite_artifact(name));
     assert_eq!(
         entries,
         BTreeSet::from([
@@ -390,6 +404,30 @@ fn assert_no_local_persistence_artifacts(codex_home: &Path) -> Result<()> {
     );
 
     Ok(())
+}
+
+fn assert_only_rollout_writer_generation_fence(codex_home: &Path) -> Result<()> {
+    let writer_locks_dir = codex_home.join(ROLLOUT_WRITER_LOCKS_DIR);
+    assert_eq!(
+        codex_home_entries(writer_locks_dir.as_path())?,
+        BTreeSet::from([ROLLOUT_WRITER_GENERATION_LOCK.to_string()]),
+        "a non-local thread store should acquire only the process generation fence, not per-thread rollout writer locks"
+    );
+    Ok(())
+}
+
+fn is_platform_sqlite_artifact(name: &str) -> bool {
+    let base_name = name
+        .strip_suffix("-shm")
+        .or_else(|| name.strip_suffix("-wal"))
+        .unwrap_or(name);
+    matches!(
+        base_name,
+        crewon_state::STATE_DB_FILENAME
+            | crewon_state::LOGS_DB_FILENAME
+            | crewon_state::GOALS_DB_FILENAME
+            | crewon_state::MEMORIES_DB_FILENAME
+    )
 }
 
 fn codex_home_entries(codex_home: &Path) -> Result<BTreeSet<String>> {

@@ -107,8 +107,7 @@ function workspaceLabel(path: string | null, locale: Locale): string {
   if (!path) {
     return locale === "zh" ? "无工作空间" : "No workspace";
   }
-  const name = workspaceDisplayName(path);
-  return locale === "zh" ? `工作空间 · ${name}` : `Workspace · ${name}`;
+  return workspaceDisplayName(path);
 }
 
 export function commandThreadRunSummary({
@@ -200,10 +199,7 @@ export function commandThreadRunSummary({
   ].filter((chip): chip is string => Boolean(chip));
 
   return {
-    chips:
-      chips.length > 0
-        ? chips
-        : [locale === "zh" ? "对话就绪" : "Conversation ready"],
+    chips,
     state,
     title,
   };
@@ -262,7 +258,7 @@ export function CommandThreadRoom({
           className="home-title thread-home-title"
           data-od-id="desktop-command-header"
         >
-          <p>{isRunning ? "Agent 正在执行" : "Agent 对话"}</p>
+          <p>{contextLabel}</p>
           <h1>
             <span>{title}</span>
           </h1>
@@ -281,7 +277,7 @@ export function CommandThreadRoom({
           <div className="command-thread-toolbar">
             <div className="command-thread-identity">
               <span>{contextLabel}</span>
-              <strong>{title}</strong>
+              <strong title={title}>{title}</strong>
               <em
                 className="command-thread-cwd"
                 title={workspacePath ?? undefined}
@@ -294,19 +290,17 @@ export function CommandThreadRoom({
               role="status"
               aria-live="polite"
               data-state={runSummary.state}
+              data-has-chips={runSummary.chips.length > 0 ? "true" : "false"}
             >
               <strong>{runSummary.title}</strong>
-              <span>
-                {runSummary.chips.map((chip) => (
-                  <em key={chip}>{chip}</em>
-                ))}
-              </span>
+              {runSummary.chips.length > 0 ? (
+                <span>
+                  {runSummary.chips.map((chip) => (
+                    <em key={chip}>{chip}</em>
+                  ))}
+                </span>
+              ) : null}
             </div>
-            {isRunning && onStop ? (
-              <button type="button" onClick={onStop}>
-                {labels.stopLabel}
-              </button>
-            ) : null}
           </div>
         ) : null}
         <Transcript

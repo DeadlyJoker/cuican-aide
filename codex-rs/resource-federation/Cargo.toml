@@ -1,0 +1,20 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "crewon-resource-federation"
+version.workspace = true
+
+[lib]
+name = "crewon_resource_federation"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+serde_json = { workspace = true }

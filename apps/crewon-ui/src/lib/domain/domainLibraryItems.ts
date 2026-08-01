@@ -116,9 +116,7 @@ export function officeConfigRecordsToLibraryItems(
       meta: savedItemMeta(locale, savedAt),
       description:
         config.workspace.goal ||
-        (locale === "zh"
-          ? "已保存的办公室。"
-          : "Saved office."),
+        (locale === "zh" ? "已保存的办公室。" : "Saved office."),
       glyph: "⌘",
       accent: "green",
       badge: { label: locale === "zh" ? "办公室" : "office", tone: "planning" },
@@ -204,7 +202,7 @@ export function toolConfigRecordsToLibraryItems(
   return records.map(({ filePath, savedAt, config }, index) => {
     const restoredDescription =
       config.description ||
-      (config.kind === "mcp" ? config.command : config.path) ||
+      (config.kind === "mcp" ? config.command || config.url : config.path) ||
       (locale === "zh"
         ? "从后端工具记录恢复。"
         : "Restored from a backend tool record.");
@@ -214,10 +212,11 @@ export function toolConfigRecordsToLibraryItems(
     );
     return {
       title: config.title,
-      meta: `${config.kind === "mcp" ? "MCP" : "Skill"} · ${backendRecordMeta(locale, filePath, savedAt)}`,
+      meta: config.kind === "mcp" ? "MCP" : "Skill",
       description: restoredDescription,
       glyph: decor.glyph,
       accent: decor.accent,
+      capabilityKind: config.kind,
       badge: {
         label: config.kind === "mcp" ? "MCP" : "Skill",
         tone: config.enabled === false ? "warning" : "planning",
@@ -238,18 +237,29 @@ export function toolConfigRecordsToLibraryItems(
               type: "mcp-detail",
               title: config.title,
               subtitle: config.name,
+              configName: config.name,
+              config: {
+                ...(config.command ? { command: config.command } : {}),
+                ...(config.url ? { url: config.url } : {}),
+                ...(config.args ? { args: config.args } : {}),
+                ...(config.env ? { env: config.env } : {}),
+                ...(config.bearerTokenEnvVar
+                  ? { bearer_token_env_var: config.bearerTokenEnvVar }
+                  : {}),
+                enabled: config.enabled !== false,
+              },
               body: [
-                sourceOfTruthLabel(locale, "workspace-tool-record"),
                 config.description,
                 config.command
                   ? `${locale === "zh" ? "命令" : "Command"}: ${config.command}`
                   : null,
+                config.url ? `URL: ${config.url}` : null,
                 config.args?.length
                   ? `${locale === "zh" ? "参数" : "Args"}: ${config.args.join(" ")}`
                   : null,
                 locale === "zh"
-                  ? `后端记录：${filePath}`
-                  : `Backend record: ${filePath}`,
+                  ? `配置记录：${filePath}`
+                  : `Config record: ${filePath}`,
               ]
                 .filter(Boolean)
                 .join("\n"),

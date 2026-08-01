@@ -61,13 +61,13 @@ describe("AppWorkspaceContent", () => {
     expect(markup).toContain('data-od-id="ai-composer"');
     expect(markup).toContain('data-od-id="context-search-panel"');
     expect(markup).toContain('data-od-id="slash-search-panel"');
-    expect(markup).toContain("让 CrewON 完成你的工作");
+    expect(markup).toContain("Put CrewON to work");
     expect(markup).toContain(">CrewON</strong>");
-    expect(markup).toContain("日常办公");
-    expect(markup).toContain("生码");
-    expect(markup).toContain("设计创意");
+    expect(markup).toContain(">Office</button>");
+    expect(markup).toContain(">Code</button>");
+    expect(markup).toContain(">Design</button>");
     expect(markup).not.toContain("创建可编排的 Agent 小队");
-    expect(markup).toContain("工作空间");
+    expect(markup).toContain("Workspaces");
     expect(markup).toContain("frontend");
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain("agents0");

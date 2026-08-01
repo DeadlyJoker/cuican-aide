@@ -5,6 +5,7 @@ import type { AppWorkspaceCapabilityHandlersParams } from "./appWorkspaceCapabil
 import type {
   AttachWorkspaceContextActionParams,
   LoadBrowserAppsActionParams,
+  ReadWorkspaceDiffActionParams,
   ReadWorkspaceFilesActionParams,
   RunTerminalStatusActionParams,
 } from "../../capability/workspaceCapabilityActions";
@@ -12,6 +13,7 @@ import type {
 const workspaceActionSpy = vi.hoisted(() => ({
   attachParams: null as AttachWorkspaceContextActionParams | null,
   browserParams: null as LoadBrowserAppsActionParams | null,
+  diffParams: null as ReadWorkspaceDiffActionParams | null,
   filesParams: null as ReadWorkspaceFilesActionParams | null,
   terminalParams: null as RunTerminalStatusActionParams | null,
   attach: vi.fn(async (params: AttachWorkspaceContextActionParams) => {
@@ -19,6 +21,9 @@ const workspaceActionSpy = vi.hoisted(() => ({
   }),
   browser: vi.fn(async (params: LoadBrowserAppsActionParams) => {
     workspaceActionSpy.browserParams = params;
+  }),
+  diff: vi.fn(async (params: ReadWorkspaceDiffActionParams) => {
+    workspaceActionSpy.diffParams = params;
   }),
   files: vi.fn(async (params: ReadWorkspaceFilesActionParams) => {
     workspaceActionSpy.filesParams = params;
@@ -31,6 +36,7 @@ const workspaceActionSpy = vi.hoisted(() => ({
 vi.mock("../../capability/workspaceCapabilityActions", () => ({
   attachWorkspaceContextAction: workspaceActionSpy.attach,
   loadBrowserAppsAction: workspaceActionSpy.browser,
+  readWorkspaceDiffAction: workspaceActionSpy.diff,
   readWorkspaceFilesAction: workspaceActionSpy.files,
   runTerminalStatusAction: workspaceActionSpy.terminal,
 }));
@@ -69,6 +75,7 @@ describe("app workspace capability handlers", () => {
   beforeEach(() => {
     workspaceActionSpy.attachParams = null;
     workspaceActionSpy.browserParams = null;
+    workspaceActionSpy.diffParams = null;
     workspaceActionSpy.filesParams = null;
     workspaceActionSpy.terminalParams = null;
     vi.clearAllMocks();
@@ -98,16 +105,24 @@ describe("app workspace capability handlers", () => {
     expect(setTerminalProcessId).toHaveBeenCalledWith("process-2");
   });
 
-  it("wires file and attach-context actions with shared workspace dependencies", async () => {
+  it("wires diff, file, and attach-context actions with shared workspace dependencies", async () => {
     const setCapabilityDockOpen = vi.fn();
     const setCapabilityPanel = vi.fn();
     const handlers = createAppWorkspaceCapabilityHandlers(
       createParams({ setCapabilityDockOpen, setCapabilityPanel }),
     );
 
+    await handlers.readWorkspaceDiff();
     await handlers.readWorkspaceFiles();
     await handlers.attachWorkspaceContext();
 
+    expect(workspaceActionSpy.diffParams).toMatchObject({
+      busyToolId: null,
+      isConnected: true,
+      isDemo: false,
+      locale: "en",
+      setCapabilityPanel,
+    });
     expect(workspaceActionSpy.filesParams).toMatchObject({
       busyToolId: null,
       isConnected: true,
@@ -147,15 +162,20 @@ describe("app workspace capability handlers", () => {
     );
 
     await handlers.runTerminalStatus();
+    await handlers.readWorkspaceDiff();
     await handlers.readWorkspaceFiles();
     await handlers.attachWorkspaceContext();
     await handlers.loadBrowserApps();
 
     expect(workspaceActionSpy.terminalParams?.client).toBe(currentClient);
+    expect(workspaceActionSpy.diffParams?.client).toBe(currentClient);
     expect(workspaceActionSpy.filesParams?.client).toBe(currentClient);
     expect(workspaceActionSpy.attachParams?.client).toBe(currentClient);
     expect(workspaceActionSpy.browserParams?.client).toBe(currentClient);
     expect(workspaceActionSpy.terminalParams?.resolveBackendCwd).toBe(
+      resolveBackendCwd,
+    );
+    expect(workspaceActionSpy.diffParams?.resolveBackendCwd).toBe(
       resolveBackendCwd,
     );
     expect(workspaceActionSpy.filesParams?.resolveBackendCwd).toBe(

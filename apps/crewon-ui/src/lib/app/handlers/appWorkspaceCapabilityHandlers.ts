@@ -4,6 +4,7 @@ import type { Locale, ToolId } from "../../i18n";
 import {
   attachWorkspaceContextAction,
   loadBrowserAppsAction,
+  readWorkspaceDiffAction,
   readWorkspaceFilesAction,
   runTerminalStatusAction,
 } from "../../capability/workspaceCapabilityActions";
@@ -18,6 +19,7 @@ type SetCapabilityPanel = (
 export type AppWorkspaceCapabilityHandlers = {
   attachWorkspaceContext: (workspaceCwd?: string | null) => Promise<void>;
   loadBrowserApps: () => Promise<void>;
+  readWorkspaceDiff: () => Promise<void>;
   readWorkspaceFiles: () => Promise<void>;
   runTerminalStatus: () => Promise<void>;
 };
@@ -66,6 +68,17 @@ export function createAppWorkspaceCapabilityHandlers(
         locale: params.locale,
         resolveBackendCwd: params.resolveBackendCwd,
         selectedThreadId: params.selectedThreadId,
+        setBusyToolId: params.setBusyToolId,
+        setCapabilityPanel: params.setCapabilityPanel,
+      }),
+    readWorkspaceDiff: () =>
+      readWorkspaceDiffAction({
+        busyToolId: params.busyToolId,
+        client: params.client,
+        isConnected: params.isConnected,
+        isDemo: params.isDemo,
+        locale: params.locale,
+        resolveBackendCwd: params.resolveBackendCwd,
         setBusyToolId: params.setBusyToolId,
         setCapabilityPanel: params.setCapabilityPanel,
       }),

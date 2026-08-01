@@ -1,7 +1,4 @@
-import type {
-  LibraryKind,
-  LibraryPanel,
-} from "../domain/crewonDomain";
+import type { LibraryKind, LibraryPanel } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
 
 export function libraryTitle(kind: LibraryKind, locale: Locale): string {
@@ -9,7 +6,7 @@ export function libraryTitle(kind: LibraryKind, locale: Locale): string {
     return kind === "plugins"
       ? "插件"
       : kind === "tools"
-        ? "工具"
+        ? "能力"
         : kind === "agents"
           ? "智能体"
           : kind === "office"
@@ -22,7 +19,7 @@ export function libraryTitle(kind: LibraryKind, locale: Locale): string {
   return kind === "plugins"
     ? "Plugins"
     : kind === "tools"
-      ? "Tools"
+      ? "Capabilities"
       : kind === "agents"
         ? "Agents"
         : kind === "office"

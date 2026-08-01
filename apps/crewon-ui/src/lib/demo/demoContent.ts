@@ -1497,36 +1497,67 @@ export function demoSettingsPanel(
   }
   if (section === "personalization") {
     return {
-      title: zh(locale) ? "个性化" : "Personalization",
+      title: zh(locale) ? "助理人格与记忆" : "Assistant profile & memory",
       subtitle: "/Users/me/work/crewon",
       body: zh(locale)
-        ? "个性化\n个人指令: 已配置\n开发者指令: 已配置\n配置层: 2\n这些内容会通过 app-server 写入配置，影响新会话和后续任务的默认行为。"
-        : "Personalization\nInstructions: configured\nDeveloper instructions: configured\nConfig layers: 2\nThese values are written through app-server config and affect defaults for new sessions and future tasks.",
+        ? "助理人格与记忆\n角色定位: 已配置\n灵魂与原则: 已配置\n长期记忆: 生成并使用（推荐）\n配置层: 2\n保存后由 app-server 热重载。角色和灵魂影响新会话；长期记忆会在对话空闲后异步沉淀，并按相关性有限检索。"
+        : "Assistant profile & memory\nRole: configured\nSoul & principles: configured\nLong-term memory: Learn and use (recommended)\nConfig layers: 2\nThe app-server hot-reloads these settings. Role and soul affect new sessions; long-term memory is consolidated asynchronously after conversations become idle and retrieved with bounded relevance.",
       fields: [
         {
           id: "personalization-instructions",
-          label: zh(locale) ? "个人指令" : "Instructions",
+          label: zh(locale) ? "角色定位" : "Role",
+          description: zh(locale)
+            ? "定义助理是谁、负责什么、以什么视角工作。保存为系统指令。"
+            : "Define who the assistant is, what it owns, and the perspective it works from. Saved as system instructions.",
+          multiline: true,
+          rows: 6,
           value: zh(locale)
-            ? "回答务实，优先给出可执行结果。"
-            : "Be practical and prioritize actionable results.",
+            ? "你是我的产品与工程助理，负责把模糊想法推进为可验证的交付。"
+            : "You are my product and engineering assistant, turning ambiguous ideas into verified deliverables.",
         },
         {
           id: "personalization-developer-instructions",
-          label: zh(locale) ? "开发者指令" : "Developer instructions",
+          label: zh(locale) ? "灵魂与原则" : "Soul & principles",
+          description: zh(locale)
+            ? "定义价值取向、表达方式、边界和长期行为原则。保存为开发者指令。"
+            : "Define values, voice, boundaries, and durable behavior principles. Saved as developer instructions.",
+          multiline: true,
+          rows: 7,
           value: zh(locale)
-            ? "遵循团队工程规范，保留现有架构。"
-            : "Follow team engineering conventions and preserve existing architecture.",
+            ? "诚实标注未验证边界；主动推进，但不越过权限；优先使用真实证据。"
+            : "Mark unverified boundaries honestly, move work forward without crossing authority, and prefer real evidence.",
+        },
+        {
+          id: "personalization-memory-mode",
+          label: zh(locale) ? "长期记忆" : "Long-term memory",
+          description: zh(locale)
+            ? "控制是否从对话形成长期记忆，以及是否在新任务中检索已有记忆。"
+            : "Control whether conversations form long-term memories and whether existing memories are retrieved in new tasks.",
+          value: "on",
+          options: zh(locale)
+            ? [
+                { label: "生成并使用（推荐）", value: "on" },
+                { label: "仅使用已有记忆", value: "read-only" },
+                { label: "仅沉淀，不主动引用", value: "learn-only" },
+                { label: "关闭长期记忆", value: "off" },
+              ]
+            : [
+                { label: "Learn and use (recommended)", value: "on" },
+                { label: "Use existing memories only", value: "read-only" },
+                { label: "Learn without retrieval", value: "learn-only" },
+                { label: "Turn off long-term memory", value: "off" },
+              ],
         },
       ],
       actions: [
         {
           id: "save-personalization",
-          label: zh(locale) ? "保存个性化" : "Save personalization",
+          label: zh(locale) ? "保存助理设置" : "Save assistant settings",
           tone: "primary",
         },
         {
           id: "refresh-personalization",
-          label: zh(locale) ? "刷新个性化" : "Refresh personalization",
+          label: zh(locale) ? "刷新助理设置" : "Refresh assistant settings",
         },
       ],
     };

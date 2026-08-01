@@ -20,7 +20,7 @@ use crate::ThreadStoreResult;
 
 pub(super) async fn list_threads(
     store: &LocalThreadStore,
-    params: ListThreadsParams,
+    mut params: ListThreadsParams,
 ) -> ThreadStoreResult<ThreadPage> {
     let cursor = params
         .cursor
@@ -40,6 +40,9 @@ pub(super) async fn list_threads(
         SortDirection::Desc => crewon_rollout::SortDirection::Desc,
     };
     let state_db = store.state_db().await;
+    if store.cloud_agent_thread_index_active().await? {
+        params.use_state_db_only = true;
+    }
     let rollout_config = RolloutConfig {
         codex_home: store.config.codex_home.clone(),
         sqlite_home: store.config.sqlite_home.clone(),

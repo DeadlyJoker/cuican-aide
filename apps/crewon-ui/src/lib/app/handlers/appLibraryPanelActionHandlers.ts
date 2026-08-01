@@ -117,8 +117,12 @@ export type AppLibraryPanelActionHandlersParams = {
       | import("../../capability/capabilityPanelTypes").CapabilityPanel
       | null
       | ((
-          currentPanel: import("../../capability/capabilityPanelTypes").CapabilityPanel | null,
-        ) => import("../../capability/capabilityPanelTypes").CapabilityPanel | null),
+          currentPanel:
+            | import("../../capability/capabilityPanelTypes").CapabilityPanel
+            | null,
+        ) =>
+          | import("../../capability/capabilityPanelTypes").CapabilityPanel
+          | null),
   ) => void;
   setLibraryPanel: LibraryPanelSetter;
   setNotice: (notice: NoticeState | null) => void;
@@ -292,6 +296,11 @@ export function createAppLibraryPanelActionHandlers(
         ),
       setLibraryPanel: params.setLibraryPanel,
       setNotice: params.setNotice,
+      writeSkillFile: (path, body) =>
+        requireAppServerClient(params.client, params.locale).writeTextFile(
+          path,
+          body,
+        ),
     },
     file: {
       getMetadata: (path) =>
@@ -300,7 +309,8 @@ export function createAppLibraryPanelActionHandlers(
       openCapabilityItem: (item) => {
         void params.handleCapabilityPanelItem(item);
       },
-      readFile: (path) => params.client?.readFile(path) ?? Promise.resolve(null),
+      readFile: (path) =>
+        params.client?.readFile(path) ?? Promise.resolve(null),
       setCapabilityDockOpen: params.setCapabilityDockOpen,
       setLibraryPanel: params.setLibraryPanel,
     },

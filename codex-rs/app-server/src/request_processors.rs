@@ -11,7 +11,11 @@ use crate::outgoing_message::ConnectionRequestId;
 use crate::outgoing_message::OutgoingMessageSender;
 use crate::outgoing_message::RequestContext;
 use crate::outgoing_message::ThreadScopedOutgoingMessageSender;
+use crate::platform_control::thread_execution_context_runtime::PreparedThreadExecutionContextCreate;
+use crate::platform_control::thread_execution_context_runtime::ThreadExecutionContextRequestRuntime;
+use crate::platform_control::thread_execution_context_runtime::ThreadExecutionContextWorkspaceScope;
 use crate::skills_watcher::SkillsWatcher;
+use crate::task_control::cloud_agent_thread_projection::CloudAgentThreadResumeProjection;
 use crate::thread_status::ThreadWatchManager;
 use crate::thread_status::resolve_thread_status;
 use chrono::Duration as ChronoDuration;
@@ -50,6 +54,7 @@ use crewon_app_server_protocol::CommandExecParams;
 use crewon_app_server_protocol::CommandExecResizeParams;
 use crewon_app_server_protocol::CommandExecTerminateParams;
 use crewon_app_server_protocol::CommandExecWriteParams;
+use crewon_app_server_protocol::CommandExecutionSource;
 use crewon_app_server_protocol::ConfigBatchWriteParams;
 use crewon_app_server_protocol::ConfigReadParams;
 use crewon_app_server_protocol::ConfigWarningNotification;
@@ -487,10 +492,12 @@ mod account_processor;
 mod agent_platform_processor;
 mod apps_processor;
 mod catalog_processor;
+pub(crate) mod cloud_agent_thread_source_fence;
 mod command_exec_processor;
 mod config_processor;
 mod crewon_domain_processor;
 mod environment_processor;
+mod experts_processor;
 mod external_agent_config_processor;
 mod external_agent_session_import;
 mod feedback_doctor_report;
@@ -504,9 +511,12 @@ mod mcp_config_processor;
 mod mcp_processor;
 mod plugins;
 mod process_exec_processor;
+mod provider_connection_request_processor;
+mod provider_resource_request_processor;
 mod remote_control_processor;
 mod scene_runtime;
 mod search;
+mod thread_execution_context_lifecycle;
 mod thread_processor;
 mod token_usage_replay;
 mod turn_processor;
@@ -520,11 +530,18 @@ pub(crate) use command_exec_processor::CommandExecRequestProcessor;
 pub(crate) use config_processor::ConfigRequestProcessor;
 pub(crate) use crewon_domain_processor::CrewonDomainRequestProcessor;
 pub(crate) use crewon_domain_processor::OfficeAutoDispatchIntentDispatched;
+pub(crate) use crewon_domain_processor::OfficeMessageDispatchMode;
+pub(crate) use crewon_domain_processor::OfficeMessageSubmitAction;
 pub(crate) use crewon_domain_processor::OfficeVerificationDispatchStarted;
+pub(crate) use crewon_domain_processor::PermittedOfficeDelegationDispatch;
+pub(crate) use crewon_domain_processor::PreparedOfficeMessageSubmit;
 pub(crate) use crewon_domain_processor::office_run_updated_notification;
 pub(crate) use crewon_domain_processor::sync_automation_runs_for_thread_turn;
-pub(crate) use crewon_domain_processor::sync_office_run_updates_for_thread_turn;
 pub(crate) use environment_processor::EnvironmentRequestProcessor;
+pub(crate) use experts_processor::ExpertTeamAuthority;
+pub(crate) use experts_processor::ExpertsRequestProcessor;
+pub(crate) use experts_processor::read_expert_team_record;
+pub(crate) use experts_processor::read_expert_team_record_by_file_path;
 pub(crate) use external_agent_config_processor::ExternalAgentConfigRequestProcessor;
 pub(crate) use feedback_processor::FeedbackRequestProcessor;
 pub(crate) use fs_processor::FsRequestProcessor;
@@ -536,11 +553,18 @@ pub(crate) use mcp_config_processor::McpConfigRequestProcessor;
 pub(crate) use mcp_processor::McpRequestProcessor;
 pub(crate) use plugins::PluginRequestProcessor;
 pub(crate) use process_exec_processor::ProcessExecRequestProcessor;
+pub(crate) use provider_connection_request_processor::ProviderConnectionRequestProcessor;
+pub(crate) use provider_resource_request_processor::ProviderResourceRequestProcessor;
 pub(crate) use remote_control_processor::RemoteControlRequestProcessor;
 pub(crate) use search::SearchRequestProcessor;
 pub(crate) use thread_goal_processor::ThreadGoalRequestProcessor;
+pub(crate) use thread_processor::OfficeManagerRuntimeProvenance;
+pub(crate) use thread_processor::OfficeManagerRuntimeThreadStart;
 pub(crate) use thread_processor::OfficeMemberRuntimeThreadStart;
 pub(crate) use thread_processor::ThreadRequestProcessor;
+pub(crate) use turn_processor::OfficeAutoDelegationAdmissionMode;
+pub(crate) use turn_processor::OfficeDurableAdmissionCertainty;
+pub(crate) use turn_processor::OfficeDurableTurnParams;
 pub(crate) use turn_processor::TurnRequestProcessor;
 pub(crate) use windows_sandbox_processor::WindowsSandboxRequestProcessor;
 
@@ -574,7 +598,18 @@ fn resolve_runtime_workspace_roots(workspace_roots: Vec<AbsolutePathBuf>) -> Vec
 }
 
 mod config_errors;
+mod crewon_domain_office_dispatch_receipt;
+#[cfg(test)]
+#[path = "request_processors/crewon_domain_office_dispatch_receipt_tests.rs"]
+mod crewon_domain_office_dispatch_receipt_tests;
+mod crewon_domain_office_dispatch_recovery;
+mod crewon_domain_office_server_owned_fields;
 mod office_auto_dispatch;
+mod office_auto_dispatch_durable;
+mod office_auto_dispatch_recovery;
+mod office_dispatch_admission_identity;
+mod office_persisted_turn;
+mod office_thread_workspace;
 mod request_errors;
 mod thread_delete;
 mod thread_goal_processor;
@@ -590,8 +625,11 @@ use self::thread_lifecycle::*;
 use self::thread_resume_redaction::*;
 use self::thread_summary::*;
 
+pub(crate) use self::crewon_domain_office_dispatch_receipt::OfficeDispatchReceiptStatus;
+pub(crate) use self::crewon_domain_office_dispatch_receipt::read_dispatch_receipt;
 pub(crate) use self::office_auto_dispatch::OfficeAutoDispatchContext;
 pub(crate) use self::office_auto_dispatch::OfficeAutoDispatchStarted;
+pub(crate) use self::thread_execution_context_lifecycle::ensure_local_core_turn_route;
 pub(crate) use self::thread_lifecycle::populate_thread_turns_from_history;
 pub(crate) use self::thread_processor::thread_from_stored_thread;
 #[cfg(test)]
@@ -600,6 +638,10 @@ pub(crate) use self::thread_summary::read_summary_from_rollout;
 pub(crate) use self::thread_summary::summary_to_thread;
 pub(crate) use self::thread_summary::thread_settings_from_config_snapshot;
 pub(crate) use self::thread_summary::thread_settings_from_core_snapshot;
+
+/// Cap command output in history API turns so tool cards stay visible without
+/// blowing up `thread/read` / `thread/turns/list` payloads.
+const API_TURN_COMMAND_OUTPUT_CHARS: usize = 8_000;
 
 pub(crate) fn build_api_turns_from_rollout_items(items: &[RolloutItem]) -> Vec<Turn> {
     let mut builder = ThreadHistoryBuilder::new();
@@ -610,8 +652,36 @@ pub(crate) fn build_api_turns_from_rollout_items(items: &[RolloutItem]) -> Vec<T
     }
     let mut turns = builder.finish();
     for turn in &mut turns {
-        turn.items
-            .retain(|item| !matches!(item, ThreadItem::CommandExecution { .. }));
+        // Keep agent shell/tool commands in history so the UI process log can
+        // show them after turn completion / reload. User-shell bang commands
+        // remain excluded from turn history.
+        turn.items.retain(|item| {
+            !matches!(
+                item,
+                ThreadItem::CommandExecution {
+                    source: CommandExecutionSource::UserShell,
+                    ..
+                }
+            )
+        });
+        for item in &mut turn.items {
+            let ThreadItem::CommandExecution {
+                aggregated_output: Some(output),
+                ..
+            } = item
+            else {
+                continue;
+            };
+            if output.len() <= API_TURN_COMMAND_OUTPUT_CHARS {
+                continue;
+            }
+            let mut truncated = output
+                .chars()
+                .take(API_TURN_COMMAND_OUTPUT_CHARS)
+                .collect::<String>();
+            truncated.push_str("\n…");
+            *output = truncated;
+        }
     }
     turns
 }

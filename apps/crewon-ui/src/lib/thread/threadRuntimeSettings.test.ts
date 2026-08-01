@@ -2,8 +2,6 @@ import type { Model } from "@crewon-protocol/v2/Model";
 import { describe, expect, it } from "vitest";
 
 import {
-  agentPlatformTargetFromThreadSource,
-  agentPlatformThreadSource,
   commandComposerRuntimeSettings,
   commandModelOptionsFromModels,
   mergeCommandModelOptions,
@@ -153,28 +151,40 @@ describe("thread runtime settings", () => {
     });
   });
 
-  it("routes an Agent Platform target through the BFF while keeping the CrewON thread", () => {
+  it("keeps an Experts selection as a distinct single-chat execution target", () => {
     expect(
       commandComposerRuntimeSettings({
-        executionTarget: "agent-platform:agents:7",
+        executionTarget: "experts:experts-code-review",
+        model: "gpt-5.6-sol",
+        permission: "approve-for-me",
+        scene: "code",
+        sceneMode: "review",
+      }),
+    ).toMatchObject({
+      scene: {
+        sceneId: "code",
+        mode: "review",
+        executionTarget: {
+          kind: "experts",
+          id: "experts-code-review",
+        },
+      },
+    });
+  });
+
+  it("keeps Provider Resource Agent authority outside ordinary thread settings", () => {
+    expect(
+      commandComposerRuntimeSettings({
+        executionTarget: "provider-agent:opaque-selection",
         model: "gpt-5.6-sol",
         permission: "approve-for-me",
         scene: "office",
         sceneMode: "auto",
       }),
     ).toMatchObject({
-      agentPlatformAgentId: "7",
       scene: {
         executionTarget: { kind: "crewon" },
       },
     });
-  });
-
-  it("round-trips an Agent Platform target through persisted thread source metadata", () => {
-    expect(agentPlatformThreadSource("7")).toBe("agent-platform:agents:7");
-    expect(
-      agentPlatformTargetFromThreadSource("agent-platform:agents:7"),
-    ).toBe("agent-platform:agents:7");
-    expect(agentPlatformTargetFromThreadSource("app_server")).toBeNull();
   });
 });

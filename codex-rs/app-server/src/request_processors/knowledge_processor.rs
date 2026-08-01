@@ -21,6 +21,10 @@ use crate::error_code::invalid_params;
 mod tests;
 
 const DEFAULT_MEMORY_LIMIT: usize = 24;
+const MAX_KNOWLEDGE_FILE_BYTES: usize = 1024 * 1024;
+const MAX_KNOWLEDGE_NOTE_BYTES: usize = 16 * 1024;
+const MAX_KNOWLEDGE_THREAD_ID_BYTES: usize = 512;
+const MAX_KNOWLEDGE_TITLE_BYTES: usize = 512;
 const MAX_MEMORY_LIMIT: usize = 100;
 const PREVIEW_LIMIT: usize = 220;
 
@@ -45,12 +49,38 @@ impl KnowledgeRequestProcessor {
         &self,
         params: KnowledgeMemoryWriteParams,
     ) -> Result<KnowledgeMemoryWriteResponse, JSONRPCErrorError> {
+        for (field, value, max_bytes) in [
+            ("title", params.title.as_deref(), MAX_KNOWLEDGE_TITLE_BYTES),
+            (
+                "threadId",
+                params.thread_id.as_deref(),
+                MAX_KNOWLEDGE_THREAD_ID_BYTES,
+            ),
+            ("note", params.note.as_deref(), MAX_KNOWLEDGE_NOTE_BYTES),
+        ] {
+            if value.is_some_and(|value| value.len() > max_bytes) {
+                return Err(invalid_params(format!(
+                    "{field} exceeds the {max_bytes}-byte knowledge write limit"
+                )));
+            }
+        }
+
         let cwd = workspace_root(&params.cwd)?;
         let crewon_dir = cwd.join(".crewon");
         fs::create_dir_all(&crewon_dir)
             .await
             .map_err(map_io_error)?;
         let file_path = crewon_dir.join("knowledge.md");
+        match fs::metadata(&file_path).await {
+            Ok(metadata) if metadata.len() > MAX_KNOWLEDGE_FILE_BYTES as u64 => {
+                return Err(invalid_params(format!(
+                    "knowledge.md exceeds the {MAX_KNOWLEDGE_FILE_BYTES}-byte file limit"
+                )));
+            }
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(map_io_error(err)),
+        }
         let existing = match fs::read_to_string(&file_path).await {
             Ok(existing) => existing,
             Err(err) if err.kind() == io::ErrorKind::NotFound => String::new(),
@@ -63,7 +93,18 @@ impl KnowledgeRequestProcessor {
             params.thread_id.as_deref(),
             params.note.as_deref(),
         );
-        fs::write(&file_path, next).await.map_err(map_io_error)?;
+        if next.len() > MAX_KNOWLEDGE_FILE_BYTES {
+            return Err(invalid_params(format!(
+                "knowledge write would exceed the {MAX_KNOWLEDGE_FILE_BYTES}-byte file limit"
+            )));
+        }
+        let write_path = file_path.clone();
+        tokio::task::spawn_blocking(move || {
+            crewon_core::path_utils::write_atomically(&write_path, &next)
+        })
+        .await
+        .map_err(|err| internal_error(format!("failed to join knowledge write: {err}")))?
+        .map_err(map_io_error)?;
         let data = list_knowledge(&params.cwd, Some(DEFAULT_MEMORY_LIMIT as u32)).await?;
         Ok(KnowledgeMemoryWriteResponse {
             file_path: file_path.to_string_lossy().into_owned(),

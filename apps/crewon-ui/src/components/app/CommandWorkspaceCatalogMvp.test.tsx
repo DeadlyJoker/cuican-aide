@@ -171,10 +171,25 @@ describe("CrewON resource catalog MVP", () => {
       </>,
     );
 
-    expect(markup).toContain("在线 Agent");
-    expect(markup).toContain("在线 · 已连接");
-    expect(markup).toContain("在线 · 只读");
-    expect(markup.match(/>下载<\/button>/g)).toHaveLength(1);
+    expect(markup).toContain("智能体 · 可用");
+    expect(markup).toContain("服务 · 已连接");
+    expect(markup).toContain("知识库 · 可检索");
+    expect(markup).toContain("创建技能");
+    expect(markup).toContain("创建服务");
+    expect(markup).toContain("表格分析");
+    expect(markup).toContain("浏览器自动化");
+    expect(markup).toContain("企业微信");
+    expect(markup).toContain("飞书套件");
+    expect(markup).toContain("运行位置");
+    expect(markup).toContain("本地");
+    expect(markup).toContain("云端");
+    expect(markup).toContain('data-logo="wecom"');
+    expect(markup).toContain('data-logo="excel"');
+    expect(markup).toContain('data-logo="assistant"');
+    expect(markup).toContain('data-logo="knowledge"');
+    expect(markup).toContain('data-catalog-filter="knowledge"');
+    expect(markup).not.toContain("在线技能");
+    expect(markup.match(/aria-label="安装 [^"]+"/g)).toHaveLength(1);
     expect(markup).not.toContain(">测试</button>");
     expect(markup).toMatchSnapshot();
   });
@@ -275,7 +290,7 @@ describe("CrewON resource catalog MVP", () => {
 
     expect(markup).toContain("Agent 加载失败，继续显示上次成功加载的 1 项");
     expect(markup).toContain("重试 Agent");
-    expect(markup).toContain("正在更新 MCP");
+    expect(markup).toContain("正在更新服务");
     expect(markup).toContain("重试知识库");
     expect(markup).toMatchSnapshot();
   });
@@ -359,6 +374,14 @@ describe("CrewON resource catalog MVP", () => {
           }}
         />
         <McpDetail
+          resource={{
+            id: 31,
+            type: "mcp_servers",
+            name: "风控服务",
+            description: "查询风险信号",
+            connected: true,
+            source: "online",
+          }}
           detail={{
             id: 31,
             description: "查询风险信号",
@@ -414,6 +437,8 @@ describe("CrewON resource catalog MVP", () => {
     expect(markup).toContain("tool_id");
     expect(markup).toContain("structuredContent");
     expect(markup).toContain("risk_level");
+    expect(markup).toContain("调用工具");
+    expect(markup).toContain("调用参数（JSON）");
     expect(markup).not.toContain("无额外字段");
     expect(markup).toMatchSnapshot();
   });

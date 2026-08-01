@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
@@ -30,6 +31,55 @@ use crewon_protocol::protocol::TokenUsage;
 pub(crate) struct ActiveTurn {
     pub(crate) task: Option<RunningTask>,
     pub(crate) turn_state: Arc<Mutex<TurnState>>,
+}
+
+/// Tracks exact turns still owned by this process while their terminal event is being persisted.
+#[derive(Clone, Default)]
+pub(crate) struct RuntimeTurnOwnership {
+    retained: Arc<StdMutex<HashMap<String, usize>>>,
+}
+
+pub(crate) struct RuntimeTurnOwnershipGuard {
+    retained: Arc<StdMutex<HashMap<String, usize>>>,
+    turn_id: String,
+}
+
+impl RuntimeTurnOwnership {
+    pub(crate) fn retain(&self, turn_id: &str) -> RuntimeTurnOwnershipGuard {
+        let mut retained = self
+            .retained
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *retained.entry(turn_id.to_string()).or_default() += 1;
+        RuntimeTurnOwnershipGuard {
+            retained: Arc::clone(&self.retained),
+            turn_id: turn_id.to_string(),
+        }
+    }
+
+    pub(crate) fn contains(&self, turn_id: &str) -> bool {
+        self.retained
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains_key(turn_id)
+    }
+}
+
+impl Drop for RuntimeTurnOwnershipGuard {
+    fn drop(&mut self) {
+        let mut retained = self
+            .retained
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(count) = retained.get_mut(&self.turn_id) else {
+            return;
+        };
+        if *count == 1 {
+            retained.remove(&self.turn_id);
+        } else {
+            *count -= 1;
+        }
+    }
 }
 
 /// Whether mailbox deliveries should still be folded into the current turn.
@@ -61,6 +111,10 @@ impl Default for ActiveTurn {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "turn_tests.rs"]
+mod tests;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TaskKind {

@@ -67,11 +67,17 @@ use crewon_app_server_protocol::ProcessKillParams;
 use crewon_app_server_protocol::ProcessResizePtyParams;
 use crewon_app_server_protocol::ProcessSpawnParams;
 use crewon_app_server_protocol::ProcessWriteStdinParams;
+use crewon_app_server_protocol::ProviderConnectParams;
+use crewon_app_server_protocol::ProviderReadParams;
 use crewon_app_server_protocol::RemoteControlClientsListParams;
 use crewon_app_server_protocol::RemoteControlClientsRevokeParams;
 use crewon_app_server_protocol::RemoteControlPairingStartParams;
 use crewon_app_server_protocol::RemoteControlPairingStatusParams;
 use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ResourceBindParams;
+use crewon_app_server_protocol::ResourceListParams;
+use crewon_app_server_protocol::ResourceReadParams;
+use crewon_app_server_protocol::ResourceUnbindParams;
 use crewon_app_server_protocol::ReviewStartParams;
 use crewon_app_server_protocol::SceneListParams;
 use crewon_app_server_protocol::SendAddCreditsNudgeEmailParams;
@@ -110,6 +116,7 @@ use crewon_app_server_protocol::TurnInterruptParams;
 use crewon_app_server_protocol::TurnStartParams;
 use crewon_app_server_protocol::TurnSteerParams;
 use crewon_app_server_protocol::WindowsSandboxSetupStartParams;
+use crewon_app_server_protocol::WorkspaceListParams;
 use crewon_login::default_client::CREWON_INTERNAL_ORIGINATOR_OVERRIDE_ENV_VAR;
 use tokio::process::Command;
 
@@ -132,6 +139,36 @@ const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CREWON_APP_SERVER_DISABLE_MANAGED_
 impl TestAppServer {
     pub async fn new(codex_home: &Path) -> anyhow::Result<Self> {
         Self::new_with_env_and_args(codex_home, &[], &[DISABLE_PLUGIN_STARTUP_TASKS_ARG]).await
+    }
+
+    /// Closes the client transport and waits until the child can no longer mutate test fixtures.
+    pub async fn shutdown(mut self) -> anyhow::Result<()> {
+        drop(self.stdin.take());
+        let status = match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            self.process.wait(),
+        )
+        .await
+        {
+            Ok(status) => {
+                status.context("failed to wait for crewon-app-server graceful shutdown")?
+            }
+            Err(_) => {
+                self.process.start_kill().context(
+                    "failed to terminate crewon-app-server after graceful shutdown timeout",
+                )?;
+                tokio::time::timeout(std::time::Duration::from_secs(5), self.process.wait())
+                    .await
+                    .context("timed out waiting for crewon-app-server termination")??;
+                anyhow::bail!(
+                    "crewon-app-server did not shut down gracefully within 5 seconds and was terminated"
+                );
+            }
+        };
+        if !status.success() {
+            anyhow::bail!("crewon-app-server graceful shutdown exited with status {status}");
+        }
+        Ok(())
     }
 
     pub async fn new_without_managed_config(codex_home: &Path) -> anyhow::Result<Self> {
@@ -379,6 +416,85 @@ impl TestAppServer {
     pub async fn send_get_account_rate_limits_request(&mut self) -> anyhow::Result<i64> {
         self.send_request("account/rateLimits/read", /*params*/ None)
             .await
+    }
+
+    /// Send an `identity/read` JSON-RPC request.
+    pub async fn send_identity_read_request(
+        &mut self,
+        params: Option<serde_json::Value>,
+    ) -> anyhow::Result<i64> {
+        self.send_request("identity/read", params).await
+    }
+
+    /// Send a `workspace/list` JSON-RPC request.
+    pub async fn send_workspace_list_request(
+        &mut self,
+        params: WorkspaceListParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("workspace/list", params).await
+    }
+
+    /// Send a `workspace/bind` JSON-RPC request.
+    pub async fn send_workspace_bind_request(
+        &mut self,
+        params: Option<serde_json::Value>,
+    ) -> anyhow::Result<i64> {
+        self.send_request("workspace/bind", params).await
+    }
+
+    /// Send a `provider/connect` JSON-RPC request.
+    pub async fn send_provider_connect_request(
+        &mut self,
+        params: ProviderConnectParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("provider/connect", params).await
+    }
+
+    /// Send a `provider/read` JSON-RPC request.
+    pub async fn send_provider_read_request(
+        &mut self,
+        params: ProviderReadParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("provider/read", params).await
+    }
+
+    /// Send a `resource/list` JSON-RPC request.
+    pub async fn send_resource_list_request(
+        &mut self,
+        params: ResourceListParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("resource/list", params).await
+    }
+
+    /// Send a `resource/read` JSON-RPC request.
+    pub async fn send_resource_read_request(
+        &mut self,
+        params: ResourceReadParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("resource/read", params).await
+    }
+
+    /// Send a `resource/bind` JSON-RPC request.
+    pub async fn send_resource_bind_request(
+        &mut self,
+        params: ResourceBindParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("resource/bind", params).await
+    }
+
+    /// Send a `resource/unbind` JSON-RPC request.
+    pub async fn send_resource_unbind_request(
+        &mut self,
+        params: ResourceUnbindParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("resource/unbind", params).await
     }
 
     /// Send an `account/sendAddCreditsNudgeEmail` JSON-RPC request.

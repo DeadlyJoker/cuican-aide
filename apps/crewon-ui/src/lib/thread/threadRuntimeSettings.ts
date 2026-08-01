@@ -17,8 +17,6 @@ export type CommandComposerPermission =
 
 export type CommandExecutionIntent = "goal" | "none" | "plan";
 
-export const AGENT_PLATFORM_THREAD_SOURCE_PREFIX = "agent-platform:agents:";
-
 export type CommandModelOption = {
   detail?: string;
   isDefault?: boolean;
@@ -34,7 +32,6 @@ export type ThreadRuntimeSettings = {
   sandboxMode?: SandboxMode | null;
   scene?: ThreadSceneSelection;
   executionIntent?: CommandExecutionIntent;
-  agentPlatformAgentId?: string;
   dynamicTools?: RuntimeDynamicTool[];
   threadSource?: string;
 };
@@ -58,7 +55,8 @@ export type ThreadSceneSelection = {
   executionTarget:
     | { kind: "crewon" }
     | { kind: "agent"; id: string }
-    | { kind: "team"; id: string };
+    | { kind: "team"; id: string }
+    | { kind: "experts"; id: string };
 };
 
 export const fallbackCommandModelOptions: CommandModelOption[] = [
@@ -140,16 +138,10 @@ export function commandComposerRuntimeSettings({
   sceneMode?: NonNullable<ThreadSceneSelection["mode"]>;
   executionIntent?: CommandExecutionIntent;
 }): ThreadRuntimeSettings {
-  const agentPlatformAgentId = executionTarget?.startsWith(
-    AGENT_PLATFORM_THREAD_SOURCE_PREFIX,
-  )
-    ? executionTarget.slice(AGENT_PLATFORM_THREAD_SOURCE_PREFIX.length)
-    : undefined;
   return {
     executionIntent,
     model,
     ...(reasoningEffort ? { reasoningEffort } : {}),
-    agentPlatformAgentId,
     ...(scene && sceneMode && executionTarget
       ? {
           scene: {
@@ -161,24 +153,6 @@ export function commandComposerRuntimeSettings({
       : {}),
     ...commandPermissionRuntimeSettings(permission),
   };
-}
-
-export function agentPlatformThreadSource(
-  agentId: string | null | undefined,
-): string | null {
-  const normalized = agentId?.trim();
-  return normalized ? `${AGENT_PLATFORM_THREAD_SOURCE_PREFIX}${normalized}` : null;
-}
-
-export function agentPlatformTargetFromThreadSource(
-  threadSource: string | null | undefined,
-): string | null {
-  if (!threadSource?.startsWith(AGENT_PLATFORM_THREAD_SOURCE_PREFIX)) {
-    return null;
-  }
-  return threadSource.length > AGENT_PLATFORM_THREAD_SOURCE_PREFIX.length
-    ? threadSource
-    : null;
 }
 
 function executionTargetSelection(
@@ -194,6 +168,9 @@ function executionTargetSelection(
     return { kind, id };
   }
   if (separator > 0 && id && kind === "team") {
+    return { kind, id };
+  }
+  if (separator > 0 && id && kind === "experts") {
     return { kind, id };
   }
   return { kind: "crewon" };

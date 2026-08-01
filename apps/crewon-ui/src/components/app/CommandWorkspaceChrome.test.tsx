@@ -84,14 +84,43 @@ describe("CommandSidebar", () => {
 
     expect(markup).toContain("crewon");
     expect(markup).toContain("codex-rs");
+    expect(markup).not.toContain('data-nav-key="projects"');
     expect(markup).toMatchSnapshot();
   });
 });
 
 describe("SidebarAccount", () => {
+  it("prefers the synchronized enterprise display name", () => {
+    const markup = renderToStaticMarkup(
+      <SidebarAccount
+        onSettings={vi.fn()}
+        account={{
+          needsPassword: false,
+          providerLabel: "企业微信已绑定",
+          user: {
+            id: 42,
+            display_name: "企业微信姓名",
+            email: "lin@example.com",
+            linked_providers: ["wecom"],
+            nickname: "PIM 昵称",
+            role: "user",
+            username: "lin.xiao",
+          },
+          onLogout: vi.fn(),
+          onSetPassword: vi.fn(),
+        }}
+      />,
+    );
+
+    expect(markup).toContain("企业微信姓名");
+    expect(markup).toContain("设置");
+    expect(markup).not.toContain("PIM 昵称");
+  });
+
   it("keeps account actions in an upward footer menu", () => {
     const markup = renderToStaticMarkup(
       <SidebarAccount
+        onSettings={vi.fn()}
         account={{
           needsPassword: true,
           providerLabel: "企业微信已绑定",

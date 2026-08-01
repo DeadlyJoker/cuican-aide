@@ -24,6 +24,13 @@ use crate::outgoing_message::ConnectionId;
 use crate::outgoing_message::ConnectionRequestId;
 use crate::outgoing_message::OutgoingMessageSender;
 use crate::outgoing_message::RequestContext;
+use crate::platform_control::AuthenticatedPrincipalError;
+use crate::platform_control::ConnectionRequestIdentity;
+use crate::platform_control::RequestIdentity;
+use crate::platform_control::WorkspaceRegistry;
+use crate::platform_control::WorkspaceRootCatalog;
+use crate::platform_control::provider_connection_production::SystemProviderConnectionClock;
+use crate::platform_control::provider_connection_startup::PreparedProviderConnectionRuntime;
 use crate::request_processors::AccountRequestProcessor;
 use crate::request_processors::AgentPlatformRequestProcessor;
 use crate::request_processors::AppsRequestProcessor;
@@ -42,10 +49,15 @@ use crate::request_processors::MarketplaceRequestProcessor;
 use crate::request_processors::McpConfigRequestProcessor;
 use crate::request_processors::McpRequestProcessor;
 use crate::request_processors::OfficeAutoDispatchContext;
+use crate::request_processors::OfficeDispatchReceiptStatus;
+use crate::request_processors::OfficeManagerRuntimeProvenance;
+use crate::request_processors::OfficeManagerRuntimeThreadStart;
 use crate::request_processors::OfficeMemberRuntimeThreadStart;
 use crate::request_processors::OfficeVerificationDispatchStarted;
 use crate::request_processors::PluginRequestProcessor;
 use crate::request_processors::ProcessExecRequestProcessor;
+use crate::request_processors::ProviderConnectionRequestProcessor;
+use crate::request_processors::ProviderResourceRequestProcessor;
 use crate::request_processors::RemoteControlRequestProcessor;
 use crate::request_processors::SearchRequestProcessor;
 use crate::request_processors::ThreadGoalRequestProcessor;
@@ -53,7 +65,7 @@ use crate::request_processors::ThreadRequestProcessor;
 use crate::request_processors::TurnRequestProcessor;
 use crate::request_processors::WindowsSandboxRequestProcessor;
 use crate::request_processors::office_run_updated_notification;
-use crate::request_processors::sync_office_run_updates_for_thread_turn;
+use crate::request_processors::read_dispatch_receipt;
 use crate::request_serialization::QueuedInitializedRequest;
 use crate::request_serialization::RequestSerializationQueueKey;
 use crate::request_serialization::RequestSerializationQueues;
@@ -61,6 +73,7 @@ use crate::skills_watcher::SkillsWatcher;
 use crate::thread_state::ConnectionCapabilities;
 use crate::thread_state::ThreadStateManager;
 use crate::transport::AppServerTransport;
+use crate::transport::ConnectionOrigin;
 use crate::transport::RemoteControlHandle;
 use async_trait::async_trait;
 use chrono::DateTime;
@@ -101,12 +114,16 @@ use crewon_app_server_protocol::OfficeSaveParams;
 use crewon_app_server_protocol::OfficeVerificationCancelResponse;
 use crewon_app_server_protocol::OfficeVerificationDispatchNextResponse;
 use crewon_app_server_protocol::OfficeVerificationRetryResponse;
+use crewon_app_server_protocol::RequestIdentityClientCapabilitiesRef;
+use crewon_app_server_protocol::RequestIdentityClientRef;
 use crewon_app_server_protocol::ServerRequestPayload;
 use crewon_app_server_protocol::TurnInterruptParams;
 use crewon_app_server_protocol::TurnStartParams;
 use crewon_app_server_protocol::TurnStatus;
 use crewon_app_server_protocol::UserInput;
 use crewon_app_server_protocol::experimental_required_message;
+use crewon_app_server_transport::TransportAuthenticatedPrincipal;
+use crewon_app_server_transport::TransportAuthenticatedPrincipalSource;
 use crewon_arg0::Arg0DispatchPaths;
 use crewon_chatgpt::workspace_settings;
 use crewon_core::ThreadManager;
@@ -226,7 +243,7 @@ pub(crate) struct MessageProcessor {
     apps_processor: AppsRequestProcessor,
     catalog_processor: CatalogRequestProcessor,
     command_exec_processor: CommandExecRequestProcessor,
-    crewon_domain_processor: CrewonDomainRequestProcessor,
+    crewon_domain_processor: Arc<CrewonDomainRequestProcessor>,
     process_exec_processor: ProcessExecRequestProcessor,
     config_processor: ConfigRequestProcessor,
     environment_processor: EnvironmentRequestProcessor,
@@ -240,12 +257,24 @@ pub(crate) struct MessageProcessor {
     mcp_config_processor: McpConfigRequestProcessor,
     mcp_processor: McpRequestProcessor,
     plugin_processor: PluginRequestProcessor,
+    provider_connection_processor: ProviderConnectionRequestProcessor,
+    provider_connection_runtime:
+        Option<Arc<PreparedProviderConnectionRuntime<SystemProviderConnectionClock>>>,
+    cloud_agent_thread_metadata_projector: Option<
+        crate::task_control::cloud_agent_thread_metadata_projection::CloudAgentThreadMetadataProjector,
+    >,
+    durable_cloud_agent_enabled: bool,
+    dynamic_tool_server:
+        Arc<crate::platform_control::thread_dynamic_tool_server::ThreadDynamicToolServer>,
+    provider_resource_processor: ProviderResourceRequestProcessor,
     remote_control_processor: RemoteControlRequestProcessor,
     search_processor: SearchRequestProcessor,
     thread_goal_processor: ThreadGoalRequestProcessor,
     thread_processor: ThreadRequestProcessor,
     turn_processor: TurnRequestProcessor,
     windows_sandbox_processor: WindowsSandboxRequestProcessor,
+    workspace_root_catalog: WorkspaceRootCatalog,
+    state_db: Option<StateDbHandle>,
     request_serialization_queues: RequestSerializationQueues,
 }
 
@@ -253,6 +282,8 @@ pub(crate) struct MessageProcessor {
 pub(crate) struct ConnectionSessionState {
     pub(crate) rpc_gate: Arc<ConnectionRpcGate>,
     cancellation: CancellationToken,
+    request_identity: ConnectionRequestIdentity,
+    workspace_registry: Arc<WorkspaceRegistry>,
     initialized: OnceLock<InitializedConnectionSessionState>,
 }
 
@@ -265,17 +296,52 @@ pub(crate) struct InitializedConnectionSessionState {
     pub(crate) request_attestation: bool,
 }
 
-impl Default for ConnectionSessionState {
-    fn default() -> Self {
-        Self::new()
-    }
+struct InitializedRequestContext {
+    request_context: RequestContext,
+    request_identity: RequestIdentity,
+    app_server_client_name: Option<String>,
+    client_version: Option<String>,
+    workspace_registry: Arc<WorkspaceRegistry>,
 }
 
 impl ConnectionSessionState {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(origin: ConnectionOrigin) -> Self {
+        let request_identity = ConnectionRequestIdentity::new(origin);
+        Self::from_request_identity(request_identity)
+    }
+
+    pub(crate) fn new_authenticated(
+        origin: ConnectionOrigin,
+        principal: TransportAuthenticatedPrincipal,
+    ) -> Result<Self, AuthenticatedPrincipalError> {
+        if !matches!(
+            (origin, principal.source()),
+            (
+                ConnectionOrigin::WebSocket,
+                TransportAuthenticatedPrincipalSource::WebSocketSignedBearer
+            ) | (
+                ConnectionOrigin::WebSocket,
+                TransportAuthenticatedPrincipalSource::WebSocketPrincipalSessionRs256
+            )
+        ) {
+            return Err(AuthenticatedPrincipalError::Invalid);
+        }
+        let request_identity = ConnectionRequestIdentity::new_authenticated(
+            origin,
+            crate::platform_control::AuthenticatedPrincipal::from_verified_transport(principal)?,
+        );
+        Ok(Self::from_request_identity(request_identity))
+    }
+
+    fn from_request_identity(request_identity: ConnectionRequestIdentity) -> Self {
+        let workspace_registry = Arc::new(WorkspaceRegistry::new(
+            request_identity.session_id().to_string(),
+        ));
         Self {
             rpc_gate: Arc::new(ConnectionRpcGate::new()),
             cancellation: CancellationToken::new(),
+            request_identity,
+            workspace_registry,
             initialized: OnceLock::new(),
         }
     }
@@ -315,8 +381,24 @@ impl ConnectionSessionState {
             .is_some_and(|session| session.request_attestation)
     }
 
-    pub(crate) fn cancellation_token(&self) -> CancellationToken {
-        self.cancellation.clone()
+    pub(crate) fn workspace_registry(&self) -> Arc<WorkspaceRegistry> {
+        Arc::clone(&self.workspace_registry)
+    }
+
+    pub(crate) fn request_identity(&self, trace_id: String) -> Option<RequestIdentity> {
+        self.initialized.get().map(|session| {
+            self.request_identity.derive(
+                RequestIdentityClientRef {
+                    name: session.app_server_client_name.clone(),
+                    version: session.client_version.clone(),
+                    capabilities: RequestIdentityClientCapabilitiesRef {
+                        experimental_api: session.experimental_api_enabled,
+                        request_attestation: session.request_attestation,
+                    },
+                },
+                trace_id,
+            )
+        })
     }
 
     pub(crate) fn initialize(&self, session: InitializedConnectionSessionState) -> Result<(), ()> {
@@ -1002,6 +1084,14 @@ fn office_verification_item_is_terminal_for_scheduler(check: &serde_json::Value)
 }
 
 fn office_delegation_started_dispatch(delegation: &serde_json::Value) -> bool {
+    if delegation.get("dispatchReceipt").is_some()
+        && !matches!(
+            read_dispatch_receipt(delegation),
+            Ok(Some(receipt)) if receipt.status == OfficeDispatchReceiptStatus::Starting
+        )
+    {
+        return true;
+    }
     if office_recovery_text(delegation, "turnId").is_some() {
         return true;
     }
@@ -1543,6 +1633,7 @@ async fn send_office_run_updated_with(
 }
 
 async fn recover_office_records_from_history_with(
+    domain_processor: &CrewonDomainRequestProcessor,
     outgoing: &OutgoingMessageSender,
     thread_processor: &ThreadRequestProcessor,
     connection_id: ConnectionId,
@@ -1581,19 +1672,21 @@ async fn recover_office_records_from_history_with(
             }
         };
 
-        let updates =
-            match sync_office_run_updates_for_thread_turn(cwd, &turn_ref.thread_id, &turn).await {
-                Ok(updates) => updates,
-                Err(err) => {
-                    tracing::warn!(
-                        thread_id = %turn_ref.thread_id,
-                        turn_id = %turn_ref.turn_id,
-                        error = %err.message,
-                        "failed to recover office run from persisted turn"
-                    );
-                    continue;
-                }
-            };
+        let updates = match domain_processor
+            .sync_office_run_updates_for_thread_turn(cwd, &turn_ref.thread_id, &turn)
+            .await
+        {
+            Ok(updates) => updates,
+            Err(err) => {
+                tracing::warn!(
+                    thread_id = %turn_ref.thread_id,
+                    turn_id = %turn_ref.turn_id,
+                    error = %err.message,
+                    "failed to recover office run from persisted turn"
+                );
+                continue;
+            }
+        };
         if updates.is_empty() {
             continue;
         }
@@ -1668,7 +1761,9 @@ async fn recover_office_scheduler_from_records_with(
     )
     .await;
     ensure_office_scheduler_replan_sources_loaded(thread_processor, connection_id, records).await;
-    for (source_thread_id, source_turn_id) in pending_intents {
+    for intent in pending_intents {
+        let source_thread_id = intent.source_thread_id;
+        let source_turn_id = intent.source_turn_id;
         let turn = match thread_processor
             .persisted_terminal_turn(&source_thread_id, &source_turn_id)
             .await
@@ -1692,7 +1787,13 @@ async fn recover_office_scheduler_from_records_with(
         let lease_uuid = Uuid::new_v4();
         let lease_id = format!("office-scheduler-recovery-{lease_uuid}");
         match domain_processor
-            .office_auto_dispatch_intent_claim(cwd, &source_thread_id, &source_turn_id, &lease_id)
+            .office_auto_dispatch_intent_claim(
+                cwd,
+                &intent.intent_id,
+                &source_thread_id,
+                &source_turn_id,
+                &lease_id,
+            )
             .await
         {
             Ok(true) => {}
@@ -1712,7 +1813,14 @@ async fn recover_office_scheduler_from_records_with(
         }
 
         if let Some(update) = thread_processor
-            .dispatch_office_after_terminal_turn(cwd, &source_thread_id, turn, connection_id)
+            .dispatch_claimed_office_after_terminal_turn(
+                cwd,
+                &intent.intent_id,
+                &source_thread_id,
+                turn,
+                connection_id,
+                &lease_id,
+            )
             .await
         {
             dispatched = true;
@@ -2024,7 +2132,7 @@ async fn repair_office_scheduler_dispatch_target_thread(
                     &updated_config,
                     "runtimeRepair",
                     Some(&new_thread_id),
-                    None,
+                    /*source_turn_id*/ None,
                 )
                 .await;
             }
@@ -2073,6 +2181,7 @@ async fn recover_office_scheduler_for_cwd_with(
     let mut idle_passes = 0usize;
     for _ in 0..OFFICE_SCHEDULER_RECOVERY_MAX_PASSES {
         let history_outcome = recover_office_records_from_history_with(
+            domain_processor,
             outgoing,
             thread_processor,
             connection_id,
@@ -2108,12 +2217,12 @@ async fn recover_office_scheduler_for_cwd_with(
 }
 
 async fn recover_office_scheduler_on_startup(
+    domain_processor: Arc<CrewonDomainRequestProcessor>,
     outgoing: Arc<OutgoingMessageSender>,
     thread_processor: ThreadRequestProcessor,
     codex_home: PathBuf,
     connection_id: ConnectionId,
 ) {
-    let domain_processor = CrewonDomainRequestProcessor::new();
     let mut cwds = office_scheduler_workspace_index_cwds(&codex_home).await;
     match thread_processor.office_scheduler_startup_threads().await {
         Ok(response) => {
@@ -2137,7 +2246,7 @@ async fn recover_office_scheduler_on_startup(
     }
     for cwd in cwds {
         recover_office_scheduler_for_cwd_with(
-            &domain_processor,
+            domain_processor.as_ref(),
             outgoing.as_ref(),
             &thread_processor,
             connection_id,
@@ -2164,6 +2273,9 @@ pub(crate) struct MessageProcessorArgs {
     pub(crate) rpc_transport: AppServerRpcTransport,
     pub(crate) remote_control_handle: Option<RemoteControlHandle>,
     pub(crate) plugin_startup_tasks: crate::PluginStartupTasks,
+    pub(crate) provider_connection_runtime:
+        Option<Arc<PreparedProviderConnectionRuntime<SystemProviderConnectionClock>>>,
+    pub(crate) durable_cloud_agent_enabled: bool,
 }
 
 impl MessageProcessor {
@@ -2187,7 +2299,18 @@ impl MessageProcessor {
             rpc_transport,
             remote_control_handle,
             plugin_startup_tasks,
+            provider_connection_runtime,
+            durable_cloud_agent_enabled,
         } = args;
+        let workspace_root_catalog = WorkspaceRootCatalog::new(
+            installation_id.clone(),
+            config.cwd.to_path_buf(),
+            config
+                .effective_workspace_roots()
+                .into_iter()
+                .map(|root| root.to_path_buf())
+                .collect(),
+        );
         auth_manager.set_external_auth(Arc::new(ExternalAuthRefreshBridge {
             outgoing: outgoing.clone(),
         }));
@@ -2257,8 +2380,7 @@ impl MessageProcessor {
             Arc::clone(&config),
             config_manager.clone(),
         );
-        let agent_platform_processor =
-            AgentPlatformRequestProcessor::new(config.codex_home.to_path_buf(), outgoing.clone());
+        let agent_platform_processor = AgentPlatformRequestProcessor::new();
         let apps_processor = AppsRequestProcessor::new(
             auth_manager.clone(),
             Arc::clone(&thread_manager),
@@ -2283,7 +2405,10 @@ impl MessageProcessor {
             config_manager.clone(),
             Arc::clone(&environment_manager_for_requests),
         );
-        let crewon_domain_processor = CrewonDomainRequestProcessor::new();
+        let crewon_domain_processor = Arc::new(state_db.as_ref().map_or_else(
+            CrewonDomainRequestProcessor::migration_unavailable,
+            |state| CrewonDomainRequestProcessor::with_migration_state(state.clone()),
+        ));
         let process_exec_processor = ProcessExecRequestProcessor::new(
             outgoing.clone(),
             Arc::clone(&environment_manager_for_requests),
@@ -2336,6 +2461,11 @@ impl MessageProcessor {
             state_db.clone(),
             Arc::clone(&goal_service),
         );
+        let dynamic_tool_server = Arc::new(
+            crate::platform_control::thread_dynamic_tool_server::ThreadDynamicToolServer::new(
+                provider_connection_runtime.clone(),
+            ),
+        );
         let turn_processor = TurnRequestProcessor::new(
             auth_manager.clone(),
             Arc::clone(&thread_manager),
@@ -2344,14 +2474,17 @@ impl MessageProcessor {
             arg0_paths.clone(),
             Arc::clone(&config),
             config_manager.clone(),
+            Arc::clone(&thread_store),
             Arc::clone(&pending_thread_unloads),
             thread_state_manager.clone(),
             thread_watch_manager.clone(),
             Arc::clone(&thread_list_state_permit),
             Arc::clone(&skills_watcher),
+            Arc::clone(&dynamic_tool_server),
+            Arc::clone(&crewon_domain_processor),
         );
         let office_auto_dispatch = Some(OfficeAutoDispatchContext {
-            domain_processor: Arc::new(CrewonDomainRequestProcessor::new()),
+            domain_processor: Arc::clone(&crewon_domain_processor),
             outgoing: outgoing.clone(),
             thread_manager: Arc::clone(&thread_manager),
             turn_processor: turn_processor.clone(),
@@ -2370,13 +2503,15 @@ impl MessageProcessor {
             thread_watch_manager,
             thread_list_state_permit,
             thread_goal_processor.clone(),
-            state_db,
+            state_db.clone(),
             log_db,
             Arc::clone(&skills_watcher),
             office_auto_dispatch,
+            Arc::clone(&dynamic_tool_server),
         );
         let automation_scheduler = AutomationScheduler::new(
             config.codex_home.to_path_buf(),
+            Arc::clone(&crewon_domain_processor),
             thread_processor.clone(),
             turn_processor.clone(),
         );
@@ -2418,6 +2553,18 @@ impl MessageProcessor {
             Arc::clone(&config),
             config_manager,
         );
+        let provider_connection_processor =
+            ProviderConnectionRequestProcessor::new(provider_connection_runtime.clone());
+        let provider_resource_processor = ProviderResourceRequestProcessor::new(
+            provider_connection_runtime.clone(),
+            state_db.clone(),
+        );
+        let cloud_agent_thread_metadata_projector = state_db.as_ref().map(|state| {
+            crate::task_control::cloud_agent_thread_metadata_projection::CloudAgentThreadMetadataProjector::new(
+                state.clone(),
+                thread_store.clone(),
+            )
+        });
 
         let processor = Self {
             outgoing,
@@ -2444,12 +2591,20 @@ impl MessageProcessor {
             mcp_config_processor,
             mcp_processor,
             plugin_processor,
+            provider_connection_processor,
+            provider_connection_runtime,
+            cloud_agent_thread_metadata_projector,
+            durable_cloud_agent_enabled,
+            dynamic_tool_server,
+            provider_resource_processor,
             remote_control_processor,
             search_processor,
             thread_goal_processor,
             thread_processor,
             turn_processor,
             windows_sandbox_processor,
+            workspace_root_catalog,
+            state_db,
             request_serialization_queues: RequestSerializationQueues::default(),
         };
         automation_scheduler.start();
@@ -2473,6 +2628,7 @@ impl MessageProcessor {
             return;
         }
         let outgoing = Arc::clone(&self.outgoing);
+        let domain_processor = Arc::clone(&self.crewon_domain_processor);
         let thread_processor = self.thread_processor.clone();
         let codex_home = self.codex_home.clone();
         let recovery_running = Arc::clone(&self.office_scheduler_recovery_running);
@@ -2483,6 +2639,7 @@ impl MessageProcessor {
         };
         handle.spawn(async move {
             recover_office_scheduler_on_startup(
+                domain_processor,
                 outgoing,
                 thread_processor,
                 codex_home,
@@ -2531,6 +2688,7 @@ impl MessageProcessor {
         records: &mut [CrewonDomainConfigRecord],
     ) {
         recover_office_records_from_history_with(
+            &self.crewon_domain_processor,
             self.outgoing.as_ref(),
             &self.thread_processor,
             connection_id,
@@ -2771,9 +2929,6 @@ impl MessageProcessor {
             );
         }
         self.outgoing.connection_closed(connection_id).await;
-        self.agent_platform_processor
-            .connection_closed(connection_id)
-            .await;
         self.fs_processor.connection_closed(connection_id).await;
         self.command_exec_processor
             .connection_closed(connection_id)
@@ -2872,13 +3027,23 @@ impl MessageProcessor {
         );
 
         let serialization_scope = crewon_request.serialization_scope();
+        let request_identity = session
+            .request_identity(request_context.trace_id())
+            .ok_or_else(|| invalid_request("Not initialized"))?;
         let app_server_client_name = session.app_server_client_name().map(str::to_string);
         let client_version = session.client_version().map(str::to_string);
-        let connection_cancellation = session.cancellation_token();
+        let workspace_registry = session.workspace_registry();
         let error_request_id = connection_request_id.clone();
         let rpc_gate = Arc::clone(&session.rpc_gate);
         let processor = Arc::clone(self);
         let span = request_context.span();
+        let initialized_request_context = InitializedRequestContext {
+            request_context,
+            request_identity,
+            app_server_client_name,
+            client_version,
+            workspace_registry,
+        };
         let request = QueuedInitializedRequest::new(
             rpc_gate,
             async move {
@@ -2887,10 +3052,7 @@ impl MessageProcessor {
                     .handle_initialized_client_request(
                         connection_request_id,
                         crewon_request,
-                        request_context,
-                        app_server_client_name,
-                        client_version,
-                        connection_cancellation,
+                        initialized_request_context,
                     )
                     .await;
                 if let Err(error) = result {
@@ -2917,11 +3079,15 @@ impl MessageProcessor {
         self: Arc<Self>,
         connection_request_id: ConnectionRequestId,
         crewon_request: ClientRequest,
-        request_context: RequestContext,
-        app_server_client_name: Option<String>,
-        client_version: Option<String>,
-        connection_cancellation: CancellationToken,
+        initialized_request_context: InitializedRequestContext,
     ) -> Result<(), JSONRPCErrorError> {
+        let InitializedRequestContext {
+            request_context,
+            request_identity,
+            app_server_client_name,
+            client_version,
+            workspace_registry,
+        } = initialized_request_context;
         let connection_id = connection_request_id.connection_id;
         let request_id = ConnectionRequestId {
             connection_id,
@@ -2932,6 +3098,64 @@ impl MessageProcessor {
         {
             ClientRequest::Initialize { .. } => {
                 panic!("Initialize should be handled before initialized request dispatch");
+            }
+            ClientRequest::IdentityRead { .. } => Ok(Some(request_identity.into_response().into())),
+            ClientRequest::ProviderConnect { params, .. } => Box::pin(
+                self.provider_connection_processor
+                    .connect(&request_identity, params),
+            )
+            .await
+            .map(|response| Some(response.into())),
+            ClientRequest::ProviderRead { params, .. } => Box::pin(
+                self.provider_connection_processor
+                    .read(&request_identity, params),
+            )
+            .await
+            .map(|response| Some(response.into())),
+            ClientRequest::ResourceList { params, .. } => Box::pin(
+                self.provider_resource_processor
+                    .list(&request_identity, params),
+            )
+            .await
+            .map(|response| Some(response.into())),
+            ClientRequest::ResourceRead { params, .. } => Box::pin(
+                self.provider_resource_processor
+                    .read(&request_identity, params),
+            )
+            .await
+            .map(|response| Some(response.into())),
+            ClientRequest::ResourceBind { params, .. } => {
+                Box::pin(self.bind_provider_resource(
+                    connection_id,
+                    &request_identity,
+                    &workspace_registry,
+                    params,
+                ))
+                .await
+            }
+            ClientRequest::ResourceUnbind { params, .. } => {
+                Box::pin(self.unbind_provider_resource(connection_id, &request_identity, params))
+                    .await
+            }
+            ClientRequest::WorkspaceList { params, .. } => {
+                Box::pin(workspace_registry.list_with_state(
+                    &request_identity,
+                    &self.workspace_root_catalog,
+                    self.state_db.as_deref(),
+                    params,
+                ))
+                .await
+                .map(|response| Some(response.into()))
+            }
+            ClientRequest::WorkspaceBind { params, .. } => {
+                Box::pin(workspace_registry.bind_with_state(
+                    &request_identity,
+                    &self.workspace_root_catalog,
+                    self.state_db.as_deref(),
+                    params,
+                ))
+                .await
+                .map(|response| Some(response.into()))
             }
             ClientRequest::ConfigRead { params, .. } => self
                 .config_processor
@@ -3055,15 +3279,23 @@ impl MessageProcessor {
                 .await
                 .map(|response| Some(response.into())),
             ClientRequest::ThreadStart { params, .. } => {
-                self.thread_processor
-                    .thread_start(
-                        request_id.clone(),
-                        params,
-                        app_server_client_name.clone(),
-                        client_version.clone(),
-                        request_context,
-                    )
-                    .await
+                Box::pin(self.authorize_expert_team_thread_start(
+                    &request_identity,
+                    &workspace_registry,
+                    &params,
+                ))
+                .await?;
+                let execution_context_runtime =
+                    self.thread_execution_context_runtime(&request_identity, &workspace_registry);
+                Box::pin(self.thread_processor.thread_start(
+                    request_id.clone(),
+                    params,
+                    execution_context_runtime,
+                    app_server_client_name.clone(),
+                    client_version.clone(),
+                    request_context,
+                ))
+                .await
             }
             ClientRequest::ThreadUnsubscribe { params, .. } => {
                 self.thread_processor
@@ -3071,24 +3303,40 @@ impl MessageProcessor {
                     .await
             }
             ClientRequest::ThreadResume { params, .. } => {
-                self.thread_processor
-                    .thread_resume(
-                        request_id.clone(),
-                        params,
-                        app_server_client_name.clone(),
-                        client_version.clone(),
-                    )
-                    .await
+                let execution_context_runtime =
+                    self.thread_execution_context_runtime(&request_identity, &workspace_registry);
+                let cloud_agent_projection =
+                    Box::pin(self.prepare_cloud_agent_resume_if_bound(&request_identity, &params))
+                        .await?;
+                Box::pin(self.thread_processor.thread_resume(
+                    request_id.clone(),
+                    params,
+                    execution_context_runtime,
+                    cloud_agent_projection,
+                    app_server_client_name.clone(),
+                    client_version.clone(),
+                ))
+                .await
             }
             ClientRequest::ThreadFork { params, .. } => {
-                self.thread_processor
-                    .thread_fork(
-                        request_id.clone(),
-                        params,
-                        app_server_client_name.clone(),
-                        client_version.clone(),
-                    )
-                    .await
+                let execution_context_runtime =
+                    self.thread_execution_context_runtime(&request_identity, &workspace_registry);
+                Box::pin(self.thread_processor.thread_fork(
+                    request_id.clone(),
+                    params,
+                    execution_context_runtime,
+                    app_server_client_name.clone(),
+                    client_version.clone(),
+                ))
+                .await
+            }
+            ClientRequest::ThreadExecutionContextUpdate { params, .. } => {
+                Box::pin(self.update_thread_execution_context(
+                    &request_identity,
+                    &workspace_registry,
+                    params,
+                ))
+                .await
             }
             ClientRequest::ThreadArchive { params, .. } => {
                 self.thread_processor
@@ -3132,6 +3380,12 @@ impl MessageProcessor {
                 self.thread_processor.thread_metadata_update(params).await
             }
             ClientRequest::ThreadSettingsUpdate { params, .. } => {
+                Box::pin(self.authorize_thread_execution_context_access(
+                    &request_identity,
+                    &workspace_registry,
+                    &params.thread_id,
+                ))
+                .await?;
                 self.turn_processor
                     .thread_settings_update(&request_id, params)
                     .await
@@ -3146,8 +3400,10 @@ impl MessageProcessor {
                     .await
             }
             ClientRequest::ThreadCompactStart { params, .. } => {
+                let execution_context_runtime =
+                    self.thread_execution_context_runtime(&request_identity, &workspace_registry);
                 self.thread_processor
-                    .thread_compact_start(&request_id, params)
+                    .thread_compact_start(&request_id, params, execution_context_runtime)
                     .await
             }
             ClientRequest::ThreadBackgroundTerminalsClean { params, .. } => {
@@ -3171,21 +3427,35 @@ impl MessageProcessor {
                     .await
             }
             ClientRequest::ThreadList { params, .. } => {
+                self.ensure_cloud_agent_thread_metadata_synced().await?;
                 let response = self.thread_processor.thread_list_response(params).await?;
                 Ok(Some(response.into()))
             }
             ClientRequest::ThreadSearch { params, .. } => {
+                self.ensure_cloud_agent_thread_metadata_synced().await?;
                 self.thread_processor.thread_search(params).await
             }
             ClientRequest::ThreadLoadedList { params, .. } => {
                 self.thread_processor.thread_loaded_list(params).await
             }
             ClientRequest::ThreadRead { params, .. } => {
-                let response = self.thread_processor.thread_read_response(params).await?;
-                Ok(Some(response.into()))
+                match Box::pin(self.read_cloud_agent_thread_if_bound(&request_identity, &params))
+                    .await?
+                {
+                    Some(response) => Ok(Some(response.into())),
+                    None => {
+                        let response = self.thread_processor.thread_read_response(params).await?;
+                        Ok(Some(response.into()))
+                    }
+                }
             }
             ClientRequest::ThreadTurnsList { params, .. } => {
-                self.thread_processor.thread_turns_list(params).await
+                match Box::pin(self.list_cloud_agent_turns_if_bound(&request_identity, &params))
+                    .await?
+                {
+                    Some(response) => Ok(Some(response.into())),
+                    None => self.thread_processor.thread_turns_list(params).await,
+                }
             }
             ClientRequest::ThreadTurnsItemsList { params, .. } => {
                 self.thread_processor.thread_turns_items_list(params).await
@@ -3301,39 +3571,34 @@ impl MessageProcessor {
                 .agent_info(params)
                 .await
                 .map(|response| Some(response.into())),
-            ClientRequest::AgentPlatformChat { params, .. } => self
+            ClientRequest::AgentPlatformWorkflowInfo { params, .. } => self
                 .agent_platform_processor
-                .chat(connection_id, params, connection_cancellation)
+                .workflow_info(params)
                 .await
                 .map(|response| Some(response.into())),
-            ClientRequest::AgentPlatformChatStart { params, .. } => self
+            ClientRequest::AgentPlatformWorkflowExecute { params, .. } => self
                 .agent_platform_processor
-                .chat_start(connection_id, params, connection_cancellation)
+                .execute_workflow(params)
                 .await
                 .map(|response| Some(response.into())),
-            ClientRequest::AgentPlatformRunCancel { params, .. } => Ok(Some(
-                self.agent_platform_processor
-                    .run_cancel(connection_id, params)
+            ClientRequest::ExpertTeamList { params, .. } => {
+                Box::pin(self.expert_team_list(&request_identity, &workspace_registry, params))
                     .await
-                    .into(),
-            )),
-            ClientRequest::AgentPlatformSessionRead { params, .. } => self
-                .agent_platform_processor
-                .session_read(params)
-                .await
-                .map(|response| Some(response.into())),
-            ClientRequest::AgentPlatformSessionClear { params, .. } => self
-                .agent_platform_processor
-                .session_clear(params)
-                .await
-                .map(|response| Some(response.into())),
+                    .map(|response| Some(response.into()))
+            }
+            ClientRequest::ExpertTeamCreate { params, .. } => {
+                Box::pin(self.expert_team_create(&request_identity, &workspace_registry, params))
+                    .await
+                    .map(|response| Some(response.into()))
+            }
+            ClientRequest::ExpertTeamRead { params, .. } => {
+                Box::pin(self.expert_team_read(&request_identity, &workspace_registry, params))
+                    .await
+                    .map(|response| Some(response.into()))
+            }
             ClientRequest::OfficeList { params, .. } => {
                 let cwd = params.cwd.clone();
-                let mut response = self.crewon_domain_processor.office_list(params).await?;
-                self.recover_office_records_from_history(connection_id, &cwd, &mut response.data)
-                    .await;
-                self.recover_office_scheduler_from_records(connection_id, &cwd, &mut response.data)
-                    .await;
+                let response = self.crewon_domain_processor.office_list(params).await?;
                 if !response.data.is_empty() {
                     self.remember_office_scheduler_cwd(&cwd).await;
                 }
@@ -3350,6 +3615,15 @@ impl MessageProcessor {
                 let response = self.crewon_domain_processor.office_create(params).await?;
                 self.remember_office_scheduler_cwd(&cwd).await;
                 Ok(Some(response.into()))
+            }
+            ClientRequest::OfficeManagerEnsure { params, .. } => {
+                let runtime = self.thread_execution_context_runtime_if_authenticated(
+                    &request_identity,
+                    &workspace_registry,
+                )?;
+                self.office_manager_ensure_request(params, connection_id, runtime)
+                    .await
+                    .map(|response| Some(response.into()))
             }
             ClientRequest::OfficeRead { params, .. } => {
                 let cwd = params.cwd.clone();
@@ -3378,11 +3652,30 @@ impl MessageProcessor {
                 .office_message_send(params)
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::OfficeMessageSubmit { params, .. } => {
+                let runtime = self.thread_execution_context_runtime_if_authenticated(
+                    &request_identity,
+                    &workspace_registry,
+                )?;
+                self.office_message_submit_request(
+                    request_id.clone(),
+                    params,
+                    runtime,
+                    app_server_client_name.clone(),
+                    client_version.clone(),
+                )
+                .await
+                .map(|response| Some(response.into()))
+            }
             ClientRequest::OfficeRun { params, .. } => {
-                let prepared = self
+                let permitted = self
                     .crewon_domain_processor
-                    .office_run_prepare(params)
+                    .office_run_prepare_permitted(params)
                     .await?;
+                let prepared = permitted.prepared();
+                let cwd = prepared.cwd.clone();
+                let thread_id = prepared.thread_id.clone();
+                let run_id = prepared.run_id.clone();
                 let turn_response = match self
                     .turn_processor
                     .turn_start_response(
@@ -3406,16 +3699,11 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_run_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &error.message,
-                            )
+                            .office_run_mark_failed_permitted(permitted, &error.message)
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
+                                run_id = %run_id,
                                 error = %mark_error.message,
                                 "failed to mark office run as failed"
                             );
@@ -3425,29 +3713,24 @@ impl MessageProcessor {
                 };
                 let (file_path, config) = self
                     .crewon_domain_processor
-                    .office_run_mark_started(
-                        &prepared.cwd,
-                        prepared.config,
-                        &prepared.run_id,
-                        &turn_response.turn.id,
-                    )
+                    .office_run_mark_started_permitted(permitted, &turn_response.turn.id)
                     .await?;
                 self.send_office_run_updated(
-                    &prepared.cwd,
+                    &cwd,
                     &file_path,
                     &config,
                     "started",
-                    Some(&prepared.thread_id),
+                    Some(&thread_id),
                     Some(&turn_response.turn.id),
                 )
                 .await;
-                self.remember_office_scheduler_cwd(&prepared.cwd).await;
+                self.remember_office_scheduler_cwd(&cwd).await;
                 Ok(Some(
                     OfficeRunResponse {
                         file_path,
                         config,
-                        thread_id: prepared.thread_id,
-                        run_id: prepared.run_id,
+                        thread_id,
+                        run_id,
                         turn: turn_response.turn,
                     }
                     .into(),
@@ -3485,10 +3768,14 @@ impl MessageProcessor {
                 Ok(Some(response.into()))
             }
             ClientRequest::OfficeRunRetry { params, .. } => {
-                let prepared = self
+                let permitted = self
                     .crewon_domain_processor
-                    .office_run_retry_prepare(params)
+                    .office_run_retry_prepare_permitted(params)
                     .await?;
+                let prepared = permitted.prepared();
+                let cwd = prepared.cwd.clone();
+                let thread_id = prepared.thread_id.clone();
+                let run_id = prepared.run_id.clone();
                 let turn_response = match self
                     .turn_processor
                     .turn_start_response(
@@ -3512,16 +3799,11 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_run_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &error.message,
-                            )
+                            .office_run_mark_failed_permitted(permitted, &error.message)
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
+                                run_id = %run_id,
                                 error = %mark_error.message,
                                 "failed to mark retried office run as failed"
                             );
@@ -3531,19 +3813,14 @@ impl MessageProcessor {
                 };
                 let (file_path, config) = self
                     .crewon_domain_processor
-                    .office_run_mark_started(
-                        &prepared.cwd,
-                        prepared.config,
-                        &prepared.run_id,
-                        &turn_response.turn.id,
-                    )
+                    .office_run_mark_started_permitted(permitted, &turn_response.turn.id)
                     .await?;
                 self.send_office_run_updated(
-                    &prepared.cwd,
+                    &cwd,
                     &file_path,
                     &config,
                     "retryStarted",
-                    Some(&prepared.thread_id),
+                    Some(&thread_id),
                     Some(&turn_response.turn.id),
                 )
                 .await;
@@ -3551,18 +3828,23 @@ impl MessageProcessor {
                     OfficeRunRetryResponse {
                         file_path,
                         config,
-                        thread_id: prepared.thread_id,
-                        run_id: prepared.run_id,
+                        thread_id,
+                        run_id,
                         turn: turn_response.turn,
                     }
                     .into(),
                 ))
             }
             ClientRequest::OfficeDelegationDispatch { params, .. } => {
-                let prepared = self
+                let permitted = self
                     .crewon_domain_processor
-                    .office_delegation_dispatch_prepare(params)
+                    .office_delegation_dispatch_prepare_permitted(params)
                     .await?;
+                let prepared = permitted.prepared();
+                let cwd = prepared.cwd.clone();
+                let run_id = prepared.run_id.clone();
+                let delegation_id = prepared.delegation_id.clone();
+                let thread_id = prepared.thread_id.clone();
                 let turn_response = match self
                     .turn_processor
                     .turn_start_response(
@@ -3586,18 +3868,15 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_delegation_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &prepared.delegation_id,
+                            .office_delegation_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                delegation_id = %prepared.delegation_id,
+                                run_id = %run_id,
+                                delegation_id = %delegation_id,
                                 error = %mark_error.message,
                                 "failed to mark office delegation dispatch as failed"
                             );
@@ -3607,20 +3886,17 @@ impl MessageProcessor {
                 };
                 let (file_path, config) = self
                     .crewon_domain_processor
-                    .office_delegation_dispatch_mark_started(
-                        &prepared.cwd,
-                        prepared.config,
-                        &prepared.run_id,
-                        &prepared.delegation_id,
+                    .office_delegation_dispatch_mark_started_permitted(
+                        permitted,
                         &turn_response.turn.id,
                     )
                     .await?;
                 self.send_office_run_updated(
-                    &prepared.cwd,
+                    &cwd,
                     &file_path,
                     &config,
                     "delegationStarted",
-                    Some(&prepared.thread_id),
+                    Some(&thread_id),
                     Some(&turn_response.turn.id),
                 )
                 .await;
@@ -3628,19 +3904,24 @@ impl MessageProcessor {
                     OfficeDelegationDispatchResponse {
                         file_path,
                         config,
-                        run_id: prepared.run_id,
-                        delegation_id: prepared.delegation_id,
-                        thread_id: prepared.thread_id,
+                        run_id,
+                        delegation_id,
+                        thread_id,
                         turn: turn_response.turn,
                     }
                     .into(),
                 ))
             }
             ClientRequest::OfficeDelegationDispatchNext { params, .. } => {
-                let prepared = self
+                let permitted = self
                     .crewon_domain_processor
-                    .office_delegation_dispatch_next_prepare(params)
+                    .office_delegation_dispatch_next_prepare_permitted(params)
                     .await?;
+                let prepared = permitted.prepared();
+                let cwd = prepared.cwd.clone();
+                let run_id = prepared.run_id.clone();
+                let delegation_id = prepared.delegation_id.clone();
+                let thread_id = prepared.thread_id.clone();
                 let turn_response = match self
                     .turn_processor
                     .turn_start_response(
@@ -3664,18 +3945,15 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_delegation_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &prepared.delegation_id,
+                            .office_delegation_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                delegation_id = %prepared.delegation_id,
+                                run_id = %run_id,
+                                delegation_id = %delegation_id,
                                 error = %mark_error.message,
                                 "failed to mark next office delegation dispatch as failed"
                             );
@@ -3685,20 +3963,17 @@ impl MessageProcessor {
                 };
                 let (file_path, config) = self
                     .crewon_domain_processor
-                    .office_delegation_dispatch_mark_started(
-                        &prepared.cwd,
-                        prepared.config,
-                        &prepared.run_id,
-                        &prepared.delegation_id,
+                    .office_delegation_dispatch_mark_started_permitted(
+                        permitted,
                         &turn_response.turn.id,
                     )
                     .await?;
                 self.send_office_run_updated(
-                    &prepared.cwd,
+                    &cwd,
                     &file_path,
                     &config,
                     "delegationStarted",
-                    Some(&prepared.thread_id),
+                    Some(&thread_id),
                     Some(&turn_response.turn.id),
                 )
                 .await;
@@ -3706,19 +3981,24 @@ impl MessageProcessor {
                     OfficeDelegationDispatchNextResponse {
                         file_path,
                         config,
-                        run_id: prepared.run_id,
-                        delegation_id: prepared.delegation_id,
-                        thread_id: prepared.thread_id,
+                        run_id,
+                        delegation_id,
+                        thread_id,
                         turn: turn_response.turn,
                     }
                     .into(),
                 ))
             }
             ClientRequest::OfficeDelegationRetry { params, .. } => {
-                let prepared = self
+                let permitted = self
                     .crewon_domain_processor
-                    .office_delegation_retry_prepare(params)
+                    .office_delegation_retry_prepare_permitted(params)
                     .await?;
+                let prepared = permitted.prepared();
+                let cwd = prepared.cwd.clone();
+                let run_id = prepared.run_id.clone();
+                let delegation_id = prepared.delegation_id.clone();
+                let thread_id = prepared.thread_id.clone();
                 let Some(retry_of_delegation_id) = prepared.retry_of_delegation_id.clone() else {
                     return Err(internal_error(
                         "office delegation retry prepare did not return a source delegation id",
@@ -3747,18 +4027,15 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_delegation_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &prepared.delegation_id,
+                            .office_delegation_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                delegation_id = %prepared.delegation_id,
+                                run_id = %run_id,
+                                delegation_id = %delegation_id,
                                 error = %mark_error.message,
                                 "failed to mark office delegation retry as failed"
                             );
@@ -3768,20 +4045,17 @@ impl MessageProcessor {
                 };
                 let (file_path, config) = self
                     .crewon_domain_processor
-                    .office_delegation_dispatch_mark_started(
-                        &prepared.cwd,
-                        prepared.config,
-                        &prepared.run_id,
-                        &prepared.delegation_id,
+                    .office_delegation_dispatch_mark_started_permitted(
+                        permitted,
                         &turn_response.turn.id,
                     )
                     .await?;
                 self.send_office_run_updated(
-                    &prepared.cwd,
+                    &cwd,
                     &file_path,
                     &config,
                     "delegationRetryStarted",
-                    Some(&prepared.thread_id),
+                    Some(&thread_id),
                     Some(&turn_response.turn.id),
                 )
                 .await;
@@ -3789,48 +4063,60 @@ impl MessageProcessor {
                     OfficeDelegationRetryResponse {
                         file_path,
                         config,
-                        run_id: prepared.run_id,
-                        delegation_id: prepared.delegation_id,
+                        run_id,
+                        delegation_id,
                         retry_of_delegation_id,
-                        thread_id: prepared.thread_id,
+                        thread_id,
                         turn: turn_response.turn,
                     }
                     .into(),
                 ))
             }
             ClientRequest::OfficeVerificationDispatchNext { params, .. } => {
-                let mut prepared = self
+                let mut permitted = self
                     .crewon_domain_processor
-                    .office_verification_dispatch_next_prepare(params)
+                    .office_verification_dispatch_next_prepare_permitted(params)
                     .await?;
+                let (cwd, automation_file_path, automation_id) = {
+                    let prepared = permitted.prepared();
+                    (
+                        prepared.cwd.clone(),
+                        prepared.automation_file_path.clone(),
+                        prepared.automation_id.clone(),
+                    )
+                };
                 let runtime_repair = match self
                     .thread_processor
                     .ensure_office_automation_runtime_thread(
                         &self.crewon_domain_processor,
-                        &prepared.cwd,
-                        &prepared.automation_file_path,
-                        &prepared.automation_id,
-                        &mut prepared.automation_config,
+                        &cwd,
+                        &automation_file_path,
+                        &automation_id,
+                        &mut permitted.prepared_mut().automation_config,
                         connection_id,
                     )
                     .await
                 {
                     Ok(runtime_repair) => runtime_repair,
                     Err(error) => {
+                        let (run_id, verification_check_id) = {
+                            let prepared = permitted.prepared();
+                            (
+                                prepared.run_id.clone(),
+                                prepared.verification_check_id.clone(),
+                            )
+                        };
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_verification_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config.clone(),
-                                &prepared.run_id,
-                                &prepared.verification_check_id,
+                            .office_verification_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                verification_check_id = %prepared.verification_check_id,
+                                run_id = %run_id,
+                                verification_check_id = %verification_check_id,
                                 error = %mark_error.message,
                                 "failed to mark office verification runtime repair failure"
                             );
@@ -3838,14 +4124,32 @@ impl MessageProcessor {
                         return Err(error);
                     }
                 };
+                let (
+                    automation_config,
+                    note,
+                    locale,
+                    client_user_message_id,
+                    run_id,
+                    verification_check_id,
+                ) = {
+                    let prepared = permitted.prepared();
+                    (
+                        prepared.automation_config.clone(),
+                        prepared.note.clone(),
+                        prepared.locale.clone(),
+                        prepared.client_user_message_id.clone(),
+                        prepared.run_id.clone(),
+                        prepared.verification_check_id.clone(),
+                    )
+                };
                 let automation_prepared = match self
                     .crewon_domain_processor
                     .automation_run_start_prepare(AutomationRunStartParams {
-                        cwd: prepared.cwd.clone(),
-                        config: prepared.automation_config.clone(),
-                        note: Some(prepared.note.clone()),
-                        locale: prepared.locale.clone(),
-                        client_user_message_id: prepared.client_user_message_id.clone(),
+                        cwd: cwd.clone(),
+                        config: automation_config,
+                        note: Some(note),
+                        locale,
+                        client_user_message_id,
                     })
                     .await
                 {
@@ -3853,18 +4157,15 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_verification_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &prepared.verification_check_id,
+                            .office_verification_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                verification_check_id = %prepared.verification_check_id,
+                                run_id = %run_id,
+                                verification_check_id = %verification_check_id,
                                 error = %mark_error.message,
                                 "failed to mark office verification dispatch as failed"
                             );
@@ -3885,7 +4186,7 @@ impl MessageProcessor {
                                 text: automation_prepared.prompt.clone(),
                                 text_elements: Vec::new(),
                             }],
-                            cwd: Some(std::path::PathBuf::from(prepared.cwd.clone())),
+                            cwd: Some(std::path::PathBuf::from(cwd.clone())),
                             ..TurnStartParams::default()
                         },
                         app_server_client_name.clone(),
@@ -3897,18 +4198,15 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_verification_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &prepared.verification_check_id,
+                            .office_verification_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                verification_check_id = %prepared.verification_check_id,
+                                run_id = %run_id,
+                                verification_check_id = %verification_check_id,
                                 error = %mark_error.message,
                                 "failed to mark next office verification dispatch as failed"
                             );
@@ -3925,18 +4223,15 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_verification_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &prepared.verification_check_id,
+                            .office_verification_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                verification_check_id = %prepared.verification_check_id,
+                                run_id = %run_id,
+                                verification_check_id = %verification_check_id,
                                 error = %mark_error.message,
                                 "failed to mark office verification dispatch record failure"
                             );
@@ -3946,12 +4241,11 @@ impl MessageProcessor {
                 };
                 let (file_path, config) = self
                     .crewon_domain_processor
-                    .office_verification_dispatch_mark_started(
-                        &prepared.cwd,
-                        prepared.config,
+                    .office_verification_dispatch_mark_started_permitted(
+                        permitted,
                         OfficeVerificationDispatchStarted {
-                            run_id: &prepared.run_id,
-                            verification_check_id: &prepared.verification_check_id,
+                            run_id: &run_id,
+                            verification_check_id: &verification_check_id,
                             automation_run_file_path: &automation_run_response.file_path,
                             automation_run_id: &automation_run_response.run.run_id,
                             automation_thread_id: &automation_prepared.thread_id,
@@ -3966,7 +4260,7 @@ impl MessageProcessor {
                     )
                     .await?;
                 self.send_office_run_updated(
-                    &prepared.cwd,
+                    &cwd,
                     &file_path,
                     &config,
                     "verificationStarted",
@@ -3978,9 +4272,9 @@ impl MessageProcessor {
                     OfficeVerificationDispatchNextResponse {
                         file_path,
                         config,
-                        run_id: prepared.run_id,
-                        verification_check_id: prepared.verification_check_id,
-                        automation_id: prepared.automation_id,
+                        run_id,
+                        verification_check_id,
+                        automation_id,
                         automation_run_file_path: automation_run_response.file_path,
                         automation_run_id: automation_run_response.run.run_id,
                         thread_id: automation_prepared.thread_id,
@@ -3990,38 +4284,50 @@ impl MessageProcessor {
                 ))
             }
             ClientRequest::OfficeVerificationRetry { params, .. } => {
-                let mut prepared = self
+                let mut permitted = self
                     .crewon_domain_processor
-                    .office_verification_retry_prepare(params)
+                    .office_verification_retry_prepare_permitted(params)
                     .await?;
+                let (cwd, automation_file_path, automation_id) = {
+                    let prepared = permitted.prepared();
+                    (
+                        prepared.cwd.clone(),
+                        prepared.automation_file_path.clone(),
+                        prepared.automation_id.clone(),
+                    )
+                };
                 let runtime_repair = match self
                     .thread_processor
                     .ensure_office_automation_runtime_thread(
                         &self.crewon_domain_processor,
-                        &prepared.cwd,
-                        &prepared.automation_file_path,
-                        &prepared.automation_id,
-                        &mut prepared.automation_config,
+                        &cwd,
+                        &automation_file_path,
+                        &automation_id,
+                        &mut permitted.prepared_mut().automation_config,
                         connection_id,
                     )
                     .await
                 {
                     Ok(runtime_repair) => runtime_repair,
                     Err(error) => {
+                        let (run_id, verification_check_id) = {
+                            let prepared = permitted.prepared();
+                            (
+                                prepared.run_id.clone(),
+                                prepared.verification_check_id.clone(),
+                            )
+                        };
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_verification_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config.clone(),
-                                &prepared.run_id,
-                                &prepared.verification_check_id,
+                            .office_verification_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                verification_check_id = %prepared.verification_check_id,
+                                run_id = %run_id,
+                                verification_check_id = %verification_check_id,
                                 error = %mark_error.message,
                                 "failed to mark office verification retry runtime repair failure"
                             );
@@ -4029,14 +4335,34 @@ impl MessageProcessor {
                         return Err(error);
                     }
                 };
+                let (
+                    automation_config,
+                    note,
+                    locale,
+                    client_user_message_id,
+                    run_id,
+                    verification_check_id,
+                    retry_of_automation_turn_id,
+                ) = {
+                    let prepared = permitted.prepared();
+                    (
+                        prepared.automation_config.clone(),
+                        prepared.note.clone(),
+                        prepared.locale.clone(),
+                        prepared.client_user_message_id.clone(),
+                        prepared.run_id.clone(),
+                        prepared.verification_check_id.clone(),
+                        prepared.retry_of_automation_turn_id.clone(),
+                    )
+                };
                 let automation_prepared = match self
                     .crewon_domain_processor
                     .automation_run_start_prepare(AutomationRunStartParams {
-                        cwd: prepared.cwd.clone(),
-                        config: prepared.automation_config.clone(),
-                        note: Some(prepared.note.clone()),
-                        locale: prepared.locale.clone(),
-                        client_user_message_id: prepared.client_user_message_id.clone(),
+                        cwd: cwd.clone(),
+                        config: automation_config,
+                        note: Some(note),
+                        locale,
+                        client_user_message_id,
                     })
                     .await
                 {
@@ -4044,18 +4370,15 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_verification_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &prepared.verification_check_id,
+                            .office_verification_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                verification_check_id = %prepared.verification_check_id,
+                                run_id = %run_id,
+                                verification_check_id = %verification_check_id,
                                 error = %mark_error.message,
                                 "failed to mark office verification retry as failed"
                             );
@@ -4076,7 +4399,7 @@ impl MessageProcessor {
                                 text: automation_prepared.prompt.clone(),
                                 text_elements: Vec::new(),
                             }],
-                            cwd: Some(std::path::PathBuf::from(prepared.cwd.clone())),
+                            cwd: Some(std::path::PathBuf::from(cwd.clone())),
                             ..TurnStartParams::default()
                         },
                         app_server_client_name.clone(),
@@ -4088,18 +4411,15 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_verification_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &prepared.verification_check_id,
+                            .office_verification_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                verification_check_id = %prepared.verification_check_id,
+                                run_id = %run_id,
+                                verification_check_id = %verification_check_id,
                                 error = %mark_error.message,
                                 "failed to mark office verification retry turn start failure"
                             );
@@ -4116,18 +4436,15 @@ impl MessageProcessor {
                     Err(error) => {
                         if let Err(mark_error) = self
                             .crewon_domain_processor
-                            .office_verification_dispatch_mark_failed(
-                                &prepared.cwd,
-                                prepared.config,
-                                &prepared.run_id,
-                                &prepared.verification_check_id,
+                            .office_verification_dispatch_mark_failed_permitted(
+                                permitted,
                                 &error.message,
                             )
                             .await
                         {
                             tracing::warn!(
-                                run_id = %prepared.run_id,
-                                verification_check_id = %prepared.verification_check_id,
+                                run_id = %run_id,
+                                verification_check_id = %verification_check_id,
                                 error = %mark_error.message,
                                 "failed to mark office verification retry record failure"
                             );
@@ -4137,12 +4454,11 @@ impl MessageProcessor {
                 };
                 let (file_path, config) = self
                     .crewon_domain_processor
-                    .office_verification_dispatch_mark_started(
-                        &prepared.cwd,
-                        prepared.config,
+                    .office_verification_dispatch_mark_started_permitted(
+                        permitted,
                         OfficeVerificationDispatchStarted {
-                            run_id: &prepared.run_id,
-                            verification_check_id: &prepared.verification_check_id,
+                            run_id: &run_id,
+                            verification_check_id: &verification_check_id,
                             automation_run_file_path: &automation_run_response.file_path,
                             automation_run_id: &automation_run_response.run.run_id,
                             automation_thread_id: &automation_prepared.thread_id,
@@ -4157,7 +4473,7 @@ impl MessageProcessor {
                     )
                     .await?;
                 self.send_office_run_updated(
-                    &prepared.cwd,
+                    &cwd,
                     &file_path,
                     &config,
                     "verificationRetryStarted",
@@ -4169,12 +4485,12 @@ impl MessageProcessor {
                     OfficeVerificationRetryResponse {
                         file_path,
                         config,
-                        run_id: prepared.run_id,
-                        verification_check_id: prepared.verification_check_id,
-                        automation_id: prepared.automation_id,
+                        run_id,
+                        verification_check_id,
+                        automation_id,
                         automation_run_file_path: automation_run_response.file_path,
                         automation_run_id: automation_run_response.run.run_id,
-                        retry_of_automation_turn_id: prepared.retry_of_automation_turn_id,
+                        retry_of_automation_turn_id,
                         thread_id: automation_prepared.thread_id,
                         turn: turn_response.turn,
                     }
@@ -4354,8 +4670,8 @@ impl MessageProcessor {
                                     &record.file_path,
                                     &record.config,
                                     "memoryDecision",
-                                    None,
-                                    None,
+                                    /*source_thread_id*/ None,
+                                    /*source_turn_id*/ None,
                                 )
                                 .await;
                             }
@@ -4534,25 +4850,75 @@ impl MessageProcessor {
                     .await
             }
             ClientRequest::TurnStart { params, .. } => {
-                self.turn_processor
-                    .turn_start(
-                        request_id.clone(),
-                        params,
-                        app_server_client_name.clone(),
-                        client_version.clone(),
-                    )
-                    .await
+                if let Some(dispatch) = Box::pin(self.start_cloud_agent_turn_if_bound(
+                    &request_id,
+                    &request_identity,
+                    &workspace_registry,
+                    &params,
+                ))
+                .await?
+                {
+                    self.outgoing
+                        .send_response(request_id.clone(), dispatch.response)
+                        .await;
+                    if let Some(turn) = dispatch.notification_turn.as_ref() {
+                        self.send_cloud_agent_turn_started(
+                            request_id.connection_id,
+                            &dispatch.thread_id,
+                            turn,
+                        )
+                        .await;
+                    }
+                    self.sync_cloud_agent_thread_metadata_best_effort().await;
+                    Ok(None)
+                } else {
+                    Box::pin(self.prepare_thread_dynamic_tools_for_turn(
+                        &request_identity,
+                        &workspace_registry,
+                        &params.thread_id,
+                    ))
+                    .await?;
+                    self.turn_processor
+                        .turn_start(
+                            request_id.clone(),
+                            params,
+                            app_server_client_name.clone(),
+                            client_version.clone(),
+                        )
+                        .await
+                }
             }
             ClientRequest::ThreadInjectItems { params, .. } => {
-                self.turn_processor.thread_inject_items(params).await
+                let execution_context_runtime =
+                    self.thread_execution_context_runtime(&request_identity, &workspace_registry);
+                self.turn_processor
+                    .thread_inject_items(params, execution_context_runtime)
+                    .await
             }
             ClientRequest::TurnSteer { params, .. } => {
-                self.turn_processor.turn_steer(&request_id, params).await
+                let execution_context_runtime =
+                    self.thread_execution_context_runtime(&request_identity, &workspace_registry);
+                self.turn_processor
+                    .turn_steer(&request_id, params, execution_context_runtime)
+                    .await
             }
             ClientRequest::TurnInterrupt { params, .. } => {
-                self.turn_processor
-                    .turn_interrupt(&request_id, params)
-                    .await
+                Box::pin(self.authorize_thread_execution_context_access(
+                    &request_identity,
+                    &workspace_registry,
+                    &params.thread_id,
+                ))
+                .await?;
+                match Box::pin(self.interrupt_cloud_agent_turn_if_bound(&request_identity, &params))
+                    .await?
+                {
+                    Some(response) => Ok(Some(response.into())),
+                    None => {
+                        self.turn_processor
+                            .turn_interrupt(&request_id, params)
+                            .await
+                    }
+                }
             }
             ClientRequest::ThreadRealtimeStart { params, .. } => {
                 self.turn_processor
@@ -4730,6 +5096,21 @@ impl MessageProcessor {
         Ok(())
     }
 }
+
+#[path = "message_processor_cloud_agent_metadata.rs"]
+mod message_processor_cloud_agent_metadata;
+#[path = "message_processor_cloud_agent_notifications.rs"]
+mod message_processor_cloud_agent_notifications;
+#[path = "message_processor_cloud_agent_validation.rs"]
+mod message_processor_cloud_agent_validation;
+#[path = "message_processor_experts.rs"]
+mod message_processor_experts;
+#[path = "message_processor_office_manager_ensure.rs"]
+mod message_processor_office_manager_ensure;
+#[path = "message_processor_office_message_submit.rs"]
+mod message_processor_office_message_submit;
+#[path = "message_processor_platform_control.rs"]
+mod message_processor_platform_control;
 
 #[cfg(test)]
 #[path = "message_processor_office_runtime_tests.rs"]

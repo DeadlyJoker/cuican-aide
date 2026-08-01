@@ -42,6 +42,34 @@ function panel() {
 }
 
 describe("mcp detail panel content", () => {
+  it("exposes persisted MCP config as an editable form", () => {
+    const content = buildMcpDetailPanelContent(
+      mcpAction({
+        configName: "github",
+        config: {
+          url: "https://api.githubcopilot.com/mcp/",
+          bearer_token_env_var: "GITHUB_PAT_TOKEN",
+          enabled: false,
+        },
+      }),
+      "zh",
+    );
+
+    expect(content.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "mcp-draft-name", value: "github" }),
+        expect.objectContaining({
+          id: "mcp-draft-config",
+          value: expect.stringContaining("api.githubcopilot.com"),
+        }),
+      ]),
+    );
+    expect(content.actions?.[0]).toMatchObject({
+      id: "save-mcp-config",
+      label: "保存更改",
+    });
+  });
+
   it("builds MCP detail lifecycle patches", () => {
     expect(
       mcpDetailContentPatch(
@@ -78,9 +106,7 @@ describe("mcp detail panel content", () => {
     expect(mcpToolThreadGoal("github", "search_issues", "en")).toBe(
       "Verify backend MCP tool call result for github.search_issues.",
     );
-    expect(mcpBackendToolEventPrompt("Record", "Body")).toBe(
-      "Record\n\nBody",
-    );
+    expect(mcpBackendToolEventPrompt("Record", "Body")).toBe("Record\n\nBody");
     expect(
       mcpToolHistoryPatch({
         currentActions: [
@@ -278,7 +304,8 @@ describe("mcp detail panel content", () => {
         {
           title: "Reading call history",
           meta: "app-server",
-          description: "Loading recent calls from the tool verification thread.",
+          description:
+            "Loading recent calls from the tool verification thread.",
           glyph: "◷",
           accent: "blue",
         },
@@ -308,7 +335,7 @@ describe("mcp detail panel content", () => {
     ).toEqual([
       {
         id: "login-mcp-oauth",
-        label: "登录 MCP",
+        label: "登录服务",
         mcpServerName: "github",
         tone: "primary",
       },

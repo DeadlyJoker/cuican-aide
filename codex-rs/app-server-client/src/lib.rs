@@ -169,10 +169,6 @@ pub(crate) fn server_notification_requires_delivery(notification: &ServerNotific
             | ServerNotification::ThreadSettingsUpdated(_)
             | ServerNotification::ItemCompleted(_)
             | ServerNotification::ExternalAgentConfigImportCompleted(_)
-            | ServerNotification::AgentPlatformChatDelta(_)
-            | ServerNotification::AgentPlatformResourceEvent(_)
-            | ServerNotification::AgentPlatformChatCompleted(_)
-            | ServerNotification::AgentPlatformChatFailed(_)
             | ServerNotification::AgentMessageDelta(_)
             | ServerNotification::PlanDelta(_)
             | ServerNotification::ReasoningSummaryTextDelta(_)
@@ -341,6 +337,8 @@ pub struct InProcessClientStartArgs {
     /// SQLite tracing layer used to flush recently emitted logs before feedback upload.
     pub log_db: Option<LogDbLayer>,
     /// Process-wide SQLite state handle shared with the embedded app-server.
+    ///
+    /// When omitted, the in-process runtime initializes state from [`Self::config`].
     pub state_db: Option<StateDbHandle>,
     /// Environment manager used by core execution and filesystem operations.
     pub environment_manager: Arc<EnvironmentManager>,
@@ -2158,53 +2156,6 @@ mod tests {
             &InProcessServerEvent::ServerNotification(
                 crewon_app_server_protocol::ServerNotification::ExternalAgentConfigImportCompleted(
                     crewon_app_server_protocol::ExternalAgentConfigImportCompletedNotification {},
-                )
-            )
-        ));
-        assert!(event_requires_delivery(
-            &InProcessServerEvent::ServerNotification(
-                crewon_app_server_protocol::ServerNotification::AgentPlatformChatDelta(
-                    crewon_app_server_protocol::AgentPlatformChatDeltaNotification {
-                        run_id: "run".to_string(),
-                        thread_id: "thread".to_string(),
-                        agent_id: "agent".to_string(),
-                        delta: "hello".to_string(),
-                    },
-                )
-            )
-        ));
-        assert!(event_requires_delivery(
-            &InProcessServerEvent::ServerNotification(
-                crewon_app_server_protocol::ServerNotification::AgentPlatformChatCompleted(
-                    crewon_app_server_protocol::AgentPlatformChatCompletedNotification {
-                        run_id: "run".to_string(),
-                        thread_id: "thread".to_string(),
-                        agent_id: "agent".to_string(),
-                        message: "hello".to_string(),
-                        thoughts: Vec::new(),
-                        skills_used: Vec::new(),
-                        resource_events: Vec::new(),
-                        tokens: crewon_app_server_protocol::AgentPlatformTokenUsage {
-                            prompt_tokens: 1,
-                            completion_tokens: 1,
-                            total_tokens: 2,
-                        },
-                        duration_ms: 1,
-                    },
-                )
-            )
-        ));
-        assert!(event_requires_delivery(
-            &InProcessServerEvent::ServerNotification(
-                crewon_app_server_protocol::ServerNotification::AgentPlatformChatFailed(
-                    crewon_app_server_protocol::AgentPlatformChatFailedNotification {
-                        run_id: "run".to_string(),
-                        thread_id: "thread".to_string(),
-                        agent_id: "agent".to_string(),
-                        error: "failed".to_string(),
-                        code: -32000,
-                        cancelled: false,
-                    },
                 )
             )
         ));

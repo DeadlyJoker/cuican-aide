@@ -173,6 +173,7 @@ pub enum SceneExecutionTargetSelection {
     Crewon,
     Agent { id: String },
     Team { id: String },
+    Experts { id: String },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
@@ -195,6 +196,7 @@ pub enum SceneExecutionTargetKind {
     Crewon,
     Agent,
     Team,
+    Experts,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
@@ -313,6 +315,9 @@ impl From<crewon_protocol::scene::SceneThreadMetadata> for ThreadSceneRuntime {
                 }
                 crewon_protocol::scene::SceneExecutionTargetKind::Team => {
                     SceneExecutionTargetKind::Team
+                }
+                crewon_protocol::scene::SceneExecutionTargetKind::Experts => {
+                    SceneExecutionTargetKind::Experts
                 }
             },
             execution_target_token: value.execution_target_token,

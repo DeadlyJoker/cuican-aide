@@ -1,19 +1,24 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { ProviderResourceSnapshot } from "../../lib/provider-resource/providerResourceSession";
 
 import {
   activateDesignPanelTab,
   applyDesignCardVisibility,
   cleanSlotTitle,
+  commandComposerResourceSelection,
   commandComposerKeyIntent,
   CommandWorkspace,
   insertTokenIntoComposerValue,
   nextExecutionIntent,
+  SelectedExecutionIntent,
   selectCommandHomeSlots,
   setDefaultTeamOfficePreview,
   setActiveFilter,
+  shouldCreateCommandThread,
   shouldCloseComposerPalette,
+  submitCommandComposer,
   syncDesignFilterState,
 } from "./CommandWorkspace";
 import { Palette } from "./CommandWorkspaceChrome";
@@ -221,6 +226,293 @@ describe("CommandWorkspace", () => {
     return renderToStaticMarkup(commandWorkspaceElement());
   }
 
+  it("uses the selected locale across the primary command shell", () => {
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="disconnected"
+        cwd="/repo/frontend"
+        isSending={false}
+        locale="en"
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect({
+      addContext: markup.includes('aria-label="Add context"'),
+      commandHeading: markup.includes("Put CrewON to work"),
+      languageMarker: markup.includes('data-locale="en"'),
+      nav: ["New task", "Assistant", "Agents", "Schedule", "Team"].map(
+        (label) => markup.includes(`<strong>${label}</strong>`),
+      ),
+      permissions: markup.includes('aria-label="Permissions"'),
+      startTask: markup.includes('aria-label="Start task"'),
+      workspaceTree: markup.includes(
+        'aria-label="Workspaces and conversations"',
+      ),
+    }).toMatchSnapshot();
+  });
+
+  it("offers Provider execution resources only while creating their owning conversation", () => {
+    const providerResource = {
+      snapshot: providerSnapshot(),
+      selectedResource: null,
+      selectedWorkspaceKey: "workspace-1",
+      canSelect: true,
+      onRefresh: () => undefined,
+      onSelect: () => undefined,
+      onUnbind: () => undefined,
+      onWorkspaceSelect: () => undefined,
+    };
+    const draft = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        providerResource={providerResource}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+    const existingThread = {
+      id: "thread-existing",
+      turns: [],
+    } as unknown as Thread;
+    const existing = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        providerResource={providerResource}
+        selectedThread={existingThread}
+        selectedThreadId={existingThread.id}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(draft).toContain("provider-mcp-tool");
+    expect(existing).not.toContain("provider-mcp-tool");
+  });
+
+  it("snapshots a Provider Agent in the execution target selector, not the add palette", () => {
+    const agent = {
+      providerId: "agent-platform",
+      resourceId: "review-agent",
+      revision: "agent-revision-1",
+      resourceType: "agent" as const,
+    };
+    const snapshot = providerSnapshot();
+    snapshot.provider = snapshot.provider
+      ? {
+          ...snapshot.provider,
+          capabilities: [...snapshot.provider.capabilities, "remoteAgent"],
+          resourceCapabilities: [
+            ...snapshot.provider.resourceCapabilities,
+            {
+              resourceType: "agent",
+              mode: "providerManaged",
+              executionLocation: "provider",
+            },
+          ],
+        }
+      : null;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        providerResource={{
+          snapshot,
+          selectedResource: null,
+          executionAgents: [agent],
+          selectedExecutionAgent: null,
+          selectedWorkspaceKey: "workspace-1",
+          canSelect: true,
+          onRefresh: () => undefined,
+          onSelect: () => undefined,
+          onExecutionAgentSelect: () => undefined,
+          onUnbind: () => undefined,
+          onWorkspaceSelect: () => undefined,
+        }}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("review-agent · 在线 Agent");
+    expect(markup).toMatchSnapshot();
+  });
+
+  it("maps platform Skill, MCP, and knowledge selections to structured composer resources", () => {
+    expect(
+      commandComposerResourceSelection({
+        detail: "3 个文档",
+        kind: "knowledge",
+        label: "知识库",
+        platformResource: {
+          execution: "remote",
+          id: 10,
+          name: "产品知识库",
+          type: "knowledge_bases",
+        },
+        title: "产品知识库",
+      }),
+    ).toEqual({
+      kind: "knowledge",
+      name: "产品知识库",
+      platformResource: {
+        execution: "remote",
+        id: 10,
+        name: "产品知识库",
+        type: "knowledge_bases",
+      },
+    });
+    expect(
+      commandComposerResourceSelection({
+        detail: "读取文件",
+        kind: "mcp",
+        label: "MCP",
+        platformResource: {
+          execution: "remote",
+          id: 30,
+          name: "filesystem",
+          type: "mcp_servers",
+        },
+        title: "Filesystem MCP",
+        token: "Filesystem MCP",
+      }),
+    ).toEqual({
+      kind: "mcp",
+      name: "Filesystem MCP",
+      platformResource: {
+        execution: "remote",
+        id: 30,
+        name: "filesystem",
+        type: "mcp_servers",
+      },
+    });
+  });
+
+  it("shows selected Skill, MCP, and knowledge resources as composer tags", () => {
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue="检查这些资源"
+        connectionState="connected"
+        cwd="/repo"
+        isSending={false}
+        pendingComposerMentions={[
+          {
+            kind: "skill",
+            name: "code-review",
+            path: "/skills/code-review/SKILL.md",
+            resourceKind: "skill",
+          },
+          {
+            name: "Filesystem",
+            path: "mcp://filesystem",
+            resourceKind: "mcp",
+          },
+          {
+            name: "产品知识库",
+            path: "agent-platform://knowledge_bases/10",
+            resourceKind: "knowledge",
+          },
+        ]}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-resource-kind="skill"');
+    expect(markup).toContain('data-resource-kind="mcp"');
+    expect(markup).toContain('data-resource-kind="knowledge"');
+    expect(markup).toContain("code-review");
+    expect(markup).toContain("Filesystem");
+    expect(markup).toContain("产品知识库");
+  });
+
+  it("passes workspace cwd only when creating a new thread", () => {
+    const existingThreadCalls: unknown[][] = [];
+    const newThreadCalls: unknown[][] = [];
+    const settings = { model: "gpt-5.5" };
+
+    submitCommandComposer({
+      cwd: "/srv/crewon-workspaces/agent-platform",
+      onSend: (...args) => existingThreadCalls.push(args),
+      onSendNewThread: (...args) => newThreadCalls.push(args),
+      settings,
+      shouldCreateNewThread: false,
+      text: "继续处理",
+    });
+    submitCommandComposer({
+      cwd: "/srv/crewon-workspaces/agent-platform",
+      onSend: (...args) => existingThreadCalls.push(args),
+      onSendNewThread: (...args) => newThreadCalls.push(args),
+      settings,
+      shouldCreateNewThread: true,
+      text: "新建任务",
+    });
+
+    expect(existingThreadCalls).toEqual([["继续处理", settings]]);
+    expect(newThreadCalls).toEqual([
+      ["新建任务", settings, "/srv/crewon-workspaces/agent-platform"],
+    ]);
+  });
+
+  it("creates a new authority thread before first Provider Agent execution", () => {
+    const selectedThread = { id: "thread-1" } as Thread;
+
+    expect(
+      shouldCreateCommandThread({
+        hasProviderAgentTarget: true,
+        isProviderAgentBoundToSelectedThread: false,
+        newTaskDraft: false,
+        selectedThread,
+      }),
+    ).toBe(true);
+    expect(
+      shouldCreateCommandThread({
+        hasProviderAgentTarget: true,
+        isProviderAgentBoundToSelectedThread: true,
+        newTaskDraft: false,
+        selectedThread,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCreateCommandThread({
+        hasProviderAgentTarget: false,
+        isProviderAgentBoundToSelectedThread: false,
+        newTaskDraft: false,
+        selectedThread,
+      }),
+    ).toBe(false);
+  });
+
   it("inserts slash command tokens without losing mention syntax", () => {
     expect(
       insertTokenIntoComposerValue({
@@ -307,7 +599,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('aria-label="执行主体"');
     expect(markup).not.toContain("执行主体：");
     expect(markup).not.toContain('data-od-id="workspace-pill"');
-    expect(markup).not.toContain("任务方式");
+    expect(markup).not.toContain('aria-label="任务类型"');
     expect(markup).not.toContain("核心上下文");
     expect(markup).not.toContain("默认交付");
     expect(markup).toContain("暂无可选智能体或小队");
@@ -370,23 +662,24 @@ describe("CommandWorkspace", () => {
     );
     expect(commandHomeMarkup).toContain('aria-label="添加上下文"');
     expect(commandHomeMarkup).toContain('aria-label="权限选择"');
-    expect(commandHomeMarkup).toContain('aria-label="执行意图"');
-    expect(commandHomeMarkup).toContain('data-execution-intent="goal"');
-    expect(commandHomeMarkup).toContain('data-execution-intent="plan"');
-    expect(commandHomeMarkup).toMatch(
-      /aria-pressed="false"[^>]+data-execution-intent="goal"/,
-    );
-    expect(commandHomeMarkup).toMatch(
-      /aria-pressed="false"[^>]+data-execution-intent="plan"/,
-    );
-    expect(commandHomeMarkup).toContain("添加文件、知识库、Skill 或 MCP");
-    expect(commandHomeMarkup).toContain("文件和文件夹");
+    expect(commandHomeMarkup).not.toContain('aria-label="执行意图"');
+    expect(commandHomeMarkup).not.toContain('data-execution-intent="goal"');
+    expect(commandHomeMarkup).not.toContain('data-execution-intent="plan"');
+    expect(commandHomeMarkup).toContain('placeholder="添加"');
+    expect(commandHomeMarkup).toContain("选择文件");
+    expect(commandHomeMarkup).toContain("选择文件夹");
+    expect(markup).toContain('aria-label="从本地电脑选择文件"');
+    expect(markup).toContain('aria-label="从本地电脑选择文件夹"');
     const addPanelMarkup = commandHomeMarkup.slice(
       commandHomeMarkup.indexOf('id="add-search-panel"'),
       commandHomeMarkup.indexOf('id="context-search-panel"'),
     );
     expect(addPanelMarkup).toContain('class="add-palette-group"');
-    expect(addPanelMarkup).toContain('class="add-palette-group-label">文件');
+    expect(addPanelMarkup).toContain('data-kind="intent"');
+    expect(addPanelMarkup).toContain('data-label="目标"');
+    expect(addPanelMarkup).toContain('data-label="计划模式"');
+    expect(addPanelMarkup).toContain('class="add-palette-item"');
+    expect(addPanelMarkup).toContain('aria-pressed="false"');
     expect(addPanelMarkup).not.toContain(">工作空间<");
     expect(commandHomeMarkup).toContain('aria-label="执行主体"');
     expect(commandHomeMarkup).toContain('aria-label="模型选择"');
@@ -412,6 +705,25 @@ describe("CommandWorkspace", () => {
     expect(nextExecutionIntent("goal", "plan")).toBe("plan");
     expect(nextExecutionIntent("plan", "goal")).toBe("goal");
     expect(nextExecutionIntent("plan", "plan")).toBe("none");
+  });
+
+  it("snapshots selected execution intents as dismissible composer chips", () => {
+    expect({
+      goal: renderToStaticMarkup(
+        <SelectedExecutionIntent
+          intent="goal"
+          locale="zh"
+          onClear={() => undefined}
+        />,
+      ),
+      plan: renderToStaticMarkup(
+        <SelectedExecutionIntent
+          intent="plan"
+          locale="zh"
+          onClear={() => undefined}
+        />,
+      ),
+    }).toMatchSnapshot();
   });
 
   it("closes composer palettes only for outside pointer targets", () => {
@@ -458,7 +770,13 @@ describe("CommandWorkspace", () => {
             detail: "选择本地内容",
             kind: "file",
             label: "文件",
-            title: "文件和文件夹",
+            title: "选择文件",
+          },
+          {
+            detail: "选择本地目录",
+            kind: "folder",
+            label: "文件夹",
+            title: "选择文件夹",
           },
           {
             detail: "引用知识",
@@ -489,11 +807,10 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup.match(/class="add-palette-group"/g)).toHaveLength(4);
-    expect(markup).toContain('class="add-palette-group-label">文件');
+    expect(markup.match(/class="add-palette-group"/g)).toHaveLength(3);
     expect(markup).toContain('class="add-palette-group-label">知识库');
-    expect(markup).toContain('class="add-palette-group-label">Skill');
-    expect(markup).toContain('class="add-palette-group-label">MCP');
+    expect(markup).toContain('class="add-palette-group-label">插件');
+    expect(markup).toContain('class="add-palette-item"');
   });
 
   it("uses a compact connection light instead of visible connection copy", () => {
@@ -532,8 +849,12 @@ describe("CommandWorkspace", () => {
   it("includes original page-specific content for sidebar targets", () => {
     const markup = renderCommandWorkspace();
 
-    expect(markup).toContain("\u4ece\u8fd9\u91cc\u5f00\u59cb\u957f\u671f\u5bf9\u8bdd");
-    expect(markup).toContain("\u4e0a\u4e0b\u6587\u63a5\u8fd1\u4e0a\u9650\u65f6\u81ea\u52a8\u538b\u7f29");
+    expect(markup).toContain(
+      "\u4ece\u8fd9\u91cc\u5f00\u59cb\u957f\u671f\u5bf9\u8bdd",
+    );
+    expect(markup).toContain(
+      "\u4e0a\u4e0b\u6587\u63a5\u8fd1\u4e0a\u9650\u65f6\u81ea\u52a8\u538b\u7f29",
+    );
     expect(markup).toContain("\u5f53\u524d\u4efb\u52a1");
     expect(markup).toContain("Workflow \u6267\u884c\u961f\u5217");
     expect(markup).toContain("\u6267\u884c\u72b6\u6001\u673a");
@@ -582,12 +903,10 @@ describe("CommandWorkspace", () => {
       hasSharedComposer: assistantMarkup.includes(
         'data-command-composer="true"',
       ),
-      hasExtraDisclaimer: assistantMarkup.includes(
-        "内容由 AI 生成，请核实重要信息",
-      ),
-      hasClearConversationAction: assistantMarkup.includes(
-        'aria-label="清理会话"',
-      ),
+      hasExtraDisclaimer:
+        assistantMarkup.includes("内容由 AI 生成，请核实重要信息"),
+      hasClearConversationAction:
+        assistantMarkup.includes('aria-label="清理会话"'),
       hasLeakedHomepageDraft: assistantMarkup.includes("继续跟进"),
       hasThreadHeader: assistantMarkup.includes(
         'data-od-id="desktop-command-header"',
@@ -868,7 +1187,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('data-od-id="command-thread-room"');
     expect(markup).toContain('class="command-thread-identity"');
     expect(markup).toContain("Agent 对话");
-    expect(markup).toContain(">工作空间 · frontend</em>");
+    expect(markup).toContain(">frontend</em>");
     expect(markup).toContain("Command room transcript");
     expect(markup).toContain('class="transcript"');
     expect(markup).toContain(
@@ -998,7 +1317,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("已读取 1 个文件");
     expect(markup).toContain("README.md");
     expect(markup).toContain("skills.delivery-check");
-    expect(markup).toContain("$ pnpm test -- CommandWorkspace");
+    expect(markup).toContain("pnpm test -- CommandWorkspace");
     expect(markup).toContain("Command workspace tests passed");
     expect(markup).toContain("退出码 0");
     expect(markup).toContain("<table>");
@@ -1060,8 +1379,9 @@ describe("CommandWorkspace", () => {
 
     expect(markup).toContain("Agent 正在执行");
     expect(markup).toContain("继续补充指令");
-    expect(markup).toContain('aria-label="发送补充指令"');
-    expect(markup).toContain('title="发送补充指令"');
+    expect(markup).toContain('data-action="stop"');
+    expect(markup).toContain('aria-label="停止"');
+    expect(markup).toContain('title="停止"');
   });
 
   it("summarizes live backend agent work in the command transcript toolbar", () => {
@@ -1370,3 +1690,47 @@ describe("CommandWorkspace", () => {
     expect(scope.querySelector<HTMLElement>("#memory")?.hidden).toBe(true);
   });
 });
+
+function providerSnapshot(): ProviderResourceSnapshot {
+  return {
+    generation: 1,
+    phase: "ready",
+    workspaces: [
+      {
+        workspaceKey: "workspace-1",
+        displayName: "cuican-aide",
+        nodeId: "node-1",
+        environmentId: "local",
+        availability: "available",
+      },
+    ],
+    provider: {
+      connectionId: "connection-1",
+      providerId: "agent-platform",
+      kind: "agentPlatform",
+      protocolVersion: "v1",
+      status: "connected",
+      capabilities: ["remoteTool"],
+      resourceCapabilities: [
+        {
+          resourceType: "mcpTool",
+          mode: "remoteReference",
+          executionLocation: "provider",
+        },
+      ],
+      projectionEtag: "etag-1",
+      observedAt: 1n,
+    },
+    resources: [
+      {
+        providerId: "agent-platform",
+        resourceId: "provider-mcp-tool",
+        revision: "revision-1",
+        resourceType: "mcpTool",
+      },
+    ],
+    workspace: null,
+    binding: null,
+    error: null,
+  };
+}

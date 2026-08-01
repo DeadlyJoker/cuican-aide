@@ -42,6 +42,7 @@ use crate::transport::start_control_socket_acceptor;
 use crate::transport::start_remote_control;
 use crate::transport::start_stdio_connection;
 use crate::transport::start_websocket_acceptor;
+use crate::transport::start_websocket_acceptor_with_principal_services;
 use crewon_analytics::AppServerRpcTransport;
 use crewon_app_server_protocol::ConfigLayerSource;
 use crewon_app_server_protocol::ConfigWarningNotification;
@@ -98,11 +99,26 @@ pub mod in_process;
 mod mcp_refresh;
 mod message_processor;
 mod models;
+#[allow(
+    dead_code,
+    reason = "the shared Office source fence is staged while manager runtime creation lands"
+)]
+mod office_runtime_contract;
 mod outgoing_message;
+pub mod platform_control;
 mod request_processors;
 mod request_serialization;
+mod rollout_writer_generation;
 mod server_request_error;
 mod skills_watcher;
+#[cfg_attr(
+    not(test),
+    allow(
+        dead_code,
+        reason = "W1-06 persistence adapter is harnessed before Task Control composition"
+    )
+)]
+mod task_control;
 mod thread_state;
 mod thread_status;
 mod transport;
@@ -449,6 +465,8 @@ pub async fn run_main_with_transport_options(
         )
     })?;
     let codex_home = find_crewon_home()?;
+    let _rollout_writer_generation_guard =
+        rollout_writer_generation::acquire_for_app_server(codex_home.as_path())?;
     let local_runtime_paths = ExecServerRuntimePaths::from_optional_paths(
         arg0_paths.codex_self_exe.clone(),
         arg0_paths.crewon_linux_sandbox_exe.clone(),
@@ -674,6 +692,49 @@ pub async fn run_main_with_transport_options(
     let transport_shutdown_token = CancellationToken::new();
     let mut transport_accept_handles = Vec::<JoinHandle<()>>::new();
 
+    let principal_session_enabled =
+        platform_control::principal_session_production::PreparedPrincipalSessionProduction::is_enabled_in_process_environment()?;
+    if principal_session_enabled && !matches!(&transport, AppServerTransport::WebSocket { .. }) {
+        return Err(std::io::Error::new(
+            ErrorKind::InvalidInput,
+            "principal session production requires websocket transport",
+        ));
+    }
+    if principal_session_enabled && auth.config.is_some() {
+        return Err(std::io::Error::new(
+            ErrorKind::InvalidInput,
+            "principal session production cannot be combined with legacy websocket auth",
+        ));
+    }
+    let mut principal_session_production = if principal_session_enabled {
+        let state = state_db.clone().ok_or_else(|| {
+            std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "principal session production requires sqlite state",
+            )
+        })?;
+        platform_control::principal_session_production::PreparedPrincipalSessionProduction::from_process_environment(state).await?
+    } else {
+        None
+    };
+    let provider_connection_runtime = platform_control::provider_connection_startup::PreparedProviderConnectionRuntime::from_process_environment(
+        state_db.clone(),
+        principal_session_production.as_ref().map(
+            platform_control::principal_session_production::PreparedPrincipalSessionProduction::identity_source_reader,
+        ),
+    )
+    .await?
+    .map(Arc::new);
+    let provider_control_runtime =
+        task_control::provider_control_production::PreparedProviderControlRuntime::from_process_environment(
+            state_db.clone(),
+            provider_connection_runtime.as_deref(),
+        )?;
+    let durable_cloud_agent_enabled =
+        task_control::provider_control_production::durable_cloud_agent_enabled_from_process_environment(
+            provider_control_runtime.is_some(),
+        )?;
+
     let single_client_mode = matches!(&transport, AppServerTransport::Stdio);
     let shutdown_when_no_connections = single_client_mode;
     let graceful_signal_restart_enabled =
@@ -701,14 +762,38 @@ pub async fn run_main_with_transport_options(
             transport_accept_handles.push(accept_handle);
         }
         AppServerTransport::WebSocket { bind_address } => {
-            let accept_handle = start_websocket_acceptor(
-                *bind_address,
-                transport_event_tx.clone(),
-                transport_shutdown_token.clone(),
-                policy_from_settings(&auth)?,
-            )
-            .await?;
-            transport_accept_handles.push(accept_handle);
+            if let Some(production) = principal_session_production.as_mut() {
+                let listener_handle =
+                    production.start_listener(transport_shutdown_token.clone())?;
+                let accept_result = start_websocket_acceptor_with_principal_services(
+                    *bind_address,
+                    transport_event_tx.clone(),
+                    transport_shutdown_token.clone(),
+                    production.auth_policy(),
+                    production.registry(),
+                    Some(production.exchange()),
+                )
+                .await;
+                let accept_handle = match accept_result {
+                    Ok(handle) => handle,
+                    Err(error) => {
+                        transport_shutdown_token.cancel();
+                        let _ = listener_handle.await;
+                        return Err(error);
+                    }
+                };
+                transport_accept_handles.push(listener_handle);
+                transport_accept_handles.push(accept_handle);
+            } else {
+                let accept_handle = start_websocket_acceptor(
+                    *bind_address,
+                    transport_event_tx.clone(),
+                    transport_shutdown_token.clone(),
+                    policy_from_settings(&auth)?,
+                )
+                .await?;
+                transport_accept_handles.push(accept_handle);
+            }
         }
         AppServerTransport::Off => {}
     }
@@ -747,6 +832,52 @@ pub async fn run_main_with_transport_options(
     )
     .await?;
     transport_accept_handles.push(remote_control_accept_handle);
+    let provider_control_handle =
+        provider_control_runtime.map(|runtime| runtime.start(transport_shutdown_token.clone()));
+    let (cloud_agent_notification_tx, mut cloud_agent_notification_rx) = mpsc::channel(64);
+    let cloud_agent_authority_handle = if durable_cloud_agent_enabled {
+        let state = state_db.clone().ok_or_else(|| {
+            std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "durable Cloud Agent authority requires sqlite state",
+            )
+        })?;
+        Some(
+            task_control::cloud_agent_task_authority::start_cloud_agent_task_authority(
+                state,
+                transport_shutdown_token.clone(),
+            ),
+        )
+    } else {
+        None
+    };
+    let cloud_agent_projector_handle = if durable_cloud_agent_enabled {
+        let state = state_db.clone().ok_or_else(|| {
+            std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "durable Cloud Agent projector requires sqlite state",
+            )
+        })?;
+        let factory = provider_connection_runtime
+            .as_ref()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    "durable Cloud Agent projector requires Provider connection runtime",
+                )
+            })?
+            .provider_client_factory();
+        Some(
+            task_control::cloud_agent_turn_projector::start_cloud_agent_turn_projector(
+                state,
+                factory,
+                cloud_agent_notification_tx,
+                transport_shutdown_token.clone(),
+            ),
+        )
+    } else {
+        None
+    };
 
     let outbound_handle = tokio::spawn(async move {
         let mut outbound_connections = HashMap::<ConnectionId, OutboundConnectionState>::new();
@@ -830,6 +961,8 @@ pub async fn run_main_with_transport_options(
             rpc_transport: analytics_rpc_transport(&transport),
             remote_control_handle: Some(remote_control_handle.clone()),
             plugin_startup_tasks: runtime_options.plugin_startup_tasks,
+            provider_connection_runtime,
+            durable_cloud_agent_enabled,
         }));
         let mut thread_created_rx = processor.thread_created_receiver();
         let mut running_turn_count_rx = processor.subscribe_running_assistant_turn_count();
@@ -837,6 +970,7 @@ pub async fn run_main_with_transport_options(
         let mut connection_cleanup_tasks = ConnectionCleanupTasks::new();
         let mut remote_control_status_rx = remote_control_handle.status_receiver();
         let mut remote_control_status = remote_control_status_rx.borrow().clone();
+        let mut listen_for_cloud_agent_notifications = durable_cloud_agent_enabled;
         let transport_shutdown_token = transport_shutdown_token.clone();
         async move {
             let mut listen_for_threads = true;
@@ -882,6 +1016,7 @@ pub async fn run_main_with_transport_options(
                             TransportEvent::ConnectionOpened {
                                 connection_id,
                                 origin,
+                                authentication,
                                 writer,
                                 disconnect_sender,
                             } => {
@@ -890,33 +1025,43 @@ pub async fn run_main_with_transport_options(
                                     Arc::new(AtomicBool::new(false));
                                 let outbound_opted_out_notification_methods =
                                     Arc::new(RwLock::new(HashSet::new()));
+                                let connection_state = match ConnectionState::new(
+                                    origin,
+                                    authentication,
+                                    Arc::clone(&outbound_initialized),
+                                    Arc::clone(&outbound_experimental_api_enabled),
+                                    Arc::clone(&outbound_opted_out_notification_methods),
+                                ) {
+                                    Ok(connection_state) => connection_state,
+                                    Err(err) => {
+                                        warn!(
+                                            ?connection_id,
+                                            %err,
+                                            "disconnecting connection with invalid verified transport principal"
+                                        );
+                                        if let Some(disconnect_sender) = disconnect_sender {
+                                            disconnect_sender.cancel();
+                                        }
+                                        continue;
+                                    }
+                                };
                                 if outbound_control_tx
                                     .send(OutboundControlEvent::Opened {
                                         connection_id,
                                         writer,
                                         disconnect_sender,
-                                        initialized: Arc::clone(&outbound_initialized),
-                                        experimental_api_enabled: Arc::clone(
-                                            &outbound_experimental_api_enabled,
-                                        ),
-                                        opted_out_notification_methods: Arc::clone(
-                                            &outbound_opted_out_notification_methods,
-                                        ),
+                                        initialized: outbound_initialized,
+                                        experimental_api_enabled:
+                                            outbound_experimental_api_enabled,
+                                        opted_out_notification_methods:
+                                            outbound_opted_out_notification_methods,
                                     })
                                     .await
                                     .is_err()
                                 {
                                     break;
                                 }
-                                connections.insert(
-                                    connection_id,
-                                    ConnectionState::new(
-                                        origin,
-                                        outbound_initialized,
-                                        outbound_experimental_api_enabled,
-                                        outbound_opted_out_notification_methods,
-                                    ),
-                                );
+                                connections.insert(connection_id, connection_state);
                             }
                             TransportEvent::ConnectionClosed { connection_id } => {
                                 let Some(connection_state) = connections.remove(&connection_id) else {
@@ -1047,6 +1192,27 @@ pub async fn run_main_with_transport_options(
                             .send_server_notification(notification)
                             .await;
                     }
+                    notice = cloud_agent_notification_rx.recv(), if listen_for_cloud_agent_notifications => {
+                        let Some(notice) = notice else {
+                            listen_for_cloud_agent_notifications = false;
+                            continue;
+                        };
+                        let recipients = connections
+                            .iter()
+                            .filter_map(|(connection_id, connection_state)| {
+                                connection_state
+                                    .session
+                                    .request_identity(format!(
+                                        "cloud-agent-terminal:{}:{}",
+                                        notice.turn_id, notice.revision
+                                    ))
+                                    .map(|identity| (*connection_id, identity))
+                            })
+                            .collect();
+                        processor
+                            .deliver_cloud_agent_terminal_notice(&notice, recipients)
+                            .await;
+                    }
                     created = thread_created_rx.recv(), if listen_for_threads => {
                         match created {
                             Ok(thread_id) => {
@@ -1101,6 +1267,15 @@ pub async fn run_main_with_transport_options(
     let _ = outbound_handle.await;
 
     transport_shutdown_token.cancel();
+    if let Some(handle) = provider_control_handle {
+        let _ = handle.await;
+    }
+    if let Some(handle) = cloud_agent_authority_handle {
+        let _ = handle.await;
+    }
+    if let Some(handle) = cloud_agent_projector_handle {
+        let _ = handle.await;
+    }
     for handle in transport_accept_handles {
         let _ = handle.await;
     }

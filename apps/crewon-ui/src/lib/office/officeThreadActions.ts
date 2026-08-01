@@ -23,6 +23,15 @@ type LibraryPanelSetter = (
   updater: (panel: LibraryPanel | null) => LibraryPanel | null,
 ) => void;
 
+function isUnmaterializedOfficeThreadError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("thread") &&
+    error.message.includes("is not materialized yet") &&
+    error.message.includes("before first user message")
+  );
+}
+
 export type OfficeThreadResolution = {
   config: OfficeConfig;
   filePath: string | null;
@@ -106,6 +115,27 @@ export async function ensureOfficeThreadAction({
         threadId: existingThreadId,
       };
     } catch (error) {
+      if (isUnmaterializedOfficeThreadError(error)) {
+        setLibraryPanel((currentPanel) =>
+          officePanelMatchesIdentity(currentPanel, expectedIdentity)
+            ? officeWorkspaceConnectedPanel(
+                currentPanel,
+                currentPanel?.workspace ?? workspace,
+                existingThreadId,
+              )
+            : currentPanel,
+        );
+        return {
+          config: officeConfigForThread(
+            panel.title,
+            panel.subtitle,
+            workspace,
+            existingThreadId,
+          ),
+          filePath: panel.configPath ?? null,
+          threadId: existingThreadId,
+        };
+      }
       if (!isMissingThreadError(error)) {
         throw error;
       }
@@ -135,7 +165,14 @@ export async function ensureOfficeThreadAction({
   if (!ensured) {
     return null;
   }
-  const thread = await readThread(ensured.threadId);
+  let thread: Thread | null | undefined;
+  try {
+    thread = await readThread(ensured.threadId);
+  } catch (error) {
+    if (!isUnmaterializedOfficeThreadError(error)) {
+      throw error;
+    }
+  }
   if (thread) {
     setThreads((current) =>
       upsertThread(current, { ...thread, name: panel.title }),

@@ -141,6 +141,23 @@ describe("office thread actions", () => {
     expect(captured.libraryPanel?.workspace?.threadId).toBe("office-thread");
   });
 
+  it("reuses an existing manager thread before its first message materializes it", async () => {
+    const captured = state();
+    const resolution = await ensureOfficeThreadAction(
+      baseParams(captured, {
+        readThread: async () => {
+          throw new Error(
+            "thread office-thread is not materialized yet; includeTurns is unavailable before first user message",
+          );
+        },
+      }),
+    );
+
+    expect(resolution?.threadId).toBe("office-thread");
+    expect(captured.ensured).toEqual([]);
+    expect(captured.libraryPanel?.workspace?.backendStatus).toBe("connected");
+  });
+
   it("uses the server-owned manager ensure flow when the saved one is missing", async () => {
     const captured = state();
     const resolution = await ensureOfficeThreadAction(
@@ -180,6 +197,28 @@ describe("office thread actions", () => {
     expect(captured.libraryPanel?.configPath).toBe(
       "/offices/new-office-thread.json",
     );
+  });
+
+  it("binds a newly ensured manager before its first message materializes it", async () => {
+    const captured = state();
+    const resolution = await ensureOfficeThreadAction(
+      baseParams(captured, {
+        forceNew: true,
+        readThread: async () => {
+          throw new Error(
+            "thread new-office-thread is not materialized yet; includeTurns is unavailable before first user message",
+          );
+        },
+      }),
+    );
+
+    expect(resolution?.threadId).toBe("new-office-thread");
+    expect(captured.libraryPanel?.workspace).toMatchObject({
+      backendStatus: "connected",
+      recordRevision: "revision-new-office-thread",
+      threadId: "new-office-thread",
+    });
+    expect(captured.threads).toEqual([]);
   });
 
   it("asks the server to repair or reuse the manager when forced", async () => {

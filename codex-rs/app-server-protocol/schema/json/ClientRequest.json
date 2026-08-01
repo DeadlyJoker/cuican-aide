@@ -137,56 +137,39 @@
       ],
       "type": "object"
     },
-    "AgentPlatformChatParams": {
+    "AgentPlatformWorkflowExecuteParams": {
+      "additionalProperties": false,
       "properties": {
         "accessToken": {
           "type": "string"
         },
-        "agentId": {
+        "input": {
           "type": "string"
         },
-        "message": {
-          "type": "string"
-        },
-        "threadId": {
+        "workflowId": {
           "type": "string"
         }
       },
       "required": [
         "accessToken",
-        "agentId",
-        "message",
-        "threadId"
+        "input",
+        "workflowId"
       ],
       "type": "object"
     },
-    "AgentPlatformRunCancelParams": {
-      "properties": {
-        "runId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "runId"
-      ],
-      "type": "object"
-    },
-    "AgentPlatformSessionParams": {
+    "AgentPlatformWorkflowInfoParams": {
+      "additionalProperties": false,
       "properties": {
         "accessToken": {
           "type": "string"
         },
-        "agentId": {
-          "type": "string"
-        },
-        "threadId": {
+        "workflowId": {
           "type": "string"
         }
       },
       "required": [
         "accessToken",
-        "agentId",
-        "threadId"
+        "workflowId"
       ],
       "type": "object"
     },
@@ -1526,6 +1509,106 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "ExpertRole": {
+      "additionalProperties": false,
+      "description": "One bounded local role in an Experts definition.",
+      "properties": {
+        "agentType": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentType",
+        "name",
+        "role"
+      ],
+      "type": "object"
+    },
+    "ExpertTeamCreateParams": {
+      "additionalProperties": false,
+      "properties": {
+        "experts": {
+          "items": {
+            "$ref": "#/definitions/ExpertRole"
+          },
+          "type": "array"
+        },
+        "goal": {
+          "type": "string"
+        },
+        "leader": {
+          "$ref": "#/definitions/ExpertRole"
+        },
+        "title": {
+          "type": "string"
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "experts",
+        "goal",
+        "leader",
+        "title",
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "ExpertTeamListParams": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "ExpertTeamReadParams": {
+      "additionalProperties": false,
+      "properties": {
+        "expertsId": {
+          "type": "string"
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "expertsId",
+        "workspaceKey"
+      ],
       "type": "object"
     },
     "ExternalAgentConfigDetectParams": {
@@ -3017,6 +3100,25 @@
       ],
       "type": "object"
     },
+    "OfficeManagerEnsureParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "expectedRecordRevision": {
+          "type": "string"
+        },
+        "officeRecordId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "expectedRecordRevision",
+        "officeRecordId"
+      ],
+      "type": "object"
+    },
     "OfficeMemberAddParams": {
       "properties": {
         "agentId": {
@@ -3131,6 +3233,18 @@
       ],
       "type": "object"
     },
+    "OfficeMessageMention": {
+      "additionalProperties": false,
+      "properties": {
+        "memberId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "memberId"
+      ],
+      "type": "object"
+    },
     "OfficeMessageSendParams": {
       "properties": {
         "config": true,
@@ -3156,6 +3270,49 @@
         "config",
         "cwd",
         "message"
+      ],
+      "type": "object"
+    },
+    "OfficeMessageSubmitParams": {
+      "additionalProperties": false,
+      "properties": {
+        "clientUserMessageId": {
+          "type": "string"
+        },
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mentions": {
+          "items": {
+            "$ref": "#/definitions/OfficeMessageMention"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "clientUserMessageId",
+        "config",
+        "cwd",
+        "text"
       ],
       "type": "object"
     },
@@ -3992,6 +4149,50 @@
           "type": "integer"
         }
       ]
+    },
+    "ResourceBindingMode": {
+      "enum": [
+        "remoteReference",
+        "localSnapshot",
+        "localFork",
+        "providerManaged"
+      ],
+      "type": "string"
+    },
+    "ResourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "resourceType": {
+          "$ref": "#/definitions/ResourceType"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId",
+        "resourceId",
+        "resourceType",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "ResourceType": {
+      "enum": [
+        "agent",
+        "skill",
+        "mcpServer",
+        "mcpTool",
+        "knowledgeBase",
+        "workflow"
+      ],
+      "type": "string"
     },
     "ResponseItem": {
       "oneOf": [
@@ -4912,6 +5113,24 @@
             "kind"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "experts"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -5199,6 +5418,19 @@
       },
       "required": [
         "threadId"
+      ],
+      "type": "object"
+    },
+    "ThreadExecutionContextCreateParams": {
+      "additionalProperties": false,
+      "description": "Server-owned Provider resource selection used when creating a new thread authority.",
+      "properties": {
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspaceKey"
       ],
       "type": "object"
     },
@@ -7450,6 +7682,15 @@
         "mode"
       ],
       "type": "object"
+    },
+    "WorkspaceScope": {
+      "enum": [
+        "conversation",
+        "office",
+        "workflow",
+        "automation"
+      ],
+      "type": "string"
     }
   },
   "description": "Request from the client to the server.",
@@ -8591,13 +8832,13 @@
         },
         "method": {
           "enum": [
-            "agentPlatform/chat"
+            "agentPlatform/workflow/info"
           ],
-          "title": "AgentPlatform/chatRequestMethod",
+          "title": "AgentPlatform/workflow/infoRequestMethod",
           "type": "string"
         },
         "params": {
-          "$ref": "#/definitions/AgentPlatformChatParams"
+          "$ref": "#/definitions/AgentPlatformWorkflowInfoParams"
         }
       },
       "required": [
@@ -8605,7 +8846,7 @@
         "method",
         "params"
       ],
-      "title": "AgentPlatform/chatRequest",
+      "title": "AgentPlatform/workflow/infoRequest",
       "type": "object"
     },
     {
@@ -8615,13 +8856,13 @@
         },
         "method": {
           "enum": [
-            "agentPlatform/chat/start"
+            "agentPlatform/workflow/execute"
           ],
-          "title": "AgentPlatform/chat/startRequestMethod",
+          "title": "AgentPlatform/workflow/executeRequestMethod",
           "type": "string"
         },
         "params": {
-          "$ref": "#/definitions/AgentPlatformChatParams"
+          "$ref": "#/definitions/AgentPlatformWorkflowExecuteParams"
         }
       },
       "required": [
@@ -8629,7 +8870,7 @@
         "method",
         "params"
       ],
-      "title": "AgentPlatform/chat/startRequest",
+      "title": "AgentPlatform/workflow/executeRequest",
       "type": "object"
     },
     {
@@ -8639,13 +8880,13 @@
         },
         "method": {
           "enum": [
-            "agentPlatform/run/cancel"
+            "expertTeam/list"
           ],
-          "title": "AgentPlatform/run/cancelRequestMethod",
+          "title": "ExpertTeam/listRequestMethod",
           "type": "string"
         },
         "params": {
-          "$ref": "#/definitions/AgentPlatformRunCancelParams"
+          "$ref": "#/definitions/ExpertTeamListParams"
         }
       },
       "required": [
@@ -8653,7 +8894,7 @@
         "method",
         "params"
       ],
-      "title": "AgentPlatform/run/cancelRequest",
+      "title": "ExpertTeam/listRequest",
       "type": "object"
     },
     {
@@ -8663,13 +8904,13 @@
         },
         "method": {
           "enum": [
-            "agentPlatform/session/read"
+            "expertTeam/create"
           ],
-          "title": "AgentPlatform/session/readRequestMethod",
+          "title": "ExpertTeam/createRequestMethod",
           "type": "string"
         },
         "params": {
-          "$ref": "#/definitions/AgentPlatformSessionParams"
+          "$ref": "#/definitions/ExpertTeamCreateParams"
         }
       },
       "required": [
@@ -8677,7 +8918,7 @@
         "method",
         "params"
       ],
-      "title": "AgentPlatform/session/readRequest",
+      "title": "ExpertTeam/createRequest",
       "type": "object"
     },
     {
@@ -8687,13 +8928,13 @@
         },
         "method": {
           "enum": [
-            "agentPlatform/session/clear"
+            "expertTeam/read"
           ],
-          "title": "AgentPlatform/session/clearRequestMethod",
+          "title": "ExpertTeam/readRequestMethod",
           "type": "string"
         },
         "params": {
-          "$ref": "#/definitions/AgentPlatformSessionParams"
+          "$ref": "#/definitions/ExpertTeamReadParams"
         }
       },
       "required": [
@@ -8701,7 +8942,7 @@
         "method",
         "params"
       ],
-      "title": "AgentPlatform/session/clearRequest",
+      "title": "ExpertTeam/readRequest",
       "type": "object"
     },
     {
@@ -8783,6 +9024,30 @@
         },
         "method": {
           "enum": [
+            "office/manager/ensure"
+          ],
+          "title": "Office/manager/ensureRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeManagerEnsureParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/manager/ensureRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
             "office/read"
           ],
           "title": "Office/readRequestMethod",
@@ -8822,6 +9087,30 @@
         "params"
       ],
       "title": "Office/message/sendRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "office/message/submit"
+          ],
+          "title": "Office/message/submitRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/OfficeMessageSubmitParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Office/message/submitRequest",
       "type": "object"
     },
     {

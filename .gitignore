@@ -73,6 +73,8 @@ personal/
 .crewon/config.toml
 .crewon/models_cache.json
 .crewon/app-server-control/
+.crewon/dev/
+.crewon/dev-ui.env
 .crewon/logs/
 .crewon/office-runs/
 .crewon/proxy/

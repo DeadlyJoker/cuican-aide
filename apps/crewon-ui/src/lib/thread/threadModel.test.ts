@@ -12,6 +12,7 @@ import {
   appendTurnWithFallbackPreview,
   ensureReasoningSummaryPartInThread,
   mergeThreadListSummaries,
+  mergeTurnsPreservingActionItems,
   removeThreadFromList,
   selectedThreadIdAfterThreadList,
   selectedThreadIdAfterThreadRemoval,
@@ -133,6 +134,88 @@ describe("thread model list helpers", () => {
         turns: [nextTurn],
       },
       threads[1],
+    ]);
+  });
+
+  it("preserves live items when turn/completed sends notLoaded empty items", () => {
+    const liveCommand = commandExecutionItem({
+      status: "completed",
+      exitCode: 0,
+      aggregatedOutput: "ok",
+    });
+    const liveReasoning = reasoningItem({
+      summary: ["Checking tests"],
+    });
+    const threads = [
+      thread({
+        turns: [
+          turn({
+            items: [liveReasoning, liveCommand],
+            status: "inProgress",
+          }),
+        ],
+      }),
+    ];
+    const completedStub = turn({
+      id: "turn-1",
+      items: [],
+      itemsView: "notLoaded",
+      status: "completed",
+      completedAt: 9,
+      durationMs: 100,
+    });
+
+    expect(upsertTurnInThread(threads, "thread-1", completedStub)).toEqual([
+      {
+        ...threads[0],
+        turns: [
+          {
+            ...completedStub,
+            items: [liveReasoning, liveCommand],
+            itemsView: "full",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("preserves missing action items when upserting a partial completed turn", () => {
+    const liveCommand = commandExecutionItem();
+    const agentMessage = {
+      id: "item-agent",
+      type: "agentMessage" as const,
+      text: "Done.",
+      phase: "final_answer" as const,
+      memoryCitation: null,
+    };
+    const threads = [
+      thread({
+        turns: [
+          turn({
+            items: [liveCommand, agentMessage],
+            status: "inProgress",
+          }),
+        ],
+      }),
+    ];
+    const nextTurn = turn({
+      id: "turn-1",
+      status: "completed",
+      completedAt: 9,
+      items: [agentMessage],
+    });
+
+    expect(upsertTurnInThread(threads, "thread-1", nextTurn)).toEqual([
+      {
+        ...threads[0],
+        turns: [
+          {
+            ...nextTurn,
+            // Missing live tools are reinserted; without a prior anchor they append.
+            items: [agentMessage, liveCommand],
+          },
+        ],
+      },
     ]);
   });
 
@@ -322,6 +405,61 @@ describe("thread model list helpers", () => {
         turns: loadedThread.turns,
       },
       fullThread,
+    ]);
+  });
+
+  it("preserves live tool items when history turns omit command executions", () => {
+    const commandItem = {
+      id: "item-command",
+      type: "commandExecution",
+      command: "rg App apps/crewon-ui/src",
+      status: "completed",
+      aggregatedOutput: "apps/crewon-ui/src/App.tsx",
+      durationMs: 120,
+      exitCode: 0,
+    } as ThreadItem;
+    const currentTurns = [
+      turn({
+        id: "turn-live",
+        status: "completed",
+        items: [
+          {
+            id: "item-user",
+            type: "userMessage",
+            clientId: null,
+            content: [{ type: "text", text: "Inspect frontend" }],
+          } as ThreadItem,
+          commandItem,
+          {
+            id: "item-agent",
+            type: "agentMessage",
+            text: "Done.",
+            phase: "final_answer",
+            memoryCitation: null,
+          } as ThreadItem,
+        ],
+      }),
+    ];
+    const nextTurns = [
+      turn({
+        id: "turn-live",
+        status: "completed",
+        items: [
+          currentTurns[0].items[0],
+          currentTurns[0].items[2],
+        ],
+      }),
+    ];
+
+    expect(mergeTurnsPreservingActionItems(currentTurns, nextTurns)).toEqual([
+      {
+        ...nextTurns[0],
+        items: [
+          currentTurns[0].items[0],
+          commandItem,
+          currentTurns[0].items[2],
+        ],
+      },
     ]);
   });
 

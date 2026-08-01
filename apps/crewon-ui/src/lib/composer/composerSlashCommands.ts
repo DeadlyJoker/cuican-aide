@@ -27,6 +27,11 @@ export type ComposerSlashCommand = {
   description: string;
   token: string;
   mention: PendingComposerMention;
+  execution?: {
+    kind: "localMcpTool";
+    serverName: string;
+    toolName: string;
+  };
 };
 
 export type LoadComposerSlashCommandsParams = {
@@ -96,27 +101,12 @@ function mcpSlashCommands(
   const commands: ComposerSlashCommand[] = [];
 
   for (const server of response?.data ?? []) {
-    const serverTitle =
-      server.serverInfo?.title || server.serverInfo?.name || server.name;
+    if (server.authStatus === "notLoggedIn") {
+      continue;
+    }
     const tools = Object.values(server.tools).filter(
       (tool): tool is NonNullable<typeof tool> => Boolean(tool),
     );
-
-    if (tools.length === 0) {
-      commands.push({
-        id: `mcp:${server.name}`,
-        kind: "mcp",
-        label: serverTitle,
-        meta: "MCP",
-        description: server.serverInfo?.description ?? server.name,
-        token: slashToken(serverTitle),
-        mention: {
-          name: serverTitle,
-          path: mcpMentionPath(server.name),
-        },
-      });
-      continue;
-    }
 
     for (const tool of tools) {
       const label = tool.title || tool.name;
@@ -133,6 +123,11 @@ function mcpSlashCommands(
         mention: {
           name: `${server.name}.${tool.name}`,
           path: mcpMentionPath(server.name),
+        },
+        execution: {
+          kind: "localMcpTool",
+          serverName: server.name,
+          toolName: tool.name,
         },
       });
     }

@@ -1,0 +1,6 @@
+load("//:defs.bzl", "crewon_rust_crate")
+
+crewon_rust_crate(
+    name = "provider-transport",
+    crate_name = "crewon_provider_transport",
+)

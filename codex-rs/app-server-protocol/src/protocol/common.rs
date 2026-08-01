@@ -772,30 +772,30 @@ client_request_definitions! {
         serialization: None,
         response: v2::AgentPlatformAgentInfoResponse,
     },
-    AgentPlatformChat => "agentPlatform/chat" {
-        params: v2::AgentPlatformChatParams,
+    AgentPlatformWorkflowInfo => "agentPlatform/workflow/info" {
+        params: v2::AgentPlatformWorkflowInfoParams,
         serialization: None,
-        response: v2::AgentPlatformChatResponse,
+        response: v2::AgentPlatformWorkflowInfoResponse,
     },
-    AgentPlatformChatStart => "agentPlatform/chat/start" {
-        params: v2::AgentPlatformChatParams,
+    AgentPlatformWorkflowExecute => "agentPlatform/workflow/execute" {
+        params: v2::AgentPlatformWorkflowExecuteParams,
         serialization: None,
-        response: v2::AgentPlatformChatStartResponse,
+        response: v2::AgentPlatformWorkflowExecuteResponse,
     },
-    AgentPlatformRunCancel => "agentPlatform/run/cancel" {
-        params: v2::AgentPlatformRunCancelParams,
-        serialization: None,
-        response: v2::AgentPlatformRunCancelResponse,
+    ExpertTeamList => "expertTeam/list" {
+        params: v2::ExpertTeamListParams,
+        serialization: global("crewon-domain"),
+        response: v2::ExpertTeamListResponse,
     },
-    AgentPlatformSessionRead => "agentPlatform/session/read" {
-        params: v2::AgentPlatformSessionParams,
-        serialization: None,
-        response: v2::AgentPlatformSessionReadResponse,
+    ExpertTeamCreate => "expertTeam/create" {
+        params: v2::ExpertTeamCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::ExpertTeamCreateResponse,
     },
-    AgentPlatformSessionClear => "agentPlatform/session/clear" {
-        params: v2::AgentPlatformSessionParams,
-        serialization: None,
-        response: v2::AgentPlatformSessionClearResponse,
+    ExpertTeamRead => "expertTeam/read" {
+        params: v2::ExpertTeamReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::ExpertTeamReadResponse,
     },
     OfficeList => "office/list" {
         params: v2::OfficeListParams,
@@ -812,6 +812,11 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::OfficeCreateResponse,
     },
+    OfficeManagerEnsure => "office/manager/ensure" {
+        params: v2::OfficeManagerEnsureParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeManagerEnsureResponse,
+    },
     OfficeRead => "office/read" {
         params: v2::OfficeReadParams,
         serialization: global("crewon-domain"),
@@ -821,6 +826,11 @@ client_request_definitions! {
         params: v2::OfficeMessageSendParams,
         serialization: global("crewon-domain"),
         response: v2::OfficeMessageSendResponse,
+    },
+    OfficeMessageSubmit => "office/message/submit" {
+        params: v2::OfficeMessageSubmitParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMessageSubmitResponse,
     },
     OfficeRun => "office/run" {
         params: v2::OfficeRunParams,
@@ -1131,6 +1141,66 @@ client_request_definitions! {
         params: v2::PermissionProfileListParams,
         serialization: global_shared_read("config"),
         response: v2::PermissionProfileListResponse,
+    },
+    #[experimental("identity/read")]
+    IdentityRead => "identity/read" {
+        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        serialization: None,
+        response: v2::IdentityReadResponse,
+    },
+    #[experimental("workspace/list")]
+    WorkspaceList => "workspace/list" {
+        params: v2::WorkspaceListParams,
+        serialization: None,
+        response: v2::WorkspaceListResponse,
+    },
+    #[experimental("workspace/bind")]
+    WorkspaceBind => "workspace/bind" {
+        params: v2::WorkspaceBindParams,
+        serialization: None,
+        response: v2::WorkspaceBindResponse,
+    },
+    #[experimental("provider/connect")]
+    ProviderConnect => "provider/connect" {
+        params: v2::ProviderConnectParams,
+        serialization: None,
+        response: v2::ProviderConnectResponse,
+    },
+    #[experimental("provider/read")]
+    ProviderRead => "provider/read" {
+        params: v2::ProviderReadParams,
+        serialization: None,
+        response: v2::ProviderReadResponse,
+    },
+    #[experimental("resource/list")]
+    ResourceList => "resource/list" {
+        params: v2::ResourceListParams,
+        serialization: None,
+        response: v2::ResourceListResponse,
+    },
+    #[experimental("resource/read")]
+    ResourceRead => "resource/read" {
+        params: v2::ResourceReadParams,
+        serialization: None,
+        response: v2::ResourceReadResponse,
+    },
+    #[experimental("resource/bind")]
+    ResourceBind => "resource/bind" {
+        params: v2::ResourceBindParams,
+        serialization: None,
+        response: v2::ResourceBindResponse,
+    },
+    #[experimental("resource/unbind")]
+    ResourceUnbind => "resource/unbind" {
+        params: v2::ResourceUnbindParams,
+        serialization: None,
+        response: v2::ResourceUnbindResponse,
+    },
+    #[experimental("threadExecutionContext/update")]
+    ThreadExecutionContextUpdate => "threadExecutionContext/update" {
+        params: v2::ThreadExecutionContextUpdateParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadExecutionContextUpdateResponse,
     },
     ExperimentalFeatureEnablementSet => "experimentalFeature/enablement/set" {
         params: v2::ExperimentalFeatureEnablementSetParams,
@@ -1896,10 +1966,8 @@ server_notification_definitions! {
     AccountRateLimitsUpdated => "account/rateLimits/updated" (v2::AccountRateLimitsUpdatedNotification),
     AppListUpdated => "app/list/updated" (v2::AppListUpdatedNotification),
     OfficeRunUpdated => "office/run/updated" (v2::OfficeRunUpdatedNotification),
-    AgentPlatformChatDelta => "agentPlatform/chat/delta" (v2::AgentPlatformChatDeltaNotification),
-    AgentPlatformResourceEvent => "agentPlatform/chat/resourceEvent" (v2::AgentPlatformResourceEventNotification),
-    AgentPlatformChatCompleted => "agentPlatform/chat/completed" (v2::AgentPlatformChatCompletedNotification),
-    AgentPlatformChatFailed => "agentPlatform/chat/failed" (v2::AgentPlatformChatFailedNotification),
+    #[experimental("resource/binding/updated")]
+    ResourceBindingUpdated => "resource/binding/updated" (v2::ResourceBindingUpdatedNotification),
     RemoteControlStatusChanged => "remoteControl/status/changed" (v2::RemoteControlStatusChangedNotification),
     ExternalAgentConfigImportCompleted => "externalAgentConfig/import/completed" (v2::ExternalAgentConfigImportCompletedNotification),
     FsChanged => "fs/changed" (v2::FsChangedNotification),
@@ -2792,6 +2860,7 @@ mod tests {
                     name: None,
                     turns: Vec::new(),
                 },
+                execution_context: None,
                 model: "gpt-5".to_string(),
                 model_provider: "openai".to_string(),
                 service_tier: None,
@@ -2838,6 +2907,7 @@ mod tests {
                         "name": null,
                         "turns": []
                     },
+                    "executionContext": null,
                     "model": "gpt-5",
                     "modelProvider": "openai",
                     "serviceTier": null,

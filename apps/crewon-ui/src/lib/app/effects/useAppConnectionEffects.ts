@@ -23,6 +23,7 @@ import type {
 } from "../appStatusTypes";
 import type { Locale } from "../../i18n";
 import type { EmptyThreadSelectionBehavior } from "../../thread/threadModel";
+import { createPrincipalSessionProtocols } from "../../app-server/principalSession";
 
 export type AppConnectionEffectsParams = {
   clientRef: MutableRefObject<AppServerClient | null>;
@@ -35,6 +36,7 @@ export type AppConnectionEffectsParams = {
   isDemoPreview: boolean;
   locale: Locale;
   preserveThreadsAfterConnectionLoss: (showConnectionNotice?: boolean) => void;
+  principalSessionEnabled: boolean;
   selectedThread: Thread | null;
   selectedThreadId: string | null;
   serverUrl: string;
@@ -63,6 +65,7 @@ export function useAppConnectionEffects({
   isDemoPreview,
   locale,
   preserveThreadsAfterConnectionLoss,
+  principalSessionEnabled,
   selectedThread,
   selectedThreadId,
   serverUrl,
@@ -87,6 +90,11 @@ export function useAppConnectionEffects({
           handleNotification,
           onConnectionLost,
           handleServerRequest,
+          principalSessionEnabled
+            ? {
+                protocols: () => createPrincipalSessionProtocols(serverUrl),
+              }
+            : undefined,
         ),
       currentClient: () => clientRef.current,
       emptySelectionBehavior,
@@ -111,6 +119,7 @@ export function useAppConnectionEffects({
     handleServerRequest,
     isDemoPreview,
     preserveThreadsAfterConnectionLoss,
+    principalSessionEnabled,
     serverUrl,
     switchToDemoThreads,
   ]);

@@ -40,7 +40,9 @@ const thread = {
           id: "item-reasoning",
           type: "reasoning",
           summary: ["Checked transcript hierarchy."],
-          content: ["Avatar chrome is low-value in a single-agent chat. <!-- -->"],
+          content: [
+            "Avatar chrome is low-value in a single-agent chat. <!-- -->",
+          ],
         },
         {
           id: "item-file",
@@ -116,6 +118,74 @@ const multiAgentMessageThread = {
   ],
 } as unknown as Thread;
 
+const executionTimelineThread = {
+  id: "thread-execution-timeline",
+  name: "Execution timeline",
+  turns: [
+    {
+      id: "turn-execution-timeline",
+      status: "completed",
+      durationMs: 1_554_000,
+      items: [
+        {
+          id: "item-user-execution-timeline",
+          type: "userMessage",
+          clientId: null,
+          content: [{ type: "text", text: "Restart the local stack." }],
+        },
+        {
+          id: "item-agent-progress-start",
+          type: "agentMessage",
+          text: "I will restart the existing local services and verify their health.",
+          phase: "commentary",
+          memoryCitation: null,
+        },
+        {
+          id: "item-command-stop",
+          type: "commandExecution",
+          command: "launchctl stop com.brilliant.crewon.dev",
+          status: "completed",
+          aggregatedOutput: "",
+          durationMs: 300,
+          exitCode: 0,
+        },
+        {
+          id: "item-command-start",
+          type: "commandExecution",
+          command: "launchctl start com.brilliant.crewon.dev",
+          status: "completed",
+          aggregatedOutput: "",
+          durationMs: 420,
+          exitCode: 0,
+        },
+        {
+          id: "item-agent-progress-verify",
+          type: "agentMessage",
+          text: "The services are starting. I will wait for both health checks.",
+          phase: "commentary",
+          memoryCitation: null,
+        },
+        {
+          id: "item-command-health",
+          type: "commandExecution",
+          command: "curl -sS http://127.0.0.1:6176/readyz",
+          status: "completed",
+          aggregatedOutput: "ok",
+          durationMs: 150,
+          exitCode: 0,
+        },
+        {
+          id: "item-agent-final-execution-timeline",
+          type: "agentMessage",
+          text: "Both services are healthy.",
+          phase: "final_answer",
+          memoryCitation: null,
+        },
+      ],
+    },
+  ],
+} as unknown as Thread;
+
 const activeThread = {
   id: "thread-active",
   name: "Active turn",
@@ -182,6 +252,10 @@ const lowSignalReasoningThread = {
           summary: [
             "Planning frontend architecture inspection Noting worktree dirty state before inspection",
             "Inspecting app source directories",
+            "Gathering project structure details",
+            "Polling parallel third task status",
+            "**Planning project inspection**",
+            "**Reading ARCHITECTURE.md for system shape**",
           ],
           content: ["Preparing simple Mermaid flowchart code <!-- -->"],
         },
@@ -458,21 +532,25 @@ describe("Transcript", () => {
 
     expect(markup).toContain("Refactor the transcript.");
     expect(markup).toContain('data-testid="transcript-follow-anchor"');
-    expect(markup).toContain("$ pnpm test");
+    expect(markup).toContain("tool-action-verb");
+    expect(markup).toContain("Ran");
+    expect(markup).toContain("pnpm test");
     expect(markup).toContain("Tests passed");
-    expect(markup).toContain("Reasoning");
-    expect(markup).toContain("Avatar chrome is low-value in a single-agent chat.");
+    expect(markup).toContain('data-kind="reasoning"');
+    expect(markup).toContain(
+      "Avatar chrome is low-value in a single-agent chat.",
+    );
     expect(markup).not.toContain("&lt;!-- --&gt;");
     expect(markup).not.toContain("<!-- -->");
     expect(markup).toContain("src/Transcript.tsx");
     expect(markup).toContain('class="message" data-kind="commandExecution"');
-    expect(markup).toContain('class="message" data-kind="reasoning"');
     expect(markup).toContain('class="message" data-kind="fileChange"');
     expect(markup).toContain('class="turn-process-details"');
     expect(markup).toContain('data-state="collapsed"');
     expect(markup).toContain('aria-expanded="false"');
-    expect(markup).toContain("Run process · 3 items");
-    expect(markup).toContain("Expand process");
+    expect(markup).toContain("Processed");
+    expect(markup).toContain("2s");
+    expect(markup).not.toContain("Run process");
     expect(markup).not.toContain(
       'class="tool-card command-card compact-tool-card" data-status="completed" open=""',
     );
@@ -481,13 +559,75 @@ describe("Transcript", () => {
     expect(markup).toContain('data-kind="added"');
     expect(markup).toContain('data-kind="removed"');
     expect(markup).toContain("Done. Transcript is easier to scan.");
-    expect(markup.indexOf("Run process · 3 items")).toBeLessThan(
+    expect(markup.indexOf("Processed")).toBeLessThan(
       markup.indexOf("Done. Transcript is easier to scan."),
     );
     expect(markup).toContain("Streaming");
   });
 
-  it("folds interim agent messages into the process group", () => {
+  it("renders Skill and MCP selections as distinct tags in the user message", () => {
+    const resourceThread = {
+      id: "thread-resource-tags",
+      name: "Resource tags",
+      turns: [
+        {
+          id: "turn-resource-tags",
+          status: "completed",
+          durationMs: 500,
+          items: [
+            {
+              id: "item-user-resource-tags",
+              type: "userMessage",
+              clientId: null,
+              content: [
+                { type: "text", text: "检查这个实现", text_elements: [] },
+                {
+                  type: "skill",
+                  name: "code-review",
+                  path: "/skills/code-review/SKILL.md",
+                },
+                {
+                  type: "mention",
+                  name: "Filesystem",
+                  path: "mcp://filesystem",
+                },
+                {
+                  type: "mention",
+                  name: "产品知识库",
+                  path: "agent-platform://knowledge_bases/10",
+                },
+                { type: "mention", name: "README.md", path: "/repo/README.md" },
+                { type: "image", url: "data:image/png;base64,AAAA" },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="zh"
+        mode="code"
+        streamingText=""
+        thread={resourceThread}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("检查这个实现");
+    expect(markup).toContain('data-resource-kind="skill"');
+    expect(markup).toContain('data-resource-kind="mcp"');
+    expect(markup).toContain('data-resource-kind="knowledge"');
+    expect(markup).toContain("code-review");
+    expect(markup).toContain("Filesystem");
+    expect(markup).toContain("产品知识库");
+    expect(markup).not.toContain('data-resource-kind="file"');
+    expect(markup).not.toContain('data-resource-kind="image"');
+  });
+
+  it("keeps interim agent messages interleaved with their tool actions", () => {
     const markup = renderToStaticMarkup(
       <Transcript
         {...labels}
@@ -501,22 +641,57 @@ describe("Transcript", () => {
     );
 
     expect(markup).toContain("Analyze the frontend structure.");
-    expect(markup).toContain("Run process · 2 items");
-    expect(markup).toContain("Progress 1 · Command 1");
+    expect(markup).toContain("Processed");
     expect(markup).toContain('data-process-note="true"');
     expect(markup).toContain("I will inspect the app entry first.");
     expect(markup).toContain("I will verify the app state flow next.");
     expect(markup).toContain("Final architecture summary.");
-    expect(markup.indexOf("Run process · 2 items")).toBeLessThan(
+    expect(markup.indexOf("I will inspect the app entry first.")).toBeLessThan(
+      markup.indexOf("rg App apps/crewon-ui/src"),
+    );
+    expect(markup.indexOf("rg App apps/crewon-ui/src")).toBeLessThan(
+      markup.indexOf("I will verify the app state flow next."),
+    );
+    expect(markup.indexOf("I will verify the app state flow next.")).toBeLessThan(
       markup.indexOf("Final architecture summary."),
     );
     expect(
-      markup.match(/data-kind="agentMessage"[^>]*data-transcript-variant="message"/g)
-        ?.length,
+      markup.match(
+        /data-kind="agentMessage"[^>]*data-transcript-variant="message"/g,
+      )?.length,
     ).toBe(1);
   });
 
-  it("omits low-signal reasoning breadcrumbs from the process group", () => {
+  it("snapshots the processed timeline header and grouped tool batches", () => {
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="en"
+        mode="code"
+        streamingText=""
+        thread={executionTimelineThread}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("Processed");
+    expect(markup).toContain("25m 54s");
+    expect(markup).toContain("Ran multiple commands");
+    expect(markup).toContain('class="process-action-group"');
+    expect(markup.indexOf("I will restart the existing local services")).toBeLessThan(
+      markup.indexOf("Ran multiple commands"),
+    );
+    expect(markup.indexOf("Ran multiple commands")).toBeLessThan(
+      markup.indexOf("The services are starting"),
+    );
+    expect(markup.indexOf("The services are starting")).toBeLessThan(
+      markup.indexOf("curl -sS http://127.0.0.1:6176/readyz"),
+    );
+    expect(markup).toMatchSnapshot();
+  });
+
+  it("omits low-signal reasoning breadcrumbs from the visible process", () => {
     const markup = renderToStaticMarkup(
       <Transcript
         {...labels}
@@ -529,14 +704,75 @@ describe("Transcript", () => {
       />,
     );
 
-    expect(markup).toContain("Run process · 1 item");
-    expect(markup).toContain("Command 1");
-    expect(markup).not.toContain("Reasoning 1");
-    expect(markup).not.toContain("Planning frontend architecture inspection");
-    expect(markup).not.toContain("Noting worktree dirty state");
-    expect(markup).not.toContain("Inspecting app source directories");
-    expect(markup).not.toContain("Preparing simple Mermaid flowchart code");
+    expect(markup).toContain("Processed");
+    expect(markup).toContain("tool-action-verb");
+    expect(markup).not.toContain("Thought");
+    expect(markup).not.toContain("reasoning-step-list");
+    expect(markup).not.toContain("Planning project inspection");
+    expect(markup).not.toContain("Gathering project structure details");
+    expect(markup).toContain("rg App apps/crewon-ui/src");
     expect(markup).toContain("The frontend entry is App.tsx.");
+  });
+
+  it("renders web search as a compact action row in the process group", () => {
+    const searchThread = {
+      id: "thread-web-search",
+      name: "Web search",
+      turns: [
+        {
+          id: "turn-web-search",
+          status: "completed",
+          durationMs: 800,
+          items: [
+            {
+              id: "item-user-web-search",
+              type: "userMessage",
+              clientId: null,
+              content: [{ type: "text", text: "Search crewon docs." }],
+            },
+            {
+              id: "item-reasoning-web-search",
+              type: "reasoning",
+              summary: ["**Planning documentation lookup**"],
+              content: [],
+            },
+            {
+              id: "item-web-search",
+              type: "webSearch",
+              query: "crewon architecture",
+              action: { type: "search", query: "crewon architecture", queries: null },
+            },
+            {
+              id: "item-agent-web-search",
+              type: "agentMessage",
+              text: "Found the architecture notes.",
+              phase: "final_answer",
+              memoryCitation: null,
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="en"
+        mode="code"
+        streamingText=""
+        thread={searchThread}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("Processed");
+    expect(markup).toContain("tool-action-verb");
+    expect(markup).toContain("Search");
+    expect(markup).toContain("crewon architecture");
+    expect(markup).not.toContain("Planning documentation lookup");
+    expect(markup).not.toContain('data-kind="reasoning"');
+    expect(markup).toContain("Found the architecture notes.");
   });
 
   it("renders reasoning content when the backend provides displayable thinking", () => {
@@ -552,12 +788,16 @@ describe("Transcript", () => {
       />,
     );
 
-    expect(markup).toContain("Run process · 1 item");
-    expect(markup).toContain("Reasoning 1");
+    expect(markup).toContain("Processed");
+    expect(markup).toContain("tool-action-verb");
+    expect(markup).toContain("Thought");
+    expect(markup).toContain("reasoning-card-static");
+    expect(markup).toContain("reasoning-card-headline");
     expect(markup).toContain(
       "The model compared a CSS-only patch with a component contract change",
     );
     expect(markup).not.toContain("Planning implementation comparison");
+    expect(markup).not.toContain("process-card-body");
     expect(markup).toContain("Use the scoped UI change.");
   });
 
@@ -575,7 +815,7 @@ describe("Transcript", () => {
     );
 
     expect(markup).toContain("Thinking");
-    expect(markup).toContain("Stop");
+    expect(markup).not.toContain("turn-stop-button");
     expect(markup).not.toContain("No messages");
   });
 
@@ -600,11 +840,10 @@ describe("Transcript", () => {
     expect(markup).toContain('class="turn-process-details"');
     expect(markup).toContain('data-state="expanded"');
     expect(markup).toContain('data-status="inProgress" open=""');
-    expect(markup).toContain("Collapse process");
     expect(markup).not.toContain("Waiting for model response");
   });
 
-  it("collapses the process group when the final response starts streaming", () => {
+  it("keeps the active process expanded when the final response starts streaming", () => {
     const markup = renderToStaticMarkup(
       <Transcript
         {...labels}
@@ -618,12 +857,10 @@ describe("Transcript", () => {
     );
 
     expect(markup).toContain('class="turn-process-details"');
-    expect(markup).toContain('data-auto-collapsed="true"');
-    expect(markup).toContain('data-state="collapsed"');
-    expect(markup).toContain('aria-expanded="false"');
-    expect(markup).toContain("Expand process");
+    expect(markup).toContain('data-state="expanded"');
+    expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain("Final answer is now streaming.");
-    expect(markup.indexOf("Run process · 1 item")).toBeLessThan(
+    expect(markup.indexOf("Processing")).toBeLessThan(
       markup.indexOf("Final answer is now streaming."),
     );
     expect(markup).not.toContain("Waiting for model response");
@@ -685,11 +922,13 @@ graph LR
     expect(markup).toContain("<td>Pass</td>");
     expect(markup).toContain('href="https://example.com/report"');
     expect(markup).toContain('class="tool-call-image-preview"');
-    expect(markup).toContain('src="https://example.com/artifacts/homepage-check.png"');
+    expect(markup).toContain(
+      'src="https://example.com/artifacts/homepage-check.png"',
+    );
     expect(markup).toContain('alt="homepage-check.png"');
-    expect(markup).toContain("data-renderer=\"mermaid\"");
-    expect(markup).toContain("data-complete=\"true\"");
-    expect(markup).toContain("data-state=\"source\"");
+    expect(markup).toContain('data-renderer="mermaid"');
+    expect(markup).toContain('data-complete="true"');
+    expect(markup).toContain('data-state="source"');
     expect(markup).toContain("language-mermaid");
     expect(markup).toContain("graph TD");
     expect(markup).toContain("graph LR");
@@ -718,8 +957,8 @@ graph LR
       renderMarkdown("```mermaid\ngraph TD\n  A[Start] -->"),
     );
 
-    expect(markup).toContain("data-renderer=\"mermaid\"");
-    expect(markup).toContain("data-complete=\"false\"");
+    expect(markup).toContain('data-renderer="mermaid"');
+    expect(markup).toContain('data-complete="false"');
     expect(markup).toContain("Streaming source");
     expect(markup).toContain("Mermaid diagram is still streaming.");
     expect(markup).toContain("language-mermaid");
@@ -732,10 +971,12 @@ graph LR
   it("detects Mermaid parser error SVGs so streaming output can fall back", () => {
     expect(
       isMermaidSyntaxErrorSvg(
-        '<svg><text>Syntax error in text</text><text>mermaid version 11.16.0</text></svg>',
+        "<svg><text>Syntax error in text</text><text>mermaid version 11.16.0</text></svg>",
       ),
     ).toBe(true);
-    expect(isMermaidSyntaxErrorSvg("<svg><text>graph rendered</text></svg>")).toBe(false);
+    expect(
+      isMermaidSyntaxErrorSvg("<svg><text>graph rendered</text></svg>"),
+    ).toBe(false);
   });
 
   it("keeps MCP text-only and structured-only results distinct", () => {
@@ -860,9 +1101,21 @@ See [runbook](https://example.com/runbook) and ~~legacy parser~~.`}
     expect(markup).toContain('class="markdown-code-block"');
     expect(markup).toContain('data-complete="true"');
     expect(markup).toContain('data-language="tsx"');
-    expect(markup).toContain("<figcaption><span>TSX</span></figcaption>");
+    expect(markup).toContain("<figcaption><span>TSX</span>");
+    expect(markup).toContain('class="markdown-code-copy"');
+    expect(markup).toContain('aria-label="Copy code"');
     expect(markup).toContain('class="markdown-code-pre"');
     expect(markup).toContain('class="language-tsx"');
     expect(markup).toContain("const enabled = true;");
+  });
+
+  it("keeps the copy affordance on code blocks without a language", () => {
+    const markup = renderToStaticMarkup(
+      renderMarkdown("```\nplain text\n```"),
+    );
+
+    expect(markup).toContain('class="markdown-code-block"');
+    expect(markup).toContain("<figcaption>");
+    expect(markup).toContain('class="markdown-code-copy"');
   });
 });

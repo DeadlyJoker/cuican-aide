@@ -30,10 +30,18 @@ pub(crate) async fn on_call_response(
         }
     };
 
+    submit_call_response(call_id, response, conversation).await;
+}
+
+pub(crate) async fn submit_call_response(
+    call_id: String,
+    response: DynamicToolCallResponse,
+    conversation: Arc<CrewonThread>,
+) {
     let DynamicToolCallResponse {
         content_items,
         success,
-    } = response.clone();
+    } = response;
     let core_response = CoreDynamicToolResponse {
         content_items: content_items
             .into_iter()
@@ -43,7 +51,7 @@ pub(crate) async fn on_call_response(
     };
     if let Err(err) = conversation
         .submit(Op::DynamicToolResponse {
-            id: call_id.clone(),
+            id: call_id,
             response: core_response,
         })
         .await

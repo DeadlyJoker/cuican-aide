@@ -92,6 +92,7 @@ pub enum SceneExecutionTargetKind {
     Crewon,
     Agent,
     Team,
+    Experts,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

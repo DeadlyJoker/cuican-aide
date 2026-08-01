@@ -101,6 +101,12 @@ struct OfficeMemoryCandidate {
     status: String,
 }
 
+#[derive(Clone, Copy)]
+enum OfficeMemoryUsagePolicy {
+    Track,
+    DoNotTrack,
+}
+
 pub(super) async fn build_prompt_context(
     cwd: &str,
     config: &JsonValue,
@@ -113,6 +119,7 @@ pub(super) async fn build_prompt_context(
         text,
         locale,
         &OfficeMemoryPromptAudience::Office,
+        OfficeMemoryUsagePolicy::Track,
     )
     .await
 }
@@ -136,6 +143,31 @@ pub(super) async fn build_member_prompt_context(
             agent_id,
             memory_scope,
         },
+        OfficeMemoryUsagePolicy::Track,
+    )
+    .await
+}
+
+pub(super) async fn preview_member_prompt_context(
+    cwd: &str,
+    config: &JsonValue,
+    text: &str,
+    member: &str,
+    agent_id: &str,
+    memory_scope: &str,
+    locale: Option<&str>,
+) -> Result<OfficeMemoryPromptContext, JSONRPCErrorError> {
+    build_prompt_context_for_audience(
+        cwd,
+        config,
+        text,
+        locale,
+        &OfficeMemoryPromptAudience::Member {
+            member,
+            agent_id,
+            memory_scope,
+        },
+        OfficeMemoryUsagePolicy::DoNotTrack,
     )
     .await
 }
@@ -284,6 +316,7 @@ async fn build_prompt_context_for_audience(
     text: &str,
     locale: Option<&str>,
     audience: &OfficeMemoryPromptAudience<'_>,
+    usage_policy: OfficeMemoryUsagePolicy,
 ) -> Result<OfficeMemoryPromptContext, JSONRPCErrorError> {
     let office_key = office_memory_key(config);
     let mut entries = read_office_memory_index(cwd)
@@ -317,7 +350,9 @@ async fn build_prompt_context_for_audience(
         .iter()
         .map(|entry| entry.id.clone())
         .collect::<Vec<_>>();
-    touch_office_memory_usage(cwd, &selected_ids).await?;
+    if matches!(usage_policy, OfficeMemoryUsagePolicy::Track) {
+        touch_office_memory_usage(cwd, &selected_ids).await?;
+    }
 
     let is_zh = locale != Some("en");
     let lines = selected
@@ -335,9 +370,17 @@ async fn build_prompt_context_for_audience(
         })
         .collect::<Vec<_>>();
     let prompt = if is_zh {
-        format!("{}：\n{}", memory_heading(audience, true), lines.join("\n"))
+        format!(
+            "{}：\n{}",
+            memory_heading(audience, /*is_zh*/ true),
+            lines.join("\n")
+        )
     } else {
-        format!("{}:\n{}", memory_heading(audience, false), lines.join("\n"))
+        format!(
+            "{}:\n{}",
+            memory_heading(audience, /*is_zh*/ false),
+            lines.join("\n")
+        )
     };
     let refs = JsonValue::Array(selected.iter().map(memory_ref_json).collect());
     Ok(OfficeMemoryPromptContext {
@@ -611,7 +654,15 @@ fn memory_candidates_from_update(update: &JsonValue) -> Vec<OfficeMemoryCandidat
 
 fn memory_candidate_from_value(value: &JsonValue) -> Option<OfficeMemoryCandidate> {
     if let Some(content) = value.as_str() {
-        return memory_candidate_from_parts(None, None, None, None, Some(content), None, None);
+        return memory_candidate_from_parts(
+            /*scope*/ None,
+            /*member*/ None,
+            /*agent_id*/ None,
+            /*kind*/ None,
+            Some(content),
+            /*confidence*/ None,
+            /*importance*/ None,
+        );
     }
 
     memory_candidate_from_parts(

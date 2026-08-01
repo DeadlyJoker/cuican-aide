@@ -7,47 +7,13 @@ impl OfficeAutoDispatchContext {
         thread_id: &str,
         receipt_id: &str,
     ) -> Result<Option<Turn>, JSONRPCErrorError> {
-        let conversation_id = ThreadId::from_string(thread_id)
-            .map_err(|err| internal_error(format!("invalid Office runtime thread id: {err}")))?;
-        let conversation = self
-            .thread_manager
-            .get_thread(conversation_id)
-            .await
-            .map_err(|err| {
-                internal_error(format!(
-                    "failed to load Office runtime thread {thread_id}: {err}"
-                ))
-            })?;
-        conversation.ensure_rollout_materialized().await;
-        let history = conversation
-            .load_history(/*include_archived*/ true)
-            .await
-            .map_err(|err| {
-                internal_error(format!(
-                    "failed to load Office runtime history for {thread_id}: {err}"
-                ))
-            })?;
-        super::office_thread_workspace::ensure_history_matches(cwd, thread_id, &history.items)?;
-        let mut matches = build_api_turns_from_rollout_items(&history.items)
-            .into_iter()
-            .filter(|turn| {
-                turn.items.iter().any(|item| {
-                    matches!(
-                        item,
-                        ThreadItem::UserMessage {
-                            client_id: Some(client_id),
-                            ..
-                        } if client_id == receipt_id
-                    )
-                })
-            });
-        let matched = matches.next();
-        if matches.next().is_some() {
-            return Err(internal_error(format!(
-                "multiple Office turns matched dispatch receipt {receipt_id}"
-            )));
-        }
-        Ok(matched)
+        super::office_persisted_turn::for_dispatch_receipt(
+            &self.turn_processor.thread_store,
+            cwd,
+            thread_id,
+            receipt_id,
+        )
+        .await
     }
 
     pub(super) async fn recover_claimed_child_dispatch(

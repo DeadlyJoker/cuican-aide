@@ -99,14 +99,13 @@ impl OfficeMessageReceipt {
                 .mentions
                 .iter()
                 .all(|member_id| valid_required(member_id, 128))
-            && match (
-                self.message_intent.as_deref(),
-                self.intent_classifier_version,
-            ) {
-                (None, None) => true,
-                (Some("conversation" | "task"), Some(1)) => true,
-                _ => false,
-            }
+            && matches!(
+                (
+                    self.message_intent.as_deref(),
+                    self.intent_classifier_version,
+                ),
+                (None, None) | (Some("conversation" | "task"), Some(1))
+            )
             && valid_optional(self.run_id.as_deref(), MAX_ID_BYTES)
             && valid_optional(self.thread_id.as_deref(), MAX_ID_BYTES)
             && valid_optional(self.expected_turn_id.as_deref(), MAX_ID_BYTES)

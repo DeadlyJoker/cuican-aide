@@ -1,4 +1,7 @@
-import type { CapabilityPanel, CapabilityPanelItem } from "../capability/capabilityPanelTypes";
+import type {
+  CapabilityPanel,
+  CapabilityPanelItem,
+} from "../capability/capabilityPanelTypes";
 import { filePanelSearchControls } from "../capability/capabilityPanelText";
 import type { Locale } from "../i18n";
 import { joinPath, pathDirName, resolveSearchPath } from "../shared/pathUtils";
@@ -18,7 +21,10 @@ export function filePanelTitle(locale: Locale): string {
   return locale === "zh" ? "文件" : "Files";
 }
 
-export function fileLoadingPanel(path: string, locale: Locale): CapabilityPanel {
+export function fileLoadingPanel(
+  path: string,
+  locale: Locale,
+): CapabilityPanel {
   return {
     title: filePanelTitle(locale),
     subtitle: path,
@@ -85,7 +91,7 @@ export function fileErrorPanel(params: {
 export function directoryEntriesToPanelItems(
   entries: DirectoryEntry[] | null | undefined,
   parentPath: string,
-  limit = 16,
+  limit = 200,
 ): CapabilityPanelItem[] {
   return [...(entries ?? [])]
     .sort(
@@ -101,7 +107,9 @@ export function directoryEntriesToPanelItems(
     }));
 }
 
-export function emptyDirectoryPanelItem(locale: "en" | "zh"): CapabilityPanelItem {
+export function emptyDirectoryPanelItem(
+  locale: "en" | "zh",
+): CapabilityPanelItem {
   return { label: locale === "zh" ? "目录为空" : "Empty directory" };
 }
 
@@ -136,7 +144,9 @@ export function directoryPanel(params: {
   };
 }
 
-export function searchFilesToPanelItems(files: SearchFile[]): CapabilityPanelItem[] {
+export function searchFilesToPanelItems(
+  files: SearchFile[],
+): CapabilityPanelItem[] {
   return files.slice(0, 24).map((file) => {
     const path = resolveSearchPath(file.root, file.path);
     return {
@@ -215,9 +225,7 @@ export function fileReadPanel(params: {
             {
               id: "send-context-to-thread",
               label:
-                locale === "zh"
-                  ? "发送到后端会话"
-                  : "Send to backend thread",
+                locale === "zh" ? "发送到后端会话" : "Send to backend thread",
               tone: "primary" as const,
             },
           ]

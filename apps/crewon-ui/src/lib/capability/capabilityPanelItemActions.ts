@@ -16,7 +16,6 @@ import type {
   CapabilityPanelItem,
 } from "./capabilityPanelTypes";
 import { fileMetadataText } from "./capabilityPanelText";
-import { contextFileComposerBlock } from "../context/contextFilePrompt";
 import {
   demoDirectoryPanel,
   demoFilePanel,
@@ -251,7 +250,7 @@ async function handleFileItem(params: CapabilityPanelItemActionParams) {
     locale,
     setBusyToolId,
     setCapabilityPanel,
-    setComposerValue,
+    setPendingComposerMentions,
     setPendingContextFile,
   } = params;
   const itemPath = item.path;
@@ -294,15 +293,19 @@ async function handleFileItem(params: CapabilityPanelItemActionParams) {
     const metadataText = fileMetadataText(metadata ?? null, locale);
     if (item.intent === "attach-context") {
       const contextText = fileText.trim();
-      const contextBlock = contextFileComposerBlock({
-        path: itemPath,
-        text: contextText,
-        locale,
-      });
-      setComposerValue((currentValue) =>
-        currentValue.trim()
-          ? `${currentValue.trim()}\n\n${contextBlock}`
-          : contextBlock,
+      setPendingComposerMentions((mentions) =>
+        mentions.some((mention) => mention.path === itemPath)
+          ? mentions
+          : [
+              ...mentions,
+              {
+                name:
+                  item.label.trim() ||
+                  itemPath.replace(/\\/g, "/").split("/").pop() ||
+                  itemPath,
+                path: itemPath,
+              },
+            ],
       );
       setPendingContextFile({ path: itemPath, text: contextText });
     }

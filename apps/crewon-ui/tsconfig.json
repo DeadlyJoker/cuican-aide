@@ -14,12 +14,18 @@
     "moduleResolution": "Bundler",
     "baseUrl": ".",
     "paths": {
-      "@crewon-protocol/*": ["../../codex-rs/app-server-protocol/schema/typescript/*"]
+      "@crewon-protocol/*": ["../../codex-rs/app-server-protocol/schema/typescript/*"],
+      "@crewon-platform-protocol/*": ["../../codex-rs/app-server-protocol/schema/typescript-experimental-platform/*"]
     },
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "vite.config.ts", "../../codex-rs/app-server-protocol/schema/typescript/**/*.ts"]
+  "include": [
+    "src",
+    "vite.config.ts",
+    "../../codex-rs/app-server-protocol/schema/typescript/**/*.ts",
+    "../../codex-rs/app-server-protocol/schema/typescript-experimental-platform/**/*.ts"
+  ]
 }

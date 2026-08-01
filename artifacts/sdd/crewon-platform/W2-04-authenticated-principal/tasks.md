@@ -1,0 +1,30 @@
+# W2-04P Tasks
+
+- [x] D0 审计 connection identity、transport auth、Workspace/Credential owner 与 RemoteControl。
+- [x] D1 冻结双层身份模型、可信来源矩阵和 threat model。
+- [x] P1a-1 增加 authenticated principal domain 与 validation/redaction Harness。
+- [x] P1a-2 实现稳定 actor derivation 和 reconnect/subject-mix-up Harness。
+- [x] P1a-3 验证 PolicyActor/CredentialOwner 对同 principal 稳定、不同 scope 隔离。
+- [x] P1b-1 WebSocket signed bearer 输出显式 verified transport authentication。
+- [x] P1b-2 ConnectionOpened/ConnectionSessionState 接线并实现 expiry disconnect。
+- [x] P1b-3 capability/legacy 保持 connection-scoped，partial/null claims fail-closed Harness。
+- [x] P1c-1a 设计 bounded revocation contract，并实现 WebSocket revoke-before-open、同 JTI 多连接 selective disconnect、lag/capacity/expiry Harness。
+- [x] P1c-1b1 完成 Agent Platform session/revoke HTTP、CrewON RS256 verifier、启动前 snapshot/catch-up、gap-free cursor supervisor 与 freshness loss fail-closed Harness；仅由默认关闭的 composition 注册。
+- [x] P1c-1b2a 完成 Agent Platform logout/context switch/member-removal revoke 语义、bootstrap/exchange 与默认关闭的受监督 production composition。
+- [x] P1c-1b2b 完成前端 bootstrap/exchange/reconnect 与浏览器 WebSocket subprotocol Harness；默认 Gate 关闭。
+- [x] P1c-1b2c 增加 bounded durable auth-session family + monotonic epoch，并在 bootstrap/session issue 重验，关闭 logout 后旧 access/refresh 或 logout 前 bootstrap 再 mint session 的竞态。
+- [x] P1c-1b2c-1 增加 server expiry、滑动续期、expired-slot reclamation，并钳制 bootstrap/principal-session expiry 不晚于 login family。
+- [x] P1c-1b2d-1 使用隔离服务与真实临时 RSA keypairs 完成跨服务 logout/context switch/member removal/restart live Harness。
+- [ ] P1c-1b2d-2 完成生产 key 供应/轮换与完整服务配置验收。
+- [x] P1c-2 冻结 RemoteControl signed principal 最小 upstream contract；当前协议缺少 proof/revoke feed，维持 no-principal。
+- [ ] P2-1 迁移 durable Credential/Workspace/Provider owner。
+- [x] P2-1a 实现 `principal:<digest>` 到 exact Agent Platform identity 的 durable mapping kernel、CAS/revoke/reopen/concurrency Harness；保持 State internal、未接线。
+- [x] P2-1b1 实现 authenticated principal + exact CredentialOwner + active mapping 的 app-server internal resolver；WorkspaceRegistry 继续 session-scoped。
+- [x] P2-1b2 在 Agent Platform 接入 exact binding resolve/read、terminal revoke 与 60 秒 freshness fail-closed；P1c 单独使用 session/JTI revoke source。
+- [x] P2-1b3 principal exchange 将成功 resolve 的 exact binding snapshot 持久化到 State，关闭首次 session 没有 mapping 的可达性缺口。
+- [x] P2-2a 实现未注册 Provider RS256 service/delegation/discovery token issuer 与真实 verifier smoke。
+- [ ] P2-2b authoritative source、freshness、隔离 live smoke 与 cancel/crash 故障演练已完成；生产 key/config 轮换和真实云模型通过后再注入 CrewON production composition。
+- [x] V1a 完成 P1a app-server targeted/full tests、scoped fix 与最终 fmt。
+- [x] V1b 完成 P1b transport/app-server targeted/full tests、scoped fix 与文档更新；无 wire schema 变化。
+- [x] V1c 完成 P1c transport/app-server tests、breaking review、scoped fix/fmt；无 wire schema 变化。
+- [x] V2 同步当前存在的 W2-04/W2-07 Gate；W2-08/W3-05 尚未创建，后续必须继承同一 production Gate。

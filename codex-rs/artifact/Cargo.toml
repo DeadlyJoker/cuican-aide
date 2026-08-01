@@ -1,0 +1,24 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "crewon-artifact"
+version.workspace = true
+
+[lib]
+name = "crewon_artifact"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crewon-policy = { workspace = true }
+crewon-resource-federation = { workspace = true }
+crewon-task-runtime = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

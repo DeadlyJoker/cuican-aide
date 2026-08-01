@@ -64,7 +64,12 @@ WHERE threads.id = ?
             r#"
 UPDATE threads
 SET preview = ?
-WHERE id = ? AND preview = ''
+WHERE id = ?
+  AND preview = ''
+  AND NOT EXISTS (
+      SELECT 1 FROM cloud_agent_thread_summaries summary
+      WHERE summary.thread_id = threads.id
+  )
             "#,
         )
         .bind(preview)
@@ -590,13 +595,22 @@ ON CONFLICT(id) DO NOTHING
         updated_at: DateTime<Utc>,
     ) -> anyhow::Result<bool> {
         let updated_at = self.allocate_thread_updated_at(updated_at)?;
-        let result =
-            sqlx::query("UPDATE threads SET updated_at = ?, updated_at_ms = ? WHERE id = ?")
-                .bind(datetime_to_epoch_seconds(updated_at))
-                .bind(datetime_to_epoch_millis(updated_at))
-                .bind(thread_id.to_string())
-                .execute(self.pool.as_ref())
-                .await?;
+        let result = sqlx::query(
+            r#"
+UPDATE threads
+SET updated_at = ?, updated_at_ms = ?
+WHERE id = ?
+  AND NOT EXISTS (
+      SELECT 1 FROM cloud_agent_thread_summaries summary
+      WHERE summary.thread_id = threads.id
+  )
+            "#,
+        )
+        .bind(datetime_to_epoch_seconds(updated_at))
+        .bind(datetime_to_epoch_millis(updated_at))
+        .bind(thread_id.to_string())
+        .execute(self.pool.as_ref())
+        .await?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -606,7 +620,7 @@ ON CONFLICT(id) DO NOTHING
     /// monotonic millisecond timestamps without querying SQLite on every update. Older
     /// backfill/repair timestamps are allowed through unchanged so historical ordering
     /// remains tied to the rollout file mtimes.
-    fn allocate_thread_updated_at(
+    pub(super) fn allocate_thread_updated_at(
         &self,
         updated_at: DateTime<Utc>,
     ) -> anyhow::Result<DateTime<Utc>> {
@@ -720,9 +734,21 @@ INSERT INTO threads (
 ON CONFLICT(id) DO UPDATE SET
     rollout_path = excluded.rollout_path,
     created_at = excluded.created_at,
-    updated_at = excluded.updated_at,
+    updated_at = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM cloud_agent_thread_summaries summary
+            WHERE summary.thread_id = excluded.id
+        ) THEN threads.updated_at
+        ELSE excluded.updated_at
+    END,
     created_at_ms = excluded.created_at_ms,
-    updated_at_ms = excluded.updated_at_ms,
+    updated_at_ms = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM cloud_agent_thread_summaries summary
+            WHERE summary.thread_id = excluded.id
+        ) THEN threads.updated_at_ms
+        ELSE excluded.updated_at_ms
+    END,
     source = excluded.source,
     thread_source = excluded.thread_source,
     agent_nickname = excluded.agent_nickname,
@@ -734,7 +760,13 @@ ON CONFLICT(id) DO UPDATE SET
     cwd = excluded.cwd,
     cli_version = excluded.cli_version,
     title = excluded.title,
-    preview = COALESCE(NULLIF(excluded.preview, ''), threads.preview),
+    preview = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM cloud_agent_thread_summaries summary
+            WHERE summary.thread_id = excluded.id
+        ) THEN threads.preview
+        ELSE COALESCE(NULLIF(excluded.preview, ''), threads.preview)
+    END,
     sandbox_policy = excluded.sandbox_policy,
     approval_mode = excluded.approval_mode,
     tokens_used = excluded.tokens_used,
@@ -942,6 +974,10 @@ WHERE status IN (?, ?)
                 .execute(&mut *tx)
                 .await?;
             }
+            sqlx::query("DELETE FROM thread_execution_contexts WHERE thread_id = ?")
+                .bind(thread_id_string)
+                .execute(&mut *tx)
+                .await?;
             sqlx::query("DELETE FROM thread_dynamic_tools WHERE thread_id = ?")
                 .bind(thread_id_string)
                 .execute(&mut *tx)
@@ -1080,7 +1116,8 @@ pub(super) fn extract_memory_mode(items: &[RolloutItem]) -> Option<String> {
         RolloutItem::ResponseItem(_)
         | RolloutItem::Compacted(_)
         | RolloutItem::TurnContext(_)
-        | RolloutItem::EventMsg(_) => None,
+        | RolloutItem::EventMsg(_)
+        | RolloutItem::UserInputOnceMarker(_) => None,
     })
 }
 

@@ -86,6 +86,11 @@ describe("composer slash commands", () => {
         kind: "mcp",
         label: "Search issues",
         mention: { name: "github.search", path: "mcp://github" },
+        execution: {
+          kind: "localMcpTool",
+          serverName: "github",
+          toolName: "search",
+        },
       }),
       expect.objectContaining({
         kind: "skill",
@@ -102,4 +107,68 @@ describe("composer slash commands", () => {
   it("uses mcp:// server paths for MCP mentions", () => {
     expect(mcpMentionPath("github")).toBe("mcp://github");
   });
+
+  it("omits MCP servers without executable tools", async () => {
+    const commands = await loadComposerSlashCommands({
+      client: capabilityClient({
+        name: "empty-server",
+        tools: {},
+        authStatus: "authorized",
+      }),
+      cwd: "/repo",
+      isConnected: true,
+      isDemoPreview: false,
+      threadId: "thread-1",
+    });
+
+    expect(commands).toMatchInlineSnapshot(`[]`);
+  });
+
+  it("omits MCP servers that require login", async () => {
+    const commands = await loadComposerSlashCommands({
+      client: capabilityClient({
+        name: "private-server",
+        tools: {
+          search: {
+            name: "search",
+            description: "Search private data",
+            inputSchema: {},
+          },
+        },
+        authStatus: "notLoggedIn",
+      }),
+      cwd: "/repo",
+      isConnected: true,
+      isDemoPreview: false,
+      threadId: "thread-1",
+    });
+
+    expect(commands).toMatchInlineSnapshot(`[]`);
+  });
 });
+
+function capabilityClient(
+  server: Record<string, unknown>,
+): Parameters<typeof loadComposerSlashCommands>[0]["client"] {
+  return {
+    async listApps() {
+      return { data: [], nextCursor: null } as unknown as AppsListResponse;
+    },
+    async listMcpServerStatus() {
+      return {
+        data: [
+          {
+            serverInfo: null,
+            resources: [],
+            resourceTemplates: [],
+            ...server,
+          },
+        ],
+        nextCursor: null,
+      } as unknown as ListMcpServerStatusResponse;
+    },
+    async listSkills() {
+      return { data: [] } as unknown as SkillsListResponse;
+    },
+  };
+}

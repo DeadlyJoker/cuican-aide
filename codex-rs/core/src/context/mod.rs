@@ -8,6 +8,8 @@ mod collaboration_mode_instructions;
 mod contextual_user_message;
 mod environment_context;
 mod execution_target_context;
+mod governed_context;
+mod governed_context_bundle;
 mod guardian_followup_review_reminder;
 mod hook_additional_context;
 mod image_generation_instructions;
@@ -46,6 +48,8 @@ pub(crate) use crewon_context_fragments::FragmentRegistrationProxy;
 pub(crate) use crewon_core_skills::SkillInstructions;
 pub(crate) use environment_context::EnvironmentContext;
 pub(crate) use execution_target_context::ExecutionTargetContextFragment;
+pub use governed_context::*;
+pub use governed_context_bundle::*;
 pub(crate) use guardian_followup_review_reminder::GuardianFollowupReviewReminder;
 pub(crate) use hook_additional_context::HookAdditionalContext;
 pub(crate) use image_generation_instructions::ImageGenerationInstructions;
@@ -72,3 +76,7 @@ pub(crate) use token_budget_context::TokenBudgetRemainingContext;
 pub(crate) use turn_aborted::TurnAborted;
 pub(crate) use user_instructions::UserInstructions;
 pub(crate) use user_shell_command::UserShellCommand;
+
+#[cfg(test)]
+#[path = "governed_context_tests.rs"]
+mod governed_context_tests;

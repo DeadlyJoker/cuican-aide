@@ -4,10 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 import { CommandTeamCapabilityCreateDialog } from "./CommandTeamCapabilityCreateDialog";
 
 describe("CommandTeamCapabilityCreateDialog", () => {
-  it.each([
-    ["workflow" as const, "/repo/team", "群聊运行工作空间"],
-    ["experts" as const, "/repo/single-chat", "团长单聊工作空间"],
-  ])("snapshots the %s creation boundary", (kind, workspaceCwd, label) => {
+  it.each(["workflow" as const, "experts" as const])(
+    "snapshots the %s creation boundary",
+    (kind) => {
+      const workspaceCwd =
+        kind === "workflow" ? "/repo/team" : "/repo/single-chat";
     const markup = renderToStaticMarkup(
       <CommandTeamCapabilityCreateDialog
         kind={kind}
@@ -17,8 +18,15 @@ describe("CommandTeamCapabilityCreateDialog", () => {
       />,
     );
 
-    expect(markup).toContain(label);
-    expect(markup).toContain(workspaceCwd);
+      if (kind === "workflow") {
+        expect(markup).toContain("云端执行边界");
+        expect(markup).toContain("Agent Platform 云端");
+        expect(markup).not.toContain(workspaceCwd);
+      } else {
+        expect(markup).toContain("团长单聊工作空间");
+        expect(markup).toContain(workspaceCwd);
+      }
     expect(markup).toMatchSnapshot();
-  });
+    },
+  );
 });

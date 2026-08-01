@@ -4,7 +4,11 @@ import { Copy } from "lucide-react";
 
 import type { Locale } from "../lib/i18n";
 import { renderMarkdown } from "./TranscriptMarkdown";
-import { reasoningDisplayLines } from "./transcriptReasoning";
+import {
+  isLowSignalReasoningLine,
+  reasoningDisplayLines,
+  reasoningProcessLines,
+} from "./transcriptReasoning";
 import { dynamicToolKindLabel } from "./transcriptToolPresentation";
 
 function commandDurationLabel(
@@ -83,10 +87,6 @@ function commandStatusLabel(
     case "declined":
       return locale === "zh" ? "已拒绝" : "Declined";
   }
-}
-
-function disclosureLabel(locale: Locale): string {
-  return locale === "zh" ? "明细" : "Details";
 }
 
 function defaultOpenToolStatus(
@@ -456,10 +456,6 @@ function diffPreviewRows(diff: string, maxRows = 90): FileDiffRow[] {
   return rows;
 }
 
-function fileEventDisclosureLabel(locale: Locale): string {
-  return locale === "zh" ? "明细" : "Details";
-}
-
 function editedFilesLabel(locale: Locale): string {
   return locale === "zh" ? "已编辑的文件" : "Edited files";
 }
@@ -509,12 +505,13 @@ export function TranscriptReasoningCard({
   item: Extract<ThreadItem, { type: "reasoning" }>;
   locale: Locale;
 }) {
-  const lines = reasoningDisplayLines(item);
+  const processLines = reasoningProcessLines(item);
+  const highSignalLines = reasoningDisplayLines(item);
 
-  if (lines.length === 0) {
+  if (processLines.length === 0) {
     return (
       <div
-        className="process-card reasoning-card"
+        className="process-card reasoning-card reasoning-card-static"
         data-status="inProgress"
         role="status"
       >
@@ -531,16 +528,63 @@ export function TranscriptReasoningCard({
     );
   }
 
-  return (
-    <details className="process-card reasoning-card" open>
-      <summary>
-        <span>{locale === "zh" ? "推理过程" : "Reasoning"}</span>
-        <em>{lineCountLabel(lines.length, locale)}</em>
-        <strong>{disclosureLabel(locale)}</strong>
-      </summary>
-      <div className="process-card-body">
-        {renderMarkdown(lines.join("\n\n"))}
+  const breadcrumbOnly =
+    highSignalLines.length === 0 ||
+    processLines.every((line) => isLowSignalReasoningLine(line));
+
+  const thoughtVerb = locale === "zh" ? "思考" : "Thought";
+  const stepCountLabel =
+    locale === "zh"
+      ? `${processLines.length} 步`
+      : `${processLines.length} step${processLines.length === 1 ? "" : "s"}`;
+
+  // Cursor/Codex: every reasoning row is labeled "Thought", never a bare grey line.
+  if (breadcrumbOnly) {
+    return (
+      <details className="process-card reasoning-card">
+        <summary title={`${thoughtVerb} · ${stepCountLabel}`}>
+          <span className="tool-action-verb">{thoughtVerb}</span>
+          <span className="reasoning-card-headline">{stepCountLabel}</span>
+        </summary>
+        <div className="process-card-body">
+          <ol className="reasoning-step-list">
+            {processLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ol>
+        </div>
+      </details>
+    );
+  }
+
+  const headline = highSignalLines[0] ?? processLines[0];
+  const detailText = highSignalLines
+    .slice(1)
+    .filter((line) => line.trim() !== headline.trim())
+    .join("\n\n")
+    .trim();
+
+  if (!detailText) {
+    return (
+      <div
+        className="process-card reasoning-card reasoning-card-static"
+        role="status"
+        title={headline}
+      >
+        <span className="tool-action-verb">{thoughtVerb}</span>
+        <span className="reasoning-card-headline">{headline}</span>
       </div>
+    );
+  }
+
+  return (
+    <details className="process-card reasoning-card">
+      <summary title={headline}>
+        <span className="tool-action-verb">{thoughtVerb}</span>
+        <span className="reasoning-card-headline">{headline}</span>
+        <em>{lineCountLabel(highSignalLines.length, locale)}</em>
+      </summary>
+      <div className="process-card-body">{renderMarkdown(detailText)}</div>
     </details>
   );
 }
@@ -553,7 +597,6 @@ export function TranscriptCommandCard({
   locale: Locale;
 }) {
   const output = item.aggregatedOutput?.trim();
-  const outputLineCount = output ? output.split("\n").length : 0;
 
   return (
     <details
@@ -562,20 +605,22 @@ export function TranscriptCommandCard({
       {...openIfDefault(defaultOpenToolStatus(item.status))}
     >
       <summary className="tool-card-header command-card-header">
-        <code>$ {item.command}</code>
+        <span className="tool-action-verb">
+          {item.status === "inProgress"
+            ? locale === "zh"
+              ? "运行中"
+              : "Running"
+            : locale === "zh"
+              ? "已运行"
+              : "Ran"}
+        </span>
+        <code>{item.command}</code>
         <span className="tool-card-status">
           <span className="status-dot" aria-hidden="true" />
           {commandStatusLabel(item, locale)}
         </span>
-        <em>
-          {output
-            ? lineCountLabel(outputLineCount, locale)
-            : locale === "zh"
-              ? "无输出"
-              : "No output"}
-        </em>
       </summary>
-      {output ? <pre>{output}</pre> : null}
+      {output ? <pre className="tool-call-output">{output}</pre> : null}
     </details>
   );
 }
@@ -605,10 +650,10 @@ export function TranscriptFileChangeCard({
       {...openIfDefault(item.status !== "declined")}
     >
       <summary className="tool-card-header file-event-header file-change-header">
-        <span className="file-event-title">
-          {fileChangeStatusLabel(item.status, locale)}{" "}
-          {fileChangeCountLabel(item.changes.length, locale)}
+        <span className="tool-action-verb">
+          {fileChangeStatusLabel(item.status, locale)}
         </span>
+        <code>{fileChangeCountLabel(item.changes.length, locale)}</code>
         <em className="file-change-stat">
           <span data-tone="added">+{total.added}</span>{" "}
           <span data-tone="removed">-{total.removed}</span>
@@ -667,7 +712,7 @@ export function TranscriptMcpToolCard({
       {...openIfDefault(defaultOpenToolStatus(item.status))}
     >
       <summary className="tool-card-header tool-call-header">
-        <span className="tool-call-kind">MCP</span>
+        <span className="tool-action-verb">MCP</span>
         <code>
           {item.server}.{item.tool}
         </code>
@@ -675,7 +720,7 @@ export function TranscriptMcpToolCard({
           <span className="status-dot" aria-hidden="true" />
           {toolStatusLabel(item.status, locale)}
         </span>
-        <em>{duration ?? disclosureLabel(locale)}</em>
+        {duration ? <em>{duration}</em> : null}
       </summary>
       <div className="tool-call-body">
         {toolSectionLabel(
@@ -740,30 +785,34 @@ function TranscriptFileReadCard({
     <details
       className="tool-card file-event-card file-read-card compact-tool-card"
       data-status={item.status}
-      open
+      {...openIfDefault(defaultOpenToolStatus(item.status))}
     >
       <summary className="tool-card-header file-event-header file-read-header">
-        <span className="file-event-title">
-          {fileReadStatusLabel(item.status, paths.length || 1, locale)}
-          <span className="visually-hidden">
-            {" "}
-            {item.server}.{item.tool}
-          </span>
+        <span className="tool-action-verb">
+          {item.status === "inProgress"
+            ? locale === "zh"
+              ? "读取中"
+              : "Reading"
+            : locale === "zh"
+              ? "已读取"
+              : "Read"}
         </span>
-        <em>{duration ?? fileEventDisclosureLabel(locale)}</em>
+        <code>{firstPath}</code>
+        <span className="visually-hidden">
+          {fileReadStatusLabel(item.status, paths.length || 1, locale)}{" "}
+          {item.server}.{item.tool}
+        </span>
+        {duration ? <em>{duration}</em> : null}
       </summary>
       <div className="file-event-body file-read-body">
-        <span className="file-read-line">
-          <strong>Read</strong>
-          <code>{firstPath}</code>
-        </span>
-        {paths.length > 1 ? (
-          <span className="file-read-more">
-            {locale === "zh"
-              ? `还有 ${paths.length - 1} 个文件`
-              : `${paths.length - 1} more file${paths.length === 2 ? "" : "s"}`}
-          </span>
-        ) : null}
+        {paths.length > 1
+          ? paths.map((path) => (
+              <span className="file-read-line" key={path}>
+                <strong>Read</strong>
+                <code>{path}</code>
+              </span>
+            ))
+          : null}
         {item.error ? toolSectionLabel(resultLabel, item.error.message) : null}
         {!item.error && !item.result
           ? toolSectionLabel(
@@ -795,7 +844,7 @@ export function TranscriptDynamicToolCard({
       {...openIfDefault(defaultOpenToolStatus(item.status))}
     >
       <summary className="tool-card-header tool-call-header">
-        <span className="tool-call-kind">
+        <span className="tool-action-verb">
           {dynamicToolKindLabel(item, locale)}
         </span>
         <code>{toolName}</code>
@@ -803,7 +852,7 @@ export function TranscriptDynamicToolCard({
           <span className="status-dot" aria-hidden="true" />
           {toolStatusLabel(item.status, locale, item.success)}
         </span>
-        <em>{duration ?? disclosureLabel(locale)}</em>
+        {duration ? <em>{duration}</em> : null}
       </summary>
       <div className="tool-call-body">
         {toolSectionLabel(
@@ -864,11 +913,9 @@ export function TranscriptCollabAgentToolCard({
           <span className="status-dot" aria-hidden="true" />
           {collabToolStatusLabel(item.status, locale)}
         </span>
-        <em>
-          {item.receiverThreadIds.length > 0
-            ? `${item.receiverThreadIds.length} agent`
-            : disclosureLabel(locale)}
-        </em>
+        {item.receiverThreadIds.length > 0 ? (
+          <em>{item.receiverThreadIds.length} agent</em>
+        ) : null}
       </summary>
       <div className="tool-call-body">
         {item.prompt

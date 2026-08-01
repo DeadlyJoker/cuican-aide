@@ -312,6 +312,7 @@ describe("capability panel item actions", () => {
   it("reads files and attaches context", async () => {
     vi.stubGlobal("window", { atob: globalThis.atob });
     let composer = "Current prompt";
+    let mentions: PendingComposerMention[] = [];
     let pendingContextFile: { path: string; text: string } | null = null;
     let panel: CapabilityPanel | null = null;
 
@@ -332,6 +333,9 @@ describe("capability panel item actions", () => {
         setComposerValue: (updater) => {
           composer = updater(composer);
         },
+        setPendingComposerMentions: (updater) => {
+          mentions = updater(mentions);
+        },
         setPendingContextFile: (contextFile) => {
           pendingContextFile = contextFile;
         },
@@ -340,7 +344,13 @@ describe("capability panel item actions", () => {
     await flushAsyncAction();
 
     expect(composer).toContain("Current prompt");
-    expect(composer).toContain("Hello world");
+    expect(composer).not.toContain("Hello world");
+    expect(mentions).toEqual([
+      {
+        name: "README.md",
+        path: "/repo/README.md",
+      },
+    ]);
     expect(pendingContextFile).toEqual({
       path: "/repo/README.md",
       text: "Hello world",

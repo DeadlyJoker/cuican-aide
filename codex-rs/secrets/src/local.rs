@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::compiler_fence;
 use std::time::SystemTime;
@@ -55,6 +56,7 @@ impl SecretsFile {
 pub struct LocalSecretsBackend {
     crewon_home: PathBuf,
     keyring_store: Arc<dyn KeyringStore>,
+    operation_lock: Arc<Mutex<()>>,
 }
 
 impl LocalSecretsBackend {
@@ -62,10 +64,12 @@ impl LocalSecretsBackend {
         Self {
             crewon_home,
             keyring_store,
+            operation_lock: Arc::new(Mutex::new(())),
         }
     }
 
     pub fn set(&self, scope: &SecretScope, name: &SecretName, value: &str) -> Result<()> {
+        let _guard = self.lock_operations()?;
         anyhow::ensure!(!value.is_empty(), "secret value must not be empty");
         let canonical_key = scope.canonical_key(name);
         let mut file = self.load_file()?;
@@ -74,12 +78,14 @@ impl LocalSecretsBackend {
     }
 
     pub fn get(&self, scope: &SecretScope, name: &SecretName) -> Result<Option<String>> {
+        let _guard = self.lock_operations()?;
         let canonical_key = scope.canonical_key(name);
         let file = self.load_file()?;
         Ok(file.secrets.get(&canonical_key).cloned())
     }
 
     pub fn delete(&self, scope: &SecretScope, name: &SecretName) -> Result<bool> {
+        let _guard = self.lock_operations()?;
         let canonical_key = scope.canonical_key(name);
         let mut file = self.load_file()?;
         let removed = file.secrets.remove(&canonical_key).is_some();
@@ -90,6 +96,7 @@ impl LocalSecretsBackend {
     }
 
     pub fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>> {
+        let _guard = self.lock_operations()?;
         let file = self.load_file()?;
         let mut entries = Vec::new();
         for canonical_key in file.secrets.keys() {
@@ -105,6 +112,12 @@ impl LocalSecretsBackend {
             entries.push(entry);
         }
         Ok(entries)
+    }
+
+    fn lock_operations(&self) -> Result<std::sync::MutexGuard<'_, ()>> {
+        self.operation_lock
+            .lock()
+            .map_err(|_| anyhow::anyhow!("local secrets backend lock poisoned"))
     }
 
     fn secrets_dir(&self) -> PathBuf {

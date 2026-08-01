@@ -76,6 +76,65 @@ export function updateThreadStatus(
   }));
 }
 
+function isPreservableActionItem(item: ThreadItem): boolean {
+  switch (item.type) {
+    case "commandExecution":
+    case "fileChange":
+    case "mcpToolCall":
+    case "dynamicToolCall":
+    case "collabAgentToolCall":
+    case "subAgentActivity":
+    case "webSearch":
+    case "imageView":
+    case "imageGeneration":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Keep live tool cards if a history refresh omits them (lossy API turns). */
+export function mergeTurnsPreservingActionItems(
+  currentTurns: Turn[],
+  nextTurns: Turn[],
+): Turn[] {
+  return nextTurns.map((nextTurn) => {
+    const currentTurn = currentTurns.find((turn) => turn.id === nextTurn.id);
+    if (!currentTurn) {
+      return nextTurn;
+    }
+
+    const nextIds = new Set(nextTurn.items.map((item) => item.id));
+    const missingActions = currentTurn.items.filter(
+      (item) => isPreservableActionItem(item) && !nextIds.has(item.id),
+    );
+    if (missingActions.length === 0) {
+      return nextTurn;
+    }
+
+    const mergedItems = [...nextTurn.items];
+    for (const action of missingActions) {
+      const anchorIndex = currentTurn.items.findIndex(
+        (item) => item.id === action.id,
+      );
+      let insertAt = mergedItems.length;
+      for (let index = anchorIndex - 1; index >= 0; index -= 1) {
+        const priorId = currentTurn.items[index]?.id;
+        const priorInMerged = mergedItems.findIndex(
+          (item) => item.id === priorId,
+        );
+        if (priorInMerged >= 0) {
+          insertAt = priorInMerged + 1;
+          break;
+        }
+      }
+      mergedItems.splice(insertAt, 0, action);
+    }
+
+    return { ...nextTurn, items: mergedItems };
+  });
+}
+
 export function updateThreadTurns(
   threads: Thread[],
   threadId: string,
@@ -83,7 +142,7 @@ export function updateThreadTurns(
 ): Thread[] {
   return updateThreadInList(threads, threadId, (thread) => ({
     ...thread,
-    turns,
+    turns: mergeTurnsPreservingActionItems(thread.turns, turns),
   }));
 }
 
@@ -212,6 +271,13 @@ export function updateItem(
   };
 }
 
+/**
+ * Merge a turn update without discarding live tool/reasoning items.
+ *
+ * `turn/completed` intentionally ships `items: []` + `itemsView: notLoaded`.
+ * Blindly replacing the turn would wipe streamed commandExecution/MCP cards
+ * before an async history refresh can restore them.
+ */
 export function upsertTurn(thread: Thread, nextTurn: Turn): Thread {
   const existingTurnIndex = thread.turns.findIndex(
     (turn) => turn.id === nextTurn.id,
@@ -221,9 +287,27 @@ export function upsertTurn(thread: Thread, nextTurn: Turn): Thread {
     return { ...thread, turns: [...thread.turns, nextTurn] };
   }
 
+  const existingTurn = thread.turns[existingTurnIndex]!;
   const turns = [...thread.turns];
-  turns[existingTurnIndex] = nextTurn;
+  turns[existingTurnIndex] = mergeTurnUpsert(existingTurn, nextTurn);
   return { ...thread, turns };
+}
+
+function mergeTurnUpsert(existingTurn: Turn, nextTurn: Turn): Turn {
+  const nextItemsMissing =
+    nextTurn.itemsView === "notLoaded" ||
+    (nextTurn.items.length === 0 && existingTurn.items.length > 0);
+
+  if (nextItemsMissing) {
+    return {
+      ...nextTurn,
+      items: existingTurn.items,
+      itemsView:
+        existingTurn.items.length > 0 ? existingTurn.itemsView : nextTurn.itemsView,
+    };
+  }
+
+  return mergeTurnsPreservingActionItems([existingTurn], [nextTurn])[0]!;
 }
 
 export function upsertTurnInThread(

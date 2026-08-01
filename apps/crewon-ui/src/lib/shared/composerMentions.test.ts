@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendAppMentionToken,
   appMentionInfo,
+  removeComposerMentionToken,
   upsertPendingComposerMention,
 } from "./composerMentions";
 
@@ -69,5 +70,20 @@ describe("composer mention helpers", () => {
         token: "$review",
       },
     ]);
+  });
+
+  it("removes a resource token without rewriting surrounding content", () => {
+    expect(
+      removeComposerMentionToken(
+        "检查 $code-review 和其他内容",
+        "$code-review",
+      ),
+    ).toBe("检查 和其他内容");
+    expect(removeComposerMentionToken("@产品知识库 继续", "@产品知识库")).toBe(
+      "继续",
+    );
+    expect(
+      removeComposerMentionToken("$plugin-creator\n", "$plugin-creator"),
+    ).toBe("");
   });
 });

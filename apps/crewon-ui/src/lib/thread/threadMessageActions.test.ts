@@ -1,6 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { Turn } from "@crewon-protocol/v2/Turn";
 import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
+import type { ThreadExecutionContext } from "@crewon-platform-protocol/v2/ThreadExecutionContext";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
@@ -171,105 +172,6 @@ function baseSendParams(
 }
 
 describe("thread message actions", () => {
-  it("adds a completed Agent Platform response to the existing CrewON thread", async () => {
-    vi.stubGlobal("localStorage", {
-      getItem: vi.fn(() => "agent-platform-access-token"),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-    });
-    const state = threadState();
-    const runAgentPlatformChat = vi.fn(
-      async (
-        _accessToken: string,
-        _threadId: string,
-        _agentId: string,
-        _message: string,
-        onDelta?: (delta: string) => void,
-        onResourceEvent?: (
-          event: {
-            type: "skill" | "mcp" | "knowledge";
-            status: "started" | "succeeded" | "failed";
-            name: string;
-            inputSummary: unknown;
-            outputSummary: unknown;
-            error: string | null;
-          },
-          index: number,
-        ) => void,
-      ) => {
-        onDelta?.("Agent ");
-        onDelta?.("answer");
-        onResourceEvent?.(
-          {
-            type: "mcp",
-            status: "succeeded",
-            name: "echo",
-            inputSummary: { message: "hello" },
-            outputSummary: "hello",
-            error: null,
-          },
-          0,
-        );
-        return {
-          agentId: "7",
-          message: "Agent answer",
-          thoughts: [],
-          skillsUsed: ["skill-12"],
-          tokens: { promptTokens: 3, completionTokens: 2, totalTokens: 5 },
-          durationMs: 42,
-        };
-      },
-    );
-
-    await sendMessageAction(
-      baseSendParams({
-        client: {
-          runAgentPlatformChat,
-          async readAgentPlatformSession() {
-            return [];
-          },
-          async resumeThread(threadId) {
-            return thread({ id: threadId });
-          },
-          async startTurn() {
-            throw new Error("local turn must not start");
-          },
-          async steerTurn() {
-            return { turnId: "unused" };
-          },
-        },
-        setIsSending: state.setIsSending,
-        setPendingComposerMentions: state.setPendingComposerMentions,
-        setThreads: state.setThreads,
-        threadSettings: { agentPlatformAgentId: "7" },
-      }),
-    );
-
-    expect(runAgentPlatformChat).toHaveBeenCalledWith(
-      "agent-platform-access-token",
-      "thread-1",
-      "7",
-      "Hello",
-      expect.any(Function),
-      expect.any(Function),
-    );
-    expect(state.threads[0]?.turns[0]).toMatchObject({
-      durationMs: 42,
-      status: "completed",
-      items: [
-        { type: "userMessage" },
-        { type: "agentMessage", text: "Agent answer" },
-        {
-          type: "dynamicToolCall",
-          namespace: "pim-mcp",
-          tool: "echo",
-          success: true,
-        },
-      ],
-    });
-    vi.unstubAllGlobals();
-  });
-
   it("keeps pending composer mentions only while their visible tokens remain", () => {
     expect(
       visibleComposerMentionsForText("$files summarize", [
@@ -359,6 +261,116 @@ describe("thread message actions", () => {
     expect(sidebarOpen).toBe(false);
   });
 
+  it("creates durable thread authority before binding Provider resources", async () => {
+    const state = threadState([]);
+    const calls: string[] = [];
+    const created = thread({ id: "thread-provider" });
+    const executionContext = {
+      threadId: created.id,
+      workspace: {
+        workspaceKey: "workspace-1",
+        bindingId: "workspace-binding-1",
+        scope: "conversation",
+        scopeId: created.id,
+        nodeId: "node-1",
+        environmentId: "env-1",
+      },
+      resourceBindings: [],
+      executionBinding: null,
+      revision: 1n,
+      createdAt: 1n,
+      updatedAt: 1n,
+    } satisfies ThreadExecutionContext;
+
+    const result = await createThreadAction({
+      client: {
+        async startThread() {
+          throw new Error("legacy start must not be used");
+        },
+        async startThreadWithExecutionContext(workspaceKey) {
+          calls.push(`start:${workspaceKey}`);
+          return { thread: created, executionContext };
+        },
+      },
+      createDemoThread: () => thread({ id: "demo-thread" }),
+      executionContextPreparation: {
+        workspaceKey: "workspace-1",
+        async afterStart(threadValue, context) {
+          calls.push(`bind:${threadValue.id}:${context.revision}`);
+        },
+      },
+      isConnected: true,
+      locale: "en",
+      preserveThreadsAfterConnectionLoss: () => {},
+      resolveBackendCwd: async () => "/repo",
+      setNotice: state.setNotice,
+      setSelectedThreadId: state.setSelectedThreadId,
+      setSidebarOpen: () => {},
+      setThreads: state.setThreads,
+      shouldAutoCloseSidebar: () => false,
+    });
+
+    expect(calls).toEqual(["start:workspace-1", "bind:thread-provider:1"]);
+    expect(result).toEqual(created);
+    expect(state.threads).toEqual([created]);
+  });
+
+  it("deletes an empty authority thread when Provider binding fails", async () => {
+    const state = threadState([]);
+    const deleted: string[] = [];
+    const created = thread({ id: "thread-provider-failed" });
+    const executionContext = {
+      threadId: created.id,
+      workspace: {
+        workspaceKey: "workspace-1",
+        bindingId: "workspace-binding-1",
+        scope: "conversation",
+        scopeId: created.id,
+        nodeId: "node-1",
+        environmentId: "env-1",
+      },
+      resourceBindings: [],
+      executionBinding: null,
+      revision: 1n,
+      createdAt: 1n,
+      updatedAt: 1n,
+    } satisfies ThreadExecutionContext;
+
+    const result = await createThreadAction({
+      client: {
+        async deleteThread(threadId) {
+          deleted.push(threadId);
+        },
+        async startThread() {
+          throw new Error("legacy start must not be used");
+        },
+        async startThreadWithExecutionContext() {
+          return { thread: created, executionContext };
+        },
+      },
+      createDemoThread: () => thread({ id: "demo-thread" }),
+      executionContextPreparation: {
+        workspaceKey: "workspace-1",
+        async afterStart() {
+          throw new Error("binding failed");
+        },
+      },
+      isConnected: true,
+      locale: "en",
+      preserveThreadsAfterConnectionLoss: () => {},
+      resolveBackendCwd: async () => "/repo",
+      setNotice: state.setNotice,
+      setSelectedThreadId: state.setSelectedThreadId,
+      setSidebarOpen: () => {},
+      setThreads: state.setThreads,
+      shouldAutoCloseSidebar: () => false,
+    });
+
+    expect(result).toBeNull();
+    expect(deleted).toEqual([created.id]);
+    expect(state.threads).toEqual([]);
+  });
+
   it("uses an explicit new-task workspace without resolving a fallback", async () => {
     const state = threadState([]);
     const resolveBackendCwd = vi.fn(async () => "/repo/fallback");
@@ -418,7 +430,7 @@ describe("thread message actions", () => {
     expect(starts).toEqual([undefined]);
   });
 
-  it("preserves threads when backend thread creation fails", async () => {
+  it("keeps the connection state when Provider preparation fails", async () => {
     const state = threadState();
     let preserved = false;
 
@@ -443,8 +455,39 @@ describe("thread message actions", () => {
     });
 
     expect(createdThread).toBeNull();
-    expect(preserved).toBe(true);
+    expect(preserved).toBe(false);
     expect(state.notice).toEqual({ text: "create failed", tone: "warning" });
+  });
+
+  it("marks a real connection close during thread creation", async () => {
+    const state = threadState();
+    let preserved = false;
+
+    await createThreadAction({
+      client: {
+        async startThread() {
+          throw new Error("App-server connection closed");
+        },
+      },
+      createDemoThread: () => thread({ id: "demo-thread" }),
+      isConnected: true,
+      locale: "en",
+      preserveThreadsAfterConnectionLoss: () => {
+        preserved = true;
+      },
+      resolveBackendCwd: async () => "/repo",
+      setNotice: state.setNotice,
+      setSelectedThreadId: state.setSelectedThreadId,
+      setSidebarOpen: () => {},
+      setThreads: state.setThreads,
+      shouldAutoCloseSidebar: () => false,
+    });
+
+    expect(preserved).toBe(true);
+    expect(state.notice).toEqual({
+      text: "App-server connection closed",
+      tone: "warning",
+    });
   });
 
   it("steers an active turn instead of starting a new one", async () => {
@@ -762,7 +805,7 @@ describe("thread message actions", () => {
     ]);
   });
 
-  it("restores composer text and preserves threads after send failure", async () => {
+  it("restores composer text without faking a disconnect after send failure", async () => {
     const state = threadState();
     let preserved = false;
 
@@ -792,7 +835,7 @@ describe("thread message actions", () => {
       }),
     );
 
-    expect(preserved).toBe(true);
+    expect(preserved).toBe(false);
     expect(state.pendingMentions).toEqual([]);
     expect(state.composerValue).toBe("Keep this text");
     expect(state.focusSignal).toBe(1);
@@ -850,19 +893,17 @@ describe("thread message actions", () => {
     expect(state.isSending).toBe(false);
   });
 
-  it("cancels an active Agent Platform run without interrupting a CrewON turn", async () => {
+  it("uses standard turn interrupt for every active thread", async () => {
     const state = threadState([
       thread({
         turns: [turn({ id: "agent-platform-turn", status: "inProgress" })],
       }),
     ]);
     const interruptTurn = vi.fn(async () => undefined);
-    const cancelAgentPlatformRunForThread = vi.fn(async () => true);
 
     await interruptActiveTurnAction({
       activeTurnId: "agent-platform-turn",
       client: {
-        cancelAgentPlatformRunForThread,
         interruptTurn,
       },
       isConnected: true,
@@ -874,8 +915,10 @@ describe("thread message actions", () => {
       setThreads: state.setThreads,
     });
 
-    expect(cancelAgentPlatformRunForThread).toHaveBeenCalledWith("thread-1");
-    expect(interruptTurn).not.toHaveBeenCalled();
+    expect(interruptTurn).toHaveBeenCalledWith(
+      "thread-1",
+      "agent-platform-turn",
+    );
     expect(state.threads[0]?.turns[0]?.status).toBe("interrupted");
   });
 });

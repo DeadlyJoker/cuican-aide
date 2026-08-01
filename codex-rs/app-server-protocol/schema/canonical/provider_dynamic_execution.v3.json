@@ -1,0 +1,208 @@
+{
+  "schemaVersion": "3.0.0",
+  "descriptor": {
+    "providerId": "agent-platform",
+    "protocolVersion": "3.0.0",
+    "capabilities": [
+      "durableRun",
+      "remoteAgent",
+      "resumableEvents",
+      "remoteTool",
+      "remoteKnowledge"
+    ],
+    "resourceCapabilities": [
+      {
+        "resourceType": "agent",
+        "bindingMode": "providerManaged",
+        "executionLocation": "provider"
+      },
+      {
+        "resourceType": "mcpTool",
+        "bindingMode": "remoteReference",
+        "executionLocation": "provider"
+      },
+      {
+        "resourceType": "mcpTool",
+        "bindingMode": "providerManaged",
+        "executionLocation": "provider"
+      },
+      {
+        "resourceType": "knowledgeBase",
+        "bindingMode": "remoteReference",
+        "executionLocation": "provider"
+      },
+      {
+        "resourceType": "knowledgeBase",
+        "bindingMode": "providerManaged",
+        "executionLocation": "provider"
+      }
+    ]
+  },
+  "commands": [
+    {
+      "type": "readDynamicResource",
+      "commandId": "command-tool-manifest-001",
+      "resource": {
+        "providerId": "agent-platform",
+        "resourceType": "mcpTool",
+        "resourceId": "tool-demo",
+        "revision": "tool-version:3"
+      }
+    },
+    {
+      "type": "readDynamicResource",
+      "commandId": "command-knowledge-manifest-001",
+      "resource": {
+        "providerId": "agent-platform",
+        "resourceType": "knowledgeBase",
+        "resourceId": "knowledge-demo",
+        "revision": "knowledge-version:5"
+      }
+    }
+  ],
+  "manifests": [
+    {
+      "resource": {
+        "providerId": "agent-platform",
+        "resourceType": "mcpTool",
+        "resourceId": "tool-demo",
+        "revision": "tool-version:3"
+      },
+      "manifestSchemaVersion": "1.0.0",
+      "contentDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "operation": "call",
+      "sideEffect": "externalWrite",
+      "schemaDigest": "sha256:c354ef73b7a7658f4b541111b9fe959df2f14a67eee4670ca4c62c554ff4867d",
+      "description": "Create one bounded delivery record.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "title"
+        ]
+      }
+    },
+    {
+      "resource": {
+        "providerId": "agent-platform",
+        "resourceType": "knowledgeBase",
+        "resourceId": "knowledge-demo",
+        "revision": "knowledge-version:5"
+      },
+      "manifestSchemaVersion": "1.0.0",
+      "contentDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "operation": "search",
+      "sideEffect": "readOnly",
+      "schemaDigest": "sha256:67d625e7a3d4c91f6604c399a977ea061d226365f3d0e9d92be6c24f10a285c9",
+      "description": "Search one exact knowledge revision.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  ],
+  "executeCommands": [
+    {
+      "type": "executeDynamicResource",
+      "commandId": "command-tool-call-001",
+      "callId": "tool-call-001",
+      "actionDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "resource": {
+        "providerId": "agent-platform",
+        "resourceType": "mcpTool",
+        "resourceId": "tool-demo",
+        "revision": "tool-version:3"
+      },
+      "operation": "call",
+      "arguments": {
+        "title": "Ship the bounded result"
+      }
+    },
+    {
+      "type": "executeDynamicResource",
+      "commandId": "command-knowledge-search-001",
+      "callId": "knowledge-call-001",
+      "actionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "resource": {
+        "providerId": "agent-platform",
+        "resourceType": "knowledgeBase",
+        "resourceId": "knowledge-demo",
+        "revision": "knowledge-version:5"
+      },
+      "operation": "search",
+      "arguments": {
+        "query": "exact revision behavior",
+        "limit": 5
+      }
+    }
+  ],
+  "artifactReadCommands": [
+    {
+      "type": "readDynamicArtifact",
+      "commandId": "command-artifact-read-001",
+      "callId": "tool-call-001",
+      "actionDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "artifactId": "provider-artifact-001",
+      "revision": 1,
+      "contentDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+  ],
+  "executeResponses": [
+    {
+      "status": "succeeded",
+      "callId": "tool-call-001",
+      "actionDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "resultDigest": "sha256:fc5791662801768ea0c009f3ed427befe1c5e147aeb92b7120c0258bd36d4744",
+      "result": {
+        "type": "inlineText",
+        "items": [
+          "Delivery record created."
+        ]
+      }
+    },
+    {
+      "status": "succeeded",
+      "callId": "tool-call-001",
+      "actionDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "resultDigest": "sha256:4dd0421aed4c373ccf38b4621daebe312734d97421deece2afee9e147ce38dea",
+      "result": {
+        "type": "artifact",
+        "artifactId": "provider-artifact-001",
+        "revision": 1,
+        "contentDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    },
+    {
+      "status": "failed",
+      "callId": "tool-call-001",
+      "actionDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "code": "rejected"
+    },
+    {
+      "status": "unknown",
+      "callId": "tool-call-001",
+      "actionDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "code": "unknownOutcome"
+    }
+  ]
+}

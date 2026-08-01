@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,59 +5,29 @@ use crewon_app_server_protocol::AgentPlatformAgentInfoResponse;
 use crewon_app_server_protocol::AgentPlatformAgentParams;
 use crewon_app_server_protocol::AgentPlatformAuthParams;
 use crewon_app_server_protocol::AgentPlatformAuthResponse;
-use crewon_app_server_protocol::AgentPlatformChatParams;
-use crewon_app_server_protocol::AgentPlatformChatResponse;
-use crewon_app_server_protocol::AgentPlatformChatStartResponse;
-use crewon_app_server_protocol::AgentPlatformHistoryMessage;
-use crewon_app_server_protocol::AgentPlatformRunCancelParams;
-use crewon_app_server_protocol::AgentPlatformRunCancelResponse;
-use crewon_app_server_protocol::AgentPlatformSessionClearResponse;
-use crewon_app_server_protocol::AgentPlatformSessionParams;
-use crewon_app_server_protocol::AgentPlatformSessionReadResponse;
+use crewon_app_server_protocol::AgentPlatformWorkflowExecuteParams;
+use crewon_app_server_protocol::AgentPlatformWorkflowExecuteResponse;
+use crewon_app_server_protocol::AgentPlatformWorkflowInfoParams;
+use crewon_app_server_protocol::AgentPlatformWorkflowInfoResponse;
 use crewon_app_server_protocol::JSONRPCErrorError;
-use reqwest::StatusCode;
 use serde::Deserialize;
 use serde::Serialize;
-use sha2::Digest;
-use sha2::Sha256;
-use tokio::fs;
-use tokio::sync::Mutex;
-use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
+use serde_json::Value as JsonValue;
 
 use crate::error_code::internal_error;
-use crate::outgoing_message::ConnectionId;
-use crate::outgoing_message::OutgoingMessageSender;
 
-mod admission;
 mod remote;
-mod session;
-mod stream;
 mod validation;
 
-use admission::AdmissionController;
-use remote::remote_error;
-#[cfg(test)]
-use session::trim_history;
-#[cfg(test)]
-use stream::take_sse_frame;
-use validation::validate_chat_params;
-use validation::validate_session_params;
-
-const MAX_HISTORY_MESSAGES: usize = 20;
-const MAX_CONTEXT_TOKENS: usize = 10_000;
-const MAX_MESSAGE_CHARS: usize = 10_000;
-const MAX_SESSION_FILE_BYTES: usize = 1_000_000;
-const MAX_SESSION_FILES: usize = 1_000;
 const MAX_ACCESS_TOKEN_BYTES: usize = 64 * 1024;
 const MAX_AGENT_ID_BYTES: usize = 128;
-const MAX_THREAD_ID_BYTES: usize = 1_024;
+const MAX_WORKFLOW_ID_BYTES: usize = 20;
+const MAX_WORKFLOW_INPUT_CHARS: usize = 10_000;
+const MAX_WORKFLOW_INPUT_BYTES: usize = 64 * 1024;
 const MAX_REMOTE_JSON_BYTES: usize = 1_000_000;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const PREFLIGHT_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
-const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(180);
-const STREAM_TOTAL_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Clone)]
 pub(crate) struct AgentPlatformRequestProcessor {
@@ -67,48 +35,12 @@ pub(crate) struct AgentPlatformRequestProcessor {
 }
 
 struct Inner {
-    admission: AdmissionController,
     base_url: Option<String>,
     allow_insecure_http: bool,
     api_key: Option<String>,
     client: reqwest::Client,
-    history_root: PathBuf,
-    history_write_lock: Mutex<()>,
-    outgoing: Arc<OutgoingMessageSender>,
     preflight_timeout: Duration,
     request_timeout: Duration,
-    runs: Mutex<HashMap<String, RunRecord>>,
-    session_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
-    stream_idle_timeout: Duration,
-    stream_total_timeout: Duration,
-}
-
-struct RunRecord {
-    cancellation: CancellationToken,
-    connection_id: ConnectionId,
-    state: RunState,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum RunState {
-    Running,
-    Finalizing,
-    Cancelled,
-}
-
-#[derive(Clone, Copy)]
-enum AgentAccessRequirement {
-    Owned,
-    Enabled,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct StoredSession {
-    user_id: i64,
-    thread_id: String,
-    agent_id: String,
-    messages: Vec<AgentPlatformHistoryMessage>,
 }
 
 #[derive(Deserialize)]
@@ -135,32 +67,52 @@ struct RemoteAgentInfo {
 }
 
 #[derive(Deserialize)]
-struct RemoteTokenUsage {
-    prompt_tokens: u64,
-    completion_tokens: u64,
-    total_tokens: u64,
+struct RemoteWorkflowStatus {
+    id: i64,
+    api_enabled: i64,
 }
 
 #[derive(Deserialize)]
-struct RemoteChatResponse {
-    agent_id: String,
-    message: String,
-    thoughts: Vec<serde_json::Value>,
-    skills_used: Vec<serde_json::Value>,
+struct RemoteWorkflowInfo {
+    id: i64,
+    name: String,
+    description: Option<String>,
+    is_published: i64,
+    version: i64,
     #[serde(default)]
-    resource_events: Vec<crewon_app_server_protocol::AgentPlatformResourceEvent>,
-    tokens: RemoteTokenUsage,
-    duration_ms: u64,
+    input_variables: Vec<JsonValue>,
+    max_concurrency: u32,
+    active_connections: u32,
 }
 
 #[derive(Serialize)]
-struct RemoteChatRequest<'a> {
-    message: &'a str,
-    history: &'a [AgentPlatformHistoryMessage],
+struct RemoteWorkflowExecuteRequest {
+    input_data: JsonValue,
+}
+
+#[derive(Deserialize)]
+struct RemoteWorkflowExecution {
+    workflow_id: i64,
+    #[serde(alias = "id")]
+    execution_id: i64,
+    status: String,
+    #[serde(default, alias = "output_data")]
+    outputs: JsonValue,
+    started_at: Option<String>,
+    finished_at: Option<String>,
+    duration_seconds: Option<f64>,
+    #[serde(default)]
+    executed_nodes: Vec<JsonValue>,
+    #[serde(default)]
+    node_results: JsonValue,
+    #[serde(alias = "error_message")]
+    error: Option<String>,
+    #[serde(default)]
+    active_connections: u32,
 }
 
 impl AgentPlatformRequestProcessor {
-    pub(crate) fn new(codex_home: PathBuf, outgoing: Arc<OutgoingMessageSender>) -> Self {
+    pub(crate) fn new() -> Self {
         let base_url = std::env::var("CREWON_AGENT_PLATFORM_BASE_URL")
             .ok()
             .map(|value| value.trim_end_matches('/').to_string())
@@ -170,13 +122,8 @@ impl AgentPlatformRequestProcessor {
             .filter(|value| !value.trim().is_empty());
         let allow_insecure_http = std::env::var("CREWON_AGENT_PLATFORM_ALLOW_INSECURE_HTTP")
             .is_ok_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"));
-        let deployment_namespace = format!(
-            "{:x}",
-            Sha256::digest(base_url.as_deref().unwrap_or("unconfigured"))
-        );
         Self {
             inner: Arc::new(Inner {
-                admission: AdmissionController::new(),
                 base_url,
                 allow_insecure_http,
                 api_key,
@@ -187,17 +134,8 @@ impl AgentPlatformRequestProcessor {
                     .unwrap_or_else(|error| {
                         panic!("Agent Platform HTTP client configuration should be valid: {error}")
                     }),
-                history_root: codex_home
-                    .join("agent-platform-sessions")
-                    .join(deployment_namespace),
-                history_write_lock: Mutex::new(()),
-                outgoing,
                 preflight_timeout: PREFLIGHT_TIMEOUT,
                 request_timeout: REQUEST_TIMEOUT,
-                runs: Mutex::new(HashMap::new()),
-                session_locks: Mutex::new(HashMap::new()),
-                stream_idle_timeout: STREAM_IDLE_TIMEOUT,
-                stream_total_timeout: STREAM_TOTAL_TIMEOUT,
             }),
         }
     }
@@ -215,270 +153,75 @@ impl AgentPlatformRequestProcessor {
         params: AgentPlatformAgentParams,
     ) -> Result<AgentPlatformAgentInfoResponse, JSONRPCErrorError> {
         let agent_id = self
-            .verify_agent_access(
-                &params.access_token,
-                &params.agent_id,
-                AgentAccessRequirement::Enabled,
-            )
+            .verify_enabled_agent_access(&params.access_token, &params.agent_id)
             .await?;
         let response: RemoteAgentInfo = self
             .send_open_api(
                 reqwest::Method::GET,
                 &format!("/api/v1/open/agent/{agent_id}/info"),
-                /*body*/ None::<&RemoteChatRequest<'_>>,
+                /*body*/ None::<&()>,
             )
             .await?;
         Ok(response.into())
     }
 
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "an Agent Platform session must stay serialized through remote execution and persistence"
-    )]
-    pub(crate) async fn chat(
+    pub(crate) async fn workflow_info(
         &self,
-        connection_id: ConnectionId,
-        mut params: AgentPlatformChatParams,
-        connection_cancellation: CancellationToken,
-    ) -> Result<AgentPlatformChatResponse, JSONRPCErrorError> {
-        validate_chat_params(&params)?;
-        let _admission_permit = self
-            .inner
-            .admission
-            .acquire(connection_id, &connection_cancellation)
+        params: AgentPlatformWorkflowInfoParams,
+    ) -> Result<AgentPlatformWorkflowInfoResponse, JSONRPCErrorError> {
+        let workflow_id = self
+            .verify_enabled_workflow_access(&params.access_token, &params.workflow_id)
             .await?;
-        let user = tokio::select! {
-            _ = connection_cancellation.cancelled() => {
-                return Err(internal_error("Agent Platform connection closed"));
-            }
-            result = self.verify_user(&params.access_token) => result?,
-        };
-        params.agent_id = tokio::select! {
-            _ = connection_cancellation.cancelled() => {
-                return Err(internal_error("Agent Platform connection closed"));
-            }
-            result = self.verify_agent_access(
-                &params.access_token,
-                &params.agent_id,
-                AgentAccessRequirement::Enabled,
-            ) => result?,
-        };
-        let session_lock = self
-            .session_lock(user.id, &params.thread_id, &params.agent_id)
-            .await;
-        let _guard = session_lock.try_lock_owned().map_err(|_| {
-            remote_error(
-                StatusCode::CONFLICT,
-                "Agent Platform session already has an active operation",
+        let response: RemoteWorkflowInfo = self
+            .send_workflow_open_api(
+                reqwest::Method::GET,
+                &format!("/api/v1/open/workflow/{workflow_id}/info"),
+                /*body*/ None::<&()>,
             )
-        })?;
-        let history = self.context_for(&user, &params).await?;
-        let path = format!("/api/v1/open/agent/{}/chat", params.agent_id);
-        let request = RemoteChatRequest {
-            message: &params.message,
-            history: &history,
-        };
-        let response: RemoteChatResponse = tokio::select! {
-            _ = connection_cancellation.cancelled() => {
-                return Err(internal_error("Agent Platform connection closed"));
-            }
-            result = self.send_open_api(
-                reqwest::Method::POST,
-                &path,
-                Some(&request),
-            ) => result?,
-        };
-        let response = AgentPlatformChatResponse::from(response);
-        if connection_cancellation.is_cancelled() {
-            return Err(internal_error("Agent Platform connection closed"));
-        }
-        self.persist_completed_turn(&user, &params, &response.message)
             .await?;
-        Ok(response)
+        if response.id.to_string() != workflow_id {
+            return Err(internal_error(
+                "Agent Platform Workflow info identity did not match the authorized resource",
+            ));
+        }
+        Ok(response.into())
     }
 
-    pub(crate) async fn chat_start(
+    pub(crate) async fn execute_workflow(
         &self,
-        connection_id: ConnectionId,
-        mut params: AgentPlatformChatParams,
-        connection_cancellation: CancellationToken,
-    ) -> Result<AgentPlatformChatStartResponse, JSONRPCErrorError> {
-        validate_chat_params(&params)?;
-        let admission_permit = self
-            .inner
-            .admission
-            .acquire(connection_id, &connection_cancellation)
+        params: AgentPlatformWorkflowExecuteParams,
+    ) -> Result<AgentPlatformWorkflowExecuteResponse, JSONRPCErrorError> {
+        let input_data = validation::workflow_input_data(&params.input)?;
+        let workflow_id = self
+            .verify_workflow_access(&params.access_token, &params.workflow_id)
             .await?;
-        let user = tokio::select! {
-            _ = connection_cancellation.cancelled() => {
-                return Err(internal_error("Agent Platform connection closed"));
-            }
-            result = self.verify_user(&params.access_token) => result?,
-        };
-        params.agent_id = tokio::select! {
-            _ = connection_cancellation.cancelled() => {
-                return Err(internal_error("Agent Platform connection closed"));
-            }
-            result = self.verify_agent_access(
-                &params.access_token,
-                &params.agent_id,
-                AgentAccessRequirement::Enabled,
-            ) => result?,
-        };
-        let session_lock = self
-            .session_lock(user.id, &params.thread_id, &params.agent_id)
-            .await;
-        let session_guard = session_lock.try_lock_owned().map_err(|_| {
-            remote_error(
-                StatusCode::CONFLICT,
-                "Agent Platform session already has an active operation",
-            )
-        })?;
-        let run_id = Uuid::now_v7().to_string();
-        let cancellation = connection_cancellation.child_token();
-        if cancellation.is_cancelled() {
-            return Err(internal_error("Agent Platform connection closed"));
+        let response = self
+            .inner
+            .client
+            .post(format!(
+                "{}/api/v1/workflows/{workflow_id}/execute",
+                self.base_url()?
+            ))
+            .bearer_auth(&params.access_token)
+            .json(&RemoteWorkflowExecuteRequest { input_data })
+            .timeout(self.inner.request_timeout)
+            .send()
+            .await
+            .map_err(|error| internal_error(error.to_string()))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(remote::remote_response_error(status, response).await);
         }
-        let mut runs = self.inner.runs.lock().await;
-        runs.insert(
-            run_id.clone(),
-            RunRecord {
-                cancellation: cancellation.clone(),
-                connection_id,
-                state: RunState::Running,
-            },
-        );
-        drop(runs);
-        let processor = self.clone();
-        let spawned_run_id = run_id.clone();
-        tokio::spawn(async move {
-            processor
-                .run_stream(
-                    connection_id,
-                    spawned_run_id,
-                    user,
-                    params,
-                    cancellation,
-                    session_guard,
-                    admission_permit,
-                )
-                .await;
-        });
-        Ok(AgentPlatformChatStartResponse { run_id })
-    }
-
-    pub(crate) async fn run_cancel(
-        &self,
-        connection_id: ConnectionId,
-        params: AgentPlatformRunCancelParams,
-    ) -> AgentPlatformRunCancelResponse {
-        let mut runs = self.inner.runs.lock().await;
-        if let Some(record) = runs.get_mut(&params.run_id)
-            && record.connection_id == connection_id
-            && record.state == RunState::Running
-            && !record.cancellation.is_cancelled()
+        let response = remote::decode_json_response::<RemoteWorkflowExecution>(response).await?;
+        if response.workflow_id.to_string() != workflow_id
+            || response.execution_id <= 0
+            || response.status.trim().is_empty()
         {
-            record.state = RunState::Cancelled;
-            record.cancellation.cancel();
-            return AgentPlatformRunCancelResponse { cancelled: true };
+            return Err(internal_error(
+                "Agent Platform Workflow execution response was invalid",
+            ));
         }
-        AgentPlatformRunCancelResponse { cancelled: false }
-    }
-
-    pub(crate) async fn connection_closed(&self, connection_id: ConnectionId) {
-        self.inner.admission.connection_closed(connection_id).await;
-        let mut runs = self.inner.runs.lock().await;
-        for record in runs.values_mut() {
-            if record.connection_id == connection_id && record.state == RunState::Running {
-                record.state = RunState::Cancelled;
-                record.cancellation.cancel();
-            }
-        }
-    }
-
-    async fn begin_run_finalization(&self, run_id: &str) -> bool {
-        let mut runs = self.inner.runs.lock().await;
-        let Some(record) = runs.get_mut(run_id) else {
-            return false;
-        };
-        if record.state != RunState::Running || record.cancellation.is_cancelled() {
-            if record.cancellation.is_cancelled() {
-                record.state = RunState::Cancelled;
-            }
-            return false;
-        }
-        record.state = RunState::Finalizing;
-        true
-    }
-
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "session reads must not race with execution or clearing the same Agent history"
-    )]
-    pub(crate) async fn session_read(
-        &self,
-        mut params: AgentPlatformSessionParams,
-    ) -> Result<AgentPlatformSessionReadResponse, JSONRPCErrorError> {
-        validate_session_params(&params)?;
-        let user = self.verify_user(&params.access_token).await?;
-        params.agent_id = self
-            .verify_agent_access(
-                &params.access_token,
-                &params.agent_id,
-                AgentAccessRequirement::Owned,
-            )
-            .await?;
-        let session_lock = self
-            .session_lock(user.id, &params.thread_id, &params.agent_id)
-            .await;
-        let _guard = session_lock.try_lock_owned().map_err(|_| {
-            remote_error(
-                StatusCode::CONFLICT,
-                "Agent Platform session already has an active operation",
-            )
-        })?;
-        let session = self
-            .load_session(user.id, &params.thread_id, &params.agent_id)
-            .await?;
-        Ok(AgentPlatformSessionReadResponse {
-            messages: session.messages,
-        })
-    }
-
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "session clearing must not race with execution or reading the same Agent history"
-    )]
-    pub(crate) async fn session_clear(
-        &self,
-        mut params: AgentPlatformSessionParams,
-    ) -> Result<AgentPlatformSessionClearResponse, JSONRPCErrorError> {
-        validate_session_params(&params)?;
-        let user = self.verify_user(&params.access_token).await?;
-        params.agent_id = self
-            .verify_agent_access(
-                &params.access_token,
-                &params.agent_id,
-                AgentAccessRequirement::Owned,
-            )
-            .await?;
-        let session_lock = self
-            .session_lock(user.id, &params.thread_id, &params.agent_id)
-            .await;
-        let _guard = session_lock.try_lock_owned().map_err(|_| {
-            remote_error(
-                StatusCode::CONFLICT,
-                "Agent Platform session already has an active operation",
-            )
-        })?;
-        let path = self.session_path(user.id, &params.thread_id, &params.agent_id);
-        match fs::remove_file(path).await {
-            Ok(()) => Ok(AgentPlatformSessionClearResponse { cleared: true }),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                Ok(AgentPlatformSessionClearResponse { cleared: false })
-            }
-            Err(error) => Err(internal_error(error.to_string())),
-        }
+        Ok(response.into())
     }
 }
 
@@ -495,20 +238,35 @@ impl From<RemoteAgentInfo> for AgentPlatformAgentInfoResponse {
     }
 }
 
-impl From<RemoteChatResponse> for AgentPlatformChatResponse {
-    fn from(value: RemoteChatResponse) -> Self {
+impl From<RemoteWorkflowInfo> for AgentPlatformWorkflowInfoResponse {
+    fn from(value: RemoteWorkflowInfo) -> Self {
         Self {
-            agent_id: value.agent_id,
-            message: value.message,
-            thoughts: value.thoughts,
-            skills_used: value.skills_used,
-            resource_events: value.resource_events,
-            tokens: crewon_app_server_protocol::AgentPlatformTokenUsage {
-                prompt_tokens: value.tokens.prompt_tokens,
-                completion_tokens: value.tokens.completion_tokens,
-                total_tokens: value.tokens.total_tokens,
-            },
-            duration_ms: value.duration_ms,
+            id: value.id,
+            name: value.name,
+            description: value.description,
+            is_published: value.is_published,
+            version: value.version,
+            input_variables: value.input_variables,
+            max_concurrency: value.max_concurrency,
+            active_connections: value.active_connections,
+        }
+    }
+}
+
+impl From<RemoteWorkflowExecution> for AgentPlatformWorkflowExecuteResponse {
+    fn from(value: RemoteWorkflowExecution) -> Self {
+        Self {
+            workflow_id: value.workflow_id,
+            execution_id: value.execution_id,
+            status: value.status,
+            outputs: value.outputs,
+            started_at: value.started_at,
+            finished_at: value.finished_at,
+            duration_seconds: value.duration_seconds,
+            executed_nodes: value.executed_nodes,
+            node_results: value.node_results,
+            error: value.error,
+            active_connections: value.active_connections,
         }
     }
 }

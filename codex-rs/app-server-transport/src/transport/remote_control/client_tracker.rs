@@ -168,6 +168,7 @@ impl ClientTracker {
                 self.send_transport_event(TransportEvent::ConnectionOpened {
                     connection_id,
                     origin: ConnectionOrigin::RemoteControl,
+                    authentication: super::super::TransportAuthentication::ConnectionScoped,
                     writer: writer_tx,
                     disconnect_sender: Some(disconnect_token.clone()),
                 })

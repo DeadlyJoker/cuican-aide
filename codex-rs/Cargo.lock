@@ -2010,6 +2010,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "async-trait",
  "base64 0.22.1",
  "crewon-arg0",
  "crewon-config",
@@ -2022,6 +2023,7 @@ dependencies = [
  "crewon-model-provider-info",
  "crewon-models-manager",
  "crewon-protocol",
+ "crewon-thread-store",
  "crewon-utils-absolute-path",
  "crewon-utils-cargo-bin",
  "ctor 0.6.3",
@@ -2194,6 +2196,7 @@ dependencies = [
  "crewon-app-server-protocol",
  "crewon-app-server-transport",
  "crewon-arg0",
+ "crewon-artifact",
  "crewon-backend-client",
  "crewon-chatgpt",
  "crewon-cloud-config",
@@ -2223,14 +2226,20 @@ dependencies = [
  "crewon-models-manager",
  "crewon-otel",
  "crewon-plugin",
+ "crewon-policy",
  "crewon-protocol",
+ "crewon-provider-agent-platform",
+ "crewon-provider-transport",
+ "crewon-resource-federation",
  "crewon-rmcp-client",
  "crewon-rollout",
  "crewon-sandboxing",
  "crewon-scene-runtime",
+ "crewon-secrets",
  "crewon-shell-command",
  "crewon-skills-extension",
  "crewon-state",
+ "crewon-task-runtime",
  "crewon-thread-store",
  "crewon-tools",
  "crewon-utils-absolute-path",
@@ -2245,6 +2254,7 @@ dependencies = [
  "flate2",
  "futures",
  "hmac 0.12.1",
+ "jsonwebtoken",
  "opentelemetry",
  "opentelemetry_sdk",
  "pretty_assertions",
@@ -2402,6 +2412,19 @@ dependencies = [
  "pretty_assertions",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "crewon-artifact"
+version = "0.0.0"
+dependencies = [
+ "crewon-policy",
+ "crewon-resource-federation",
+ "crewon-task-runtime",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -3550,6 +3573,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "crewon-policy"
+version = "0.0.0"
+dependencies = [
+ "crewon-resource-federation",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "crewon-process-hardening"
 version = "0.0.0"
 dependencies = [
@@ -3612,12 +3646,52 @@ dependencies = [
 ]
 
 [[package]]
+name = "crewon-provider-agent-platform"
+version = "0.0.0"
+dependencies = [
+ "crewon-provider-transport",
+ "crewon-resource-federation",
+ "crewon-utils-cargo-bin",
+ "jsonwebtoken",
+ "pretty_assertions",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+ "wiremock",
+ "zeroize",
+]
+
+[[package]]
+name = "crewon-provider-transport"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "pretty_assertions",
+ "reqwest 0.12.28",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
 name = "crewon-realtime-webrtc"
 version = "0.0.0"
 dependencies = [
  "libwebrtc",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "crewon-resource-federation"
+version = "0.0.0"
+dependencies = [
+ "pretty_assertions",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -3849,12 +3923,24 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sqlx",
  "strum",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "crewon-task-runtime"
+version = "0.0.0"
+dependencies = [
+ "crewon-resource-federation",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]

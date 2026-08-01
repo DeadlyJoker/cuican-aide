@@ -57,6 +57,9 @@ use crewon_app_server_protocol::OfficeDeleteParams;
 use crewon_app_server_protocol::OfficeDeleteResponse;
 use crewon_app_server_protocol::OfficeListParams;
 use crewon_app_server_protocol::OfficeListResponse;
+use crewon_app_server_protocol::OfficeManagerEnsureParams;
+use crewon_app_server_protocol::OfficeManagerEnsureResponse;
+use crewon_app_server_protocol::OfficeManagerEnsureStatus;
 use crewon_app_server_protocol::OfficeMemberAddParams;
 use crewon_app_server_protocol::OfficeMemberAddResponse;
 use crewon_app_server_protocol::OfficeMemberContextPreviewParams;
@@ -67,6 +70,7 @@ use crewon_app_server_protocol::OfficeMemoryListParams;
 use crewon_app_server_protocol::OfficeMemoryListResponse;
 use crewon_app_server_protocol::OfficeMessageSendParams;
 use crewon_app_server_protocol::OfficeMessageSendResponse;
+use crewon_app_server_protocol::OfficeMessageSubmitParams;
 use crewon_app_server_protocol::OfficeReadParams;
 use crewon_app_server_protocol::OfficeReadResponse;
 use crewon_app_server_protocol::OfficeRunCancelParams;
@@ -125,8 +129,138 @@ const AUTOMATION_RUNS_DIRECTORY: &str = "automation-runs";
 
 #[path = "crewon_domain_office_agent_profile.rs"]
 mod office_agent_profile;
+#[path = "crewon_domain_office_authority_lock.rs"]
+mod office_authority_lock;
+#[allow(
+    dead_code,
+    reason = "preserves the server-owned field boundary used by the full Office storage path"
+)]
+mod office_automation_binding {
+    use crewon_app_server_protocol::JSONRPCErrorError;
+    use serde_json::Value as JsonValue;
+
+    use crate::error_code::invalid_params;
+
+    pub(super) fn preserve_canonical_bindings(
+        latest: Option<&JsonValue>,
+        proposed: &mut JsonValue,
+    ) -> Result<bool, JSONRPCErrorError> {
+        let latest_bindings = latest
+            .and_then(|config| config.get("workspace"))
+            .and_then(|workspace| workspace.get("automationBindings"))
+            .cloned();
+        let proposed_bindings = proposed
+            .get("workspace")
+            .and_then(|workspace| workspace.get("automationBindings"))
+            .cloned();
+        if proposed_bindings.is_some() && proposed_bindings != latest_bindings {
+            return Err(invalid_params(
+                "workspace.automationBindings is server-owned",
+            ));
+        }
+        let Some(latest_bindings) = latest_bindings else {
+            return Ok(false);
+        };
+        if proposed_bindings.is_some() {
+            return Ok(false);
+        }
+        let workspace = proposed
+            .get_mut("workspace")
+            .and_then(JsonValue::as_object_mut)
+            .ok_or_else(|| invalid_params("office config is missing workspace"))?;
+        workspace.insert("automationBindings".to_string(), latest_bindings);
+        Ok(true)
+    }
+}
+#[path = "crewon_domain_office_legacy_record_mutation.rs"]
+mod office_legacy_record_mutation;
+#[path = "crewon_domain_office_manager.rs"]
+mod office_manager;
+#[path = "crewon_domain_office_message.rs"]
+#[allow(
+    dead_code,
+    reason = "message receipt recovery helpers land incrementally around the active submit path"
+)]
+mod office_message;
+#[path = "crewon_domain_office_message_intent.rs"]
+mod office_message_intent;
+#[path = "crewon_domain_office_message_receipt.rs"]
+#[allow(
+    dead_code,
+    reason = "the receipt mirror is non-authoritative and includes recovery helpers for the next stage"
+)]
+mod office_message_receipt;
+#[cfg(test)]
+#[path = "crewon_domain_office_migration_importer.rs"]
+mod office_migration_importer;
+#[cfg(test)]
+#[path = "crewon_domain_office_migration_snapshot.rs"]
+mod office_migration_snapshot;
+#[path = "crewon_domain_office_migration_targets.rs"]
+mod office_migration_targets;
+#[path = "crewon_domain_office_record_identity.rs"]
+mod office_record_identity;
+#[path = "crewon_domain_office_record_lock.rs"]
+mod office_record_lock;
 #[path = "crewon_domain_office_run.rs"]
 mod office_run;
+#[path = "crewon_domain_office_runtime_authority.rs"]
+#[allow(
+    dead_code,
+    reason = "member runtime authority is compiled with storage before member creation is switched over"
+)]
+mod office_runtime_authority;
+#[path = "crewon_domain_office_runtime_owner_reconciliation.rs"]
+mod office_runtime_owner_reconciliation;
+#[path = "crewon_domain_office_runtime_owner_registry.rs"]
+#[allow(
+    dead_code,
+    reason = "the owner registry supports message storage now and member runtime lifecycle next"
+)]
+mod office_runtime_owner_registry;
+#[path = "crewon_domain_office_runtime_owner_registry_config.rs"]
+mod office_runtime_owner_registry_config;
+#[path = "crewon_domain_office_runtime_owner_registry_store.rs"]
+mod office_runtime_owner_registry_store;
+#[path = "crewon_domain_office_storage.rs"]
+#[allow(
+    dead_code,
+    unused_imports,
+    reason = "the canonical storage module contains bounded recovery APIs not all used by the minimum submit path"
+)]
+mod office_storage;
+#[path = "crewon_domain_office_workspace_identity.rs"]
+#[allow(
+    dead_code,
+    reason = "workspace identity supports canonical receipt storage and staged runtime migration"
+)]
+mod office_workspace_identity;
+
+#[allow(
+    dead_code,
+    reason = "used by canonical storage branches staged with member runtime authority"
+)]
+fn office_runtime_authority_error(
+    error: office_runtime_authority::RepairedRuntimeAuthorityError,
+) -> JSONRPCErrorError {
+    match error {
+        office_runtime_authority::RepairedRuntimeAuthorityError::ConflictingBinding {
+            agent_id,
+        } => invalid_params(format!(
+            "Office runtime binding conflicts for agent {agent_id}"
+        )),
+        office_runtime_authority::RepairedRuntimeAuthorityError::ForgedAuthority { agent_id } => {
+            invalid_params(format!(
+                "Office runtime authority is invalid for agent {agent_id}"
+            ))
+        }
+        office_runtime_authority::RepairedRuntimeAuthorityError::TooManyBindings { limit } => {
+            invalid_params(format!(
+                "Office runtime bindings exceed the limit of {limit}"
+            ))
+        }
+    }
+}
 
 pub(crate) struct OfficeAutoDispatchIntentDispatched<'a> {
     pub(crate) run_id: &'a str,
@@ -136,6 +270,17 @@ pub(crate) struct OfficeAutoDispatchIntentDispatched<'a> {
     pub(crate) file_path: &'a str,
     pub(crate) dispatched_thread_id: &'a str,
     pub(crate) dispatched_turn_id: &'a str,
+}
+
+pub(crate) use office_message::OfficeMessageDispatchMode;
+pub(crate) use office_message::OfficeMessageSubmitAction;
+pub(crate) use office_message::PreparedOfficeMessageSubmit;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OfficeAutoDispatchIntentRef {
+    pub(crate) intent_id: String,
+    pub(crate) source_thread_id: String,
+    pub(crate) source_turn_id: String,
 }
 
 pub(crate) struct OfficeVerificationDispatchStarted<'a> {
@@ -224,12 +369,192 @@ impl DomainKind {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct CrewonDomainRequestProcessor;
+#[derive(Clone)]
+pub(crate) struct CrewonDomainRequestProcessor {
+    office_records: office_legacy_record_mutation::OfficeLegacyRecordMutator,
+}
+
+#[must_use = "a permitted Office dispatch must be committed as started or failed"]
+pub(crate) struct PermittedOfficeDispatch<T> {
+    prepared: T,
+    permit: office_legacy_record_mutation::OfficeDispatchPermit,
+}
+
+pub(crate) type PermittedOfficeDelegationDispatch =
+    PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>;
+
+impl<T> PermittedOfficeDispatch<T> {
+    pub(crate) fn prepared(&self) -> &T {
+        &self.prepared
+    }
+
+    pub(crate) fn record_id(&self) -> &str {
+        self.permit.record_id()
+    }
+
+    fn into_parts(self) -> (T, office_legacy_record_mutation::OfficeDispatchPermit) {
+        (self.prepared, self.permit)
+    }
+
+    #[cfg(test)]
+    fn into_prepared_for_test(self) -> T {
+        self.prepared
+    }
+}
+
+impl PermittedOfficeDispatch<office_run::PreparedOfficeVerificationDispatch> {
+    pub(crate) fn prepared_mut(&mut self) -> &mut office_run::PreparedOfficeVerificationDispatch {
+        &mut self.prepared
+    }
+}
+
+impl PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch> {
+    pub(crate) fn prepared_mut(&mut self) -> &mut office_run::PreparedOfficeDelegationDispatch {
+        &mut self.prepared
+    }
+}
 
 impl CrewonDomainRequestProcessor {
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
-        Self
+        Self {
+            office_records:
+                office_legacy_record_mutation::OfficeLegacyRecordMutator::legacy_unfenced(),
+        }
+    }
+
+    pub(crate) fn migration_unavailable() -> Self {
+        Self {
+            office_records:
+                office_legacy_record_mutation::OfficeLegacyRecordMutator::migration_unavailable(),
+        }
+    }
+
+    pub(crate) fn with_migration_state(
+        migration_state: crewon_rollout::state_db::StateDbHandle,
+    ) -> Self {
+        Self {
+            office_records:
+                office_legacy_record_mutation::OfficeLegacyRecordMutator::with_migration_state(
+                    migration_state,
+                ),
+        }
+    }
+
+    async fn lock_auto_dispatch_mutation(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        source_turn_id: &str,
+    ) -> Result<office_legacy_record_mutation::OfficeLegacyMutationGuard, JSONRPCErrorError> {
+        let authority = self.office_records.lock_authority(cwd).await?;
+        let configs = office_migration_targets::configs_referencing_turn(
+            cwd,
+            source_thread_id,
+            source_turn_id,
+        )
+        .await?;
+        for config in configs {
+            authority
+                .ensure_config_writable(&self.office_records, cwd, &config)
+                .await?;
+        }
+        Ok(authority)
+    }
+
+    async fn lock_auto_dispatch_drain(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        source_turn_id: &str,
+    ) -> Result<office_legacy_record_mutation::OfficeLegacyMutationGuard, JSONRPCErrorError> {
+        let authority = self.office_records.lock_authority(cwd).await?;
+        let configs = office_migration_targets::configs_referencing_turn(
+            cwd,
+            source_thread_id,
+            source_turn_id,
+        )
+        .await?;
+        for config in configs {
+            authority
+                .ensure_config_drainable(&self.office_records, cwd, &config)
+                .await?;
+        }
+        Ok(authority)
+    }
+
+    async fn permit_delegation_dispatch(
+        &self,
+        authority: office_legacy_record_mutation::OfficeLegacyMutationGuard,
+        prepared: office_run::PreparedOfficeDelegationDispatch,
+    ) -> Result<
+        PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        JSONRPCErrorError,
+    > {
+        let permit = authority
+            .into_dispatch_permit(
+                &self.office_records,
+                &prepared.cwd,
+                &prepared.config,
+                office_legacy_record_mutation::OfficeDispatchAction::Delegation {
+                    run_id: prepared.run_id.clone(),
+                    delegation_id: prepared.delegation_id.clone(),
+                },
+            )
+            .await?;
+        Ok(PermittedOfficeDispatch { prepared, permit })
+    }
+
+    async fn permit_run_dispatch(
+        &self,
+        authority: office_legacy_record_mutation::OfficeLegacyMutationGuard,
+        prepared: office_run::PreparedOfficeRun,
+    ) -> Result<PermittedOfficeDispatch<office_run::PreparedOfficeRun>, JSONRPCErrorError> {
+        let permit = authority
+            .into_dispatch_permit(
+                &self.office_records,
+                &prepared.cwd,
+                &prepared.config,
+                office_legacy_record_mutation::OfficeDispatchAction::Run {
+                    run_id: prepared.run_id.clone(),
+                },
+            )
+            .await?;
+        Ok(PermittedOfficeDispatch { prepared, permit })
+    }
+
+    async fn permit_verification_dispatch(
+        &self,
+        authority: office_legacy_record_mutation::OfficeLegacyMutationGuard,
+        prepared: office_run::PreparedOfficeVerificationDispatch,
+    ) -> Result<
+        PermittedOfficeDispatch<office_run::PreparedOfficeVerificationDispatch>,
+        JSONRPCErrorError,
+    > {
+        let permit = authority
+            .into_dispatch_permit(
+                &self.office_records,
+                &prepared.cwd,
+                &prepared.config,
+                office_legacy_record_mutation::OfficeDispatchAction::Verification {
+                    run_id: prepared.run_id.clone(),
+                    verification_check_id: prepared.verification_check_id.clone(),
+                },
+            )
+            .await?;
+        Ok(PermittedOfficeDispatch { prepared, permit })
+    }
+
+    pub(crate) async fn sync_office_run_updates_for_thread_turn(
+        &self,
+        cwd: &str,
+        thread_id: &str,
+        turn: &Turn,
+    ) -> Result<Vec<OfficeRunSyncUpdate>, JSONRPCErrorError> {
+        let _authority = self
+            .lock_auto_dispatch_drain(cwd, thread_id, &turn.id)
+            .await?;
+        office_run::drain_thread_turn_updates(cwd, thread_id, turn).await
     }
 
     pub(crate) async fn agent_list(
@@ -331,7 +656,8 @@ impl CrewonDomainRequestProcessor {
         &self,
         params: OfficeSaveParams,
     ) -> Result<OfficeSaveResponse, JSONRPCErrorError> {
-        save_record(DomainKind::Office, &params.cwd, params.config)
+        self.office_records
+            .save(&params.cwd, params.config)
             .await
             .map(|file_path| OfficeSaveResponse { file_path })
     }
@@ -341,8 +667,10 @@ impl CrewonDomainRequestProcessor {
         params: OfficeCreateParams,
     ) -> Result<OfficeCreateResponse, JSONRPCErrorError> {
         let cwd = params.cwd.clone();
-        let config = create_office_config(params)?;
-        save_record(DomainKind::Office, &cwd, config.clone())
+        let mut config = create_office_config(params)?;
+        office_record_identity::assign_new(&mut config)?;
+        self.office_records
+            .create(&cwd, config.clone())
             .await
             .map(|file_path| OfficeCreateResponse { file_path, config })
     }
@@ -360,6 +688,29 @@ impl CrewonDomainRequestProcessor {
         .map(|record| OfficeReadResponse { record })
     }
 
+    pub(crate) async fn office_manager_ensure_prepare(
+        &self,
+        params: OfficeManagerEnsureParams,
+    ) -> Result<office_manager::PreparedOfficeManagerEnsure, JSONRPCErrorError> {
+        office_manager::prepare(&self.office_records, params).await
+    }
+
+    pub(crate) async fn office_manager_ensure_reused(
+        &self,
+        prepared: office_manager::PreparedOfficeManagerEnsure,
+        status: OfficeManagerEnsureStatus,
+    ) -> Result<OfficeManagerEnsureResponse, JSONRPCErrorError> {
+        office_manager::reused(&self.office_records, prepared, status).await
+    }
+
+    pub(crate) async fn office_manager_ensure_commit(
+        &self,
+        prepared: office_manager::PreparedOfficeManagerEnsure,
+        replacement_thread_id: &str,
+    ) -> Result<OfficeManagerEnsureResponse, JSONRPCErrorError> {
+        office_manager::commit(&self.office_records, prepared, replacement_thread_id).await
+    }
+
     pub(crate) async fn office_message_send(
         &self,
         params: OfficeMessageSendParams,
@@ -371,29 +722,176 @@ impl CrewonDomainRequestProcessor {
             params.locale.as_deref(),
             params.workspace,
         )?;
-        save_record(DomainKind::Office, &params.cwd, config.clone())
+        self.office_records
+            .save(&params.cwd, config.clone())
             .await
             .map(|file_path| OfficeMessageSendResponse { file_path, config })
     }
 
+    pub(crate) async fn office_message_submit_resolve(
+        &self,
+        params: OfficeMessageSubmitParams,
+    ) -> Result<office_message::ResolvedOfficeMessageSubmit, JSONRPCErrorError> {
+        let (authority, latest) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        let office_record_id = office_storage::office_record_id(&latest)
+            .ok_or_else(|| invalid_params("Office workspace has no canonical recordId"))?
+            .to_string();
+        let manager_thread_id = office_thread_id(&latest)
+            .map(str::trim)
+            .filter(|thread_id| !thread_id.is_empty())
+            .ok_or_else(|| invalid_params("Office workspace has no canonical manager threadId"))?
+            .to_string();
+        drop(authority);
+        Ok(office_message::ResolvedOfficeMessageSubmit {
+            params: OfficeMessageSubmitParams {
+                config: latest,
+                ..params
+            },
+            expected_office_record_id: office_record_id,
+            manager_thread_id,
+        })
+    }
+
+    pub(crate) async fn office_message_submit_prepare_resolved(
+        &self,
+        resolved: office_message::ResolvedOfficeMessageSubmit,
+    ) -> Result<office_message::PreparedOfficeMessageSubmit, JSONRPCErrorError> {
+        office_message::prepare(resolved).await
+    }
+
+    pub(crate) async fn office_message_latest_exact(
+        &self,
+        cwd: &str,
+        config: &JsonValue,
+    ) -> Result<OfficeRunSyncUpdate, JSONRPCErrorError> {
+        let (authority, latest) = self
+            .office_records
+            .lock_resolved_config_mutation(cwd, config)
+            .await?;
+        drop(authority);
+        let file_path = self.office_records.save(cwd, latest.clone()).await?;
+        Ok(OfficeRunSyncUpdate {
+            file_path,
+            config: latest,
+        })
+    }
+
+    pub(crate) async fn office_message_mark_run_started(
+        &self,
+        prepared: &office_message::PreparedOfficeMessageSubmit,
+        run_id: &str,
+        thread_id: &str,
+        turn_id: &str,
+    ) -> Result<OfficeRunSyncUpdate, JSONRPCErrorError> {
+        office_message::mark_run_started(prepared, run_id, thread_id, turn_id).await
+    }
+
+    pub(crate) fn office_message_run_id_for_client(
+        &self,
+        config: &JsonValue,
+        client_user_message_id: &str,
+    ) -> Result<String, JSONRPCErrorError> {
+        office_message::run_id_for_client_message(config, client_user_message_id)
+    }
+
+    pub(crate) fn office_message_run_has_turn_for_client(
+        &self,
+        config: &JsonValue,
+        client_user_message_id: &str,
+    ) -> bool {
+        office_message::run_has_turn_for_client_message(config, client_user_message_id)
+    }
+
+    pub(crate) async fn office_message_mark_queued(
+        &self,
+        prepared: &office_message::PreparedOfficeMessageSubmit,
+        after_run_id: &str,
+    ) -> Result<(OfficeRunSyncUpdate, u32), JSONRPCErrorError> {
+        office_message::mark_queued(prepared, after_run_id).await
+    }
+
+    pub(crate) async fn office_message_mark_failed(
+        &self,
+        prepared: &office_message::PreparedOfficeMessageSubmit,
+        message: &str,
+    ) -> Result<OfficeRunSyncUpdate, JSONRPCErrorError> {
+        office_message::mark_failed(prepared, message).await
+    }
+
+    pub(crate) async fn office_submitted_message_run_prepare(
+        &self,
+        mut params: OfficeRunParams,
+        dispatch_receipt_id: String,
+    ) -> Result<PermittedOfficeDispatch<office_run::PreparedOfficeRun>, JSONRPCErrorError> {
+        let (authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
+        let prepared = office_run::prepare_submitted_message(params, dispatch_receipt_id).await?;
+        self.permit_run_dispatch(authority, prepared).await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_run_prepare(
         &self,
         params: OfficeRunParams,
     ) -> Result<office_run::PreparedOfficeRun, JSONRPCErrorError> {
-        office_run::prepare(params).await
+        Ok(self
+            .office_run_prepare_permitted(params)
+            .await?
+            .into_prepared_for_test())
     }
 
+    pub(crate) async fn office_run_prepare_permitted(
+        &self,
+        mut params: OfficeRunParams,
+    ) -> Result<PermittedOfficeDispatch<office_run::PreparedOfficeRun>, JSONRPCErrorError> {
+        let (authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
+        let prepared = office_run::prepare(params).await?;
+        self.permit_run_dispatch(authority, prepared).await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_run_retry_prepare(
         &self,
         params: OfficeRunRetryParams,
     ) -> Result<office_run::PreparedOfficeRun, JSONRPCErrorError> {
-        office_run::prepare_retry(params).await
+        Ok(self
+            .office_run_retry_prepare_permitted(params)
+            .await?
+            .into_prepared_for_test())
+    }
+
+    pub(crate) async fn office_run_retry_prepare_permitted(
+        &self,
+        mut params: OfficeRunRetryParams,
+    ) -> Result<PermittedOfficeDispatch<office_run::PreparedOfficeRun>, JSONRPCErrorError> {
+        let (authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
+        let prepared = office_run::prepare_retry(params).await?;
+        self.permit_run_dispatch(authority, prepared).await
     }
 
     pub(crate) async fn office_run_cancel_prepare(
         &self,
-        params: OfficeRunCancelParams,
+        mut params: OfficeRunCancelParams,
     ) -> Result<office_run::PreparedOfficeRunCancel, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::prepare_cancel(params).await
     }
 
@@ -404,13 +902,22 @@ impl CrewonDomainRequestProcessor {
         run_id: &str,
         turn_id: &str,
     ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(cwd, &config)
+            .await?;
         office_run::mark_cancel_requested(cwd, config, run_id, turn_id).await
     }
 
     pub(crate) async fn office_delegation_cancel_prepare(
         &self,
-        params: OfficeDelegationCancelParams,
+        mut params: OfficeDelegationCancelParams,
     ) -> Result<office_run::PreparedOfficeChildCancel, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::prepare_delegation_cancel(params).await
     }
 
@@ -422,14 +929,23 @@ impl CrewonDomainRequestProcessor {
         delegation_id: &str,
         turn_id: &str,
     ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(cwd, &config)
+            .await?;
         office_run::mark_delegation_cancel_requested(cwd, config, run_id, delegation_id, turn_id)
             .await
     }
 
     pub(crate) async fn office_verification_cancel_prepare(
         &self,
-        params: OfficeVerificationCancelParams,
+        mut params: OfficeVerificationCancelParams,
     ) -> Result<office_run::PreparedOfficeChildCancel, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::prepare_verification_cancel(params).await
     }
 
@@ -441,6 +957,10 @@ impl CrewonDomainRequestProcessor {
         verification_check_id: &str,
         turn_id: &str,
     ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(cwd, &config)
+            .await?;
         office_run::mark_verification_cancel_requested(
             cwd,
             config,
@@ -451,6 +971,7 @@ impl CrewonDomainRequestProcessor {
         .await
     }
 
+    #[cfg(test)]
     pub(crate) async fn office_run_mark_started(
         &self,
         cwd: &str,
@@ -458,9 +979,54 @@ impl CrewonDomainRequestProcessor {
         run_id: &str,
         turn_id: &str,
     ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(cwd, &config)
+            .await?;
         office_run::mark_started(cwd, config, run_id, turn_id).await
     }
 
+    pub(crate) async fn office_run_mark_started_permitted(
+        &self,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeRun>,
+        turn_id: &str,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (prepared, permit) = permitted.into_parts();
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
+        office_run::mark_started(&prepared.cwd, prepared.config, &prepared.run_id, turn_id).await
+    }
+
+    pub(crate) async fn office_run_recover_started(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        turn_id: &str,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(cwd, &config)
+            .await?;
+        office_run::mark_started(cwd, config, run_id, turn_id).await
+    }
+
+    pub(crate) async fn office_run_recovery_mark_failed(
+        &self,
+        cwd: &str,
+        config: JsonValue,
+        run_id: &str,
+        message: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(cwd, &config)
+            .await?;
+        office_run::mark_failed(cwd, config, run_id, message).await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_run_mark_failed(
         &self,
         cwd: &str,
@@ -468,13 +1034,34 @@ impl CrewonDomainRequestProcessor {
         run_id: &str,
         message: &str,
     ) -> Result<(), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(cwd, &config)
+            .await?;
         office_run::mark_failed(cwd, config, run_id, message).await
+    }
+
+    pub(crate) async fn office_run_mark_failed_permitted(
+        &self,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeRun>,
+        message: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        let (prepared, permit) = permitted.into_parts();
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
+        office_run::mark_failed(&prepared.cwd, prepared.config, &prepared.run_id, message).await
     }
 
     pub(crate) async fn office_run_sync(
         &self,
-        params: OfficeRunSyncParams,
+        mut params: OfficeRunSyncParams,
     ) -> Result<office_run::SyncedOfficeRun, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::sync(params).await
     }
 
@@ -487,8 +1074,13 @@ impl CrewonDomainRequestProcessor {
 
     pub(crate) async fn office_memory_decide(
         &self,
-        params: OfficeMemoryDecideParams,
+        mut params: OfficeMemoryDecideParams,
     ) -> Result<OfficeMemoryDecideResponse, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::decide_memory(params).await
     }
 
@@ -499,66 +1091,278 @@ impl CrewonDomainRequestProcessor {
         office_run::preview_member_context(params).await
     }
 
+    #[cfg(test)]
     pub(crate) async fn office_delegation_dispatch_prepare(
         &self,
-        params: OfficeDelegationDispatchParams,
+        mut params: OfficeDelegationDispatchParams,
     ) -> Result<office_run::PreparedOfficeDelegationDispatch, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::prepare_delegation_dispatch(params).await
     }
 
+    pub(crate) async fn office_delegation_dispatch_prepare_permitted(
+        &self,
+        mut params: OfficeDelegationDispatchParams,
+    ) -> Result<
+        PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        JSONRPCErrorError,
+    > {
+        let (authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
+        let prepared = office_run::prepare_delegation_dispatch(params).await?;
+        self.permit_delegation_dispatch(authority, prepared).await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_delegation_dispatch_next_prepare(
         &self,
-        params: OfficeDelegationDispatchNextParams,
+        mut params: OfficeDelegationDispatchNextParams,
     ) -> Result<office_run::PreparedOfficeDelegationDispatch, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::prepare_next_delegation_dispatch(params).await
     }
 
+    pub(crate) async fn office_delegation_dispatch_next_prepare_permitted(
+        &self,
+        mut params: OfficeDelegationDispatchNextParams,
+    ) -> Result<
+        PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        JSONRPCErrorError,
+    > {
+        let (authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
+        let prepared = office_run::prepare_next_delegation_dispatch(params).await?;
+        self.permit_delegation_dispatch(authority, prepared).await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_delegation_retry_prepare(
         &self,
-        params: OfficeDelegationRetryParams,
+        mut params: OfficeDelegationRetryParams,
     ) -> Result<office_run::PreparedOfficeDelegationDispatch, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::prepare_delegation_retry(params).await
     }
 
+    pub(crate) async fn office_delegation_retry_prepare_permitted(
+        &self,
+        mut params: OfficeDelegationRetryParams,
+    ) -> Result<
+        PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        JSONRPCErrorError,
+    > {
+        let (authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
+        let prepared = office_run::prepare_delegation_retry(params).await?;
+        self.permit_delegation_dispatch(authority, prepared).await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_verification_dispatch_next_prepare(
         &self,
-        params: OfficeVerificationDispatchNextParams,
+        mut params: OfficeVerificationDispatchNextParams,
     ) -> Result<office_run::PreparedOfficeVerificationDispatch, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::prepare_next_verification_dispatch(params).await
     }
 
+    pub(crate) async fn office_verification_dispatch_next_prepare_permitted(
+        &self,
+        mut params: OfficeVerificationDispatchNextParams,
+    ) -> Result<
+        PermittedOfficeDispatch<office_run::PreparedOfficeVerificationDispatch>,
+        JSONRPCErrorError,
+    > {
+        let (authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
+        let prepared = office_run::prepare_next_verification_dispatch(params).await?;
+        self.permit_verification_dispatch(authority, prepared).await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_verification_retry_prepare(
         &self,
-        params: OfficeVerificationRetryParams,
+        mut params: OfficeVerificationRetryParams,
     ) -> Result<office_run::PreparedOfficeVerificationDispatch, JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
         office_run::prepare_verification_retry(params).await
     }
 
-    pub(crate) async fn office_auto_delegation_dispatch_prepare_after_thread_turn(
+    pub(crate) async fn office_verification_retry_prepare_permitted(
+        &self,
+        mut params: OfficeVerificationRetryParams,
+    ) -> Result<
+        PermittedOfficeDispatch<office_run::PreparedOfficeVerificationDispatch>,
+        JSONRPCErrorError,
+    > {
+        let (authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(&params.cwd, &params.config)
+            .await?;
+        params.config = config;
+        let prepared = office_run::prepare_verification_retry(params).await?;
+        self.permit_verification_dispatch(authority, prepared).await
+    }
+
+    pub(crate) async fn office_auto_delegation_dispatch_prepare_after_thread_turn_permitted(
         &self,
         cwd: &str,
         thread_id: &str,
         turn: &Turn,
-    ) -> Result<Option<office_run::PreparedOfficeDelegationDispatch>, JSONRPCErrorError> {
-        office_run::prepare_auto_delegation_dispatch_after_thread_turn(cwd, thread_id, turn).await
+    ) -> Result<
+        Option<PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>>,
+        JSONRPCErrorError,
+    > {
+        let authority = self
+            .lock_auto_dispatch_mutation(cwd, thread_id, &turn.id)
+            .await?;
+        let Some(prepared) =
+            office_run::prepare_auto_delegation_dispatch_after_thread_turn(cwd, thread_id, turn)
+                .await?
+        else {
+            return Ok(None);
+        };
+        self.permit_delegation_dispatch(authority, prepared)
+            .await
+            .map(Some)
     }
 
+    pub(crate) async fn office_auto_delegation_dispatch_recovery_scan(
+        &self,
+        cwd: &str,
+        intent_id: &str,
+        source_thread_id: &str,
+        source_turn_id: &str,
+    ) -> Result<Option<office_run::ScannedOfficeDispatchRecovery>, JSONRPCErrorError> {
+        office_run::scan_exact_office_dispatch_recovery(
+            cwd,
+            intent_id,
+            source_thread_id,
+            source_turn_id,
+        )
+        .await
+    }
+
+    pub(crate) async fn office_auto_delegation_dispatch_recovery_prepare_permitted(
+        &self,
+        cwd: &str,
+        file_path: &str,
+        recovery: &super::crewon_domain_office_dispatch_recovery::LocatedOfficeDispatchRecovery,
+    ) -> Result<PermittedOfficeDelegationDispatch, JSONRPCErrorError> {
+        let authority = self.office_records.lock_authority(cwd).await?;
+        let reloaded: office_run::ReloadedOfficeDispatchRecovery =
+            office_run::reload_exact_office_dispatch_recovery(cwd, file_path, recovery).await?;
+        authority
+            .ensure_config_writable(&self.office_records, cwd, &reloaded.config)
+            .await?;
+        let prepared = office_run::prepare_recovered_delegation_dispatch(
+            cwd,
+            &reloaded.file_path,
+            &reloaded.recovery,
+        )
+        .await?;
+        self.permit_delegation_dispatch(authority, prepared).await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_auto_verification_dispatch_prepare_after_thread_turn(
         &self,
         cwd: &str,
         thread_id: &str,
         turn: &Turn,
     ) -> Result<Option<office_run::PreparedOfficeVerificationDispatch>, JSONRPCErrorError> {
+        let _authority = self
+            .lock_auto_dispatch_mutation(cwd, thread_id, &turn.id)
+            .await?;
         office_run::prepare_auto_verification_dispatch_after_thread_turn(cwd, thread_id, turn).await
     }
 
+    pub(crate) async fn office_auto_verification_dispatch_prepare_after_thread_turn_permitted(
+        &self,
+        cwd: &str,
+        thread_id: &str,
+        turn: &Turn,
+    ) -> Result<
+        Option<PermittedOfficeDispatch<office_run::PreparedOfficeVerificationDispatch>>,
+        JSONRPCErrorError,
+    > {
+        let authority = self
+            .lock_auto_dispatch_mutation(cwd, thread_id, &turn.id)
+            .await?;
+        let Some(prepared) =
+            office_run::prepare_auto_verification_dispatch_after_thread_turn(cwd, thread_id, turn)
+                .await?
+        else {
+            return Ok(None);
+        };
+        self.permit_verification_dispatch(authority, prepared)
+            .await
+            .map(Some)
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_auto_retry_prepare_after_thread_turn(
         &self,
         cwd: &str,
         thread_id: &str,
         turn: &Turn,
     ) -> Result<Option<office_run::PreparedOfficeRun>, JSONRPCErrorError> {
+        let _authority = self
+            .lock_auto_dispatch_mutation(cwd, thread_id, &turn.id)
+            .await?;
         office_run::prepare_auto_retry_after_thread_turn(cwd, thread_id, turn).await
+    }
+
+    pub(crate) async fn office_auto_retry_prepare_after_thread_turn_permitted(
+        &self,
+        cwd: &str,
+        thread_id: &str,
+        turn: &Turn,
+    ) -> Result<Option<PermittedOfficeDispatch<office_run::PreparedOfficeRun>>, JSONRPCErrorError>
+    {
+        let authority = self
+            .lock_auto_dispatch_mutation(cwd, thread_id, &turn.id)
+            .await?;
+        let Some(prepared) =
+            office_run::prepare_auto_retry_after_thread_turn(cwd, thread_id, turn).await?
+        else {
+            return Ok(None);
+        };
+        self.permit_run_dispatch(authority, prepared)
+            .await
+            .map(Some)
     }
 
     pub(crate) async fn office_auto_verification_automation_records_after_thread_turn(
@@ -567,6 +1371,9 @@ impl CrewonDomainRequestProcessor {
         thread_id: &str,
         turn: &Turn,
     ) -> Result<Vec<CrewonDomainConfigRecord>, JSONRPCErrorError> {
+        let _authority = self
+            .lock_auto_dispatch_mutation(cwd, thread_id, &turn.id)
+            .await?;
         office_run::auto_verification_automation_records_after_thread_turn(cwd, thread_id, turn)
             .await
     }
@@ -577,43 +1384,74 @@ impl CrewonDomainRequestProcessor {
         source_thread_id: &str,
         source_turn_id: &str,
         reason: &str,
-    ) -> Result<(), JSONRPCErrorError> {
-        office_run::queue_auto_dispatch_intent(cwd, source_thread_id, source_turn_id, reason).await
+    ) -> Result<OfficeAutoDispatchIntentRef, JSONRPCErrorError> {
+        let _authority = self
+            .lock_auto_dispatch_mutation(cwd, source_thread_id, source_turn_id)
+            .await?;
+        let intent_id =
+            office_run::queue_auto_dispatch_intent(cwd, source_thread_id, source_turn_id, reason)
+                .await?;
+        Ok(OfficeAutoDispatchIntentRef {
+            intent_id,
+            source_thread_id: source_thread_id.to_string(),
+            source_turn_id: source_turn_id.to_string(),
+        })
     }
 
     pub(crate) async fn office_auto_dispatch_pending_intents(
         &self,
         cwd: &str,
-    ) -> Result<Vec<(String, String)>, JSONRPCErrorError> {
+    ) -> Result<Vec<OfficeAutoDispatchIntentRef>, JSONRPCErrorError> {
         Ok(office_run::pending_auto_dispatch_intents(cwd)
             .await?
             .into_iter()
-            .map(|intent| (intent.source_thread_id, intent.source_turn_id))
+            .map(|intent| OfficeAutoDispatchIntentRef {
+                intent_id: intent.intent_id,
+                source_thread_id: intent.source_thread_id,
+                source_turn_id: intent.source_turn_id,
+            })
             .collect())
     }
 
     pub(crate) async fn office_auto_dispatch_intent_claim(
         &self,
         cwd: &str,
+        intent_id: &str,
         source_thread_id: &str,
         source_turn_id: &str,
         lease_id: &str,
     ) -> Result<bool, JSONRPCErrorError> {
-        office_run::claim_auto_dispatch_intent(cwd, source_thread_id, source_turn_id, lease_id)
-            .await
+        let _authority = self
+            .lock_auto_dispatch_mutation(cwd, source_thread_id, source_turn_id)
+            .await?;
+        office_run::claim_auto_dispatch_intent(
+            cwd,
+            intent_id,
+            source_thread_id,
+            source_turn_id,
+            lease_id,
+        )
+        .await
     }
 
     pub(crate) async fn office_auto_dispatch_intent_dispatched(
         &self,
         cwd: &str,
+        intent_id: &str,
         source_thread_id: &str,
         source_turn_id: &str,
+        lease_id: &str,
         dispatched: OfficeAutoDispatchIntentDispatched<'_>,
     ) -> Result<(), JSONRPCErrorError> {
+        let _authority = self
+            .lock_auto_dispatch_drain(cwd, source_thread_id, source_turn_id)
+            .await?;
         office_run::mark_auto_dispatch_intent_dispatched(
             cwd,
+            intent_id,
             source_thread_id,
             source_turn_id,
+            lease_id,
             office_run::AutoDispatchIntentDispatched {
                 run_id: dispatched.run_id,
                 dispatch_kind: dispatched.dispatch_kind,
@@ -627,26 +1465,202 @@ impl CrewonDomainRequestProcessor {
         .await
     }
 
+    pub(crate) async fn office_auto_dispatch_recovery_admitted(
+        &self,
+        cwd: &str,
+        file_path: &str,
+        expected: &super::crewon_domain_office_dispatch_recovery::LocatedOfficeDispatchRecovery,
+        lease_id: &str,
+    ) -> Result<office_run::ReloadedOfficeDispatchRecovery, JSONRPCErrorError> {
+        let authority = self.office_records.lock_authority(cwd).await?;
+        let reloaded =
+            office_run::reload_exact_office_dispatch_recovery(cwd, file_path, expected).await?;
+        authority
+            .ensure_config_drainable(&self.office_records, cwd, &reloaded.config)
+            .await?;
+        let turn_id = reloaded.recovery.turn_id.as_deref().ok_or_else(|| {
+            invalid_params("Office admitted dispatch recovery is missing its turn")
+        })?;
+        office_run::mark_auto_dispatch_intent_dispatched(
+            cwd,
+            &reloaded.recovery.intent_id,
+            &reloaded.recovery.source_thread_id,
+            &reloaded.recovery.source_turn_id,
+            lease_id,
+            office_run::AutoDispatchIntentDispatched {
+                run_id: &reloaded.recovery.run_id,
+                dispatch_kind: "delegation",
+                delegation_id: Some(&reloaded.recovery.delegation_id),
+                verification_check_id: None,
+                file_path: &reloaded.file_path,
+                dispatched_thread_id: &reloaded.recovery.target_thread_id,
+                dispatched_turn_id: turn_id,
+            },
+        )
+        .await?;
+        Ok(reloaded)
+    }
+
+    pub(crate) async fn office_auto_dispatch_quarantine_execution_unknown(
+        &self,
+        cwd: &str,
+        file_path: &str,
+        expected: &super::crewon_domain_office_dispatch_recovery::LocatedOfficeDispatchRecovery,
+        lease_id: &str,
+        turn_id: &str,
+        state: crewon_core::UserInputOnceState,
+    ) -> Result<office_run::ReloadedOfficeDispatchRecovery, JSONRPCErrorError> {
+        let authority = self.office_records.lock_authority(cwd).await?;
+        let reloaded =
+            office_run::reload_exact_office_dispatch_recovery(cwd, file_path, expected).await?;
+        authority
+            .ensure_config_drainable(&self.office_records, cwd, &reloaded.config)
+            .await?;
+        let (config, changed, recovery) = office_run::quarantine_dispatch_execution_unknown(
+            reloaded.config,
+            &reloaded.recovery,
+            turn_id,
+            state,
+        )?;
+        if changed {
+            update_record(DomainKind::Office, cwd, &reloaded.file_path, config.clone()).await?;
+        }
+        office_run::mark_auto_dispatch_intent_execution_unknown(
+            cwd,
+            lease_id,
+            &recovery,
+            &reloaded.file_path,
+            turn_id,
+        )
+        .await?;
+        Ok(office_run::ReloadedOfficeDispatchRecovery {
+            config,
+            file_path: reloaded.file_path,
+            recovery,
+        })
+    }
+
+    pub(crate) async fn office_auto_delegation_quarantine_execution_unknown(
+        &self,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        token: super::crewon_domain_office_dispatch_receipt::OfficeDispatchReceiptToken<'_>,
+        turn_id: &str,
+        state: crewon_core::UserInputOnceState,
+        lease_id: &str,
+    ) -> Result<office_run::ReloadedOfficeDispatchRecovery, JSONRPCErrorError> {
+        let (prepared, permit) = permitted.into_parts();
+        validate_delegation_receipt_token(&prepared, permit.record_id(), token)?;
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
+        let cwd = prepared.cwd.clone();
+        let run_id = prepared.run_id.clone();
+        let delegation_id = prepared.delegation_id.clone();
+        let (file_path, config, _) = office_run::quarantine_delegation_execution_unknown(
+            &cwd,
+            prepared.config,
+            &run_id,
+            &delegation_id,
+            token,
+            turn_id,
+            state,
+            office_run::EXECUTION_UNKNOWN_MESSAGE,
+        )
+        .await?;
+        let recovery =
+            super::crewon_domain_office_dispatch_recovery::locate_office_dispatch_recovery(
+                &config,
+                token.intent_id,
+                token.source_thread_id,
+                token.source_turn_id,
+            )
+            .map_err(|_| invalid_params("Office dispatch reconciliation receipt is corrupt"))?
+            .ok_or_else(|| invalid_params("Office dispatch reconciliation receipt is missing"))?;
+        office_run::mark_auto_dispatch_intent_execution_unknown(
+            &cwd, lease_id, &recovery, &file_path, turn_id,
+        )
+        .await?;
+        drop(permit);
+        Ok(office_run::ReloadedOfficeDispatchRecovery {
+            config,
+            file_path,
+            recovery,
+        })
+    }
+
     pub(crate) async fn office_auto_dispatch_intent_failed(
         &self,
         cwd: &str,
+        intent_id: &str,
         source_thread_id: &str,
         source_turn_id: &str,
+        lease_id: &str,
         message: &str,
     ) -> Result<(), JSONRPCErrorError> {
-        office_run::mark_auto_dispatch_intent_failed(cwd, source_thread_id, source_turn_id, message)
-            .await
+        let _authority = self
+            .lock_auto_dispatch_drain(cwd, source_thread_id, source_turn_id)
+            .await?;
+        office_run::mark_auto_dispatch_intent_failed(
+            cwd,
+            intent_id,
+            source_thread_id,
+            source_turn_id,
+            lease_id,
+            message,
+        )
+        .await
+    }
+
+    pub(crate) async fn office_auto_dispatch_recovery_failed(
+        &self,
+        cwd: &str,
+        file_path: &str,
+        expected: &super::crewon_domain_office_dispatch_recovery::LocatedOfficeDispatchRecovery,
+        lease_id: &str,
+    ) -> Result<office_run::ReloadedOfficeDispatchRecovery, JSONRPCErrorError> {
+        let authority = self.office_records.lock_authority(cwd).await?;
+        let reloaded =
+            office_run::reload_exact_office_dispatch_recovery(cwd, file_path, expected).await?;
+        authority
+            .ensure_config_drainable(&self.office_records, cwd, &reloaded.config)
+            .await?;
+        let message = reloaded.recovery.last_error.as_deref().ok_or_else(|| {
+            invalid_params("Office failed dispatch recovery is missing its error")
+        })?;
+        office_run::mark_auto_dispatch_intent_failed(
+            cwd,
+            &reloaded.recovery.intent_id,
+            &reloaded.recovery.source_thread_id,
+            &reloaded.recovery.source_turn_id,
+            lease_id,
+            message,
+        )
+        .await?;
+        Ok(reloaded)
     }
 
     pub(crate) async fn office_auto_dispatch_intent_clear(
         &self,
         cwd: &str,
+        intent_id: &str,
         source_thread_id: &str,
         source_turn_id: &str,
+        lease_id: &str,
     ) -> Result<(), JSONRPCErrorError> {
-        office_run::clear_auto_dispatch_intent(cwd, source_thread_id, source_turn_id).await
+        let _authority = self
+            .lock_auto_dispatch_drain(cwd, source_thread_id, source_turn_id)
+            .await?;
+        office_run::clear_auto_dispatch_intent(
+            cwd,
+            intent_id,
+            source_thread_id,
+            source_turn_id,
+            lease_id,
+        )
+        .await
     }
 
+    #[cfg(test)]
     pub(crate) async fn office_delegation_dispatch_mark_started(
         &self,
         cwd: &str,
@@ -655,9 +1669,112 @@ impl CrewonDomainRequestProcessor {
         delegation_id: &str,
         turn_id: &str,
     ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(cwd, &config)
+            .await?;
         office_run::mark_delegation_started(cwd, config, run_id, delegation_id, turn_id).await
     }
 
+    pub(crate) async fn office_auto_delegation_reserve_starting(
+        &self,
+        permitted: &mut PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        token: super::crewon_domain_office_dispatch_receipt::OfficeDispatchReceiptToken<'_>,
+    ) -> Result<
+        super::crewon_domain_office_dispatch_receipt::OfficeDispatchReceipt,
+        JSONRPCErrorError,
+    > {
+        validate_delegation_receipt_token(permitted.prepared(), permitted.record_id(), token)?;
+        permitted
+            .permit
+            .ensure_config_identity(&permitted.prepared.cwd, &permitted.prepared.config)
+            .await?;
+        let prepared = permitted.prepared();
+        let (config, receipt) = office_run::reserve_delegation_starting(
+            &prepared.cwd,
+            prepared.config.clone(),
+            &prepared.run_id,
+            &prepared.delegation_id,
+            token,
+        )
+        .await?;
+        permitted.prepared_mut().config = config;
+        Ok(receipt)
+    }
+
+    pub(crate) async fn office_auto_delegation_commit_admitted(
+        &self,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        token: super::crewon_domain_office_dispatch_receipt::OfficeDispatchReceiptToken<'_>,
+        turn_id: &str,
+        state: crewon_core::UserInputOnceState,
+    ) -> Result<
+        (
+            String,
+            JsonValue,
+            super::crewon_domain_office_dispatch_receipt::OfficeDispatchReceipt,
+        ),
+        JSONRPCErrorError,
+    > {
+        let (prepared, permit) = permitted.into_parts();
+        validate_delegation_receipt_token(&prepared, permit.record_id(), token)?;
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
+        office_run::commit_delegation_admitted(
+            &prepared.cwd,
+            prepared.config,
+            &prepared.run_id,
+            &prepared.delegation_id,
+            token,
+            turn_id,
+            state,
+        )
+        .await
+    }
+
+    pub(crate) async fn office_auto_delegation_fail_starting(
+        &self,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        token: super::crewon_domain_office_dispatch_receipt::OfficeDispatchReceiptToken<'_>,
+        message: &str,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (prepared, permit) = permitted.into_parts();
+        validate_delegation_receipt_token(&prepared, permit.record_id(), token)?;
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
+        office_run::fail_delegation_starting(
+            &prepared.cwd,
+            prepared.config,
+            &prepared.run_id,
+            &prepared.delegation_id,
+            token,
+            message,
+        )
+        .await
+    }
+
+    pub(crate) async fn office_delegation_dispatch_mark_started_permitted(
+        &self,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        turn_id: &str,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (prepared, permit) = permitted.into_parts();
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
+        office_run::mark_delegation_started(
+            &prepared.cwd,
+            prepared.config,
+            &prepared.run_id,
+            &prepared.delegation_id,
+            turn_id,
+        )
+        .await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_delegation_dispatch_mark_failed(
         &self,
         cwd: &str,
@@ -666,15 +1783,43 @@ impl CrewonDomainRequestProcessor {
         delegation_id: &str,
         message: &str,
     ) -> Result<(), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_drain(cwd, &config)
+            .await?;
         office_run::mark_delegation_failed(cwd, config, run_id, delegation_id, message).await
     }
 
+    pub(crate) async fn office_delegation_dispatch_mark_failed_permitted(
+        &self,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeDelegationDispatch>,
+        message: &str,
+    ) -> Result<(), JSONRPCErrorError> {
+        let (prepared, permit) = permitted.into_parts();
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
+        office_run::mark_delegation_failed(
+            &prepared.cwd,
+            prepared.config,
+            &prepared.run_id,
+            &prepared.delegation_id,
+            message,
+        )
+        .await
+    }
+
+    #[cfg(test)]
     pub(crate) async fn office_verification_dispatch_mark_started(
         &self,
         cwd: &str,
         config: JsonValue,
         started: OfficeVerificationDispatchStarted<'_>,
     ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (_authority, config) = self
+            .office_records
+            .lock_resolved_config_mutation(cwd, &config)
+            .await?;
         office_run::mark_verification_dispatch_started(
             cwd,
             config,
@@ -692,37 +1837,72 @@ impl CrewonDomainRequestProcessor {
         .await
     }
 
-    pub(crate) async fn office_verification_dispatch_mark_failed(
+    pub(crate) async fn office_verification_dispatch_mark_started_permitted(
         &self,
-        cwd: &str,
-        config: JsonValue,
-        run_id: &str,
-        verification_check_id: &str,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeVerificationDispatch>,
+        started: OfficeVerificationDispatchStarted<'_>,
+    ) -> Result<(String, JsonValue), JSONRPCErrorError> {
+        let (prepared, permit) = permitted.into_parts();
+        if started.run_id != prepared.run_id
+            || started.verification_check_id != prepared.verification_check_id
+        {
+            return Err(invalid_params(
+                "Office verification start does not match its dispatch permit",
+            ));
+        }
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
+        office_run::mark_verification_dispatch_started(
+            &prepared.cwd,
+            prepared.config,
+            office_run::StartedOfficeVerificationDispatch {
+                run_id: &prepared.run_id,
+                verification_check_id: &prepared.verification_check_id,
+                automation_run_file_path: started.automation_run_file_path,
+                automation_run_id: started.automation_run_id,
+                automation_thread_id: started.automation_thread_id,
+                automation_turn_id: started.automation_turn_id,
+                runtime_repair_source_thread_id: started.runtime_repair_source_thread_id,
+                runtime_repaired_at: started.runtime_repaired_at,
+            },
+        )
+        .await
+    }
+
+    pub(crate) async fn office_verification_dispatch_mark_failed_permitted(
+        &self,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeVerificationDispatch>,
         message: &str,
     ) -> Result<(), JSONRPCErrorError> {
+        let (prepared, permit) = permitted.into_parts();
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
         office_run::mark_verification_dispatch_failed(
-            cwd,
-            config,
-            run_id,
-            verification_check_id,
+            &prepared.cwd,
+            prepared.config,
+            &prepared.run_id,
+            &prepared.verification_check_id,
             message,
         )
         .await
     }
 
-    pub(crate) async fn office_verification_dispatch_mark_retryable_start_failure(
+    pub(crate) async fn office_verification_dispatch_mark_retryable_start_failure_permitted(
         &self,
-        cwd: &str,
-        config: JsonValue,
-        run_id: &str,
-        verification_check_id: &str,
+        permitted: PermittedOfficeDispatch<office_run::PreparedOfficeVerificationDispatch>,
         message: &str,
     ) -> Result<(), JSONRPCErrorError> {
+        let (prepared, permit) = permitted.into_parts();
+        permit
+            .ensure_config_identity(&prepared.cwd, &prepared.config)
+            .await?;
         office_run::mark_verification_dispatch_retryable_start_failure(
-            cwd,
-            config,
-            run_id,
-            verification_check_id,
+            &prepared.cwd,
+            prepared.config,
+            &prepared.run_id,
+            &prepared.verification_check_id,
             message,
         )
         .await
@@ -732,8 +1912,13 @@ impl CrewonDomainRequestProcessor {
         &self,
         params: OfficeMemberAddParams,
     ) -> Result<OfficeMemberAddResponse, JSONRPCErrorError> {
-        let agent_record =
-            read_agent_record(&params.cwd, Some(&params.agent_id), None, None).await?;
+        let agent_record = read_agent_record(
+            &params.cwd,
+            Some(&params.agent_id),
+            /*thread_id*/ None,
+            /*name*/ None,
+        )
+        .await?;
         let mut config = append_office_member(
             params.config,
             &params.agent_id,
@@ -741,7 +1926,8 @@ impl CrewonDomainRequestProcessor {
             agent_record.as_ref().map(|record| &record.config),
         )?;
         resolve_office_member_runtimes(&params.cwd, &mut config).await?;
-        save_record(DomainKind::Office, &params.cwd, config.clone())
+        self.office_records
+            .save(&params.cwd, config.clone())
             .await
             .map(|file_path| OfficeMemberAddResponse { file_path, config })
     }
@@ -756,7 +1942,8 @@ impl CrewonDomainRequestProcessor {
             params.decision,
             params.message,
         )?;
-        save_record(DomainKind::Office, &params.cwd, config.clone())
+        self.office_records
+            .save(&params.cwd, config.clone())
             .await
             .map(|file_path| OfficeApprovalDecideResponse { file_path, config })
     }
@@ -767,7 +1954,8 @@ impl CrewonDomainRequestProcessor {
     ) -> Result<OfficeArtifactUpsertResponse, JSONRPCErrorError> {
         let mut config = upsert_office_artifact(params.config, params.artifact, params.message)?;
         apply_office_artifact_file_fingerprints(&params.cwd, &mut config).await?;
-        save_record(DomainKind::Office, &params.cwd, config.clone())
+        self.office_records
+            .save(&params.cwd, config.clone())
             .await
             .map(|file_path| OfficeArtifactUpsertResponse { file_path, config })
     }
@@ -776,7 +1964,8 @@ impl CrewonDomainRequestProcessor {
         &self,
         params: OfficeDeleteParams,
     ) -> Result<OfficeDeleteResponse, JSONRPCErrorError> {
-        delete_record(DomainKind::Office, &params.cwd, &params.file_path)
+        self.office_records
+            .delete(&params.cwd, &params.file_path)
             .await
             .map(|deleted| OfficeDeleteResponse { deleted })
     }
@@ -970,6 +2159,29 @@ impl CrewonDomainRequestProcessor {
     }
 }
 
+fn validate_delegation_receipt_token(
+    prepared: &office_run::PreparedOfficeDelegationDispatch,
+    permit_record_id: &str,
+    token: super::crewon_domain_office_dispatch_receipt::OfficeDispatchReceiptToken<'_>,
+) -> Result<(), JSONRPCErrorError> {
+    let explicit_record_id = prepared
+        .config
+        .get("workspace")
+        .and_then(|workspace| workspace.get("recordId"))
+        .and_then(JsonValue::as_str);
+    if explicit_record_id != Some(permit_record_id)
+        || token.record_id != permit_record_id
+        || token.run_id != prepared.run_id
+        || token.delegation_id != prepared.delegation_id
+        || token.target_thread_id != prepared.thread_id
+    {
+        return Err(invalid_params(
+            "Office dispatch receipt does not match the permitted delegation",
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PersistedDomainConfigRecord {
@@ -1004,14 +2216,6 @@ pub(crate) async fn sync_office_runs_for_thread_turn(
     turn: &Turn,
 ) -> Result<usize, JSONRPCErrorError> {
     office_run::sync_thread_turn(cwd, thread_id, turn).await
-}
-
-pub(crate) async fn sync_office_run_updates_for_thread_turn(
-    cwd: &str,
-    thread_id: &str,
-    turn: &Turn,
-) -> Result<Vec<OfficeRunSyncUpdate>, JSONRPCErrorError> {
-    office_run::sync_thread_turn_updates(cwd, thread_id, turn).await
 }
 
 pub(crate) fn office_run_updated_notification(
@@ -1100,12 +2304,34 @@ async fn read_record(
     kind: DomainKind,
     path: &Path,
 ) -> Result<Option<CrewonDomainConfigRecord>, JSONRPCErrorError> {
+    if matches!(kind, DomainKind::Office) {
+        let metadata = match fs::symlink_metadata(path).await {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(map_io_error(err)),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(invalid_params(
+                "Office record must be a regular server-owned file",
+            ));
+        }
+        if metadata.len() == 0 || metadata.len() > crewon_state::MAX_OFFICE_MIGRATION_SOURCE_BYTES {
+            return Err(invalid_params("Office record exceeds its bounded size"));
+        }
+    }
     let bytes = match fs::read(path).await {
         Ok(bytes) => bytes,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) if matches!(kind, DomainKind::Office) => return Err(map_io_error(err)),
         Err(_) => return Ok(None),
     };
     let record = match serde_json::from_slice::<PersistedDomainConfigRecord>(&bytes) {
         Ok(record) => record,
+        Err(err) if matches!(kind, DomainKind::Office) => {
+            return Err(internal_error(format!(
+                "Office record is corrupt and cannot be used: {err}"
+            )));
+        }
         Err(_) => return Ok(None),
     };
     if record.version != 1
@@ -1182,6 +2408,27 @@ async fn save_record(
     let directory = domain_directory(cwd, kind)?;
     fs::create_dir_all(&directory).await.map_err(map_io_error)?;
 
+    if matches!(kind, DomainKind::Office)
+        && let Some(record_id) = office_record_identity::record_id(&config)
+    {
+        let (records, _) = list_records(
+            DomainKind::Office,
+            cwd,
+            /*cursor*/ None,
+            Some(MAX_LIST_LIMIT as u32),
+        )
+        .await?;
+        let record = records
+            .into_iter()
+            .find(|record| office_record_identity::record_id(&record.config) == Some(record_id))
+            .ok_or_else(|| {
+                invalid_params(
+                    "office record identity no longer exists; reload the Office list before retrying",
+                )
+            })?;
+        return update_record(kind, cwd, &record.file_path, config).await;
+    }
+
     let saved_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let file_path = directory.join(domain_file_name(kind, &config));
     write_domain_record(kind, &file_path, saved_at, config).await?;
@@ -1248,6 +2495,24 @@ async fn write_domain_record(
     saved_at: String,
     config: JsonValue,
 ) -> Result<(), JSONRPCErrorError> {
+    let _record_guard = if matches!(kind, DomainKind::Office) {
+        Some(
+            office_record_lock::lock(file_path)
+                .await
+                .map_err(map_io_error)?,
+        )
+    } else {
+        None
+    };
+    write_domain_record_unlocked(kind, file_path, saved_at, config).await
+}
+
+async fn write_domain_record_unlocked(
+    kind: DomainKind,
+    file_path: &Path,
+    saved_at: String,
+    config: JsonValue,
+) -> Result<(), JSONRPCErrorError> {
     let record = PersistedDomainConfigRecord {
         version: 1,
         kind: kind.record_kind().to_string(),
@@ -1255,11 +2520,21 @@ async fn write_domain_record(
         config,
     };
 
-    let mut bytes = serde_json::to_vec_pretty(&record)
+    let mut contents = serde_json::to_string_pretty(&record)
         .map_err(|err| internal_error(format!("failed to serialize domain config: {err}")))?;
-    bytes.push(b'\n');
-    fs::write(file_path, bytes).await.map_err(map_io_error)?;
-    Ok(())
+    contents.push('\n');
+    if matches!(kind, DomainKind::Office)
+        && contents.len() as u64 > crewon_state::MAX_OFFICE_MIGRATION_SOURCE_BYTES
+    {
+        return Err(invalid_params("Office record exceeds its bounded size"));
+    }
+    let file_path = file_path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        crewon_core::path_utils::write_atomically(&file_path, &contents)
+    })
+    .await
+    .map_err(|err| internal_error(format!("failed to join domain config write: {err}")))?
+    .map_err(map_io_error)
 }
 
 async fn create_automation_run(
@@ -1743,8 +3018,13 @@ pub(super) async fn read_office_record(
     if thread_id.is_none() && title.is_none() {
         return Err(invalid_params("threadId or title is required"));
     }
-    let (records, _) =
-        list_records(DomainKind::Office, cwd, None, Some(MAX_LIST_LIMIT as u32)).await?;
+    let (records, _) = list_records(
+        DomainKind::Office,
+        cwd,
+        /*cursor*/ None,
+        Some(MAX_LIST_LIMIT as u32),
+    )
+    .await?;
     Ok(records.into_iter().find(|record| {
         thread_id.is_some_and(|thread_id| office_thread_id(&record.config) == Some(thread_id))
             || title.is_some_and(|title| {
@@ -1762,8 +3042,13 @@ pub(super) async fn read_agent_record(
     if agent_id.is_none() && thread_id.is_none() && name.is_none() {
         return Err(invalid_params("agentId, threadId, or name is required"));
     }
-    let (records, _) =
-        list_records(DomainKind::Agent, cwd, None, Some(MAX_LIST_LIMIT as u32)).await?;
+    let (records, _) = list_records(
+        DomainKind::Agent,
+        cwd,
+        /*cursor*/ None,
+        Some(MAX_LIST_LIMIT as u32),
+    )
+    .await?;
     Ok(records.into_iter().find(|record| {
         agent_id.is_some_and(|agent_id| {
             record.config.get("agentId").and_then(JsonValue::as_str) == Some(agent_id)
@@ -1806,7 +3091,7 @@ async fn read_automation_record(
     let (records, _) = list_records(
         DomainKind::Automation,
         cwd,
-        None,
+        /*cursor*/ None,
         Some(MAX_LIST_LIMIT as u32),
     )
     .await?;
@@ -1947,7 +3232,11 @@ fn office_manager_reply_identity(
     let manager = workspace
         .get("members")
         .and_then(JsonValue::as_array)
-        .and_then(|members| members.iter().find(is_office_manager_member));
+        .and_then(|members| {
+            members
+                .iter()
+                .find(|member| is_office_manager_member(member))
+        });
     if let Some(manager) = manager {
         return OfficeReplyIdentity {
             author: manager
@@ -1983,7 +3272,7 @@ fn office_manager_reply_identity(
     }
 }
 
-fn is_office_manager_member(member: &&JsonValue) -> bool {
+fn is_office_manager_member(member: &JsonValue) -> bool {
     let haystack = [
         member.get("name").and_then(JsonValue::as_str),
         member.get("role").and_then(JsonValue::as_str),
@@ -2077,8 +3366,13 @@ async fn resolve_office_member_runtimes(
         return Ok(());
     }
 
-    let (agent_records, _) =
-        list_records(DomainKind::Agent, cwd, None, Some(MAX_LIST_LIMIT as u32)).await?;
+    let (agent_records, _) = list_records(
+        DomainKind::Agent,
+        cwd,
+        /*cursor*/ None,
+        Some(MAX_LIST_LIMIT as u32),
+    )
+    .await?;
     if agent_records.is_empty() {
         return Ok(());
     }
@@ -2314,7 +3608,7 @@ fn apply_artifact_content_fingerprint(artifact: &mut JsonValue) -> Result<(), JS
         OFFICE_ARTIFACT_CONTENT_STATUS_FINGERPRINTED,
         Some(content_sha256),
         Some(content_bytes as u64),
-        None,
+        /*error*/ None,
     );
     if let Some(artifact) = artifact.as_object_mut() {
         for key in ["content", "body", "text"] {
@@ -2727,3 +4021,7 @@ fn map_io_error(err: io::Error) -> JSONRPCErrorError {
 #[cfg(test)]
 #[path = "crewon_domain_processor_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "crewon_domain_office_terminal_sync_tests.rs"]
+mod office_terminal_sync_tests;

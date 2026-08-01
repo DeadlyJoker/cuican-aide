@@ -24,8 +24,8 @@ fn scene_descriptor_is_derived_from_runtime_registry() {
         SceneTaskContract {
             scene: SceneId::Office,
             mode: SceneInteractionMode::Auto,
-            deliverable: SceneDeliverable::Conversation,
-            local_write_policy: LocalWritePolicy::ReadOnly,
+            deliverable: SceneDeliverable::Document,
+            local_write_policy: LocalWritePolicy::WorkspaceWrite,
             external_action_policy: ExternalActionPolicy::DraftOnly,
         }
     );

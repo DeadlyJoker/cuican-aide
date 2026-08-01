@@ -42,3 +42,24 @@ fn maximum_team_profile_stays_below_the_context_fragment_limit() {
 
     assert!(fragment.render().len() < 10_000);
 }
+
+#[test]
+fn maximum_experts_profile_stays_below_the_context_fragment_limit() {
+    let fragment = ExecutionTargetContextFragment::new(SceneExecutionTargetProfile {
+        kind: SceneExecutionTargetKind::Experts,
+        display_name: "T".repeat(120),
+        role: Some("G".repeat(800)),
+        model: None,
+        instructions: Some("L".repeat(1_500)),
+        capabilities: Vec::new(),
+        team_members: (0..8)
+            .map(|index| SceneTeamMemberProfile {
+                name: format!("expert-{index}"),
+                role: Some("R".repeat(600)),
+                agent_id: Some("worker".to_string()),
+            })
+            .collect(),
+    });
+
+    assert!(fragment.render().len() < 10_000);
+}

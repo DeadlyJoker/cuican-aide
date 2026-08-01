@@ -3,12 +3,14 @@ use crate::realtime_conversation::handle_close as handle_realtime_conversation_c
 use crate::realtime_conversation::handle_start as handle_realtime_conversation_start;
 use crate::realtime_conversation::handle_text as handle_realtime_conversation_text;
 use async_channel::Receiver;
+use crewon_features::Feature;
 use crewon_otel::set_parent_from_w3c_trace_context;
 use crewon_protocol::protocol::Submission;
 use tracing::Instrument;
 use tracing::debug_span;
 use tracing::info_span;
 
+use crate::session::SessionSubmission;
 use crate::session::SteerInputError;
 use crate::session::TurnInput;
 use crate::session::session::Session;
@@ -104,7 +106,7 @@ pub async fn update_thread_settings(
     sess.send_event_raw(Event { id: sub_id, msg }).await;
 }
 
-async fn thread_settings_update(
+pub(super) async fn thread_settings_update(
     sess: &Session,
     thread_settings: ThreadSettingsOverrides,
 ) -> SessionSettingsUpdate {
@@ -155,7 +157,7 @@ async fn thread_settings_update(
     }
 }
 
-async fn thread_settings_applied_event(sess: &Session) -> EventMsg {
+pub(super) async fn thread_settings_applied_event(sess: &Session) -> EventMsg {
     let snapshot = {
         let state = sess.state.lock().await;
         state.session_configuration.thread_config_snapshot()
@@ -697,11 +699,29 @@ pub async fn review(
 pub(super) async fn submission_loop(
     sess: Arc<Session>,
     config: Arc<Config>,
-    rx_sub: Receiver<Submission>,
+    rx_sub: Receiver<SessionSubmission>,
 ) {
     // To break out of this loop, send Op::Shutdown.
     let mut shutdown_received = false;
-    while let Ok(sub) = rx_sub.recv().await {
+    while let Ok(envelope) = rx_sub.recv().await {
+        let (sub, once) = match envelope {
+            SessionSubmission::Regular(sub) => (sub, None),
+            SessionSubmission::Once {
+                submission,
+                payload_hash,
+                turn_context_precondition,
+                existing_policy,
+                reply,
+            } => (
+                submission,
+                Some((
+                    payload_hash,
+                    turn_context_precondition,
+                    existing_policy,
+                    reply,
+                )),
+            ),
+        };
         debug!(?sub, "Submission");
         let dispatch_span = submission_dispatch_span(&sub);
         let should_exit = async {
@@ -746,8 +766,51 @@ pub(super) async fn submission_loop(
                     false
                 }
                 Op::UserInput { .. } => {
-                    user_input_or_turn(&sess, sub.id.clone(), sub.op, sub.client_user_message_id)
-                        .await;
+                    if let Some((payload_hash, turn_context_precondition, existing_policy, reply)) =
+                        once
+                    {
+                        let _ = reply.send(
+                            super::user_input_once::process(
+                                &sess,
+                                sub,
+                                payload_hash,
+                                turn_context_precondition,
+                                existing_policy,
+                            )
+                            .await,
+                        );
+                    } else {
+                        let duplicate_id = if sess.features.enabled(Feature::UserInputOnce)
+                            && let Some(client_id) = sub.client_user_message_id.as_deref()
+                            && super::user_input_once_index::valid_client_id(client_id)
+                        {
+                            !sess
+                                .user_input_once_index
+                                .lock()
+                                .await
+                                .reserve_legacy(client_id.to_string())
+                        } else {
+                            false
+                        };
+                        if duplicate_id {
+                            sess.send_event_raw(Event {
+                                id: sub.id,
+                                msg: EventMsg::Error(ErrorEvent {
+                                    message: "client id was already submitted".to_string(),
+                                    codex_error_info: Some(CodexErrorInfo::BadRequest),
+                                }),
+                            })
+                            .await;
+                        } else {
+                            user_input_or_turn(
+                                &sess,
+                                sub.id.clone(),
+                                sub.op,
+                                sub.client_user_message_id,
+                            )
+                            .await;
+                        }
+                    }
                     false
                 }
                 Op::ThreadSettings { thread_settings } => {

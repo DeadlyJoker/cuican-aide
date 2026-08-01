@@ -211,6 +211,9 @@ pub(crate) mod session;
 mod token_budget;
 pub(crate) mod turn;
 pub(crate) mod turn_context;
+mod user_input_once;
+mod user_input_once_durable;
+mod user_input_once_index;
 use self::config_lock::export_config_lock_if_configured;
 use self::config_lock::validate_config_lock_if_configured;
 #[cfg(test)]
@@ -229,7 +232,15 @@ use self::turn::AssistantMessageStreamParsers;
 use self::turn::collect_explicit_app_ids_from_skill_items;
 use self::turn::realtime_text_for_event;
 use self::turn_context::TurnContext;
+pub use self::turn_context::TurnContextPrecondition;
 use self::turn_context::TurnSkillsContext;
+pub use self::user_input_once::ExistingUserInputOncePolicy;
+pub(crate) use self::user_input_once::SessionSubmission;
+pub use self::user_input_once::SubmitUserInputOnceError;
+pub use self::user_input_once::SubmitUserInputOnceOutcome;
+pub use self::user_input_once::SubmitUserInputOnceRequest;
+pub use self::user_input_once_index::UserInputOnceExecutionState;
+pub use self::user_input_once_index::UserInputOnceState;
 #[cfg(test)]
 mod rollout_reconstruction_tests;
 
@@ -378,7 +389,7 @@ use crewon_utils_stream_parser::ProposedPlanSegment;
 /// The high-level interface to the Crewon system.
 /// It operates as a queue pair where you send submissions and receive events.
 pub struct Crewon {
-    pub(crate) tx_sub: Sender<Submission>,
+    pub(crate) tx_sub: Sender<SessionSubmission>,
     pub(crate) rx_event: Receiver<Event>,
     // Last known status of the agent.
     pub(crate) agent_status: watch::Receiver<AgentStatus>,
@@ -774,10 +785,7 @@ impl Crewon {
         if sub.trace.is_none() {
             sub.trace = current_span_w3c_trace_context();
         }
-        self.tx_sub
-            .send(sub)
-            .await
-            .map_err(|_| CodexErr::InternalAgentDied)?;
+        self.submit_session(sub.into()).await?;
         Ok(())
     }
 
@@ -1519,6 +1527,19 @@ impl Session {
         Ok(())
     }
 
+    pub(crate) async fn dynamic_tools(&self) -> Vec<DynamicToolSpec> {
+        self.state
+            .lock()
+            .await
+            .session_configuration
+            .dynamic_tools
+            .clone()
+    }
+
+    pub(crate) async fn replace_dynamic_tools(&self, dynamic_tools: Vec<DynamicToolSpec>) {
+        self.state.lock().await.session_configuration.dynamic_tools = dynamic_tools;
+    }
+
     pub(crate) async fn preview_settings(
         &self,
         updates: &SessionSettingsUpdate,
@@ -1943,6 +1964,16 @@ impl Session {
             .await?;
 
         Ok(())
+    }
+
+    pub(crate) async fn owns_exact_runtime_turn(&self, sub_id: &str) -> bool {
+        let active = self.active_turn.lock().await;
+        let active_matches = active
+            .as_ref()
+            .and_then(|turn| turn.task.as_ref())
+            .is_some_and(|task| task.turn_context.sub_id == sub_id);
+        drop(active);
+        active_matches || self.runtime_turn_ownership.contains(sub_id)
     }
 
     pub(crate) async fn turn_context_for_sub_id(&self, sub_id: &str) -> Option<Arc<TurnContext>> {

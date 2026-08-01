@@ -1,5 +1,15 @@
 pub mod auth;
 
+mod auth_debug;
+mod authenticated_principal;
+mod principal_revocation;
+mod principal_session_auth;
+mod principal_session_exchange;
+
+#[cfg(test)]
+#[path = "principal_revocation_tests.rs"]
+mod principal_revocation_tests;
+
 use crate::outgoing_message::ConnectionId;
 use crate::outgoing_message::OutgoingError;
 use crate::outgoing_message::OutgoingMessage;
@@ -29,7 +39,21 @@ mod unix_socket;
 #[cfg(test)]
 mod unix_socket_tests;
 mod websocket;
+mod websocket_principal_claims;
 
+pub use authenticated_principal::TransportAuthenticatedPrincipal;
+pub use authenticated_principal::TransportAuthenticatedPrincipalSource;
+pub use authenticated_principal::TransportAuthentication;
+pub use authenticated_principal::TransportPrincipalBinding;
+pub use principal_revocation::TransportPrincipalRevocation;
+pub use principal_revocation::TransportPrincipalRevocationError;
+pub use principal_revocation::TransportPrincipalRevocationRegistry;
+pub use principal_revocation::TransportPrincipalRevocationSpec;
+pub use principal_session_auth::PrincipalSessionRs256AuthConfig;
+pub use principal_session_auth::PrincipalSessionRs256AuthConfigError;
+pub use principal_session_exchange::PrincipalSessionExchangeError;
+pub use principal_session_exchange::PrincipalSessionExchangeResult;
+pub use principal_session_exchange::PrincipalSessionExchangeService;
 pub use remote_control::RemoteControlHandle;
 pub use remote_control::RemoteControlStartConfig;
 pub use remote_control::RemoteControlUnavailable;
@@ -40,6 +64,8 @@ pub use unix_socket::acquire_app_server_startup_lock;
 pub use unix_socket::prepare_control_socket_path;
 pub use unix_socket::start_control_socket_acceptor;
 pub use websocket::start_websocket_acceptor;
+pub use websocket::start_websocket_acceptor_with_principal_revocation;
+pub use websocket::start_websocket_acceptor_with_principal_services;
 
 const OVERLOADED_ERROR_CODE: i64 = -32001;
 
@@ -165,6 +191,7 @@ pub enum TransportEvent {
     ConnectionOpened {
         connection_id: ConnectionId,
         origin: ConnectionOrigin,
+        authentication: TransportAuthentication,
         writer: mpsc::Sender<QueuedOutgoingMessage>,
         disconnect_sender: Option<CancellationToken>,
     },

@@ -1,10 +1,13 @@
 import {
   BookOpen,
   Bot,
+  Download,
+  Eye,
   Layers3,
+  Plus,
+  RefreshCw,
   Search,
   Wrench,
-  X,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
@@ -12,10 +15,23 @@ import {
   CommandOfficeRoom,
   type CommandOfficeRoomProps,
 } from "./CommandOfficeRoom";
+import { CommandExpertsPanel } from "./CommandExpertsPanel";
+import { CommandWorkflowPanel } from "./CommandWorkflowPanel";
 import { classNames } from "./commandWorkspaceUtils";
+import {
+  capabilityPresetById,
+  mcpEditorDraftForPreset,
+  mcpPresetSetup,
+  orderedCapabilityPresets,
+  type CapabilityEditorDraft,
+  type CapabilityEditorSaveHandler,
+  type CapabilityLocation,
+} from "../../lib/capability/capabilityCatalog";
+import { CapabilityEditorDialog } from "../catalog/CapabilityEditorDialog";
+import { CapabilityLogo } from "../catalog/CapabilityLogo";
 import { CatalogResourceDialog } from "../catalog/CatalogResourceDialog";
 import {
-  downloadCatalogResource,
+  installCatalogSkill,
   type CatalogResourceSummary,
 } from "../../lib/agent-platform/agentPlatformCatalog";
 import type {
@@ -23,7 +39,10 @@ import type {
   AgentPlatformResourceState,
   AgentPlatformResourceStates,
   AgentPlatformSnapshot,
+  PlatformWorkflow,
+  PlatformWorkflowExecution,
 } from "../../lib/agent-platform/agentPlatformClient";
+import type { ExpertTeamRecordReference } from "../../lib/experts/expertTeamRecord";
 
 type FilterOption = {
   label: string;
@@ -39,7 +58,10 @@ type CatalogItem = {
   icon: ReactNode;
   id: string;
   label: string;
+  location?: CapabilityLocation;
+  logo?: string;
   meta: string[];
+  preset?: { id: string; kind: "mcp" | "skill" };
   status?: string;
   statusTone?: "success" | "warn";
   title: string;
@@ -50,8 +72,8 @@ type TeamMode = "office" | "workflow" | "experts";
 
 const resourceCategoryLabels: Record<AgentPlatformResourceCategory, string> = {
   agents: "Agent",
-  skills: "Skill",
-  mcp: "MCP",
+  skills: "技能",
+  mcp: "服务",
   knowledge: "知识库",
 };
 
@@ -67,8 +89,9 @@ function CatalogCategoryState({
   onRetry: (category: AgentPlatformResourceCategory) => Promise<void>;
 }) {
   const label = resourceCategoryLabels[category];
-  const inlineLabel = category === "knowledge" ? label : ` ${label}`;
-  const subjectLabel = category === "knowledge" ? label : `${label} `;
+  const inlineLabel = category === "agents" ? ` ${label}` : label;
+  const subjectLabel = category === "agents" ? `${label} ` : label;
+  const actionLabel = category === "agents" ? ` ${label}` : label;
   if (state.status === "ready" && count > 0) {
     return null;
   }
@@ -77,7 +100,7 @@ function CatalogCategoryState({
   if (state.status === "loading") {
     message =
       count > 0
-        ? `正在更新 ${label}，继续显示上次成功加载的 ${count} 项。`
+        ? `正在更新${actionLabel}，继续显示上次成功加载的 ${count} 项。`
         : `正在读取当前账号的${inlineLabel}…`;
   } else if (state.status === "error") {
     message =
@@ -104,7 +127,7 @@ function CatalogCategoryState({
           type="button"
           onClick={() => void onRetry(category)}
         >
-          {category === "knowledge" ? "重试知识库" : `重试 ${label}`}
+          {category === "knowledge" ? "重试知识库" : `重试${actionLabel}`}
         </button>
       ) : null}
     </div>
@@ -124,6 +147,12 @@ function includesQuery(item: CatalogItem, query: string) {
 
 function hasFilter(item: CatalogItem, filter: string) {
   return item.filter.split(/\s+/).includes(filter);
+}
+
+function resourceLocation(
+  source: CatalogResourceSummary["source"],
+): CapabilityLocation {
+  return source === "local" ? "local" : "cloud";
 }
 
 function FilterTabs({
@@ -226,35 +255,34 @@ function CatalogCard({
   progress,
   onDownload,
   onOpen,
+  onPreset,
 }: {
   item: CatalogItem;
   progress?: number;
   onDownload?: (resource: CatalogResourceSummary) => void;
   onOpen?: (resource: CatalogResourceSummary) => void;
+  onPreset?: (preset: { id: string; kind: "mcp" | "skill" }) => void;
 }) {
   const resource = item.resource;
-  const canDownload =
-    resource?.type === "skills" &&
-    resource.source === "catalog" &&
-    resource.download_available !== false;
+  const canDownload = resource?.type === "skills";
   const resourceStatus = resource
     ? resource.type === "skills"
-        ? resource.source === "catalog"
+      ? resource.source === "catalog"
         ? resource.update_available
           ? "有更新"
           : resource.downloaded
-            ? "已下载"
-            : "可下载"
-        : "在线 Skill"
+            ? "云端已同步"
+            : "技能 · 可添加"
+        : "技能 · 可安装"
       : resource.type === "agents"
         ? resource.enabled && resource.api_enabled
-          ? "在线 Agent"
-          : "在线 · 只读"
+          ? "智能体 · 可用"
+          : "智能体 · 只读"
         : resource.type === "mcp_servers"
           ? resource.connected
-            ? "在线 · 已连接"
-            : "在线 · 未连接"
-          : "在线 · 只读"
+            ? "服务 · 已连接"
+            : "服务 · 未连接"
+          : "知识库 · 可检索"
     : null;
   return (
     <article
@@ -262,8 +290,15 @@ function CatalogCard({
       data-card-filter={item.filter}
       data-od-id={item.id}
     >
-      <div className="catalog-icon" aria-hidden="true">
-        {item.icon}
+      <div
+        className={classNames("catalog-icon", item.logo && "has-logo")}
+        aria-hidden="true"
+      >
+        {item.logo ? (
+          <CapabilityLogo fallback={String(item.icon)} logo={item.logo} />
+        ) : (
+          item.icon
+        )}
       </div>
       <div className="catalog-card-body">
         <div className="catalog-card-head">
@@ -272,18 +307,40 @@ function CatalogCard({
         </div>
         {item.detail ? <p>{item.detail}</p> : null}
         {resource ? (
-          <span
-            className={classNames(
-              "catalog-download-status",
-              resource.update_available && "update",
-              (resource.downloaded || resource.source !== "catalog") &&
-                "downloaded",
-            )}
-          >
-            {resourceStatus}
-          </span>
+          <div className="catalog-resource-meta">
+            {item.location ? (
+              <span
+                className={classNames(
+                  "catalog-location-badge",
+                  `is-${item.location}`,
+                )}
+              >
+                {item.location === "local" ? "本地" : "云端"}
+              </span>
+            ) : null}
+            <span
+              className={classNames(
+                "catalog-download-status",
+                resource.update_available && "update",
+                (resource.downloaded || resource.source !== "catalog") &&
+                  "downloaded",
+              )}
+            >
+              {resourceStatus}
+            </span>
+          </div>
         ) : (
           <div className="catalog-meta">
+            {item.location ? (
+              <span
+                className={classNames(
+                  "catalog-location-badge",
+                  `is-${item.location}`,
+                )}
+              >
+                {item.location === "local" ? "本地" : "云端"}
+              </span>
+            ) : null}
             {item.meta.map((meta) => (
               <span key={meta}>{meta}</span>
             ))}
@@ -293,30 +350,35 @@ function CatalogCard({
       {resource ? (
         <div className="catalog-card-actions">
           <button
-            className="button compact"
+            aria-label={`查看 ${item.title}`}
+            className="icon-action compact catalog-card-action"
             type="button"
             onClick={() => onOpen?.(resource)}
           >
-            查看
+            <Eye aria-hidden="true" />
           </button>
           {canDownload ? (
             <>
               <button
-                className="button compact"
-                disabled={
-                  progress !== undefined ||
-                  (Boolean(resource.downloaded) && !resource.update_available)
-                }
+                aria-label={`${
+                  progress !== undefined
+                    ? "正在安装"
+                    : resource.update_available
+                      ? "更新"
+                      : resource.downloaded
+                        ? "重新安装"
+                        : "安装"
+                } ${item.title}`}
+                className="icon-action compact catalog-card-action"
+                disabled={progress !== undefined}
                 type="button"
                 onClick={() => onDownload?.(resource)}
               >
-                {progress !== undefined
-                  ? "下载中…"
-                  : resource.update_available
-                    ? "更新"
-                    : resource.downloaded
-                      ? "已下载"
-                      : "下载"}
+                {resource.update_available || resource.downloaded ? (
+                  <RefreshCw aria-hidden="true" />
+                ) : (
+                  <Download aria-hidden="true" />
+                )}
               </button>
               {progress !== undefined ? (
                 <progress max="100" value={progress} />
@@ -325,9 +387,20 @@ function CatalogCard({
           ) : null}
         </div>
       ) : item.action ? (
-        <button className="button compact" type="button">
-          {item.action}
-        </button>
+        item.preset ? (
+          <button
+            aria-label={`${item.action} ${item.title}`}
+            className="icon-action compact catalog-card-action"
+            type="button"
+            onClick={() => item.preset && onPreset?.(item.preset)}
+          >
+            <Plus aria-hidden="true" />
+          </button>
+        ) : (
+          <button className="button compact" type="button">
+            {item.action}
+          </button>
+        )
       ) : item.status ? (
         <span className={classNames("status", item.statusTone)}>
           {item.status}
@@ -343,6 +416,23 @@ function CatalogCard({
       )}
     </article>
   );
+}
+
+function presetCapabilityCatalog(): CatalogItem[] {
+  return orderedCapabilityPresets().map((preset) => ({
+    accent: preset.kind === "skill" ? "skill-card" : "service-card",
+    action: "添加",
+    detail: preset.description,
+    filter: preset.kind === "skill" ? "skill" : "service",
+    icon: preset.glyph,
+    id: `crewon:preset:${preset.kind}:${preset.id}`,
+    label: preset.kind === "skill" ? "技能" : "服务",
+    location: preset.location,
+    logo: preset.logo,
+    meta: [preset.category, "预制"],
+    preset: { id: preset.id, kind: preset.kind },
+    title: preset.title,
+  }));
 }
 
 function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
@@ -370,7 +460,9 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
       filter: "employee",
       icon: "A",
       id: `agent-platform:agents:${agent.id}`,
-      label: "员工",
+      label: "智能体",
+      location: resourceLocation(resource.source),
+      logo: "assistant",
       meta: [],
       resource,
       title: agent.name,
@@ -402,6 +494,8 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
       icon: "S",
       id: `agent-platform:skills:${skill.id}`,
       label: "技能",
+      location: resourceLocation(resource.source),
+      logo: "skill",
       meta: [],
       resource,
       title: skill.name,
@@ -432,6 +526,8 @@ function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
       icon: "M",
       id: `agent-platform:mcp_servers:${server.id}`,
       label: "服务",
+      location: resourceLocation(resource.source),
+      logo: "mcp",
       meta: [],
       resource,
       title: resource.name,
@@ -712,6 +808,7 @@ export function AgentsView({
   onReload,
   onCatalogFilterChange,
   onCatalogSearchChange,
+  onSaveCapability,
 }: {
   active: boolean;
   catalogFilter: string;
@@ -722,6 +819,7 @@ export function AgentsView({
   onReload: (category?: AgentPlatformResourceCategory) => Promise<void>;
   onCatalogFilterChange: (filter: string) => void;
   onCatalogSearchChange: (query: string) => void;
+  onSaveCapability?: CapabilityEditorSaveHandler;
 }) {
   const [selectedResource, setSelectedResource] = useState<{
     resource: CatalogResourceSummary;
@@ -731,11 +829,27 @@ export function AgentsView({
   const [downloadProgress, setDownloadProgress] = useState<
     Record<string, number>
   >({});
+  const [editorDraft, setEditorDraft] = useState<CapabilityEditorDraft | null>(
+    null,
+  );
+  const [editorBusy, setEditorBusy] = useState(false);
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [editorAuthorizationUrl, setEditorAuthorizationUrl] = useState<
+    string | null
+  >(null);
+  const [locationFilter, setLocationFilter] = useState<
+    "all" | CapabilityLocation
+  >("all");
   const syncedCards = useMemo(() => syncedAgentCatalog(snapshot), [snapshot]);
-  const cards = syncedCards;
+  const presetCards = useMemo(presetCapabilityCatalog, []);
+  const cards = useMemo(
+    () => [...presetCards, ...syncedCards],
+    [presetCards, syncedCards],
+  );
   const visibleCards = cards.filter(
     (item) =>
       (catalogFilter === "all" || hasFilter(item, catalogFilter)) &&
+      (locationFilter === "all" || item.location === locationFilter) &&
       includesQuery(item, catalogSearch),
   );
   const displayedCategories: AgentPlatformResourceCategory[] =
@@ -748,8 +862,12 @@ export function AgentsView({
           : ["agents", "skills", "mcp"];
   const categoryCounts: Record<AgentPlatformResourceCategory, number> = {
     agents: snapshot.agents.length,
-    skills: snapshot.skills.length,
-    mcp: snapshot.mcpServers.length,
+    skills:
+      snapshot.skills.length +
+      presetCards.filter((item) => item.preset?.kind === "skill").length,
+    mcp:
+      snapshot.mcpServers.length +
+      presetCards.filter((item) => item.preset?.kind === "mcp").length,
     knowledge: snapshot.knowledgeBases.length,
   };
   const selectedCardCount = displayedCategories.reduce(
@@ -772,15 +890,18 @@ export function AgentsView({
   }
 
   async function download(resource: CatalogResourceSummary) {
-    if (resource.type !== "skills" || resource.source !== "catalog") {
-      setDownloadError("只有目录 Skill 可以下载");
+    if (resource.type !== "skills") {
+      setDownloadError("只有技能可以安装");
       return;
     }
     const key = `${resource.type}:${resource.id}`;
     setDownloadProgress((current) => ({ ...current, [key]: 1 }));
     setDownloadError(null);
     try {
-      await downloadCatalogResource("skills", resource.id);
+      if (!onSaveCapability) {
+        throw new Error("App Server 未连接，无法安装技能到当前工作区");
+      }
+      await installCatalogSkill(resource, onSaveCapability);
       await onReload();
     } catch (reason) {
       setDownloadError(
@@ -792,6 +913,79 @@ export function AgentsView({
         delete next[key];
         return next;
       });
+    }
+  }
+
+  function openBlankEditor(kind: "mcp" | "skill") {
+    setEditorError(null);
+    setEditorAuthorizationUrl(null);
+    setEditorDraft(
+      kind === "skill"
+        ? {
+            kind,
+            name: "new-skill",
+            description: "可复用的 CrewON 工作流。",
+            workflow:
+              "- 确认目标、输入和验收标准。\n- 按步骤执行并保留证据。\n- 输出结果、风险和验证记录。",
+          }
+        : mcpEditorDraftForPreset("filesystem"),
+    );
+  }
+
+  function openPresetEditor(preset: { id: string; kind: "mcp" | "skill" }) {
+    const definition = capabilityPresetById(preset.id, preset.kind);
+    if (!definition) {
+      return;
+    }
+    setEditorError(null);
+    setEditorAuthorizationUrl(null);
+    setEditorDraft(
+      definition.kind === "skill"
+        ? {
+            kind: "skill",
+            name: definition.id,
+            description: definition.description,
+            workflow: definition.workflow,
+          }
+        : mcpEditorDraftForPreset(definition.id),
+    );
+  }
+
+  async function saveEditorDraft() {
+    if (!editorDraft || !onSaveCapability) {
+      return;
+    }
+    const oauthWindow =
+      editorDraft.kind === "mcp" &&
+      mcpPresetSetup(editorDraft.presetId).oauth &&
+      typeof window !== "undefined"
+        ? window.open("about:blank", "crewon-mcp-oauth")
+        : null;
+    setEditorBusy(true);
+    setEditorError(null);
+    setEditorAuthorizationUrl(null);
+    try {
+      const result = await onSaveCapability(editorDraft);
+      if (result?.authorizationUrl) {
+        if (oauthWindow) {
+          oauthWindow.opener = null;
+          oauthWindow.location.href = result.authorizationUrl;
+        } else {
+          setEditorAuthorizationUrl(result.authorizationUrl);
+          setEditorError(
+            "登录窗口被浏览器拦截，请点击“继续登录授权”完成连接。",
+          );
+          return;
+        }
+      } else {
+        oauthWindow?.close();
+      }
+      setEditorDraft(null);
+    } catch (error) {
+      oauthWindow?.close();
+      setEditorError(error instanceof Error ? error.message : "保存能力失败");
+    } finally {
+      setEditorBusy(false);
     }
   }
 
@@ -815,7 +1009,7 @@ export function AgentsView({
             options={[
               {
                 icon: <Bot aria-hidden="true" />,
-                label: "员工",
+                label: "智能体",
                 value: "employee",
               },
               {
@@ -834,7 +1028,7 @@ export function AgentsView({
           <div className="catalog-header-actions">
             <CatalogSearch
               label="搜索能力"
-              placeholder="搜索员工、技能或服务"
+              placeholder="搜索智能体、技能或服务"
               value={catalogSearch}
               onChange={onCatalogSearchChange}
             />
@@ -846,8 +1040,52 @@ export function AgentsView({
             >
               {refreshing ? "更新中…" : "刷新资源"}
             </button>
+            <button
+              className="button compact"
+              type="button"
+              onClick={() => openBlankEditor("skill")}
+            >
+              创建技能
+            </button>
+            <button
+              className="button compact primary"
+              type="button"
+              onClick={() => openBlankEditor("mcp")}
+            >
+              创建服务
+            </button>
           </div>
         </header>
+
+        <div
+          className="catalog-location-filter"
+          role="group"
+          aria-label="运行位置筛选"
+        >
+          <span>运行位置</span>
+          {(["all", "local", "cloud"] as const).map((location) => (
+            <button
+              aria-pressed={locationFilter === location}
+              className={classNames(
+                "catalog-location-filter-button",
+                locationFilter === location && "active",
+              )}
+              key={location}
+              type="button"
+              onClick={() => setLocationFilter(location)}
+            >
+              {location === "all"
+                ? "全部"
+                : location === "local"
+                  ? "本地"
+                  : "云端"}
+            </button>
+          ))}
+          <span className="catalog-location-summary">
+            本地 {cards.filter((item) => item.location === "local").length} ·
+            云端 {cards.filter((item) => item.location === "cloud").length}
+          </span>
+        </div>
 
         {downloadError ? (
           <p className="catalog-download-error" role="alert">
@@ -870,6 +1108,7 @@ export function AgentsView({
         <section
           className="capability-catalog"
           data-od-id="agent-capability-catalog"
+          data-catalog-filter={catalogFilter}
         >
           {visibleCards.map((item) => (
             <CatalogCard
@@ -884,6 +1123,7 @@ export function AgentsView({
               }
               onDownload={download}
               onOpen={(resource) => setSelectedResource({ resource })}
+              onPreset={openPresetEditor}
             />
           ))}
           {visibleCards.length === 0 && selectedCardCount > 0 ? (
@@ -900,7 +1140,22 @@ export function AgentsView({
       <CatalogResourceDialog
         resource={selectedResource?.resource ?? null}
         onClose={() => setSelectedResource(null)}
+        onInstallSkill={download}
         onRefresh={refresh}
+      />
+      <CapabilityEditorDialog
+        authorizationUrl={editorAuthorizationUrl}
+        busy={editorBusy}
+        draft={editorDraft}
+        error={editorError}
+        onChange={setEditorDraft}
+        onClose={() => {
+          if (!editorBusy) {
+            setEditorDraft(null);
+            setEditorAuthorizationUrl(null);
+          }
+        }}
+        onSave={saveEditorDraft}
       />
     </section>
   );
@@ -923,6 +1178,9 @@ export function KnowledgeCatalogView({
     resource: CatalogResourceSummary;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [locationFilter, setLocationFilter] = useState<
+    "all" | CapabilityLocation
+  >("all");
   const cards = snapshot.knowledgeBases.map((knowledgeBase): CatalogItem => {
     const resource: CatalogResourceSummary = {
       id: knowledgeBase.id,
@@ -944,15 +1202,23 @@ export function KnowledgeCatalogView({
       accent: "knowledge-card",
       detail: resource.description,
       filter: "knowledge personal",
-      icon: <BookOpen aria-hidden="true" />,
+      icon: "KB",
       id: `agent-platform:knowledge_bases:${knowledgeBase.id}`,
       label: "知识库",
+      location: resourceLocation(resource.source),
+      logo: "knowledge",
       meta: [],
       resource,
       title: knowledgeBase.name,
     };
   });
-  const visibleCards = cards.filter((item) => includesQuery(item, query));
+  const visibleCards = cards.filter(
+    (item) =>
+      (locationFilter === "all" || item.location === locationFilter) &&
+      includesQuery(item, query),
+  );
+  const localCount = cards.filter((item) => item.location === "local").length;
+  const cloudCount = cards.filter((item) => item.location === "cloud").length;
 
   async function refresh() {
     setRefreshing(true);
@@ -971,8 +1237,11 @@ export function KnowledgeCatalogView({
     >
       <div className="page-stack">
         <header className="catalog-market-header">
-          <div>
-            <h2>知识库</h2>
+          <div className="catalog-mode-tabs" aria-label="知识库分类">
+            <span className="filter-chip mode-tab active">
+              <BookOpen aria-hidden="true" />
+              <span>知识库</span>
+            </span>
           </div>
           <div className="catalog-header-actions">
             <CatalogSearch
@@ -991,6 +1260,36 @@ export function KnowledgeCatalogView({
             </button>
           </div>
         </header>
+        <div
+          className="catalog-location-filter"
+          role="group"
+          aria-label="运行位置筛选"
+        >
+          <span>运行位置</span>
+          {(
+            [
+              ["all", "全部"],
+              ["local", "本地"],
+              ["cloud", "云端"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              aria-pressed={locationFilter === value}
+              className={classNames(
+                "catalog-location-filter-button",
+                locationFilter === value && "active",
+              )}
+              key={value}
+              type="button"
+              onClick={() => setLocationFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="catalog-location-summary">
+            本地 {localCount} · 云端 {cloudCount}
+          </span>
+        </div>
         {resourceStates.knowledge.status !== "ready" || cards.length === 0 ? (
           <div className="catalog-category-states">
             <CatalogCategoryState
@@ -1001,7 +1300,10 @@ export function KnowledgeCatalogView({
             />
           </div>
         ) : null}
-        <section className="capability-catalog knowledge-catalog">
+        <section
+          className="capability-catalog knowledge-catalog"
+          data-catalog-filter="knowledge"
+        >
           {visibleCards.map((item) => (
             <CatalogCard
               item={item}
@@ -1021,334 +1323,6 @@ export function KnowledgeCatalogView({
         onClose={() => setSelectedResource(null)}
         onRefresh={refresh}
       />
-    </section>
-  );
-}
-
-function CalendarPanel({
-  agenda,
-  hidden,
-  kind,
-}: {
-  agenda: Array<[string, string, string, string, "success" | "warn" | ""]>;
-  hidden: boolean;
-  kind: "personal" | "teamflow";
-}) {
-  const title = kind === "personal" ? "个人日程" : "小队日程";
-  return (
-    <section
-      className="schedule-calendar-panel"
-      data-card-filter={`calendar ${kind}`}
-      data-od-id={
-        kind === "personal"
-          ? "schedule-calendar-personal"
-          : "schedule-calendar-team"
-      }
-      hidden={hidden}
-    >
-      <div
-        className="calendar-month"
-        aria-label={kind === "personal" ? "个人日历" : "小队日历"}
-      >
-        <div className="calendar-month-head">
-          <strong>2026 年 7 月</strong>
-          <span>{title}</span>
-        </div>
-        <div className="calendar-grid">
-          {["一", "二", "三", "四", "五", "六", "日"].map((day) => (
-            <span key={day}>{day}</span>
-          ))}
-          {Array.from({ length: 21 }, (_, index) => (
-            <button
-              className={classNames(
-                [8, 14, 16].includes(index) && "has-event",
-                index === 16 && "is-selected",
-              )}
-              key={index}
-              type="button"
-            >
-              {index + 1}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="calendar-agenda">
-        <div className="panel-head">
-          <h3>{kind === "personal" ? "7 月 17 日安排" : "小队执行安排"}</h3>
-          <span
-            className={classNames(
-              "status",
-              kind === "personal" ? "success" : "warn",
-            )}
-          >
-            {kind === "personal" ? "2/3 完成" : "1 项卡点"}
-          </span>
-        </div>
-        {agenda.map(([time, titleText, detail, status, tone]) => (
-          <article className="agenda-item" key={`${time}-${titleText}`}>
-            <span className="time-block">{time}</span>
-            <div>
-              <strong>{titleText}</strong>
-              <p>{detail}</p>
-            </div>
-            <span className={classNames("status", tone)}>{status}</span>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function ScheduleView({
-  active,
-  modalOpen,
-  scheduleMode,
-  scheduleSource,
-  onCloseModal,
-  onModeChange,
-  onOpenModal,
-  onSourceChange,
-}: {
-  active: boolean;
-  modalOpen: boolean;
-  scheduleMode: string;
-  scheduleSource: string;
-  onCloseModal: () => void;
-  onModeChange: (mode: string) => void;
-  onOpenModal: () => void;
-  onSourceChange: (source: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const arrangementCards: CatalogItem[] = [
-    {
-      accent: "schedule-card",
-      action: "创建",
-      detail: "给自己创建周期提醒、材料整理、审批跟进等自动化任务安排。",
-      filter: "arrangement personal",
-      icon: "我",
-      id: "schedule-arrange-personal",
-      label: "Personal",
-      meta: ["个人日程", "单次 / 周期", "可推送"],
-      title: "创建个人任务安排",
-    },
-    {
-      accent: "schedule-card",
-      action: "创建",
-      detail: "为小队创建 Code Review、日报、Gate 超时和 Channel 推送安排。",
-      filter: "arrangement teamflow",
-      icon: "队",
-      id: "schedule-arrange-team",
-      label: "Team",
-      meta: ["小队日程", "自动执行", "Gate"],
-      title: "创建小队任务安排",
-    },
-  ];
-  const visibleArrangementCards = arrangementCards.filter(
-    (item) =>
-      scheduleMode === "arrangement" &&
-      hasFilter(item, scheduleSource) &&
-      includesQuery(item, query),
-  );
-
-  return (
-    <section
-      className={classNames("shell-view shell-page-view", active && "active")}
-      data-filter-scope=""
-      data-od-id="shell-view-schedule"
-      data-shell-view="schedule"
-      hidden={!active}
-    >
-      <div className="page-stack" data-filter-scope="">
-        <header
-          className="catalog-market-header function-market-header"
-          data-od-id="schedule-header-inline"
-        >
-          <FilterTabs
-            active={scheduleMode}
-            group="schedule-mode"
-            label="日程视图筛选"
-            options={[
-              { label: "日程", value: "calendar" },
-              { label: "安排", value: "arrangement" },
-            ]}
-            onChange={onModeChange}
-          />
-          <div className="catalog-header-actions">
-            <CatalogSearch
-              label="搜索日程"
-              placeholder="搜索日程、安排、结果"
-              value={query}
-              onChange={setQuery}
-            />
-            <button className="button" type="button">
-              同步日程
-            </button>
-            <button
-              className="button primary"
-              type="button"
-              onClick={onOpenModal}
-            >
-              新建安排
-            </button>
-          </div>
-        </header>
-
-        <section
-          className="catalog-source-bar"
-          data-od-id="schedule-filters-inline"
-        >
-          <SourceTabs
-            active={scheduleSource}
-            group="schedule-source"
-            label="日程范围筛选"
-            options={[
-              { label: "个人日程", value: "personal" },
-              { label: "小队日程", value: "teamflow" },
-            ]}
-            onChange={onSourceChange}
-          />
-          <span className="catalog-context-note">
-            今天 4 项安排 · 2 项执行中 · 1 个结果待确认
-          </span>
-        </section>
-
-        <CalendarPanel
-          agenda={[
-            [
-              "09:00",
-              "审批待确认 Gate",
-              "安排：审阅需求拆解；状态：等待你确认；产出：任务分解摘要。",
-              "待确认",
-              "warn",
-            ],
-            [
-              "11:30",
-              "个人周报草稿",
-              "安排：汇总本周项目变化；状态：执行完成；产出：周报草稿可编辑。",
-              "已产出",
-              "success",
-            ],
-            [
-              "16:00",
-              "设计走查提醒",
-              "安排：检查能力库与日程页；状态：待开始；产出：检查清单。",
-              "待开始",
-              "",
-            ],
-          ]}
-          hidden={scheduleMode !== "calendar" || scheduleSource !== "personal"}
-          kind="personal"
-        />
-        <CalendarPanel
-          agenda={[
-            [
-              "10:00",
-              "Code Review 安排",
-              "安排：PR 更新后触发审阅智能体；状态：运行中；产出：高风险结果推到 Gate。",
-              "运行中",
-              "success",
-            ],
-            [
-              "14:00",
-              "需求 Gate 超时",
-              "安排：72h 未确认自动驳回；状态：待人介入；产出：驳回说明草稿。",
-              "待确认",
-              "warn",
-            ],
-            [
-              "17:30",
-              "小队日报推送",
-              "安排：汇总执行状态、失败重试和完成报告；状态：待开始；产出：Channel 草稿。",
-              "待开始",
-              "",
-            ],
-          ]}
-          hidden={scheduleMode !== "calendar" || scheduleSource !== "teamflow"}
-          kind="teamflow"
-        />
-
-        <section
-          className="capability-catalog function-catalog schedule-arrangement-catalog"
-          data-od-id="schedule-arrangement-catalog"
-          hidden={scheduleMode !== "arrangement"}
-        >
-          {visibleArrangementCards.map((item) => (
-            <CatalogCard item={item} key={item.id} />
-          ))}
-        </section>
-        <div
-          className="filter-empty-state"
-          data-filter-empty=""
-          hidden={
-            scheduleMode !== "arrangement" || visibleArrangementCards.length > 0
-          }
-        >
-          没有匹配项
-        </div>
-        <div id="schedule-log" className="sr-log" aria-live="polite" />
-      </div>
-
-      <div
-        className={classNames("modal-backdrop", modalOpen && "open")}
-        hidden={!modalOpen}
-        id="schedule-arrangement-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="schedule-arrangement-title"
-      >
-        <section
-          className="arrangement-modal-card"
-          data-od-id="schedule-arrangement-modal"
-        >
-          <header className="arrangement-modal-header">
-            <h2 id="schedule-arrangement-title">创建任务安排</h2>
-            <button
-              className="icon-action compact"
-              type="button"
-              aria-label="关闭"
-              onClick={onCloseModal}
-            >
-              <X aria-hidden="true" />
-            </button>
-          </header>
-          <label className="form-field">
-            <span>名称</span>
-            <input type="text" defaultValue="每日交付状态同步" />
-          </label>
-          <label className="form-field">
-            <span>任务提示词</span>
-            <textarea defaultValue="汇总当天执行状态、卡点和结果产出，只推送需要确认的内容。" />
-          </label>
-          <div className="modal-chip-row" aria-label="执行配置">
-            <span>Auto</span>
-            <span>技能</span>
-            <span>产品专家</span>
-            <span className="warn">完全访问权限</span>
-          </div>
-          <div className="form-field">
-            <span>执行频率</span>
-            <div className="frequency-tabs">
-              <button className="active" type="button">
-                周期
-              </button>
-              <button type="button">按间隔</button>
-              <button type="button">单次</button>
-            </div>
-          </div>
-          <footer className="arrangement-modal-actions">
-            <button className="button" type="button" onClick={onCloseModal}>
-              取消
-            </button>
-            <button
-              className="button primary"
-              type="button"
-              onClick={onCloseModal}
-            >
-              创建
-            </button>
-          </footer>
-        </section>
-      </div>
     </section>
   );
 }
@@ -1415,8 +1389,16 @@ export function TeamView({
   teamMode,
   teamWorkspaceCwd,
   teamWorkspaceOptions,
+  workflows,
+  expertTeams,
+  expertTeamsStatus,
   onCreateOffice,
+  onCreateWorkflow,
+  onCreateExpertTeam,
   onRefresh,
+  onReloadWorkflows,
+  onRunWorkflow,
+  onSelectExpert,
   onTeamModeChange,
   onTeamWorkspaceChange,
 }: {
@@ -1427,12 +1409,24 @@ export function TeamView({
   teamMode: TeamMode;
   teamWorkspaceCwd: string;
   teamWorkspaceOptions: Array<{ label: string; value: string }>;
+  workflows: PlatformWorkflow[];
+  expertTeams: ExpertTeamRecordReference[];
+  expertTeamsStatus: "loading" | "ready" | "unavailable";
   onCreateOffice?: () => void;
+  onCreateWorkflow?: () => void;
+  onCreateExpertTeam?: () => void;
   onRefresh?: () => void;
+  onReloadWorkflows: () => Promise<void>;
+  onRunWorkflow: (
+    workflow: PlatformWorkflow,
+    input: string,
+  ) => Promise<PlatformWorkflowExecution>;
+  onSelectExpert: (record: ExpertTeamRecordReference) => void;
   onTeamModeChange: (mode: TeamMode) => void;
   onTeamWorkspaceChange: (cwd: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [workflowRoomOpen, setWorkflowRoomOpen] = useState(false);
   const officeStatus = officeRuntime?.status ?? "unavailable";
   return (
     <section
@@ -1440,6 +1434,7 @@ export function TeamView({
         "shell-view shell-page-view",
         active && "active",
         officeRoomId && "office-room-active",
+        workflowRoomOpen && "workflow-room-active",
       )}
       data-filter-scope=""
       data-od-id="shell-view-team"
@@ -1460,7 +1455,13 @@ export function TeamView({
               { label: "协作流", value: "workflow" },
               { label: "专家团", value: "experts" },
             ]}
-            onChange={(value) => onTeamModeChange(value as TeamMode)}
+            onChange={(value) => {
+              const nextMode = value as TeamMode;
+              if (nextMode !== "workflow") {
+                setWorkflowRoomOpen(false);
+              }
+              onTeamModeChange(nextMode);
+            }}
           />
           <div className="catalog-header-actions">
             {teamMode === "office" ? (
@@ -1480,6 +1481,16 @@ export function TeamView({
             >
               {officeStatus === "loading" ? "同步中…" : "同步真实数据"}
             </button>
+            {teamMode === "workflow" && onCreateWorkflow ? (
+              <button
+                className="button primary"
+                type="button"
+                data-team-action="workflow"
+                onClick={onCreateWorkflow}
+              >
+                创建协作流
+              </button>
+            ) : null}
             <button
               className="button primary"
               type="button"
@@ -1493,20 +1504,10 @@ export function TeamView({
             <button
               className="button primary"
               type="button"
-              data-team-action="workflow"
-              disabled
-              hidden={teamMode !== "workflow"}
-              title="等待 Workflow 后端列表、创建与运行接口接入"
-            >
-              创建协作流
-            </button>
-            <button
-              className="button primary"
-              type="button"
               data-team-action="experts"
-              disabled
+              disabled={!onCreateExpertTeam}
               hidden={teamMode !== "experts"}
-              title="等待专家团定义与单聊运行接口接入"
+              onClick={onCreateExpertTeam}
             >
               创建专家团
             </button>
@@ -1519,27 +1520,22 @@ export function TeamView({
         >
           {teamMode === "experts" ? (
             <div className="team-workspace-scope is-single-chat">
-              <span className="team-workspace-scope-label">
-                专家团工作空间
-              </span>
+              <span className="team-workspace-scope-label">专家团工作空间</span>
               <strong title={singleChatWorkspaceCwd}>
                 {singleChatWorkspaceCwd || "无工作空间"}
               </strong>
             </div>
+          ) : teamMode === "workflow" ? (
+            <div className="team-workspace-scope is-cloud-runtime">
+              <span className="team-workspace-scope-label">协作流执行环境</span>
+              <strong>Agent Platform 云端</strong>
+            </div>
           ) : (
             <label className="team-workspace-scope">
-              <span className="team-workspace-scope-label">
-                {teamMode === "office"
-                  ? "办公室工作空间"
-                  : "协作流工作空间"}
-              </span>
+              <span className="team-workspace-scope-label">办公室工作空间</span>
               <span className="team-workspace-picker">
                 <select
-                  aria-label={
-                    teamMode === "office"
-                      ? "办公室群聊工作空间"
-                      : "协作流运行工作空间"
-                  }
+                  aria-label="办公室群聊工作空间"
                   title={teamWorkspaceCwd}
                   value={teamWorkspaceCwd}
                   onChange={(event) =>
@@ -1562,52 +1558,56 @@ export function TeamView({
             {teamMode === "office"
               ? "群聊空间 · 可 @ 任意员工 · 不影响主页单聊"
               : teamMode === "workflow"
-                ? "群聊协作 · 工作空间归属本次运行"
+                ? "云端执行 · 不上传本机路径或工作空间内容"
                 : "单聊模式 · 只与团长对话"}
           </span>
         </section>
 
-        <section
-          className={classNames(
-            "team-office-shell",
-            officeRoomId && "is-room-open",
-          )}
-          data-card-filter="office"
-          data-office-shell=""
-          data-od-id="team-office-shell"
-          hidden={teamMode !== "office" && !officeRoomId}
-        >
-          {officeRuntime ? (
-            <CommandOfficeRoom
-              {...officeRuntime}
-              isOpen={Boolean(officeRoomId)}
-              query={searchQuery}
-            />
-          ) : (
-            <CommandOfficeRoom
-              isOpen={false}
-              query={searchQuery}
-              records={[]}
-              room={null}
-              selectedRecordKey={null}
-              status="unavailable"
-              onOpen={() => undefined}
-            />
-          )}
-        </section>
+        {teamMode === "office" || officeRoomId ? (
+          <section
+            className={classNames(
+              "team-office-shell",
+              officeRoomId && "is-room-open",
+            )}
+            data-card-filter="office"
+            data-office-shell=""
+            data-od-id="team-office-shell"
+          >
+            {officeRuntime ? (
+              <CommandOfficeRoom
+                {...officeRuntime}
+                isOpen={Boolean(officeRoomId)}
+                query={searchQuery}
+              />
+            ) : (
+              <CommandOfficeRoom
+                isOpen={false}
+                query={searchQuery}
+                records={[]}
+                room={null}
+                selectedRecordKey={null}
+                status="unavailable"
+                onOpen={() => undefined}
+              />
+            )}
+          </section>
+        ) : null}
 
         <section
-          className="team-workflow-shell"
+          className={classNames(
+            "team-workflow-shell",
+            workflowRoomOpen && "is-room-open",
+          )}
           data-card-filter="workflow"
           data-od-id="team-workflow-shell"
           data-workflow-shell=""
           hidden={teamMode !== "workflow"}
         >
-          <TeamCapabilityUnavailable
-            boundary="协作流运行工作空间"
-            description="当前 App Server 尚未提供协作流的列表、创建和运行接口。前端不会再用静态节点、假进度或本地消息模拟成功。"
-            title="协作流真实运行态尚未接入"
-            workspaceCwd={teamWorkspaceCwd}
+          <CommandWorkflowPanel
+            workflows={workflows}
+            onReload={onReloadWorkflows}
+            onRun={onRunWorkflow}
+            onRoomOpenChange={setWorkflowRoomOpen}
           />
         </section>
 
@@ -1617,12 +1617,22 @@ export function TeamView({
           data-od-id="team-experts-shell"
           hidden={teamMode !== "experts"}
         >
-          <TeamCapabilityUnavailable
-            boundary="专家团单聊工作空间"
-            description="专家团属于单聊执行目标，但当前还没有真实的专家团定义、团长会话和后台成员运行接口。前端不会生成罐头回复或虚构后台协作。"
-            title="专家团真实单聊运行态尚未接入"
-            workspaceCwd={singleChatWorkspaceCwd}
+          <CommandExpertsPanel
+            records={expertTeams}
+            onSelect={onSelectExpert}
           />
+          {expertTeamsStatus === "loading" ? (
+            <div className="team-capability-inline-status" role="status">
+              正在读取专家团…
+            </div>
+          ) : expertTeamsStatus === "unavailable" ? (
+            <div
+              className="team-capability-inline-status is-error"
+              role="status"
+            >
+              专家团服务暂时不可用，请确认当前工作空间已注册。
+            </div>
+          ) : null}
         </section>
 
         <div id="team-log" className="sr-log" aria-live="polite" />

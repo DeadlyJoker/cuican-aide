@@ -44,17 +44,50 @@ describe("command workspace conversation style", () => {
     );
     const marker = ".markdown-content table {";
     const baseContract = appStyles
-      .slice(appStyles.indexOf(marker), appStyles.indexOf(".markdown-content th,"))
+      .slice(
+        appStyles.indexOf(marker),
+        appStyles.indexOf(".markdown-content th,"),
+      )
       .trim();
     const commandMarker = `.message[data-kind="agentMessage"]
   .markdown-content
   table {`;
     const commandStart = appStyles.indexOf(commandMarker);
     const commandEnd = appStyles.indexOf("\n}", commandStart) + 2;
-    const commandContract = appStyles
-      .slice(commandStart, commandEnd)
-      .trim();
+    const commandContract = appStyles.slice(commandStart, commandEnd).trim();
 
     expect({ baseContract, commandContract }).toMatchSnapshot();
+  });
+
+  it("snapshots resource tags and the command file picker contract", () => {
+    const conversationStyles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    const marker =
+      "/* Resource attachments stay compact in the composer, while Skill and MCP remain visible in the sent message. */";
+    const endMarker =
+      "/* Keep active conversations close to Codex's quiet transcript hierarchy. */";
+    const contract = conversationStyles
+      .slice(
+        conversationStyles.indexOf(marker),
+        conversationStyles.indexOf(endMarker),
+      )
+      .trim();
+
+    expect(contract).toMatchSnapshot();
+  });
+
+  it("snapshots the compact add-resource palette contract", () => {
+    const styles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    const marker =
+      "/* Keep the add-resource palette dense enough to compare names and descriptions at a glance. */";
+    const start = styles.indexOf(marker);
+    const end = styles.indexOf(".slash-palette[hidden]", start);
+
+    expect(styles.slice(start, end).trim()).toMatchSnapshot();
   });
 });

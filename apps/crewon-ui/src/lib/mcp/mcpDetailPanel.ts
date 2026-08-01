@@ -6,6 +6,7 @@ import type {
   McpDetailAction,
 } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
+import { buildMcpDraftPanelContent } from "../draft/draftSavePayloads";
 import { toolEmptyHistoryItems } from "../thread/threadHistoryItems";
 
 type McpDetailPanelContent = {
@@ -27,7 +28,18 @@ export function buildMcpDetailPanelContent(
   locale: Locale,
 ): McpDetailPanelContent {
   const tool = action.tool;
-  const actions = mcpDetailActions(action, locale);
+  const editor = action.config
+    ? buildMcpDraftPanelContent({
+        config: action.config,
+        locale,
+        mode: "edit",
+        serverName: action.configName || action.subtitle,
+      })
+    : null;
+  const actions = [
+    ...(editor?.actions?.filter((item) => item.id === "save-mcp-config") ?? []),
+    ...mcpDetailActions(action, locale),
+  ];
   return {
     title: action.title,
     subtitle: action.subtitle,
@@ -45,21 +57,29 @@ export function buildMcpDetailPanelContent(
     ]
       .filter(Boolean)
       .join("\n"),
-    fields: tool
-      ? [
-          {
-            id: "mcp-tool-arguments",
-            label: locale === "zh" ? "工具参数 JSON" : "Tool arguments JSON",
-            placeholder: "{\n}",
-            value: "{}",
-          },
-        ]
-      : undefined,
+    fields:
+      editor || tool
+        ? [
+            ...(editor?.fields ?? []),
+            ...(tool
+              ? [
+                  {
+                    id: "mcp-tool-arguments",
+                    label:
+                      locale === "zh" ? "工具参数 JSON" : "Tool arguments JSON",
+                    placeholder: "{\n}",
+                    value: "{}",
+                  },
+                ]
+              : []),
+          ]
+        : undefined,
     actions: actions.length > 0 ? actions : undefined,
     items: tool
       ? [
           {
-            title: locale === "zh" ? "正在读取调用记录" : "Reading call history",
+            title:
+              locale === "zh" ? "正在读取调用记录" : "Reading call history",
             meta: "app-server",
             description:
               locale === "zh"
@@ -247,7 +267,7 @@ function mcpDetailActions(
   if (action.authStatus === "notLoggedIn") {
     actions.push({
       id: "login-mcp-oauth",
-      label: locale === "zh" ? "登录 MCP" : "Log in to MCP",
+      label: locale === "zh" ? "登录服务" : "Log in to MCP",
       mcpServerName: action.subtitle,
       tone: "primary",
     });
@@ -282,7 +302,7 @@ function mcpDetailActions(
   if (action.configName) {
     actions.push({
       id: "delete-mcp-config",
-      label: locale === "zh" ? "删除 MCP 配置" : "Delete MCP config",
+      label: locale === "zh" ? "删除服务配置" : "Delete MCP config",
       mcpServerName: action.configName,
       tone: "danger",
     });

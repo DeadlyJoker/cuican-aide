@@ -95,6 +95,10 @@ impl<'de> Deserialize<'de> for DynamicToolSpec {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ThreadStartParams {
+    /// Establish the first server-owned Provider resource authority for this new thread.
+    #[experimental("thread/start.executionContext")]
+    #[ts(optional = nullable)]
+    pub execution_context: Option<super::ThreadExecutionContextCreateParams>,
     #[ts(optional = nullable)]
     pub model: Option<String>,
     #[ts(optional = nullable)]
@@ -197,6 +201,10 @@ pub struct MockExperimentalMethodResponse {
 #[ts(export_to = "v2/")]
 pub struct ThreadStartResponse {
     pub thread: Thread,
+    /// Server-owned Provider resource authority established for this thread.
+    #[experimental("thread/start.executionContext")]
+    #[serde(default)]
+    pub execution_context: Option<super::ThreadExecutionContext>,
     pub model: String,
     pub model_provider: String,
     pub service_tier: Option<String>,
@@ -415,6 +423,10 @@ pub struct ThreadResumeParams {
 #[ts(export_to = "v2/")]
 pub struct ThreadResumeResponse {
     pub thread: Thread,
+    /// Existing server-owned Provider resource authority restored for this thread.
+    #[experimental("thread/resume.executionContext")]
+    #[serde(default)]
+    pub execution_context: Option<super::ThreadExecutionContext>,
     pub model: String,
     pub model_provider: String,
     pub service_tier: Option<String>,
@@ -500,6 +512,11 @@ impl From<ThreadTurnsListResponse> for TurnsPage {
 pub struct ThreadForkParams {
     pub thread_id: String,
 
+    /// Establish a new server-owned Provider resource authority for the fork.
+    #[experimental("thread/fork.executionContext")]
+    #[ts(optional = nullable)]
+    pub execution_context: Option<super::ThreadExecutionContextCreateParams>,
+
     /// [UNSTABLE] Specify the rollout path to fork from.
     /// If specified, the thread_id param will be ignored.
     #[experimental("thread/fork.path")]
@@ -567,6 +584,10 @@ pub struct ThreadForkParams {
 #[ts(export_to = "v2/")]
 pub struct ThreadForkResponse {
     pub thread: Thread,
+    /// Server-owned Provider resource authority established for the fork.
+    #[experimental("thread/fork.executionContext")]
+    #[serde(default)]
+    pub execution_context: Option<super::ThreadExecutionContext>,
     pub model: String,
     pub model_provider: String,
     pub service_tier: Option<String>,
@@ -1032,9 +1053,9 @@ pub struct ThreadRollbackParams {
 pub struct ThreadRollbackResponse {
     /// The updated thread after applying the rollback, with `turns` populated.
     ///
-    /// The ThreadItems stored in each Turn are lossy since we explicitly do not
-    /// persist all agent interactions, such as command executions. This is the same
-    /// behavior as `thread/resume`.
+    /// The ThreadItems stored in each Turn are lossy for some interaction kinds.
+    /// Agent command executions are retained (with truncated output); user-shell
+    /// bang commands are still omitted. This matches `thread/resume`.
     pub thread: Thread,
 }
 

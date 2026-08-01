@@ -1,5 +1,7 @@
 use crate::ClientNotification;
 use crate::ClientRequest;
+use crate::PlatformContract;
+use crate::ProviderContract;
 use crate::ServerNotification;
 use crate::ServerRequest;
 use crate::experimental_api::experimental_fields;
@@ -117,6 +119,8 @@ pub fn generate_ts_with_options(
     ensure_dir(&v2_out_dir)?;
 
     ClientRequest::export_all_to(out_dir)?;
+    PlatformContract::export_all_to(out_dir)?;
+    ProviderContract::export_all_to(out_dir)?;
     export_client_responses(out_dir)?;
     ClientNotification::export_all_to(out_dir)?;
 
@@ -127,6 +131,55 @@ pub fn generate_ts_with_options(
     if !options.experimental_api {
         filter_experimental_ts(out_dir)?;
     }
+
+    finalize_ts_output(out_dir, prettier, options)
+}
+
+/// Generates the narrow experimental app-server DTO overlay used by the
+/// first-party CrewON platform UI without widening the stable schema surface.
+pub fn generate_platform_experimental_ts(out_dir: &Path, prettier: Option<&Path>) -> Result<()> {
+    ensure_dir(out_dir)?;
+    ensure_dir(&out_dir.join("v2"))?;
+
+    crate::WorkspaceListParams::export_all_to(out_dir)?;
+    crate::WorkspaceListResponse::export_all_to(out_dir)?;
+    crate::WorkspaceBindParams::export_all_to(out_dir)?;
+    crate::WorkspaceBindResponse::export_all_to(out_dir)?;
+    crate::ProviderConnectParams::export_all_to(out_dir)?;
+    crate::ProviderConnectResponse::export_all_to(out_dir)?;
+    crate::ProviderReadParams::export_all_to(out_dir)?;
+    crate::ProviderReadResponse::export_all_to(out_dir)?;
+    crate::ResourceListParams::export_all_to(out_dir)?;
+    crate::ResourceListResponse::export_all_to(out_dir)?;
+    crate::ResourceReadParams::export_all_to(out_dir)?;
+    crate::ResourceReadResponse::export_all_to(out_dir)?;
+    crate::ResourceBindParams::export_all_to(out_dir)?;
+    crate::ResourceBindResponse::export_all_to(out_dir)?;
+    crate::ResourceUnbindParams::export_all_to(out_dir)?;
+    crate::ResourceUnbindResponse::export_all_to(out_dir)?;
+    crate::ThreadExecutionContextCreateParams::export_all_to(out_dir)?;
+    crate::ThreadExecutionContextBindingRef::export_all_to(out_dir)?;
+    crate::ThreadExecutionContext::export_all_to(out_dir)?;
+    crate::ThreadExecutionContextUpdateParams::export_all_to(out_dir)?;
+    crate::ThreadExecutionContextUpdateResponse::export_all_to(out_dir)?;
+    crate::ResourceBindingUpdatedNotification::export_all_to(out_dir)?;
+
+    finalize_ts_output(
+        out_dir,
+        prettier,
+        GenerateTsOptions {
+            experimental_api: true,
+            ..GenerateTsOptions::default()
+        },
+    )
+}
+
+fn finalize_ts_output(
+    out_dir: &Path,
+    prettier: Option<&Path>,
+    options: GenerateTsOptions,
+) -> Result<()> {
+    let v2_out_dir = out_dir.join("v2");
 
     if options.generate_indices {
         generate_index_ts(out_dir)?;
@@ -214,7 +267,14 @@ pub fn generate_json_with_experimental(out_dir: &Path, experimental_api: bool) -
     for emit in &envelope_emitters {
         schemas.push(emit(out_dir)?);
     }
-
+    schemas.push(write_json_schema_with_return::<PlatformContract>(
+        out_dir,
+        "v2::PlatformContract",
+    )?);
+    schemas.push(write_json_schema_with_return::<ProviderContract>(
+        out_dir,
+        "v2::ProviderContract",
+    )?);
     schemas.extend(export_client_param_schemas(out_dir)?);
     schemas.extend(export_client_response_schemas(out_dir)?);
     schemas.extend(export_server_param_schemas(out_dir)?);
@@ -659,7 +719,7 @@ fn prune_unused_type_imports(content: String, type_alias_body: &str) -> String {
     let mut lines = Vec::new();
     for line in content.lines() {
         if let Some(type_name) = parse_imported_type_name(line)
-            && !type_alias_body.contains(type_name)
+            && !contains_typescript_identifier(type_alias_body, type_name)
         {
             continue;
         }
@@ -671,6 +731,20 @@ fn prune_unused_type_imports(content: String, type_alias_body: &str) -> String {
         rewritten.push('\n');
     }
     rewritten
+}
+
+fn contains_typescript_identifier(input: &str, identifier: &str) -> bool {
+    input.match_indices(identifier).any(|(start, _)| {
+        let end = start + identifier.len();
+        let before = input[..start].chars().next_back();
+        let after = input[end..].chars().next();
+        before.is_none_or(|ch| !is_typescript_identifier_char(ch))
+            && after.is_none_or(|ch| !is_typescript_identifier_char(ch))
+    })
+}
+
+fn is_typescript_identifier_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_' || ch == '$'
 }
 
 fn parse_imported_type_name(line: &str) -> Option<&str> {

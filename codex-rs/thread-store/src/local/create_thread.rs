@@ -44,9 +44,7 @@ pub(super) async fn create_thread(
         .with_scene_runtime(scene_runtime),
     )
     .await
-    .map_err(|err| ThreadStoreError::Internal {
-        message: format!("failed to initialize local thread recorder: {err}"),
-    })?;
+    .map_err(super::live_writer::map_recorder_error)?;
 
     Ok(recorder)
 }

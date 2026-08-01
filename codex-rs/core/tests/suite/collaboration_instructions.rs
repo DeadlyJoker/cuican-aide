@@ -716,6 +716,7 @@ async fn resume_replays_collaboration_instructions() -> Result<()> {
         matches!(ev, EventMsg::TurnComplete(_))
     })
     .await;
+    initial.crewon.shutdown_and_wait().await?;
 
     let resumed = builder.resume(&server, home, rollout_path).await?;
     resumed

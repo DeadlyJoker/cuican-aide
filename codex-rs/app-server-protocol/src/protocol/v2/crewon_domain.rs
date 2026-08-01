@@ -188,6 +188,34 @@ pub struct OfficeCreateResponse {
     pub config: JsonValue,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum OfficeManagerEnsureStatus {
+    Created,
+    ReusedServerOwned,
+    ReusedLegacy,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct OfficeManagerEnsureParams {
+    pub cwd: String,
+    pub office_record_id: String,
+    pub expected_record_revision: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct OfficeManagerEnsureResponse {
+    pub file_path: String,
+    pub config: JsonValue,
+    pub thread_id: String,
+    pub status: OfficeManagerEnsureStatus,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]

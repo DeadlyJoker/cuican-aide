@@ -34,11 +34,15 @@ pub(crate) struct PendingThreadResumeRequest {
     pub(crate) config_snapshot: ThreadConfigSnapshot,
     pub(crate) instruction_sources: Vec<AbsolutePathBuf>,
     pub(crate) thread_summary: crewon_app_server_protocol::Thread,
+    pub(crate) execution_context: Option<crewon_app_server_protocol::ThreadExecutionContext>,
     pub(crate) emit_thread_goal_update: bool,
     pub(crate) thread_goal_state_db: Option<StateDbHandle>,
     pub(crate) include_turns: bool,
     pub(crate) initial_turns_page:
         Option<crewon_app_server_protocol::ThreadResumeInitialTurnsPageParams>,
+    pub(crate) projected_turns: Option<Vec<crewon_app_server_protocol::Turn>>,
+    pub(crate) projected_initial_turns_page: Option<crewon_app_server_protocol::TurnsPage>,
+    pub(crate) projected_thread_status: Option<crewon_app_server_protocol::ThreadStatus>,
     pub(crate) redact_resume_payloads: bool,
 }
 

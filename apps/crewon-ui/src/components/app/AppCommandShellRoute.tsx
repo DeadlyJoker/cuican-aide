@@ -18,10 +18,13 @@ export function AppCommandShellRoute({
   ...commandWorkspaceProps
 }: AppCommandShellRouteProps) {
   return (
-    <>
+    <div
+      className="command-shell-route"
+      data-capability-sidebar-open={capabilityDrawer.open ? "true" : "false"}
+    >
       <CommandWorkspace {...commandWorkspaceProps} />
       <CommandWorkspaceCapabilityDrawer {...capabilityDrawer} />
       <AppConfirmDialog {...confirmDialog} />
-    </>
+    </div>
   );
 }

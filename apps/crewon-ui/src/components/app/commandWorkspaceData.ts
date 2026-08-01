@@ -8,6 +8,7 @@ export type ShellNavItem = {
   label: string;
   en: string;
   meta?: string;
+  metaEn?: string;
 };
 
 export type ResourceCard = {
@@ -20,9 +21,20 @@ export type ResourceCard = {
 export const shellNavItems: ShellNavItem[] = [
   { key: "command", label: "新建任务", en: "New task" },
   { key: "assist", label: "助理", en: "Assistant" },
-  { key: "projects", label: "项目", en: "Projects" },
-  { key: "agents", label: "智能体", en: "Agents", meta: "技能·连接器" },
-  { key: "schedule", label: "日程安排", en: "Schedule", meta: "计划·提醒" },
+  {
+    key: "agents",
+    label: "智能体",
+    en: "Agents",
+    meta: "技能·连接器",
+    metaEn: "Skills · connectors",
+  },
+  {
+    key: "schedule",
+    label: "日程安排",
+    en: "Schedule",
+    meta: "计划·提醒",
+    metaEn: "Plans · reminders",
+  },
   { key: "team", label: "团队", en: "Team" },
 ];
 

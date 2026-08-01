@@ -22,6 +22,8 @@ export type CommandPaletteKind =
   | "agent"
   | "conversation"
   | "file"
+  | "folder"
+  | "intent"
   | "knowledge"
   | "mcp"
   | "project"
@@ -206,13 +208,8 @@ export function selectCommandHomeSlots(
     ]) ?? snapshot.workflows[0];
   const knowledge = accountKnowledge[0];
   const skillA =
-    findByKeyword(accountSkills, [
-      "schema",
-      "校验",
-      "审阅",
-      "交付",
-      "检查",
-    ]) ?? accountSkills[0];
+    findByKeyword(accountSkills, ["schema", "校验", "审阅", "交付", "检查"]) ??
+    accountSkills[0];
   const skillB =
     accountSkills.find((item) => item.id !== skillA?.id) ?? accountSkills[1];
   const mcpA =

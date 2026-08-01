@@ -1,5 +1,5 @@
-import type { AgentPlatformSnapshot } from "../agent-platform/agentPlatformClient";
 import type { AgentConfig, OfficeConfig } from "../domain/domainTypes";
+import type { Locale } from "../i18n";
 
 export type CommandScene = "office" | "code" | "design";
 
@@ -18,7 +18,7 @@ export type SceneInteractionMode =
   | "produce"
   | "inspect";
 
-export type ExecutionTargetKind = "crewon" | "agent" | "team";
+export type ExecutionTargetKind = "crewon" | "agent" | "team" | "experts";
 
 export type ExecutionTargetOption = {
   detail: string;
@@ -52,10 +52,6 @@ export type ScenePreset = {
   subtitle: string;
   tabLabel: string;
 };
-
-function explicitlyEnabled(value: unknown): boolean {
-  return value === true || value === 1;
-}
 
 const autoMode: SceneModeOption = {
   detail: "根据任务对象、交付物和风险自动判断",
@@ -180,53 +176,197 @@ export const scenePresets: Record<CommandScene, ScenePreset> = {
   },
 };
 
-export function executionTargetOptions(
-  snapshot: AgentPlatformSnapshot,
-  runtimeAvailability: { agent: boolean; team: boolean } = {
-    agent: false,
-    team: false,
+export const scenePresetsEn: Record<CommandScene, ScenePreset> = {
+  office: {
+    capabilitySummary: "Documents · Calendar · Knowledge",
+    contextSummary: "Documents / calendar / knowledge base",
+    deliverableSummary: "Documents and action items",
+    modes: [
+      {
+        detail: "Choose from the task, deliverable, and risk",
+        label: "Auto",
+        value: "auto",
+      },
+      {
+        detail: "Organize items, sources, and actions",
+        label: "Organize",
+        value: "organize",
+      },
+      {
+        detail: "Produce a ready-to-use draft for its audience",
+        label: "Write",
+        value: "write",
+      },
+      {
+        detail: "Explain the method and conclusions from sources",
+        label: "Analyze",
+        value: "analyze",
+      },
+      {
+        detail: "Prepare messages, meetings, or shared drafts",
+        label: "Coordinate",
+        value: "coordinate",
+      },
+    ],
+    placeholder:
+      "For example: organize today's project work, schedule meetings, follow up on blockers, and save conclusions to the knowledge base",
+    quickActions: [
+      {
+        label: "Organize today's work",
+        mode: "organize",
+        prompt:
+          "Organize today's project work with tasks, meetings, owners, blockers, and deadlines.",
+      },
+      {
+        label: "Prepare meeting materials",
+        mode: "write",
+        prompt:
+          "Prepare meeting materials from the available sources and calendar, including agenda, context, decisions, and action items.",
+      },
+      {
+        label: "Write a project update",
+        mode: "write",
+        prompt:
+          "Write a ready-to-use project update covering progress, risks, conclusions, and next steps.",
+      },
+      {
+        label: "Save to the knowledge base",
+        mode: "organize",
+        prompt:
+          "Turn this discussion into a knowledge-base entry with conclusions, sources, scope, and owner.",
+      },
+    ],
+    scene: "office",
+    subtitle: "Organize, write, and move your work forward",
+    tabLabel: "Office",
   },
-): ExecutionTargetOption[] {
-  const agents = snapshot.agents
-    .filter((agent) => explicitlyEnabled(agent.is_active))
-    .map((agent) => {
-      const apiEnabled = explicitlyEnabled(agent.api_enabled);
-      const available = apiEnabled && runtimeAvailability.agent;
-      return {
-        detail: !apiEnabled
-          ? "Agent 尚未开放 Open API"
-          : runtimeAvailability.agent
-            ? agent.description?.trim() || "使用该智能体的模型与能力配置"
-            : "智能体定义已同步，Execution Target Runtime 尚未接入",
-        disabled: !available,
-        kind: "agent" as const,
-        label: `${agent.name} · 单 Agent`,
-        strategy: "single" as const,
-        value: `agent:${agent.id}`,
-      };
-    });
-
-  return [
-    {
-      detail: "本地 Agent，独立完成任务",
-      kind: "crewon",
-      label: "CrewON",
-      strategy: "single",
-      value: "crewon",
-    },
-    ...agents,
-    {
-      detail: runtimeAvailability.team
-        ? "使用服务端解析的小队定义和有界 Team Runtime"
-        : "服务端 Team Runtime 与小队目录尚未接入",
-      disabled: !runtimeAvailability.team,
-      kind: "team",
-      label: "选择已有小队 · 暂不可用",
-      strategy: "team",
-      value: runtimeAvailability.team ? "team:select" : "team:unavailable",
-    },
-  ];
-}
+  code: {
+    capabilitySummary: "Workspace · Terminal · Test · Git",
+    contextSummary: "Repository / issue / logs",
+    deliverableSummary: "Answers, plans, diffs, and tests",
+    modes: [
+      {
+        detail: "Choose from the task, deliverable, and risk",
+        label: "Auto",
+        value: "auto",
+      },
+      {
+        detail: "Answer read-only with repository evidence",
+        label: "Ask",
+        value: "ask",
+      },
+      {
+        detail: "Create an actionable plan without changing files",
+        label: "Plan",
+        value: "plan",
+      },
+      {
+        detail: "Change the workspace and run relevant checks",
+        label: "Code",
+        value: "implement",
+      },
+      {
+        detail: "Return read-only, locatable review findings",
+        label: "Review",
+        value: "review",
+      },
+    ],
+    placeholder:
+      "For example: read the repository rules, implement this feature, and run the relevant tests",
+    quickActions: [
+      {
+        label: "Implement a feature",
+        mode: "implement",
+        prompt:
+          "Read the repository rules, implement this feature, and run the relevant formatting, tests, and build checks.",
+      },
+      {
+        label: "Fix a bug",
+        mode: "implement",
+        prompt:
+          "Use the issue description, logs, and repository evidence to find the root cause, fix it, and verify the regression.",
+      },
+      {
+        label: "Review current changes",
+        mode: "review",
+        prompt:
+          "Review the current changes without modifying files. Return locatable findings, evidence, and suggested fixes by severity.",
+      },
+      {
+        label: "Complete tests and CI",
+        mode: "implement",
+        prompt:
+          "Find gaps in tests and CI for the current changes, add coverage, and run the relevant checks.",
+      },
+    ],
+    scene: "code",
+    subtitle: "Ask, plan, implement, and review in your repository",
+    tabLabel: "Code",
+  },
+  design: {
+    capabilitySummary: "Vision · Figma · Image generation",
+    contextSummary: "Brief / Figma / brand and references",
+    deliverableSummary: "Directions, visual assets, and handoff notes",
+    modes: [
+      {
+        detail: "Choose from the task, deliverable, and risk",
+        label: "Auto",
+        value: "auto",
+      },
+      {
+        detail: "Create clearly differentiated directions",
+        label: "Explore",
+        value: "explore",
+      },
+      {
+        detail: "Develop a direction using the design system",
+        label: "Refine",
+        value: "refine",
+      },
+      {
+        detail: "Create previewable, deliverable design assets",
+        label: "Produce",
+        value: "produce",
+      },
+      {
+        detail: "Diagnose and return locatable issues only",
+        label: "Inspect",
+        value: "inspect",
+      },
+    ],
+    placeholder:
+      "For example: explore three directions from this brief and produce previewable page concepts",
+    quickActions: [
+      {
+        label: "Explore design directions",
+        mode: "explore",
+        prompt:
+          "Explore three clearly differentiated design directions from the current brief and explain their tradeoffs.",
+      },
+      {
+        label: "Design a page or component",
+        mode: "produce",
+        prompt:
+          "Use the brief, brand, and target canvas to design a previewable page or component with key states.",
+      },
+      {
+        label: "Generate visual assets",
+        mode: "produce",
+        prompt:
+          "Generate previewable, exportable visual assets that follow the brief and brand constraints.",
+      },
+      {
+        label: "Inspect and hand off",
+        mode: "inspect",
+        prompt:
+          "Inspect the current design and report locatable issues, state coverage, responsive risks, and handoff guidance.",
+      },
+    ],
+    scene: "design",
+    subtitle: "Explore, produce, and inspect from a brief",
+    tabLabel: "Design",
+  },
+};
 
 type ExecutionTargetConfigRecord<TConfig> = {
   config: TConfig;
@@ -235,22 +375,26 @@ type ExecutionTargetConfigRecord<TConfig> = {
 
 export function executionTargetOptionsFromDomain({
   agents,
+  locale = "zh",
   offices,
-  platformAgents = [],
   status,
 }: {
   agents: Array<ExecutionTargetConfigRecord<AgentConfig>>;
+  locale?: Locale;
   offices: Array<ExecutionTargetConfigRecord<OfficeConfig>>;
-  platformAgents?: AgentPlatformSnapshot["agents"];
   status: "loading" | "ready" | "unavailable";
 }): ExecutionTargetOption[] {
   const agentOptions = agents.flatMap((record) => {
     const id = record.config.agentId?.trim();
-    if (!id) {
+    if (!id || id.startsWith("agent-platform:")) {
       return [];
     }
     return [{
-      detail: record.config.role?.trim() || "使用该智能体的模型与能力配置",
+      detail:
+        record.config.role?.trim() ||
+        (locale === "zh"
+          ? "使用该智能体的模型与能力配置"
+          : "Use this agent's model and capability configuration"),
       kind: "agent" as const,
       label: `${record.config.name} · 单 Agent`,
       strategy: "single" as const,
@@ -272,10 +416,16 @@ export function executionTargetOptionsFromDomain({
     );
     return {
       detail: duplicateTitle
-        ? "存在同名办公室，需先在办公室配置中改为唯一名称"
+        ? locale === "zh"
+          ? "存在同名办公室，需先在办公室配置中改为唯一名称"
+          : "Duplicate office names must be made unique first"
         : ready
-          ? `${members.length} 名成员 · 服务端有界 Team Runtime`
-          : "小队尚未配置成员，不能开始任务",
+          ? locale === "zh"
+            ? `${members.length} 名成员 · 服务端有界 Team Runtime`
+            : `${members.length} members · bounded server Team Runtime`
+          : locale === "zh"
+            ? "小队尚未配置成员，不能开始任务"
+            : "This team has no configured members and cannot start",
       disabled: !ready,
       kind: "team" as const,
       label: `${title} · Team`,
@@ -285,48 +435,47 @@ export function executionTargetOptionsFromDomain({
         : `team:${title}`,
     };
   });
-  const platformAgentOptions = platformAgents.flatMap((agent) => {
-    const active = explicitlyEnabled(agent.is_active);
-    const apiEnabled = explicitlyEnabled(agent.api_enabled);
-    if (!active || !apiEnabled) {
-      return [];
-    }
-    return [{
-      detail: agent.description?.trim() || "通过 Agent Platform Open API 执行",
-      kind: "agent" as const,
-      label: `${agent.name} · 在线 Agent`,
-      strategy: "single" as const,
-      value: `agent-platform:agents:${agent.id}`,
-    }];
-  });
   const fallback = status === "loading"
-    ? "正在读取本地 Agent 与小队定义"
-    : "未读取到可用的本地 Agent 或小队定义";
+    ? locale === "zh"
+      ? "正在读取本地 Agent 与小队定义"
+      : "Loading local agent and team definitions"
+    : locale === "zh"
+      ? "未读取到可用的本地 Agent 或小队定义"
+      : "No available local agent or team definitions were found";
 
   const options: ExecutionTargetOption[] = [
     {
-      detail: "本地 Agent，独立完成任务",
+      detail:
+        locale === "zh"
+          ? "本地 Agent，独立完成任务"
+          : "Local agent that completes the task independently",
       kind: "crewon",
       label: "CrewON",
       strategy: "single",
       value: "crewon",
     },
-    ...platformAgentOptions,
     ...agentOptions,
     ...teamOptions,
-    ...(platformAgentOptions.length === 0 && agentOptions.length === 0 && teamOptions.length === 0
-      ? [{
-          detail: fallback,
-          disabled: true,
-          kind: "agent" as const,
-          label: "暂无可选智能体或小队",
-          strategy: "single" as const,
-          value: "target:unavailable",
-        }]
+    ...(agentOptions.length === 0 && teamOptions.length === 0
+      ? [
+          {
+            detail: fallback,
+            disabled: true,
+            kind: "agent" as const,
+            label:
+              locale === "zh"
+                ? "暂无可选智能体或小队"
+                : "No agent or team available",
+            strategy: "single" as const,
+            value: "target:unavailable",
+          },
+        ]
       : []),
   ];
   return options.filter(
-    (option, index) => options.findIndex((candidate) => candidate.value === option.value) === index,
+    (option, index) =>
+      options.findIndex((candidate) => candidate.value === option.value) ===
+      index,
   );
 }
 

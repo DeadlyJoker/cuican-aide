@@ -48,12 +48,18 @@ async fn handle_spawn_agent(
     } = invocation;
     let arguments = function_arguments(payload)?;
     let args: SpawnAgentArgs = parse_arguments(&arguments)?;
-    let fork_mode = args.fork_mode()?;
-    let role_name = args
-        .agent_type
-        .as_deref()
-        .map(str::trim)
-        .filter(|role| !role.is_empty());
+    let execution_target_profile = turn
+        .config
+        .extra_config
+        .as_ref()
+        .and_then(|extra| extra.scene_execution_target_profile.as_ref());
+    let role_name = resolve_spawn_role_name(
+        execution_target_profile,
+        args.agent_type.as_deref(),
+        &args.task_name,
+    )?;
+    let role_name = role_name.as_deref();
+    let fork_mode = args.fork_mode(execution_target_profile)?;
 
     let message = args.message.clone();
     let initial_operation = parse_collab_input(Some(args.message), /*items*/ None)?;
@@ -91,6 +97,7 @@ async fn handle_spawn_agent(
     )
     .await?;
     apply_spawn_agent_runtime_overrides(&mut config, turn.as_ref())?;
+    apply_experts_child_context(&mut config, execution_target_profile, role_name);
 
     let spawn_source = thread_spawn_source(
         session.thread_id,
@@ -176,6 +183,91 @@ async fn handle_spawn_agent(
     }
 }
 
+fn resolve_spawn_role_name(
+    profile: Option<&crewon_protocol::scene::SceneExecutionTargetProfile>,
+    requested_role_name: Option<&str>,
+    task_name: &str,
+) -> Result<Option<String>, FunctionCallError> {
+    let requested_role_name = requested_role_name
+        .map(str::trim)
+        .filter(|role| !role.is_empty());
+    let Some(profile) = profile.filter(|profile| {
+        profile.kind == crewon_protocol::scene::SceneExecutionTargetKind::Experts
+    }) else {
+        return Ok(requested_role_name.map(str::to_string));
+    };
+    let role_name = requested_role_name
+        .or_else(|| {
+            let task_name = task_name.trim();
+            profile.team_members.iter().find_map(|member| {
+                member
+                    .agent_id
+                    .as_deref()
+                    .filter(|agent_id| *agent_id == task_name)
+            })
+        })
+        .ok_or_else(|| {
+        FunctionCallError::RespondToModel(
+            "Experts delegation requires agent_type, or task_name must exactly match a configured agentId"
+                .to_string(),
+        )
+    })?;
+    if !profile.team_members.iter().any(|member| {
+        member
+            .agent_id
+            .as_deref()
+            .is_some_and(|agent_type| agent_type == role_name)
+    }) {
+        return Err(FunctionCallError::RespondToModel(format!(
+            "agent_type '{role_name}' is not allowed by this Experts definition"
+        )));
+    }
+    Ok(Some(role_name.to_string()))
+}
+
+fn apply_experts_child_context(
+    config: &mut crate::config::Config,
+    profile: Option<&crewon_protocol::scene::SceneExecutionTargetProfile>,
+    role_name: Option<&str>,
+) {
+    let Some((profile, role_name)) = profile
+        .filter(|profile| profile.kind == crewon_protocol::scene::SceneExecutionTargetKind::Experts)
+        .zip(role_name)
+    else {
+        return;
+    };
+    let Some(member) = profile.team_members.iter().find(|member| {
+        member
+            .agent_id
+            .as_deref()
+            .is_some_and(|agent_id| agent_id == role_name)
+    }) else {
+        return;
+    };
+
+    let extra = config.extra_config.get_or_insert_with(Default::default);
+    if let Some(runtime) = extra.scene_runtime.as_mut() {
+        runtime.execution_target_kind = crewon_protocol::scene::SceneExecutionTargetKind::Crewon;
+        runtime.execution_target_ref = None;
+        runtime.execution_target_token.clear();
+        runtime.execution_strategy = crewon_protocol::scene::SceneExecutionStrategy::Single;
+    }
+    extra.scene_execution_target_profile = Some(
+        crewon_protocol::scene::SceneExecutionTargetProfile {
+            kind: crewon_protocol::scene::SceneExecutionTargetKind::Agent,
+            display_name: member.name.clone(),
+            role: member.role.clone(),
+            model: None,
+            instructions: Some(
+                "Complete only the assigned expert task and return the result to the parent. Do not create or delegate to sub-agents."
+                    .to_string(),
+            ),
+            capabilities: profile.capabilities.clone(),
+            team_members: Vec::new(),
+        },
+    );
+}
+
 impl CoreToolRuntime for Handler {
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
         matches!(payload, ToolPayload::Function { .. })
@@ -195,8 +287,15 @@ struct SpawnAgentArgs {
     fork_context: Option<bool>,
 }
 
+#[cfg(test)]
+#[path = "spawn_tests.rs"]
+mod tests;
+
 impl SpawnAgentArgs {
-    fn fork_mode(&self) -> Result<Option<SpawnAgentForkMode>, FunctionCallError> {
+    fn fork_mode(
+        &self,
+        execution_target_profile: Option<&crewon_protocol::scene::SceneExecutionTargetProfile>,
+    ) -> Result<Option<SpawnAgentForkMode>, FunctionCallError> {
         if self.fork_context.is_some() {
             return Err(FunctionCallError::RespondToModel(
                 "fork_context is not supported in MultiAgentV2; use fork_turns instead".to_string(),
@@ -208,7 +307,15 @@ impl SpawnAgentArgs {
             .as_deref()
             .map(str::trim)
             .filter(|fork_turns| !fork_turns.is_empty())
-            .unwrap_or("all");
+            .unwrap_or_else(|| {
+                if execution_target_profile.is_some_and(|profile| {
+                    profile.kind == crewon_protocol::scene::SceneExecutionTargetKind::Experts
+                }) {
+                    "none"
+                } else {
+                    "all"
+                }
+            });
 
         if fork_turns.eq_ignore_ascii_case("none") {
             return Ok(None);

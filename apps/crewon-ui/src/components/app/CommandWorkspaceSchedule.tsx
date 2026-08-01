@@ -1,5 +1,4 @@
 import {
-  Bell,
   CalendarClock,
   CheckCircle2,
   Clock3,
@@ -7,30 +6,20 @@ import {
   History,
   Inbox,
   LoaderCircle,
-  Pause,
-  Play,
   Plus,
   RefreshCw,
   Search,
   X,
   XCircle,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 
+import { CommandScheduleCalendar } from "./CommandScheduleCalendar";
+import type { ScheduleRecord } from "./scheduleCalendarModel";
 import { classNames } from "./commandWorkspaceUtils";
 import type { AutomationConfig } from "../../lib/domain/crewonDomain";
 
-type ScheduleRecord = {
-  filePath: string;
-  savedAt: string;
-  config: AutomationConfig;
-};
+export type { ScheduleRecord } from "./scheduleCalendarModel";
 
 type AutomationRunRecord = {
   runId: string;
@@ -141,18 +130,6 @@ function formatDateTime(timestamp?: number | null) {
   }).format(timestamp * 1000);
 }
 
-function cadenceLabel(config: AutomationConfig) {
-  const trigger = config.trigger;
-  if (!trigger || trigger.type !== "schedule") return "手动触发";
-  const scheduleType = String(trigger.scheduleType ?? "daily");
-  if (scheduleType === "interval")
-    return `每 ${trigger.intervalMinutes ?? 60} 分钟`;
-  if (scheduleType === "once")
-    return `单次 · ${formatDateTime(Number(trigger.nextRunAt))}`;
-  if (scheduleType === "weekly") return `每周 · ${trigger.time ?? "09:00"}`;
-  return `每天 · ${trigger.time ?? "09:00"}`;
-}
-
 function runStatus(status: string) {
   if (status === "completed")
     return { label: "已完成", tone: "success", icon: CheckCircle2 };
@@ -235,15 +212,6 @@ export function ScheduleView({
     const interval = window.setInterval(() => void refresh(), 10_000);
     return () => window.clearInterval(interval);
   }, [active, refresh, scheduleSource]);
-
-  const latestByThread = useMemo(() => {
-    const latest = new Map<string, RunRecord>();
-    for (const run of runs) {
-      if (run.run.threadId && !latest.has(run.run.threadId))
-        latest.set(run.run.threadId, run);
-    }
-    return latest;
-  }, [runs]);
 
   const visibleRecords = records.filter(({ config }) =>
     `${config.title} ${config.body} ${config.prompt}`
@@ -375,19 +343,7 @@ export function ScheduleView({
       hidden={!active}
     >
       <div className="page-stack schedule-page">
-        <header className="schedule-header">
-          <div className="schedule-heading">
-            <span className="schedule-kicker">
-              <CalendarClock />
-              日程安排
-            </span>
-            <h2>{scheduleSource === "personal" ? "个人日程" : "小队日程"}</h2>
-            <p>
-              {scheduleSource === "personal"
-                ? "让 CrewON 按计划完成重复工作，并把结果留在这里。"
-                : "查看由小队共同负责和共享结果的工作安排。"}
-            </p>
-          </div>
+        <header className="schedule-header" aria-label="日程操作">
           <div className="schedule-header-actions">
             <label className="catalog-search schedule-search">
               <Search aria-hidden="true" />
@@ -521,126 +477,22 @@ export function ScheduleView({
             ) : null}
 
             {scheduleMode === "tasks" ? (
-              <section className="schedule-task-list" aria-label="个人日程列表">
-                {loadState === "loading" ? (
-                  <div className="schedule-empty">
-                    <LoaderCircle className="spin" />
-                    <p>正在加载日程…</p>
-                  </div>
-                ) : null}
-                {loadState !== "loading" && visibleRecords.length === 0 ? (
-                  <div className="schedule-empty">
-                    <CalendarClock />
-                    <h3>还没有个人日程</h3>
-                    <p>
-                      创建后，CrewON
-                      会按计划自动执行；即使关闭浏览器，安排仍然保留。
-                    </p>
-                    <button
-                      className="button primary"
-                      type="button"
-                      onClick={onOpenModal}
-                      disabled={!client}
-                    >
-                      创建第一个日程
-                    </button>
-                  </div>
-                ) : null}
-                {visibleRecords.map((record) => {
-                  const latest = record.config.threadId
-                    ? latestByThread.get(record.config.threadId)
-                    : undefined;
-                  const status = latest ? runStatus(latest.run.status) : null;
-                  const StatusIcon = status?.icon;
-                  return (
-                    <article
-                      className="schedule-task-card"
-                      key={record.filePath}
-                    >
-                      <div className="schedule-task-icon">
-                        <CalendarClock />
-                      </div>
-                      <div className="schedule-task-main">
-                        <div className="schedule-task-title">
-                          <h3>{record.config.title}</h3>
-                          <span
-                            className={
-                              record.config.enabled ? "enabled" : "paused"
-                            }
-                          >
-                            {record.config.enabled ? "已启用" : "已暂停"}
-                          </span>
-                          {status && StatusIcon ? (
-                            <span className={`run-${status.tone}`}>
-                              <StatusIcon
-                                className={
-                                  status.tone === "running" ? "spin" : ""
-                                }
-                              />
-                              {status.label}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p>{record.config.prompt}</p>
-                        <div className="schedule-task-meta">
-                          <span>
-                            <Clock3 />
-                            {cadenceLabel(record.config)}
-                          </span>
-                          <span>
-                            <Bell />
-                            下次{" "}
-                            {formatDateTime(
-                              Number(record.config.trigger?.nextRunAt),
-                            )}
-                          </span>
-                          <span>
-                            <Inbox />
-                            发给{" "}
-                            {record.config.delivery?.recipientLabel ??
-                              "我（创建者）"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="schedule-task-actions">
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={() => void runNow(record)}
-                          disabled={
-                            busy === record.filePath ||
-                            latest?.run.status === "running"
-                          }
-                        >
-                          <Play />
-                          立即执行
-                        </button>
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={() => void toggleSchedule(record)}
-                          disabled={busy === record.filePath}
-                        >
-                          {record.config.enabled ? <Pause /> : <Play />}
-                          {record.config.enabled ? "暂停" : "启用"}
-                        </button>
-                        {record.config.threadId ? (
-                          <button
-                            className="icon-action"
-                            type="button"
-                            aria-label="打开结果线程"
-                            onClick={() =>
-                              onOpenThread?.(record.config.threadId ?? null)
-                            }
-                          >
-                            <ExternalLink />
-                          </button>
-                        ) : null}
-                      </div>
-                    </article>
-                  );
-                })}
-              </section>
+              loadState === "loading" ? (
+                <div className="schedule-empty">
+                  <LoaderCircle className="spin" />
+                  <p>正在加载日程…</p>
+                </div>
+              ) : (
+                <CommandScheduleCalendar
+                  busy={busy}
+                  clientAvailable={Boolean(client)}
+                  records={visibleRecords}
+                  onCreate={onOpenModal}
+                  onOpenThread={onOpenThread}
+                  onRunNow={(record) => void runNow(record)}
+                  onToggleSchedule={(record) => void toggleSchedule(record)}
+                />
+              )
             ) : (
               <section className="schedule-history" aria-label="执行记录">
                 <div className="schedule-history-filters">

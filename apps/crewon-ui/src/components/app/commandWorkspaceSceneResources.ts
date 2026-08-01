@@ -132,24 +132,17 @@ function agentSupportsResource(
 }
 
 function currentAgentNumericId(
-  currentAgentId: string | number | null | undefined,
+  currentAgentId: number | null | undefined,
 ): number | null {
-  if (typeof currentAgentId === "number") {
-    return Number.isInteger(currentAgentId) ? currentAgentId : null;
-  }
-  const value = currentAgentId?.trim();
-  if (!value) return null;
-  const candidate = value.startsWith("agent-platform:agents:")
-    ? value.slice("agent-platform:agents:".length)
-    : value;
-  const numericId = Number(candidate);
-  return Number.isInteger(numericId) ? numericId : null;
+  return typeof currentAgentId === "number" && Number.isInteger(currentAgentId)
+    ? currentAgentId
+    : null;
 }
 
 export function findCompatibleOnlineAgent(
   snapshot: AgentPlatformSnapshot,
   selectedResources: readonly AgentPlatformComposerResource[],
-  currentAgentId?: string | number | null,
+  currentAgentId?: number | null,
 ): PlatformAgent | null {
   const supportsAll = (agent: PlatformAgent) =>
     selectedResources.every((resource) =>

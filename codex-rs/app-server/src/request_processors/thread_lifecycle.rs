@@ -14,6 +14,8 @@ pub(super) struct ListenerTaskContext {
     pub(super) codex_home: PathBuf,
     pub(super) skills_watcher: Arc<SkillsWatcher>,
     pub(super) office_auto_dispatch: Option<OfficeAutoDispatchContext>,
+    pub(super) dynamic_tool_server:
+        Arc<crate::platform_control::thread_dynamic_tool_server::ThreadDynamicToolServer>,
 }
 
 struct UnloadingState {
@@ -272,6 +274,7 @@ pub(super) async fn ensure_listener_task_running(
         thread_list_state_permit,
         fallback_model_provider,
         codex_home,
+        dynamic_tool_server,
         office_auto_dispatch: _,
         skills_watcher: _,
     } = listener_task_context;
@@ -356,6 +359,10 @@ pub(super) async fn ensure_listener_task_running(
                         thread_watch_manager.clone(),
                         thread_list_state_permit.clone(),
                         fallback_model_provider.clone(),
+                        office_auto_dispatch
+                            .as_ref()
+                            .map(|context| Arc::clone(&context.domain_processor)),
+                        Some(Arc::clone(&dynamic_tool_server)),
                     )
                     .await;
                     if let (Some(office_auto_dispatch), Some(turn)) =
@@ -587,24 +594,35 @@ pub(super) async fn handle_pending_thread_resume_request(
     let connection_id = request_id.connection_id;
     let mut thread = pending.thread_summary;
     if pending.include_turns {
-        populate_thread_turns_from_history(
-            &mut thread,
-            &pending.history_items,
-            active_turn.as_ref(),
-        );
+        if let Some(projected_turns) = pending.projected_turns.clone() {
+            thread.turns = projected_turns;
+        } else {
+            populate_thread_turns_from_history(
+                &mut thread,
+                &pending.history_items,
+                active_turn.as_ref(),
+            );
+        }
     }
 
     let thread_status = thread_watch_manager
         .loaded_status_for_thread(&thread.id)
         .await;
 
-    set_thread_status_and_interrupt_stale_turns(
-        &mut thread,
-        thread_status,
-        has_live_in_progress_turn,
-    );
-    let token_usage_thread = pending.include_turns.then(|| thread.clone());
-    let mut initial_turns_page = if let Some(params) = pending.initial_turns_page.as_ref() {
+    if let Some(projected_status) = pending.projected_thread_status.clone() {
+        thread.status = projected_status;
+    } else {
+        set_thread_status_and_interrupt_stale_turns(
+            &mut thread,
+            thread_status,
+            has_live_in_progress_turn,
+        );
+    }
+    let token_usage_thread = (pending.include_turns && pending.projected_thread_status.is_none())
+        .then(|| thread.clone());
+    let mut initial_turns_page = if pending.projected_initial_turns_page.is_some() {
+        pending.projected_initial_turns_page.clone()
+    } else if let Some(params) = pending.initial_turns_page.as_ref() {
         match super::thread_processor::build_thread_resume_initial_turns_page(
             &pending.history_items,
             thread.status.clone(),
@@ -679,6 +697,7 @@ pub(super) async fn handle_pending_thread_resume_request(
 
     let response = ThreadResumeResponse {
         thread,
+        execution_context: pending.execution_context,
         model,
         model_provider: model_provider_id,
         service_tier,

@@ -1,4 +1,5 @@
 import type { LibraryItem } from "../../lib/domain/crewonDomain";
+import { CapabilityLogo } from "../catalog/CapabilityLogo";
 
 export function LibraryCard({
   item,
@@ -9,13 +10,20 @@ export function LibraryCard({
 }) {
   const content = (
     <>
-      {item.glyph ? (
+      {item.logo || item.glyph ? (
         <span
           className="library-card-glyph"
           data-accent={item.accent ?? "slate"}
           aria-hidden="true"
         >
-          {item.glyph}
+          {item.logo ? (
+            <CapabilityLogo
+              fallback={item.glyph ?? item.title.slice(0, 1)}
+              logo={item.logo}
+            />
+          ) : (
+            item.glyph
+          )}
         </span>
       ) : null}
       <span className="library-card-main">
@@ -43,8 +51,12 @@ export function LibraryCard({
         ) : null}
       </span>
       {item.action ? (
-        <span className="library-card-chevron" aria-hidden="true">
-          ›
+        <span
+          className="library-card-chevron"
+          data-add={item.action.type === "capability-preset"}
+          aria-hidden="true"
+        >
+          {item.action.type === "capability-preset" ? "+" : "›"}
         </span>
       ) : null}
     </>

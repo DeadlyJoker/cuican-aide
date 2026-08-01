@@ -579,8 +579,8 @@ async fn unrelated_unreadable_records_do_not_block_save_or_message_submit() {
     let mut updated = saved.config.clone();
     updated["workspace"]["messages"][0]["text"] = json!("saved around bad neighbors");
     let saved_again = save(&processor, &cwd, updated).await;
-    let prepared = processor
-        .office_message_submit_prepare(OfficeMessageSubmitParams {
+    let resolved = processor
+        .office_message_submit_resolve(OfficeMessageSubmitParams {
             cwd: cwd.clone(),
             config: saved_again.config,
             text: "submitted around bad neighbors".to_string(),
@@ -590,7 +590,11 @@ async fn unrelated_unreadable_records_do_not_block_save_or_message_submit() {
             mentions: None,
         })
         .await
-        .expect("message submit must isolate unrelated unreadable records");
+        .expect("message submit resolve must isolate unrelated unreadable records");
+    let prepared = processor
+        .office_message_submit_prepare_resolved(resolved)
+        .await
+        .expect("message submit prepare must isolate unrelated unreadable records");
 
     assert_eq!(
         prepared.config["workspace"]["recordId"],

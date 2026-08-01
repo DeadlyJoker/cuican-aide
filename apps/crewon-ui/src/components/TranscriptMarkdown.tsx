@@ -9,7 +9,7 @@ import {
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Maximize2, X } from "lucide-react";
+import { Check, Copy, Maximize2, X } from "lucide-react";
 
 type MarkdownSegment =
   | { type: "markdown"; text: string }
@@ -351,6 +351,56 @@ function splitMarkdownSegments(text: string): MarkdownSegment[] {
   return segments;
 }
 
+const CODE_COPY_RESET_MS = 1600;
+
+function CodeBlockCopyButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      return;
+    }
+    setCopied(true);
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current);
+    }
+    resetTimerRef.current = window.setTimeout(() => {
+      resetTimerRef.current = null;
+      setCopied(false);
+    }, CODE_COPY_RESET_MS);
+  };
+
+  return (
+    <button
+      aria-label={copied ? "Copied" : "Copy code"}
+      className="markdown-code-copy"
+      data-copied={copied ? "true" : undefined}
+      onClick={() => void handleCopy()}
+      title={copied ? "Copied" : "Copy code"}
+      type="button"
+    >
+      {copied ? (
+        <Check size={13} strokeWidth={2} aria-hidden="true" />
+      ) : (
+        <Copy size={13} strokeWidth={1.8} aria-hidden="true" />
+      )}
+      <span>{copied ? "Copied" : "Copy"}</span>
+    </button>
+  );
+}
+
 function renderCodeSegment(segment: Extract<MarkdownSegment, { type: "code" }>, key: string) {
   if (segment.language === "mermaid") {
     return <MermaidDiagram code={segment.code} complete={segment.complete} key={key} />;
@@ -365,12 +415,11 @@ function renderCodeSegment(segment: Extract<MarkdownSegment, { type: "code" }>, 
       data-language={segment.language ?? undefined}
       key={key}
     >
-      {languageLabel ? (
-        <figcaption>
-          <span>{languageLabel}</span>
-          {!segment.complete ? <em>Streaming</em> : null}
-        </figcaption>
-      ) : null}
+      <figcaption>
+        {languageLabel ? <span>{languageLabel}</span> : null}
+        {!segment.complete ? <em>Streaming</em> : null}
+        <CodeBlockCopyButton code={segment.code} />
+      </figcaption>
       <pre className="markdown-code-pre">
         <code className={codeLanguageClass(segment.language)}>
           {segment.code}

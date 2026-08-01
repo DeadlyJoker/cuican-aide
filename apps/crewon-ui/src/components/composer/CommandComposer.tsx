@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from "react";
+import type { ClipboardEvent, ReactNode, RefObject } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { ComposerCore } from "./ComposerCore";
@@ -108,7 +108,7 @@ export function CommandComposerSelect<TValue extends string>({
 
 export function CommandComposer({
   actions,
-  afterTextarea,
+  beforeTextarea,
   ariaDescribedBy,
   ariaInvalid,
   ariaLabel,
@@ -138,11 +138,12 @@ export function CommandComposer({
   onChange,
   onClosePalette,
   onOpenPalette,
+  onPaste,
   onStop,
   onSubmit,
 }: {
   actions: ReactNode;
-  afterTextarea?: ReactNode;
+  beforeTextarea?: ReactNode;
   ariaDescribedBy?: string;
   ariaInvalid?: boolean;
   ariaLabel: string;
@@ -172,6 +173,7 @@ export function CommandComposer({
   onChange: (value: string) => void;
   onClosePalette?: () => void;
   onOpenPalette?: (intent: "context" | "slash") => void;
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   onStop?: () => void;
   onSubmit: (value: string) => void | Promise<void>;
 }) {
@@ -195,6 +197,7 @@ export function CommandComposer({
       onStop={onStop}
       onSubmit={onSubmit}
     >
+      {beforeTextarea}
       <ComposerCore.Textarea
         ariaDescribedBy={ariaDescribedBy}
         ariaInvalid={ariaInvalid}
@@ -205,8 +208,8 @@ export function CommandComposer({
         placeholder={placeholder}
         readOnly={readOnly}
         textareaRef={textareaRef}
+        onPaste={onPaste}
       />
-      {afterTextarea}
       <div className="input-tools" data-od-id="composer-tools">
         <div className="composer-controls" data-od-id="composer-control-row">
           {controls}

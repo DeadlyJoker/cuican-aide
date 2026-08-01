@@ -6,16 +6,16 @@ exports[`command Office room style > snapshots the Team card layout and responsi
 .shell-page-view .office-card-button {
   display: grid;
   align-content: space-between;
-  gap: 9px;
-  min-height: 132px;
-  padding: 13px;
-  border: 1px solid oklch(89% 0.01 235);
-  border-radius: 11px;
+  gap: 10px;
+  min-height: 138px;
+  padding: 14px;
+  border: 1px solid oklch(90% 0.009 235);
+  border-radius: 14px;
   background: oklch(100% 0 0);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 1px 0 rgb(15 23 42 / 0.03);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -23,17 +23,17 @@ exports[`command Office room style > snapshots the Team card layout and responsi
     box-shadow 0.15s ease;
 }
 .shell-page-view .office-card-button:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklch, var(--accent) 24%, oklch(89% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 2.5%, white);
-  box-shadow: 0 10px 24px rgb(31 51 84 / 0.06);
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--accent) 26%, oklch(89% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 2%, white);
+  box-shadow: 0 12px 28px rgb(31 51 84 / 0.08);
 }
 .shell-page-view .office-card-button:focus-visible {
   outline: 2px solid color-mix(in oklch, var(--accent) 62%, white);
   outline-offset: 3px;
 }
 .shell-page-view .office-card-button.is-active {
-  border-color: color-mix(in oklch, var(--accent) 30%, oklch(89% 0.01 235));
+  border-color: color-mix(in oklch, var(--accent) 34%, oklch(89% 0.01 235));
   background: color-mix(in oklch, var(--accent) 3%, white);
 }
 .shell-page-view .office-card-head,
@@ -43,14 +43,36 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   min-width: 0;
 }
 .shell-page-view .office-card-head {
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+}
+.shell-page-view .office-card-glyph {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--accent) 10%, white);
+  color: color-mix(in oklch, var(--accent) 72%, oklch(30% 0.02 235));
+  font-size: 14px;
+  font-weight: 680;
+}
+.shell-page-view .office-card-button:hover .office-card-glyph {
+  background: color-mix(in oklch, var(--accent) 15%, white);
 }
 .shell-page-view .office-card-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: oklch(20% 0.018 235);
   font-size: 14px;
   font-weight: 650;
   line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-page-view .office-card-head .status {
+  flex: 0 0 auto;
 }
 .shell-page-view .office-card-copy {
   color: oklch(48% 0.016 235);
@@ -61,6 +83,11 @@ exports[`command Office room style > snapshots the Team card layout and responsi
 .shell-page-view .office-card-foot {
   align-items: center;
   justify-content: space-between;
+  margin: 0 -14px -14px;
+  padding: 9px 14px;
+  border-top: 1px solid oklch(93% 0.006 235);
+  background: oklch(98.9% 0.003 235);
+  border-radius: 0 0 13px 13px;
   color: oklch(45% 0.017 235);
   font-size: 12px;
   line-height: 1.35;
@@ -72,11 +99,21 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   white-space: nowrap;
 }
 .shell-page-view .office-card-foot em {
+  display: inline-flex;
   flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
   color: color-mix(in oklch, var(--accent) 78%, oklch(25% 0.02 235));
   font-style: normal;
   font-weight: 620;
   white-space: nowrap;
+}
+.shell-page-view .office-card-foot em::after {
+  content: "→";
+  transition: transform 0.15s ease;
+}
+.shell-page-view .office-card-button:hover .office-card-foot em::after {
+  transform: translateX(2px);
 }",
   "responsiveContract": "/* Match the design artifact's Team responsive density. */
 .shell-page-view .expert-team-card .catalog-card-head {
@@ -85,6 +122,13 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   align-items: baseline;
   gap: 6px;
   margin: 0;
+}
+.shell-page-view .expert-team-card .catalog-card-head > span {
+  color: color-mix(in oklch, var(--accent) 68%, oklch(40% 0.02 235));
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 @media (max-width: 1180px) {
   .shell-page-view .office-card-grid,
@@ -122,11 +166,369 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   .shell-page-view .workflow-list-item {
     grid-template-columns: minmax(0, 1fr);
   }
+  .shell-page-view .team-capability-live-layout {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+  .shell-page-view .team-capability-definition-list {
+    max-height: 320px;
+  }
+  .shell-page-view .team-capability-run-panel {
+    padding: 16px;
+  }
+  .shell-page-view .team-capability-run-panel > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .shell-page-view .team-capability-run-panel > footer .button.primary {
+    width: 100%;
+  }
   .shell-page-view .workflow-list-foot {
     justify-content: flex-start;
   }
 }",
 }
+`;
+
+exports[`command Office room style > snapshots the Workflow and Experts live-runtime layout contract 1`] = `
+".shell-page-view .team-capability-live-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 520px;
+}
+.shell-page-view .team-capability-definition-list,
+.shell-page-view .team-capability-run-panel {
+  min-width: 0;
+  border: 1px solid oklch(89% 0.01 235);
+  border-radius: 12px;
+  background: oklch(100% 0 0);
+}
+.shell-page-view .team-capability-definition-list {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  max-height: min(620px, calc(100vh - 300px));
+  overflow-y: auto;
+  padding: 14px;
+}
+.shell-page-view .team-capability-panel-head,
+.shell-page-view .team-capability-run-header,
+.shell-page-view .team-capability-run-panel > footer,
+.shell-page-view .team-capability-execution-result > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.shell-page-view .team-capability-panel-head {
+  padding: 2px 2px 7px;
+}
+.shell-page-view .team-capability-panel-head span,
+.shell-page-view .team-capability-run-kicker,
+.shell-page-view .team-capability-workspace span,
+.shell-page-view .team-capability-execution-result span {
+  color: oklch(53% 0.018 235);
+  font-size: 11px;
+}
+.shell-page-view .team-capability-panel-head h2,
+.shell-page-view .team-capability-run-panel h2 {
+  margin: 2px 0 0;
+  color: oklch(22% 0.018 235);
+  font-size: 15px;
+}
+.shell-page-view .team-capability-definition {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 13px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: oklch(98% 0.004 238);
+  color: inherit;
+  text-align: left;
+}
+.shell-page-view .team-capability-definition:hover,
+.shell-page-view .team-capability-definition.active {
+  border-color: color-mix(in oklch, var(--accent) 24%, oklch(88% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 5%, white);
+}
+.shell-page-view .team-capability-definition strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-page-view .team-capability-definition span,
+.shell-page-view .team-capability-definition em {
+  color: oklch(51% 0.015 235);
+  font-size: 11.5px;
+  font-style: normal;
+}
+.shell-page-view .team-capability-definition span {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.shell-page-view .team-capability-run-panel {
+  display: grid;
+  align-content: start;
+  grid-template-rows: auto auto auto auto;
+  gap: 16px;
+  padding: 20px;
+}
+.shell-page-view .team-capability-run-header {
+  align-items: start;
+}
+.shell-page-view .team-capability-run-heading {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.shell-page-view .team-capability-run-heading h2 {
+  margin: 0;
+  font-size: clamp(17px, 1.5vw, 21px);
+  font-weight: 660;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.shell-page-view .team-capability-run-heading p {
+  display: -webkit-box;
+  max-width: 92ch;
+  margin: 0;
+  overflow: hidden;
+  color: oklch(48% 0.016 235);
+  font-size: 12.5px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.shell-page-view .team-capability-workspace,
+.shell-page-view .team-capability-execution-result {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid oklch(91% 0.008 235);
+  border-radius: 9px;
+  background: oklch(98% 0.004 235);
+}
+.shell-page-view .team-capability-workspace strong,
+.shell-page-view .team-capability-execution-result strong {
+  color: oklch(31% 0.02 235);
+  font-size: 12px;
+}
+.shell-page-view .team-capability-execution-result pre {
+  max-height: 210px;
+  margin: 4px 0 0;
+  overflow: auto;
+  color: oklch(29% 0.018 235);
+  font:
+    11.5px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre-wrap;
+}
+.shell-page-view .team-capability-run-input {
+  display: grid;
+  gap: 7px;
+  color: oklch(34% 0.018 235);
+  font-size: 12px;
+  font-weight: 600;
+}
+.shell-page-view .team-capability-run-input textarea {
+  min-height: 190px;
+  max-height: 380px;
+  resize: vertical;
+  padding: 13px 14px;
+  border: 1px solid oklch(87% 0.012 235);
+  border-radius: 11px;
+  outline: 0;
+  background: oklch(99.5% 0.002 235);
+  color: oklch(24% 0.018 235);
+  font: 13px/1.55 var(--font-body);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.shell-page-view .team-capability-run-input textarea:focus {
+  border-color: color-mix(in oklch, var(--accent) 42%, oklch(87% 0.012 235));
+  background: white;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 9%, transparent);
+}
+.shell-page-view .team-capability-run-panel > footer {
+  align-items: center;
+  margin-top: auto;
+  padding-top: 2px;
+}
+.shell-page-view .team-capability-run-panel > footer small {
+  max-width: 480px;
+  color: oklch(52% 0.014 235);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.shell-page-view .team-capability-run-panel > footer .button.primary {
+  min-height: 40px;
+  padding-inline: 16px;
+  border-radius: 10px;
+}
+.shell-page-view .team-capability-error,
+.shell-page-view .team-capability-inline-status {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: oklch(43% 0.02 235);
+  background: oklch(96% 0.006 235);
+  font-size: 12px;
+}
+.shell-page-view .team-capability-error,
+.shell-page-view .team-capability-inline-status.is-error {
+  color: var(--danger);
+  background: color-mix(in oklch, var(--danger) 8%, white);
+}
+.shell-page-view .expert-team-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.shell-page-view .expert-team-card {
+  display: grid;
+  align-content: space-between;
+  gap: 10px;
+  min-height: 184px;
+  padding: 14px;
+  border: 1px solid oklch(90% 0.009 235);
+  border-radius: 14px;
+  background: oklch(100% 0 0);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.shell-page-view .expert-team-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--accent) 24%, oklch(89% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 2%, white);
+  box-shadow: 0 12px 28px rgb(31 51 84 / 0.08);
+}
+/* Match the design artifact's Team responsive density. */
+.shell-page-view .expert-team-card .catalog-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+}
+.shell-page-view .expert-team-card .catalog-card-head > span {
+  color: color-mix(in oklch, var(--accent) 68%, oklch(40% 0.02 235));
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+@media (max-width: 1180px) {
+  .shell-page-view .office-card-grid,
+  .shell-page-view .expert-team-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 860px) {
+  .shell-page-view[data-shell-view="team"] .catalog-market-header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+  }
+  .shell-page-view[data-shell-view="team"] .catalog-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .shell-page-view[data-shell-view="team"] .catalog-source-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 8px;
+  }
+  .shell-page-view[data-shell-view="team"] .catalog-context-note,
+  .shell-page-view[data-shell-view="team"] .team-workspace-scope {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .shell-page-view[data-shell-view="team"] .team-workspace-picker {
+    width: min(100%, 620px);
+    max-width: 100%;
+  }
+  .shell-page-view .office-card-grid,
+  .shell-page-view .expert-team-grid,
+  .shell-page-view .workflow-list-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell-page-view .team-capability-live-layout {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+  .shell-page-view .team-capability-definition-list {
+    max-height: 320px;
+  }
+  .shell-page-view .team-capability-run-panel {
+    padding: 16px;
+  }
+  .shell-page-view .team-capability-run-panel > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .shell-page-view .team-capability-run-panel > footer .button.primary {
+    width: 100%;
+  }
+  .shell-page-view .workflow-list-foot {
+    justify-content: flex-start;
+  }
+}
+.shell-page-view .expert-member-stack {
+  display: grid;
+  gap: 3px;
+}
+.shell-page-view .expert-member-stack span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding: 2px 0;
+  color: oklch(42% 0.018 235);
+  font-size: 12px;
+  font-weight: 520;
+}
+.shell-page-view .expert-member-stack span::before {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: oklch(82% 0.01 235);
+  content: "";
+}
+.shell-page-view .expert-member-stack span:first-child::before {
+  background: color-mix(in oklch, var(--accent) 68%, white);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 12%, transparent);
+}
+.shell-page-view .expert-member-stack svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+@media (max-width: 860px) {
+  .shell-page-view .team-capability-live-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell-page-view .team-capability-run-panel > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}"
 `;
 
 exports[`command Office room style > snapshots the canonical Office workspace embedding contract 1`] = `
@@ -164,6 +566,233 @@ exports[`command Office room style > snapshots the canonical Office workspace em
 .team-office-room-error {
   color: oklch(48% 0.15 25);
 }"
+`;
+
+exports[`command Office room style > snapshots the design-aligned Workflow list and room contract 1`] = `
+{
+  "list": ".shell-page-view .workflow-list {
+  display: grid;
+  gap: 8px;
+}
+.shell-page-view .workflow-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.55fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 76px;
+  padding: 13px 16px;
+  border: 1px solid oklch(90% 0.009 235);
+  border-radius: 14px;
+  background: oklch(100% 0 0);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.shell-page-view .workflow-list-item:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--accent) 24%, oklch(89% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 2%, white);
+  box-shadow: 0 12px 28px rgb(31 51 84 / 0.08);
+}
+.shell-page-view .workflow-list-item:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--accent) 62%, white);
+  outline-offset: 3px;
+}
+.shell-page-view .workflow-list-item.is-active {
+  border-color: color-mix(in oklch, var(--accent) 30%, oklch(89% 0.01 235));
+  background: color-mix(in oklch, var(--accent) 3%, white);
+}
+.shell-page-view .workflow-list-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+.shell-page-view .workflow-list-main strong {
+  min-width: 0;
+  overflow: hidden;
+  color: oklch(20% 0.018 235);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-page-view .workflow-list-meta {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+.shell-page-view .workflow-list-copy {
+  display: -webkit-box;
+  overflow: hidden;
+  color: oklch(48% 0.016 235);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+.shell-page-view .workflow-member-strip {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  color: oklch(54% 0.014 235);
+  font-size: 11.5px;
+}
+.shell-page-view .workflow-member-strip small {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 2px solid oklch(100% 0 0);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--accent) 9%, oklch(96% 0.006 235));
+  color: color-mix(in oklch, var(--accent) 62%, oklch(32% 0.02 235));
+  font-size: 10.5px;
+  font-weight: 680;
+}
+.shell-page-view .workflow-member-strip small + small {
+  margin-left: -7px;
+}
+.shell-page-view .workflow-member-strip em {
+  margin-left: 8px;
+  color: oklch(52% 0.014 235);
+  font-style: normal;
+  font-weight: 560;
+}
+.shell-page-view .workflow-list-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.shell-page-view .workflow-list-foot > small {
+  max-width: 150px;
+  overflow: hidden;
+  color: oklch(54% 0.014 235);
+  font-size: 10.5px;
+  font-weight: 520;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shell-page-view .workflow-list-foot b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: color-mix(in oklch, var(--accent) 78%, oklch(25% 0.02 235));
+  font-size: 12px;
+  font-weight: 620;
+}
+.shell-page-view .workflow-list-foot b::after {
+  content: "→";
+  transition: transform 0.15s ease;
+}
+.shell-page-view .workflow-list-item:hover .workflow-list-foot b::after {
+  transform: translateX(2px);
+}
+.shell-page-view .workflow-list-progress {
+  display: inline-grid;
+  grid-template-columns: repeat(4, 22px);
+  align-items: center;
+  gap: 4px;
+}
+.shell-page-view .workflow-list-progress i {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: oklch(91.5% 0.007 235);
+}
+.shell-page-view .workflow-list-progress i.is-done {
+  background: color-mix(in oklch, var(--success) 62%, oklch(90% 0.008 235));
+}
+.shell-page-view .workflow-list-progress i.is-running {
+  background: color-mix(in oklch, var(--accent) 74%, oklch(90% 0.008 235));
+}",
+  "room": ".shell-page-view.workflow-room-active .team-workflow-shell {
+  display: block;
+}
+.shell-page-view.workflow-room-active .workflow-room-inline {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: oklch(98.8% 0.004 235);
+  box-shadow: none;
+}
+.workflow-room-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 64px;
+  padding: 10px 16px;
+  border-bottom: 1px solid oklch(89% 0.01 235);
+  background: rgb(255 255 255 / 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.workflow-room-title-block {
+  display: grid;
+  gap: 2px;
+}
+.workflow-room-title-block span {
+  color: oklch(55% 0.014 235);
+  font-size: 11px;
+  font-weight: 680;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.workflow-room-title-block h3 {
+  color: oklch(20% 0.018 235);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.workflow-room-title-block p {
+  display: -webkit-box;
+  max-width: 90ch;
+  overflow: hidden;
+  color: oklch(49% 0.016 235);
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.workflow-room-top > .button:first-child svg,
+.workflow-room-actions .button svg {
+  width: 14px;
+  height: 14px;
+}
+.workflow-room-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.workflow-room-actions .button[aria-expanded="true"] {
+  border-color: color-mix(in oklch, var(--accent) 28%, oklch(88% 0.012 235));
+  background: color-mix(in oklch, var(--accent) 7%, white);
+  color: color-mix(in oklch, var(--accent) 88%, oklch(20% 0.018 235));
+}
+.workflow-room-stage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}",
+}
 `;
 
 exports[`command Office room style > snapshots the visible Office landing contract 1`] = `

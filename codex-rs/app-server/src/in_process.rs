@@ -64,6 +64,7 @@ use crate::outgoing_message::OutgoingMessage;
 use crate::outgoing_message::OutgoingMessageSender;
 use crate::outgoing_message::QueuedOutgoingMessage;
 use crate::transport::CHANNEL_CAPACITY;
+use crate::transport::ConnectionOrigin;
 use crate::transport::OutboundConnectionState;
 use crate::transport::route_outgoing_envelope;
 use crewon_analytics::AppServerRpcTransport;
@@ -107,9 +108,6 @@ fn server_notification_requires_delivery(notification: &ServerNotification) -> b
         ServerNotification::TurnCompleted(_)
             | ServerNotification::ThreadSettingsUpdated(_)
             | ServerNotification::ExternalAgentConfigImportCompleted(_)
-            | ServerNotification::AgentPlatformChatDelta(_)
-            | ServerNotification::AgentPlatformChatCompleted(_)
-            | ServerNotification::AgentPlatformChatFailed(_)
     )
 }
 
@@ -138,6 +136,8 @@ pub struct InProcessStartArgs {
     /// SQLite tracing layer used to flush recently emitted logs before feedback upload.
     pub log_db: Option<LogDbLayer>,
     /// Process-wide SQLite state handle shared with embedded app-server consumers.
+    ///
+    /// When omitted, [`start`] initializes the state runtime from [`Self::config`].
     pub state_db: Option<StateDbHandle>,
     /// Environment manager used by core execution and filesystem operations.
     pub environment_manager: Arc<EnvironmentManager>,
@@ -374,13 +374,28 @@ pub async fn start(args: InProcessStartArgs) -> IoResult<InProcessClientHandle> 
     Ok(client)
 }
 
-async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
+async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
     let channel_capacity = args.channel_capacity.max(1);
+    let rollout_writer_generation_guard =
+        crate::rollout_writer_generation::acquire_for_app_server(&args.config.codex_home)?;
     let installation_id = resolve_installation_id(&args.config.codex_home).await?;
+    if args.state_db.is_none() {
+        args.state_db = Some(
+            crewon_rollout::state_db::try_init(args.config.as_ref())
+                .await
+                .map_err(|err| {
+                    IoError::other(format!(
+                        "failed to initialize in-process sqlite state under {}: {err:#}",
+                        args.config.sqlite_home.display()
+                    ))
+                })?,
+        );
+    }
     let (client_tx, mut client_rx) = mpsc::channel::<InProcessClientMessage>(channel_capacity);
     let (event_tx, event_rx) = mpsc::channel::<InProcessServerEvent>(channel_capacity);
 
     let runtime_handle = tokio::spawn(async move {
+        let _rollout_writer_generation_guard = rollout_writer_generation_guard;
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<OutgoingEnvelope>(channel_capacity);
         let auth_manager =
             AuthManager::shared_from_config(args.config.as_ref(), args.enable_codex_api_key_env)
@@ -443,9 +458,11 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
                 rpc_transport: AppServerRpcTransport::InProcess,
                 remote_control_handle: None,
                 plugin_startup_tasks: crate::PluginStartupTasks::Start,
+                provider_connection_runtime: None,
+                durable_cloud_agent_enabled: false,
             }));
             let mut thread_created_rx = processor.thread_created_receiver();
-            let session = Arc::new(ConnectionSessionState::new());
+            let session = Arc::new(ConnectionSessionState::new(ConnectionOrigin::InProcess));
             let mut listen_for_threads = true;
 
             loop {
@@ -732,13 +749,12 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crewon_app_server_protocol::AgentPlatformChatCompletedNotification;
-    use crewon_app_server_protocol::AgentPlatformChatDeltaNotification;
-    use crewon_app_server_protocol::AgentPlatformChatFailedNotification;
-    use crewon_app_server_protocol::AgentPlatformTokenUsage;
     use crewon_app_server_protocol::ClientInfo;
     use crewon_app_server_protocol::ConfigRequirementsReadResponse;
     use crewon_app_server_protocol::ExternalAgentConfigImportCompletedNotification;
+    use crewon_app_server_protocol::OfficeCreateParams;
+    use crewon_app_server_protocol::OfficeCreateResponse;
+    use crewon_app_server_protocol::OfficeSaveParams;
     use crewon_app_server_protocol::SessionSource as ApiSessionSource;
     use crewon_app_server_protocol::ThreadStartParams;
     use crewon_app_server_protocol::ThreadStartResponse;
@@ -747,7 +763,11 @@ mod tests {
     use crewon_app_server_protocol::TurnItemsView;
     use crewon_app_server_protocol::TurnStatus;
     use crewon_core::config::ConfigBuilder;
+    use crewon_state::DurableWorkspaceRootRecord;
+    use crewon_state::OfficeMigrationStart;
+    use crewon_state::OfficeMigrationStartOutcome;
     use pretty_assertions::assert_eq;
+    use serde_json::json;
     use std::path::Path;
     use tempfile::TempDir;
 
@@ -832,6 +852,122 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn in_process_start_without_state_db_preserves_office_migration_fence() {
+        let codex_home = TempDir::new().expect("temp dir");
+        let workspace = TempDir::new().expect("workspace temp dir");
+        let config = Arc::new(build_test_config(codex_home.path()).await);
+        let client = start(InProcessStartArgs {
+            arg0_paths: Arg0DispatchPaths::default(),
+            config: Arc::clone(&config),
+            config_overrides: Vec::new(),
+            loader_overrides: LoaderOverrides::default(),
+            strict_config: false,
+            cloud_config_bundle: CloudConfigBundleLoader::default(),
+            thread_config_loader: Arc::new(crewon_config::NoopThreadConfigLoader),
+            feedback: CrewonFeedback::new(),
+            log_db: None,
+            state_db: None,
+            environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
+            config_warnings: Vec::new(),
+            session_source: SessionSource::LegacyCli,
+            enable_codex_api_key_env: false,
+            initialize: InitializeParams {
+                client_info: ClientInfo {
+                    name: "crewon-in-process-state-test".to_string(),
+                    title: None,
+                    version: "0.0.0".to_string(),
+                },
+                capabilities: None,
+            },
+            channel_capacity: DEFAULT_IN_PROCESS_CHANNEL_CAPACITY,
+        })
+        .await
+        .expect("in-process runtime should initialize omitted state db");
+        let cwd = workspace.path().to_string_lossy().into_owned();
+        let created: OfficeCreateResponse = serde_json::from_value(
+            client
+                .request(ClientRequest::OfficeCreate {
+                    request_id: RequestId::Integer(10),
+                    params: OfficeCreateParams {
+                        cwd: cwd.clone(),
+                        title: "In-process State Office".to_string(),
+                        subtitle: None,
+                        thread_id: Some("thread-in-process-state".to_string()),
+                        goal: Some("Keep migration fencing enabled".to_string()),
+                    },
+                })
+                .await
+                .expect("office/create transport should work")
+                .expect("office/create should succeed without a supplied state db"),
+        )
+        .expect("office/create response should parse");
+
+        let state = crewon_rollout::state_db::try_init(config.as_ref())
+            .await
+            .expect("reopen initialized state db");
+        let workspace_key = "workspace:018f0d8e-7e6a-7cb2-8b34-7b2ca4d60029";
+        let mut root = DurableWorkspaceRootRecord {
+            workspace_key: workspace_key.to_string(),
+            node_id: "in-process-state-node".to_string(),
+            environment_id: "in-process-state-environment".to_string(),
+            root_fingerprint: format!("sha256:{}", "a".repeat(64)),
+            record_hash: String::new(),
+            created_at: 1,
+        };
+        root.record_hash = root.canonical_hash();
+        state
+            .resolve_durable_workspace_root_record(&root)
+            .await
+            .expect("seed durable workspace");
+        let record_id = created.config["workspace"]["recordId"]
+            .as_str()
+            .expect("created record id");
+        let source_revision = created.config["workspace"]["recordRevision"]
+            .as_str()
+            .expect("created record revision");
+        assert!(matches!(
+            state
+                .start_office_migration(&OfficeMigrationStart {
+                    record_id: record_id.to_string(),
+                    workspace_key: workspace_key.to_string(),
+                    source_revision: source_revision.to_string(),
+                    source_digest: format!("sha256:{}", "b".repeat(64)),
+                    source_bytes: 1,
+                    started_at: 2,
+                })
+                .await
+                .expect("start Office migration"),
+            OfficeMigrationStartOutcome::Started(_)
+        ));
+
+        let mut changed = created.config;
+        changed["title"] = json!("Forbidden update");
+        let error = client
+            .request(ClientRequest::OfficeSave {
+                request_id: RequestId::Integer(11),
+                params: OfficeSaveParams {
+                    cwd,
+                    config: changed,
+                },
+            })
+            .await
+            .expect("office/save transport should work")
+            .expect_err("auto-initialized state must still enforce the migration fence");
+        assert_eq!(
+            error.data,
+            Some(json!({
+                "type": "officeMigrationFenced",
+                "phase": "quiescing",
+                "journalRevision": 1,
+            }))
+        );
+        client
+            .shutdown()
+            .await
+            .expect("in-process runtime should shutdown cleanly");
+    }
+
+    #[tokio::test]
     async fn in_process_start_uses_requested_session_source_for_thread_start() {
         for (requested_source, expected_source) in [
             (SessionSource::LegacyCli, ApiSessionSource::LegacyCli),
@@ -907,43 +1043,6 @@ mod tests {
             &ServerNotification::ExternalAgentConfigImportCompleted(
                 ExternalAgentConfigImportCompletedNotification {},
             )
-        ));
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::AgentPlatformChatDelta(AgentPlatformChatDeltaNotification {
-                run_id: "run-1".to_string(),
-                thread_id: "thread-1".to_string(),
-                agent_id: "agent-1".to_string(),
-                delta: "hello".to_string(),
-            },)
-        ));
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::AgentPlatformChatCompleted(
-                AgentPlatformChatCompletedNotification {
-                    run_id: "run-1".to_string(),
-                    thread_id: "thread-1".to_string(),
-                    agent_id: "agent-1".to_string(),
-                    message: "hello".to_string(),
-                    thoughts: Vec::new(),
-                    skills_used: Vec::new(),
-                    resource_events: Vec::new(),
-                    tokens: AgentPlatformTokenUsage {
-                        prompt_tokens: 1,
-                        completion_tokens: 1,
-                        total_tokens: 2,
-                    },
-                    duration_ms: 1,
-                },
-            )
-        ));
-        assert!(server_notification_requires_delivery(
-            &ServerNotification::AgentPlatformChatFailed(AgentPlatformChatFailedNotification {
-                run_id: "run-1".to_string(),
-                thread_id: "thread-1".to_string(),
-                agent_id: "agent-1".to_string(),
-                error: "failed".to_string(),
-                code: -32000,
-                cancelled: false,
-            },)
         ));
     }
 }
