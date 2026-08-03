@@ -94,7 +94,7 @@
   border: 1px solid
     color-mix(in oklch, var(--command-sidebar-border), var(--n-0) 18%);
   border-radius: var(--radius-xl);
-  background: rgb(255 255 255 / 0.96);
+  background: var(--n-0);
   box-shadow: var(--shadow-modal);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -783,7 +783,7 @@
 .shell-page-view .timeline-panel {
   border: 1px solid var(--n-350);
   border-radius: var(--radius-xl);
-  background: rgb(255 255 255 / 0.82);
+  background: var(--n-25);
   box-shadow: none;
 }
 .shell-page-view .page-card,
@@ -1314,7 +1314,7 @@
   padding: 15px;
   border: 1px solid var(--n-300);
   border-radius: var(--radius-lg);
-  background: rgb(255 255 255 / 0.72);
+  background: var(--n-25);
 }
 .shell-page-view .team-capability-unavailable .team-office-capability {
   grid-template-columns: minmax(0, 1fr);
@@ -2177,7 +2177,7 @@
   max-height: min(840px, calc(100vh - 56px));
   overflow: auto;
   padding: 24px;
-  border: 1px solid rgb(255 255 255 / 0.7);
+  border: 1px solid var(--n-alpha-45);
   border-radius: var(--radius-xl);
   background: var(--n-0);
   box-shadow: var(--shadow-modal);
@@ -2595,7 +2595,7 @@
   min-height: 64px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--n-300);
-  background: rgb(255 255 255 / 0.78);
+  background: var(--n-25);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -2684,7 +2684,7 @@
   min-height: 64px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--n-300);
-  background: rgb(255 255 255 / 0.78);
+  background: var(--n-25);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -2759,7 +2759,7 @@
   padding: 8px 12px;
   border: 1px dashed var(--n-350);
   border-radius: var(--radius-lg);
-  background: rgb(255 255 255 / 0.64);
+  background: var(--n-50);
 }
 .workflow-stage-empty strong {
   color: var(--n-900);
@@ -3092,7 +3092,7 @@
   padding: 12px;
   border: 1px solid var(--n-350);
   border-radius: var(--radius-xl);
-  background: rgb(255 255 255 / 0.94);
+  background: var(--n-0);
   box-shadow: var(--shadow-overlay);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -3151,7 +3151,7 @@ body.modal-open {
   max-height: min(820px, calc(100vh - 56px));
   overflow: auto;
   padding: 24px 24px 22px;
-  border: 1px solid rgb(255 255 255 / 0.7);
+  border: 1px solid var(--n-alpha-45);
   border-radius: var(--radius-lg);
   background: var(--n-0);
   box-shadow: var(--shadow-modal);
@@ -3321,7 +3321,7 @@ body.modal-open {
   padding: 11px 12px;
   border: 1px solid var(--n-300);
   border-radius: var(--radius-lg);
-  background: rgb(255 255 255 / 0.78);
+  background: var(--n-25);
 }
 .shell-page-view .focus-chip span,
 .shell-page-view .focus-chip small {
@@ -3358,7 +3358,7 @@ body.modal-open {
   padding: 13px;
   border: 1px solid var(--n-350);
   border-radius: var(--radius-xl);
-  background: rgb(255 255 255 / 0.76);
+  background: var(--n-25);
 }
 .shell-page-view .rail-panel h3,
 .shell-page-view .page-panel h3 {
@@ -3542,7 +3542,7 @@ body.modal-open {
   border-color: var(--n-400);
   border-radius: var(--radius-xl);
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.92), rgb(248 251 255 / 0.88)),
+    linear-gradient(180deg, var(--n-0), var(--n-25)),
     radial-gradient(
       circle at 12% 0%,
       color-mix(in oklch, var(--accent) 12%, transparent),
@@ -3558,7 +3558,7 @@ body.modal-open {
   min-height: 58px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--n-300);
-  background: rgb(255 255 255 / 0.72);
+  background: var(--n-25);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -3736,7 +3736,7 @@ body.modal-open {
   border-bottom: 0;
   border-left: 0;
   border-radius: 0;
-  background: rgb(255 255 255 / 0.86);
+  background: var(--n-25);
 }
 .shell-page-view .mini-composer textarea {
   min-height: 76px;
@@ -4166,7 +4166,7 @@ body.modal-open {
   -webkit-font-smoothing: antialiased;
 }
 .command-input textarea::placeholder {
-  color: #8a8f98;
+  color: var(--n-600);
   font-weight: 400;
   opacity: 1;
 }
@@ -4849,7 +4849,7 @@ body.modal-open {
   .send-button,
 :root:not([data-theme="light"]) .input-tools .send-button {
   background: #f4f4f5;
-  color: #171717;
+  color: var(--n-950);
   box-shadow: var(--shadow-raised);
 }
 
@@ -4863,8 +4863,8 @@ body.modal-open {
   .send-button:focus-visible,
 :root:not([data-theme="light"]) .input-tools .send-button:hover,
 :root:not([data-theme="light"]) .input-tools .send-button:focus-visible {
-  background: #ffffff;
-  color: #111111;
+  background: var(--n-0);
+  color: var(--n-1000);
 }
 
 :root:not([data-theme="light"])
@@ -4873,7 +4873,7 @@ body.modal-open {
   .send-button:disabled,
 :root:not([data-theme="light"]) .input-tools .send-button:disabled {
   background: #f4f4f5;
-  color: #171717;
+  color: var(--n-950);
   opacity: 0.34;
 }
 
@@ -4883,7 +4883,7 @@ body.modal-open {
   .send-button[data-action="stop"],
 :root:not([data-theme="light"]) .input-tools .send-button[data-action="stop"] {
   background: #f4f4f5;
-  color: #171717;
+  color: var(--n-950);
   border-color: transparent;
 }
 
@@ -4901,8 +4901,8 @@ body.modal-open {
 :root:not([data-theme="light"])
   .input-tools
   .send-button[data-action="stop"]:focus-visible {
-  background: #ffffff;
-  color: #111111;
+  background: var(--n-0);
+  color: var(--n-1000);
 }
 
 :root[data-theme="light"]
@@ -4916,7 +4916,7 @@ body.modal-open {
   .send-button[data-action="stop"],
 :root[data-theme="light"] .input-tools .send-button[data-action="stop"] {
   background: #171717;
-  color: #ffffff;
+  color: var(--n-50);
   box-shadow: var(--shadow-raised);
 }
 
@@ -4939,7 +4939,7 @@ body.modal-open {
   .input-tools
   .send-button[data-action="stop"]:focus-visible {
   background: #000000;
-  color: #ffffff;
+  color: var(--n-50);
 }
 .composer-state-row {
   display: grid;
@@ -5066,7 +5066,7 @@ body.modal-open {
   padding: 10px;
   border: 1px solid var(--n-300);
   border-radius: var(--radius-md);
-  background: rgb(255 255 255 / 0.82);
+  background: var(--n-25);
   color: var(--n-950);
 }
 .resource-card span {
@@ -5339,7 +5339,7 @@ body.modal-open {
   .screen-shell.command-screen
   .command-thread-identity
   > strong {
-  color: #3f3f46;
+  color: var(--n-800);
 }
 
 :root[data-theme="light"]
@@ -5347,7 +5347,7 @@ body.modal-open {
   .screen-shell.command-screen
   .command-thread-runtime
   strong {
-  color: #71717a;
+  color: var(--n-700);
 }
 
 :root[data-theme="light"]
@@ -5359,7 +5359,7 @@ body.modal-open {
   .screen-shell.command-screen
   .command-thread-runtime
   em {
-  color: #8a8f98;
+  color: var(--n-600);
 }
 
 :root[data-theme="light"]
@@ -5433,7 +5433,7 @@ body.modal-open {
   .screen-shell.command-screen
   :is(.context-palette, .slash-palette) {
   border-color: oklch(84% 0 0);
-  background: rgb(255 255 255 / 0.985);
+  background: var(--n-0);
   color: oklch(25% 0 0);
   box-shadow: var(--shadow-modal);
 }
@@ -5593,7 +5593,7 @@ body.modal-open {
   .screen-shell.command-screen
   .command-thread-room
   .turn-process-details {
-  color: #1c1f24;
+  color: var(--n-900);
 }
 
 /*
@@ -5657,7 +5657,7 @@ body.modal-open {
 
 :root[data-theme="light"] .command-workbench-launcher-menu {
   border-color: oklch(84% 0 0);
-  background: rgb(255 255 255 / 0.98);
+  background: var(--n-0);
   box-shadow: var(--shadow-modal);
 }
 
@@ -5710,7 +5710,7 @@ body.modal-open {
     .command-workbench-file-search select
   ) {
   border-color: oklch(86% 0 0);
-  background: white;
+  background: var(--n-0);
   color: oklch(28% 0 0);
 }
 
@@ -5750,7 +5750,7 @@ body.modal-open {
     .capability-field-list select
   ) {
   border-color: oklch(86% 0 0);
-  background: white;
+  background: var(--n-0);
   color: oklch(28% 0 0);
 }
 
@@ -5789,18 +5789,18 @@ body.modal-open {
   .screen-shell.command-screen
   .shell-page-view {
   background: #171717;
-  color: #ededed;
+  color: var(--n-250);
 }
 
 :root:not([data-theme="light"])
   .command-shell-route
   .screen-shell.command-screen {
   --command-sidebar-bg: #202020;
-  --command-sidebar-border: #303030;
+  --command-sidebar-border: var(--n-850);
   --command-sidebar-hover: #292929;
   --command-sidebar-active: #343434;
   --command-control-bg: #242424;
-  --command-control-border: #3a3a3a;
+  --command-control-border: var(--n-800);
 }
 
 :root:not([data-theme="light"])
@@ -5828,7 +5828,7 @@ body.modal-open {
     .command-thread-room .message-type,
     .composer-state-row
   ) {
-  color: #9b9b9b;
+  color: var(--n-600);
 }
 
 :root:not([data-theme="light"])
@@ -5843,14 +5843,14 @@ body.modal-open {
     .conversation-item,
     .sidebar-account summary
   ) {
-  color: #d6d6d6;
+  color: var(--n-400);
 }
 
 :root:not([data-theme="light"])
   .command-shell-route
   .screen-shell.command-screen
   :is(.space-title strong, .sidebar-account strong, .tree-head strong) {
-  color: #ededed;
+  color: var(--n-250);
 }
 
 :root:not([data-theme="light"])
@@ -5882,7 +5882,7 @@ body.modal-open {
   .screen-shell.command-screen
   .conversation-item.active {
   background: var(--command-sidebar-hover);
-  color: #f5f5f5;
+  color: var(--n-150);
 }
 
 :root:not([data-theme="light"])
@@ -5896,7 +5896,7 @@ body.modal-open {
     .command-input textarea,
     .command-thread-runtime strong
   ) {
-  color: #f1f1f1;
+  color: var(--n-200);
 }
 
 :root:not([data-theme="light"])
@@ -5912,9 +5912,9 @@ body.modal-open {
     .control-select .select-trigger,
     .workspace-picker .select-trigger
   ) {
-  border-color: #393939;
+  border-color: var(--n-800);
   background: #242424;
-  color: #dcdcdc;
+  color: var(--n-350);
 }
 
 :root:not([data-theme="light"])
@@ -5927,16 +5927,16 @@ body.modal-open {
     .control-select .select-trigger,
     .workspace-picker .select-trigger
   ):hover {
-  border-color: #505050;
+  border-color: var(--n-750);
   background: #303030;
-  color: #fff;
+  color: var(--n-50);
 }
 
 :root:not([data-theme="light"])
   .command-shell-route
   .screen-shell.command-screen
   .command-thread-toolbar {
-  border-color: #303030;
+  border-color: var(--n-850);
 }
 
 :root:not([data-theme="light"])
@@ -5956,7 +5956,7 @@ body.modal-open {
   .screen-shell.command-screen
   .command-thread-room
   .turn-process-details {
-  color: #e8e8ea;
+  color: var(--n-250);
 }
 
 :root:not([data-theme="light"])
@@ -5978,7 +5978,7 @@ body.modal-open {
   .command-shell-route
   .screen-shell.command-screen
   input::placeholder {
-  color: #7a7a7e;
+  color: var(--n-650);
 }
 
 :root:not([data-theme="light"])
@@ -5991,9 +5991,9 @@ body.modal-open {
     .context-palette,
     .select-menu
   ) {
-  border-color: #393939;
+  border-color: var(--n-800);
   background: #242424;
-  color: #ededed;
+  color: var(--n-250);
   box-shadow: var(--shadow-modal);
 }
 
@@ -6005,9 +6005,9 @@ body.modal-open {
     .sidebar-workspace-form input,
     .context-palette input
   ) {
-  border-color: #3c3c3c;
+  border-color: var(--n-800);
   background: #1d1d1d;
-  color: #ededed;
+  color: var(--n-250);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -6100,7 +6100,7 @@ body.modal-open {
   padding: 0 9px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: rgb(255 255 255 / 0.76);
+  background: var(--n-25);
   color: var(--n-750);
   cursor: pointer;
   font-size: calc(12px + var(--user-ui-font-delta));
@@ -8057,7 +8057,7 @@ body.modal-open {
   width: min(780px, 100%);
   min-height: 36px;
   padding: 8px 2px 11px;
-  border-bottom: 1px solid rgba(24, 24, 27, 0.08);
+  border-bottom: 1px solid var(--n-alpha-08);
   color: var(--n-650);
 }
 
@@ -8086,7 +8086,7 @@ body.modal-open {
   padding: 0;
   border-radius: 0;
   background: transparent;
-  color: #8a8f98;
+  color: var(--n-600);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-style: normal;
   font-weight: 500;
@@ -8100,7 +8100,7 @@ body.modal-open {
 
 .screen-shell.command-screen .command-thread-runtime {
   gap: 6px;
-  color: #8a8f98;
+  color: var(--n-600);
 }
 
 .screen-shell.command-screen .command-thread-runtime strong {
@@ -8121,7 +8121,7 @@ body.modal-open {
   padding: 0;
   border-radius: 0;
   background: transparent;
-  color: #8a8f98;
+  color: var(--n-600);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
 }
@@ -8396,7 +8396,7 @@ body.modal-open {
   .message[data-kind="agentMessage"]
   .markdown-content
   li::marker {
-  color: #8a8f98;
+  color: var(--n-600);
 }
 
 .screen-shell.command-screen
@@ -8456,7 +8456,7 @@ body.modal-open {
   .message[data-kind="agentMessage"]
   .markdown-content
   table {
-  border: 1px solid rgba(24, 24, 27, 0.09);
+  border: 1px solid var(--n-alpha-08);
   border-radius: var(--radius-md);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.4;
@@ -8503,7 +8503,7 @@ body.modal-open {
   .assistant-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content {
-  color: #e8e8ea;
+  color: var(--n-250);
 }
 
 :root:not([data-theme="light"])
@@ -8517,7 +8517,7 @@ body.modal-open {
   .message[data-kind="agentMessage"]
   .markdown-content
   :is(h1, h2, h3, h4, strong) {
-  color: #f0f0f0;
+  color: var(--n-200);
 }
 
 :root:not([data-theme="light"])
@@ -8531,8 +8531,8 @@ body.modal-open {
   .message[data-kind="agentMessage"]
   .markdown-content
   blockquote {
-  border-left-color: #3d3d3d;
-  color: #a8a8a8;
+  border-left-color: var(--n-800);
+  color: var(--n-550);
 }
 
 :root:not([data-theme="light"])
@@ -8549,8 +8549,8 @@ body.modal-open {
   :not(pre)
   > code {
   border: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: #f4f4f5;
+  background: var(--n-0);
+  color: var(--n-150);
 }
 
 :root:not([data-theme="light"])
@@ -8576,7 +8576,7 @@ body.modal-open {
   .assistant-single-conversation
   .command-input
   textarea {
-  color: #f1f1f1;
+  color: var(--n-200);
 }
 
 :root:not([data-theme="light"])
@@ -8584,7 +8584,7 @@ body.modal-open {
   .command-input
   textarea::placeholder,
 :root:not([data-theme="light"]) .assistant-home-composer textarea::placeholder {
-  color: #7a7a7e;
+  color: var(--n-650);
 }
 
 :root[data-theme="light"]
@@ -8596,7 +8596,7 @@ body.modal-open {
   .assistant-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content {
-  color: #1a1a1a;
+  color: var(--n-950);
 }
 
 :root[data-theme="light"]
@@ -8610,7 +8610,7 @@ body.modal-open {
   .message[data-kind="agentMessage"]
   .markdown-content
   :is(h1, h2, h3, h4, strong) {
-  color: #111111;
+  color: var(--n-1000);
 }
 
 :root[data-theme="light"]
@@ -8627,7 +8627,7 @@ body.modal-open {
   :not(pre)
   > code {
   background: rgba(24, 24, 27, 0.06);
-  color: #1a1a1a;
+  color: var(--n-950);
 }
 
 :root[data-theme="light"]
@@ -8640,7 +8640,7 @@ body.modal-open {
   .message[data-kind="userMessage"]
   .markdown-content {
   background: #f0f0f0;
-  color: #1a1a1a;
+  color: var(--n-950);
 }
 
 :root[data-theme="light"] .screen-shell.command-screen .command-input textarea,
@@ -8649,7 +8649,7 @@ body.modal-open {
   .assistant-single-conversation
   .command-input
   textarea {
-  color: #1a1a1a;
+  color: var(--n-950);
 }
 
 .screen-shell.command-screen
@@ -8692,7 +8692,7 @@ body.modal-open {
 .screen-shell.command-screen .command-input textarea::placeholder,
 .assistant-home-composer textarea::placeholder,
 .assistant-single-conversation .command-input textarea::placeholder {
-  color: #8a8f98;
+  color: var(--n-600);
   opacity: 1;
 }
 
@@ -8763,7 +8763,7 @@ body.modal-open {
   border-bottom: 1px solid var(--n-200);
   border-radius: 0;
   background: transparent;
-  color: #7b818a;
+  color: var(--n-650);
   transform: none;
 }
 
@@ -8796,7 +8796,7 @@ body.modal-open {
   .turn-process-summary:focus-visible {
   border-color: var(--n-300);
   background: transparent;
-  color: #555b64;
+  color: var(--n-750);
 }
 
 .screen-shell.command-screen
@@ -8855,7 +8855,7 @@ body.modal-open {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #8a9098;
+  color: var(--n-600);
 }
 
 .screen-shell.command-screen
@@ -8894,7 +8894,7 @@ body.modal-open {
     .action-card-header
   )
   code {
-  color: #777d85;
+  color: var(--n-650);
   font-size: calc(13px + var(--user-ui-font-delta));
   font-weight: 500;
 }
@@ -8909,7 +8909,7 @@ body.modal-open {
 .process-action-group {
   display: block;
   width: 100%;
-  color: #777d85;
+  color: var(--n-650);
 }
 
 .process-action-group > summary {
@@ -8949,7 +8949,7 @@ body.modal-open {
   width: 20px;
   height: 24px;
   place-items: center;
-  color: #8a9098;
+  color: var(--n-600);
 }
 
 .process-action-group-items {

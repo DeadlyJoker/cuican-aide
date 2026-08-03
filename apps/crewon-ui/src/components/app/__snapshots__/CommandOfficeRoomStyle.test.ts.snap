@@ -704,7 +704,7 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   min-height: 64px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--n-300);
-  background: rgb(255 255 255 / 0.78);
+  background: var(--n-25);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -819,7 +819,7 @@ exports[`command Office room style > snapshots the visible Office landing contra
   padding: 15px;
   border: 1px solid var(--n-300);
   border-radius: var(--radius-lg);
-  background: rgb(255 255 255 / 0.72);
+  background: var(--n-25);
 }
 .shell-page-view .team-capability-unavailable .team-office-capability {
   grid-template-columns: minmax(0, 1fr);

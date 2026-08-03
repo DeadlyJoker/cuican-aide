@@ -589,7 +589,7 @@ exports[`command workspace conversation style > snapshots the assistant and home
   padding: 0 9px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: rgb(255 255 255 / 0.76);
+  background: var(--n-25);
   color: var(--n-750);
   cursor: pointer;
   font-size: calc(12px + var(--user-ui-font-delta));
@@ -799,7 +799,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   width: min(780px, 100%);
   min-height: 36px;
   padding: 8px 2px 11px;
-  border-bottom: 1px solid rgba(24, 24, 27, 0.08);
+  border-bottom: 1px solid var(--n-alpha-08);
   color: var(--n-650);
 }
 
@@ -828,7 +828,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   padding: 0;
   border-radius: 0;
   background: transparent;
-  color: #8a8f98;
+  color: var(--n-600);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-style: normal;
   font-weight: 500;
@@ -842,7 +842,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 
 .screen-shell.command-screen .command-thread-runtime {
   gap: 6px;
-  color: #8a8f98;
+  color: var(--n-600);
 }
 
 .screen-shell.command-screen .command-thread-runtime strong {
@@ -863,7 +863,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   padding: 0;
   border-radius: 0;
   background: transparent;
-  color: #8a8f98;
+  color: var(--n-600);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
 }
@@ -1138,7 +1138,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   li::marker {
-  color: #8a8f98;
+  color: var(--n-600);
 }
 
 .screen-shell.command-screen
@@ -1198,7 +1198,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   table {
-  border: 1px solid rgba(24, 24, 27, 0.09);
+  border: 1px solid var(--n-alpha-08);
   border-radius: var(--radius-md);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.4;
@@ -1245,7 +1245,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .assistant-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content {
-  color: #e8e8ea;
+  color: var(--n-250);
 }
 
 :root:not([data-theme="light"])
@@ -1259,7 +1259,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   :is(h1, h2, h3, h4, strong) {
-  color: #f0f0f0;
+  color: var(--n-200);
 }
 
 :root:not([data-theme="light"])
@@ -1273,8 +1273,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   blockquote {
-  border-left-color: #3d3d3d;
-  color: #a8a8a8;
+  border-left-color: var(--n-800);
+  color: var(--n-550);
 }
 
 :root:not([data-theme="light"])
@@ -1291,8 +1291,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   :not(pre)
   > code {
   border: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: #f4f4f5;
+  background: var(--n-0);
+  color: var(--n-150);
 }
 
 :root:not([data-theme="light"])
@@ -1318,7 +1318,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .assistant-single-conversation
   .command-input
   textarea {
-  color: #f1f1f1;
+  color: var(--n-200);
 }
 
 :root:not([data-theme="light"])
@@ -1326,7 +1326,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .command-input
   textarea::placeholder,
 :root:not([data-theme="light"]) .assistant-home-composer textarea::placeholder {
-  color: #7a7a7e;
+  color: var(--n-650);
 }
 
 :root[data-theme="light"]
@@ -1338,7 +1338,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .assistant-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content {
-  color: #1a1a1a;
+  color: var(--n-950);
 }
 
 :root[data-theme="light"]
@@ -1352,7 +1352,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   :is(h1, h2, h3, h4, strong) {
-  color: #111111;
+  color: var(--n-1000);
 }
 
 :root[data-theme="light"]
@@ -1369,7 +1369,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   :not(pre)
   > code {
   background: rgba(24, 24, 27, 0.06);
-  color: #1a1a1a;
+  color: var(--n-950);
 }
 
 :root[data-theme="light"]
@@ -1382,7 +1382,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="userMessage"]
   .markdown-content {
   background: #f0f0f0;
-  color: #1a1a1a;
+  color: var(--n-950);
 }
 
 :root[data-theme="light"] .screen-shell.command-screen .command-input textarea,
@@ -1391,7 +1391,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .assistant-single-conversation
   .command-input
   textarea {
-  color: #1a1a1a;
+  color: var(--n-950);
 }
 
 .screen-shell.command-screen
@@ -1434,7 +1434,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .screen-shell.command-screen .command-input textarea::placeholder,
 .assistant-home-composer textarea::placeholder,
 .assistant-single-conversation .command-input textarea::placeholder {
-  color: #8a8f98;
+  color: var(--n-600);
   opacity: 1;
 }
 
@@ -1505,7 +1505,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border-bottom: 1px solid var(--n-200);
   border-radius: 0;
   background: transparent;
-  color: #7b818a;
+  color: var(--n-650);
   transform: none;
 }
 
@@ -1538,7 +1538,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .turn-process-summary:focus-visible {
   border-color: var(--n-300);
   background: transparent;
-  color: #555b64;
+  color: var(--n-750);
 }
 
 .screen-shell.command-screen
@@ -1597,7 +1597,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #8a9098;
+  color: var(--n-600);
 }
 
 .screen-shell.command-screen
@@ -1636,7 +1636,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
     .action-card-header
   )
   code {
-  color: #777d85;
+  color: var(--n-650);
   font-size: calc(13px + var(--user-ui-font-delta));
   font-weight: 500;
 }
@@ -1651,7 +1651,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .process-action-group {
   display: block;
   width: 100%;
-  color: #777d85;
+  color: var(--n-650);
 }
 
 .process-action-group > summary {
@@ -1691,7 +1691,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   width: 20px;
   height: 24px;
   place-items: center;
-  color: #8a9098;
+  color: var(--n-600);
 }
 
 .process-action-group-items {
