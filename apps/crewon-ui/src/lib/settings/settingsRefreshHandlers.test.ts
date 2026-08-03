@@ -29,6 +29,7 @@ function baseParams(
 ) {
   return {
     accountStatus: null,
+    platformUser: null,
     client: overrides.client ?? null,
     connectionHint: "Disconnected",
     connectionState: "demo" as const,

@@ -28,16 +28,34 @@ export type CapabilityPanelAction = {
   tone?: "primary" | "danger";
 };
 
+/**
+ * Control shape for a settings field. `text` stays the default so existing
+ * panels keep rendering unchanged; the rest let appearance settings expose real
+ * controls instead of squeezing colors and sizes through text inputs.
+ */
+export type CapabilityFieldControl =
+  | "color"
+  | "number"
+  | "segmented"
+  | "slider"
+  | "text"
+  | "toggle";
+
 export type CapabilityPanelField = {
   commitOnChange?: boolean;
+  control?: CapabilityFieldControl;
   description?: string;
   id: string;
+  max?: number;
+  min?: number;
   multiline?: boolean;
   label: string;
   options?: Array<{ label: string; value: string }>;
   placeholder?: string;
   rows?: number;
   secret?: boolean;
+  step?: number;
+  unit?: string;
   value: string;
 };
 

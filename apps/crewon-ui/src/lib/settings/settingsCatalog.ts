@@ -159,6 +159,97 @@ export function settingsSectionLabel(
       : "Settings";
 }
 
+/**
+ * Appearance writes one flat `desktop.*` key per control. Listing them here is
+ * what lets commitSettingsFieldAction persist each field without special cases.
+ */
+const APPEARANCE_CONFIG_FIELDS = [
+  {
+    fieldId: "appearance-locale",
+    configPath: "desktop.uiLocale",
+    valueKind: "select",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-theme",
+    configPath: "desktop.appearanceTheme",
+    valueKind: "select",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-accent",
+    configPath: "desktop.appearanceAccent",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-background",
+    configPath: "desktop.appearanceBackground",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-foreground",
+    configPath: "desktop.appearanceForeground",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-ui-font",
+    configPath: "desktop.uiFontFamily",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-code-font",
+    configPath: "desktop.codeFontFamily",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-ui-font-size",
+    configPath: "desktop.uiFontSize",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-code-font-size",
+    configPath: "desktop.codeFontSize",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-contrast",
+    configPath: "desktop.appearanceContrast",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-reduce-motion",
+    configPath: "desktop.reduceMotion",
+    valueKind: "select",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-diff-markers",
+    configPath: "desktop.diffMarkers",
+    valueKind: "select",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-translucent-sidebar",
+    configPath: "desktop.translucentSidebar",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+  {
+    fieldId: "appearance-font-smoothing",
+    configPath: "desktop.fontSmoothing",
+    valueKind: "string",
+    writeActionId: "save-appearance",
+  },
+] as const satisfies readonly SettingsConfigField[];
+
 export const settingsCatalog = [
   {
     id: "personal",
@@ -210,20 +301,7 @@ export const settingsCatalog = [
         backend: {
           refreshTarget: "appearance-settings",
           scope: "desktop",
-          fields: [
-            {
-              fieldId: "appearance-locale",
-              configPath: "desktop.uiLocale",
-              valueKind: "select",
-              writeActionId: "save-appearance",
-            },
-            {
-              fieldId: "appearance-theme",
-              configPath: "desktop.appearanceTheme",
-              valueKind: "select",
-              writeActionId: "save-appearance",
-            },
-          ],
+          fields: APPEARANCE_CONFIG_FIELDS,
         },
       },
       {

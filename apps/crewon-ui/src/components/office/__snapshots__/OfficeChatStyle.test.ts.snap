@@ -10,19 +10,19 @@ exports[`Office chat style > snapshots the quiet bubble and plain mention contra
   min-height: 58px;
   padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
   box-shadow: none;
 }",
   "mention": ".office-mention {
   color: var(--accent);
-  font-weight: 650;
+  font-weight: 500;
   padding: 0;
   border-radius: 0;
   background: transparent;
 }",
   "selfBubble": ".office-bubble[data-self="true"] .office-bubble-body {
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   border-color: transparent;
   background: color-mix(in srgb, var(--accent) 5%, var(--surface));
 }",

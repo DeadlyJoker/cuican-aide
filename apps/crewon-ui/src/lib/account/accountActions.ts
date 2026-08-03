@@ -7,6 +7,7 @@ import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
 import type { ModelProviderCapabilitiesReadResponse } from "@crewon-protocol/v2/ModelProviderCapabilitiesReadResponse";
 import type { PermissionProfileListResponse } from "@crewon-protocol/v2/PermissionProfileListResponse";
 
+import type { AgentPlatformUser } from "../agent-platform/agentPlatformSession";
 import type { AccountStatus } from "../shared/statusTypes";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
@@ -65,6 +66,7 @@ export type RefreshAccountPanelActionParams = {
   fallbackAccount: AccountStatus | null;
   isConnected: boolean;
   locale: Locale;
+  platformUser: AgentPlatformUser | null;
   resolveBackendCwd: () => Promise<string | undefined>;
   setAccountStatus: (account: AccountStatus | null) => void;
   setCapabilityPanel: (panel: CapabilityPanel) => void;
@@ -106,6 +108,7 @@ export async function refreshAccountPanelAction({
   fallbackAccount,
   isConnected,
   locale,
+  platformUser,
   resolveBackendCwd,
   setAccountStatus,
   setCapabilityPanel,
@@ -180,6 +183,7 @@ export async function refreshAccountPanelAction({
           capabilities,
           errors,
           fallbackAccount,
+          platformUser,
           telemetry,
         },
         locale,

@@ -3,6 +3,8 @@ import {
   DESKTOP_THEME_KEY_PATH,
 } from "./appRuntimeState";
 import { desktopPreferenceSyncFailureNotice } from "./appNotificationPresentation";
+import { parseAppearancePreferences } from "../appearance/appearanceSerialization";
+import { resolveThemeMode } from "../appearance/applyAppearance";
 import type { Locale } from "../i18n";
 import type { Theme } from "../theme";
 
@@ -77,24 +79,28 @@ export function applyDesktopPreferencesAction(params: {
   desktopConfig: Record<string, unknown> | null | undefined;
   persistLocale: LocalePersistence;
   persistTheme: ThemePersistence;
+  /** Supplied by the caller so this action stays free of platform lookups. */
+  prefersDark?: boolean;
   setLocale: LocaleSetter;
   setTheme: (theme: Theme) => void;
   themeOverride: string | null;
 }): void {
   const configuredLocale = params.desktopConfig?.uiLocale;
-  const configuredTheme = params.desktopConfig?.appearanceTheme;
+  const preferences = parseAppearancePreferences(params.desktopConfig);
 
   if (configuredLocale === "zh" || configuredLocale === "en") {
     params.setLocale(configuredLocale);
     params.persistLocale(configuredLocale);
   }
 
-  if (
-    params.themeOverride !== "light" &&
-    params.themeOverride !== "dark" &&
-    (configuredTheme === "light" || configuredTheme === "dark")
-  ) {
-    params.setTheme(configuredTheme);
-    params.persistTheme(configuredTheme);
+  if (params.themeOverride === "light" || params.themeOverride === "dark") {
+    return;
   }
+
+  const resolvedTheme = resolveThemeMode(
+    preferences.themeMode,
+    params.prefersDark ?? false,
+  );
+  params.setTheme(resolvedTheme);
+  params.persistTheme(resolvedTheme);
 }

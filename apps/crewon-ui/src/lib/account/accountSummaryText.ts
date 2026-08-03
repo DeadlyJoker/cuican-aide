@@ -6,6 +6,7 @@ import type { ModelProviderCapabilitiesReadResponse } from "@crewon-protocol/v2/
 import type { PermissionProfileListResponse } from "@crewon-protocol/v2/PermissionProfileListResponse";
 import type { RateLimitSnapshot } from "@crewon-protocol/v2/RateLimitSnapshot";
 
+import type { AgentPlatformUser } from "../agent-platform/agentPlatformSession";
 import type { AccountStatus } from "../shared/statusTypes";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
@@ -30,6 +31,7 @@ type AccountOverviewContent = {
   capabilities: string;
   errors: string[];
   fallbackAccount: AccountStatus | null;
+  platformUser: AgentPlatformUser | null;
   telemetry: string;
 };
 
@@ -55,8 +57,8 @@ export function accountDisconnectedPanel(
     title: accountPanelTitle(locale),
     subtitle:
       locale === "zh"
-        ? "认证、模型、权限与用量"
-        : "Auth, models, permissions, and usage",
+        ? "企业身份、模型账号与用量"
+        : "Enterprise identity, model account, and usage",
     body: connectionBody,
   };
 }
@@ -82,10 +84,14 @@ export function accountOverviewPanel(
     title: accountPanelTitle(locale),
     subtitle:
       locale === "zh"
-        ? "认证、模型、权限与用量"
-        : "Auth, models, permissions, and usage",
+        ? "企业身份、模型账号与用量"
+        : "Enterprise identity, model account, and usage",
     body: [
-      accountStatusText(content.account ?? content.fallbackAccount, locale),
+      platformIdentityText(content.platformUser, locale),
+      [
+        locale === "zh" ? "模型账号" : "Model account",
+        accountStatusText(content.account ?? content.fallbackAccount, locale),
+      ].join("\n"),
       authStatusText(content.authStatus, locale),
       content.capabilities,
       content.telemetry,
@@ -105,7 +111,7 @@ export function accountOverviewPanel(
       },
       {
         id: "logout-account",
-        label: locale === "zh" ? "退出登录" : "Logout",
+        label: locale === "zh" ? "退出模型账号" : "Sign out of model account",
         tone: "danger",
       },
       {
@@ -189,6 +195,44 @@ export function accountAuthErrorPanel(
           ? "账号操作失败"
           : "Account action failed",
   };
+}
+
+/*
+ * The enterprise identity from agent-platform. This is who you are in CrewON;
+ * the model account below is a separate, technical credential for inference.
+ * The panel used to show only the latter under the title "account", which read
+ * as though CrewON had no identity of its own.
+ */
+export function platformIdentityText(
+  user: AgentPlatformUser | null,
+  locale: Locale,
+): string {
+  if (!user) {
+    return locale === "zh"
+      ? "企业账号：未登录"
+      : "Enterprise account: signed out";
+  }
+
+  const displayName =
+    (user.display_name || user.nickname || user.username).trim() ||
+    user.username;
+  const wecomLinked = user.linked_providers?.includes("wecom") ?? false;
+  const details = [
+    user.email,
+    locale === "zh"
+      ? `角色：${user.role}`
+      : `Role: ${user.role}`,
+    wecomLinked
+      ? locale === "zh"
+        ? "企业微信已绑定"
+        : "WeCom linked"
+      : "",
+  ].filter(Boolean);
+
+  return [
+    locale === "zh" ? `企业账号：${displayName}` : `Enterprise account: ${displayName}`,
+    ...details,
+  ].join("\n");
 }
 
 export function accountStatusText(

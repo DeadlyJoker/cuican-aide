@@ -54,7 +54,7 @@ export function TitleBar({
 
   return (
     <header className="titlebar" data-platform={platform}>
-      <TitleBarWindowControls platform={platform} />
+      <TitleBarWindowControls locale={locale} platform={platform} />
       <button
         className="icon-button"
         type="button"

@@ -17,6 +17,7 @@ function createCoordinator(
 ) {
   return createAppSettingsCoordinator({
     accountStatus: null,
+    platformUser: null,
     capabilityPanel: null,
     client: null as AppServerClient | null,
     connectionHint: "Disconnected",

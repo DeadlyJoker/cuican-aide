@@ -34,11 +34,11 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  border: 1px solid oklch(88% 0.012 235);
-  border-radius: 8px;
-  background: oklch(98% 0.006 235);
-  color: oklch(36% 0.018 235);
-  font-size: 12px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-md);
+  background: var(--n-50);
+  color: var(--n-850);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1;
 }
 
@@ -49,9 +49,9 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 }
 
 .composer-resource-tag > small {
-  color: oklch(51% 0.024 235);
-  font-size: 10px;
-  font-weight: 700;
+  color: var(--n-700);
+  font-size: calc(10px + var(--user-ui-font-delta));
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -59,7 +59,7 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 .composer-resource-tag > strong {
   min-width: 0;
   overflow: hidden;
-  font-weight: 560;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -72,15 +72,15 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: oklch(54% 0.02 235);
+  color: var(--n-700);
   cursor: pointer;
 }
 
 .composer-resource-tag > button:hover {
-  background: oklch(92% 0.012 235);
-  color: oklch(28% 0.018 235);
+  background: var(--n-200);
+  color: var(--n-900);
 }
 
 .composer-resource-tag > button svg {
@@ -90,37 +90,37 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 
 .composer-resource-tag[data-resource-kind="file"] {
   border-color: oklch(86% 0.04 245);
-  background: oklch(97% 0.018 245);
+  background: var(--n-75);
   color: oklch(39% 0.07 245);
 }
 
 .composer-resource-tag[data-resource-kind="folder"] {
   border-color: oklch(86% 0.045 85);
-  background: oklch(97% 0.022 85);
+  background: var(--n-75);
   color: oklch(40% 0.07 75);
 }
 
 .composer-resource-tag[data-resource-kind="image"] {
   border-color: oklch(87% 0.045 315);
-  background: oklch(97% 0.018 315);
+  background: var(--n-75);
   color: oklch(42% 0.075 315);
 }
 
 .composer-resource-tag[data-resource-kind="knowledge"] {
   border-color: oklch(86% 0.04 205);
-  background: oklch(97% 0.018 205);
+  background: var(--n-75);
   color: oklch(39% 0.07 205);
 }
 
 .composer-resource-tag[data-resource-kind="skill"] {
   border-color: oklch(86% 0.045 275);
-  background: oklch(97% 0.018 275);
+  background: var(--n-75);
   color: oklch(40% 0.08 275);
 }
 
 .composer-resource-tag[data-resource-kind="mcp"] {
   border-color: oklch(85% 0.045 155);
-  background: oklch(97% 0.018 155);
+  background: var(--n-75);
   color: oklch(38% 0.07 155);
 }
 
@@ -136,7 +136,7 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  background: oklch(98.5% 0.006 235);
+  background: var(--n-25);
   transition: grid-template-columns 180ms ease;
 }
 
@@ -164,8 +164,8 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   height: 100dvh;
   grid-template-rows: 44px minmax(0, 1fr);
   overflow: hidden;
-  border-left: 1px solid oklch(89% 0.009 235);
-  background: oklch(98.8% 0.002 235);
+  border-left: 1px solid var(--n-300);
+  background: var(--n-25);
   box-shadow: none;
 }
 
@@ -175,15 +175,15 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   justify-content: space-between;
   gap: 10px;
   padding: 0 8px 0 13px;
-  border-bottom: 1px solid oklch(90% 0.008 235);
+  border-bottom: 1px solid var(--n-250);
 }
 
 .command-capability-sidebar-header strong {
   min-width: 0;
   overflow: hidden;
-  color: oklch(24% 0.016 235);
-  font-size: 13px;
-  font-weight: 600;
+  color: var(--n-950);
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -242,7 +242,7 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   gap: 2px;
   min-height: 38px;
   padding: 4px 8px;
-  border-bottom: 1px solid oklch(91% 0.007 235);
+  border-bottom: 1px solid var(--n-250);
 }
 
 .command-capability-sidebar .capability-tool-tabs > button {
@@ -253,17 +253,17 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: oklch(46% 0.014 235);
+  color: var(--n-750);
 }
 
 .command-capability-sidebar .capability-tool-tabs > button:hover,
 .command-capability-sidebar .capability-tool-tabs > button:focus-visible,
 .command-capability-sidebar .capability-tool-tabs > button[data-active="true"] {
-  border-color: oklch(89% 0.009 235);
-  background: oklch(94.8% 0.007 235);
-  color: oklch(24% 0.02 235);
+  border-color: var(--n-300);
+  background: var(--n-150);
+  color: var(--n-950);
   outline: 0;
 }
 
@@ -301,8 +301,8 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: oklch(31% 0.016 235);
-  font-size: 12px;
+  color: var(--n-900);
+  font-size: calc(12px + var(--user-ui-font-delta));
 }
 
 .command-capability-sidebar .capability-result-header {
@@ -319,15 +319,15 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 }
 
 .command-capability-sidebar .capability-result-header span {
-  color: oklch(54% 0.016 235);
-  font-size: 10.5px;
+  color: var(--n-700);
+  font-size: calc(11px + var(--user-ui-font-delta));
   line-height: 1.35;
 }
 
 .command-capability-sidebar .capability-result-summary {
   margin: -2px 2px 0;
-  color: oklch(48% 0.014 235);
-  font-size: 11.5px;
+  color: var(--n-750);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -336,10 +336,10 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 .command-capability-sidebar .capability-field-list input,
 .command-capability-sidebar .capability-field-list select {
   height: 32px;
-  border: 1px solid oklch(88.5% 0.009 235);
-  border-radius: 7px;
-  background: oklch(99% 0.003 235);
-  color: oklch(31% 0.016 235);
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-sm);
+  background: var(--n-25);
+  color: var(--n-900);
 }
 
 .command-capability-sidebar .capability-field-list {
@@ -351,8 +351,8 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 }
 
 .command-capability-sidebar .capability-field-list span {
-  color: oklch(51% 0.014 235);
-  font-size: 11px;
+  color: var(--n-700);
+  font-size: calc(11px + var(--user-ui-font-delta));
 }
 
 .command-capability-sidebar .capability-result-actions {
@@ -367,11 +367,11 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   flex: 0 0 auto;
   height: 30px;
   padding: 0 10px;
-  border: 1px solid oklch(88% 0.01 235);
-  border-radius: 7px;
-  background: oklch(96% 0.007 235);
-  color: oklch(32% 0.018 235);
-  font-size: 11.5px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-sm);
+  background: var(--n-100);
+  color: var(--n-900);
+  font-size: calc(12px + var(--user-ui-font-delta));
   white-space: nowrap;
 }
 
@@ -379,18 +379,18 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 .command-capability-sidebar .capability-result-actions button:focus-visible,
 .command-capability-sidebar .capability-command-form button:hover,
 .command-capability-sidebar .capability-command-form button:focus-visible {
-  border-color: oklch(82% 0.014 235);
-  background: oklch(92.5% 0.009 235);
+  border-color: var(--n-400);
+  background: var(--n-200);
   outline: 0;
 }
 
 .command-capability-sidebar .capability-result-output {
   max-height: none;
   padding: 10px 11px;
-  border: 1px solid oklch(90% 0.007 235);
-  border-radius: 7px;
-  background: oklch(97.2% 0.004 235);
-  color: oklch(31% 0.018 235);
+  border: 1px solid var(--n-250);
+  border-radius: var(--radius-sm);
+  background: var(--n-75);
+  color: var(--n-900);
 }
 
 .command-capability-sidebar
@@ -401,9 +401,9 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   .capability-result-output {
   max-height: calc(100dvh - 248px);
   overflow: auto;
-  border-color: oklch(90% 0.007 235);
-  background: oklch(97.2% 0.004 235);
-  color: oklch(31% 0.018 235);
+  border-color: var(--n-250);
+  background: var(--n-75);
+  color: var(--n-900);
   overscroll-behavior: contain;
 }
 
@@ -411,9 +411,9 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   gap: 0;
   margin: 0;
   padding: 3px;
-  border: 1px solid oklch(91% 0.007 235);
-  border-radius: 8px;
-  background: oklch(99.2% 0.002 235);
+  border: 1px solid var(--n-250);
+  border-radius: var(--radius-md);
+  background: var(--n-25);
 }
 
 .command-capability-sidebar .capability-result-item {
@@ -425,18 +425,18 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   gap: 6px;
   padding: 3px 7px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: oklch(31% 0.018 235);
+  color: var(--n-900);
   font-family: inherit;
-  font-size: 12px;
+  font-size: calc(12px + var(--user-ui-font-delta));
   text-decoration: none;
 }
 
 .command-capability-sidebar .capability-result-item:hover,
 .command-capability-sidebar .capability-result-item:focus-visible {
-  background: oklch(94.8% 0.007 235);
-  color: oklch(20% 0.022 235);
+  background: var(--n-150);
+  color: var(--n-1000);
   outline: 0;
   text-decoration: none;
 }
@@ -457,7 +457,7 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 
 .command-capability-sidebar .capability-result-item-icon {
   display: grid;
-  color: oklch(54% 0.012 235);
+  color: var(--n-700);
   place-items: center;
 }
 
@@ -470,7 +470,7 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 .command-capability-sidebar
   .capability-result[data-panel-kind="files"]
   .capability-result-item-icon {
-  color: oklch(54% 0.012 235);
+  color: var(--n-700);
 }
 
 .command-capability-sidebar .capability-result-item-label {
@@ -480,11 +480,9 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   white-space: nowrap;
 }
 
-:root[data-theme="light"]
-  .command-capability-sidebar
-  .capability-result-item {
+:root[data-theme="light"] .command-capability-sidebar .capability-result-item {
   background: transparent;
-  color: oklch(31% 0.018 235);
+  color: oklch(31% 0 0);
 }
 
 :root[data-theme="light"]
@@ -493,7 +491,7 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 :root[data-theme="light"]
   .command-capability-sidebar
   .capability-result-item:focus-visible {
-  background: oklch(94.8% 0.007 235);
+  background: oklch(94.8% 0 0);
   color: oklch(20% 0.022 235);
 }
 
@@ -504,18 +502,18 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   gap: 5px;
   min-height: 220px;
   padding: 24px 28px;
-  color: oklch(52% 0.016 235);
+  color: var(--n-700);
   text-align: center;
 }
 
 .command-capability-sidebar-empty strong {
-  color: oklch(36% 0.018 235);
-  font-size: 13px;
+  color: var(--n-850);
+  font-size: calc(13px + var(--user-ui-font-delta));
 }
 
 .command-capability-sidebar-empty p {
   margin: 0;
-  font-size: 12px;
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.55;
 }
 
@@ -534,7 +532,7 @@ exports[`command workspace conversation style > snapshots resource tags and the 
     position: fixed;
     inset: 0 0 0 auto;
     width: min(380px, calc(100vw - 32px));
-    box-shadow: -24px 0 70px rgb(22 31 43 / 0.2);
+    box-shadow: var(--shadow-drawer-left);
   }
 
   .command-shell-route[data-capability-sidebar-open="true"]
@@ -559,7 +557,7 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 exports[`command workspace conversation style > snapshots the assistant and home conversation alignment contract 1`] = `
 "/* Assistant uses the same real thread transcript and composer as the home chat. */
 .shell-page-view.assistant-only-view {
-  background: oklch(99% 0.002 235);
+  background: var(--n-25);
 }
 .assistant-single-conversation {
   position: relative;
@@ -590,12 +588,12 @@ exports[`command workspace conversation style > snapshots the assistant and home
   gap: 6px;
   padding: 0 9px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: rgb(255 255 255 / 0.76);
-  color: oklch(48% 0.018 235);
+  color: var(--n-750);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 620;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
   pointer-events: auto;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -606,8 +604,8 @@ exports[`command workspace conversation style > snapshots the assistant and home
 }
 .assistant-clear-conversation:hover:not(:disabled),
 .assistant-clear-conversation:focus-visible:not(:disabled) {
-  border-color: oklch(88% 0.018 25);
-  background: oklch(97% 0.012 25);
+  border-color: var(--n-300);
+  background: var(--n-75);
   color: oklch(48% 0.12 25);
   outline: 0;
 }
@@ -624,7 +622,7 @@ exports[`command workspace conversation style > snapshots the assistant and home
   justify-items: center;
   width: min(620px, 100%);
   margin: 0 auto;
-  color: oklch(49% 0.014 235);
+  color: var(--n-750);
   text-align: center;
   gap: 10px;
 }
@@ -633,25 +631,25 @@ exports[`command workspace conversation style > snapshots the assistant and home
   width: 48px;
   height: 48px;
   place-items: center;
-  border: 1px solid oklch(88% 0.012 235);
-  border-radius: 16px;
-  background: oklch(100% 0 0);
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-xl);
+  background: var(--n-0);
   color: oklch(40% 0.06 225);
-  box-shadow: 0 12px 30px rgb(18 26 38 / 0.05);
+  box-shadow: var(--shadow-overlay);
 }
 .assistant-empty-state svg {
   width: 22px;
   height: 22px;
 }
 .assistant-empty-state strong {
-  color: oklch(24% 0.018 235);
-  font-size: 17px;
-  font-weight: 720;
+  color: var(--n-950);
+  font-size: calc(17px + var(--user-ui-font-delta));
+  font-weight: 600;
 }
 .assistant-empty-state p {
   max-width: 520px;
   margin: 0;
-  font-size: 13px;
+  font-size: calc(13px + var(--user-ui-font-delta));
   line-height: 1.7;
 }
 .assistant-single-conversation .command-thread-room {
@@ -666,9 +664,7 @@ exports[`command workspace conversation style > snapshots the assistant and home
   max-width: min(620px, 82%);
   justify-self: end;
 }
-.assistant-thread-room
-  .message[data-kind="agentMessage"]
-  .markdown-content {
+.assistant-thread-room .message[data-kind="agentMessage"] .markdown-content {
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -676,10 +672,8 @@ exports[`command workspace conversation style > snapshots the assistant and home
   box-shadow: none;
 }
 
-.assistant-thread-room
-  .message[data-kind="userMessage"]
-  .markdown-content {
-  border-radius: 20px;
+.assistant-thread-room .message[data-kind="userMessage"] .markdown-content {
+  border-radius: var(--radius-xl);
   box-shadow: none;
 }
 .assistant-composer-zone {
@@ -691,10 +685,11 @@ exports[`command workspace conversation style > snapshots the assistant and home
 .assistant-home-composer {
   width: 100%;
   margin: 0;
-  border-color: oklch(88.5% 0.01 235);
-  border-radius: 20px;
-  background: oklch(100% 0 0);
-  box-shadow: 0 14px 34px rgb(18 26 38 / 0.06);
+  border-color: var(--n-300);
+  border-radius: var(--radius-xl);
+  background: var(--n-0);
+  /* Matches the command composer: one rung off the canvas, no drop. */
+  box-shadow: var(--shadow-raised);
 }
 .assistant-home-composer textarea {
   height: 80px;
@@ -703,15 +698,9 @@ exports[`command workspace conversation style > snapshots the assistant and home
   padding: 15px 15px 7px;
   color: inherit;
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Text",
-    "PingFang SC",
-    "Hiragino Sans GB",
-    "Segoe UI",
-    system-ui,
-    sans-serif;
-  font-size: 13.5px;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Hiragino Sans GB", "Segoe UI", system-ui, sans-serif;
+  font-size: calc(13px + var(--user-ui-font-delta));
   line-height: 1.45;
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
@@ -761,10 +750,26 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   align-content: stretch;
   justify-items: stretch;
   width: min(1180px, calc(100% - 88px));
-  height: calc(100% - 38px);
+  height: calc(100% - 14px);
   margin: 0;
   transform: translateX(-50%);
   gap: 12px;
+}
+
+/*
+ * Below 860px the shell drops the hero out of absolute positioning, so the
+ * translateX(-50%) that centres it against \`left: 50%\` no longer has a matching
+ * offset to cancel and instead shoves the composer off the left edge. app.css
+ * clears the transform at this breakpoint, but this file loads after it, so the
+ * reset has to be repeated here.
+ */
+@media (max-width: 860px) {
+  .screen-shell.command-screen .hero-center.has-command-thread {
+    left: auto;
+    width: calc(100% - 28px);
+    justify-self: center;
+    transform: none;
+  }
 }
 
 .assistant-single-conversation {
@@ -795,7 +800,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   min-height: 36px;
   padding: 8px 2px 11px;
   border-bottom: 1px solid rgba(24, 24, 27, 0.08);
-  color: #71717a;
+  color: var(--n-650);
 }
 
 .screen-shell.command-screen .command-thread-identity {
@@ -808,9 +813,9 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .screen-shell.command-screen .command-thread-identity > strong {
   min-width: 0;
   overflow: hidden;
-  color: #3f3f46;
-  font-size: 13px;
-  font-weight: 550;
+  color: var(--n-850);
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 500;
   line-height: 1.3;
   letter-spacing: 0;
   text-overflow: ellipsis;
@@ -824,7 +829,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border-radius: 0;
   background: transparent;
   color: #8a8f98;
-  font-size: 12px;
+  font-size: calc(12px + var(--user-ui-font-delta));
   font-style: normal;
   font-weight: 500;
 }
@@ -832,7 +837,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .screen-shell.command-screen .command-thread-cwd::before {
   content: "·";
   margin: 0 8px;
-  color: #c4c4c8;
+  color: var(--n-400);
 }
 
 .screen-shell.command-screen .command-thread-runtime {
@@ -842,15 +847,15 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 
 .screen-shell.command-screen .command-thread-runtime strong {
   gap: 6px;
-  color: #71717a;
-  font-size: 12px;
+  color: var(--n-650);
+  font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
 }
 
 .screen-shell.command-screen .command-thread-runtime strong::before {
   width: 6px;
   height: 6px;
-  background: #c4c4c8;
+  background: var(--n-400);
 }
 
 .screen-shell.command-screen .command-thread-runtime em {
@@ -859,14 +864,14 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border-radius: 0;
   background: transparent;
   color: #8a8f98;
-  font-size: 12px;
+  font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
 }
 
 .screen-shell.command-screen .command-thread-runtime em::before {
   content: "·";
   margin-right: 6px;
-  color: #c4c4c8;
+  color: var(--n-400);
 }
 
 :root[data-theme="dark"] .screen-shell.command-screen .command-thread-toolbar {
@@ -883,7 +888,10 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 
 :root[data-theme="dark"] .screen-shell.command-screen .command-thread-cwd,
 :root[data-theme="dark"] .screen-shell.command-screen .command-thread-runtime,
-:root[data-theme="dark"] .screen-shell.command-screen .command-thread-runtime em {
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-runtime
+  em {
   color: #a1a1aa;
 }
 
@@ -958,24 +966,16 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .command-thread-room
   .message[data-kind="plan"]
   .markdown-content,
-.assistant-thread-room
-  .message[data-kind="agentMessage"]
-  .markdown-content,
+.assistant-thread-room .message[data-kind="agentMessage"] .markdown-content,
 .assistant-thread-room .message[data-kind="plan"] .markdown-content {
   max-width: 720px;
   gap: 0;
   /* Theme colors are set by data-theme rules below. */
   color: inherit;
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Text",
-    "PingFang SC",
-    "Hiragino Sans GB",
-    "Segoe UI",
-    system-ui,
-    sans-serif;
-  font-size: 13.5px;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Hiragino Sans GB", "Segoe UI", system-ui, sans-serif;
+  font-size: calc(13px + var(--user-ui-font-delta));
   font-weight: 400;
   line-height: 1.45;
   letter-spacing: 0;
@@ -1031,7 +1031,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   :is(h1, h2, h3, h4) {
   margin: 14px 0 5px;
   color: inherit;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0;
   line-height: 1.35;
 }
@@ -1053,11 +1053,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   h1,
-.assistant-thread-room
-  .message[data-kind="agentMessage"]
-  .markdown-content
-  h1 {
-  font-size: 14px;
+.assistant-thread-room .message[data-kind="agentMessage"] .markdown-content h1 {
+  font-size: calc(14px + var(--user-ui-font-delta));
 }
 
 .screen-shell.command-screen
@@ -1065,11 +1062,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   h2,
-.assistant-thread-room
-  .message[data-kind="agentMessage"]
-  .markdown-content
-  h2 {
-  font-size: 13.5px;
+.assistant-thread-room .message[data-kind="agentMessage"] .markdown-content h2 {
+  font-size: calc(13px + var(--user-ui-font-delta));
 }
 
 .screen-shell.command-screen
@@ -1081,7 +1075,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   :is(h3, h4) {
-  font-size: 13px;
+  font-size: calc(13px + var(--user-ui-font-delta));
 }
 
 .screen-shell.command-screen
@@ -1102,10 +1096,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   li,
-.assistant-thread-room
-  .message[data-kind="agentMessage"]
-  .markdown-content
-  li {
+.assistant-thread-room .message[data-kind="agentMessage"] .markdown-content li {
   padding-left: 1px;
 }
 
@@ -1113,11 +1104,13 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .command-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content
-  li > :is(ul, ol),
+  li
+  > :is(ul, ol),
 .assistant-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content
-  li > :is(ul, ol) {
+  li
+  > :is(ul, ol) {
   margin: 2px 0 0;
   gap: 2px;
 }
@@ -1126,11 +1119,13 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .command-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content
-  li > p,
+  li
+  > p,
 .assistant-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content
-  li > p {
+  li
+  > p {
   margin: 0;
 }
 
@@ -1150,11 +1145,13 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .command-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content
-  :not(pre) > code,
+  :not(pre)
+  > code,
 .assistant-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content
-  :not(pre) > code {
+  :not(pre)
+  > code {
   padding: 0 3.5px;
   border: 0;
   border-radius: 3px;
@@ -1174,7 +1171,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   strong {
-  font-weight: 600;
+  font-weight: 500;
   color: inherit;
 }
 
@@ -1188,8 +1185,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .markdown-content
   blockquote {
   padding: 0 0 0 12px;
-  border-left: 2px solid #d4d4d8;
-  color: #52525b;
+  border-left: 2px solid var(--n-350);
+  color: var(--n-800);
 }
 
 .screen-shell.command-screen
@@ -1202,8 +1199,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .markdown-content
   table {
   border: 1px solid rgba(24, 24, 27, 0.09);
-  border-radius: 8px;
-  font-size: 12.5px;
+  border-radius: var(--radius-md);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.4;
 }
 
@@ -1225,12 +1222,9 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-kind="agentMessage"]
   .markdown-content
   th,
-.assistant-thread-room
-  .message[data-kind="agentMessage"]
-  .markdown-content
-  th {
-  font-size: 12px;
-  font-weight: 600;
+.assistant-thread-room .message[data-kind="agentMessage"] .markdown-content th {
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 
 :root[data-theme="dark"]
@@ -1310,8 +1304,9 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .assistant-thread-room
   .message[data-kind="userMessage"]
   .markdown-content {
-  background: #2a2a2c;
-  color: #e8e8ea;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
 }
 
 :root:not([data-theme="light"])
@@ -1390,10 +1385,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   color: #1a1a1a;
 }
 
-:root[data-theme="light"]
-  .screen-shell.command-screen
-  .command-input
-  textarea,
+:root[data-theme="light"] .screen-shell.command-screen .command-input textarea,
 :root[data-theme="light"] .assistant-home-composer textarea,
 :root[data-theme="light"]
   .assistant-single-conversation
@@ -1416,19 +1408,13 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .assistant-thread-room .message[data-kind="userMessage"] .markdown-content {
   padding: 8px 13px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   box-shadow: none;
   /* Theme bubble fill/text set by data-theme rules above. */
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Text",
-    "PingFang SC",
-    "Hiragino Sans GB",
-    "Segoe UI",
-    system-ui,
-    sans-serif;
-  font-size: 13.5px;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Hiragino Sans GB", "Segoe UI", system-ui, sans-serif;
+  font-size: calc(13px + var(--user-ui-font-delta));
   font-weight: 400;
   line-height: 1.45;
   letter-spacing: 0;
@@ -1439,7 +1425,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .screen-shell.command-screen .command-input textarea,
 .assistant-home-composer textarea,
 .assistant-single-conversation .command-input textarea {
-  font-size: 13.5px;
+  font-size: calc(13px + var(--user-ui-font-delta));
   font-weight: 400;
   line-height: 1.45;
   letter-spacing: 0;
@@ -1502,15 +1488,11 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 }
 
 /* The turn status owns the execution disclosure; tool batches stay inside it. */
-.screen-shell.command-screen
-  .command-thread-room
-  .turn-process-details {
+.screen-shell.command-screen .command-thread-room .turn-process-details {
   justify-items: stretch;
 }
 
-.screen-shell.command-screen
-  .command-thread-room
-  .turn-process-summary {
+.screen-shell.command-screen .command-thread-room .turn-process-summary {
   width: 100%;
   max-width: none;
   min-height: 38px;
@@ -1520,7 +1502,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   margin: 0;
   padding: 0 0 12px;
   border: 0;
-  border-bottom: 1px solid #e4e6e9;
+  border-bottom: 1px solid var(--n-200);
   border-radius: 0;
   background: transparent;
   color: #7b818a;
@@ -1536,34 +1518,25 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   margin-left: 2px;
 }
 
-.screen-shell.command-screen
-  .command-thread-room
-  .turn-process-summary-main {
+.screen-shell.command-screen .command-thread-room .turn-process-summary-main {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
 }
 
-.screen-shell.command-screen
-  .command-thread-room
-  .turn-process-title,
-.screen-shell.command-screen
-  .command-thread-room
-  .turn-process-summary
-  em {
+.screen-shell.command-screen .command-thread-room .turn-process-title,
+.screen-shell.command-screen .command-thread-room .turn-process-summary em {
   color: inherit;
-  font-size: 14px;
-  font-weight: 570;
+  font-size: calc(14px + var(--user-ui-font-delta));
+  font-weight: 500;
   line-height: 1.4;
 }
 
-.screen-shell.command-screen
-  .command-thread-room
-  .turn-process-summary:hover,
+.screen-shell.command-screen .command-thread-room .turn-process-summary:hover,
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-summary:focus-visible {
-  border-color: #d9dce1;
+  border-color: var(--n-300);
   background: transparent;
   color: #555b64;
 }
@@ -1579,9 +1552,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   margin-bottom: 18px;
 }
 
-.screen-shell.command-screen
-  .command-thread-room
-  .turn-process-items {
+.screen-shell.command-screen .command-thread-room .turn-process-items {
   gap: 18px;
   padding: 2px 0 4px;
 }
@@ -1599,9 +1570,9 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .message[data-process-note="true"]
   .markdown-content {
   max-width: 100%;
-  color: #22252a;
-  font-size: 14.5px;
-  font-weight: 430;
+  color: var(--n-950);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  font-weight: 400;
   line-height: 1.65;
   letter-spacing: -0.009em;
 }
@@ -1657,18 +1628,24 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
-  :is(.command-card-header, .file-read-header, .file-change-header, .tool-call-header, .action-card-header)
+  :is(
+    .command-card-header,
+    .file-read-header,
+    .file-change-header,
+    .tool-call-header,
+    .action-card-header
+  )
   code {
   color: #777d85;
-  font-size: 13px;
-  font-weight: 480;
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
   .tool-action-verb {
-  font-weight: 570;
+  font-weight: 500;
 }
 
 .process-action-group {
@@ -1685,8 +1662,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   gap: 8px;
   cursor: pointer;
   list-style: none;
-  font-size: 13px;
-  font-weight: 560;
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 
 .process-action-group > summary::-webkit-details-marker {
@@ -1722,7 +1699,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   gap: 4px;
   margin: 4px 0 0 10px;
   padding: 2px 0 2px 20px;
-  border-left: 1px solid #e1e3e6;
+  border-left: 1px solid var(--n-250);
 }
 
 .screen-shell.command-screen
@@ -1745,16 +1722,14 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
     .command-thread-room
     .message[data-kind="plan"]
     .markdown-content,
-  .assistant-thread-room
-    .message[data-kind="agentMessage"]
-    .markdown-content {
-    font-size: 13px;
+  .assistant-thread-room .message[data-kind="agentMessage"] .markdown-content {
+    font-size: calc(13px + var(--user-ui-font-delta));
     line-height: 1.42;
   }
 
   .screen-shell.command-screen .command-input textarea,
   .assistant-home-composer textarea {
-    font-size: 13px;
+    font-size: calc(13px + var(--user-ui-font-delta));
     line-height: 1.42;
   }
 }
@@ -1849,7 +1824,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border-color: #393939;
   background: #242424;
   color: #ededed;
-  box-shadow: 0 16px 44px rgb(0 0 0 / 0.34);
+  box-shadow: var(--shadow-modal);
 }
 
 :root[data-theme="dark"]
@@ -2009,7 +1984,13 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
-  :is(.command-card-header, .file-read-header, .file-change-header, .tool-call-header, .action-card-header)
+  :is(
+    .command-card-header,
+    .file-read-header,
+    .file-change-header,
+    .tool-call-header,
+    .action-card-header
+  )
   code,
 :root[data-theme="dark"] .process-action-group {
   color: #a8a8a8;
@@ -2151,9 +2132,9 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   height: 100dvh;
   grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
-  border-left: 1px solid #2d2d2d;
-  background: #171717;
-  color: #ededed;
+  border-left: 1px solid var(--n-900);
+  background: var(--n-1000);
+  color: var(--n-150);
 }
 
 .command-workbench[data-empty="true"] {
@@ -2169,8 +2150,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   justify-content: space-between;
   gap: 10px;
   padding: 4px 8px 4px 10px;
-  border-bottom: 1px solid #2b2b2b;
-  background: #181818;
+  border-bottom: 1px solid var(--n-900);
+  background: var(--n-1000);
 }
 
 .command-workbench-tabs {
@@ -2191,15 +2172,15 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   align-items: center;
   overflow: hidden;
   border: 1px solid transparent;
-  border-radius: 9px;
-  background: #202020;
-  color: #b7b7b7;
+  border-radius: var(--radius-md);
+  background: var(--n-950);
+  color: var(--n-450);
 }
 
 .command-workbench-tab[data-active="true"] {
-  border-color: #353535;
-  background: #292929;
-  color: #f4f4f4;
+  border-color: var(--n-900);
+  background: var(--n-900);
+  color: var(--n-75);
 }
 
 .command-workbench-tab > button:first-child {
@@ -2218,8 +2199,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .command-workbench-tab > button:first-child span {
   min-width: 0;
   overflow: hidden;
-  font-size: 12px;
-  font-weight: 570;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2240,21 +2221,21 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   place-items: center;
   border: 0;
   background: transparent;
-  color: #999;
+  color: var(--n-550);
   cursor: pointer;
 }
 
 .command-workbench-tab-close {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .command-workbench-tab-close:hover,
 .command-workbench-add:hover,
 .command-workbench-close:hover {
-  background: #343434;
-  color: #fff;
+  background: var(--n-900);
+  color: var(--n-0);
 }
 
 .command-workbench-launcher-anchor {
@@ -2265,15 +2246,15 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .command-workbench-add {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
-  color: #dedede;
+  border-radius: var(--radius-md);
+  color: var(--n-250);
 }
 
 .command-workbench-close {
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .command-workbench-close.is-floating {
@@ -2290,10 +2271,10 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   left: 0;
   width: 284px;
   padding: 5px;
-  border: 1px solid #414141;
-  border-radius: 13px;
-  background: #2a2a2a;
-  box-shadow: 0 18px 46px rgb(0 0 0 / 0.38);
+  border: 1px solid var(--n-850);
+  border-radius: var(--radius-lg);
+  background: var(--n-900);
+  box-shadow: var(--shadow-modal);
 }
 
 .command-workbench-content {
@@ -2326,9 +2307,9 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   gap: 16px;
   padding: 0 10px;
   border: 0;
-  border-radius: 8px;
-  background: #202020;
-  color: #e5e5e5;
+  border-radius: var(--radius-md);
+  background: var(--n-950);
+  color: var(--n-200);
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -2340,8 +2321,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 
 .command-workbench-launcher > button:hover,
 .command-workbench-launcher > button:focus-visible {
-  background: #414141;
-  color: #fff;
+  background: var(--n-850);
+  color: var(--n-0);
   outline: 0;
 }
 
@@ -2355,22 +2336,22 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   min-width: 0;
   align-items: center;
   gap: 9px;
-  font-size: 12.5px;
-  font-weight: 560;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 
 .command-workbench-launcher > button svg {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-  color: #bdbdbd;
+  color: var(--n-450);
   stroke-width: 1.65;
 }
 
 .command-workbench-launcher > button kbd {
-  color: #999;
+  color: var(--n-550);
   font-family: inherit;
-  font-size: 11px;
+  font-size: calc(11px + var(--user-ui-font-delta));
 }
 
 .command-workbench-context-bar {
@@ -2378,10 +2359,10 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   min-height: 34px;
   overflow: hidden;
   padding: 9px 14px 7px;
-  border-bottom: 1px solid #292929;
-  color: #bcbcbc;
+  border-bottom: 1px solid var(--n-900);
+  color: var(--n-450);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: calc(11px + var(--user-ui-font-delta));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2399,7 +2380,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  background: #181818;
+  background: var(--n-1000);
 }
 
 .command-workbench-file-preview > section {
@@ -2412,9 +2393,9 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   margin: 0;
   padding: 18px 20px 40px;
   overflow: auto;
-  color: #d8d8d8;
+  color: var(--n-300);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.55;
   tab-size: 2;
   white-space: pre-wrap;
@@ -2426,7 +2407,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   align-content: center;
   justify-items: center;
   gap: 6px;
-  color: #8c8c8c;
+  color: var(--n-600);
   text-align: center;
 }
 
@@ -2440,13 +2421,13 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 
 .command-workbench-file-empty strong,
 .command-workbench-tool-empty strong {
-  color: #dedede;
-  font-size: 13px;
-  font-weight: 590;
+  color: var(--n-250);
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 
 .command-workbench-file-empty span {
-  font-size: 11px;
+  font-size: calc(11px + var(--user-ui-font-delta));
 }
 
 .command-workbench-file-explorer {
@@ -2455,8 +2436,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border-left: 1px solid #2c2c2c;
-  background: #1b1b1b;
+  border-left: 1px solid var(--n-900);
+  background: var(--n-950);
 }
 
 .command-workbench-file-search {
@@ -2480,18 +2461,18 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   height: 27px;
   min-width: 0;
   padding: 0 8px;
-  border: 1px solid #353535;
-  border-radius: 8px;
+  border: 1px solid var(--n-900);
+  border-radius: var(--radius-md);
   outline: 0;
-  background: #222;
-  color: #ddd;
+  background: var(--n-950);
+  color: var(--n-300);
   font: inherit;
-  font-size: 11px;
+  font-size: calc(11px + var(--user-ui-font-delta));
 }
 
 .command-workbench-file-search input:focus,
 .command-workbench-file-search select:focus {
-  border-color: #555;
+  border-color: var(--n-800);
 }
 
 .command-workbench-file-actions {
@@ -2504,18 +2485,18 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .command-workbench-file-actions button {
   height: 25px;
   padding: 0 7px;
-  border: 1px solid #343434;
-  border-radius: 7px;
-  background: #232323;
-  color: #bdbdbd;
+  border: 1px solid var(--n-900);
+  border-radius: var(--radius-sm);
+  background: var(--n-950);
+  color: var(--n-450);
   cursor: pointer;
   font: inherit;
-  font-size: 10.5px;
+  font-size: calc(11px + var(--user-ui-font-delta));
 }
 
 .command-workbench-file-actions button:hover {
-  background: #303030;
-  color: #fff;
+  background: var(--n-900);
+  color: var(--n-0);
 }
 
 .command-workbench-file-tree {
@@ -2535,19 +2516,19 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   gap: 5px;
   padding: 2px 5px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: #c5c5c5;
+  color: var(--n-400);
   cursor: pointer;
   font: inherit;
-  font-size: 11.5px;
+  font-size: calc(12px + var(--user-ui-font-delta));
   text-align: left;
 }
 
 .command-workbench-file-row:hover,
 .command-workbench-file-row:focus-visible {
-  background: #2c2c2c;
-  color: #fff;
+  background: var(--n-900);
+  color: var(--n-0);
   outline: 0;
 }
 
@@ -2559,7 +2540,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .command-workbench-file-row svg {
   width: 14px;
   height: 14px;
-  color: #aaa;
+  color: var(--n-500);
   stroke-width: 1.55;
 }
 
@@ -2573,7 +2554,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .command-workbench-error {
   margin: 16px;
   color: #ef9b9b;
-  font-size: 12px;
+  font-size: calc(12px + var(--user-ui-font-delta));
 }
 
 .command-workbench-generic-surface {
@@ -2581,7 +2562,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   height: 100%;
   min-height: 0;
   overflow: auto;
-  background: #181818;
+  background: var(--n-1000);
 }
 
 .command-workbench-generic-surface .capability-result {
@@ -2594,7 +2575,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #dcdcdc;
+  color: var(--n-300);
 }
 
 .command-workbench-generic-surface .capability-result-header {
@@ -2613,16 +2594,16 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
     .capability-field-list input,
     .capability-field-list select
   ) {
-  border-color: #393939;
-  background: #222;
-  color: #e4e4e4;
+  border-color: var(--n-850);
+  background: var(--n-950);
+  color: var(--n-250);
 }
 
 .command-workbench-generic-surface
   :is(.capability-command-form button, .capability-result-actions button) {
-  border-color: #3c3c3c;
-  background: #292929;
-  color: #ddd;
+  border-color: var(--n-850);
+  background: var(--n-900);
+  color: var(--n-300);
 }
 
 .command-workbench-generic-surface .capability-result-output {
@@ -2633,14 +2614,14 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #d7d7d7;
-  font-size: 12px;
+  color: var(--n-300);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.55;
 }
 
 .command-workbench-generic-surface[data-tool-id="terminal"]
   .capability-result-output {
-  color: #d8d8d8;
+  color: var(--n-300);
 }
 
 .command-workbench-trigger {
@@ -2653,13 +2634,13 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   margin-top: 8px;
   border: 0;
   background: transparent;
-  color: #aaa;
+  color: var(--n-500);
   box-shadow: none;
 }
 
 .command-workbench-trigger:hover {
-  background: #2b2b2b;
-  color: #fff;
+  background: var(--n-900);
+  color: var(--n-0);
 }
 
 .command-workbench-trigger svg {
@@ -2676,7 +2657,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
     position: fixed;
     inset: 0 0 0 auto;
     width: min(760px, calc(100vw - 80px));
-    box-shadow: -28px 0 70px rgb(0 0 0 / 0.38);
+    box-shadow: var(--shadow-drawer-left);
   }
 }
 
@@ -2688,6 +2669,52 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .command-workbench-files {
     grid-template-columns: minmax(0, 1fr) minmax(210px, 38%);
   }
+}
+
+/*
+ * Scene switch and recommended-task cards.
+ *
+ * Theme-scoped \`:is(...)\` rules earlier in this file group \`.scene-pills button\`
+ * and \`.quick-row button\` with the generic pill controls and pin their color per
+ * theme. That outranks the base rules above, which left the selected tab dark
+ * text on the dark sliding thumb. These rules restate the intent at higher
+ * specificity, and because they resolve through --accent-ink and the neutral
+ * scale they stay correct in both themes.
+ */
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .scene-tabs.scene-pills
+  button.active {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-ink);
+}
+
+/*
+ * Theme-scoped \`:is(...)\` rules above match \`.quick-row button\` and flatten its
+ * border to transparent. Those use an attribute selector inside \`:is()\`, so they
+ * outrank ordinary class selectors; matching that weight with \`:where()\` at zero
+ * cost is not enough either. The cards therefore assert their own box at a
+ * deliberately higher weight, scoped by the shell so nothing else is affected.
+ */
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .quick-row
+  button.quick-card {
+  border: 1px solid var(--n-200);
+  background: transparent;
+  color: var(--text);
+}
+
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .quick-row
+  button.quick-card:hover {
+  border: 1px solid var(--n-300);
+  background: var(--n-0);
 }"
 `;
 
@@ -2703,14 +2730,14 @@ exports[`command workspace conversation style > snapshots the markdown table siz
   border-spacing: 0;
   border-collapse: separate;
   color: inherit;
-  font-size: 12px;
+  font-size: calc(12px + var(--user-ui-font-delta));
 }",
   "commandContract": ".message[data-kind="agentMessage"]
   .markdown-content
   table {
   overflow: auto;
-  border-radius: 12px;
-  box-shadow: inset 0 0 0 1px oklch(90% 0.008 235);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--n-250);
 }",
 }
 `;

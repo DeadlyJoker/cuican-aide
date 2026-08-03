@@ -6,6 +6,7 @@ import {
   settingsSectionLabel,
   type SettingsSection,
 } from "../../lib/settings/settingsCatalog";
+import { SettingsFieldControl } from "./SettingsFieldControl";
 
 export type SettingsDataMode = "demo" | "disconnected" | "live";
 
@@ -47,7 +48,11 @@ export function SettingsContent({
     ? settingsSummarySections(panel.body, panel.title)
     : [];
 
-  function changeField(fieldId: string, value: string, commitOnChange: boolean) {
+  function changeField(
+    fieldId: string,
+    value: string,
+    commitOnChange: boolean,
+  ) {
     onPanelFieldChange(fieldId, value);
     if (commitOnChange) {
       onPanelFieldCommit?.(fieldId, value);
@@ -55,7 +60,11 @@ export function SettingsContent({
   }
 
   return (
-    <section className="settings-page" aria-label={copy.title} data-mode={dataMode}>
+    <section
+      className="settings-page"
+      aria-label={copy.title}
+      data-mode={dataMode}
+    >
       <main className="settings-content">
         <header className="settings-heading">
           <h1>{headingTitle}</h1>
@@ -77,7 +86,11 @@ export function SettingsContent({
         ) : null}
 
         {panel?.error ? (
-          <section className="settings-state-card" data-tone="error" role="alert">
+          <section
+            className="settings-state-card"
+            data-tone="error"
+            role="alert"
+          >
             <AlertTriangle size={17} aria-hidden="true" />
             <span>
               <strong>{copy.unavailable}</strong>
@@ -92,58 +105,20 @@ export function SettingsContent({
             <div className="settings-card settings-form-card">
               <div className="settings-field-list">
                 {fields.map((field) => (
-                  <label key={field.id}>
+                  <label data-control={field.control ?? "text"} key={field.id}>
                     <span className="settings-field-copy">
                       <strong>{field.label}</strong>
-                      {field.description ? <small>{field.description}</small> : null}
+                      {field.description ? (
+                        <small>{field.description}</small>
+                      ) : null}
                     </span>
-                    {field.options ? (
-                      <select
-                        disabled={controlsDisabled}
-                        value={field.value}
-                        onChange={(event) =>
-                          changeField(
-                            field.id,
-                            event.target.value,
-                            field.commitOnChange === true,
-                          )
-                        }
-                      >
-                        {field.options.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : field.multiline ? (
-                      <textarea
-                        disabled={controlsDisabled}
-                        value={field.value}
-                        rows={field.rows ?? 5}
-                        placeholder={field.placeholder}
-                        onChange={(event) =>
-                          changeField(
-                            field.id,
-                            event.target.value,
-                            field.commitOnChange === true,
-                          )
-                        }
-                      />
-                    ) : (
-                      <input
-                        disabled={controlsDisabled}
-                        type={field.secret ? "password" : "text"}
-                        value={field.value}
-                        placeholder={field.placeholder}
-                        onChange={(event) =>
-                          changeField(
-                            field.id,
-                            event.target.value,
-                            field.commitOnChange === true,
-                          )
-                        }
-                      />
-                    )}
+                    <SettingsFieldControl
+                      disabled={controlsDisabled}
+                      field={field}
+                      onChange={(value, commitOnChange) =>
+                        changeField(field.id, value, commitOnChange)
+                      }
+                    />
                   </label>
                 ))}
               </div>
@@ -276,7 +251,9 @@ function settingsSummarySections(
         title: rawTitle === panelTitle ? null : rawTitle,
       };
 
-      for (const line of hasSectionTitle ? contentLines.slice(1) : contentLines) {
+      for (const line of hasSectionTitle
+        ? contentLines.slice(1)
+        : contentLines) {
         if (line.startsWith("- ")) {
           section.bullets.push(line.slice(2));
           continue;

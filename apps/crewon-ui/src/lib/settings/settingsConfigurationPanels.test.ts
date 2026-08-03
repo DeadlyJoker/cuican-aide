@@ -119,47 +119,41 @@ describe("settings configuration panels", () => {
       subtitle: "全局配置",
       body: "正在读取外观设置...",
     });
-    expect(
-      appearancePanel({
-        configRead: null,
-        currentLocale: "zh",
-        currentTheme: "dark",
-        cwd: "/repo",
-        locale: "en",
-      }),
-    ).toEqual({
-      title: "Appearance",
-      subtitle: "/repo",
-      body: [
-        "Appearance",
-        "Language: follow current UI",
-        "Theme: system/current",
-        "Config layers: 0",
-        "Appearance settings are written to desktop config and applied immediately.",
-      ].join("\n"),
-      fields: [
-        {
-          commitOnChange: true,
-          id: "appearance-locale",
-          label: "Language",
-          value: "zh",
-          options: [
-            { label: "中文", value: "zh" },
-            { label: "English", value: "en" },
-          ],
-        },
-        {
-          commitOnChange: true,
-          id: "appearance-theme",
-          label: "Theme",
-          value: "dark",
-          options: [
-            { label: "Dark", value: "dark" },
-            { label: "Light", value: "light" },
-          ],
-        },
-      ],
+    const appearance = appearancePanel({
+      configRead: null,
+      currentLocale: "zh",
+      currentTheme: "dark",
+      cwd: "/repo",
+      locale: "en",
+      os: "mac",
+      surface: "desktop",
     });
+
+    expect({ subtitle: appearance.subtitle, title: appearance.title }).toEqual({
+      subtitle: "/repo",
+      title: "Appearance",
+    });
+    expect(
+      appearance.fields?.map((field) => ({
+        control: field.control ?? "text",
+        id: field.id,
+      })),
+    ).toEqual([
+      { control: "text", id: "appearance-locale" },
+      { control: "segmented", id: "appearance-theme" },
+      { control: "color", id: "appearance-accent" },
+      { control: "color", id: "appearance-background" },
+      { control: "color", id: "appearance-foreground" },
+      { control: "text", id: "appearance-ui-font" },
+      { control: "text", id: "appearance-code-font" },
+      { control: "number", id: "appearance-ui-font-size" },
+      { control: "number", id: "appearance-code-font-size" },
+      { control: "slider", id: "appearance-contrast" },
+      { control: "segmented", id: "appearance-reduce-motion" },
+      { control: "segmented", id: "appearance-diff-markers" },
+      { control: "toggle", id: "appearance-translucent-sidebar" },
+      { control: "toggle", id: "appearance-font-smoothing" },
+    ]);
     expect(
       appearanceErrorPanel({
         cwd: "/repo",

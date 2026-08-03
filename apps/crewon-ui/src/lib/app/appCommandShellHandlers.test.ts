@@ -90,7 +90,7 @@ describe("createAppCommandShellHandlers", () => {
 });
 
 describe("commandShellWorkspaceUrl", () => {
-  it("keeps the team workspace while restoring the single-chat workspace", () => {
+  it("restores the workspace without dropping unrelated search params", () => {
     expect(
       commandShellWorkspaceUrl(
         "http://127.0.0.1:5175/?cwd=%2Frepo%2Fold&teamCwd=%2Frepo%2Fteam#view-team",
@@ -101,7 +101,7 @@ describe("commandShellWorkspaceUrl", () => {
     );
   });
 
-  it("requires an explicit empty workspace without dropping team state", () => {
+  it("requires an explicit empty workspace", () => {
     expect(
       commandShellWorkspaceUrl(
         "http://127.0.0.1:5175/?cwd=%2Frepo%2Ffrontend&teamCwd=%2Frepo%2Fteam#view-team",

@@ -1,0 +1,100 @@
+/*
+ * Theme-aware neutral scale.
+ *
+ * The shell was authored with ~2350 hard-coded colors against ~2130 token
+ * references, and only ~344 of its ~3500 color declarations had a dark
+ * counterpart. That is why borders and text did not follow the theme: most
+ * colors were literals with no dark value to switch to.
+ *
+ * Rather than add a dark override per rule, every neutral is mapped onto this
+ * one scale. `--n-0` is the page ground and `--n-1000` is maximum contrast
+ * against it, so the same declaration reads correctly in both themes: in light
+ * the scale runs white -> black, in dark it runs near-black -> white.
+ *
+ * Chromatic colors (status, accents) are intentionally NOT part of this scale;
+ * they stay literal so semantic meaning is preserved.
+ */
+
+:root {
+  --n-0: oklch(100% 0 0);
+  --n-25: oklch(99% 0 0);
+  --n-50: oklch(98% 0 0);
+  --n-75: oklch(97% 0 0);
+  --n-100: oklch(96% 0 0);
+  --n-150: oklch(94.5% 0 0);
+  --n-200: oklch(93% 0 0);
+  --n-250: oklch(91% 0 0);
+  --n-300: oklch(89% 0 0);
+  --n-350: oklch(86% 0 0);
+  --n-400: oklch(84% 0 0);
+  --n-450: oklch(80% 0 0);
+  --n-500: oklch(74% 0 0);
+  --n-550: oklch(70% 0 0);
+  --n-600: oklch(62% 0 0);
+  --n-650: oklch(58% 0 0);
+  --n-700: oklch(52% 0 0);
+  --n-750: oklch(48% 0 0);
+  --n-800: oklch(42% 0 0);
+  --n-850: oklch(36% 0 0);
+  --n-900: oklch(30% 0 0);
+  --n-950: oklch(24% 0 0);
+  --n-1000: oklch(18% 0 0);
+}
+
+/*
+ * Dark mode inverts the scale. The endpoints are not pure black/white: a
+ * near-black ground (#111-ish) and a near-white ink read better on screens and
+ * match the shipped dark palette.
+ */
+:root[data-theme="dark"] {
+  --n-0: oklch(17.5% 0 0);
+  --n-25: oklch(19% 0 0);
+  --n-50: oklch(20.5% 0 0);
+  --n-75: oklch(22% 0 0);
+  --n-100: oklch(24% 0 0);
+  --n-150: oklch(26% 0 0);
+  --n-200: oklch(28% 0 0);
+  --n-250: oklch(31% 0 0);
+  --n-300: oklch(34% 0 0);
+  --n-350: oklch(37% 0 0);
+  --n-400: oklch(40% 0 0);
+  --n-450: oklch(45% 0 0);
+  --n-500: oklch(52% 0 0);
+  --n-550: oklch(58% 0 0);
+  --n-600: oklch(64% 0 0);
+  --n-650: oklch(68% 0 0);
+  --n-700: oklch(74% 0 0);
+  --n-750: oklch(78% 0 0);
+  --n-800: oklch(83% 0 0);
+  --n-850: oklch(87% 0 0);
+  --n-900: oklch(91% 0 0);
+  --n-950: oklch(95% 0 0);
+  --n-1000: oklch(98% 0 0);
+}
+
+/*
+ * Translucent neutrals for shadows, scrims, and hairlines. In light these are
+ * black at low alpha; in dark, tinting with white keeps edges visible instead of
+ * disappearing into the ground.
+ */
+:root {
+  --n-alpha-04: rgb(0 0 0 / 0.04);
+  --n-alpha-06: rgb(0 0 0 / 0.06);
+  --n-alpha-08: rgb(0 0 0 / 0.08);
+  --n-alpha-10: rgb(0 0 0 / 0.1);
+  --n-alpha-14: rgb(0 0 0 / 0.14);
+  --n-alpha-20: rgb(0 0 0 / 0.2);
+  --n-alpha-30: rgb(0 0 0 / 0.3);
+  --n-alpha-45: rgb(0 0 0 / 0.45);
+}
+
+:root[data-theme="dark"] {
+  --n-alpha-04: rgb(255 255 255 / 0.05);
+  --n-alpha-06: rgb(255 255 255 / 0.07);
+  --n-alpha-08: rgb(255 255 255 / 0.09);
+  --n-alpha-10: rgb(255 255 255 / 0.12);
+  --n-alpha-14: rgb(255 255 255 / 0.16);
+  --n-alpha-20: rgb(255 255 255 / 0.22);
+  --n-alpha-30: rgb(0 0 0 / 0.45);
+  --n-alpha-45: rgb(0 0 0 / 0.6);
+}

@@ -244,16 +244,26 @@ describe("settings configuration actions", () => {
       }),
       currentLocale: "zh",
       currentTheme: "dark",
+      os: "mac",
       setCapabilityPanel: sink.setCapabilityPanel,
+      surface: "desktop",
     });
 
-    expect(sink.panel).toMatchObject({
-      title: "Appearance",
+    expect({
+      subtitle: sink.panel?.subtitle,
+      title: sink.panel?.title,
+      locale: sink.panel?.fields?.find(
+        (field) => field.id === "appearance-locale",
+      )?.value,
+      // An unset desktop table falls back to following the system theme.
+      theme: sink.panel?.fields?.find(
+        (field) => field.id === "appearance-theme",
+      )?.value,
+    }).toEqual({
+      locale: "zh",
       subtitle: "/repo",
-      fields: [
-        expect.objectContaining({ id: "appearance-locale", value: "zh" }),
-        expect.objectContaining({ id: "appearance-theme", value: "dark" }),
-      ],
+      theme: "system",
+      title: "Appearance",
     });
   });
 

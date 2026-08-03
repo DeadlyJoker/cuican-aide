@@ -58,10 +58,6 @@ export function legacyOfficeCommandShellUrl(currentHref: string): string | null 
     return null;
   }
   nextUrl.searchParams.delete("view");
-  const cwd = nextUrl.searchParams.get("cwd")?.trim();
-  if (cwd && !nextUrl.searchParams.get("teamCwd")?.trim()) {
-    nextUrl.searchParams.set("teamCwd", cwd);
-  }
   nextUrl.hash = "#view-team";
   return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
 }

@@ -7,7 +7,14 @@ import type { AppServerClient } from "../app-server/appServer";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
 import type { ConnectionState } from "../shared/connectionState";
+import type { AgentPlatformUser } from "../agent-platform/agentPlatformSession";
 import type { AccountStatus } from "../shared/statusTypes";
+import {
+  detectOperatingSystem,
+  detectRuntimeSurface,
+  type OperatingSystem,
+  type RuntimeSurface,
+} from "../platform";
 import type { Theme } from "../theme";
 import { previewAwareBackendThreadId } from "../thread/threadIds";
 import { openThreadSettingsPanelAction } from "../thread/threadSettingsPanelActions";
@@ -74,6 +81,10 @@ export function createAppSettingsRefreshHandlers(params: {
   isConnected: boolean;
   isDemoPreview: boolean;
   locale: Locale;
+  /** Defaults to the detected platform; callers override in tests. */
+  os?: OperatingSystem;
+  /** Enterprise identity from agent-platform, independent of the app-server. */
+  platformUser: AgentPlatformUser | null;
   resolveBackendCwd: () => Promise<string>;
   selectedThread: Thread | null;
   selectedThreadId: string | null;
@@ -81,6 +92,7 @@ export function createAppSettingsRefreshHandlers(params: {
   setCapabilityDockOpen: (open: boolean) => void;
   setCapabilityPanel: SetCapabilityPanel;
   setThreads: (updater: (currentThreads: Thread[]) => Thread[]) => void;
+  surface?: RuntimeSurface;
   theme: Theme;
   threadGoal: ThreadGoal | null;
   threads: Thread[];
@@ -102,6 +114,8 @@ export function createAppSettingsRefreshHandlers(params: {
         ...baseParams,
         currentLocale: params.locale,
         currentTheme: params.theme,
+        os: params.os ?? detectOperatingSystem(),
+        surface: params.surface ?? detectRuntimeSurface(),
       }),
     refreshPersonalizationSettingsPanel: () =>
       refreshPersonalizationSettingsPanelAction(baseParams),
@@ -172,6 +186,7 @@ export function createAppSettingsRefreshHandlers(params: {
         ...baseParams,
         connectionState: params.connectionState,
         fallbackAccount: params.accountStatus,
+        platformUser: params.platformUser,
         setAccountStatus: params.setAccountStatus,
       }),
     openThreadSettingsPanel: () =>

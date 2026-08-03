@@ -129,6 +129,7 @@ function baseRefreshParams(
     fallbackAccount: null,
     isConnected: true,
     locale: "en",
+    platformUser: null,
     resolveBackendCwd: async () => "/repo",
     setAccountStatus: () => {},
     setCapabilityPanel: () => {},
@@ -352,7 +353,7 @@ describe("account actions", () => {
     expect(read).toBe(false);
     expect(panel).toEqual({
       title: "Account",
-      subtitle: "Auth, models, permissions, and usage",
+      subtitle: "Enterprise identity, model account, and usage",
       body: "Connecting to local app-server...",
     });
   });
@@ -386,7 +387,7 @@ describe("account actions", () => {
     expect(status).toEqual(accountStatus());
     expect(panel).toMatchObject({
       title: "Account",
-      subtitle: "Auth, models, permissions, and usage",
+      subtitle: "Enterprise identity, model account, and usage",
       body: expect.stringContaining("GPT Test"),
     });
     const panelBody = (panel as CapabilityPanel | null)?.body ?? "";

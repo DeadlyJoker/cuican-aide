@@ -16,3 +16,11 @@ export function connectionLabel(connectionState: ConnectionState) {
       return "未连接：请求暂不发送";
   }
 }
+
+/** Last path segment of a workspace directory, for display. */
+export function workspaceName(path: string, emptyLabel = "无工作空间"): string {
+  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  return (
+    normalized.split("/").filter(Boolean).pop() || normalized || emptyLabel
+  );
+}

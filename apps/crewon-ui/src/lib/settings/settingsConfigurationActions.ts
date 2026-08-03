@@ -8,6 +8,7 @@ import {
 } from "../shared/settledResults";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
+import type { OperatingSystem, RuntimeSurface } from "../platform";
 import {
   appearanceDisconnectedPanel,
   appearanceErrorPanel,
@@ -56,6 +57,8 @@ export type RefreshAppearanceSettingsPanelParams =
   BaseSettingsConfigurationParams & {
     currentLocale: Locale;
     currentTheme: Theme;
+    os?: OperatingSystem;
+    surface?: RuntimeSurface;
   };
 
 export type RefreshPersonalizationSettingsPanelParams =
@@ -126,8 +129,10 @@ export async function refreshAppearanceSettingsPanelAction(
     currentTheme,
     isConnected,
     locale,
+    os,
     resolveBackendCwd,
     setCapabilityPanel,
+    surface,
   } = params;
 
   if (!isConnected) {
@@ -147,6 +152,8 @@ export async function refreshAppearanceSettingsPanelAction(
         currentTheme,
         cwd: configCwd ?? null,
         locale,
+        os,
+        surface,
       }),
     );
   } catch (error) {

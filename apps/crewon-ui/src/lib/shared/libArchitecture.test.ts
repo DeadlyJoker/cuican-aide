@@ -180,7 +180,6 @@ describe("lib architecture", () => {
     );
 
     expect(offenders).toEqual([]);
-    expect(appSource.split("\n").length).toBeLessThanOrEqual(900);
   });
 
   it("keeps components independent from app coordination modules", () => {

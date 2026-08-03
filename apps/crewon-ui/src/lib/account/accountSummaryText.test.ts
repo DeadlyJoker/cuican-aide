@@ -11,6 +11,7 @@ import {
   accountLoadingPanel,
   accountOverviewPanel,
   accountReadErrorPanel,
+  platformIdentityText,
 } from "./accountSummaryText";
 
 const chatGptAccount: AccountStatus = {
@@ -22,11 +23,42 @@ const chatGptAccount: AccountStatus = {
   requiresOpenaiAuth: false,
 };
 
+/*
+ * The panel showed only the ChatGPT/Codex credential under the title
+ * "account", so CrewON looked as though it had no identity of its own. The
+ * enterprise account from agent-platform now leads the panel.
+ */
+describe("enterprise identity", () => {
+  it("leads with the enterprise account and labels the model credential", () => {
+    expect(
+      platformIdentityText(
+        {
+          id: 1,
+          username: "admin",
+          email: "admin@aicuican.com",
+          role: "admin",
+          display_name: "\u7ba1\u7406\u5458",
+          linked_providers: ["wecom"],
+        },
+        "zh",
+      ),
+    ).toBe(
+      ["\u4f01\u4e1a\u8d26\u53f7\uff1a\u7ba1\u7406\u5458", "admin@aicuican.com", "\u89d2\u8272\uff1aadmin", "\u4f01\u4e1a\u5fae\u4fe1\u5df2\u7ed1\u5b9a"].join("\n"),
+    );
+  });
+
+  it("reports a signed-out enterprise account instead of staying silent", () => {
+    expect(platformIdentityText(null, "en")).toBe(
+      "Enterprise account: signed out",
+    );
+  });
+});
+
 describe("account summary panel helpers", () => {
   it("builds account overview and status panels", () => {
     expect(accountDisconnectedPanel("Offline", "en")).toEqual({
       title: "Account",
-      subtitle: "Auth, models, permissions, and usage",
+      subtitle: "Enterprise identity, model account, and usage",
       body: "Offline",
     });
     expect(accountLoadingPanel("zh")).toEqual({
@@ -45,14 +77,16 @@ describe("account summary panel helpers", () => {
         capabilities: "Models: 2",
         errors: ["usage failed"],
         fallbackAccount: chatGptAccount,
+        platformUser: null,
         telemetry: "Usage\nLifetime tokens: 100",
       },
       "en",
     )).toEqual({
       title: "Account",
-      subtitle: "Auth, models, permissions, and usage",
+      subtitle: "Enterprise identity, model account, and usage",
       body: [
-        "user@example.com\nplus",
+        "Enterprise account: signed out",
+        "Model account\nuser@example.com\nplus",
         "Auth status\nMethod: chatgpt\nRequires model account auth: no",
         "Models: 2",
         "Usage\nLifetime tokens: 100",
@@ -61,7 +95,11 @@ describe("account summary panel helpers", () => {
       actions: [
         { id: "login-chatgpt", label: "Model login", tone: "primary" },
         { id: "login-device-code", label: "Device code" },
-        { id: "logout-account", label: "Logout", tone: "danger" },
+        {
+          id: "logout-account",
+          label: "Sign out of model account",
+          tone: "danger",
+        },
         { id: "refresh-account", label: "Refresh" },
       ],
     });

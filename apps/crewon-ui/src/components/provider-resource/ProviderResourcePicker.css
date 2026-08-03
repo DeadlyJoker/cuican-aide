@@ -3,11 +3,16 @@
   width: min(360px, calc(100vw - 32px));
   max-height: min(520px, calc(100vh - 48px));
   overflow: hidden;
-  color: var(--text-strong, #202225);
-  background: color-mix(in srgb, var(--surface, #fff) 96%, #eef3f5);
-  border: 1px solid color-mix(in srgb, var(--border, #d8dde2) 82%, transparent);
-  border-radius: 16px;
-  box-shadow: 0 18px 48px rgb(26 38 46 / 12%);
+  /*
+   * Neutral tokens rather than a blue-green mix: this popover floats over the
+   * command shell, so a tinted fill reads as a different material than the
+   * menus beside it.
+   */
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-modal);
 }
 
 .provider-resource-composer-popover {
@@ -21,7 +26,7 @@
 .provider-resource-picker__workspace select {
   background: var(--surface, #fff);
   border: 1px solid var(--border, #d7dde4);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: inherit;
   max-width: 150px;
   min-height: 30px;
@@ -77,9 +82,10 @@
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  color: #2d7180;
-  background: #edf6f7;
-  border-radius: 10px;
+  /* Decorative, so neutral: the teal wash made this popover look foreign. */
+  color: var(--text-muted);
+  background: var(--surface-strong);
+  border-radius: var(--radius-lg);
 }
 
 .provider-resource-picker__icon {
@@ -102,24 +108,28 @@
   font-size: 11px;
 }
 
+/*
+ * Status dots keep their hues because the colour is the message, but they read
+ * from the shared semantic tokens so the dark theme adjusts with everything else.
+ */
 .provider-resource-picker__status i {
   width: 7px;
   height: 7px;
-  background: #a8afb5;
+  background: var(--text-faint);
   border-radius: 50%;
 }
 
 .provider-resource-picker__status[data-status="connected"] i {
-  background: #4f9a68;
+  background: var(--success);
 }
 
 .provider-resource-picker__status[data-status="degraded"] i {
-  background: #c8903c;
+  background: var(--warning);
 }
 
 .provider-resource-picker__status[data-status="unavailable"] i,
 .provider-resource-picker__status[data-status="disconnected"] i {
-  background: #c46666;
+  background: var(--danger);
 }
 
 .provider-resource-picker__list {
@@ -140,24 +150,24 @@
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 11px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
 }
 
 .provider-resource-picker__item:hover {
-  background: color-mix(in srgb, #eaf3f4 68%, transparent);
+  background: var(--surface-strong);
 }
 
 .provider-resource-picker__item[data-selected="true"] {
-  background: #f0f7f7;
-  border-color: #bfd5d9;
+  background: var(--surface-strong);
+  border-color: var(--border-strong, var(--border));
 }
 
 .provider-resource-picker__item-icon {
   width: 30px;
   height: 30px;
-  color: #57636a;
-  background: #f1f3f4;
+  color: var(--text-muted);
+  background: var(--surface-strong);
 }
 
 .provider-resource-picker__item-copy {
@@ -168,11 +178,12 @@
 
 .provider-resource-picker__item em {
   padding: 3px 7px;
-  color: #39724c;
+  /* The badge marks a bound resource, so the green carries the meaning. */
+  color: var(--success);
   font-size: 10px;
   font-style: normal;
-  background: #eaf5ed;
-  border-radius: 999px;
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  border-radius: var(--radius-pill);
 }
 
 .provider-resource-picker__empty {
@@ -188,7 +199,7 @@
 .provider-resource-picker__empty > svg {
   width: 22px;
   height: 22px;
-  color: #7c878d;
+  color: var(--text-faint);
 }
 
 .provider-resource-picker__empty strong {
@@ -201,14 +212,14 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 30px;
+  min-height: var(--control-h-md);
   padding: 0 10px;
-  color: #26393e;
+  color: var(--text);
   font: inherit;
   font-size: 11px;
-  background: #f4f8f8;
-  border: 1px solid #cbd8db;
-  border-radius: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
@@ -220,8 +231,8 @@
 
 .provider-resource-picker__footer {
   min-height: 46px;
-  background: color-mix(in srgb, #edf3f4 58%, transparent);
-  border-top: 1px solid color-mix(in srgb, var(--border, #d8dde2) 72%, transparent);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
 }
 
 .provider-resource-picker__footer > span {

@@ -2,8 +2,11 @@ import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse"
 import type { ConfigRequirementsReadResponse } from "@crewon-protocol/v2/ConfigRequirementsReadResponse";
 import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
 
+import { appearancePanelFields } from "../appearance/appearancePanelFields";
+import { parseAppearancePreferences } from "../appearance/appearanceSerialization";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
+import type { OperatingSystem, RuntimeSurface } from "../platform";
 
 export function configSummaryText(
   configRead: ConfigReadResponse | null,
@@ -346,39 +349,24 @@ export function appearancePanel(params: {
   currentTheme: AppearanceTheme;
   cwd: string | null;
   locale: Locale;
+  os?: OperatingSystem;
+  surface?: RuntimeSurface;
 }): CapabilityPanel {
-  const { configRead, currentLocale, currentTheme, cwd, locale } = params;
+  const { configRead, currentLocale, cwd, locale } = params;
   const configuredLocale =
     configDesktopValue(configRead, "uiLocale") || currentLocale;
-  const configuredTheme =
-    configDesktopValue(configRead, "appearanceTheme") || currentTheme;
+  const preferences = parseAppearancePreferences(configRead?.config.desktop);
 
   return {
     title: appearanceTitle(locale),
     subtitle: configScopedSubtitle(cwd, locale),
-    body: appearanceSettingsText(configRead, locale),
-    fields: [
-      {
-        commitOnChange: true,
-        id: "appearance-locale",
-        label: locale === "zh" ? "语言" : "Language",
-        value: configuredLocale,
-        options: [
-          { label: "中文", value: "zh" },
-          { label: "English", value: "en" },
-        ],
-      },
-      {
-        commitOnChange: true,
-        id: "appearance-theme",
-        label: locale === "zh" ? "主题" : "Theme",
-        value: configuredTheme,
-        options: [
-          { label: locale === "zh" ? "深色" : "Dark", value: "dark" },
-          { label: locale === "zh" ? "浅色" : "Light", value: "light" },
-        ],
-      },
-    ],
+    fields: appearancePanelFields({
+      locale,
+      os: params.os ?? "mac",
+      preferences,
+      surface: params.surface ?? "web",
+      uiLocale: configuredLocale,
+    }),
   };
 }
 

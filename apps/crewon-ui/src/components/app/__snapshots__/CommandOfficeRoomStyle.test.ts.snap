@@ -9,13 +9,13 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   gap: 10px;
   min-height: 138px;
   padding: 14px;
-  border: 1px solid oklch(90% 0.009 235);
-  border-radius: 14px;
-  background: oklch(100% 0 0);
+  border: 1px solid var(--n-250);
+  border-radius: var(--radius-xl);
+  background: var(--n-0);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  box-shadow: var(--shadow-raised);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -24,17 +24,17 @@ exports[`command Office room style > snapshots the Team card layout and responsi
 }
 .shell-page-view .office-card-button:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in oklch, var(--accent) 26%, oklch(89% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 2%, white);
-  box-shadow: 0 12px 28px rgb(31 51 84 / 0.08);
+  border-color: var(--n-500);
+  background: var(--n-25);
+  box-shadow: var(--shadow-raised);
 }
 .shell-page-view .office-card-button:focus-visible {
-  outline: 2px solid color-mix(in oklch, var(--accent) 62%, white);
+  outline: 2px solid color-mix(in oklch, var(--accent) 62%, var(--n-0));
   outline-offset: 3px;
 }
 .shell-page-view .office-card-button.is-active {
-  border-color: color-mix(in oklch, var(--accent) 34%, oklch(89% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 3%, white);
+  border-color: var(--n-600);
+  background: var(--n-50);
 }
 .shell-page-view .office-card-head,
 .shell-page-view .office-card-foot {
@@ -51,22 +51,22 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   width: 34px;
   height: 34px;
   place-items: center;
-  border-radius: 10px;
-  background: color-mix(in oklch, var(--accent) 10%, white);
-  color: color-mix(in oklch, var(--accent) 72%, oklch(30% 0.02 235));
-  font-size: 14px;
-  font-weight: 680;
+  border-radius: var(--radius-lg);
+  background: var(--n-100);
+  color: var(--n-800);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  font-weight: 600;
 }
 .shell-page-view .office-card-button:hover .office-card-glyph {
-  background: color-mix(in oklch, var(--accent) 15%, white);
+  background: var(--n-150);
 }
 .shell-page-view .office-card-head strong {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: oklch(20% 0.018 235);
-  font-size: 14px;
-  font-weight: 650;
+  color: var(--n-1000);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  font-weight: 500;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -75,8 +75,8 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   flex: 0 0 auto;
 }
 .shell-page-view .office-card-copy {
-  color: oklch(48% 0.016 235);
-  font-size: 12.5px;
+  color: var(--n-750);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.45;
   text-wrap: pretty;
 }
@@ -85,11 +85,11 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   justify-content: space-between;
   margin: 0 -14px -14px;
   padding: 9px 14px;
-  border-top: 1px solid oklch(93% 0.006 235);
-  background: oklch(98.9% 0.003 235);
-  border-radius: 0 0 13px 13px;
-  color: oklch(45% 0.017 235);
-  font-size: 12px;
+  border-top: 1px solid var(--n-200);
+  background: var(--n-25);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  color: var(--n-750);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.35;
 }
 .shell-page-view .office-card-foot > span {
@@ -103,9 +103,9 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   flex: 0 0 auto;
   align-items: center;
   gap: 4px;
-  color: color-mix(in oklch, var(--accent) 78%, oklch(25% 0.02 235));
+  color: var(--n-800);
   font-style: normal;
-  font-weight: 620;
+  font-weight: 500;
   white-space: nowrap;
 }
 .shell-page-view .office-card-foot em::after {
@@ -124,9 +124,9 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   margin: 0;
 }
 .shell-page-view .expert-team-card .catalog-card-head > span {
-  color: color-mix(in oklch, var(--accent) 68%, oklch(40% 0.02 235));
-  font-size: 10.5px;
-  font-weight: 700;
+  color: var(--n-800);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -136,7 +136,8 @@ exports[`command Office room style > snapshots the Team card layout and responsi
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 860px) {
+/* Canvas-relative, and on the same 760px step as the agents header. */
+@container page-stack (max-width: 760px) {
   .shell-page-view[data-shell-view="team"] .catalog-market-header {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
@@ -145,21 +146,6 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   .shell-page-view[data-shell-view="team"] .catalog-header-actions {
     flex-wrap: wrap;
     justify-content: flex-start;
-  }
-  .shell-page-view[data-shell-view="team"] .catalog-source-bar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
-    padding-bottom: 8px;
-  }
-  .shell-page-view[data-shell-view="team"] .catalog-context-note,
-  .shell-page-view[data-shell-view="team"] .team-workspace-scope {
-    flex-wrap: wrap;
-    white-space: normal;
-  }
-  .shell-page-view[data-shell-view="team"] .team-workspace-picker {
-    width: min(100%, 620px);
-    max-width: 100%;
   }
   .shell-page-view .office-card-grid,
   .shell-page-view .expert-team-grid,
@@ -175,10 +161,6 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   }
   .shell-page-view .team-capability-run-panel {
     padding: 16px;
-  }
-  .shell-page-view .team-capability-run-panel > footer {
-    align-items: stretch;
-    flex-direction: column;
   }
   .shell-page-view .team-capability-run-panel > footer .button.primary {
     width: 100%;
@@ -200,9 +182,9 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
 .shell-page-view .team-capability-definition-list,
 .shell-page-view .team-capability-run-panel {
   min-width: 0;
-  border: 1px solid oklch(89% 0.01 235);
-  border-radius: 12px;
-  background: oklch(100% 0 0);
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-lg);
+  background: var(--n-0);
 }
 .shell-page-view .team-capability-definition-list {
   display: grid;
@@ -228,14 +210,14 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
 .shell-page-view .team-capability-run-kicker,
 .shell-page-view .team-capability-workspace span,
 .shell-page-view .team-capability-execution-result span {
-  color: oklch(53% 0.018 235);
-  font-size: 11px;
+  color: var(--n-700);
+  font-size: calc(11px + var(--user-ui-font-delta));
 }
 .shell-page-view .team-capability-panel-head h2,
 .shell-page-view .team-capability-run-panel h2 {
   margin: 2px 0 0;
-  color: oklch(22% 0.018 235);
-  font-size: 15px;
+  color: var(--n-950);
+  font-size: calc(15px + var(--user-ui-font-delta));
 }
 .shell-page-view .team-capability-definition {
   display: grid;
@@ -243,26 +225,26 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   width: 100%;
   padding: 13px;
   border: 1px solid transparent;
-  border-radius: 11px;
-  background: oklch(98% 0.004 238);
+  border-radius: var(--radius-lg);
+  background: var(--n-50);
   color: inherit;
   text-align: left;
 }
 .shell-page-view .team-capability-definition:hover,
 .shell-page-view .team-capability-definition.active {
-  border-color: color-mix(in oklch, var(--accent) 24%, oklch(88% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 5%, white);
+  border-color: var(--n-500);
+  background: var(--n-75);
 }
 .shell-page-view .team-capability-definition strong {
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: calc(12px + var(--user-ui-font-delta));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .shell-page-view .team-capability-definition span,
 .shell-page-view .team-capability-definition em {
-  color: oklch(51% 0.015 235);
-  font-size: 11.5px;
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
   font-style: normal;
 }
 .shell-page-view .team-capability-definition span {
@@ -291,7 +273,7 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
 .shell-page-view .team-capability-run-heading h2 {
   margin: 0;
   font-size: clamp(17px, 1.5vw, 21px);
-  font-weight: 660;
+  font-weight: 700;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -300,8 +282,8 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   max-width: 92ch;
   margin: 0;
   overflow: hidden;
-  color: oklch(48% 0.016 235);
-  font-size: 12.5px;
+  color: var(--n-750);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.6;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -311,22 +293,22 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   display: grid;
   gap: 5px;
   padding: 10px 12px;
-  border: 1px solid oklch(91% 0.008 235);
-  border-radius: 9px;
-  background: oklch(98% 0.004 235);
+  border: 1px solid var(--n-250);
+  border-radius: var(--radius-md);
+  background: var(--n-50);
 }
 .shell-page-view .team-capability-workspace strong,
 .shell-page-view .team-capability-execution-result strong {
-  color: oklch(31% 0.02 235);
-  font-size: 12px;
+  color: var(--n-900);
+  font-size: calc(12px + var(--user-ui-font-delta));
 }
 .shell-page-view .team-capability-execution-result pre {
   max-height: 210px;
   margin: 4px 0 0;
   overflow: auto;
-  color: oklch(29% 0.018 235);
+  color: var(--n-900);
   font:
-    11.5px/1.55 ui-monospace,
+    var(--user-code-font-size) / 1.55 ui-monospace,
     SFMono-Regular,
     Menlo,
     monospace;
@@ -335,29 +317,29 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
 .shell-page-view .team-capability-run-input {
   display: grid;
   gap: 7px;
-  color: oklch(34% 0.018 235);
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--n-850);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 .shell-page-view .team-capability-run-input textarea {
   min-height: 190px;
   max-height: 380px;
   resize: vertical;
   padding: 13px 14px;
-  border: 1px solid oklch(87% 0.012 235);
-  border-radius: 11px;
+  border: 1px solid var(--n-350);
+  border-radius: var(--radius-lg);
   outline: 0;
-  background: oklch(99.5% 0.002 235);
-  color: oklch(24% 0.018 235);
-  font: 13px/1.55 var(--font-body);
+  background: var(--n-0);
+  color: var(--n-950);
+  font: calc(13px + var(--user-ui-font-delta)) / 1.55 var(--font-body);
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease,
     background 0.15s ease;
 }
 .shell-page-view .team-capability-run-input textarea:focus {
-  border-color: color-mix(in oklch, var(--accent) 42%, oklch(87% 0.012 235));
-  background: white;
+  border-color: color-mix(in oklch, var(--accent) 42%, var(--n-350));
+  background: var(--n-0);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 9%, transparent);
 }
 .shell-page-view .team-capability-run-panel > footer {
@@ -367,28 +349,29 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
 }
 .shell-page-view .team-capability-run-panel > footer small {
   max-width: 480px;
-  color: oklch(52% 0.014 235);
-  font-size: 11.5px;
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.45;
 }
+/* The panel's submit action is a page-level primary, so it takes the lg step. */
 .shell-page-view .team-capability-run-panel > footer .button.primary {
-  min-height: 40px;
+  min-height: var(--control-h-lg);
   padding-inline: 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 .shell-page-view .team-capability-error,
 .shell-page-view .team-capability-inline-status {
   margin: 0;
   padding: 9px 11px;
-  border-radius: 9px;
-  color: oklch(43% 0.02 235);
-  background: oklch(96% 0.006 235);
-  font-size: 12px;
+  border-radius: var(--radius-md);
+  color: var(--n-800);
+  background: var(--n-100);
+  font-size: calc(12px + var(--user-ui-font-delta));
 }
 .shell-page-view .team-capability-error,
 .shell-page-view .team-capability-inline-status.is-error {
   color: var(--danger);
-  background: color-mix(in oklch, var(--danger) 8%, white);
+  background: color-mix(in oklch, var(--danger) 8%, var(--n-0));
 }
 .shell-page-view .expert-team-grid {
   display: grid;
@@ -401,10 +384,10 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   gap: 10px;
   min-height: 184px;
   padding: 14px;
-  border: 1px solid oklch(90% 0.009 235);
-  border-radius: 14px;
-  background: oklch(100% 0 0);
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  border: 1px solid var(--n-250);
+  border-radius: var(--radius-xl);
+  background: var(--n-0);
+  box-shadow: var(--shadow-raised);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -413,9 +396,9 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
 }
 .shell-page-view .expert-team-card:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in oklch, var(--accent) 24%, oklch(89% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 2%, white);
-  box-shadow: 0 12px 28px rgb(31 51 84 / 0.08);
+  border-color: var(--n-500);
+  background: var(--n-25);
+  box-shadow: var(--shadow-raised);
 }
 /* Match the design artifact's Team responsive density. */
 .shell-page-view .expert-team-card .catalog-card-head {
@@ -426,9 +409,9 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   margin: 0;
 }
 .shell-page-view .expert-team-card .catalog-card-head > span {
-  color: color-mix(in oklch, var(--accent) 68%, oklch(40% 0.02 235));
-  font-size: 10.5px;
-  font-weight: 700;
+  color: var(--n-800);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -438,7 +421,8 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 860px) {
+/* Canvas-relative, and on the same 760px step as the agents header. */
+@container page-stack (max-width: 760px) {
   .shell-page-view[data-shell-view="team"] .catalog-market-header {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
@@ -447,21 +431,6 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   .shell-page-view[data-shell-view="team"] .catalog-header-actions {
     flex-wrap: wrap;
     justify-content: flex-start;
-  }
-  .shell-page-view[data-shell-view="team"] .catalog-source-bar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
-    padding-bottom: 8px;
-  }
-  .shell-page-view[data-shell-view="team"] .catalog-context-note,
-  .shell-page-view[data-shell-view="team"] .team-workspace-scope {
-    flex-wrap: wrap;
-    white-space: normal;
-  }
-  .shell-page-view[data-shell-view="team"] .team-workspace-picker {
-    width: min(100%, 620px);
-    max-width: 100%;
   }
   .shell-page-view .office-card-grid,
   .shell-page-view .expert-team-grid,
@@ -477,10 +446,6 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   }
   .shell-page-view .team-capability-run-panel {
     padding: 16px;
-  }
-  .shell-page-view .team-capability-run-panel > footer {
-    align-items: stretch;
-    flex-direction: column;
   }
   .shell-page-view .team-capability-run-panel > footer .button.primary {
     width: 100%;
@@ -499,20 +464,20 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   gap: 8px;
   min-height: 24px;
   padding: 2px 0;
-  color: oklch(42% 0.018 235);
-  font-size: 12px;
-  font-weight: 520;
+  color: var(--n-800);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 .shell-page-view .expert-member-stack span::before {
   flex: 0 0 auto;
   width: 6px;
   height: 6px;
-  border-radius: 999px;
-  background: oklch(82% 0.01 235);
+  border-radius: var(--radius-pill);
+  background: var(--n-400);
   content: "";
 }
 .shell-page-view .expert-member-stack span:first-child::before {
-  background: color-mix(in oklch, var(--accent) 68%, white);
+  background: color-mix(in oklch, var(--accent) 68%, var(--n-0));
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 12%, transparent);
 }
 .shell-page-view .expert-member-stack svg {
@@ -542,7 +507,7 @@ exports[`command Office room style > snapshots the canonical Office workspace em
   height: 100%;
   min-height: 0;
   padding: 0;
-  background: oklch(98.8% 0.004 235);
+  background: var(--n-25);
 }
 .team-office-runtime-room
   > .office-workspace
@@ -560,8 +525,8 @@ exports[`command Office room style > snapshots the canonical Office workspace em
   min-height: 100%;
   padding: 28px;
   place-items: center;
-  color: oklch(48% 0.016 235);
-  font-size: 13px;
+  color: var(--n-750);
+  font-size: calc(13px + var(--user-ui-font-delta));
 }
 .team-office-room-error {
   color: oklch(48% 0.15 25);
@@ -581,13 +546,13 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   align-items: center;
   min-height: 76px;
   padding: 13px 16px;
-  border: 1px solid oklch(90% 0.009 235);
-  border-radius: 14px;
-  background: oklch(100% 0 0);
+  border: 1px solid var(--n-250);
+  border-radius: var(--radius-xl);
+  background: var(--n-0);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  box-shadow: var(--shadow-raised);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -596,17 +561,17 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
 }
 .shell-page-view .workflow-list-item:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in oklch, var(--accent) 24%, oklch(89% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 2%, white);
-  box-shadow: 0 12px 28px rgb(31 51 84 / 0.08);
+  border-color: color-mix(in oklch, var(--accent) 24%, var(--n-300));
+  background: color-mix(in oklch, var(--accent) 2%, var(--n-0));
+  box-shadow: var(--shadow-raised);
 }
 .shell-page-view .workflow-list-item:focus-visible {
-  outline: 2px solid color-mix(in oklch, var(--accent) 62%, white);
+  outline: 2px solid color-mix(in oklch, var(--accent) 62%, var(--n-0));
   outline-offset: 3px;
 }
 .shell-page-view .workflow-list-item.is-active {
-  border-color: color-mix(in oklch, var(--accent) 30%, oklch(89% 0.01 235));
-  background: color-mix(in oklch, var(--accent) 3%, white);
+  border-color: color-mix(in oklch, var(--accent) 30%, var(--n-300));
+  background: color-mix(in oklch, var(--accent) 3%, var(--n-0));
 }
 .shell-page-view .workflow-list-main {
   display: flex;
@@ -617,9 +582,9 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
 .shell-page-view .workflow-list-main strong {
   min-width: 0;
   overflow: hidden;
-  color: oklch(20% 0.018 235);
-  font-size: 14px;
-  font-weight: 650;
+  color: var(--n-1000);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  font-weight: 500;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -632,8 +597,8 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
 .shell-page-view .workflow-list-copy {
   display: -webkit-box;
   overflow: hidden;
-  color: oklch(48% 0.016 235);
-  font-size: 12.5px;
+  color: var(--n-750);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.45;
   text-wrap: pretty;
   -webkit-box-orient: vertical;
@@ -643,29 +608,29 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   display: flex;
   align-items: center;
   min-width: 0;
-  color: oklch(54% 0.014 235);
-  font-size: 11.5px;
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
 }
 .shell-page-view .workflow-member-strip small {
   display: grid;
   width: 24px;
   height: 24px;
   place-items: center;
-  border: 2px solid oklch(100% 0 0);
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--accent) 9%, oklch(96% 0.006 235));
-  color: color-mix(in oklch, var(--accent) 62%, oklch(32% 0.02 235));
-  font-size: 10.5px;
-  font-weight: 680;
+  border: 2px solid var(--n-0);
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklch, var(--accent) 9%, var(--n-100));
+  color: color-mix(in oklch, var(--accent) 62%, var(--n-900));
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
 }
 .shell-page-view .workflow-member-strip small + small {
   margin-left: -7px;
 }
 .shell-page-view .workflow-member-strip em {
   margin-left: 8px;
-  color: oklch(52% 0.014 235);
+  color: var(--n-700);
   font-style: normal;
-  font-weight: 560;
+  font-weight: 500;
 }
 .shell-page-view .workflow-list-foot {
   display: inline-flex;
@@ -676,9 +641,9 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
 .shell-page-view .workflow-list-foot > small {
   max-width: 150px;
   overflow: hidden;
-  color: oklch(54% 0.014 235);
-  font-size: 10.5px;
-  font-weight: 520;
+  color: var(--n-700);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -686,9 +651,9 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: color-mix(in oklch, var(--accent) 78%, oklch(25% 0.02 235));
-  font-size: 12px;
-  font-weight: 620;
+  color: color-mix(in oklch, var(--accent) 78%, var(--n-950));
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 .shell-page-view .workflow-list-foot b::after {
   content: "→";
@@ -706,14 +671,14 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
 .shell-page-view .workflow-list-progress i {
   display: block;
   height: 4px;
-  border-radius: 999px;
-  background: oklch(91.5% 0.007 235);
+  border-radius: var(--radius-pill);
+  background: var(--n-250);
 }
 .shell-page-view .workflow-list-progress i.is-done {
-  background: color-mix(in oklch, var(--success) 62%, oklch(90% 0.008 235));
+  background: color-mix(in oklch, var(--success) 62%, var(--n-250));
 }
 .shell-page-view .workflow-list-progress i.is-running {
-  background: color-mix(in oklch, var(--accent) 74%, oklch(90% 0.008 235));
+  background: color-mix(in oklch, var(--accent) 74%, var(--n-250));
 }",
   "room": ".shell-page-view.workflow-room-active .team-workflow-shell {
   display: block;
@@ -728,7 +693,7 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: oklch(98.8% 0.004 235);
+  background: var(--n-25);
   box-shadow: none;
 }
 .workflow-room-top {
@@ -738,7 +703,7 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   align-items: center;
   min-height: 64px;
   padding: 10px 16px;
-  border-bottom: 1px solid oklch(89% 0.01 235);
+  border-bottom: 1px solid var(--n-300);
   background: rgb(255 255 255 / 0.78);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -748,24 +713,24 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   gap: 2px;
 }
 .workflow-room-title-block span {
-  color: oklch(55% 0.014 235);
-  font-size: 11px;
-  font-weight: 680;
+  color: var(--n-650);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 .workflow-room-title-block h3 {
-  color: oklch(20% 0.018 235);
-  font-size: 17px;
-  font-weight: 650;
+  color: var(--n-1000);
+  font-size: calc(17px + var(--user-ui-font-delta));
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 .workflow-room-title-block p {
   display: -webkit-box;
   max-width: 90ch;
   overflow: hidden;
-  color: oklch(49% 0.016 235);
-  font-size: 12px;
+  color: var(--n-750);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -782,9 +747,9 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   gap: 6px;
 }
 .workflow-room-actions .button[aria-expanded="true"] {
-  border-color: color-mix(in oklch, var(--accent) 28%, oklch(88% 0.012 235));
-  background: color-mix(in oklch, var(--accent) 7%, white);
-  color: color-mix(in oklch, var(--accent) 88%, oklch(20% 0.018 235));
+  border-color: color-mix(in oklch, var(--accent) 28%, var(--n-300));
+  background: color-mix(in oklch, var(--accent) 7%, var(--n-0));
+  color: color-mix(in oklch, var(--accent) 88%, var(--n-1000));
 }
 .workflow-room-stage {
   display: grid;
@@ -805,17 +770,12 @@ exports[`command Office room style > snapshots the visible Office landing contra
   min-height: min(430px, calc(100vh - 190px));
   margin: 0;
   padding: clamp(26px, 4vw, 46px);
-  border: 1px solid oklch(87% 0.014 235);
-  border-radius: 18px;
-  background:
-    radial-gradient(
-      circle at 88% 10%,
-      color-mix(in oklch, var(--accent) 8%, transparent),
-      transparent 36%
-    ),
-    oklch(100% 0 0);
-  color: oklch(23% 0.018 235);
-  box-shadow: 0 18px 50px rgb(28 45 72 / 0.055);
+  border: 1px solid var(--n-350);
+  border-radius: var(--radius-xl);
+  background: var(--n-0);
+  color: var(--n-950);
+  /* An empty-state card rests on the page rather than floating over it. */
+  box-shadow: var(--shadow-raised);
   text-align: left;
 }
 .shell-page-view .team-office-empty-head {
@@ -824,24 +784,24 @@ exports[`command Office room style > snapshots the visible Office landing contra
   max-width: 680px;
 }
 .shell-page-view .team-office-empty-kicker {
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 720;
+  color: var(--n-700);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
   letter-spacing: 0.14em;
 }
 .shell-page-view .team-office-empty h3 {
   margin: 0;
-  color: oklch(19% 0.018 235);
+  color: var(--n-1000);
   font-size: clamp(24px, 3vw, 32px);
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.025em;
   line-height: 1.18;
 }
 .shell-page-view .team-office-empty-head p {
   max-width: 66ch;
   margin: 0;
-  color: oklch(47% 0.018 235);
-  font-size: 14px;
+  color: var(--n-750);
+  font-size: calc(14px + var(--user-ui-font-delta));
   line-height: 1.6;
   text-wrap: pretty;
 }
@@ -857,8 +817,8 @@ exports[`command Office room style > snapshots the visible Office landing contra
   gap: 12px;
   min-width: 0;
   padding: 15px;
-  border: 1px solid oklch(89% 0.012 235);
-  border-radius: 13px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-lg);
   background: rgb(255 255 255 / 0.72);
 }
 .shell-page-view .team-capability-unavailable .team-office-capability {
@@ -872,9 +832,9 @@ exports[`command Office room style > snapshots the visible Office landing contra
   width: 38px;
   height: 38px;
   place-items: center;
-  border-radius: 11px;
-  background: color-mix(in oklch, var(--accent) 9%, white);
-  color: var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--n-100);
+  color: var(--n-800);
 }
 .shell-page-view .team-office-capability svg {
   width: 18px;
@@ -891,14 +851,14 @@ exports[`command Office room style > snapshots the visible Office landing contra
   min-width: 0;
 }
 .shell-page-view .team-office-capability strong {
-  color: oklch(22% 0.018 235);
-  font-size: 14px;
-  font-weight: 640;
+  color: var(--n-950);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 .shell-page-view .team-office-capability p {
   margin: 0;
-  color: oklch(50% 0.016 235);
-  font-size: 12px;
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.5;
   text-wrap: pretty;
 }
@@ -913,16 +873,16 @@ exports[`command Office room style > snapshots the visible Office landing contra
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: oklch(47% 0.018 235);
-  font-size: 12px;
-  font-weight: 560;
+  color: var(--n-750);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
 }
 .shell-page-view .team-office-connection-state::before {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
-  background: oklch(66% 0.01 235);
-  box-shadow: 0 0 0 3px oklch(66% 0.01 235 / 0.1);
+  border-radius: var(--radius-pill);
+  background: var(--n-550);
+  box-shadow: 0 0 0 3px oklch(66% 0 0 / 0.1);
   content: "";
 }
 .shell-page-view .team-office-connection-state[data-state="ready"]::before {

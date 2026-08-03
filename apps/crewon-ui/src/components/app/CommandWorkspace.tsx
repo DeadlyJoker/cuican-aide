@@ -22,9 +22,8 @@ import {
   type CommandOfficeCreationInput,
 } from "./commandOfficeCreation";
 import {
-  commandTeamWorkspaceCwdFromSearch,
-  initialCommandTeamWorkspaceCwd,
-  persistCommandTeamWorkspaceCwd,
+  clearLegacyCommandTeamWorkspaceCwd,
+  legacyCommandTeamWorkspaceCwd,
 } from "./commandTeamWorkspace";
 import {
   CommandSidebar,
@@ -34,7 +33,10 @@ import {
 } from "./CommandWorkspaceChrome";
 import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
-import { CommandSceneHeader } from "./CommandSceneHeader";
+import {
+  CommandSceneHeader,
+  CommandSceneQuickRow,
+} from "./CommandSceneHeader";
 import {
   AgentsView,
   KnowledgeCatalogView,
@@ -65,6 +67,7 @@ import {
 import { isLegacyGeneratedAgentPlaceholder } from "../../lib/agent-config/legacyAgentPlaceholder";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
+import type { PlatformKind } from "../../lib/platform";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import {
   pendingComposerImagesFromFiles,
@@ -102,6 +105,7 @@ import {
 } from "../../lib/thread/threadRuntimeSettings";
 import type { WorkMode } from "../../lib/workMode";
 import { sidebarThreadTitle } from "../SidebarPresentation";
+import { DesktopWindowDragRegion } from "../TitleBarWindowControls";
 import {
   CommandComposer,
   CommandComposerSelect,
@@ -193,6 +197,7 @@ type CommandWorkspaceProps = {
   isSending: boolean;
   linkedThreads?: Thread[];
   locale?: Locale;
+  platform?: PlatformKind;
   modelOptions?: CommandModelOption[];
   officeRoomAdapter?: CommandOfficeRoomAdapter | null;
   pendingComposerMentions?: PendingComposerMention[];
@@ -462,6 +467,7 @@ export function CommandWorkspace({
   isSending,
   linkedThreads = [],
   locale = "zh",
+  platform = "web",
   modelOptions = fallbackCommandModelOptions,
   officeRoomAdapter = null,
   pendingComposerMentions = [],
@@ -540,9 +546,6 @@ export function CommandWorkspace({
   const [scheduleSource, setScheduleSource] = useState("personal");
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [teamMode, setTeamMode] = useState<TeamMode>("office");
-  const [teamWorkspaceCwd, setTeamWorkspaceCwd] = useState(() =>
-    initialCommandTeamWorkspaceCwd(cwd),
-  );
   const [teamCatalog, setTeamCatalog] = useState<CommandDomainCatalog>({
     agents: [],
     offices: [],
@@ -591,11 +594,6 @@ export function CommandWorkspace({
   useEffect(() => {
     function syncRoute() {
       setActiveView(shellViewFromHash());
-      const routeTeamCwd = commandTeamWorkspaceCwdFromSearch(
-        window.location.search,
-        cwd,
-      );
-      setTeamWorkspaceCwd(routeTeamCwd);
     }
     window.addEventListener("hashchange", syncRoute);
     window.addEventListener("popstate", syncRoute);
@@ -603,26 +601,33 @@ export function CommandWorkspace({
       window.removeEventListener("hashchange", syncRoute);
       window.removeEventListener("popstate", syncRoute);
     };
+  }, []);
+
+  // An office is a long-lived chat inside one workspace, so switching the
+  // workspace must close whatever room is open.
+  useEffect(() => {
+    officeOpenRequestRef.current += 1;
+    setOfficeRoomId(null);
+    setOfficeCreateOpen(false);
+    setOfficeCreateError(null);
+    setOfficeRoomWarning(null);
+    setSelectedOfficeRecord(null);
+    setOfficeRoomError(null);
   }, [cwd]);
 
+  // Legacy links carried a separate ?teamCwd= workspace for the team page. The
+  // workspace now has a single source of truth (the sidebar), so adopt the old
+  // parameter once and drop it from the URL.
   useEffect(() => {
-    if (!teamWorkspaceCwd && cwd.trim()) {
-      setTeamWorkspaceCwd(cwd.trim());
-    }
-  }, [cwd, teamWorkspaceCwd]);
-
-  useEffect(() => {
-    const normalizedCwd = teamWorkspaceCwd.trim();
-    if (!normalizedCwd || typeof window === "undefined") {
+    const legacyCwd = legacyCommandTeamWorkspaceCwd();
+    if (!legacyCwd) {
       return;
     }
-    const persistedCwd = new URLSearchParams(window.location.search)
-      .get("teamCwd")
-      ?.trim();
-    if (!persistedCwd) {
-      persistCommandTeamWorkspaceCwd(normalizedCwd);
+    clearLegacyCommandTeamWorkspaceCwd();
+    if (legacyCwd !== cwd.trim()) {
+      onChangeWorkspaceCwd?.(legacyCwd);
     }
-  }, [teamWorkspaceCwd]);
+  }, [cwd, onChangeWorkspaceCwd]);
 
   useEffect(() => {
     let cancelled = false;
@@ -680,7 +685,7 @@ export function CommandWorkspace({
     let cancelled = false;
     if (
       !executionTargetClient ||
-      !teamWorkspaceCwd ||
+      !cwd ||
       connectionState !== "connected"
     ) {
       setTeamCatalog({
@@ -699,8 +704,8 @@ export function CommandWorkspace({
       status: "loading",
     });
     Promise.allSettled([
-      executionTargetClient.listAgentConfigs(teamWorkspaceCwd),
-      executionTargetClient.listOfficeConfigs(teamWorkspaceCwd),
+      executionTargetClient.listAgentConfigs(cwd),
+      executionTargetClient.listOfficeConfigs(cwd),
     ]).then(([agents, offices]) => {
       if (cancelled) {
         return;
@@ -720,7 +725,7 @@ export function CommandWorkspace({
               )
               .map((record) => ({
                 ...record,
-                workspaceCwd: teamWorkspaceCwd,
+                workspaceCwd: cwd,
               }))
           : [],
         officeStatus: officesAvailable ? "ready" : "unavailable",
@@ -734,7 +739,7 @@ export function CommandWorkspace({
     connectionState,
     executionTargetClient,
     teamRefreshNonce,
-    teamWorkspaceCwd,
+    cwd,
   ]);
 
   useCommandOfficeCatalogAutoReconnect({
@@ -742,7 +747,7 @@ export function CommandWorkspace({
     connectionState,
     refreshNonce: setTeamRefreshNonce,
     status: teamCatalog.officeStatus,
-    workspaceCwd: teamWorkspaceCwd,
+    workspaceCwd: cwd,
   });
 
   const providerExpertWorkspaceKey = useMemo(() => {
@@ -1155,24 +1160,6 @@ export function CommandWorkspace({
       })),
     ];
   }, [cwd, linkedThreads, locale]);
-  const teamWorkspaceOptions = useMemo(
-    () =>
-      [
-        teamWorkspaceCwd,
-        cwd,
-        ...linkedThreads.map((thread) => thread.cwd ?? ""),
-      ]
-        .map((path) => path.trim())
-        .filter(
-          (path, index, allPaths) => path && allPaths.indexOf(path) === index,
-        )
-        .map((path) => ({
-          label: basename(path),
-          value: path,
-        })),
-    [cwd, linkedThreads, teamWorkspaceCwd],
-  );
-
   useEffect(() => {
     const targetProviderAgent = providerAgentResourceForTarget(
       providerResource?.executionAgents ?? [],
@@ -1613,24 +1600,8 @@ export function CommandWorkspace({
     }
   }
 
-  function changeTeamWorkspace(nextCwd: string) {
-    const normalizedCwd = nextCwd.trim();
-    if (!normalizedCwd || normalizedCwd === teamWorkspaceCwd) {
-      return;
-    }
-    officeOpenRequestRef.current += 1;
-    setTeamWorkspaceCwd(normalizedCwd);
-    persistCommandTeamWorkspaceCwd(normalizedCwd);
-    setOfficeRoomId(null);
-    setOfficeCreateOpen(false);
-    setOfficeCreateError(null);
-    setOfficeRoomWarning(null);
-    setSelectedOfficeRecord(null);
-    setOfficeRoomError(null);
-  }
-
   async function createRuntimeOffice(input: CommandOfficeCreationInput) {
-    if (!executionTargetClient || !teamWorkspaceCwd || !officeRoomAdapter) {
+    if (!executionTargetClient || !cwd || !officeRoomAdapter) {
       return;
     }
     setOfficeCreateBusy(true);
@@ -1638,7 +1609,7 @@ export function CommandWorkspace({
     try {
       const result = await createCommandOffice(
         executionTargetClient,
-        teamWorkspaceCwd,
+        cwd,
         input,
         locale,
       );
@@ -1752,7 +1723,7 @@ export function CommandWorkspace({
   const canCreateOffice = Boolean(
     officeRoomAdapter &&
       executionTargetClient &&
-      teamWorkspaceCwd &&
+      cwd &&
       connectionState === "connected",
   );
   const canCreateExpertTeam = Boolean(
@@ -1795,7 +1766,7 @@ export function CommandWorkspace({
         ) : null,
         selectedRecordKey: selectedOfficeRecordKey,
         status: teamCatalog.officeStatus,
-        workspaceCwd: teamWorkspaceCwd,
+        workspaceCwd: cwd,
         onCreate: canCreateOffice
           ? () => {
               setOfficeCreateError(null);
@@ -1892,6 +1863,7 @@ export function CommandWorkspace({
           cwd={cwd}
           linkedThreads={commandLinkedThreads}
           locale={locale}
+          platform={platform}
           query={sidebarSearchQuery}
           selectedLinkedThreadId={activeLinkedThreadId}
           slots={slots}
@@ -1922,6 +1894,8 @@ export function CommandWorkspace({
           }
           onToggleSearch={() => setSidebarSearchOpen((open) => !open)}
         />
+
+        <DesktopWindowDragRegion />
 
         <section className="command-canvas" data-od-id="desktop-main-pane">
           <section
@@ -2217,6 +2191,16 @@ export function CommandWorkspace({
                 onStop={onStop}
                 onSubmit={sendComposerValue}
               />
+
+              {showCommandThread ? null : (
+                <CommandSceneQuickRow
+                  locale={locale}
+                  scene={scene}
+                  onQuickAction={(action) =>
+                    prefillScenario(action.prompt, scene, action.mode)
+                  }
+                />
+              )}
             </section>
           </section>
 
@@ -2484,10 +2468,7 @@ export function CommandWorkspace({
             active={activeView === "team"}
             officeRuntime={officeRuntime}
             officeRoomId={officeRoomId}
-            singleChatWorkspaceCwd={cwd}
             teamMode={teamMode}
-            teamWorkspaceCwd={teamWorkspaceCwd}
-            teamWorkspaceOptions={teamWorkspaceOptions}
             workflows={platformSnapshot.workflows}
             expertTeams={expertTeams}
             expertTeamsStatus={expertTeamsStatus}
@@ -2545,7 +2526,6 @@ export function CommandWorkspace({
               };
             }}
             onSelectExpert={openExpertTeam}
-            onTeamWorkspaceChange={changeTeamWorkspace}
             onTeamModeChange={(mode) => {
               setTeamMode(mode);
               setOfficeRoomId(null);
@@ -2574,7 +2554,7 @@ export function CommandWorkspace({
               busy={expertCreateBusy}
               error={expertCreateError}
               workspaceCwd={cwd}
-              onClose={() => {
+                onClose={() => {
                 if (!expertCreateBusy) {
                   setExpertCreateOpen(false);
                   setExpertCreateError(null);

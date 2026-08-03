@@ -1,43 +1,40 @@
 const teamWorkspaceCwdSearchParam = "teamCwd";
 
-export function commandTeamWorkspaceCwdFromSearch(
+/**
+ * The team page used to track its own workspace, persisted as `?teamCwd=`.
+ * The workspace now has a single source of truth (the sidebar), so this
+ * parameter is read once from old links and then dropped.
+ */
+export function legacyCommandTeamWorkspaceCwdFromSearch(
   search: string,
-  fallbackCwd: string,
 ): string {
-  const searchParams = new URLSearchParams(search);
-  const teamCwd = searchParams.get(teamWorkspaceCwdSearchParam)?.trim();
-  if (teamCwd) {
-    return teamCwd;
-  }
-  if (searchParams.has("cwd")) {
-    return searchParams.get("cwd")?.trim() || "";
-  }
-  return fallbackCwd.trim();
-}
-
-export function initialCommandTeamWorkspaceCwd(fallbackCwd: string): string {
-  return commandTeamWorkspaceCwdFromSearch(
-    typeof window === "undefined" ? "" : window.location.search,
-    fallbackCwd,
+  return (
+    new URLSearchParams(search).get(teamWorkspaceCwdSearchParam)?.trim() || ""
   );
 }
 
-export function commandTeamWorkspaceUrl(
+export function legacyCommandTeamWorkspaceCwd(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return legacyCommandTeamWorkspaceCwdFromSearch(window.location.search);
+}
+
+export function commandTeamWorkspaceUrlWithoutLegacyCwd(
   currentHref: string,
-  workspaceCwd: string,
 ): string {
   const nextUrl = new URL(currentHref);
-  nextUrl.searchParams.set(teamWorkspaceCwdSearchParam, workspaceCwd.trim());
+  nextUrl.searchParams.delete(teamWorkspaceCwdSearchParam);
   return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
 }
 
-export function persistCommandTeamWorkspaceCwd(workspaceCwd: string): void {
+export function clearLegacyCommandTeamWorkspaceCwd(): void {
   if (typeof window === "undefined") {
     return;
   }
   window.history.replaceState(
     null,
     "",
-    commandTeamWorkspaceUrl(window.location.href, workspaceCwd),
+    commandTeamWorkspaceUrlWithoutLegacyCwd(window.location.href),
   );
 }

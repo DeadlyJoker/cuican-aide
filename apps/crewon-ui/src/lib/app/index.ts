@@ -3,7 +3,6 @@ export { createAppShellActionHandlers } from "./handlers/appShellActionHandlers"
 export { createAppThreadRuntimeHandlers } from "./handlers/appThreadRuntimeHandlers";
 export { createAppWorkspaceCapabilityHandlers } from "./handlers/appWorkspaceCapabilityHandlers";
 export {
-  useAppCallbackRefsEffect,
   useAppChromeEffects,
   useAppConnectionEffects,
   useAppDocumentPreferenceEffects,
@@ -22,7 +21,16 @@ export { isCommandShellHash, shouldRenderCommandShellView } from "./appRouting";
 export { createAppDomainActionCoordinator } from "./appDomainActionCoordinator";
 export { createAppDomainBackendCoordinator } from "./appDomainBackendCoordinator";
 export { createAppCommandShellHandlers } from "./appCommandShellHandlers";
-export { commandShellRuntimeState } from "./appCommandShellRuntime";
+export {
+  assistantThreadRuntimeState,
+  commandShellRuntimeState,
+} from "./appCommandShellRuntime";
+export { saveCapabilityDraftAction } from "./appCapabilitySaveAction";
+export {
+  addLocalComposerResources,
+  platformResourceMentionPath,
+  withPlatformResourceMention,
+} from "./appComposerAttachmentActions";
 export { createAppLibraryOpenCoordinator } from "./appLibraryOpenCoordinator";
 export { createAppLibraryPanelDispatchCoordinator } from "./appLibraryPanelDispatchCoordinator";
 export { createAppOfficeRuntimeCoordinator } from "./appOfficeRuntimeCoordinator";

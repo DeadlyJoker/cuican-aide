@@ -39,6 +39,7 @@ type Messages = {
   files: string;
   hideSidebar: string;
   language: string;
+  loadingRouteHint: string;
   loadingThreads: string;
   newDraftPreview: string;
   newDraftThread: string;
@@ -93,6 +94,7 @@ const messages: Record<Locale, Messages> = {
     files: "文件",
     hideSidebar: "隐藏侧栏",
     language: "语言",
+    loadingRouteHint: "首次打开需要载入模块，稍等一下。",
     loadingThreads: "正在加载会话…",
     modeCode: "单体对话",
     modeCodeDescription: "和一个智能体连续对话，适合审查、修复、测试和运行项目命令。",
@@ -156,6 +158,7 @@ const messages: Record<Locale, Messages> = {
     files: "Files",
     hideSidebar: "Hide sidebar",
     language: "Language",
+    loadingRouteHint: "Loading the module for the first time takes a moment.",
     loadingThreads: "Loading sessions...",
     modeCode: "Direct chat",
     modeCodeDescription: "Talk with one agent for review, fixes, tests, and project commands.",

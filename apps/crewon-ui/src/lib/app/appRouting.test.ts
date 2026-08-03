@@ -41,7 +41,8 @@ describe("app routing search parsing", () => {
     }).toEqual({
       cwd: "/repo/office",
       hash: "#view-team",
-      teamCwd: "/repo/office",
+      // The Team page no longer has a workspace of its own to pin.
+      teamCwd: null,
       view: null,
     });
   });

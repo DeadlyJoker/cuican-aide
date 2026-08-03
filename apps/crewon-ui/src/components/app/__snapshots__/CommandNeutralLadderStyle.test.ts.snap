@@ -1,0 +1,251 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`command shell light locals > snapshots the narrow-width hero reset that keeps the composer on screen 1`] = `
+"/*
+ * Below 860px the shell drops the hero out of absolute positioning, so the
+ * translateX(-50%) that centres it against \`left: 50%\` no longer has a matching
+ * offset to cancel and instead shoves the composer off the left edge. app.css
+ * clears the transform at this breakpoint, but this file loads after it, so the
+ * reset has to be repeated here.
+ */
+@media (max-width: 860px) {
+  .screen-shell.command-screen .hero-center.has-command-thread {
+    left: auto;
+    width: calc(100% - 28px);
+    justify-self: center;
+    transform: none;
+  }
+}
+
+.assistant-single-conversation {
+  position: relative;
+  left: auto;
+  margin: 19px auto;
+  transform: none;
+}"
+`;
+
+exports[`command shell light locals > snapshots the sampled sidebar and control tokens 1`] = `
+"/*
+ * Command shell locals for the light theme, sampled from the Cursor agent
+ * window: the rail is a distinctly recessed #ececee against a #f5f5f5 canvas,
+ * and the active row is a neutral #dfdfe1 rather than a blue tint. The previous
+ * values put the rail at 97.6% lightness, which left it nearly flush with the
+ * canvas and made the sidebar boundary read as an accident.
+ */
+:root[data-theme="light"] .command-shell-route .screen-shell.command-screen {
+  --command-sidebar-bg: var(--sidebar);
+  --command-sidebar-border: var(--border-strong);
+  --command-sidebar-hover: oklch(93.5% 0 0);
+  --command-sidebar-active: var(--accent-soft);
+  --command-control-bg: var(--surface);
+  --command-control-border: var(--border-strong);
+}"
+`;
+
+exports[`command shell light locals > snapshots the user turn lifting off the canvas in both themes 1`] = `
+"/*
+ * The user's own turn lifts off the canvas rather than sinking into it, matching
+ * how the Cursor agent window separates the two speakers: one rung up on the
+ * grey ladder plus a hairline, no tint. The previous #f1f2f4 was both darker
+ * than the canvas and slightly blue, which read as a foreign surface.
+ */
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .markdown-content {
+  border: 1px solid var(--border);
+  background: var(--surface);
+}"
+`;
+
+exports[`command shell neutral ladder > snapshots the dark ladder that keeps rail, canvas, and cards distinct 1`] = `
+"/*
+   * Mirrors the light ladder: the rail sits below the canvas, cards sit above
+   * it. The previous palette gave bg, sidebar, and surface the same #111111,
+   * which collapsed all three layers into one flat plane.
+   */
+  --bg: #171717;
+  --panel-subtle: #1f1f1f;
+  --sidebar: #121212;
+  --surface: #1c1c1c;
+  --surface-raised: #232323;
+  --border: rgba(244, 244, 245, 0.08);
+  --border-strong: rgba(244, 244, 245, 0.16);
+  --text: #eeeeee;
+  --text-muted: #cccccc;
+  --text-faint: #8a8a8f;
+  --accent: #3b82f6;
+  --accent-strong: #eeeeee;
+  --accent-soft: #2c2c2e;
+  --accent-glow: rgba(59, 130, 246, 0.16);"
+`;
+
+exports[`command shell neutral ladder > snapshots the light grey ladder sampled from the agent window 1`] = `
+"/*
+   * Neutral grey ladder sampled from the Cursor agent window. Depth is carried
+   * by 4-7 point lightness steps plus hairline borders, not by hue, so the
+   * accent stays free for genuinely interactive affordances.
+   *
+   *   sidebar #ececee  recessed rail
+   *   bg      #f5f5f5  canvas
+   *   surface #fcfcfc  cards and popovers (deliberately not pure white)
+   */
+  --bg: #f5f5f5;
+  --panel-subtle: #ececec;
+  --sidebar: #ececee;
+  --surface: #fcfcfc;
+  --surface-raised: #ffffff;
+  --border: rgba(24, 24, 27, 0.08);
+  --border-strong: rgba(24, 24, 27, 0.16);
+  --text: #18181b;
+  --text-muted: #52525b;
+  --text-faint: #8a8f98;
+  --accent: #2563eb;
+  --accent-strong: #18181b;
+  --accent-soft: #dfdfe1;
+  --accent-glow: rgba(37, 99, 235, 0.14);"
+`;
+
+exports[`command shell neutral ladder > snapshots the radius scale 1`] = `
+"--radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-pill: 999px;
+  /*
+   * Elevation scale, keyed to how far a surface sits off the canvas.
+   *
+   *   raised   resting cards and controls: a hairline, not a drop
+   *   overlay  menus and popovers that leave the flow
+   *   modal    dialogs and drawers that take over the screen
+   *
+   * All three are neutral. Tinted shadows read as a different material, which
+   * is what made the feature pages look unrelated to the command shell.
+   */
+  --shadow-raised: 0 1px 2px rgba(24, 24, 27, 0.06);
+  --shadow-overlay: 0 8px 24px rgba(24, 24, 27, 0.1);
+  --shadow-modal: 0 18px 48px rgba(24, 24, 27, 0.16);
+  /* A drawer casts toward the edge it slid away from, not downward. */
+  --shadow-drawer-left: -18px 0 48px rgba(24, 24, 27, 0.16);
+  /* A zero-blur hairline under a row: a divider drawn as a shadow, not a drop. */
+  --shadow-hairline: 0 1px 0 rgba(24, 24, 27, 0.04);
+  /*
+   * Control height scale. Every interactive box lands on one of these, so a
+   * primary button is the same height on every page.
+   *
+   *   sm  dense chips, inline actions, table row buttons
+   *   md  the default: buttons, selects, nav items, search fields
+   *   lg  page-level primary actions and composer rows
+   */
+  --control-h-sm: 28px;
+  --control-h-md: 32px;
+  --control-h-lg: 38px;"
+`;
+
+exports[`conversation surfaces follow the theme > snapshots the code and tool output contract 1`] = `
+"/*
+ * Code and tool output sit on the same grey ladder as the rest of the shell.
+ * These blocks used to invert against the page (--n-1000 ground, --n-250 ink),
+ * which dropped a dark terminal panel into the light theme. Keeping them on
+ * --surface-strong lets the panel read as a recessed area of the conversation
+ * in both themes instead of a foreign surface.
+ */
+.screen-shell.command-screen .command-thread-room .markdown-content > pre,
+.screen-shell.command-screen .command-thread-room .tool-call-section pre,
+.screen-shell.command-screen .command-thread-room .command-card pre {
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  color: var(--text);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.62;
+  white-space: pre;
+}"
+`;
+
+exports[`conversation surfaces follow the theme > snapshots the composer surface contract 1`] = `
+"/*
+ * Final word on the thread composer; two earlier blocks in this file set the
+ * same properties and are overridden here. The composer sits on --surface so it
+ * lifts off the canvas by one rung of the grey ladder rather than by a drop
+ * shadow, which is how the Cursor agent composer reads.
+ */
+.screen-shell.command-screen .command-input.thread-command-input {
+  width: min(980px, 100%);
+  margin-bottom: 6px;
+  border-color: var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: none;
+}"
+`;
+
+exports[`conversation surfaces follow the theme > snapshots the diff row contract for both themes 1`] = `
+"/*
+ * Diff rows are the one place chromatic colour still carries meaning, so they
+ * stay literal rather than joining the neutral scale. They are tinted washes
+ * over the card ground instead of opaque blocks: the added/removed hue reads at
+ * a glance while the code keeps the body text colour and stays legible. Light
+ * values are the default; the dark counterparts follow below.
+ */
+.file-diff-line[data-kind="added"] {
+  border-left-color: #37a457;
+  background: rgb(55 164 87 / 0.09);
+  color: var(--text);
+}
+
+.file-diff-line[data-kind="removed"] {
+  border-left-color: #d64545;
+  background: rgb(214 69 69 / 0.08);
+  color: var(--text);
+}
+
+.file-diff-line[data-kind="hunk"] {
+  background: var(--surface-strong);
+  color: var(--text-faint);
+}
+
+:root[data-theme="dark"] .file-diff-line[data-kind="added"] {
+  border-left-color: #78d889;
+  background: rgb(120 216 137 / 0.12);
+}
+
+:root[data-theme="dark"] .file-diff-line[data-kind="removed"] {
+  border-left-color: #e06c5f;
+  background: rgb(224 108 95 / 0.13);
+}"
+`;
+
+exports[`starter card row > lays the cards out as an equal-column grid 1`] = `
+".screen-shell.command-screen .quick-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 8px;
+  width: 100%;
+  margin-top: 14px;"
+`;
+
+exports[`starter card row > rests the cards on the canvas so the composer stays the raised surface 1`] = `
+".quick-row .quick-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 84px;
+  padding: 11px 12px;
+  border: 1px solid var(--n-200);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  text-align: left;
+}
+
+.screen-shell.command-screen .quick-row .quick-card:hover,
+.quick-row .quick-card:hover {
+  border-color: var(--n-300);
+  background: var(--n-0);
+}"
+`;

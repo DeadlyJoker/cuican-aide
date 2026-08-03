@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { CommandScheduleCalendar } from "./CommandScheduleCalendar";
+import { SegmentedTabs } from "./SegmentedTabs";
 import type { ScheduleRecord } from "./scheduleCalendarModel";
 import { classNames } from "./commandWorkspaceUtils";
 import type { AutomationConfig } from "../../lib/domain/crewonDomain";
@@ -343,88 +344,69 @@ export function ScheduleView({
       hidden={!active}
     >
       <div className="page-stack schedule-page">
+        {/* Tabs left, actions right, on one row -- the catalog pages' header. */}
         <header className="schedule-header" aria-label="日程操作">
-          <div className="schedule-header-actions">
-            <label className="catalog-search schedule-search">
-              <Search aria-hidden="true" />
-              <input
-                aria-label="搜索日程"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索日程或执行记录"
-              />
-            </label>
-            <button
-              className="icon-action schedule-refresh"
-              type="button"
-              onClick={() => void refresh()}
-              disabled={!client}
-              aria-label="刷新日程"
-              title="刷新日程"
-            >
-              <RefreshCw />
-            </button>
-            <button
-              className="button primary"
-              type="button"
-              onClick={onOpenModal}
-              disabled={!client || scheduleSource !== "personal"}
-            >
-              <Plus />
-              新建日程
-            </button>
-          </div>
-        </header>
-
-        <nav className="schedule-subnav" aria-label="日程筛选">
-          <div
-            className="schedule-scope-tabs"
-            role="group"
-            aria-label="日程范围"
-          >
-            <button
-              className={scheduleSource === "personal" ? "active" : ""}
-              onClick={() => onSourceChange("personal")}
-              type="button"
-            >
-              个人日程
-            </button>
-            <button
-              className={scheduleSource === "teamflow" ? "active" : ""}
-              onClick={() => onSourceChange("teamflow")}
-              type="button"
-            >
-              小队日程
-            </button>
-          </div>
-          <span className="schedule-nav-divider" aria-hidden="true" />
-          <div
-            className="schedule-view-tabs"
-            role="group"
-            aria-label="查看内容"
-          >
-            <button
-              className={scheduleMode === "tasks" ? "active" : ""}
-              onClick={() => onModeChange("tasks")}
-              type="button"
-            >
-              日程
-            </button>
-            <button
-              className={scheduleMode === "history" ? "active" : ""}
-              onClick={() => onModeChange("history")}
-              type="button"
-            >
-              执行记录
-            </button>
-          </div>
+          <nav className="schedule-subnav" aria-label="日程筛选">
+            <SegmentedTabs
+              active={scheduleSource}
+              label="日程范围"
+              options={[
+                { label: "个人日程", value: "personal" },
+                { label: "小队日程", value: "teamflow" },
+              ]}
+              onChange={(value) =>
+                onSourceChange(value as "personal" | "teamflow")
+              }
+            />
+            <span className="schedule-nav-divider" aria-hidden="true" />
+            <SegmentedTabs
+              active={scheduleMode}
+              label="查看内容"
+              options={[
+                { label: "日程", value: "tasks" },
+                { label: "执行记录", value: "history" },
+              ]}
+              onChange={(value) => onModeChange(value as "tasks" | "history")}
+            />
+          </nav>
+          {/*
+            Team schedules render only an explanatory empty state, so searching,
+            refreshing, and creating have nothing to act on there. Omitting the
+            controls is clearer than showing three dead ones.
+          */}
           {scheduleSource === "personal" ? (
-            <span className="schedule-delivery-note">
-              <Inbox />
-              结果发送给：我（创建者） · 保存在个人日程中心
-            </span>
+            <div className="schedule-header-actions">
+              <label className="catalog-search schedule-search">
+                <Search aria-hidden="true" />
+                <input
+                  aria-label="搜索日程"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="搜索日程或执行记录"
+                />
+              </label>
+              <button
+                className="icon-action schedule-refresh"
+                type="button"
+                onClick={() => void refresh()}
+                disabled={!client}
+                aria-label="刷新日程"
+                title="刷新日程"
+              >
+                <RefreshCw />
+              </button>
+              <button
+                className="button primary"
+                type="button"
+                onClick={onOpenModal}
+                disabled={!client}
+              >
+                <Plus />
+                新建日程
+              </button>
+            </div>
           ) : null}
-        </nav>
+        </header>
 
         {scheduleSource === "teamflow" ? (
           <div className="schedule-empty">
@@ -496,21 +478,17 @@ export function ScheduleView({
             ) : (
               <section className="schedule-history" aria-label="执行记录">
                 <div className="schedule-history-filters">
-                  {[
-                    ["all", "全部"],
-                    ["running", "执行中"],
-                    ["completed", "已完成"],
-                    ["failed", "失败"],
-                  ].map(([value, label]) => (
-                    <button
-                      className={runFilter === value ? "active" : ""}
-                      type="button"
-                      onClick={() => setRunFilter(value)}
-                      key={value}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  <SegmentedTabs
+                    active={runFilter}
+                    label="执行状态筛选"
+                    options={[
+                      { label: "全部", value: "all" },
+                      { label: "执行中", value: "running" },
+                      { label: "已完成", value: "completed" },
+                      { label: "失败", value: "failed" },
+                    ]}
+                    onChange={setRunFilter}
+                  />
                 </div>
                 <div className="schedule-run-table" role="table">
                   <div className="schedule-run-row header" role="row">

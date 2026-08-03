@@ -4,6 +4,9 @@ import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { AppServerClient } from "../../app-server/appServer";
 import { appDocumentTitle } from "../appDocumentActions";
 import { applyDesktopPreferencesAction } from "../appPreferenceActions";
+import { parseAppearancePreferences } from "../../appearance/appearanceSerialization";
+import { setAppliedAppearance } from "../../appearance/appearanceRuntime";
+import { systemPrefersDark } from "../../appearance/applyAppearance";
 import { persistLocale, type Locale } from "../../i18n";
 import { persistTheme, type Theme } from "../../theme";
 
@@ -68,14 +71,24 @@ export function useAppDocumentPreferenceEffects({
           "theme",
         );
 
+        const desktopConfig = configRead.config.desktop as Record<
+          string,
+          unknown
+        > | null;
+
         applyDesktopPreferencesAction({
-          desktopConfig: configRead.config.desktop as Record<string, unknown> | null,
+          desktopConfig,
           persistLocale,
           persistTheme,
+          prefersDark: systemPrefersDark(),
           setLocale,
           setTheme,
           themeOverride,
         });
+
+        // Colors, fonts, and behavior flags land on the document root here so
+        // the stylesheets can read them independently of the theme.
+        setAppliedAppearance(parseAppearancePreferences(desktopConfig));
       })
       .catch(() => {
         // Desktop preferences are best-effort; config/settings panels surface detailed errors.

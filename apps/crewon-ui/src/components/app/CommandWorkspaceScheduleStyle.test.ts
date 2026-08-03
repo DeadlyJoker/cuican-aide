@@ -9,11 +9,14 @@ describe("command workspace schedule style", () => {
       new URL("../../styles/original-shell-overrides.css", import.meta.url),
       "utf8",
     );
+    // Anchor on the selector, not on prose: keying off a comment made this test
+    // fail whenever the comment was reworded.
     const marker =
-      "/* Personal schedule: calm, content-first planning with visible delivery and run history. */";
-    const endMarker = ".schedule-alert {";
+      '.screen-shell.command-screen .shell-page-view[data-shell-view="schedule"] {';
     const start = styles.indexOf(marker);
-    const end = styles.indexOf(endMarker, start);
+    // The calendar rules sit past the first .schedule-alert, so bound the slice
+    // on the last one to cover the whole schedule section.
+    const end = styles.lastIndexOf(".schedule-alert {");
 
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
@@ -24,8 +27,15 @@ describe("command workspace schedule style", () => {
       '.screen-shell.command-screen .shell-page-view[data-shell-view="schedule"]',
     );
     expect(contract).toContain(".page-stack.schedule-page");
-    expect(contract).toContain("gap: clamp(20px, 1.6vw, 28px)");
-    expect(contract).toContain("justify-content: flex-end");
+    // The page inset and stack rhythm match the catalog pages rather than the
+    // clamped values this page used to set for itself.
+    expect(contract).toContain("padding: 10px 18px 36px");
+    expect(contract).toContain("gap: 0");
+    // Tabs left, actions right, on one row.
+    expect(contract).toContain("justify-content: space-between");
+    // The panel takes the leftover viewport height instead of stopping at 620px.
+    expect(contract).toContain("min-height: 100%");
+    expect(contract).toContain("flex: 1 1 auto");
     expect(contract).not.toContain(".schedule-heading");
     expect(contract).toContain("min-height: 620px");
     expect(contract).toContain("min-height: clamp(62px, 5.2vw, 76px)");

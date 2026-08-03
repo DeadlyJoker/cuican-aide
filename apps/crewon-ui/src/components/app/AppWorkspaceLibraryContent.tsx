@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import { Suspense, lazy } from "react";
 
 import type {
@@ -114,7 +115,11 @@ export function AppWorkspaceLibraryContent({
     <Suspense
       fallback={
         <section className="library-page" aria-label={libraryPanel.title}>
-          <p className="library-loading">{t.loadingThreads}</p>
+          <div className="route-loading-state" role="status" aria-live="polite">
+            <LoaderCircle aria-hidden="true" size={18} />
+            <strong>{t.loadingThreads}</strong>
+            <small>{t.loadingRouteHint}</small>
+          </div>
         </section>
       }
     >

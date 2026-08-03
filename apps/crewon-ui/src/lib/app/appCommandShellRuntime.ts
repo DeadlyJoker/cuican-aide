@@ -10,6 +10,33 @@ type CommandShellRuntimeStateParams = {
   threads: Thread[];
 };
 
+/**
+ * Live turn and streaming text for the assistant thread.
+ *
+ * The assistant pane resolves these the same way the shell does: prefer the
+ * tracked active turn, otherwise fall back to whichever turn is still running.
+ */
+export function assistantThreadRuntimeState({
+  activeTurnByThread,
+  assistantThread,
+  streamingTextByThread,
+}: {
+  activeTurnByThread: Record<string, string>;
+  assistantThread: Thread | null;
+  streamingTextByThread: Record<string, string>;
+}): { activeTurnId: string | null; streamingText: string } {
+  if (!assistantThread) {
+    return { activeTurnId: null, streamingText: "" };
+  }
+  return {
+    activeTurnId:
+      activeTurnByThread[assistantThread.id] ??
+      assistantThread.turns.find((turn) => turn.status === "inProgress")?.id ??
+      null,
+    streamingText: streamingTextByThread[assistantThread.id] ?? "",
+  };
+}
+
 export function commandShellRuntimeState({
   activeTurnByThread,
   activeTurnId,

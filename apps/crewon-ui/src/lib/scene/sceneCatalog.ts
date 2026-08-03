@@ -35,7 +35,28 @@ export type SceneModeOption = {
   value: SceneInteractionMode;
 };
 
+/**
+ * Icon shown on a quick-action card. The name is resolved to a component by the
+ * view, so the catalog stays free of React imports.
+ */
+export type SceneQuickActionIcon =
+  | "clipboardList"
+  | "presentation"
+  | "fileText"
+  | "bookMarked"
+  | "sparkles"
+  | "bug"
+  | "searchCheck"
+  | "flaskConical"
+  | "compass"
+  | "layoutTemplate"
+  | "image"
+  | "scanEye";
+
 export type SceneQuickAction = {
+  /** Short line under the label, mirroring the intent of the prompt. */
+  hint: string;
+  icon: SceneQuickActionIcon;
   label: string;
   mode: SceneInteractionMode;
   prompt: string;
@@ -69,29 +90,46 @@ export const scenePresets: Record<CommandScene, ScenePreset> = {
       { detail: "整理事项、来源与行动项", label: "整理", value: "organize" },
       { detail: "生成面向受众的可用成稿", label: "撰写", value: "write" },
       { detail: "基于来源说明方法与结论", label: "分析", value: "analyze" },
-      { detail: "准备消息、会议或共享写入草稿", label: "协同", value: "coordinate" },
+      {
+        detail: "准备消息、会议或共享写入草稿",
+        label: "协同",
+        value: "coordinate",
+      },
     ],
-    placeholder: "例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库",
+    placeholder:
+      "例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库",
     quickActions: [
       {
+        hint: "待办、会议与阻塞项",
+        icon: "clipboardList",
         label: "整理今日工作",
         mode: "organize",
-        prompt: "整理今天的项目事项，列出待办、会议、负责人、阻塞项和截止时间。",
+        prompt:
+          "整理今天的项目事项，列出待办、会议、负责人、阻塞项和截止时间。",
       },
       {
+        hint: "议题、背景与决策项",
+        icon: "presentation",
         label: "生成会议材料",
         mode: "write",
-        prompt: "结合现有资料和日程生成会议材料，包含议题、背景、待决策项和行动项。",
+        prompt:
+          "结合现有资料和日程生成会议材料，包含议题、背景、待决策项和行动项。",
       },
       {
+        hint: "进度、风险与下一步",
+        icon: "fileText",
         label: "撰写项目汇报",
         mode: "write",
-        prompt: "基于项目资料撰写可直接使用的项目汇报，说明进度、风险、结论和下一步。",
+        prompt:
+          "基于项目资料撰写可直接使用的项目汇报，说明进度、风险、结论和下一步。",
       },
       {
+        hint: "结论、来源与维护人",
+        icon: "bookMarked",
         label: "沉淀知识库",
         mode: "organize",
-        prompt: "把这次讨论沉淀成知识库条目，包含结论、来源、适用范围和维护人。",
+        prompt:
+          "把这次讨论沉淀成知识库条目，包含结论、来源、适用范围和维护人。",
       },
     ],
     scene: "office",
@@ -112,21 +150,31 @@ export const scenePresets: Record<CommandScene, ScenePreset> = {
     placeholder: "例如：读取当前仓库规则，实现这个功能并运行适用测试",
     quickActions: [
       {
+        hint: "遵循仓库规则并验证",
+        icon: "sparkles",
         label: "实现一个功能",
         mode: "implement",
-        prompt: "读取当前仓库规则，实现这个功能，并运行适用的格式化、测试和构建验证。",
+        prompt:
+          "读取当前仓库规则，实现这个功能，并运行适用的格式化、测试和构建验证。",
       },
       {
+        hint: "定位根因并验证回归",
+        icon: "bug",
         label: "修复一个 Bug",
         mode: "implement",
         prompt: "结合问题描述、日志和仓库证据定位根因，完成修复并验证回归。",
       },
       {
+        hint: "只读输出可定位问题",
+        icon: "searchCheck",
         label: "审阅当前改动",
         mode: "review",
-        prompt: "只读审阅当前改动，按严重程度输出可定位的问题、证据和修复建议。",
+        prompt:
+          "只读审阅当前改动，按严重程度输出可定位的问题、证据和修复建议。",
       },
       {
+        hint: "补齐覆盖与流水线",
+        icon: "flaskConical",
         label: "补齐测试与 CI",
         mode: "implement",
         prompt: "检查当前改动的测试与 CI 缺口，补齐覆盖并运行适用验证。",
@@ -144,30 +192,44 @@ export const scenePresets: Record<CommandScene, ScenePreset> = {
       autoMode,
       { detail: "给出有明显差异的设计方向", label: "探索", value: "explore" },
       { detail: "深化选定方向并复用设计系统", label: "收敛", value: "refine" },
-      { detail: "生成可预览、可交付的设计产物", label: "制作", value: "produce" },
+      {
+        detail: "生成可预览、可交付的设计产物",
+        label: "制作",
+        value: "produce",
+      },
       { detail: "只诊断并输出可定位问题", label: "走查", value: "inspect" },
     ],
     placeholder: "例如：基于这个 Brief 探索三个方向，并制作可预览的页面方案",
     quickActions: [
       {
+        hint: "三个方向与取舍",
+        icon: "compass",
         label: "探索设计方向",
         mode: "explore",
         prompt: "基于当前 Brief 探索三个有明显差异的设计方向，并说明各自取舍。",
       },
       {
+        hint: "覆盖关键状态",
+        icon: "layoutTemplate",
         label: "设计页面或组件",
         mode: "produce",
-        prompt: "结合 Brief、品牌与目标画布，设计可预览的页面或组件并覆盖关键状态。",
+        prompt:
+          "结合 Brief、品牌与目标画布，设计可预览的页面或组件并覆盖关键状态。",
       },
       {
+        hint: "可预览、可导出",
+        icon: "image",
         label: "生成视觉资产",
         mode: "produce",
         prompt: "根据 Brief 和品牌约束生成可预览、可导出的视觉资产。",
       },
       {
+        hint: "状态覆盖与交付建议",
+        icon: "scanEye",
         label: "走查并交付",
         mode: "inspect",
-        prompt: "走查当前设计，输出可定位问题、状态覆盖、响应式风险和交付建议。",
+        prompt:
+          "走查当前设计，输出可定位问题、状态覆盖、响应式风险和交付建议。",
       },
     ],
     scene: "design",
@@ -212,24 +274,32 @@ export const scenePresetsEn: Record<CommandScene, ScenePreset> = {
       "For example: organize today's project work, schedule meetings, follow up on blockers, and save conclusions to the knowledge base",
     quickActions: [
       {
+        hint: "Tasks, meetings, and blockers",
+        icon: "clipboardList",
         label: "Organize today's work",
         mode: "organize",
         prompt:
           "Organize today's project work with tasks, meetings, owners, blockers, and deadlines.",
       },
       {
+        hint: "Agenda, context, and decisions",
+        icon: "presentation",
         label: "Prepare meeting materials",
         mode: "write",
         prompt:
           "Prepare meeting materials from the available sources and calendar, including agenda, context, decisions, and action items.",
       },
       {
+        hint: "Progress, risks, and next steps",
+        icon: "fileText",
         label: "Write a project update",
         mode: "write",
         prompt:
           "Write a ready-to-use project update covering progress, risks, conclusions, and next steps.",
       },
       {
+        hint: "Conclusions, sources, and owner",
+        icon: "bookMarked",
         label: "Save to the knowledge base",
         mode: "organize",
         prompt:
@@ -275,24 +345,32 @@ export const scenePresetsEn: Record<CommandScene, ScenePreset> = {
       "For example: read the repository rules, implement this feature, and run the relevant tests",
     quickActions: [
       {
+        hint: "Follow repo rules and verify",
+        icon: "sparkles",
         label: "Implement a feature",
         mode: "implement",
         prompt:
           "Read the repository rules, implement this feature, and run the relevant formatting, tests, and build checks.",
       },
       {
+        hint: "Find the root cause and verify",
+        icon: "bug",
         label: "Fix a bug",
         mode: "implement",
         prompt:
           "Use the issue description, logs, and repository evidence to find the root cause, fix it, and verify the regression.",
       },
       {
+        hint: "Read-only, locatable findings",
+        icon: "searchCheck",
         label: "Review current changes",
         mode: "review",
         prompt:
           "Review the current changes without modifying files. Return locatable findings, evidence, and suggested fixes by severity.",
       },
       {
+        hint: "Close coverage and pipeline gaps",
+        icon: "flaskConical",
         label: "Complete tests and CI",
         mode: "implement",
         prompt:
@@ -338,24 +416,32 @@ export const scenePresetsEn: Record<CommandScene, ScenePreset> = {
       "For example: explore three directions from this brief and produce previewable page concepts",
     quickActions: [
       {
+        hint: "Three directions with tradeoffs",
+        icon: "compass",
         label: "Explore design directions",
         mode: "explore",
         prompt:
           "Explore three clearly differentiated design directions from the current brief and explain their tradeoffs.",
       },
       {
+        hint: "Cover the key states",
+        icon: "layoutTemplate",
         label: "Design a page or component",
         mode: "produce",
         prompt:
           "Use the brief, brand, and target canvas to design a previewable page or component with key states.",
       },
       {
+        hint: "Previewable and exportable",
+        icon: "image",
         label: "Generate visual assets",
         mode: "produce",
         prompt:
           "Generate previewable, exportable visual assets that follow the brief and brand constraints.",
       },
       {
+        hint: "State coverage and handoff",
+        icon: "scanEye",
         label: "Inspect and hand off",
         mode: "inspect",
         prompt:
@@ -389,17 +475,19 @@ export function executionTargetOptionsFromDomain({
     if (!id || id.startsWith("agent-platform:")) {
       return [];
     }
-    return [{
-      detail:
-        record.config.role?.trim() ||
-        (locale === "zh"
-          ? "使用该智能体的模型与能力配置"
-          : "Use this agent's model and capability configuration"),
-      kind: "agent" as const,
-      label: `${record.config.name} · 单 Agent`,
-      strategy: "single" as const,
-      value: `agent:${id}`,
-    }];
+    return [
+      {
+        detail:
+          record.config.role?.trim() ||
+          (locale === "zh"
+            ? "使用该智能体的模型与能力配置"
+            : "Use this agent's model and capability configuration"),
+        kind: "agent" as const,
+        label: `${record.config.name} · 单 Agent`,
+        strategy: "single" as const,
+        value: `agent:${id}`,
+      },
+    ];
   });
   const officeTitleCounts = offices.reduce((counts, record) => {
     const title = record.config.title.trim();
@@ -435,13 +523,14 @@ export function executionTargetOptionsFromDomain({
         : `team:${title}`,
     };
   });
-  const fallback = status === "loading"
-    ? locale === "zh"
-      ? "正在读取本地 Agent 与小队定义"
-      : "Loading local agent and team definitions"
-    : locale === "zh"
-      ? "未读取到可用的本地 Agent 或小队定义"
-      : "No available local agent or team definitions were found";
+  const fallback =
+    status === "loading"
+      ? locale === "zh"
+        ? "正在读取本地 Agent 与小队定义"
+        : "Loading local agent and team definitions"
+      : locale === "zh"
+        ? "未读取到可用的本地 Agent 或小队定义"
+        : "No available local agent or team definitions were found";
 
   const options: ExecutionTargetOption[] = [
     {

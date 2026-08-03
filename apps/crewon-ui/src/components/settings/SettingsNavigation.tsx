@@ -34,15 +34,15 @@ type SettingsNavigationProps = {
 
 const settingsIcons: Record<SettingsIconKey, LucideIcon> = {
   "app-window": AppWindow,
-  bot: Bot,
-  cable: Cable,
+  "bot": Bot,
+  "cable": Cable,
   "git-branch": GitBranch,
-  globe: Globe,
-  keyboard: Keyboard,
-  palette: Palette,
+  "globe": Globe,
+  "keyboard": Keyboard,
+  "palette": Palette,
   "shield-check": ShieldCheck,
   "sliders-horizontal": SlidersHorizontal,
-  sparkles: Sparkles,
+  "sparkles": Sparkles,
   "terminal-square": TerminalSquare,
 };
 

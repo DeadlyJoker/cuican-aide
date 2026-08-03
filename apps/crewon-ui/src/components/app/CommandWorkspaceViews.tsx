@@ -17,6 +17,7 @@ import {
 } from "./CommandOfficeRoom";
 import { CommandExpertsPanel } from "./CommandExpertsPanel";
 import { CommandWorkflowPanel } from "./CommandWorkflowPanel";
+import { SegmentedTabs } from "./SegmentedTabs";
 import { classNames } from "./commandWorkspaceUtils";
 import {
   capabilityPresetById,
@@ -155,76 +156,13 @@ function resourceLocation(
   return source === "local" ? "local" : "cloud";
 }
 
-function FilterTabs({
-  active,
-  group,
-  label,
-  options,
-  onChange,
-}: {
-  active: string;
-  group: string;
-  label: string;
-  options: FilterOption[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="catalog-mode-tabs" role="group" aria-label={label}>
-      {options.map((option) => (
-        <button
-          aria-pressed={active === option.value}
-          className={classNames(
-            "filter-chip mode-tab",
-            active === option.value && "active",
-          )}
-          data-filter-group={group}
-          data-filter={option.value}
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-        >
-          {option.icon}
-          <span>{option.label}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function SourceTabs({
-  active,
-  group,
-  label,
-  options,
-  onChange,
-}: {
-  active: string;
-  group: string;
-  label: string;
-  options: FilterOption[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="catalog-source-tabs" role="group" aria-label={label}>
-      {options.map((option) => (
-        <button
-          aria-pressed={active === option.value}
-          className={classNames(
-            "filter-chip source-tab",
-            active === option.value && "active",
-          )}
-          data-filter-group={group}
-          data-filter={option.value}
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
+/*
+ * Both aliases resolve to the one segmented control. Source and filter tabs used
+ * to look different -- 58px underlines against 28px chips -- even though both
+ * switch between a small set of views.
+ */
+const FilterTabs = SegmentedTabs;
+const SourceTabs = SegmentedTabs;
 
 function CatalogSearch({
   label,
@@ -1385,10 +1323,7 @@ export function TeamView({
   active,
   officeRuntime,
   officeRoomId,
-  singleChatWorkspaceCwd,
   teamMode,
-  teamWorkspaceCwd,
-  teamWorkspaceOptions,
   workflows,
   expertTeams,
   expertTeamsStatus,
@@ -1400,15 +1335,11 @@ export function TeamView({
   onRunWorkflow,
   onSelectExpert,
   onTeamModeChange,
-  onTeamWorkspaceChange,
 }: {
   active: boolean;
   officeRuntime: Omit<CommandOfficeRoomProps, "isOpen"> | null;
   officeRoomId: string | null;
-  singleChatWorkspaceCwd: string;
   teamMode: TeamMode;
-  teamWorkspaceCwd: string;
-  teamWorkspaceOptions: Array<{ label: string; value: string }>;
   workflows: PlatformWorkflow[];
   expertTeams: ExpertTeamRecordReference[];
   expertTeamsStatus: "loading" | "ready" | "unavailable";
@@ -1423,7 +1354,6 @@ export function TeamView({
   ) => Promise<PlatformWorkflowExecution>;
   onSelectExpert: (record: ExpertTeamRecordReference) => void;
   onTeamModeChange: (mode: TeamMode) => void;
-  onTeamWorkspaceChange: (cwd: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [workflowRoomOpen, setWorkflowRoomOpen] = useState(false);
@@ -1513,55 +1443,6 @@ export function TeamView({
             </button>
           </div>
         </header>
-
-        <section
-          className="catalog-source-bar"
-          data-od-id="team-filters-inline"
-        >
-          {teamMode === "experts" ? (
-            <div className="team-workspace-scope is-single-chat">
-              <span className="team-workspace-scope-label">专家团工作空间</span>
-              <strong title={singleChatWorkspaceCwd}>
-                {singleChatWorkspaceCwd || "无工作空间"}
-              </strong>
-            </div>
-          ) : teamMode === "workflow" ? (
-            <div className="team-workspace-scope is-cloud-runtime">
-              <span className="team-workspace-scope-label">协作流执行环境</span>
-              <strong>Agent Platform 云端</strong>
-            </div>
-          ) : (
-            <label className="team-workspace-scope">
-              <span className="team-workspace-scope-label">办公室工作空间</span>
-              <span className="team-workspace-picker">
-                <select
-                  aria-label="办公室群聊工作空间"
-                  title={teamWorkspaceCwd}
-                  value={teamWorkspaceCwd}
-                  onChange={(event) =>
-                    onTeamWorkspaceChange(event.target.value)
-                  }
-                >
-                  {teamWorkspaceOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="team-workspace-path" title={teamWorkspaceCwd}>
-                  {teamWorkspaceCwd || "未选择工作空间"}
-                </span>
-              </span>
-            </label>
-          )}
-          <span className="catalog-context-note team-workspace-note">
-            {teamMode === "office"
-              ? "群聊空间 · 可 @ 任意员工 · 不影响主页单聊"
-              : teamMode === "workflow"
-                ? "云端执行 · 不上传本机路径或工作空间内容"
-                : "单聊模式 · 只与团长对话"}
-          </span>
-        </section>
 
         {teamMode === "office" || officeRoomId ? (
           <section

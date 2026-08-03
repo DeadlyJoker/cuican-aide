@@ -191,14 +191,10 @@ describe("CommandOfficeRoom", () => {
           onRetry: vi.fn(),
         }}
         officeRoomId={null}
-        singleChatWorkspaceCwd="/repo/personal"
         teamMode="office"
-        teamWorkspaceCwd="/repo/team"
-        teamWorkspaceOptions={[{ label: "team", value: "/repo/team" }]}
         onCreateOffice={vi.fn()}
         onRefresh={vi.fn()}
         onTeamModeChange={vi.fn()}
-        onTeamWorkspaceChange={vi.fn()}
       />,
     );
 
@@ -206,10 +202,8 @@ describe("CommandOfficeRoom", () => {
     expect(markup).toContain('data-office-empty-state="unavailable"');
     expect(markup).toContain("等待自动重试");
     expect(markup).toContain("立即重试");
-    expect(markup).toContain("办公室工作空间");
-    expect(markup).toContain("群聊空间 · 可 @ 任意员工 · 不影响主页单聊");
-    expect(markup).toContain(">team</option>");
-    expect(markup).not.toContain("team · /repo/team");
+    expect(markup).not.toContain("<option");
+    expect(markup).not.toContain("team-workspace-scope");
     expect(markup).not.toContain("设计交付办公室");
     expect(markup).toMatchSnapshot();
   });
@@ -221,21 +215,15 @@ describe("CommandOfficeRoom", () => {
         active
         officeRuntime={null}
         officeRoomId={null}
-        singleChatWorkspaceCwd="/repo/personal"
         teamMode="workflow"
-        teamWorkspaceCwd="/repo/team"
-        teamWorkspaceOptions={[{ label: "team", value: "/repo/team" }]}
         onCreateWorkflow={vi.fn()}
         onTeamModeChange={vi.fn()}
-        onTeamWorkspaceChange={vi.fn()}
       />,
     );
 
     expect(markup).toContain("当前账号没有可运行的协作流");
     expect(markup).toContain("不生成本地演示节点");
-    expect(markup).toContain("Agent Platform 云端");
     expect(markup).toContain("创建协作流");
-    expect(markup).toContain("不上传本机路径或工作空间内容");
     expect(markup).not.toContain("页面交付协作流");
     expect(markup).not.toContain("产品交付专家团");
     expect(markup).toMatchSnapshot();
@@ -255,21 +243,16 @@ describe("CommandOfficeRoom", () => {
           onOpen: vi.fn(),
         }}
         officeRoomId={null}
-        singleChatWorkspaceCwd="/repo/personal"
         teamMode="experts"
-        teamWorkspaceCwd="/repo/team"
-        teamWorkspaceOptions={[{ label: "team", value: "/repo/team" }]}
         onTeamModeChange={vi.fn()}
-        onTeamWorkspaceChange={vi.fn()}
       />,
     );
 
     expect(markup).toContain("代码审阅专家团");
     expect(markup).toContain("团长：审阅团长");
-    expect(markup).toContain("单聊模式 · 只与团长对话");
-    expect(markup).toContain("/repo/personal");
     expect(markup).not.toContain("同名办公室");
-    expect(markup).not.toContain("办公室群聊工作空间");
+    expect(markup).not.toContain("<option");
+    expect(markup).not.toContain("team-workspace-scope");
     expect(markup).toMatchSnapshot();
   });
 

@@ -619,7 +619,6 @@ describe("CommandWorkspace", () => {
       Array.from(commandHomeMarkup.matchAll(pattern), (match) => match[1]);
 
     expect({
-      capability: visibleText(/data-scene-capabilities="">([^<]+)/g),
       executionTargets: visibleText(
         /data-value="(?:crewon|team:[^"]+)"[^>]*><span><strong>([^<]+)/g,
       ),
@@ -633,6 +632,31 @@ describe("CommandWorkspace", () => {
         /data-value="(?:__no_workspace__|C:\\Users\\admin\\Documents\\crewon)"[^>]*>\s*<span><strong>([^<]+)/g,
       ),
     }).toMatchSnapshot();
+  });
+
+  /*
+   * Order is the point of the layout: the composer is what someone came to use,
+   * and the starter cards are the fallback underneath it. A snapshot alone would
+   * let a refactor quietly swap them, so the positions are compared directly.
+   */
+  it("puts the starter cards after the composer, not above it", () => {
+    const markup = renderCommandWorkspace();
+    const commandHomeMarkup = markup.slice(
+      markup.indexOf('data-shell-view="command"'),
+      markup.indexOf('data-shell-view="assist"'),
+    );
+
+    const composerAt = commandHomeMarkup.indexOf('data-od-id="ai-composer"');
+    const cardsAt = commandHomeMarkup.indexOf('data-od-id="quick-scenarios"');
+
+    expect(composerAt).toBeGreaterThan(-1);
+    expect(cardsAt).toBeGreaterThan(composerAt);
+  });
+
+  it("drops the recommended-capability line from the home scene", () => {
+    const markup = renderCommandWorkspace();
+
+    expect(markup).not.toContain("data-scene-capabilities");
   });
 
   it("renders only real workspaces and conversations in the sidebar", () => {

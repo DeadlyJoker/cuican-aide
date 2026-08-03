@@ -22,6 +22,7 @@ import {
   Target,
   Users,
 } from "lucide-react";
+import { isTauri } from "@tauri-apps/api/core";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import { shellNavItems } from "./commandWorkspaceData";
@@ -33,6 +34,8 @@ import type {
 import { classNames } from "./commandWorkspaceUtils";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
+import type { PlatformKind } from "../../lib/platform";
+import { TitleBarWindowControls } from "../TitleBarWindowControls";
 import {
   type AgentPlatformAccount,
   useAgentPlatformAccount,
@@ -212,6 +215,7 @@ export function CommandSidebar({
   isSearchOpen,
   linkedThreads = [],
   locale = "zh",
+  platform = "web",
   query,
   selectedLinkedThreadId,
   slots,
@@ -230,6 +234,7 @@ export function CommandSidebar({
   isSearchOpen: boolean;
   linkedThreads: CommandLinkedThread[];
   locale?: Locale;
+  platform?: PlatformKind;
   query: string;
   selectedLinkedThreadId: string | null;
   slots: CommandHomeSlots;
@@ -244,6 +249,7 @@ export function CommandSidebar({
   onToggleSearch: () => void;
 }) {
   const account = useAgentPlatformAccount();
+  const desktopRuntime = isTauri();
   const copy =
     locale === "zh"
       ? {
@@ -402,13 +408,27 @@ export function CommandSidebar({
       data-sidebar-log="command-log"
       data-sidebar-prefix="desktop"
       data-sidebar-shell=""
+      data-desktop-runtime={desktopRuntime ? "true" : undefined}
     >
-      <div className="sidebar-topbar" data-od-id="desktop-sidebar-topbar">
-        <div className="traffic" aria-hidden="true">
-          <span className="dot close" />
-          <span className="dot min" />
-          <span className="dot max" />
-        </div>
+      <div
+        className="sidebar-topbar"
+        data-od-id="desktop-sidebar-topbar"
+        data-tauri-drag-region={desktopRuntime ? "" : undefined}
+      >
+        {desktopRuntime ? (
+          <TitleBarWindowControls
+            desktopOnly
+            locale={locale}
+            platform={platform}
+            variant="command"
+          />
+        ) : (
+          <div className="traffic" aria-hidden="true">
+            <span className="dot close" />
+            <span className="dot min" />
+            <span className="dot max" />
+          </div>
+        )}
         <div className="sidebar-tools" aria-label={copy.sidebarTools}>
           <button
             aria-label={copy.collapseSidebar}
@@ -502,6 +522,7 @@ export function CommandSidebar({
         className="sidebar-brand"
         data-od-id="desktop-brand"
         href="#view-command"
+        style={desktopRuntime ? { left: 76 } : undefined}
         onClick={(event) => {
           event.preventDefault();
           onSwitchView("command");

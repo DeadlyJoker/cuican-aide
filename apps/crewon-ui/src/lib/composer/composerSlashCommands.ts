@@ -5,7 +5,10 @@ import type { SkillsListResponse } from "@crewon-protocol/v2/SkillsListResponse"
 import { isMissingThreadError } from "../app-server/appServer";
 import { listAppsForThreadOrGlobal } from "../app-server/appServerRequests";
 import type { PendingComposerMention } from "../shared/composerMentions";
-import { appMentionInfo } from "../shared/composerMentions";
+import {
+  appMentionInfo,
+  upsertPendingComposerMention,
+} from "../shared/composerMentions";
 import { appMentionSlug, promptPreview } from "../shared/text";
 
 type ComposerSlashCommandClient = {
@@ -149,8 +152,9 @@ function skillSlashCommands(
       label: skill.name,
       meta: "Skill",
       description:
-        promptPreview(skill.description || skill.shortDescription || skill.path) ||
-        skill.path,
+        promptPreview(
+          skill.description || skill.shortDescription || skill.path,
+        ) || skill.path,
       token: slashToken(skill.name),
       mention: {
         kind: "skill",
@@ -182,5 +186,41 @@ export async function loadComposerSlashCommands({
     ...appSlashCommands(settledValue(apps) ?? null),
     ...mcpSlashCommands(settledValue(mcp)),
     ...skillSlashCommands(settledValue(skills)),
+  ];
+}
+
+/**
+ * Adds the mention for a chosen slash command to the pending list.
+ *
+ * Apps carry a token that has to be reconciled with any text already typed, so
+ * they go through the token-aware upsert. Other resources are identified by path
+ * alone and are simply appended once.
+ */
+export function mentionsWithSlashCommand(
+  mentions: PendingComposerMention[],
+  command: ComposerSlashCommand,
+): PendingComposerMention[] {
+  if (command.kind === "app") {
+    return upsertPendingComposerMention(
+      mentions,
+      {
+        kind: command.mention.kind,
+        path: command.mention.path,
+        token: command.token,
+      },
+      command.mention.name,
+    );
+  }
+  if (mentions.some((mention) => mention.path === command.mention.path)) {
+    return mentions;
+  }
+  return [
+    ...mentions,
+    {
+      kind: command.mention.kind,
+      name: command.mention.name,
+      path: command.mention.path,
+      resourceKind: command.kind,
+    },
   ];
 }

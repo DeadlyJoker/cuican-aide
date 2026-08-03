@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import { Suspense, lazy } from "react";
 
 import type { CapabilityPanel } from "../../lib/capability/capabilityPanelTypes";
@@ -37,7 +38,11 @@ export function AppWorkspaceSettingsContent({
       fallback={
         <section className="settings-page" aria-label={t.settings}>
           <main className="settings-content">
-            <p className="settings-loading">{t.loadingThreads}</p>
+            <div className="route-loading-state" role="status" aria-live="polite">
+              <LoaderCircle aria-hidden="true" size={18} />
+              <strong>{t.loadingThreads}</strong>
+              <small>{t.loadingRouteHint}</small>
+            </div>
           </main>
         </section>
       }
