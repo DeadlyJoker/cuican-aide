@@ -58,7 +58,7 @@ where
     fn spec(&self) -> ToolSpec {
         memory_function_tool::<SearchArgs, SearchMemoriesResponse>(
             SEARCH_TOOL_NAME,
-            "Search Crewon memory files for substring matches, optionally normalizing separators or requiring all query substrings on the same line or within a line window.",
+            "Search Crewon memory files, including pending ad-hoc notes, for substring matches. Supports separator normalization and requiring all query substrings on the same line or within a line window.",
         )
     }
 

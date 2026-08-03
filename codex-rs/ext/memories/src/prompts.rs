@@ -13,6 +13,8 @@ static MEMORY_TOOL_DEVELOPER_INSTRUCTIONS_TEMPLATE: LazyLock<Template> = LazyLoc
     )
 });
 
+const PENDING_MEMORY_SUMMARY_PLACEHOLDER: &str = "No consolidated memory summary is available yet. Pending ad-hoc notes may still contain remembered facts; search them before concluding that memory is empty.";
+
 fn parse_embedded_template(source: &'static str, template_name: &str) -> Template {
     match Template::parse(source) {
         Ok(template) => template,
@@ -31,16 +33,37 @@ pub(crate) async fn build_memory_tool_developer_instructions(
     let memory_summary_path = base_path.join("memory_summary.md");
     let memory_summary = fs::read_to_string(&memory_summary_path)
         .await
-        .ok()?
-        .trim()
-        .to_string();
+        .ok()
+        .map(|summary| summary.trim().to_string())
+        .filter(|summary| !summary.is_empty());
+    if memory_summary.is_none() {
+        let notes_path = base_path.join("extensions").join("ad_hoc").join("notes");
+        let mut entries = fs::read_dir(notes_path).await.ok()?;
+        let mut has_ad_hoc_note = false;
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let file_name = entry.file_name();
+            if file_name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+            if entry
+                .file_type()
+                .await
+                .is_ok_and(|file_type| file_type.is_file())
+            {
+                has_ad_hoc_note = true;
+                break;
+            }
+        }
+        if !has_ad_hoc_note {
+            return None;
+        }
+    }
+    let memory_summary =
+        memory_summary.unwrap_or_else(|| PENDING_MEMORY_SUMMARY_PLACEHOLDER.to_string());
     let memory_summary = truncate_text(
         &memory_summary,
         TruncationPolicy::Tokens(MEMORY_TOOL_DEVELOPER_INSTRUCTIONS_SUMMARY_TOKEN_LIMIT),
     );
-    if memory_summary.is_empty() {
-        return None;
-    }
     let base_path = base_path.display().to_string();
     MEMORY_TOOL_DEVELOPER_INSTRUCTIONS_TEMPLATE
         .render([

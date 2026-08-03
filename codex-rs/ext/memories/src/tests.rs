@@ -194,7 +194,7 @@ async fn prompt_contribution_uses_memory_summary_when_enabled() {
 }
 
 #[tokio::test]
-async fn add_ad_hoc_note_tool_creates_note_file() {
+async fn ad_hoc_note_tool_is_visible_to_new_thread_before_consolidation() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let memory_root = tempdir.path().join("memories");
     let tool = memory_tool(&memory_root, crate::ADD_AD_HOC_NOTE_TOOL_NAME);
@@ -233,6 +233,28 @@ async fn add_ad_hoc_note_tool_creates_note_file() {
         .await
         .expect("read ad-hoc note"),
         "Remember to keep PR review comments concise."
+    );
+
+    let extension = MemoriesExtension::default();
+    let new_thread_store = ExtensionData::new("new-thread");
+    new_thread_store.insert(MemoriesExtensionConfig {
+        enabled: true,
+        dedicated_tools: true,
+        crewon_home: tempdir.path().abs(),
+    });
+
+    let fragments = extension
+        .contribute(&ExtensionData::new("new-session"), &new_thread_store)
+        .await;
+
+    assert_eq!(fragments.len(), 1);
+    assert_eq!(fragments[0].slot(), PromptSlot::DeveloperPolicy);
+    assert!(fragments[0].text().contains("extensions/ad_hoc/notes/"));
+    assert!(fragments[0].text().contains("You MUST search memory"));
+    assert!(
+        !fragments[0]
+            .text()
+            .contains("Remember to keep PR review comments concise.")
     );
 }
 
