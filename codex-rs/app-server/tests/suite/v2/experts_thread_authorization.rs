@@ -16,6 +16,7 @@ use app_test_support::create_mock_responses_server_sequence_unchecked;
 use app_test_support::to_response;
 use crewon_app_server_protocol::ClientInfo;
 use crewon_app_server_protocol::ExpertTeamCreateResponse;
+use crewon_app_server_protocol::ExpertTeamListResponse;
 use crewon_app_server_protocol::InitializeCapabilities;
 use crewon_app_server_protocol::InitializeParams;
 use crewon_app_server_protocol::JSONRPCMessage;
@@ -74,21 +75,50 @@ async fn experts_single_tenant_websocket_mode_is_explicit_and_functional() -> Re
     .await
     .context("timed out creating the single-tenant Expert Team")??;
     let cwd = workspace_root_for_record(&created.record.file_path)?;
+    drop(client);
 
-    let mut thread_start =
-        experts_thread_start_params(&cwd, &workspace_key, &created.record.config.experts_id);
+    let mut reconnected =
+        tokio::time::timeout(Duration::from_secs(10), connect_websocket(bind_addr))
+            .await
+            .context("timed out reconnecting single-tenant Experts websocket")??;
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        initialize(&mut reconnected, /*id*/ 10),
+    )
+    .await
+    .context("timed out initializing reconnected single-tenant Experts websocket")??;
+    let reconnected_workspace_key = tokio::time::timeout(
+        Duration::from_secs(10),
+        read_workspace_key(&mut reconnected, /*id*/ 11),
+    )
+    .await
+    .context("timed out listing the reconnected single-tenant Experts workspace")??;
+    assert_eq!(reconnected_workspace_key, workspace_key);
+    let listed = tokio::time::timeout(
+        Duration::from_secs(10),
+        list_expert_teams(&mut reconnected, /*id*/ 12, &reconnected_workspace_key),
+    )
+    .await
+    .context("timed out listing Expert Teams after reconnect")??;
+    assert_eq!(listed.data, vec![created.record.clone()]);
+
+    let mut thread_start = experts_thread_start_params(
+        &cwd,
+        &reconnected_workspace_key,
+        &created.record.config.experts_id,
+    );
     thread_start.execution_context = None;
     send_request(
-        &mut client,
+        &mut reconnected,
         "thread/start",
-        /*id*/ 4,
+        /*id*/ 13,
         Some(serde_json::to_value(thread_start)?),
     )
     .await?;
     let started: ThreadStartResponse = to_response(
         tokio::time::timeout(
             Duration::from_secs(10),
-            read_response_for_id(&mut client, /*id*/ 4),
+            read_response_for_id(&mut reconnected, /*id*/ 13),
         )
         .await
         .context("timed out starting the single-tenant Experts thread")??,
@@ -103,7 +133,7 @@ async fn experts_single_tenant_websocket_mode_is_explicit_and_functional() -> Re
     );
 
     std::fs::remove_file(&created.record.file_path)?;
-    client.close(None).await?;
+    drop(reconnected);
     process
         .kill()
         .await
@@ -447,6 +477,25 @@ async fn create_expert_team(
                     "instructions": "Return concrete risks"
                 }
             ]
+        })),
+    )
+    .await?;
+    to_response(read_response_for_id(stream, id).await?)
+}
+
+async fn list_expert_teams(
+    stream: &mut WsClient,
+    id: i64,
+    workspace_key: &str,
+) -> Result<ExpertTeamListResponse> {
+    send_request(
+        stream,
+        "expertTeam/list",
+        id,
+        Some(json!({
+            "workspaceKey": workspace_key,
+            "cursor": null,
+            "limit": 100
         })),
     )
     .await?;

@@ -37,6 +37,7 @@ const MAX_REGISTERED_WORKSPACE_ROOTS: usize = 64;
 const MAX_WORKSPACE_BINDINGS: usize = 256;
 const MAX_WORKSPACE_KEY_CHARS: usize = 128;
 const MAX_WORKSPACE_SCOPE_ID_CHARS: usize = 256;
+const SINGLE_TENANT_WEBSOCKET_ENV: &str = "CREWON_EXPERT_TEAM_SINGLE_TENANT_WEBSOCKET_ENABLED";
 
 /// Server-owned roots that may be granted opaque keys to a connection session.
 #[derive(Debug, Clone)]
@@ -396,13 +397,24 @@ fn workspace_key_mode<'a>(
     identity: &RequestIdentity,
     state: Option<&'a StateRuntime>,
 ) -> Result<WorkspaceKeyMode<'a>, JSONRPCErrorError> {
-    if identity.authenticated_principal().is_some() {
+    // Expert definitions are stored below the workspace root and must remain
+    // addressable after the browser reconnects. The explicit single-tenant
+    // gate gives that deployment a durable server-owned key without changing
+    // the default unauthenticated WebSocket isolation model.
+    if identity.authenticated_principal().is_some()
+        || (identity.transport() == RequestIdentityTransport::WebSocket
+            && single_tenant_websocket_experts_enabled())
+    {
         Ok(WorkspaceKeyMode::Durable(state.ok_or_else(|| {
             internal_error("durable workspace authority is unavailable")
         })?))
     } else {
         Ok(WorkspaceKeyMode::ConnectionScoped)
     }
+}
+
+fn single_tenant_websocket_experts_enabled() -> bool {
+    std::env::var(SINGLE_TENANT_WEBSOCKET_ENV).is_ok_and(|value| value == "true")
 }
 
 #[derive(Debug, Default)]
