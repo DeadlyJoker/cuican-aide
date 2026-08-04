@@ -1393,7 +1393,18 @@
   background: oklch(70% 0.13 78);
   box-shadow: 0 0 0 3px oklch(70% 0.13 78 / 0.12);
 }
-@media (max-width: 860px) {
+/*
+ * Query the canvas, not the viewport: the window stays wide while this canvas
+ * shrinks behind the workbench, so @media never matched and the three capability
+ * cards stayed side by side in a half-width column, wrapping their labels one
+ * character per line.
+ */
+@container page-stack (max-width: 1080px) {
+  .shell-page-view .team-office-capability-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container page-stack (max-width: 860px) {
   .shell-page-view .team-office-empty {
     min-height: 0;
   }
@@ -1401,7 +1412,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (max-width: 560px) {
+@container page-stack (max-width: 560px) {
   .shell-page-view .team-office-empty-footer {
     align-items: stretch;
     flex-direction: column;
@@ -2028,7 +2039,8 @@
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
-@media (max-width: 1180px) {
+/* Canvas-relative: the window stays wide while the canvas shrinks. */
+@container page-stack (max-width: 1180px) {
   .shell-page-view .office-card-grid,
   .shell-page-view .expert-team-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2098,7 +2110,8 @@
   height: 14px;
   flex: 0 0 auto;
 }
-@media (max-width: 860px) {
+/* Canvas-relative: the window stays wide while the canvas shrinks. */
+@container page-stack (max-width: 860px) {
   .shell-page-view .team-capability-live-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2228,7 +2241,60 @@
   line-height: 1.55;
 }
 .team-capability-create-card {
-  width: min(620px, calc(100vw - 32px));
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(860px, calc(100vh - 32px));
+  overflow: auto;
+}
+.workflow-node-builder,
+.workflow-node-list {
+  display: grid;
+  gap: 10px;
+}
+.workflow-node-builder-head,
+.workflow-node-editor > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.workflow-node-builder-head > div {
+  min-width: 0;
+}
+.workflow-node-builder-head strong,
+.workflow-node-editor > header strong {
+  color: var(--n-950);
+  font-size: calc(13px + var(--user-ui-font-delta));
+}
+.workflow-node-builder-head p {
+  margin: 3px 0 0;
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+.workflow-node-editor {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-lg);
+  background: var(--n-25);
+}
+.workflow-node-editor > header > span {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--n-200);
+  color: var(--n-900);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 600;
+}
+.workflow-node-editor > header > strong {
+  flex: 1;
+}
+.workflow-node-editor > header > div {
+  display: flex;
+  gap: 4px;
 }
 .team-capability-scope-preview {
   display: grid;
@@ -5249,7 +5315,13 @@ body.modal-open {
     padding: 12px;
   }
   .shell-page-view .capability-catalog,
-  .shell-page-view .metric-grid,
+  .shell-page-view .metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Canvas-relative: the card grid tracks its column, not the window. */
+@container page-stack (max-width: 760px) {
   .shell-page-view .office-card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -5389,18 +5461,39 @@ body.modal-open {
 :root[data-theme="light"]
   .command-shell-route
   .screen-shell.command-screen
+  :is(.scene-pills, .quick-row button, .workspace-pill) {
+  /*
+   * Controls read as fills; the ring only appears on hover/focus. They sit one
+   * step back from their container, which shared the same
+   * --command-control-bg and left the composer flat.
+   */
+  border-color: transparent;
+  background: oklch(96.5% 0 0);
+  color: oklch(31% 0 0);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .scene-pills
+  button {
+  /* Tabs stay transparent so the sliding thumb reads as one group. */
+  border-color: transparent;
+  background: transparent;
+  color: oklch(31% 0 0);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
   :is(
-    .scene-pills,
-    .scene-pills button,
-    .quick-row button,
     .input-tools button:not(.send-button),
-    .workspace-pill,
     .control-select .select-trigger,
     .workspace-picker .select-trigger
   ) {
-  /* Controls read as fills; the ring only appears on hover/focus. */
+  /* Composer controls stay chrome-free until hover, mirroring dark mode. */
   border-color: transparent;
-  background: var(--command-control-bg);
+  background: transparent;
   color: oklch(31% 0 0);
 }
 
@@ -5417,15 +5510,21 @@ body.modal-open {
 :root[data-theme="light"]
   .command-shell-route
   .screen-shell.command-screen
+  :is(.quick-row button, .workspace-pill):is(:hover, :focus-visible) {
+  border-color: var(--command-control-border);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
   :is(
-    .scene-pills button,
-    .quick-row button,
     .input-tools button:not(.send-button),
-    .workspace-pill,
     .control-select .select-trigger,
     .workspace-picker .select-trigger
   ):is(:hover, :focus-visible) {
-  border-color: var(--command-control-border);
+  /* Hover is the only time a composer control shows a surface. */
+  border-color: transparent;
+  background: oklch(94% 0 0);
 }
 
 :root[data-theme="light"]
@@ -5789,18 +5888,23 @@ body.modal-open {
   .screen-shell.command-screen
   .shell-page-view {
   background: #171717;
-  color: var(--n-250);
+  color: var(--n-750);
 }
 
 :root:not([data-theme="light"])
   .command-shell-route
   .screen-shell.command-screen {
   --command-sidebar-bg: #202020;
-  --command-sidebar-border: var(--n-850);
+  /*
+   * Dark-mode hairlines sit close to their surface. Driving these from the
+   * neutral scale resolved --n-850 to oklch(87%), ringing every control in a
+   * near-white outline against the near-black canvas.
+   */
+  --command-sidebar-border: #303030;
   --command-sidebar-hover: #292929;
   --command-sidebar-active: #343434;
   --command-control-bg: #242424;
-  --command-control-border: var(--n-800);
+  --command-control-border: #3a3a3a;
 }
 
 :root:not([data-theme="light"])
@@ -5843,14 +5947,14 @@ body.modal-open {
     .conversation-item,
     .sidebar-account summary
   ) {
-  color: var(--n-400);
+  color: var(--n-600);
 }
 
 :root:not([data-theme="light"])
   .command-shell-route
   .screen-shell.command-screen
   :is(.space-title strong, .sidebar-account strong, .tree-head strong) {
-  color: var(--n-250);
+  color: var(--n-750);
 }
 
 :root:not([data-theme="light"])
@@ -5882,7 +5986,7 @@ body.modal-open {
   .screen-shell.command-screen
   .conversation-item.active {
   background: var(--command-sidebar-hover);
-  color: var(--n-150);
+  color: var(--n-850);
 }
 
 :root:not([data-theme="light"])
@@ -5896,47 +6000,97 @@ body.modal-open {
     .command-input textarea,
     .command-thread-runtime strong
   ) {
-  color: var(--n-200);
+  color: var(--n-800);
 }
+
+/*
+ * The scene thumb inherits --accent, which is near-white in dark mode. That
+ * reads as a bright slab against the grey control family, so keep it inside the
+ * same ladder: one step above the controls, with light text.
+ */
+:root:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen
+  .scene-pill-thumb {
+  background: #454545;
+}
+:root:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen
+  :is(.scene-pills, .command-input, .workspace-pill) {
+  /*
+   * Containers sit one step above the canvas and keep a hairline, which is what
+   * separates the composer panel from the page.
+   *
+   * Dark-mode hairlines stay close to their surface. The neutral scale resolves
+   * --n-800 to oklch(83%) here, which ringed every control in a near-white
+   * outline against the near-black canvas.
+   */
+  border-color: #3a3a3a;
+  background: #242424;
+  color: var(--n-650);
+}
+
 
 :root:not([data-theme="light"])
   .command-shell-route
   .screen-shell.command-screen
   :is(
-    .scene-pills,
-    .scene-pills button,
-    .quick-row button,
     .input-tools button:not(.send-button),
-    .workspace-pill,
-    .command-input,
     .control-select .select-trigger,
     .workspace-picker .select-trigger
   ) {
-  border-color: var(--n-800);
-  background: #242424;
-  color: var(--n-350);
+  /*
+   * Composer controls carry no chrome of their own: icon and label sit directly
+   * on the panel, and a fill only appears on hover. Giving each one a chip
+   * background turned the toolbar into a row of competing boxes, which pulled
+   * attention away from the send button -- the only control that should read as
+   * filled.
+   */
+  border-color: transparent;
+  background: transparent;
+  color: var(--n-800);
+}
+
+:root:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen
+  .quick-row
+  button {
+  border-color: transparent;
+  background: #303030;
+  color: var(--n-800);
 }
 
 :root:not([data-theme="light"])
   .command-shell-route
   .screen-shell.command-screen
   :is(
-    .scene-pills button,
-    .quick-row button,
     .input-tools button:not(.send-button),
     .control-select .select-trigger,
     .workspace-picker .select-trigger
   ):hover {
-  border-color: var(--n-750);
-  background: #303030;
-  color: var(--n-50);
+  /* Hover is the only time a composer control shows a surface. */
+  border-color: transparent;
+  background: #2e2e2e;
+  color: var(--n-950);
+}
+
+:root:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen
+  .quick-row
+  button:hover {
+  border-color: transparent;
+  background: #3a3a3a;
+  color: var(--n-950);
 }
 
 :root:not([data-theme="light"])
   .command-shell-route
   .screen-shell.command-screen
   .command-thread-toolbar {
-  border-color: var(--n-850);
+  border-color: #303030;
 }
 
 :root:not([data-theme="light"])
@@ -5956,7 +6110,7 @@ body.modal-open {
   .screen-shell.command-screen
   .command-thread-room
   .turn-process-details {
-  color: var(--n-250);
+  color: var(--n-750);
 }
 
 :root:not([data-theme="light"])
@@ -5991,9 +6145,9 @@ body.modal-open {
     .context-palette,
     .select-menu
   ) {
-  border-color: var(--n-800);
+  border-color: #343434;
   background: #242424;
-  color: var(--n-250);
+  color: var(--n-750);
   box-shadow: var(--shadow-modal);
 }
 
@@ -6005,9 +6159,9 @@ body.modal-open {
     .sidebar-workspace-form input,
     .context-palette input
   ) {
-  border-color: var(--n-800);
+  border-color: #3a3a3a;
   background: #1d1d1d;
-  color: var(--n-250);
+  color: var(--n-750);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -8503,7 +8657,7 @@ body.modal-open {
   .assistant-thread-room
   .message[data-kind="agentMessage"]
   .markdown-content {
-  color: var(--n-250);
+  color: var(--n-750);
 }
 
 :root:not([data-theme="light"])
@@ -8517,7 +8671,7 @@ body.modal-open {
   .message[data-kind="agentMessage"]
   .markdown-content
   :is(h1, h2, h3, h4, strong) {
-  color: var(--n-200);
+  color: var(--n-800);
 }
 
 :root:not([data-theme="light"])
@@ -8550,7 +8704,7 @@ body.modal-open {
   > code {
   border: 0;
   background: var(--n-0);
-  color: var(--n-150);
+  color: var(--n-850);
 }
 
 :root:not([data-theme="light"])
@@ -8576,7 +8730,7 @@ body.modal-open {
   .assistant-single-conversation
   .command-input
   textarea {
-  color: var(--n-200);
+  color: var(--n-800);
 }
 
 :root:not([data-theme="light"])
@@ -9390,9 +9544,9 @@ body.modal-open {
   height: 100dvh;
   grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
-  border-left: 1px solid var(--n-900);
-  background: var(--n-1000);
-  color: var(--n-150);
+  border-left: 1px solid oklch(30% 0 0);
+  background: oklch(18% 0 0);
+  color: oklch(94.5% 0 0);
 }
 
 .command-workbench[data-empty="true"] {
@@ -9408,8 +9562,8 @@ body.modal-open {
   justify-content: space-between;
   gap: 10px;
   padding: 4px 8px 4px 10px;
-  border-bottom: 1px solid var(--n-900);
-  background: var(--n-1000);
+  border-bottom: 1px solid oklch(30% 0 0);
+  background: oklch(18% 0 0);
 }
 
 .command-workbench-tabs {
@@ -9431,14 +9585,14 @@ body.modal-open {
   overflow: hidden;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: var(--n-950);
-  color: var(--n-450);
+  background: oklch(24% 0 0);
+  color: oklch(80% 0 0);
 }
 
 .command-workbench-tab[data-active="true"] {
-  border-color: var(--n-900);
-  background: var(--n-900);
-  color: var(--n-75);
+  border-color: oklch(30% 0 0);
+  background: oklch(30% 0 0);
+  color: oklch(97% 0 0);
 }
 
 .command-workbench-tab > button:first-child {
@@ -9479,7 +9633,7 @@ body.modal-open {
   place-items: center;
   border: 0;
   background: transparent;
-  color: var(--n-550);
+  color: oklch(70% 0 0);
   cursor: pointer;
 }
 
@@ -9492,8 +9646,8 @@ body.modal-open {
 .command-workbench-tab-close:hover,
 .command-workbench-add:hover,
 .command-workbench-close:hover {
-  background: var(--n-900);
-  color: var(--n-0);
+  background: oklch(30% 0 0);
+  color: oklch(100% 0 0);
 }
 
 .command-workbench-launcher-anchor {
@@ -9505,7 +9659,7 @@ body.modal-open {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-md);
-  color: var(--n-250);
+  color: oklch(91% 0 0);
 }
 
 .command-workbench-close {
@@ -9529,9 +9683,9 @@ body.modal-open {
   left: 0;
   width: 284px;
   padding: 5px;
-  border: 1px solid var(--n-850);
+  border: 1px solid oklch(36% 0 0);
   border-radius: var(--radius-lg);
-  background: var(--n-900);
+  background: oklch(30% 0 0);
   box-shadow: var(--shadow-modal);
 }
 
@@ -9566,8 +9720,8 @@ body.modal-open {
   padding: 0 10px;
   border: 0;
   border-radius: var(--radius-md);
-  background: var(--n-950);
-  color: var(--n-200);
+  background: oklch(24% 0 0);
+  color: oklch(93% 0 0);
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -9579,8 +9733,8 @@ body.modal-open {
 
 .command-workbench-launcher > button:hover,
 .command-workbench-launcher > button:focus-visible {
-  background: var(--n-850);
-  color: var(--n-0);
+  background: oklch(36% 0 0);
+  color: oklch(100% 0 0);
   outline: 0;
 }
 
@@ -9602,12 +9756,12 @@ body.modal-open {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-  color: var(--n-450);
+  color: oklch(80% 0 0);
   stroke-width: 1.65;
 }
 
 .command-workbench-launcher > button kbd {
-  color: var(--n-550);
+  color: oklch(70% 0 0);
   font-family: inherit;
   font-size: calc(11px + var(--user-ui-font-delta));
 }
@@ -9617,8 +9771,8 @@ body.modal-open {
   min-height: 34px;
   overflow: hidden;
   padding: 9px 14px 7px;
-  border-bottom: 1px solid var(--n-900);
-  color: var(--n-450);
+  border-bottom: 1px solid oklch(30% 0 0);
+  color: oklch(80% 0 0);
   font-family: var(--font-mono);
   font-size: calc(11px + var(--user-ui-font-delta));
   text-overflow: ellipsis;
@@ -9638,7 +9792,7 @@ body.modal-open {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  background: var(--n-1000);
+  background: oklch(18% 0 0);
 }
 
 .command-workbench-file-preview > section {
@@ -9651,7 +9805,7 @@ body.modal-open {
   margin: 0;
   padding: 18px 20px 40px;
   overflow: auto;
-  color: var(--n-300);
+  color: oklch(89% 0 0);
   font-family: var(--font-mono);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.55;
@@ -9665,7 +9819,7 @@ body.modal-open {
   align-content: center;
   justify-items: center;
   gap: 6px;
-  color: var(--n-600);
+  color: oklch(62% 0 0);
   text-align: center;
 }
 
@@ -9679,7 +9833,7 @@ body.modal-open {
 
 .command-workbench-file-empty strong,
 .command-workbench-tool-empty strong {
-  color: var(--n-250);
+  color: oklch(91% 0 0);
   font-size: calc(13px + var(--user-ui-font-delta));
   font-weight: 500;
 }
@@ -9694,8 +9848,8 @@ body.modal-open {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border-left: 1px solid var(--n-900);
-  background: var(--n-950);
+  border-left: 1px solid oklch(30% 0 0);
+  background: oklch(24% 0 0);
 }
 
 .command-workbench-file-search {
@@ -9719,18 +9873,18 @@ body.modal-open {
   height: 27px;
   min-width: 0;
   padding: 0 8px;
-  border: 1px solid var(--n-900);
+  border: 1px solid oklch(30% 0 0);
   border-radius: var(--radius-md);
   outline: 0;
-  background: var(--n-950);
-  color: var(--n-300);
+  background: oklch(24% 0 0);
+  color: oklch(89% 0 0);
   font: inherit;
   font-size: calc(11px + var(--user-ui-font-delta));
 }
 
 .command-workbench-file-search input:focus,
 .command-workbench-file-search select:focus {
-  border-color: var(--n-800);
+  border-color: oklch(42% 0 0);
 }
 
 .command-workbench-file-actions {
@@ -9743,18 +9897,18 @@ body.modal-open {
 .command-workbench-file-actions button {
   height: 25px;
   padding: 0 7px;
-  border: 1px solid var(--n-900);
+  border: 1px solid oklch(30% 0 0);
   border-radius: var(--radius-sm);
-  background: var(--n-950);
-  color: var(--n-450);
+  background: oklch(24% 0 0);
+  color: oklch(80% 0 0);
   cursor: pointer;
   font: inherit;
   font-size: calc(11px + var(--user-ui-font-delta));
 }
 
 .command-workbench-file-actions button:hover {
-  background: var(--n-900);
-  color: var(--n-0);
+  background: oklch(30% 0 0);
+  color: oklch(100% 0 0);
 }
 
 .command-workbench-file-tree {
@@ -9776,7 +9930,7 @@ body.modal-open {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--n-400);
+  color: oklch(84% 0 0);
   cursor: pointer;
   font: inherit;
   font-size: calc(12px + var(--user-ui-font-delta));
@@ -9785,8 +9939,8 @@ body.modal-open {
 
 .command-workbench-file-row:hover,
 .command-workbench-file-row:focus-visible {
-  background: var(--n-900);
-  color: var(--n-0);
+  background: oklch(30% 0 0);
+  color: oklch(100% 0 0);
   outline: 0;
 }
 
@@ -9798,7 +9952,7 @@ body.modal-open {
 .command-workbench-file-row svg {
   width: 14px;
   height: 14px;
-  color: var(--n-500);
+  color: oklch(74% 0 0);
   stroke-width: 1.55;
 }
 
@@ -9820,7 +9974,7 @@ body.modal-open {
   height: 100%;
   min-height: 0;
   overflow: auto;
-  background: var(--n-1000);
+  background: oklch(18% 0 0);
 }
 
 .command-workbench-generic-surface .capability-result {
@@ -9833,7 +9987,7 @@ body.modal-open {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--n-300);
+  color: oklch(89% 0 0);
 }
 
 .command-workbench-generic-surface .capability-result-header {
@@ -9852,16 +10006,16 @@ body.modal-open {
     .capability-field-list input,
     .capability-field-list select
   ) {
-  border-color: var(--n-850);
-  background: var(--n-950);
-  color: var(--n-250);
+  border-color: oklch(36% 0 0);
+  background: oklch(24% 0 0);
+  color: oklch(91% 0 0);
 }
 
 .command-workbench-generic-surface
   :is(.capability-command-form button, .capability-result-actions button) {
-  border-color: var(--n-850);
-  background: var(--n-900);
-  color: var(--n-300);
+  border-color: oklch(36% 0 0);
+  background: oklch(30% 0 0);
+  color: oklch(89% 0 0);
 }
 
 .command-workbench-generic-surface .capability-result-output {
@@ -9872,14 +10026,14 @@ body.modal-open {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--n-300);
+  color: oklch(89% 0 0);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.55;
 }
 
 .command-workbench-generic-surface[data-tool-id="terminal"]
   .capability-result-output {
-  color: var(--n-300);
+  color: oklch(89% 0 0);
 }
 
 .command-workbench-trigger {
@@ -9892,13 +10046,13 @@ body.modal-open {
   margin-top: 8px;
   border: 0;
   background: transparent;
-  color: var(--n-500);
+  color: oklch(74% 0 0);
   box-shadow: none;
 }
 
 .command-workbench-trigger:hover {
-  background: var(--n-900);
-  color: var(--n-0);
+  background: oklch(30% 0 0);
+  color: oklch(100% 0 0);
 }
 
 .command-workbench-trigger svg {
@@ -9939,7 +10093,7 @@ body.modal-open {
  * specificity, and because they resolve through --accent-ink and the neutral
  * scale they stay correct in both themes.
  */
-:root[data-theme]
+:root[data-theme="light"]
   .command-shell-route
   .screen-shell.command-screen
   .scene-tabs.scene-pills
@@ -9950,13 +10104,28 @@ body.modal-open {
 }
 
 /*
+ * Dark mode paints the thumb from the grey ladder rather than --accent, so the
+ * label needs light ink; --accent-ink is near-black to suit the near-white
+ * accent and would vanish on the grey thumb.
+ */
+:root:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen
+  .scene-tabs.scene-pills
+  button.active {
+  border-color: transparent;
+  background: transparent;
+  color: var(--n-950);
+}
+
+/*
  * Theme-scoped `:is(...)` rules above match `.quick-row button` and flatten its
  * border to transparent. Those use an attribute selector inside `:is()`, so they
  * outrank ordinary class selectors; matching that weight with `:where()` at zero
  * cost is not enough either. The cards therefore assert their own box at a
  * deliberately higher weight, scoped by the shell so nothing else is affected.
  */
-:root[data-theme]
+:root[data-theme="light"]
   .command-shell-route
   .screen-shell.command-screen
   .quick-row
@@ -9966,11 +10135,56 @@ body.modal-open {
   color: var(--text);
 }
 
-:root[data-theme]
+:root[data-theme="light"]
   .command-shell-route
   .screen-shell.command-screen
   .quick-row
   button.quick-card:hover {
   border: 1px solid var(--n-300);
   background: var(--n-0);
+}
+
+/*
+ * Dark mode gives the cards a raised fill instead of an outline: a border over a
+ * transparent card reads as an empty frame against the near-black canvas.
+ */
+:root:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen
+  .quick-row
+  button.quick-card {
+  border: 1px solid transparent;
+  background: #202020;
+  color: var(--text);
+}
+
+:root:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen
+  .quick-row
+  button.quick-card:hover {
+  border: 1px solid transparent;
+  background: #2a2a2a;
+}
+
+/*
+ * Scene tabs are painted by the sliding thumb behind them, so each tab must stay
+ * transparent. Earlier `:is(...)` groups list `.scene-pills button` alongside
+ * its own container and win on specificity, which gave every tab a fill and a
+ * hairline and split the group into three separate boxes. Matching the element
+ * as well as the class settles it in both themes.
+ */
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .scene-tabs.scene-pills
+  button {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.command-shell .composer-inline-error {
+  color: var(--text-danger, #b42318);
+  font-size: 12px;
+  margin: 6px 16px 0;
 }

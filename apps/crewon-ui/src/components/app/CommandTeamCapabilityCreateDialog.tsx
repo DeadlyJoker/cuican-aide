@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import type {
@@ -8,11 +8,25 @@ import type {
 
 export type CommandTeamCapabilityKind = "experts" | "workflow";
 
+export type WorkflowAgentOption = {
+  apiEnabled: boolean;
+  description: string;
+  id: number;
+  name: string;
+};
+
+export type WorkflowAgentNodeInput = {
+  agentId: number;
+  instruction: string;
+  title: string;
+};
+
 export type CommandTeamCapabilityCreateInput =
   | {
       kind: "workflow";
       goal: string;
       lead: string;
+      nodes: WorkflowAgentNodeInput[];
       title: string;
     }
   | {
@@ -29,16 +43,29 @@ type ExpertDraft = {
   role: string;
 };
 
+type WorkflowNodeDraft = {
+  agentId: string;
+  instruction: string;
+  title: string;
+};
+
 const EMPTY_EXPERT: ExpertDraft = {
   agentType: "explorer",
   name: "",
   role: "",
 };
 
+const EMPTY_WORKFLOW_NODE: WorkflowNodeDraft = {
+  agentId: "",
+  instruction: "",
+  title: "",
+};
+
 export function CommandTeamCapabilityCreateDialog({
   kind,
   busy = false,
   error = null,
+  workflowAgents = [],
   workspaceCwd,
   onClose,
   onSubmit,
@@ -46,6 +73,7 @@ export function CommandTeamCapabilityCreateDialog({
   kind: CommandTeamCapabilityKind;
   busy?: boolean;
   error?: string | null;
+  workflowAgents?: WorkflowAgentOption[];
   workspaceCwd: string;
   onClose: () => void;
   onSubmit: (input: CommandTeamCapabilityCreateInput) => void;
@@ -60,7 +88,13 @@ export function CommandTeamCapabilityCreateDialog({
     EMPTY_EXPERT,
     { ...EMPTY_EXPERT, agentType: "worker" },
   ]);
+  const [workflowNodes, setWorkflowNodes] = useState<WorkflowNodeDraft[]>([
+    EMPTY_WORKFLOW_NODE,
+  ]);
   const workflow = kind === "workflow";
+  const runnableWorkflowAgents = workflowAgents.filter(
+    (agent) => agent.apiEnabled,
+  );
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -75,15 +109,41 @@ export function CommandTeamCapabilityCreateDialog({
     const normalizedGoal = goal.trim();
     const normalizedLead = lead.trim();
     const normalizedTitle = title.trim();
-    if (!normalizedGoal || !normalizedLead || !normalizedTitle) {
+    if (
+      !normalizedGoal ||
+      (!workflow && !normalizedLead) ||
+      !normalizedTitle
+    ) {
       setFormError("请完整填写名称、目标和负责人信息。");
       return;
     }
     if (workflow) {
+      const normalizedNodes = workflowNodes.map((node) => ({
+        agentId: Number(node.agentId),
+        instruction: node.instruction.trim(),
+        title: node.title.trim(),
+      }));
+      if (
+        normalizedNodes.length === 0 ||
+        normalizedNodes.some(
+          (node) =>
+            !Number.isInteger(node.agentId) ||
+            node.agentId <= 0 ||
+            !node.title ||
+            !node.instruction,
+        )
+      ) {
+        setFormError("请至少配置一个完整的 Agent 节点。");
+        return;
+      }
+      const leadAgent = workflowAgents.find(
+        (agent) => agent.id === normalizedNodes[0]?.agentId,
+      );
       onSubmit({
         kind: "workflow",
         goal: normalizedGoal,
-        lead: normalizedLead,
+        lead: leadAgent?.name ?? normalizedNodes[0]?.title ?? "Workflow Lead",
+        nodes: normalizedNodes,
         title: normalizedTitle,
       });
       return;
@@ -137,6 +197,29 @@ export function CommandTeamCapabilityCreateDialog({
     });
   }
 
+  function updateWorkflowNode(
+    index: number,
+    patch: Partial<WorkflowNodeDraft>,
+  ) {
+    setWorkflowNodes((current) =>
+      current.map((node, nodeIndex) =>
+        nodeIndex === index ? { ...node, ...patch } : node,
+      ),
+    );
+  }
+
+  function moveWorkflowNode(index: number, direction: -1 | 1) {
+    setWorkflowNodes((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      [next[index], next[target]] = [next[target]!, next[index]!];
+      return next;
+    });
+  }
+
   return (
     <div className="modal-backdrop open" role="dialog" aria-modal="true">
       <form
@@ -169,18 +252,6 @@ export function CommandTeamCapabilityCreateDialog({
             onChange={(event) => setTitle(event.target.value)}
           />
         </label>
-        {workflow ? (
-          <label className="form-field">
-            <span>组长与首个节点负责人</span>
-            <input
-              required
-              maxLength={120}
-              placeholder="例如：交付组长智能体"
-              value={lead}
-              onChange={(event) => setLead(event.target.value)}
-            />
-          </label>
-        ) : null}
         <label className="form-field">
           <span>目标与交付边界</span>
           <textarea
@@ -190,6 +261,140 @@ export function CommandTeamCapabilityCreateDialog({
             onChange={(event) => setGoal(event.target.value)}
           />
         </label>
+        {workflow ? (
+          <section
+            className="workflow-node-builder"
+            aria-labelledby="workflow-node-builder-title"
+          >
+            <div className="workflow-node-builder-head">
+              <div>
+                <strong id="workflow-node-builder-title">执行节点</strong>
+                <p>节点按当前顺序串行执行，前一个 Agent 的输出会交给下一个。</p>
+              </div>
+              <button
+                className="button compact"
+                type="button"
+                disabled={runnableWorkflowAgents.length === 0}
+                onClick={() =>
+                  setWorkflowNodes((current) => [
+                    ...current,
+                    { ...EMPTY_WORKFLOW_NODE },
+                  ])
+                }
+              >
+                <Plus aria-hidden="true" />
+                添加节点
+              </button>
+            </div>
+            {runnableWorkflowAgents.length === 0 ? (
+              <p className="team-office-create-error" role="alert">
+                当前没有已启用 Open API 的云智能体。请先在智能体页启用 Agent API，再创建协作流。
+              </p>
+            ) : null}
+            <div className="workflow-node-list">
+              {workflowNodes.map((node, index) => (
+                <article className="workflow-node-editor" key={index}>
+                  <header>
+                    <span>{index + 1}</span>
+                    <strong>Agent 节点</strong>
+                    <div>
+                      <button
+                        className="icon-action compact"
+                        type="button"
+                        aria-label="上移节点"
+                        disabled={index === 0}
+                        onClick={() => moveWorkflowNode(index, -1)}
+                      >
+                        <ArrowUp aria-hidden="true" />
+                      </button>
+                      <button
+                        className="icon-action compact"
+                        type="button"
+                        aria-label="下移节点"
+                        disabled={index === workflowNodes.length - 1}
+                        onClick={() => moveWorkflowNode(index, 1)}
+                      >
+                        <ArrowDown aria-hidden="true" />
+                      </button>
+                      <button
+                        className="icon-action compact"
+                        type="button"
+                        aria-label="删除节点"
+                        disabled={workflowNodes.length === 1}
+                        onClick={() =>
+                          setWorkflowNodes((current) =>
+                            current.filter((_, nodeIndex) => nodeIndex !== index),
+                          )
+                        }
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </button>
+                    </div>
+                  </header>
+                  <div className="modal-form-grid">
+                    <label className="form-field">
+                      <span>云智能体</span>
+                      <select
+                        required
+                        value={node.agentId}
+                        onChange={(event) => {
+                          const agent = workflowAgents.find(
+                            (candidate) =>
+                              String(candidate.id) === event.target.value,
+                          );
+                          updateWorkflowNode(index, {
+                            agentId: event.target.value,
+                            title: node.title || agent?.name || "",
+                          });
+                        }}
+                      >
+                        <option value="">选择智能体</option>
+                        {workflowAgents.map((agent) => (
+                          <option
+                            disabled={!agent.apiEnabled}
+                            key={agent.id}
+                            value={agent.id}
+                          >
+                            {agent.name}
+                            {agent.apiEnabled ? "" : " · API 未启用"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="form-field">
+                      <span>节点名称</span>
+                      <input
+                        required
+                        maxLength={120}
+                        placeholder="例如：需求审阅"
+                        value={node.title}
+                        onChange={(event) =>
+                          updateWorkflowNode(index, {
+                            title: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label className="form-field">
+                    <span>本节点任务</span>
+                    <textarea
+                      required
+                      maxLength={2_000}
+                      placeholder="说明这个节点要完成的任务、输出格式和验收要求。"
+                      value={node.instruction}
+                      onChange={(event) =>
+                        updateWorkflowNode(index, {
+                          instruction: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {!workflow ? (
           <>
             <section
@@ -310,7 +515,11 @@ export function CommandTeamCapabilityCreateDialog({
           >
             取消
           </button>
-          <button className="button primary" disabled={busy} type="submit">
+          <button
+            className="button primary"
+            disabled={busy || (workflow && runnableWorkflowAgents.length === 0)}
+            type="submit"
+          >
             {busy
               ? "创建中…"
               : workflow

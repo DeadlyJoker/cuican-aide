@@ -130,7 +130,8 @@ exports[`command Office room style > snapshots the Team card layout and responsi
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
-@media (max-width: 1180px) {
+/* Canvas-relative: the window stays wide while the canvas shrinks. */
+@container page-stack (max-width: 1180px) {
   .shell-page-view .office-card-grid,
   .shell-page-view .expert-team-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -415,7 +416,8 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
-@media (max-width: 1180px) {
+/* Canvas-relative: the window stays wide while the canvas shrinks. */
+@container page-stack (max-width: 1180px) {
   .shell-page-view .office-card-grid,
   .shell-page-view .expert-team-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -485,7 +487,8 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   height: 14px;
   flex: 0 0 auto;
 }
-@media (max-width: 860px) {
+/* Canvas-relative: the window stays wide while the canvas shrinks. */
+@container page-stack (max-width: 860px) {
   .shell-page-view .team-capability-live-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -898,7 +901,18 @@ exports[`command Office room style > snapshots the visible Office landing contra
   background: oklch(70% 0.13 78);
   box-shadow: 0 0 0 3px oklch(70% 0.13 78 / 0.12);
 }
-@media (max-width: 860px) {
+/*
+ * Query the canvas, not the viewport: the window stays wide while this canvas
+ * shrinks behind the workbench, so @media never matched and the three capability
+ * cards stayed side by side in a half-width column, wrapping their labels one
+ * character per line.
+ */
+@container page-stack (max-width: 1080px) {
+  .shell-page-view .team-office-capability-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container page-stack (max-width: 860px) {
   .shell-page-view .team-office-empty {
     min-height: 0;
   }
@@ -906,7 +920,7 @@ exports[`command Office room style > snapshots the visible Office landing contra
     grid-template-columns: minmax(0, 1fr);
   }
 }
-@media (max-width: 560px) {
+@container page-stack (max-width: 560px) {
   .shell-page-view .team-office-empty-footer {
     align-items: stretch;
     flex-direction: column;

@@ -35,7 +35,7 @@ type PlatformAgentMcpBinding =
       excluded_tool_ids?: number[];
     };
 
-type PlatformAgent = {
+export type PlatformAgent = {
   id: number;
   name: string;
   description?: string | null;
@@ -154,6 +154,17 @@ export type PlatformWorkflowExecution = {
   executed_nodes?: unknown[] | null;
   node_results?: Record<string, unknown> | null;
   error_message?: string | null;
+};
+
+export type AgentPlatformWorkflowNodeInput = {
+  agentId: number;
+  instruction: string;
+  title: string;
+};
+
+export type AgentPlatformWorkflowGraph = {
+  edges: Array<Record<string, unknown>>;
+  nodes: Array<Record<string, unknown>>;
 };
 
 export type AgentPlatformResourceCategory =
@@ -307,8 +318,10 @@ async function request<T>(
 
 export async function createAgentPlatformWorkflow(input: {
   description: string;
+  edges: Array<Record<string, unknown>>;
   lead: string;
   name: string;
+  nodes: Array<Record<string, unknown>>;
 }): Promise<PlatformWorkflow> {
   const workflow = await request<PlatformWorkflow>("/api/v1/workflows", {
     auth: true,
@@ -320,8 +333,8 @@ export async function createAgentPlatformWorkflow(input: {
       body: JSON.stringify({
         name: input.name,
         description: input.description,
-        nodes: [],
-        edges: [],
+        nodes: input.nodes,
+        edges: input.edges,
         config: {
           crewon: {
             collaboration_mode: "workflow",
@@ -332,6 +345,95 @@ export async function createAgentPlatformWorkflow(input: {
     },
   });
   return { ...workflow, resource_source: "online" };
+}
+
+export function buildAgentPlatformWorkflowGraph(
+  configuredNodes: AgentPlatformWorkflowNodeInput[],
+): AgentPlatformWorkflowGraph {
+  if (configuredNodes.length === 0) {
+    throw new Error("Workflow requires at least one Agent node");
+  }
+
+  const startId = "start";
+  const endId = "end";
+  const agentNodes = configuredNodes.map((node, index) => {
+    const id = `agent-${index + 1}`;
+    const sourceId = index === 0 ? startId : `agent-${index}`;
+    const sourceField = index === 0 ? "query" : "text";
+    const inputTemplate = `{{#${sourceId}.${sourceField}#}}`;
+    const query = `${inputTemplate}\n\n本节点要求：${node.instruction}`;
+    return {
+      id,
+      type: "agent",
+      position: { x: 280 * (index + 1), y: 120 },
+      data: {
+        type: "agent",
+        label: node.title,
+        title: node.title,
+        agentId: node.agentId,
+        agentInput: query,
+        query,
+        instruction: node.instruction,
+        max_iterations: 5,
+      },
+    };
+  });
+  const lastAgentId = `agent-${configuredNodes.length}`;
+  const nodes: Array<Record<string, unknown>> = [
+    {
+      id: startId,
+      type: "input",
+      position: { x: 0, y: 120 },
+      data: {
+        type: "start",
+        label: "任务输入",
+        title: "任务输入",
+        variables: [
+          {
+            variable: "query",
+            label: "任务",
+            description: "本次协作流要完成的任务",
+            type: "paragraph",
+            required: true,
+            max_length: 20_000,
+          },
+        ],
+      },
+    },
+    ...agentNodes,
+    {
+      id: endId,
+      type: "output",
+      position: { x: 280 * (configuredNodes.length + 1), y: 120 },
+      data: {
+        type: "end",
+        label: "交付结果",
+        title: "交付结果",
+        outputs: [
+          {
+            variable: "result",
+            value_selector: [lastAgentId, "text"],
+          },
+        ],
+      },
+    },
+  ];
+  const orderedIds = [
+    startId,
+    ...configuredNodes.map((_, index) => `agent-${index + 1}`),
+    endId,
+  ];
+  const edges = orderedIds.slice(0, -1).map((source, index) => {
+    const target = orderedIds[index + 1]!;
+    return {
+      id: `edge-${source}-${target}`,
+      source,
+      target,
+      sourceHandle: "source",
+      targetHandle: "target",
+    };
+  });
+  return { edges, nodes };
 }
 
 async function getAgentPlatformToken(): Promise<string | null> {
@@ -597,18 +699,46 @@ function jwtExpiryMilliseconds(token: string): number {
   }
 }
 
+/**
+ * Whether a token carries the scoping the Principal Session flow needs.
+ *
+ * The guard exists to retire pre-Principal-Session tokens. It must not reject
+ * tokens from a deployment that does not issue auth-session claims at all:
+ * clearing those would log the user straight back out after a successful login,
+ * with no way to recover. A token is only treated as stale when it shows
+ * evidence of the claims but fails to satisfy them.
+ */
 function tokenMatchesCurrentSessionRequirements(token: string): boolean {
   if (envValue("VITE_CREWON_PRINCIPAL_SESSION_ENABLED") !== "true") {
     return true;
   }
   const payload = jwtPayload(token);
-  return Boolean(
-    payload &&
-      isPositiveInteger(payload.tenant_id) &&
-      isPositiveInteger(payload.space_id) &&
-      typeof payload.crewon_auth_session_id === "string" &&
-      payload.crewon_auth_session_id.length > 0 &&
-      isPositiveInteger(payload.crewon_auth_epoch),
+  if (!payload) {
+    return false;
+  }
+  if (
+    isPositiveInteger(payload.tenant_id) &&
+    isPositiveInteger(payload.space_id) &&
+    typeof payload.crewon_auth_session_id === "string" &&
+    payload.crewon_auth_session_id.length > 0 &&
+    isPositiveInteger(payload.crewon_auth_epoch)
+  ) {
+    return true;
+  }
+  return !serverIssuesAuthSessionClaims(payload);
+}
+
+/**
+ * Whether the issuing server participates in the auth-session scheme.
+ *
+ * Servers that implement it always emit the session claims, so their absence
+ * means the deployment predates the scheme rather than the token being stale.
+ */
+function serverIssuesAuthSessionClaims(
+  payload: Record<string, unknown>,
+): boolean {
+  return (
+    "crewon_auth_session_id" in payload || "crewon_auth_epoch" in payload
   );
 }
 
@@ -1084,7 +1214,7 @@ export function platformKnowledgeToData(
   };
 }
 
-function platformAgentToConfig(
+export function platformAgentToConfig(
   agent: PlatformAgent,
   snapshot: AgentPlatformSnapshot,
   index: number,
@@ -1136,6 +1266,7 @@ function platformAgentToConfig(
   );
 
   return {
+    agentId: `agent-platform:${agent.id}`,
     name: agent.name,
     glyph: "A",
     accent: accents[index % accents.length],

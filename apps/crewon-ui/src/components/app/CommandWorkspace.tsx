@@ -59,11 +59,17 @@ import {
   commandSceneSlashItems,
 } from "./commandWorkspaceSceneResources";
 import {
+  buildAgentPlatformWorkflowGraph,
   createAgentPlatformWorkflow,
   getAgentPlatformAccessToken,
+  platformAgentToConfig,
   readAgentPlatformSnapshot,
   type AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
+import {
+  agentPlatformExecutionTargetOptions,
+  platformAgentForExecutionTarget,
+} from "../../lib/agent-platform/agentPlatformExecutionTargets";
 import { isLegacyGeneratedAgentPlaceholder } from "../../lib/agent-config/legacyAgentPlaceholder";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
@@ -521,6 +527,9 @@ export function CommandWorkspace({
   const [model, setModel] = useState(fallbackCommandModelOptions[0].value);
   const [modelSelectionTouched, setModelSelectionTouched] = useState(false);
   const [executionTarget, setExecutionTarget] = useState("crewon");
+  const [cloudAgentTargetError, setCloudAgentTargetError] = useState<
+    string | null
+  >(null);
   const [executionTargetCatalog, setExecutionTargetCatalog] =
     useState<CommandDomainCatalog>({
       agents: [],
@@ -751,15 +760,22 @@ export function CommandWorkspace({
   });
 
   const providerExpertWorkspaceKey = useMemo(() => {
-    if (providerResource?.selectedWorkspaceKey) {
-      return providerResource.selectedWorkspaceKey;
-    }
     const workspaces = providerResource?.snapshot.workspaces ?? [];
     const matching = workspaces.filter(
       (workspace) => workspace.displayName === basename(cwd),
     );
     if (matching.length === 1) {
       return matching[0]?.workspaceKey ?? null;
+    }
+    if (
+      providerResource?.selectedWorkspaceKey &&
+      workspaces.some(
+        (workspace) =>
+          workspace.workspaceKey === providerResource.selectedWorkspaceKey &&
+          workspace.availability === "available",
+      )
+    ) {
+      return providerResource.selectedWorkspaceKey;
     }
     return workspaces.length === 1
       ? (workspaces[0]?.workspaceKey ?? null)
@@ -948,6 +964,9 @@ export function CommandWorkspace({
           ? !selectedThread || newTaskDraft
           : activeView === "assist" && !assistantThread)),
   );
+  const providerExecutionTargetsAvailable = Boolean(
+    providerResource && (providerResource.executionAgents?.length ?? 0) > 0,
+  );
   const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
     () => [
       {
@@ -1082,11 +1101,18 @@ export function CommandWorkspace({
       ...executionTargetCatalog,
       locale,
     });
-    const providerTargets = providerResourceAvailable
+    const providerTargets = providerExecutionTargetsAvailable
       ? providerAgentExecutionTargetOptions(
           providerResource?.executionAgents ?? [],
         )
       : [];
+    const platformTargets =
+      providerTargets.length === 0
+        ? agentPlatformExecutionTargetOptions(
+            platformSnapshot,
+            executionTargetCatalog.agents,
+          )
+        : [];
     const expertTargets = expertTeams.map((record) => ({
       detail:
         locale === "zh"
@@ -1100,6 +1126,7 @@ export function CommandWorkspace({
     return [
       ...domainTargets.slice(0, 1),
       ...providerTargets,
+      ...platformTargets,
       ...expertTargets,
       ...domainTargets.slice(1),
     ];
@@ -1107,8 +1134,9 @@ export function CommandWorkspace({
     executionTargetCatalog,
     expertTeams,
     locale,
+    platformSnapshot,
     providerResource?.executionAgents,
-    providerResourceAvailable,
+    providerExecutionTargetsAvailable,
   ]);
   const localizedScenePresets = locale === "zh" ? scenePresets : scenePresetsEn;
   const scenePreset = localizedScenePresets[scene];
@@ -1188,7 +1216,22 @@ export function CommandWorkspace({
     providerResource?.selectedExecutionAgent,
   ]);
 
-  function selectExecutionTarget(nextTarget: string) {
+  async function selectExecutionTarget(nextTarget: string) {
+    setCloudAgentTargetError(null);
+    const platformAgent = platformAgentForExecutionTarget(
+      platformSnapshot,
+      nextTarget,
+    );
+    if (platformAgent) {
+      try {
+        await addPlatformAgentToWorkspace(platformAgent.id);
+      } catch (error) {
+        setCloudAgentTargetError(
+          error instanceof Error ? error.message : "云智能体同步失败",
+        );
+        return;
+      }
+    }
     const providerAgent = providerAgentResourceForTarget(
       providerResource?.executionAgents ?? [],
       nextTarget,
@@ -1641,11 +1684,31 @@ export function CommandWorkspace({
 
   function openExpertTeam(record: ExpertTeamRecordReference) {
     setExecutionTarget(`experts:${record.config.expertsId}`);
+    setScene("office");
+    setSceneMode("coordinate");
     setActiveLinkedThreadId(null);
     setNewTaskDraft(true);
-    onChangeComposerValue("");
+    onChangeComposerValue(record.config.goal);
     switchView("command");
     textareaRef.current?.focus();
+  }
+
+  async function addPlatformAgentToWorkspace(agentId: number) {
+    if (!executionTargetClient?.saveAgentConfig || !cwd) {
+      throw new Error("App Server 或当前工作区不可用，无法加入智能体");
+    }
+    const index = platformSnapshot.agents.findIndex(
+      (agent) => agent.id === agentId,
+    );
+    const agent = platformSnapshot.agents[index];
+    if (!agent) {
+      throw new Error("云智能体已不存在，请刷新资源后重试");
+    }
+    await executionTargetClient.saveAgentConfig(
+      cwd,
+      platformAgentToConfig(agent, platformSnapshot, index),
+    );
+    setTeamRefreshNonce((current) => current + 1);
   }
 
   async function createExpertTeam(input: CommandTeamCapabilityCreateInput) {
@@ -1692,10 +1755,13 @@ export function CommandWorkspace({
     setWorkflowCreateBusy(true);
     setWorkflowCreateError(null);
     try {
+      const graph = buildAgentPlatformWorkflowGraph(input.nodes);
       const workflow = await createAgentPlatformWorkflow({
         description: input.goal,
+        edges: graph.edges,
         lead: input.lead,
         name: input.title,
+        nodes: graph.nodes,
       });
       setPlatformSnapshot((current) => ({
         ...current,
@@ -2191,6 +2257,11 @@ export function CommandWorkspace({
                 onStop={onStop}
                 onSubmit={sendComposerValue}
               />
+              {cloudAgentTargetError ? (
+                <div className="composer-inline-error" role="alert">
+                  {cloudAgentTargetError}
+                </div>
+              ) : null}
 
               {showCommandThread ? null : (
                 <CommandSceneQuickRow
@@ -2442,6 +2513,7 @@ export function CommandWorkspace({
             onReload={reloadPlatformResources}
             onCatalogFilterChange={setCatalogFilter}
             onCatalogSearchChange={setCatalogSearch}
+            onAddAgent={addPlatformAgentToWorkspace}
             onSaveCapability={onSaveCapability}
           />
           <KnowledgeCatalogView
@@ -2568,6 +2640,12 @@ export function CommandWorkspace({
               kind="workflow"
               busy={workflowCreateBusy}
               error={workflowCreateError}
+              workflowAgents={platformSnapshot.agents.map((agent) => ({
+                apiEnabled: Boolean(agent.api_enabled),
+                description: agent.description || "",
+                id: agent.id,
+                name: agent.name,
+              }))}
               workspaceCwd=""
               onClose={() => {
                 if (!workflowCreateBusy) {

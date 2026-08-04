@@ -68,7 +68,9 @@ describe("command Office room style", () => {
     expect(contract).toContain(".team-capability-run-panel");
     expect(contract).toContain(".team-capability-workspace");
     expect(contract).toContain(".expert-member-stack");
-    expect(contract).toContain("@media (max-width: 860px)");
+    // Canvas-relative: the window stays wide while the canvas shrinks behind
+    // the workbench, so a viewport query never matched here.
+    expect(contract).toContain("@container page-stack (max-width: 860px)");
     expect(contract).toMatchSnapshot();
   });
 

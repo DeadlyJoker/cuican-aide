@@ -9618,16 +9618,28 @@ button.library-item:hover .library-card-chevron {
   background: #202020;
 }
 
-:root[data-theme="dark"] .screen-shell.command-screen .scene-pills button,
 :root[data-theme="dark"] .screen-shell.command-screen .quick-row button,
-:root[data-theme="dark"]
-  .screen-shell.command-screen
-  .input-tools
-  button:not(.send-button),
 :root[data-theme="dark"] .screen-shell.command-screen .workspace-pill,
 :root[data-theme="dark"] .screen-shell.command-screen .command-input {
   border-color: #373737;
   background: #222222;
+  color: #eeeeee;
+  box-shadow: none;
+}
+
+/*
+ * Scene tabs and composer controls carry no surface of their own: the tabs are
+ * painted by the sliding thumb behind them, and the composer toolbar shows only
+ * icons and labels until hover. Grouping them with their containers above gave
+ * every one a fill and a hairline, which turned both into rows of boxes.
+ */
+:root[data-theme="dark"] .screen-shell.command-screen .scene-pills button,
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .input-tools
+  button:not(.send-button) {
+  border-color: transparent;
+  background: transparent;
   color: #eeeeee;
   box-shadow: none;
 }

@@ -1,12 +1,14 @@
 import {
   BookOpen,
   Bot,
+  Check,
   Download,
   Eye,
   Layers3,
   Plus,
   RefreshCw,
   Search,
+  UserPlus,
   Wrench,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
@@ -190,14 +192,18 @@ function CatalogSearch({
 
 function CatalogCard({
   item,
+  agentAdded = false,
   progress,
   onDownload,
+  onAddAgent,
   onOpen,
   onPreset,
 }: {
   item: CatalogItem;
+  agentAdded?: boolean;
   progress?: number;
   onDownload?: (resource: CatalogResourceSummary) => void;
+  onAddAgent?: (resource: CatalogResourceSummary) => void;
   onOpen?: (resource: CatalogResourceSummary) => void;
   onPreset?: (preset: { id: string; kind: "mcp" | "skill" }) => void;
 }) {
@@ -322,6 +328,21 @@ function CatalogCard({
                 <progress max="100" value={progress} />
               ) : null}
             </>
+          ) : null}
+          {resource.type === "agents" ? (
+            <button
+              aria-label={`加入当前工作区 ${item.title}`}
+              className="icon-action compact catalog-card-action"
+              disabled={progress !== undefined || agentAdded}
+              type="button"
+              onClick={() => onAddAgent?.(resource)}
+            >
+              {agentAdded ? (
+                <Check aria-hidden="true" />
+              ) : (
+                <UserPlus aria-hidden="true" />
+              )}
+            </button>
           ) : null}
         </div>
       ) : item.action ? (
@@ -746,6 +767,7 @@ export function AgentsView({
   onReload,
   onCatalogFilterChange,
   onCatalogSearchChange,
+  onAddAgent,
   onSaveCapability,
 }: {
   active: boolean;
@@ -757,6 +779,7 @@ export function AgentsView({
   onReload: (category?: AgentPlatformResourceCategory) => Promise<void>;
   onCatalogFilterChange: (filter: string) => void;
   onCatalogSearchChange: (query: string) => void;
+  onAddAgent?: (agentId: number) => Promise<void>;
   onSaveCapability?: CapabilityEditorSaveHandler;
 }) {
   const [selectedResource, setSelectedResource] = useState<{
@@ -767,6 +790,10 @@ export function AgentsView({
   const [downloadProgress, setDownloadProgress] = useState<
     Record<string, number>
   >({});
+  const [agentAddProgress, setAgentAddProgress] = useState<
+    Record<string, number>
+  >({});
+  const [addedAgents, setAddedAgents] = useState<Set<number>>(new Set());
   const [editorDraft, setEditorDraft] = useState<CapabilityEditorDraft | null>(
     null,
   );
@@ -847,6 +874,33 @@ export function AgentsView({
       );
     } finally {
       setDownloadProgress((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  }
+
+  async function addAgent(resource: CatalogResourceSummary) {
+    if (resource.type !== "agents") {
+      return;
+    }
+    if (!onAddAgent) {
+      setDownloadError("App Server 或当前工作区不可用，无法加入智能体");
+      return;
+    }
+    const key = `${resource.type}:${resource.id}`;
+    setAgentAddProgress((current) => ({ ...current, [key]: 1 }));
+    setDownloadError(null);
+    try {
+      await onAddAgent(resource.id);
+      setAddedAgents((current) => new Set(current).add(resource.id));
+    } catch (reason) {
+      setDownloadError(
+        reason instanceof Error ? reason.message : "智能体加入工作区失败",
+      );
+    } finally {
+      setAgentAddProgress((current) => {
         const next = { ...current };
         delete next[key];
         return next;
@@ -1050,15 +1104,23 @@ export function AgentsView({
         >
           {visibleCards.map((item) => (
             <CatalogCard
+              agentAdded={
+                item.resource?.type === "agents" &&
+                addedAgents.has(item.resource.id)
+              }
               item={item}
               key={item.id}
               progress={
                 item.resource
-                  ? downloadProgress[
+                  ? (downloadProgress[
                       `${item.resource.type}:${item.resource.id}`
-                    ]
+                    ] ??
+                    agentAddProgress[
+                      `${item.resource.type}:${item.resource.id}`
+                    ])
                   : undefined
               }
+              onAddAgent={addAgent}
               onDownload={download}
               onOpen={(resource) => setSelectedResource({ resource })}
               onPreset={openPresetEditor}
@@ -1078,6 +1140,7 @@ export function AgentsView({
       <CatalogResourceDialog
         resource={selectedResource?.resource ?? null}
         onClose={() => setSelectedResource(null)}
+        onAddAgent={addAgent}
         onInstallSkill={download}
         onRefresh={refresh}
       />

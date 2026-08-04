@@ -323,8 +323,8 @@ export function OfficeMembersPanel({
                   ? "正在读取可招募智能体..."
                   : "Loading recruitable agents..."
                 : isZh
-                  ? "暂无可招募智能体。"
-                  : "No recruitable agents yet."}
+                  ? "暂无可招募智能体。请先在智能体页把云智能体加入当前工作区。"
+                  : "No recruitable agents yet. Add a cloud agent to this workspace from Agents first."}
             </p>
           )}
           {recruitAction ? (

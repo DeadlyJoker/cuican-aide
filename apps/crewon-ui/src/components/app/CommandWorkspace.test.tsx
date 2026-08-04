@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ProviderResourceSnapshot } from "../../lib/provider-resource/providerResourceSession";
 
@@ -195,7 +195,15 @@ describe("commandSceneSlashItems", () => {
 });
 
 describe("CommandWorkspace", () => {
+  // The schedule calendar marks today, so the markup snapshot drifts with the
+  // wall clock. Pin the date to keep the snapshot reproducible.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-03T12:00:00+08:00"));
+  });
+
   afterEach(() => {
+    vi.useRealTimers();
     if (typeof document !== "undefined") {
       document.body.classList.remove("modal-open");
     }
@@ -359,8 +367,42 @@ describe("CommandWorkspace", () => {
         onSend={() => undefined}
       />,
     );
+    const existingThread = {
+      id: "thread-existing-provider-agent",
+      turns: [],
+    } as unknown as Thread;
+    const existingThreadMarkup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        providerResource={{
+          snapshot,
+          selectedResource: null,
+          executionAgents: [agent],
+          selectedExecutionAgent: null,
+          selectedWorkspaceKey: "workspace-1",
+          canSelect: false,
+          onRefresh: () => undefined,
+          onSelect: () => undefined,
+          onExecutionAgentSelect: () => undefined,
+          onUnbind: () => undefined,
+          onWorkspaceSelect: () => undefined,
+        }}
+        selectedThread={existingThread}
+        selectedThreadId={existingThread.id}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
 
     expect(markup).toContain("review-agent · 在线 Agent");
+    expect(existingThreadMarkup).toContain("review-agent · 在线 Agent");
     expect(markup).toMatchSnapshot();
   });
 

@@ -4,6 +4,7 @@ import {
   AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
   AGENT_PLATFORM_TOKEN_STORAGE_KEY,
   agentPlatformAuthorizedFetch,
+  buildAgentPlatformWorkflowGraph,
   clearAgentPlatformSession,
   createAgentPlatformWorkflow,
   getAgentPlatformAccessToken,
@@ -98,10 +99,19 @@ describe("agent-platform client mapping", () => {
     vi.unstubAllEnvs();
   });
 
-  it("drops legacy tokens when Principal Session is enabled", async () => {
+  it("drops stale auth-session tokens when Principal Session is enabled", async () => {
+    // A token from a server that does emit session claims, but whose scoping no
+    // longer satisfies the requirements, is genuinely stale.
     vi.stubEnv("VITE_CREWON_PRINCIPAL_SESSION_ENABLED", "true");
+    const staleToken = jwt({
+      exp: 4_102_444_800,
+      tenant_id: null,
+      space_id: null,
+      crewon_auth_session_id: "",
+      crewon_auth_epoch: 0,
+    });
     const values = new Map<string, string>([
-      [AGENT_PLATFORM_TOKEN_STORAGE_KEY, jwt({ exp: 4_102_444_800 })],
+      [AGENT_PLATFORM_TOKEN_STORAGE_KEY, staleToken],
       [AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY, "legacy-refresh"],
     ]);
     vi.stubGlobal("localStorage", storage(values));
@@ -109,6 +119,25 @@ describe("agent-platform client mapping", () => {
     await expect(getAgentPlatformAccessToken()).resolves.toBeNull();
     expect(values.has(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBe(false);
     expect(values.has(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)).toBe(false);
+  });
+
+  it("keeps tokens from a server that does not issue auth-session claims", async () => {
+    // The deployment predates the scheme, so clearing the token would log the
+    // user out immediately after a successful login with no way to recover.
+    vi.stubEnv("VITE_CREWON_PRINCIPAL_SESSION_ENABLED", "true");
+    const token = jwt({
+      exp: 4_102_444_800,
+      tenant_id: null,
+      space_id: null,
+      username: "admin",
+    });
+    const values = new Map<string, string>([
+      [AGENT_PLATFORM_TOKEN_STORAGE_KEY, token],
+    ]);
+    vi.stubGlobal("localStorage", storage(values));
+
+    await expect(getAgentPlatformAccessToken()).resolves.toBe(token);
+    expect(values.get(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBe(token);
   });
 
   it("keeps a scoped auth-session token for Principal Session", async () => {
@@ -231,11 +260,26 @@ describe("agent-platform client mapping", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
+    const graph = buildAgentPlatformWorkflowGraph([
+      {
+        agentId: 101,
+        instruction: "审阅需求并列出风险",
+        title: "需求审阅",
+      },
+      {
+        agentId: 102,
+        instruction: "根据审阅结果完成交付检查",
+        title: "交付检查",
+      },
+    ]);
+
     await expect(
       createAgentPlatformWorkflow({
         description: "完成审阅和验收",
+        edges: graph.edges,
         lead: "交付负责人",
         name: "交付协作流",
+        nodes: graph.nodes,
       }),
     ).resolves.toMatchObject({
       id: 77,
@@ -252,8 +296,8 @@ describe("agent-platform client mapping", () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       name: "交付协作流",
       description: "完成审阅和验收",
-      nodes: [],
-      edges: [],
+      nodes: graph.nodes,
+      edges: graph.edges,
       config: {
         crewon: {
           collaboration_mode: "workflow",
@@ -262,6 +306,21 @@ describe("agent-platform client mapping", () => {
       },
     });
     expect(String(init?.body)).not.toContain("/Users/");
+    expect(graph.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "start", type: "input" }),
+        expect.objectContaining({
+          id: "agent-1",
+          type: "agent",
+          data: expect.objectContaining({
+            agentId: 101,
+            title: "需求审阅",
+          }),
+        }),
+        expect.objectContaining({ id: "end", type: "output" }),
+      ]),
+    );
+    expect(graph.edges).toHaveLength(3);
   });
 
   it("keeps healthy resource categories when Agent and Workflow fail", async () => {
@@ -784,7 +843,7 @@ describe("agent-platform client mapping", () => {
       items[0]?.action?.type === "agent-config"
         ? items[0].action.config.agentId
         : null,
-    ).toBeUndefined();
+    ).toBe("agent-platform:101");
   });
 
   it("maps MCP servers and skills into tool library cards", () => {

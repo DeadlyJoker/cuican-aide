@@ -472,7 +472,7 @@ export function executionTargetOptionsFromDomain({
 }): ExecutionTargetOption[] {
   const agentOptions = agents.flatMap((record) => {
     const id = record.config.agentId?.trim();
-    if (!id || id.startsWith("agent-platform:")) {
+    if (!id) {
       return [];
     }
     return [

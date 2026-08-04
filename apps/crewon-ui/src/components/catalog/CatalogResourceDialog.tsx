@@ -8,6 +8,7 @@ import {
   Folder,
   LoaderCircle,
   RefreshCw,
+  UserPlus,
   X,
 } from "lucide-react";
 
@@ -575,11 +576,13 @@ export function KnowledgeDetail({ detail }: { detail: CatalogResourceDetail }) {
 export function CatalogResourceDialog({
   resource,
   onClose,
+  onAddAgent,
   onInstallSkill,
   onRefresh,
 }: {
   resource: CatalogResourceSummary | null;
   onClose: () => void;
+  onAddAgent?: (resource: CatalogResourceSummary) => Promise<void>;
   onInstallSkill?: (resource: CatalogResourceSummary) => Promise<void>;
   onRefresh: () => Promise<void>;
 }) {
@@ -613,6 +616,7 @@ export function CatalogResourceDialog({
   if (!resource) return null;
   const activeResource = resource;
   const isInstallableSkill = activeResource.type === "skills";
+  const isAddableAgent = activeResource.type === "agents";
 
   async function updateResource() {
     if (activeResource.type !== "skills") {
@@ -635,6 +639,25 @@ export function CatalogResourceDialog({
       setDetail(await readCatalogResourceDetail(activeResource));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "资源更新失败");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function addAgent() {
+    if (!onAddAgent || activeResource.type !== "agents") {
+      setError("App Server 或当前工作区不可用，无法加入智能体");
+      return;
+    }
+    setUpdating(true);
+    setError(null);
+    try {
+      await onAddAgent(activeResource);
+      setInstalled(true);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "智能体加入工作区失败",
+      );
     } finally {
       setUpdating(false);
     }
@@ -687,6 +710,21 @@ export function CatalogResourceDialog({
                     : resource.source === "catalog" && !downloaded
                       ? "下载并安装"
                       : "安装技能"}
+              </button>
+            ) : null}
+            {isAddableAgent ? (
+              <button
+                className="button compact"
+                disabled={updating}
+                type="button"
+                onClick={addAgent}
+              >
+                <UserPlus aria-hidden="true" />
+                {updating
+                  ? "加入中…"
+                  : installed
+                    ? "重新加入工作区"
+                    : "加入当前工作区"}
               </button>
             ) : null}
             <button
@@ -745,7 +783,11 @@ export function CatalogResourceDialog({
                     : "在线技能 · 可安装到当前工作区"
               : resource.type === "mcp_servers"
                 ? "云端服务 · 可直接调用工具"
-                : "在线只读 · 运行时由绑定的 Agent 使用"}
+                : resource.type === "agents"
+                  ? installed
+                    ? "已加入当前工作区 · 可在办公室招募"
+                    : "云端智能体 · 加入工作区后可在办公室招募"
+                  : "在线只读 · 运行时由绑定的 Agent 使用"}
           </span>
         </footer>
       </section>
