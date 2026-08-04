@@ -24,8 +24,11 @@ describe("agentPlatformExecutionTargets", () => {
     expect(agentPlatformExecutionTargetOptions(snapshot, [])).toEqual([
       {
         detail: "审查合同风险",
+        // A cloud agent runs as a single agent, so it joins that section and the
+        // label carries no "· 云智能体" suffix repeating the header.
+        group: "single",
         kind: "agent",
-        label: "合同审核 · 云智能体",
+        label: "合同审核",
         strategy: "single",
         value: "agent:agent-platform:7",
       },
@@ -38,12 +41,22 @@ describe("agentPlatformExecutionTargets", () => {
     ).toEqual(snapshot.agents[0]);
   });
 
-  it("does not duplicate a cloud agent already persisted in the workspace", () => {
-    const persisted = [
-      {
-        config: { agentId: "agent-platform:7" },
-      },
-    ];
+  /*
+   * Both key shapes are on disk: the Agents page writes the resource id
+   * `agent-platform:agents:<id>`, while older saved configs carry a bare
+   * `agent-platform:<id>`. Only the bare form used to be covered here, so the
+   * dedupe passed its test while every agent saved through the Agents page was
+   * listed twice in the selector.
+   */
+  it("does not duplicate a cloud agent persisted under the resource id", () => {
+    const persisted = [{ config: { agentId: "agent-platform:agents:7" } }];
+
+    expect(agentPlatformExecutionTargetOptions(snapshot, persisted)).toEqual([]);
+  });
+
+  it("does not duplicate a cloud agent persisted under the legacy bare id", () => {
+    const persisted = [{ config: { agentId: "agent-platform:7" } }];
+
     expect(agentPlatformExecutionTargetOptions(snapshot, persisted)).toEqual([]);
   });
 });

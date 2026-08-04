@@ -17,8 +17,9 @@ describe("Provider Agent execution targets", () => {
 
     expect(options).toHaveLength(1);
     expect(options[0]).toMatchObject({
+      group: "single",
       kind: "agent",
-      label: "agent-7 · 在线 Agent",
+      label: "agent-7",
       strategy: "single",
     });
     expect(options[0]?.value).toMatch(/^provider-agent:/);

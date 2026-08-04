@@ -89,6 +89,7 @@ import type { LocalResourceSelectionKind } from "../../lib/shared/localResourceA
 import { formatRelativeTime } from "../../lib/shared/text";
 import type { ExpertTeamRecordReference } from "../../lib/experts/expertTeamRecord";
 import {
+  executionTargetGroups,
   executionTargetOptionsFromDomain,
   scenePresets,
   scenePresetsEn,
@@ -1124,17 +1125,20 @@ export function CommandWorkspace({
         locale === "zh"
           ? `${record.config.experts.length} 名后台专家 · 团长 ${record.config.leader.name}`
           : `${record.config.experts.length} background experts · lead ${record.config.leader.name}`,
+      group: "experts" as const,
       kind: "experts" as const,
-      label: `${record.config.title} · ${locale === "zh" ? "专家团" : "Expert team"}`,
+      label: record.config.title,
       strategy: "team" as const,
       value: `experts:${record.config.expertsId}`,
     }));
+    // Natural order: the selector groups these into local, cloud, and expert
+    // sections, so the concat order no longer has to interleave cloud targets
+    // behind CrewON to keep them visible.
     return [
-      ...domainTargets.slice(0, 1),
+      ...domainTargets,
       ...providerTargets,
       ...platformTargets,
       ...expertTargets,
-      ...domainTargets.slice(1),
     ];
   }, [
     executionTargetCatalog,
@@ -2020,6 +2024,7 @@ export function CommandWorkspace({
                     <CommandComposerSelect
                       ariaLabel={locale === "zh" ? "执行主体" : "Run with"}
                       className="execution-target-dropdown"
+                      groups={executionTargetGroups(locale)}
                       options={executionTargets}
                       value={executionTarget}
                       onChange={selectExecutionTarget}

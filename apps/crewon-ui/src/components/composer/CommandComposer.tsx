@@ -1,11 +1,18 @@
 import type { ClipboardEvent, ReactNode, RefObject } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
+import { composerSelectSections } from "./composerSelectSections";
 import { ComposerCore } from "./ComposerCore";
 
 export type CommandComposerSelectOption<TValue extends string = string> = {
   detail?: string;
   disabled?: boolean;
+  /**
+   * Optional section this option belongs to. Options that share a group render
+   * under one label, in the order the groups are declared on the select. An
+   * option without a group sits above every labelled section.
+   */
+  group?: string;
   tone?: "danger" | "normal" | "warning";
   value: TValue;
   label: string;
@@ -15,6 +22,7 @@ export function CommandComposerSelect<TValue extends string>({
   ariaLabel,
   className,
   disabled = false,
+  groups,
   icon,
   options,
   value,
@@ -23,6 +31,11 @@ export function CommandComposerSelect<TValue extends string>({
   ariaLabel: string;
   className: string;
   disabled?: boolean;
+  /**
+   * Section order and labels. A group with no matching options is skipped, so
+   * callers can declare the full set without checking what is available.
+   */
+  groups?: Array<{ id: string; label: string }>;
   icon?: ReactNode;
   options: CommandComposerSelectOption<TValue>[];
   value: TValue;
@@ -33,6 +46,36 @@ export function CommandComposerSelect<TValue extends string>({
   const [open, setOpen] = useState(false);
   const selectedOption =
     options.find((option) => option.value === value) ?? options[0];
+  // One unlabelled section when the caller declares no groups, so the flat menu
+  // and the grouped menu render through the same path.
+  const sections = composerSelectSections(options, groups ?? []);
+
+  function renderOption(option: CommandComposerSelectOption<TValue>) {
+    return (
+      <button
+        key={option.value}
+        aria-selected={option.value === value}
+        className="select-option"
+        data-tone={option.tone ?? "normal"}
+        data-value={option.value}
+        disabled={option.disabled}
+        role="option"
+        type="button"
+        onClick={() => {
+          if (option.disabled) {
+            return;
+          }
+          onChange(option.value);
+          setOpen(false);
+        }}
+      >
+        <span>
+          <strong>{option.label}</strong>
+          {option.detail ? <em>{option.detail}</em> : null}
+        </span>
+      </button>
+    );
+  }
 
   useEffect(() => {
     if (!open) {
@@ -77,29 +120,13 @@ export function CommandComposerSelect<TValue extends string>({
         {selectedOption?.label ?? value}
       </button>
       <div className="select-menu" hidden={!open} id={menuId} role="listbox">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            aria-selected={option.value === value}
-            className="select-option"
-            data-tone={option.tone ?? "normal"}
-            data-value={option.value}
-            disabled={option.disabled}
-            role="option"
-            type="button"
-            onClick={() => {
-              if (option.disabled) {
-                return;
-              }
-              onChange(option.value);
-              setOpen(false);
-            }}
-          >
-            <span>
-              <strong>{option.label}</strong>
-              {option.detail ? <em>{option.detail}</em> : null}
-            </span>
-          </button>
+        {sections.map((section) => (
+          <div className="select-group" key={section.id} role="presentation">
+            {section.label ? (
+              <div className="select-group-label">{section.label}</div>
+            ) : null}
+            {section.options.map(renderOption)}
+          </div>
         ))}
       </div>
     </div>

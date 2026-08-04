@@ -2757,6 +2757,16 @@
 .workflow-room-title-block {
   display: grid;
   gap: 2px;
+  min-width: 0;
+}
+/*
+ * The heading and paragraph keep their user-agent margins otherwise (17px and
+ * 12px, top and bottom), which inflated this row to 142px against the Office
+ * room's 84px even though both declare the same 64px floor.
+ */
+.workflow-room-title-block h3,
+.workflow-room-title-block p {
+  margin: 0;
 }
 .workflow-room-title-block span {
   color: var(--n-650);
@@ -2771,15 +2781,26 @@
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+/*
+ * One line with an ellipsis, like the Office room: a second line moves the room
+ * header by 16px depending on how long the summary happens to be, and the full
+ * text is already on the element's title attribute.
+ */
 .workflow-room-title-block p {
-  display: -webkit-box;
-  max-width: 90ch;
   overflow: hidden;
   color: var(--n-750);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/*
+ * Room headers follow the page headers: one control height across the row, so a
+ * `compact` button does not render 28px beside the 32px controls in the Office
+ * room header.
+ */
+.workflow-room-top .button.compact {
+  min-height: var(--control-h-md);
 }
 .workflow-room-top > .button:first-child svg,
 .workflow-room-actions .button svg {
@@ -4472,6 +4493,35 @@ body.modal-open {
 .select-menu .select-option[aria-selected="true"]::after {
   opacity: 1;
 }
+/*
+ * Sections in a select menu, matching the `+` palette's grouping: a hairline and
+ * a quiet label between groups, and no chrome at all when there is only one.
+ */
+.select-menu .select-group {
+  display: grid;
+  gap: 2px;
+}
+.select-menu .select-group + .select-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--n-250);
+}
+/*
+ * Sticky so the section a long list is scrolled into stays named. The menu paints
+ * the background, so the label needs its own or the options scroll through it.
+ */
+.select-menu .select-group-label {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  padding: 5px 10px 3px;
+  /* Matches .select-menu's own fill; `inherit` resolves to transparent here. */
+  background: var(--n-0);
+  color: var(--n-700);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
 .mode-dropdown select {
   max-width: 82px;
 }
@@ -5575,8 +5625,20 @@ body.modal-open {
 :root[data-theme="light"]
   .command-shell-route
   .screen-shell.command-screen
-  .add-palette-group-label {
+  .add-palette-group-label,
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .select-group-label {
   color: oklch(50% 0 0);
+}
+
+:root[data-theme="light"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .select-group
+  + .select-group {
+  border-color: oklch(91% 0 0);
 }
 
 :root[data-theme="light"]
@@ -5631,8 +5693,31 @@ body.modal-open {
   .command-shell-route
   .screen-shell.command-screen
   .add-palette-group
-  + .add-palette-group {
+  + .add-palette-group,
+:root[data-theme="dark"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .select-group
+  + .select-group {
   border-color: #393939;
+}
+
+:root[data-theme="dark"]
+  .command-shell-route
+  .screen-shell.command-screen
+  .select-group-label {
+  color: #999;
+}
+
+/*
+ * The sticky label has to repaint the menu's own fill, and in dark mode that is
+ * #242424 rather than --n-0, or options scroll visibly behind the header.
+ */
+:root:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen
+  .select-group-label {
+  background: #242424;
 }
 
 :root[data-theme="dark"]
@@ -6442,9 +6527,23 @@ body.modal-open {
 .screen-shell.command-screen .quick-row {
   margin-top: 14px;
 }
-.screen-shell.command-screen .execution-target-dropdown .select-trigger,
-.screen-shell.command-screen .execution-target-dropdown .select-menu {
+/*
+ * The trigger stays narrow so it does not crowd the composer row, but the menu
+ * needs its own width: at 236px every cloud agent label truncated to "MCP 工具助手 · 云…"
+ * and its description to a fragment, which is unreadable when picking between them.
+ */
+.screen-shell.command-screen .execution-target-dropdown .select-trigger {
   max-width: 236px;
+}
+.screen-shell.command-screen .execution-target-dropdown .select-menu {
+  min-width: 288px;
+  max-width: min(380px, calc(100vw - 48px));
+  /*
+   * The shared 320px cap cut this menu off mid-list, so the "专家团" section sat
+   * below the fold and the grouping was invisible until you scrolled. Tall enough
+   * to show both section headers, still bounded by the viewport.
+   */
+  max-height: min(520px, calc(100vh - 160px));
 }
 .screen-shell.command-screen .select-menu .select-option:disabled {
   cursor: not-allowed;

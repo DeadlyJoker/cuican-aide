@@ -23,11 +23,43 @@ export type ExecutionTargetKind = "crewon" | "agent" | "team" | "experts";
 export type ExecutionTargetOption = {
   detail: string;
   disabled?: boolean;
+  /**
+   * Section this target appears under in the composer selector. Derived from
+   * where the definition lives rather than from its execution strategy, since
+   * that is the distinction users pick along: local, cloud, or expert team.
+   */
+  group?: ExecutionTargetGroup;
   kind: ExecutionTargetKind;
   label: string;
   strategy: "single" | "team";
   value: string;
 };
+
+export type ExecutionTargetGroup = "single" | "experts";
+
+/**
+ * Section order and labels for the execution target selector.
+ *
+ * The split follows what actually differs when running a task: one agent that
+ * completes it alone, or a team of experts reporting to a lead. Where the
+ * definition happens to live -- on this machine or on the platform -- does not
+ * change how the task runs, so it is not a section.
+ *
+ * CrewON itself carries no group and stays above these as the default choice.
+ */
+export function executionTargetGroups(
+  locale: Locale = "zh",
+): Array<{ id: ExecutionTargetGroup; label: string }> {
+  return locale === "zh"
+    ? [
+        { id: "single", label: "单智能体" },
+        { id: "experts", label: "专家团" },
+      ]
+    : [
+        { id: "single", label: "Single agent" },
+        { id: "experts", label: "Expert teams" },
+      ];
+}
 
 export type SceneModeOption = {
   detail: string;
@@ -482,8 +514,11 @@ export function executionTargetOptionsFromDomain({
           (locale === "zh"
             ? "使用该智能体的模型与能力配置"
             : "Use this agent's model and capability configuration"),
+        // The section header already says these run as a single agent, so the
+        // label carries the name only.
+        group: "single" as const,
         kind: "agent" as const,
-        label: `${record.config.name} · 单 Agent`,
+        label: record.config.name,
         strategy: "single" as const,
         value: `agent:${id}`,
       },
@@ -515,8 +550,11 @@ export function executionTargetOptionsFromDomain({
             ? "小队尚未配置成员，不能开始任务"
             : "This team has no configured members and cannot start",
       disabled: !ready,
+      // A bounded Team Runtime is a team of agents reporting to a lead, which is
+      // the same choice users make when picking an expert team.
+      group: "experts" as const,
       kind: "team" as const,
-      label: `${title} · Team`,
+      label: title,
       strategy: "team" as const,
       value: duplicateTitle
         ? `team:unavailable:${unavailableId}`
@@ -550,6 +588,7 @@ export function executionTargetOptionsFromDomain({
           {
             detail: fallback,
             disabled: true,
+            group: "single" as const,
             kind: "agent" as const,
             label:
               locale === "zh"
@@ -563,9 +602,27 @@ export function executionTargetOptionsFromDomain({
   ];
   return options.filter(
     (option, index) =>
-      options.findIndex((candidate) => candidate.value === option.value) ===
-      index,
+      options.findIndex(
+        (candidate) =>
+          executionTargetIdentity(candidate.value) ===
+          executionTargetIdentity(option.value),
+      ) === index,
   );
+}
+
+/**
+ * Collapse the two saved shapes of a platform agent target to one identity.
+ *
+ * The same cloud agent can be saved twice on disk -- once as the resource id
+ * `agent-platform:agents:<id>` and once as a bare `agent-platform:<id>` -- which
+ * listed it twice in the selector under the same name. Any other target is its
+ * own identity.
+ */
+function executionTargetIdentity(value: string): string {
+  const platformAgent = /^agent:agent-platform:(?:agents:)?(\d+)$/.exec(value);
+  return platformAgent === null
+    ? value
+    : `agent:agent-platform:${platformAgent[1]}`;
 }
 
 export function modeMayWrite(mode: SceneInteractionMode): boolean {

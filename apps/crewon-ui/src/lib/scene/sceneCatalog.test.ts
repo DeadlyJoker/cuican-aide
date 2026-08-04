@@ -107,6 +107,73 @@ describe("sceneCatalog", () => {
     ]);
   });
 
+  /*
+   * A cloud agent can be saved twice on disk: once as the resource id
+   * `agent-platform:agents:<id>` and once as a bare `agent-platform:<id>`. Both
+   * are real shapes in existing workspaces, and keying the dedupe on the raw
+   * value listed the same agent twice under the same name.
+   */
+  it("lists a cloud agent once when both saved id shapes exist", () => {
+    const options = executionTargetOptionsFromDomain({
+      agents: [
+        {
+          filePath: "/repo/.crewon/agents/new.json",
+          config: {
+            agentId: "agent-platform:agents:7",
+            name: "数据分析助手",
+          } as never,
+        },
+        {
+          filePath: "/repo/.crewon/agents/legacy.json",
+          config: { agentId: "agent-platform:7", name: "数据分析助手" } as never,
+        },
+      ],
+      offices: [],
+      status: "ready",
+    });
+
+    expect(options.filter((option) => option.kind === "agent")).toEqual([
+      expect.objectContaining({
+        group: "single",
+        label: "数据分析助手",
+        value: "agent:agent-platform:agents:7",
+      }),
+    ]);
+  });
+
+  it("groups single agents apart from teams and drops repeated suffixes", () => {
+    const options = executionTargetOptionsFromDomain({
+      agents: [
+        {
+          filePath: "/repo/.crewon/agents/reviewer.json",
+          config: { agentId: "agent-reviewer", name: "审阅员" } as never,
+        },
+      ],
+      offices: [
+        {
+          filePath: "/repo/.crewon/offices/delivery.json",
+          config: {
+            title: "交付小队",
+            workspace: { members: [{ name: "A" }] },
+          } as never,
+        },
+      ],
+      status: "ready",
+    });
+
+    // The section header carries the distinction, so the label is the name only.
+    expect(
+      options.map((option) => ({
+        group: option.group,
+        label: option.label,
+      })),
+    ).toEqual([
+      { group: undefined, label: "CrewON" },
+      { group: "single", label: "审阅员" },
+      { group: "experts", label: "交付小队" },
+    ]);
+  });
+
   it("does not relabel Office records as Experts execution targets", () => {
     const options = executionTargetOptionsFromDomain({
       agents: [],

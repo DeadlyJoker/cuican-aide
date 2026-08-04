@@ -17,11 +17,14 @@ export function agentPlatformExecutionTargetOptions(
   );
   return snapshot.agents
     .filter(isRunnablePlatformAgent)
-    .filter((agent) => !persistedIds.has(agentPlatformAgentId(agent.id)))
+    .filter((agent) => !isPersisted(persistedIds, agent.id))
     .map((agent) => ({
       detail: agent.description?.trim() || "已同步的云智能体配置",
+      // A cloud agent still runs as one agent, so it shares the single-agent
+      // section and carries no suffix of its own.
+      group: "single" as const,
       kind: "agent" as const,
-      label: `${agent.name} · 云智能体`,
+      label: agent.name,
       strategy: "single" as const,
       value: agentPlatformExecutionTargetValue(agent.id),
     }));
@@ -49,8 +52,18 @@ function platformAgentIdForExecutionTarget(target: string): number | null {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-function agentPlatformAgentId(agentId: number): string {
-  return `agent-platform:${agentId}`;
+/*
+ * Two key shapes exist in the wild. The Agents page writes the resource id
+ * `agent-platform:agents:<id>`, but older configs on disk carry a bare
+ * `agent-platform:<id>`. Matching only one shape leaves the other half of the
+ * saved agents undeduped, so the selector lists them twice: once from the
+ * persisted config and once from the live snapshot.
+ */
+function isPersisted(persistedIds: Set<string>, agentId: number): boolean {
+  return (
+    persistedIds.has(`agent-platform:agents:${agentId}`) ||
+    persistedIds.has(`agent-platform:${agentId}`)
+  );
 }
 
 function isRunnablePlatformAgent(agent: PlatformAgent): boolean {

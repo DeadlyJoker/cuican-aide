@@ -11,8 +11,9 @@ export function providerAgentExecutionTargetOptions(
     .filter((resource) => resource.resourceType === "agent")
     .map((resource) => ({
       detail: `${resource.providerId} · revision ${resource.revision}`,
+      group: "single" as const,
       kind: "agent" as const,
-      label: `${resource.resourceId} · 在线 Agent`,
+      label: resource.resourceId,
       strategy: "single" as const,
       value: providerAgentTargetValue(resource),
     }));

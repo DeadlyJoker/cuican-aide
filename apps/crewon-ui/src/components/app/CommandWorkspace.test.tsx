@@ -401,8 +401,10 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain("review-agent · 在线 Agent");
-    expect(existingThreadMarkup).toContain("review-agent · 在线 Agent");
+    // The selector's "单智能体" section header carries the distinction now, so the
+    // option label is the agent name without a repeated per-row suffix.
+    expect(markup).toContain("review-agent");
+    expect(existingThreadMarkup).toContain("review-agent");
     expect(markup).toMatchSnapshot();
   });
 
