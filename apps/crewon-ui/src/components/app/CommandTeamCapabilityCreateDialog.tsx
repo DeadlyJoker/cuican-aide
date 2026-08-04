@@ -12,12 +12,18 @@ export type WorkflowAgentOption = {
   apiEnabled: boolean;
   description: string;
   id: number;
+  modelName: string;
+  modelProvider: string;
   name: string;
+  systemPrompt: string;
 };
 
 export type WorkflowAgentNodeInput = {
   agentId: number;
   instruction: string;
+  modelName: string;
+  modelProvider: string;
+  systemPrompt: string;
   title: string;
 };
 
@@ -118,11 +124,20 @@ export function CommandTeamCapabilityCreateDialog({
       return;
     }
     if (workflow) {
-      const normalizedNodes = workflowNodes.map((node) => ({
-        agentId: Number(node.agentId),
-        instruction: node.instruction.trim(),
-        title: node.title.trim(),
-      }));
+      const normalizedNodes = workflowNodes.map((node) => {
+        const agentId = Number(node.agentId);
+        const agent = workflowAgents.find(
+          (candidate) => candidate.id === agentId,
+        );
+        return {
+          agentId,
+          instruction: node.instruction.trim(),
+          modelName: agent?.modelName || "qwen-plus",
+          modelProvider: agent?.modelProvider || "openai",
+          systemPrompt: agent?.systemPrompt || "",
+          title: node.title.trim(),
+        };
+      });
       if (
         normalizedNodes.length === 0 ||
         normalizedNodes.some(

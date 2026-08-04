@@ -17,13 +17,19 @@ describe("CommandTeamCapabilityCreateDialog", () => {
             apiEnabled: true,
             description: "审阅需求",
             id: 101,
+            modelName: "qwen-plus",
+            modelProvider: "qwen",
             name: "产品审阅智能体",
+            systemPrompt: "严格审阅需求。",
           },
           {
             apiEnabled: false,
             description: "交付检查",
             id: 102,
+            modelName: "qwen-plus",
+            modelProvider: "qwen",
             name: "交付智能体",
+            systemPrompt: "检查交付质量。",
           },
         ]}
         workspaceCwd={workspaceCwd}

@@ -264,11 +264,17 @@ describe("agent-platform client mapping", () => {
       {
         agentId: 101,
         instruction: "审阅需求并列出风险",
+        modelName: "qwen-plus",
+        modelProvider: "qwen",
+        systemPrompt: "Use bound resources.",
         title: "需求审阅",
       },
       {
         agentId: 102,
         instruction: "根据审阅结果完成交付检查",
+        modelName: "qwen-plus",
+        modelProvider: "qwen",
+        systemPrompt: "Check the delivery.",
         title: "交付检查",
       },
     ]);
@@ -313,7 +319,8 @@ describe("agent-platform client mapping", () => {
           id: "agent-1",
           type: "agent",
           data: expect.objectContaining({
-            agentId: 101,
+            model: { name: "qwen-plus", provider: "qwen" },
+            platformAgentId: 101,
             title: "需求审阅",
           }),
         }),

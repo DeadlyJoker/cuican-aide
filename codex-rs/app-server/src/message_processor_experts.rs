@@ -21,6 +21,8 @@ use crate::request_processors::ExpertsRequestProcessor;
 use crate::request_processors::read_expert_team_record;
 
 const EXPERT_DEFINITION_SCOPE_ID: &str = "expert-team-definitions";
+const SINGLE_TENANT_WEBSOCKET_ENV: &str = "CREWON_EXPERT_TEAM_SINGLE_TENANT_WEBSOCKET_ENABLED";
+const SINGLE_TENANT_OWNER_SUBJECT: &str = "single-tenant-web-user";
 
 impl MessageProcessor {
     pub(super) async fn authorize_expert_team_thread_start(
@@ -160,26 +162,34 @@ impl MessageProcessor {
 fn expert_team_identity_scope(
     identity: &RequestIdentity,
 ) -> Result<(ExpertTeamAuthority, String, Option<String>, Option<String>), JSONRPCErrorError> {
-    let (owner_subject, tenant_id, space_id) =
-        if let Some(principal) = identity.authenticated_principal() {
-            (
-                principal.stable_actor_id().to_string(),
-                Some(principal.tenant_id().to_string()),
-                Some(principal.space_id().to_string()),
-            )
-        } else {
-            match identity.transport() {
-                RequestIdentityTransport::Stdio | RequestIdentityTransport::InProcess => {
-                    ("local-user".to_string(), None, None)
-                }
-                RequestIdentityTransport::WebSocket | RequestIdentityTransport::RemoteControl => {
-                    return Err(invalid_request(
-                        "Expert Team requests require an authenticated principal",
-                    ));
-                }
+    let (owner_subject, tenant_id, space_id) = if let Some(principal) =
+        identity.authenticated_principal()
+    {
+        (
+            principal.stable_actor_id().to_string(),
+            Some(principal.tenant_id().to_string()),
+            Some(principal.space_id().to_string()),
+        )
+    } else {
+        match identity.transport() {
+            RequestIdentityTransport::Stdio | RequestIdentityTransport::InProcess => {
+                ("local-user".to_string(), None, None)
             }
-        };
+            RequestIdentityTransport::WebSocket if single_tenant_websocket_experts_enabled() => {
+                (SINGLE_TENANT_OWNER_SUBJECT.to_string(), None, None)
+            }
+            RequestIdentityTransport::WebSocket | RequestIdentityTransport::RemoteControl => {
+                return Err(invalid_request(
+                    "Expert Team requests require an authenticated principal",
+                ));
+            }
+        }
+    };
     let authority =
         ExpertTeamAuthority::new(owner_subject.clone(), tenant_id.clone(), space_id.clone())?;
     Ok((authority, owner_subject, tenant_id, space_id))
+}
+
+fn single_tenant_websocket_experts_enabled() -> bool {
+    std::env::var(SINGLE_TENANT_WEBSOCKET_ENV).is_ok_and(|value| value == "true")
 }

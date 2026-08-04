@@ -1,4 +1,5 @@
 use super::connection_handling_websocket::WsClient;
+use super::connection_handling_websocket::connect_websocket;
 use super::connection_handling_websocket::connect_websocket_with_bearer;
 use super::connection_handling_websocket::create_config_toml;
 use super::connection_handling_websocket::read_error_for_id;
@@ -8,6 +9,7 @@ use super::connection_handling_websocket::read_response_for_id;
 use super::connection_handling_websocket::send_request;
 use super::connection_handling_websocket::signed_bearer_token;
 use super::connection_handling_websocket::spawn_websocket_server_with_args;
+use super::connection_handling_websocket::spawn_websocket_server_with_env_and_args;
 use anyhow::Context;
 use anyhow::Result;
 use app_test_support::create_mock_responses_server_sequence_unchecked;
@@ -34,10 +36,80 @@ use crewon_protocol::models::ResponseItem;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::path::Path;
+use std::time::Duration;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 
 const SHARED_SECRET: &str = "0123456789abcdef0123456789abcdef";
+const SINGLE_TENANT_WEBSOCKET_ENV: &str = "CREWON_EXPERT_TEAM_SINGLE_TENANT_WEBSOCKET_ENABLED";
+
+#[tokio::test]
+async fn experts_single_tenant_websocket_mode_is_explicit_and_functional() -> Result<()> {
+    let server = create_mock_responses_server_sequence_unchecked(Vec::new()).await;
+    let codex_home = TempDir::new()?;
+    create_config_toml(codex_home.path(), &server.uri(), "never")?;
+    let (mut process, bind_addr) = spawn_websocket_server_with_env_and_args(
+        codex_home.path(),
+        "ws://127.0.0.1:0",
+        &[(SINGLE_TENANT_WEBSOCKET_ENV, Some("true"))],
+        &[],
+    )
+    .await?;
+    let mut client = tokio::time::timeout(Duration::from_secs(10), connect_websocket(bind_addr))
+        .await
+        .context("timed out connecting single-tenant Experts websocket")??;
+    tokio::time::timeout(Duration::from_secs(10), initialize(&mut client, /*id*/ 1))
+        .await
+        .context("timed out initializing single-tenant Experts websocket")??;
+    let workspace_key = tokio::time::timeout(
+        Duration::from_secs(10),
+        read_workspace_key(&mut client, /*id*/ 2),
+    )
+    .await
+    .context("timed out listing the single-tenant Experts workspace")??;
+    let created = tokio::time::timeout(
+        Duration::from_secs(10),
+        create_expert_team(&mut client, /*id*/ 3, &workspace_key),
+    )
+    .await
+    .context("timed out creating the single-tenant Expert Team")??;
+    let cwd = workspace_root_for_record(&created.record.file_path)?;
+
+    let mut thread_start =
+        experts_thread_start_params(&cwd, &workspace_key, &created.record.config.experts_id);
+    thread_start.execution_context = None;
+    send_request(
+        &mut client,
+        "thread/start",
+        /*id*/ 4,
+        Some(serde_json::to_value(thread_start)?),
+    )
+    .await?;
+    let started: ThreadStartResponse = to_response(
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            read_response_for_id(&mut client, /*id*/ 4),
+        )
+        .await
+        .context("timed out starting the single-tenant Experts thread")??,
+    )?;
+    let scene = started.scene_runtime.expect("Experts scene runtime");
+    assert_eq!(
+        (scene.execution_target_kind, scene.execution_strategy),
+        (
+            SceneExecutionTargetKind::Experts,
+            SceneExecutionStrategy::Team,
+        )
+    );
+
+    std::fs::remove_file(&created.record.file_path)?;
+    client.close(None).await?;
+    process
+        .kill()
+        .await
+        .context("failed to stop single-tenant Experts app-server process")?;
+    Ok(())
+}
 
 #[tokio::test]
 async fn experts_thread_start_enforces_owner_and_workspace_authority() -> Result<()> {

@@ -159,6 +159,9 @@ export type PlatformWorkflowExecution = {
 export type AgentPlatformWorkflowNodeInput = {
   agentId: number;
   instruction: string;
+  modelName: string;
+  modelProvider: string;
+  systemPrompt: string;
   title: string;
 };
 
@@ -359,9 +362,12 @@ export function buildAgentPlatformWorkflowGraph(
   const agentNodes = configuredNodes.map((node, index) => {
     const id = `agent-${index + 1}`;
     const sourceId = index === 0 ? startId : `agent-${index}`;
-    const sourceField = index === 0 ? "query" : "text";
+    const sourceField = index === 0 ? "input" : "text";
     const inputTemplate = `{{#${sourceId}.${sourceField}#}}`;
     const query = `${inputTemplate}\n\n本节点要求：${node.instruction}`;
+    const instruction = [node.systemPrompt.trim(), node.instruction.trim()]
+      .filter(Boolean)
+      .join("\n\n");
     return {
       id,
       type: "agent",
@@ -370,11 +376,15 @@ export function buildAgentPlatformWorkflowGraph(
         type: "agent",
         label: node.title,
         title: node.title,
-        agentId: node.agentId,
         agentInput: query,
         query,
-        instruction: node.instruction,
+        instruction,
         max_iterations: 5,
+        model: {
+          name: node.modelName,
+          provider: node.modelProvider,
+        },
+        platformAgentId: node.agentId,
       },
     };
   });
@@ -390,7 +400,7 @@ export function buildAgentPlatformWorkflowGraph(
         title: "任务输入",
         variables: [
           {
-            variable: "query",
+            variable: "input",
             label: "任务",
             description: "本次协作流要完成的任务",
             type: "paragraph",

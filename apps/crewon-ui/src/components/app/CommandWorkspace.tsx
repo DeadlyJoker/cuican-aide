@@ -791,6 +791,7 @@ export function CommandWorkspace({
   useEffect(() => {
     let cancelled = false;
     if (
+      connectionState !== "connected" ||
       providerExpertWorkspaceKey ||
       !executionTargetClient?.listRegisteredWorkspaces
     ) {
@@ -822,7 +823,12 @@ export function CommandWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [cwd, executionTargetClient, providerExpertWorkspaceKey]);
+  }, [
+    connectionState,
+    cwd,
+    executionTargetClient,
+    providerExpertWorkspaceKey,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2644,7 +2650,13 @@ export function CommandWorkspace({
                 apiEnabled: Boolean(agent.api_enabled),
                 description: agent.description || "",
                 id: agent.id,
+                modelName:
+                  agent.model_info?.model_name ||
+                  agent.model_info?.name ||
+                  "qwen-plus",
+                modelProvider: agent.model_info?.provider || "openai",
                 name: agent.name,
+                systemPrompt: agent.system_prompt || "",
               }))}
               workspaceCwd=""
               onClose={() => {
