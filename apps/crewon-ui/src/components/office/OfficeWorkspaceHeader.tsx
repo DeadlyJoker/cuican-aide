@@ -1,3 +1,5 @@
+import { SegmentedTabs } from "../shared/SegmentedTabs";
+
 import type {
   LibraryPanel,
   OfficeWorkspace,
@@ -121,24 +123,12 @@ export function OfficeWorkspaceHeader({
           {workspace.members.length} {isZh ? "员工" : "members"}
         </p>
       </div>
-      <div
-        className="office-tabs"
-        role="tablist"
-        aria-label={isZh ? "办公室视图" : "Office views"}
-      >
-        {tabs.map((tab) => (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.value}
-            data-active={activeTab === tab.value}
-            key={tab.value}
-            onClick={() => onTabChange(tab.value)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+        active={activeTab}
+        label={isZh ? "办公室视图" : "Office views"}
+        options={tabs}
+        onChange={(value) => onTabChange(value as OfficeWorkspaceTab)}
+      />
       <div className="office-top-actions">
         <button
           type="button"

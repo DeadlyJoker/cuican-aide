@@ -714,6 +714,16 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
 .workflow-room-title-block {
   display: grid;
   gap: 2px;
+  min-width: 0;
+}
+/*
+ * The heading and paragraph keep their user-agent margins otherwise (17px and
+ * 12px, top and bottom), which inflated this row to 142px against the Office
+ * room's 84px even though both declare the same 64px floor.
+ */
+.workflow-room-title-block h3,
+.workflow-room-title-block p {
+  margin: 0;
 }
 .workflow-room-title-block span {
   color: var(--n-650);
@@ -728,15 +738,26 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+/*
+ * One line with an ellipsis, like the Office room: a second line moves the room
+ * header by 16px depending on how long the summary happens to be, and the full
+ * text is already on the element's title attribute.
+ */
 .workflow-room-title-block p {
-  display: -webkit-box;
-  max-width: 90ch;
   overflow: hidden;
   color: var(--n-750);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/*
+ * Room headers follow the page headers: one control height across the row, so a
+ * \`compact\` button does not render 28px beside the 32px controls in the Office
+ * room header.
+ */
+.workflow-room-top .button.compact {
+  min-height: var(--control-h-md);
 }
 .workflow-room-top > .button:first-child svg,
 .workflow-room-actions .button svg {

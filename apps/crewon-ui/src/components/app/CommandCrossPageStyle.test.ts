@@ -514,3 +514,112 @@ describe("segmented tabs", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/*
+ * The Team rooms are the same kind of surface -- back action, three-line title,
+ * trailing controls -- but they had drifted apart on every axis. The Office room
+ * hand-rolled its own tab strip (a bordered 220px track whose labels wrapped
+ * onto a second line, rendering an 88px-floored header at 95.5px), while the
+ * Workflow room left the UA margins on its heading and paragraph and rendered
+ * 142.6px against a declared 64px floor. Both are now 84.6px.
+ */
+describe("team room header", () => {
+  it("renders the room tab strip through the shared segmented control", () => {
+    const rooms = new URL("../office/", import.meta.url);
+    const offenders: string[] = [];
+
+    for (const entry of readdirSync(rooms)) {
+      if (!entry.endsWith(".tsx") || entry.includes(".test.")) continue;
+      const source = readFileSync(new URL(entry, rooms).pathname, "utf8");
+      // A role="tablist" of buttons is a segmented control, so it belongs to the
+      // shared component rather than a per-room strip.
+      if (source.includes('role="tablist"')) offenders.push(entry);
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("leaves no styles behind for the removed room strips", () => {
+    const declared = SHELL_FILES.map(readStyles).join("\n");
+
+    expect(declared).not.toContain(".office-tabs");
+    expect(declared).not.toContain(".office-memory-status-tabs");
+  });
+
+  it("strips the user-agent margins off every room title block", () => {
+    // Without this the heading and paragraph carry 17px and 12px top and bottom,
+    // which is the whole 58px gap between the two room headers.
+    const source = readStyles("original-shell-overrides.css");
+    const rule = scanRules(source).find((candidate) =>
+      /^\.workflow-room-title-block h3,\s*\.workflow-room-title-block p$/.test(
+        candidate.selector.replace(/\s+/g, " ").trim(),
+      ),
+    );
+
+    expect(rule?.body).toContain("margin: 0");
+  });
+
+  it("keeps one control height across both room headers", () => {
+    const offenders: string[] = [];
+
+    for (const file of SHELL_FILES) {
+      const source = readStyles(file);
+      for (const rule of scanRules(source)) {
+        if (!/\.(office-top|workflow-room-top)\b/.test(rule.selector)) continue;
+        // An icon is sized geometry, not a control.
+        if (/\bsvg\b/.test(rule.selector)) continue;
+        for (const match of rule.body.matchAll(
+          /(?:^|[\s;])(?:min-)?height:\s*([^;]+)/g,
+        )) {
+          const value = match[1].trim();
+          if (value.startsWith("var(--control-h-")) continue;
+          if (/^(auto|100%|inherit|0|64px)$/.test(value)) continue;
+          const line = source.slice(0, rule.start).split("\n").length;
+          offenders.push(`${file}:${line} ${rule.selector.slice(0, 40)} = ${value}`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("gives both rooms the same header floor", () => {
+    const floors: Record<string, string | undefined> = {};
+
+    for (const file of SHELL_FILES) {
+      for (const rule of rulesOf(file)) {
+        if (rule.atRules.length > 0) continue;
+        if (!/^\.(office-top|workflow-room-top)$/.test(rule.selector)) continue;
+        const floor = rule.body.match(/min-height:\s*([^;]+)/)?.[1].trim();
+        if (floor) floors[rule.selector] = floor;
+      }
+    }
+
+    expect(floors).toEqual({
+      ".office-top": "64px",
+      ".workflow-room-top": "64px",
+    });
+  });
+
+  it("reflows the room header from the canvas, not the viewport", () => {
+    // The Office room renders inside the Team page stack, so the window stays
+    // wide while the room narrows behind the sidebar and workbench.
+    const source = readStyles("app.css");
+    const offenders: string[] = [];
+
+    for (const rule of scanRules(source)) {
+      const media = rule.atRules.find((at) => at.startsWith("@media"));
+      if (!media) continue;
+      if (!/\.office-top\b/.test(rule.selector)) continue;
+      const props = declaredProperties(rule.body);
+      if (!props.has("grid-template-columns")) continue;
+      // The smallest step may stay a viewport query: at that width the whole
+      // window is narrow, not just the canvas.
+      if (/max-width:\s*720px/.test(media)) continue;
+      const line = source.slice(0, rule.start).split("\n").length;
+      offenders.push(`${line} ${rule.selector.slice(0, 40)} ${media}`);
+    }
+
+    expect(offenders).toEqual([]);
+  });
+});

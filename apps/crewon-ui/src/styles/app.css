@@ -7731,21 +7731,28 @@ button.library-item:hover .library-card-chevron {
   background: var(--bg);
 }
 
+/*
+ * The Office and Workflow rooms are the same kind of surface -- a back action, a
+ * title block, and trailing controls -- so they share one header geometry. This
+ * row used to be 88px against Workflow's 64px, and the tab strip sat in a `1fr`
+ * column that stretched a 110px strip wide enough to wrap its labels onto a
+ * second line, pushing the rendered header to 95.5px.
+ */
 .office-top {
   display: grid;
-  grid-template-columns: auto minmax(240px, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 16px;
-  min-height: 88px;
-  padding: 12px 22px;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
   width: 100%;
 }
 
 .office-back {
-  height: 34px;
-  padding: 0 13px;
+  min-height: var(--control-h-md);
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
@@ -7761,61 +7768,33 @@ button.library-item:hover .library-card-chevron {
   min-width: 0;
 }
 
+/* Same three-line title block as the Workflow room, so both read as one kind. */
 .office-top-title > span {
   color: var(--text-muted);
-  font-size: calc(12px + var(--user-ui-font-delta));
-  font-weight: 500;
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .office-top-title h1 {
   margin: 0;
   overflow: hidden;
-  font-size: calc(18px + var(--user-ui-font-delta));
-  font-weight: 700;
+  font-size: calc(17px + var(--user-ui-font-delta));
+  font-weight: 600;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .office-top-title p {
   margin: 0;
+  overflow: hidden;
   color: var(--text-faint);
   font-size: calc(12px + var(--user-ui-font-delta));
-}
-
-.office-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: var(--radius-lg);
-  background: var(--surface-strong);
-  border: 1px solid var(--border);
-  width: min(220px, 100%);
-}
-
-.office-tabs button {
-  flex: 1;
-  min-width: 0;
-  padding: 7px 13px;
-  border-radius: var(--radius-md);
-  font-size: calc(13px + var(--user-ui-font-delta));
-  font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  transition:
-    background var(--dur-fast) var(--ease),
-    color var(--dur-fast) var(--ease);
-}
-
-.office-tabs button:hover {
-  color: var(--text);
-}
-
-.office-tabs button[data-active="true"] {
-  color: var(--text);
-  background: var(--surface);
-  box-shadow: var(--shadow-raised);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .office-top-actions {
@@ -7826,8 +7805,8 @@ button.library-item:hover .library-card-chevron {
 
 .office-top-actions button,
 .office-runtime-status {
-  height: 34px;
-  padding: 0 13px;
+  min-height: var(--control-h-md);
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
@@ -7883,20 +7862,10 @@ button.library-item:hover .library-card-chevron {
   flex-wrap: wrap;
 }
 
-.office-memory-status-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--surface-strong);
-}
-
-.office-memory-status-tabs button,
 .office-memory-refresh,
 .office-memory-load-more,
 .office-memory-actions button {
-  min-height: 30px;
+  min-height: var(--control-h-md);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface);
@@ -7904,18 +7873,6 @@ button.library-item:hover .library-card-chevron {
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
   cursor: pointer;
-}
-
-.office-memory-status-tabs button {
-  min-width: 88px;
-  border-color: transparent;
-  background: transparent;
-}
-
-.office-memory-status-tabs button[data-active="true"] {
-  background: var(--surface);
-  color: var(--text);
-  border-color: var(--border);
 }
 
 .office-memory-refresh,
@@ -8921,15 +8878,19 @@ button.library-item:hover .library-card-chevron {
   line-height: 1.5;
 }
 
-@media (max-width: 1080px) {
+/*
+ * Canvas-relative: the Office room renders inside the Team page stack, so the
+ * window stays wide while the room narrows behind the sidebar and workbench. A
+ * viewport query never matched here.
+ */
+@container page-stack (max-width: 1080px) {
   .office-top {
-    grid-template-columns: auto minmax(220px, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
-  .office-tabs {
+  .office-top .catalog-mode-tabs {
     grid-column: 2 / 4;
     grid-row: 2;
-    width: 100%;
   }
 
   .office-top-actions {
@@ -8945,12 +8906,12 @@ button.library-item:hover .library-card-chevron {
     padding: 10px 12px;
   }
 
-  .office-tabs,
+  .office-top .catalog-mode-tabs,
   .office-top-actions {
     grid-column: 1 / -1;
   }
 
-  .office-tabs {
+  .office-top .catalog-mode-tabs {
     grid-row: 2;
   }
 

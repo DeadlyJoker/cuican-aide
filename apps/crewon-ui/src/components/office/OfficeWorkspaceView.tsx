@@ -31,6 +31,7 @@ import {
   officeIdentitySnapshotsMatch,
   officePanelMatchesIdentity,
 } from "../../lib/office/officeIdentity";
+import { SegmentedTabs } from "../shared/SegmentedTabs";
 import { OfficeChatPanel } from "./OfficeChatPanel";
 import { OfficeMembersPanel } from "./OfficeMembersPanel";
 import {
@@ -550,24 +551,17 @@ export function OfficeMemoryReviewPanel({
   return (
     <section className="office-memory-panel" aria-label={statusLabel(status)}>
       <div className="office-memory-toolbar">
-        <div
-          className="office-memory-status-tabs"
-          role="tablist"
-          aria-label={isZh ? "记忆状态" : "Memory status"}
-        >
-          {statusOptions.map((option) => (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={status === option}
-              data-active={status === option}
-              key={option}
-              onClick={() => onStatusChange(option)}
-            >
-              {statusLabel(option)}
-            </button>
-          ))}
-        </div>
+        <SegmentedTabs
+          active={status}
+          label={isZh ? "记忆状态" : "Memory status"}
+          options={statusOptions.map((option) => ({
+            label: statusLabel(option),
+            value: option,
+          }))}
+          onChange={(value) =>
+            onStatusChange(value as OfficeMemoryStatus)
+          }
+        />
         <button
           type="button"
           className="office-memory-refresh"
