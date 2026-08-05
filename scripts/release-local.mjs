@@ -43,14 +43,50 @@ function run(command, args, options = {}) {
   });
 }
 
+/**
+ * Token used to create the release and upload assets.
+ *
+ * Falls back to the credential git already has, which on a machine that pushes
+ * to GitHub over HTTPS is usually there with `repo` scope. Asking someone to mint
+ * a second token for a credential the machine already holds is friction for
+ * nothing.
+ *
+ * Cached because the helper shells out and this is called per request.
+ */
+let cachedToken;
 function token() {
-  const value = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
-  if (value === undefined || value === "") {
-    throw new Error(
-      "GITHUB_TOKEN is not set. Create one with `repo` scope at https://github.com/settings/tokens",
-    );
+  if (cachedToken !== undefined) {
+    return cachedToken;
   }
-  return value;
+
+  const fromEnv = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+  if (fromEnv !== undefined && fromEnv !== "") {
+    cachedToken = fromEnv;
+    return cachedToken;
+  }
+
+  try {
+    const filled = execFileSync("git", ["credential", "fill"], {
+      input: "protocol=https\nhost=github.com\n\n",
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    const line = filled
+      .split("\n")
+      .find((entry) => entry.startsWith("password="));
+    if (line !== undefined) {
+      cachedToken = line.slice("password=".length);
+      return cachedToken;
+    }
+  } catch {
+    // No helper, or nothing stored. Fall through to the explicit instruction.
+  }
+
+  throw new Error(
+    "no GitHub credential found. Either push to GitHub over HTTPS once so it is " +
+      "stored, or set GITHUB_TOKEN to a token with `repo` scope from " +
+      "https://github.com/settings/tokens",
+  );
 }
 
 async function github(path, { method = "GET", body, host = API } = {}) {
@@ -68,7 +104,8 @@ async function github(path, { method = "GET", body, host = API } = {}) {
       `${method} ${path} failed: ${response.status} ${await response.text()}`,
     );
   }
-  return response.json();
+  // DELETE answers 204 with no body, so parsing unconditionally throws.
+  return response.status === 204 ? undefined : response.json();
 }
 
 /**
@@ -252,14 +289,22 @@ async function main() {
   const release = await ensureRelease(tag, version);
 
   console.log("uploading");
-  const [installerAsset, archiveAsset] = [
-    await uploadAsset(release, installer),
-    await uploadAsset(release, archive),
-  ];
+  await uploadAsset(release, installer);
+  await uploadAsset(release, archive);
+
+  /** Download URL an asset will have once the release is published. */
+  const publishedUrl = (path) =>
+    `https://github.com/${REPO}/releases/download/${tag}/${encodeURIComponent(
+      path.split("/").pop(),
+    )}`;
 
   // The manifest is written after the uploads, because it names the archive by
   // the URL GitHub assigned it. Attaching it last also means a partially
   // uploaded release has no manifest to be found by.
+  // Built from the tag, not taken from `archiveAsset.browser_download_url`.
+  // A draft's asset URLs contain a temporary `untagged-<hash>` segment that
+  // changes to the tag on publish, so recording what the API returns now yields
+  // a manifest whose download 404s the moment the release goes live.
   const manifest = {
     version,
     notes: `Crewon desktop ${version}`,
@@ -267,7 +312,7 @@ async function main() {
     platforms: {
       [PLATFORM_KEY]: {
         signature: readFileSync(signature, "utf8").trim(),
-        url: archiveAsset.browser_download_url,
+        url: publishedUrl(archive),
       },
     },
   };
@@ -276,7 +321,7 @@ async function main() {
   await uploadAsset(release, manifestPath);
 
   console.log(`\ndraft release ready: ${release.html_url}`);
-  console.log(`installer: ${installerAsset.browser_download_url}`);
+  console.log(`installer (once published): ${publishedUrl(installer)}`);
   console.log(
     "\nPublish it on GitHub to make the update visible to installed apps.",
   );
