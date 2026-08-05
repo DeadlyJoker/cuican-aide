@@ -1,0 +1,71 @@
+name: desktop-ci
+
+# The desktop client is the shipping surface, so its bundle has to build on both
+# supported platforms. Nothing verified this before: no workflow referenced Tauri
+# or the UI package, so a Windows-only break could only be found by hand.
+
+on:
+  pull_request:
+    paths:
+      - "apps/crewon-ui/**"
+      - "codex-rs/app-server/**"
+      - "scripts/stage-app-server-sidecar.mjs"
+      - ".github/workflows/desktop-ci.yml"
+  push: { branches: [main] }
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  bundle:
+    name: bundle (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          # Windows ARM64 is deferred: x64 covers the deployed machines and keeps
+          # this matrix to two legs.
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Same pinned toolchain the Rust workflows use, so the sidecar is built with
+      # the compiler the backend is already tested against.
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: ${{ matrix.target }}
+
+      # Runs on both platforms, which is the point: the staging script and the
+      # sidecar path resolution are where Windows assumptions surface.
+      - name: Stage the app-server sidecar
+        run: pnpm --filter @crewon/ui sidecar:stage
+        env:
+          CREWON_SIDECAR_TARGET: ${{ matrix.target }}
+
+      # `tauri build` directly, not `desktop:build`: the sidecar is already staged
+      # above with the matrix target, and the wrapper would rebuild it for the host.
+      - name: Build the desktop bundle
+        run: pnpm --filter @crewon/ui exec tauri build --target ${{ matrix.target }}
