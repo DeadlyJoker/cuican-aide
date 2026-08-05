@@ -1,0 +1,155 @@
+name: crewon-desktop-release
+
+# Builds the installers users download and the manifest the in-app updater reads.
+#
+# Yunxiao's public build clusters are Linux only, and Tauri cannot cross-compile a
+# bundle: a DMG needs macOS `hdiutil`, an NSIS installer needs Windows. Both legs
+# therefore run on a private build cluster of self-hosted machines. See
+# `docs/desktop-release.md` for what those machines need.
+#
+# Triggered by a `desktop-v*` tag so a release is an explicit act, not a side
+# effect of landing on a branch.
+
+sources:
+  repo:
+    type: codeup
+    name: crewon
+    endpoint: https://codeup.aliyun.com/69b2f0ba9df7fdfa6546be32/ccai/crewon.git
+    branch: main
+    triggerEvents:
+      - tagPush
+    certificate:
+      type: serviceConnection
+      # Flow -> 全局设置 -> 服务连接
+      serviceConnection: <your-service-connection-id>
+
+# Private variables cannot be declared in YAML. The signing key authorises every
+# update this app will install, so it comes from a variable group configured in
+# the UI and marked private. See docs/desktop-release.md.
+variableGroups:
+  - crewon-desktop-signing
+
+stages:
+  # Windows first, on its own, because the release job runs on macOS and needs the
+  # Windows artifacts as an input. Each job is a fresh environment that is
+  # destroyed afterwards, so nothing is shared except uploaded artifacts.
+  windows:
+    name: Windows 打包
+    jobs:
+      bundle:
+        name: Windows (x64)
+        runsOn:
+          group: private/<your-private-cluster-id>
+          # Windows and macOS only support the VM environment, so `vm: true` is
+          # required rather than optional.
+          labels: windows,amd64
+          vm: true
+        steps:
+          build:
+            step: Command
+            name: 构建并签名
+            with:
+              # PowerShell: the Windows runner has no POSIX shell. Everything this
+              # calls is Node for the same reason.
+              run: |
+                $ErrorActionPreference = "Stop"
+
+                # Release builds write tens of GB. Keep that off the system
+                # volume, which usually has the least room.
+                if (-not $env:BUILD_DISK) { throw "BUILD_DISK is not set on this runner" }
+                $env:CARGO_TARGET_DIR = Join-Path $env:BUILD_DISK "cargo-target"
+                New-Item -ItemType Directory -Force -Path $env:CARGO_TARGET_DIR | Out-Null
+
+                $env:CREWON_SIDECAR_TARGET = "x86_64-pc-windows-msvc"
+
+                corepack enable
+                pnpm install --frozen-lockfile
+                pnpm --filter @crewon/ui sidecar:stage
+                pnpm --filter @crewon/ui exec tauri build --target x86_64-pc-windows-msvc
+          upload:
+            step: ArtifactUpload
+            name: 上传制品
+            with:
+              uploadType: flowPublic
+              artifact: windows
+              filePath:
+                # The installer, the updater archive, and its signature all live
+                # here. Uploading the directory keeps them together.
+                - apps/crewon-ui/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/
+
+  release:
+    name: macOS 打包并发布
+    jobs:
+      bundle:
+        name: macOS (Apple Silicon) + 发布
+        needs: windows.bundle
+        runsOn:
+          group: private/<your-private-cluster-id>
+          labels: darwin,arm64
+          vm: true
+        steps:
+          fetch_windows:
+            step: ArtifactDownload
+            name: 取回 Windows 制品
+            with:
+              artifact: $[stages.windows.bundle.upload.artifacts.windows]
+              downloadPath: ./dist-windows
+          build:
+            step: Command
+            name: 构建并签名
+            with:
+              run: |
+                set -euo pipefail
+
+                : "${BUILD_DISK:?BUILD_DISK is not set on this runner}"
+                export CARGO_TARGET_DIR="${BUILD_DISK}/cargo-target"
+                mkdir -p "$CARGO_TARGET_DIR"
+
+                # Skips the Finder-arranging AppleScript in DMG bundling, which
+                # needs automation permission a Runner session does not have.
+                # Without this the build compiles everything and then fails.
+                # A self-hosted Runner does not set CI for you.
+                export CI=true
+                export CREWON_SIDECAR_TARGET=aarch64-apple-darwin
+
+                corepack enable
+                pnpm install --frozen-lockfile
+                pnpm --filter @crewon/ui sidecar:stage
+                pnpm --filter @crewon/ui exec tauri build --target aarch64-apple-darwin
+          publish:
+            step: Command
+            name: 生成清单并发布
+            with:
+              # One step, in this order, on purpose: the manifest names files by
+              # URL, so it has to be written before upload and uploaded last.
+              run: |
+                set -euo pipefail
+
+                MAC_BUNDLE=apps/crewon-ui/src-tauri/target/aarch64-apple-darwin/release/bundle
+
+                node scripts/build-update-manifest.mjs \
+                  --tag "$CREWON_RELEASE_TAG" \
+                  --mac "$MAC_BUNDLE/macos" \
+                  --windows ./dist-windows \
+                  --out latest.json
+
+                node scripts/publish-release.mjs \
+                  --tag "$CREWON_RELEASE_TAG" \
+                  --manifest latest.json \
+                  --mac "$MAC_BUNDLE" \
+                  --windows ./dist-windows
+            env:
+              # Flow exposes the triggering tag here; the release scripts check it
+              # against the version in package.json and refuse a mismatch.
+              CREWON_RELEASE_TAG: $[sources.repo.tag]
+          upload:
+            step: ArtifactUpload
+            name: 留存制品
+            with:
+              # OSS is what users and the updater read. This copy exists so a
+              # release can be inspected from Flow without going to the bucket.
+              uploadType: flowPublic
+              artifact: release
+              filePath:
+                - apps/crewon-ui/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/
+                - latest.json

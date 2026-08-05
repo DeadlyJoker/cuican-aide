@@ -85,7 +85,9 @@ function main() {
   if (dryRun) {
     console.log(`would tag ${tag}`);
     if (pending.length === 0) {
-      console.log(`  version is already ${version}; would tag without a commit`);
+      console.log(
+        `  version is already ${version}; would tag without a commit`,
+      );
     }
     for (const edit of pending) {
       console.log(`  would set version ${version} in ${edit.path}`);

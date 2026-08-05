@@ -56,16 +56,23 @@ The staged binary is a build artifact and is gitignored.
 
 `pnpm release:desktop <version>` then pushing the tag builds and publishes both
 platforms. See `docs/desktop-release.md` for the release, install, and
-self-update flow, including the updater signing key.
+self-update flow, including the updater signing key and the build machines it
+needs.
 
 The version has one source: `tauri.conf.json` reads it from `package.json`, and
 the release script keeps `Cargo.toml` in step.
 
 ## CI
 
-`.github/workflows/desktop-ci.yml` bundles on `macos-15` (aarch64) and
-`windows-latest` (x86_64) for every PR. `desktop-release.yml` does the same on a
-`desktop-v*` tag and uploads the result. Windows ARM64 is deliberately deferred.
+Releases run on Yunxiao Flow (`.workflow/desktop-release.yml`), because that is
+where this repository lives. Bundling needs a private build cluster: Flow's
+public clusters are Linux only, and Tauri cannot cross-compile a DMG or an NSIS
+installer.
+
+`.workflow/desktop-ci.yml` checks types, tests, and the release scripts on every
+merge request. It does not bundle -- that would tie up the two platform machines
+for an hour per change. So a Windows-only break is found at release time rather
+than on the change that caused it.
 
 `ci.yml` also typechecks and runs the UI test suite, which nothing did before.
 
