@@ -8,6 +8,7 @@
     "ui:build": "pnpm --filter @crewon/ui build",
     "ui:desktop": "pnpm --filter @crewon/ui desktop",
     "release:desktop": "node scripts/release-desktop.mjs",
+    "release:publish": "node scripts/release-local.mjs",
     "crewon:dev": "bash scripts/crewon-dev.sh",
     "crewon:app-server": "bash scripts/crewon-app-server.sh",
     "format": "prettier --check *.json *.md docs/*.md .github/workflows/*.yml **/*.js",

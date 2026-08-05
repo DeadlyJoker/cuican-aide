@@ -64,15 +64,12 @@ the release script keeps `Cargo.toml` in step.
 
 ## CI
 
-Releases run on Yunxiao Flow (`.workflow/desktop-release.yml`), because that is
-where this repository lives. Bundling needs a private build cluster: Flow's
-public clusters are Linux only, and Tauri cannot cross-compile a DMG or an NSIS
-installer.
+There is none for the bundle. Tauri cannot cross-compile it, so hosted Linux
+runners cannot build it, and self-hosted machines were more infrastructure than
+this release cadence justifies. Releases are built locally and uploaded to GitHub
+Releases; see `docs/desktop-release.md`.
 
-`.workflow/desktop-ci.yml` checks types, tests, and the release scripts on every
-merge request. It does not bundle -- that would tie up the two platform machines
-for an hour per change. So a Windows-only break is found at release time rather
-than on the change that caused it.
+The cost: nothing verifies the bundle except the person cutting the release.
 
 `ci.yml` also typechecks and runs the UI test suite, which nothing did before.
 
