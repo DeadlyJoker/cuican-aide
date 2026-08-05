@@ -4,6 +4,12 @@ mod sidecar;
 pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_shell::init());
 
+    // Requests issued from Rust are not subject to the webview's CORS rules.
+    // The backend sends no `Access-Control-Allow-Origin`, so a packaged build
+    // dialling it from `tauri://localhost` had every request blocked; in dev the
+    // Vite proxy made those calls same-origin and hid the problem.
+    let builder = builder.plugin(tauri_plugin_http::init());
+
     // The updater needs `process` to relaunch after installing. Both are desktop
     // only, and the frontend drives them, so registration is all the shell owes.
     #[cfg(desktop)]
