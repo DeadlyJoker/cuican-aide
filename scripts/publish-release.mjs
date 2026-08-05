@@ -54,9 +54,29 @@ function bucketUri(baseUrl) {
   return prefix === "" ? `oss://${bucket}` : `oss://${bucket}/${prefix}`;
 }
 
-function oss(...args) {
+/**
+ * Region the bucket lives in, read out of the public base URL.
+ *
+ * ossutil v2 signs with SigV4 and refuses to run without a region -- credentials
+ * alone are not enough. Deriving it from the URL rather than taking a separate
+ * setting keeps it from disagreeing with the bucket being written to.
+ */
+function bucketRegion(baseUrl) {
+  // <bucket>.oss-cn-hangzhou.aliyuncs.com -> cn-hangzhou
+  const match = new URL(baseUrl).hostname.match(
+    /\.oss-([a-z0-9-]+)\.aliyuncs\.com$/,
+  );
+  if (match === null) {
+    throw new Error(
+      `could not read a region from ${baseUrl}; expected <bucket>.oss-<region>.aliyuncs.com`,
+    );
+  }
+  return match[1];
+}
+
+function oss(region, ...args) {
   console.log(`ossutil ${args.join(" ")}`);
-  execFileSync("ossutil", args, { stdio: "inherit" });
+  execFileSync("ossutil", [...args, "--region", region], { stdio: "inherit" });
 }
 
 /** Files in `directory` whose name ends with any of `suffixes`, recursively. */
@@ -126,15 +146,17 @@ function main() {
     );
   }
 
+  const region = bucketRegion(baseUrl);
+
   for (const path of payload) {
-    oss("cp", "-f", path, `${base}/${tag}/`);
+    oss(region, "cp", "-f", path, `${base}/${tag}/`);
   }
 
   // Last, and at the stable path the updater polls.
-  oss("cp", "-f", manifest, `${base}/latest.json`);
+  oss(region, "cp", "-f", manifest, `${base}/latest.json`);
   // Also kept under the tag, so a release can be inspected after a later one
   // overwrites the stable manifest.
-  oss("cp", "-f", manifest, `${base}/${tag}/latest.json`);
+  oss(region, "cp", "-f", manifest, `${base}/${tag}/latest.json`);
 
   console.log(`published ${tag}: ${payload.length} artifacts`);
 }

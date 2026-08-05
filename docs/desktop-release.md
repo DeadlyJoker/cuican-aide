@@ -133,13 +133,38 @@ sees an update — there is nothing to fail loudly.
 ### 3. OSS bucket
 
 Yunxiao build artifacts are not durable public URLs, so releases are served from
-OSS. Create a bucket with public read, and give the Runner's `ossutil`
-credentials write access to it. The layout the scripts produce:
+OSS. Create a bucket with public read, and configure `ossutil` on each build
+machine with credentials that can write it:
+
+```bash
+ossutil config
+```
+
+The region is not configured there — `publish-release.mjs` derives it from
+`CREWON_RELEASE_BASE_URL` and passes `--region` on every call, because ossutil v2
+signs with SigV4 and refuses to run without one. That also stops the region and
+the bucket from disagreeing.
+
+The layout the scripts produce:
 
 ```
 desktop/latest.json               ← the stable path the updater polls
 desktop/desktop-v0.2.0/…          ← installers, updater archives, signatures
 ```
+
+### 4. Windows, when there is a machine for it
+
+The pipeline is a `template=true` YAML with a `windows` variable, false by
+default. With only a Mac connected, a `needs` on a Windows job that never runs
+would block every release, so the Windows stage is omitted entirely instead.
+
+Flip `windows` to true in `.workflow/desktop-release.yml` once a Windows machine
+joins the cluster. Nothing else changes: the manifest and publish steps pick up
+their `--windows` arguments from the same switch.
+
+Until then, releases contain macOS only. `latest.json` will have no
+`windows-x86_64` key, which means Windows users are never offered an update —
+that is the correct behaviour when no Windows build exists, but it is silent.
 
 ## Cutting a release
 

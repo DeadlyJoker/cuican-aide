@@ -1,3 +1,4 @@
+# template=true
 name: crewon-desktop-release
 
 # Builds the installers users download and the manifest the in-app updater reads.
@@ -9,6 +10,15 @@ name: crewon-desktop-release
 #
 # Triggered by a `desktop-v*` tag so a release is an explicit act, not a side
 # effect of landing on a branch.
+#
+# `template=true` for one reason: Windows is optional. Only a Mac is connected
+# today, and a `needs` on a job that does not exist would block every release. Set
+# `windows` to true once a Windows machine joins the cluster.
+
+variables:
+  - key: windows
+    type: Object
+    value: false
 
 sources:
   repo:
@@ -30,9 +40,10 @@ variableGroups:
   - crewon-desktop-signing
 
 stages:
-  # Windows first, on its own, because the release job runs on macOS and needs the
-  # Windows artifacts as an input. Each job is a fresh environment that is
-  # destroyed afterwards, so nothing is shared except uploaded artifacts.
+{{ if .windows }}
+  # Windows runs first and alone, because the release job is on macOS and needs
+  # its artifacts. Each job is a fresh environment that is destroyed afterwards,
+  # so nothing is shared except what gets uploaded.
   windows:
     name: Windows 打包
     jobs:
@@ -54,8 +65,11 @@ stages:
               run: |
                 $ErrorActionPreference = "Stop"
 
-                # Release builds write tens of GB. Keep that off the system
-                # volume, which usually has the least room.
+                # The Runner is a service and does not see per-user PATH entries,
+                # which is where rustup and pnpm install. Same problem the macOS
+                # leg has, different cause.
+                . scripts/ci/windows-build-env.ps1
+
                 if (-not $env:BUILD_DISK) { throw "BUILD_DISK is not set on this runner" }
                 $env:CARGO_TARGET_DIR = Join-Path $env:BUILD_DISK "cargo-target"
                 New-Item -ItemType Directory -Force -Path $env:CARGO_TARGET_DIR | Out-Null
@@ -73,27 +87,31 @@ stages:
               uploadType: flowPublic
               artifact: windows
               filePath:
-                # The installer, the updater archive, and its signature all live
-                # here. Uploading the directory keeps them together.
+                # Installer, updater archive, and signature all live here.
                 - apps/crewon-ui/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/
+{{ end }}
 
   release:
     name: macOS 打包并发布
     jobs:
       bundle:
         name: macOS (Apple Silicon) + 发布
+{{ if .windows }}
         needs: windows.bundle
+{{ end }}
         runsOn:
           group: private/<your-private-cluster-id>
           labels: darwin,arm64
           vm: true
         steps:
+{{ if .windows }}
           fetch_windows:
             step: ArtifactDownload
             name: 取回 Windows 制品
             with:
               artifact: $[stages.windows.bundle.upload.artifacts.windows]
               downloadPath: ./dist-windows
+{{ end }}
           build:
             step: Command
             name: 构建并签名
@@ -142,14 +160,18 @@ stages:
                 node scripts/build-update-manifest.mjs \
                   --tag "$CREWON_RELEASE_TAG" \
                   --mac "$MAC_BUNDLE/macos" \
+{{ if .windows }}
                   --windows ./dist-windows \
+{{ end }}
                   --out latest.json
 
                 node scripts/publish-release.mjs \
                   --tag "$CREWON_RELEASE_TAG" \
                   --manifest latest.json \
-                  --mac "$MAC_BUNDLE" \
-                  --windows ./dist-windows
+{{ if .windows }}
+                  --windows ./dist-windows \
+{{ end }}
+                  --mac "$MAC_BUNDLE"
             env:
               # Flow exposes the triggering tag here; the release scripts check it
               # against the version in package.json and refuse a mismatch.
