@@ -15,6 +15,9 @@ build/
 out/
 storybook-static/
 apps/crewon-ui/src-tauri/target/
+# Staged app-server sidecar: a build artifact, produced by
+# `scripts/stage-app-server-sidecar.mjs` at bundle time.
+apps/crewon-ui/src-tauri/binaries/
 apps/crewon-ui/showcase.zip
 
 # ignore Nix derivation results
@@ -95,6 +98,10 @@ yarn.lock
 package.json-e
 session.ts-e
 CHANGELOG.ignore.md
+# Updater signing keys. The private key lives outside the repo and in GitHub
+# secrets; a committed copy would let anyone sign an update this app installs.
+*.key
+!**/*.key.pub
 
 # nix related
 .direnv

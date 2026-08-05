@@ -1,0 +1,121 @@
+name: desktop-release
+
+# Publishes the installers users download and the manifest the in-app updater
+# reads. `desktop-ci.yml` only proves the bundle compiles; nothing produced a
+# downloadable artifact or a `latest.json` before this.
+#
+# Triggered by a `desktop-v*` tag so a release is an explicit act, not a side
+# effect of landing on main. `workflow_dispatch` exists for dry runs: it builds
+# and uploads to a draft without publishing.
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (must already exist), e.g. desktop-v0.2.0"
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    name: bundle (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      # No fail-fast: a Windows failure should not discard a finished macOS
+      # bundle, since each leg costs the better part of an hour.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Same pinned toolchain as the Rust workflows, so shipped binaries are built
+      # with the compiler the backend is tested against.
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            codex-rs/target
+            apps/crewon-ui/src-tauri/target
+          key: release-${{ matrix.target }}-${{ hashFiles('codex-rs/Cargo.lock', 'apps/crewon-ui/src-tauri/Cargo.lock') }}
+          restore-keys: release-${{ matrix.target }}-
+
+      # The bundle ships the backend as a sidecar, so it has to exist before
+      # `tauri build` runs. Cross-target builds need the triple passed through.
+      - name: Stage the app-server sidecar
+        run: pnpm --filter @crewon/ui sidecar:stage
+        env:
+          CREWON_SIDECAR_TARGET: ${{ matrix.target }}
+
+      # `tauri-action` handles the release plumbing the hand-rolled equivalent got
+      # wrong: it uploads per-platform `.sig` files and merges every platform's
+      # entry into one `latest.json` instead of the last job overwriting the rest.
+      - name: Build and publish the bundle
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Skips the Finder-arranging AppleScript in macOS DMG bundling, which
+          # needs automation permission no runner grants. Actions sets this
+          # already; stated explicitly so the build does not rest on that.
+          CI: "true"
+          # Signs the updater artifacts. Distinct from code signing: without this
+          # the updater refuses every update, unsigned or not.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/crewon-ui
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: "Crewon __VERSION__"
+          releaseBody: |
+            Download the installer for your platform below.
+
+            - macOS (Apple Silicon): `.dmg`
+            - Windows (x64): `-setup.exe`
+
+            These builds are not code signed yet. macOS reports the app as
+            damaged and Windows shows a SmartScreen warning on first launch; see
+            `docs/desktop-release.md` for how to get past both.
+          # Draft: a release is reviewed before users can reach it, and the draft
+          # also keeps `latest.json` invisible to the updater until both platforms
+          # have uploaded. Publishing a half-populated manifest would offer an
+          # update that 404s on the other platform.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: --target ${{ matrix.target }}
