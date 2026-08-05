@@ -101,6 +101,15 @@ stages:
               run: |
                 set -euo pipefail
 
+                # The Runner is started by launchd and inherits none of a login
+                # shell's environment: cargo, node, pnpm and ossutil all live
+                # outside the default PATH, so without this the first command
+                # fails with `command not found`. Sourced from the repo rather
+                # than configured on the machine so it is reviewable.
+                #
+                # `|| exit 1` because a sourced script cannot abort its caller.
+                . scripts/ci/macos-build-env.sh || exit 1
+
                 : "${BUILD_DISK:?BUILD_DISK is not set on this runner}"
                 export CARGO_TARGET_DIR="${BUILD_DISK}/cargo-target"
                 mkdir -p "$CARGO_TARGET_DIR"
@@ -124,6 +133,9 @@ stages:
               # URL, so it has to be written before upload and uploaded last.
               run: |
                 set -euo pipefail
+
+                # Each step is its own shell, so the PATH set up above is gone.
+                . scripts/ci/macos-build-env.sh || exit 1
 
                 MAC_BUNDLE=apps/crewon-ui/src-tauri/target/aarch64-apple-darwin/release/bundle
 

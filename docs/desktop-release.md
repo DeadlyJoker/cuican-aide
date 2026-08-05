@@ -67,14 +67,52 @@ Each machine needs, beyond the Runner:
 | MSVC build tools   | Windows only                                          |
 | ~100GB free        | A release build of the workspace is large             |
 
-Point the Runner's work directory at a disk with room. A cold build writes tens
-of GB under `codex-rs/target`, and the default location is the system volume,
-which is usually the tightest. The workflow reads `BUILD_DISK` for this; set it
-as an environment variable on each machine, for example `/Volumes/ssd/crewon-ci`.
+#### Installing the Runner on macOS
 
-Fill the cluster id into both `runsOn` blocks in `.workflow/desktop-release.yml`,
-and the service connection id into `sources`. `.workflow/desktop-ci.yml` needs the
-same service connection.
+macOS supports manual installation only, and any user account works — it does not
+need to be an admin. The Runner runs under launchd as that user.
+
+1. Flow → 全局设置 → 构建集群管理 → 新建构建集群.
+2. Open the cluster, click 接入新节点, choose macOS and 手动安装 Runner.
+3. Run the generated command on the Mac. It embeds credentials and **expires in
+   15 minutes**; get a fresh one if it lapses.
+4. Refresh the host list. The machine should appear with labels `darwin,arm64`.
+5. Put the cluster id into both `runsOn` blocks in
+   `.workflow/desktop-release.yml`, and the service connection id into `sources`
+   in both workflow files.
+
+Verify with `launchctl list | grep runner-v`.
+
+Flow documents support for macOS 12 through 14. Anything newer is outside what
+Alibaba has verified, though the Runner is an ordinary long-polling process and
+is not especially version-sensitive.
+
+#### What the Runner does not inherit
+
+launchd gives the Runner `/usr/bin:/bin:/usr/sbin:/sbin` and nothing else — no
+`.zshrc`, no Homebrew, no rustup shims. Every tool this build needs lives outside
+that PATH, so a job's first command would fail with `command not found`.
+
+`scripts/ci/macos-build-env.sh` fixes that, and the workflow sources it in every
+shell step. It lives in the repo rather than in the machine's launchd config so
+it is reviewable, and so a second machine gets the same environment without
+anyone remembering what was set by hand. A tool installed somewhere it does not
+look needs a line added there, not a change on the machine.
+
+One variable does belong on the machine, because it is genuinely per-machine:
+
+```bash
+launchctl setenv BUILD_DISK /Volumes/ssd/crewon-ci
+```
+
+A cold build writes tens of GB under `CARGO_TARGET_DIR`, and the default location
+is the system volume — usually the tightest disk on a developer's Mac. The
+workflow refuses to start when `BUILD_DISK` is unset rather than quietly filling
+the boot disk.
+
+`launchctl setenv` does not survive a reboot. Persist it with a
+`~/Library/LaunchAgents` plist, or re-run it after restarting; a missing value
+fails loudly, so it cannot go unnoticed.
 
 ### 2. Private variables
 
