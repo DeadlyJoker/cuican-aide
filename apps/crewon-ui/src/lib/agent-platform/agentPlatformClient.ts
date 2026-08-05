@@ -10,6 +10,7 @@ import type {
   LibraryAccent,
   LibraryItem,
 } from "../domain/crewonDomain";
+import { hasDevServerProxy } from "../platform";
 import { promptPreview } from "../shared/text";
 
 type PageResponse<T> = {
@@ -207,7 +208,16 @@ type RequestOptions = {
   init?: RequestInit;
 };
 
+/** Dev-server proxy route. Rewritten to `PACKAGED_BASE_URL` outside dev. */
 const DEFAULT_BASE_URL = "/agent-platform-api";
+/**
+ * Where a packaged build looks for the backend.
+ *
+ * Matches the proxy target in `vite.config.ts`, so a desktop build talks to the
+ * same backend a developer runs. A deployment that hosts it elsewhere sets
+ * `VITE_AGENT_PLATFORM_BASE_URL` to an absolute URL, which is left alone.
+ */
+const PACKAGED_BASE_URL = "http://127.0.0.1:8000";
 const PLATFORM_AVAILABILITY_PROBE_PATH = "/api/v1/health";
 export const AGENT_PLATFORM_TOKEN_STORAGE_KEY = "crewon-agent-platform-token";
 export const AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY =
@@ -237,11 +247,26 @@ function envValue(key: string): string | undefined {
 }
 
 export function agentPlatformBaseUrl(): string {
-  return (
+  const configured = (
     envValue("VITE_AGENT_PLATFORM_BASE_URL") ??
     envValue("VITE_AGENT_PLATFORM_API_BASE_URL") ??
     DEFAULT_BASE_URL
   ).replace(/\/+$/, "");
+
+  // A root-relative path is a dev-server proxy route. In a packaged build there
+  // is no proxy and the page is served from `tauri://localhost`, where WebKit
+  // rejects the request outright -- the login screen showed "The string did not
+  // match the expected pattern" rather than any network error.
+  //
+  // The proxy strips its own prefix before forwarding, so the replacement is the
+  // backend origin alone, not the origin with the prefix appended.
+  //
+  // Only bare paths are rewritten: an absolute URL is a deliberate choice about
+  // which backend to talk to and must survive packaging.
+  if (configured.startsWith("/") && !hasDevServerProxy()) {
+    return PACKAGED_BASE_URL;
+  }
+  return configured;
 }
 
 export function crewonUnifiedSsoEnabled(): boolean {
@@ -747,9 +772,7 @@ function tokenMatchesCurrentSessionRequirements(token: string): boolean {
 function serverIssuesAuthSessionClaims(
   payload: Record<string, unknown>,
 ): boolean {
-  return (
-    "crewon_auth_session_id" in payload || "crewon_auth_epoch" in payload
-  );
+  return "crewon_auth_session_id" in payload || "crewon_auth_epoch" in payload;
 }
 
 function jwtPayload(token: string): Record<string, unknown> | null {

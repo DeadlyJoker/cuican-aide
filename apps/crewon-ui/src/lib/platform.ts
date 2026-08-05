@@ -12,8 +12,14 @@ const LOCALHOST_NAMES = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 const DEFAULT_APP_SERVER_PORT = "6176";
 
 export function detectPlatform(): PlatformKind {
-  const platformOverride = new URLSearchParams(window.location.search).get("platform");
-  if (platformOverride === "mac" || platformOverride === "windows" || platformOverride === "web") {
+  const platformOverride = new URLSearchParams(window.location.search).get(
+    "platform",
+  );
+  if (
+    platformOverride === "mac" ||
+    platformOverride === "windows" ||
+    platformOverride === "web"
+  ) {
     return platformOverride;
   }
 
@@ -45,7 +51,11 @@ export function detectOperatingSystem(): OperatingSystem {
       .userAgentData?.platform ?? "";
   const probe = `${platformHint} ${navigator.userAgent}`.toLowerCase();
 
-  if (probe.includes("mac") || probe.includes("iphone") || probe.includes("ipad")) {
+  if (
+    probe.includes("mac") ||
+    probe.includes("iphone") ||
+    probe.includes("ipad")
+  ) {
     return "mac";
   }
   if (probe.includes("win")) {
@@ -66,9 +76,57 @@ export function detectRuntimeSurface(): RuntimeSurface {
     : "web";
 }
 
+/**
+ * `/app-server` is served by the Vite dev server, which proxies it to the local
+ * app-server. It only exists while `pnpm dev` runs.
+ */
 function proxiedServerUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/app-server`;
+}
+
+/**
+ * A packaged desktop build loads from `tauri://` or `http://tauri.localhost`, so
+ * there is no dev server to proxy through and the app talks to the sidecar
+ * app-server directly on the loopback port.
+ */
+function sidecarServerUrl(): string {
+  return `ws://127.0.0.1:${DEFAULT_APP_SERVER_PORT}`;
+}
+
+/**
+ * Whether this page is served by the Vite dev server rather than from a packaged
+ * bundle. `tauri dev` also loads over http from the dev server, and in that case
+ * the proxy is present and should be used.
+ *
+ * Exported because every same-origin proxy path has this problem, not just the
+ * app-server socket: a packaged build resolving one asks the webview for a path
+ * that nothing serves.
+ */
+export function hasDevServerProxy(): boolean {
+  // No document at all: a unit test or any other non-DOM host. Reporting "no
+  // proxy" would rewrite same-origin paths to a hardcoded backend origin, so a
+  // test asserting on a request URL would see one it never configured. Treating
+  // it as proxied keeps a relative path relative, which is what callers outside
+  // a browser mean by it.
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const { hostname, protocol } = window.location;
+  // A location without these is not a real page either -- a partial stub, most
+  // likely. Same reasoning as a missing `window`: guessing "packaged" would
+  // rewrite URLs the caller never asked to have rewritten.
+  if (typeof protocol !== "string" || typeof hostname !== "string") {
+    return true;
+  }
+
+  if (protocol !== "http:" && protocol !== "https:") {
+    return false;
+  }
+  // The packaged webview serves the bundle from a synthetic http host on
+  // Windows, which looks like http but has no dev server behind it.
+  return !hostname.endsWith(".localhost");
 }
 
 function localhostName(hostname: string): string {
@@ -76,6 +134,11 @@ function localhostName(hostname: string): string {
 }
 
 function shouldUseLocalProxy(configuredUrl: string): boolean {
+  // Without a dev server there is nothing to proxy through, so a loopback URL
+  // has to be dialled directly.
+  if (!hasDevServerProxy()) {
+    return false;
+  }
   try {
     const url = new URL(configuredUrl);
     return (
@@ -90,11 +153,15 @@ function shouldUseLocalProxy(configuredUrl: string): boolean {
 }
 
 function configuredServerUrl(configuredUrl: string): string {
-  return shouldUseLocalProxy(configuredUrl) ? proxiedServerUrl() : configuredUrl;
+  return shouldUseLocalProxy(configuredUrl)
+    ? proxiedServerUrl()
+    : configuredUrl;
 }
 
 export function defaultServerUrl(): string {
-  const configuredUrl = new URLSearchParams(window.location.search).get("server");
+  const configuredUrl = new URLSearchParams(window.location.search).get(
+    "server",
+  );
 
   if (configuredUrl) {
     return configuredServerUrl(configuredUrl);
@@ -104,5 +171,5 @@ export function defaultServerUrl(): string {
     return configuredServerUrl(import.meta.env.VITE_CREWON_APP_SERVER_URL);
   }
 
-  return proxiedServerUrl();
+  return hasDevServerProxy() ? proxiedServerUrl() : sidecarServerUrl();
 }
