@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
-
 import type { AppServerClient } from "../../app-server/appServer";
 import type { AccountStatus } from "../appStatusTypes";
 import type { AppServerEventHandlersParams } from "./appServerEventHandlers";
@@ -108,6 +106,7 @@ function createParams(
   const currentClient = client();
   return {
     appendStreamingTextDelta: () => {},
+    appendTerminalOutputDelta: () => {},
     automationRunsByTurn: () => ({
       "turn-1": { filePath: "automation.json", runId: "run-1", threadId: "t1" },
     }),
@@ -248,20 +247,11 @@ describe("app server event handlers", () => {
     });
   });
 
-  it("wires thread notifications to refresh and reload helpers", () => {
+  it("ignores legacy Goal notifications after Control SSE cutover", () => {
     const currentClient = client();
     const setThreadGoal = vi.fn();
     const openThreadSettingsPanel = vi.fn();
     notificationSpy.threadHandled = true;
-    notificationSpy.thread.mockImplementationOnce((params) => {
-      notificationSpy.threadParams = params;
-      params.openThreadSettingsPanel();
-      params.refreshSelectedThreadGoal("thread-1");
-      params.refreshThread("thread-2");
-      params.reloadThreads();
-      params.setThreadGoal({ objective: "Goal" } as ThreadGoal);
-      return true;
-    });
 
     const handlers = createAppServerEventHandlers(
       createParams({
@@ -273,23 +263,12 @@ describe("app server event handlers", () => {
 
     handlers.handleNotification({ method: "thread/goal/updated" } as never);
 
-    expect(openThreadSettingsPanel).toHaveBeenCalledOnce();
-    expect(refreshActionSpy.goal).toHaveBeenCalledWith({
-      client: currentClient,
-      setThreadGoal,
-      threadId: "thread-1",
-    });
-    expect(refreshActionSpy.thread).toHaveBeenCalledWith({
-      client: currentClient,
-      setThreads: expect.any(Function),
-      threadId: "thread-2",
-    });
-    expect(refreshActionSpy.reloadThreads).toHaveBeenCalledWith({
-      archived: true,
-      client: currentClient,
-      setThreads: expect.any(Function),
-    });
-    expect(setThreadGoal).toHaveBeenCalledWith({ objective: "Goal" });
+    expect(openThreadSettingsPanel).not.toHaveBeenCalled();
+    expect(refreshActionSpy.goal).not.toHaveBeenCalled();
+    expect(notificationSpy.thread).not.toHaveBeenCalled();
+    expect(setThreadGoal).not.toHaveBeenCalled();
+    expect(refreshActionSpy.thread).not.toHaveBeenCalled();
+    expect(refreshActionSpy.reloadThreads).not.toHaveBeenCalled();
   });
 
   it("wires turn completion helpers with current run records and client", async () => {

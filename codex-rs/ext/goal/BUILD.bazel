@@ -6,5 +6,10 @@ crewon_rust_crate(
     compile_data = glob([
         "templates/**",
     ]),
-    integration_compile_data_extra = ["src/accounting.rs"],
+    integration_compile_data_extra = [
+        "src/accounting.rs",
+        "src/steering.rs",
+        "//:packages/test-contracts/fixtures/goal-continuation.reference.json",
+        "//:packages/test-contracts/fixtures/goal-runtime-semantics.reference.json",
+    ],
 )

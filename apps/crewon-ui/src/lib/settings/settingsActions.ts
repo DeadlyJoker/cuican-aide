@@ -13,6 +13,7 @@ export type SettingsRefreshAction =
   | "integrations"
   | "keyboard"
   | "mcpSettings"
+  | "modelProviders"
   | "personalization"
   | "worktrees";
 
@@ -33,6 +34,7 @@ export type SettingsSectionRefreshHandlers = {
   hooks: () => void | Promise<void>;
   keyboard: () => void | Promise<void>;
   mcpServers: () => void | Promise<void>;
+  modelProviders: () => void | Promise<void>;
   personalization: () => void | Promise<void>;
   worktrees: () => void | Promise<void>;
 };
@@ -66,6 +68,8 @@ export async function refreshSettingsSectionAction(
       return await handlers.keyboard();
     case "mcp-servers":
       return await handlers.mcpServers();
+    case "model-providers":
+      return await handlers.modelProviders();
     case "personalization":
       return await handlers.personalization();
     case "worktrees":
@@ -91,6 +95,8 @@ export function settingsRefreshActionForActionId(
       return "hooks";
     case "refresh-mcp-settings":
       return "mcpSettings";
+    case "refresh-model-providers":
+      return "modelProviders";
     case "refresh-browser-apps":
       return "browserApps";
     case "refresh-environment":

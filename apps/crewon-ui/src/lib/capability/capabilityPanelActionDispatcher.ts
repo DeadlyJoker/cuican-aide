@@ -33,6 +33,11 @@ import {
   type FilePanelActionHandlersParams,
 } from "../file/filePanelActions";
 import type { Locale, ToolId } from "../i18n";
+import {
+  handleModelProviderAction,
+  modelProviderActionForActionId,
+  type ModelProviderActionParams,
+} from "../model-provider/modelProviderActions";
 import type { NoticeState } from "../shared/noticeState";
 import {
   handlePluginPanelAction,
@@ -70,7 +75,6 @@ import {
   type TerminalActionHandlersParams,
 } from "../terminal/terminalActions";
 import {
-  createThreadGoalActionHandlers,
   threadGoalActionForActionId,
   type ThreadGoalActionHandlersParams,
 } from "../thread/threadGoalActions";
@@ -78,6 +82,7 @@ import {
   createThreadLifecycleActionHandlers,
   threadLifecycleActionForActionId,
   type ThreadLifecycleActionHandlersParams,
+  type ThreadLifecycleClient,
 } from "../thread/threadLifecycleActions";
 import {
   createThreadSettingsActionHandlers,
@@ -90,11 +95,11 @@ import {
   type WorktreeSessionActionHandlersParams,
 } from "../worktree/worktreeSessionActions";
 
-type DispatcherClient =
-  NonNullable<AccountActionHandlersParams["client"]> &
+type DispatcherClient = NonNullable<AccountActionHandlersParams["client"]> &
   NonNullable<BackgroundTerminalActionHandlersParams["client"]> &
   NonNullable<ContextThreadActionHandlersParams["client"]> &
   NonNullable<FilePanelActionHandlersParams["client"]> &
+  NonNullable<ModelProviderActionParams["client"]> &
   NonNullable<PluginPanelActionHandlersParams["client"]> &
   NonNullable<RemoteControlActionHandlersParams["client"]> &
   NonNullable<ServerRequestActionHandlersParams["client"]> &
@@ -105,7 +110,8 @@ type DispatcherClient =
   NonNullable<ThreadSettingsActionHandlersParams["client"]> &
   NonNullable<WorktreeSessionActionHandlersParams["client"]>;
 
-type PendingContextFile = ContextThreadActionHandlersParams["pendingContextFile"];
+type PendingContextFile =
+  ContextThreadActionHandlersParams["pendingContextFile"];
 
 type SetCapabilityPanel = (
   panelOrUpdater:
@@ -120,6 +126,9 @@ export type CapabilityPanelActionDispatcherParams = {
   busyToolId: ToolId | null;
   capabilityPanel: CapabilityPanel | null;
   client: DispatcherClient | null | undefined;
+  threadLifecycleClient?: ThreadLifecycleClient | null;
+  threadLifecycleConnected?: boolean;
+  threadLifecycleControlConfigured?: boolean;
   confirm: ConfirmHandler;
   createThread: (initialPrompt?: string) => Promise<Thread | null>;
   cwd: string;
@@ -197,14 +206,12 @@ export function handleCapabilityPanelActionDispatch(
     locale,
     loadBrowserApps,
     openPluginPath,
-    openThreadSettingsPanel,
     pendingApprovalRequest,
     pendingContextFile,
     pendingDynamicToolRequest,
     pendingExternalSecretRequest,
     pendingMcpElicitationRequest,
     pendingUserInputRequest,
-    previewAwareThreadId,
     readWorkspaceFiles,
     refreshAccountPanel,
     refreshComputerControlSettingsPanel,
@@ -227,7 +234,6 @@ export function handleCapabilityPanelActionDispatch(
     setPendingUserInputRequest,
     setSelectedThreadId,
     setStreamingTextByThread,
-    setThreadGoal,
     setThreads,
     settingsRefreshHandlers,
     settingsSaveHandlers,
@@ -262,6 +268,28 @@ export function handleCapabilityPanelActionDispatch(
         setNotice,
       },
       pluginPanelAction,
+    );
+    return true;
+  }
+
+  /*
+   * Checked before the generic settings lookup because the per-row ids carry
+   * their target provider (`model-provider-edit:my-gateway`) and would not
+   * match any fixed action name.
+   */
+  const modelProviderAction = modelProviderActionForActionId(actionId);
+  if (modelProviderAction) {
+    handleModelProviderAction(
+      {
+        client,
+        fieldValue,
+        isConnected,
+        locale,
+        resolveBackendCwd,
+        setCapabilityPanel,
+      },
+      modelProviderAction.action,
+      modelProviderAction.providerId,
     );
     return true;
   }
@@ -345,10 +373,13 @@ export function handleCapabilityPanelActionDispatch(
   if (threadLifecycleAction) {
     createThreadLifecycleActionHandlers({
       busyToolId,
-      client,
+      client:
+        params.threadLifecycleClient === undefined
+          ? client
+          : params.threadLifecycleClient,
       confirm,
-      isConnected,
-      isDemo,
+      isConnected: params.threadLifecycleConnected ?? isConnected,
+      isDemo: params.threadLifecycleControlConfigured === true ? false : isDemo,
       locale,
       setActiveTurnByThread,
       setBusyToolId,
@@ -362,20 +393,13 @@ export function handleCapabilityPanelActionDispatch(
 
   const threadGoalAction = threadGoalActionForActionId(actionId);
   if (threadGoalAction) {
-    createThreadGoalActionHandlers({
-      busyToolId,
-      client,
-      createThread,
-      fieldValue,
-      isConnected,
-      isDemo,
-      locale,
-      openThreadSettingsPanel,
-      setBusyToolId,
-      setCapabilityPanel,
-      setThreadGoal,
-      threadId: previewAwareThreadId,
-    })[threadGoalAction]();
+    setNotice({
+      text:
+        locale === "zh"
+          ? "目标已迁移到对话输入框，请在那里编辑、暂停或清除。"
+          : "Goals moved to the conversation composer. Edit, pause, or clear them there.",
+      tone: "warning",
+    });
     return true;
   }
 

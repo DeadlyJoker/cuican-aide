@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "crewon.responses-websocket-parity.v0",
+  "fallback": {
+    "caseIds": ["AR-004", "AR-005", "AR-006"],
+    "streamMaxRetries": 2,
+    "startupPrewarmAttempts": 1,
+    "firstTurn": {
+      "websocketAttempts": 3,
+      "httpAttempts": 1,
+      "retryAttempts": [1, 2],
+      "fallback": {
+        "fromTransport": "websocket",
+        "toTransport": "http",
+        "code": "responses_websocket_closed",
+        "discardedOutput": false
+      }
+    },
+    "secondTurn": {
+      "websocketAttempts": 0,
+      "httpAttempts": 1,
+      "fallbackEvents": 0
+    },
+    "debugVisibleRetryAttempts": [1, 2],
+    "releaseVisibleRetryAttempts": [2]
+  },
+  "incremental": {
+    "caseId": "AR-011",
+    "connectionCount": 1,
+    "firstRequest": {
+      "previousResponseId": null,
+      "input": [{ "role": "user", "content": "hello" }]
+    },
+    "secondRequest": {
+      "previousResponseId": "resp-1",
+      "input": [{ "role": "user", "content": "second" }]
+    }
+  }
+}

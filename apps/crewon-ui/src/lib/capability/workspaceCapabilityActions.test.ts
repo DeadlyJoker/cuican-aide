@@ -8,7 +8,11 @@ import {
   loadBrowserAppsAction,
   readWorkspaceDiffAction,
   readWorkspaceFilesAction,
+  resizeWorkbenchTerminalAction,
   runTerminalStatusAction,
+  startWorkbenchTerminalSessionAction,
+  stopWorkbenchTerminalSessionAction,
+  writeWorkbenchTerminalInputAction,
   type RunTerminalStatusActionParams,
 } from "./workspaceCapabilityActions";
 
@@ -70,9 +74,15 @@ function baseClient(overrides: Partial<WorkspaceClient> = {}): WorkspaceClient {
     async readDirectory() {
       return { entries: [] };
     },
+    async resizeCommand() {},
     async runCommand() {
       return { exitCode: 0, stdout: "ok\n", stderr: null };
     },
+    async startTerminalSession() {
+      return { exitCode: 0, stdout: "", stderr: null };
+    },
+    async terminateCommand() {},
+    async writeCommandInput() {},
     ...overrides,
   };
 }
@@ -162,6 +172,96 @@ describe("workspace capability actions", () => {
     });
   });
 
+  it("keeps one PTY session alive for interactive input and resize", async () => {
+    const sink = panelSink();
+    const outputLines: string[] = [];
+    const calls: string[] = [];
+    const processIds: Array<string | null> = [];
+    let currentProcessId: string | null = null;
+    let finishSession: (value: {
+      exitCode: number;
+      stderr: null;
+      stdout: string;
+    }) => void = () => {
+      throw new Error("terminal session did not start");
+    };
+    const client = baseClient({
+      async resizeCommand(processId, size) {
+        calls.push(`resize:${processId}:${size.cols}x${size.rows}`);
+      },
+      startTerminalSession(cwd, processId, size) {
+        calls.push(`start:${cwd}:${processId}:${size.cols}x${size.rows}`);
+        return new Promise((resolve) => {
+          finishSession = resolve;
+        });
+      },
+      async terminateCommand(processId) {
+        calls.push(`stop:${processId}`);
+      },
+      async writeCommandInput(processId, input) {
+        calls.push(`write:${processId}:${input}`);
+      },
+    });
+    const terminalProcessId = () => currentProcessId;
+    const setTerminalProcessId = (processId: string | null) => {
+      currentProcessId = processId;
+      processIds.push(processId);
+    };
+
+    await startWorkbenchTerminalSessionAction({
+      ...baseParams(),
+      appendTerminalOutputLine: (notice) => outputLines.push(notice),
+      client,
+      processIdFactory: () => "pty-1",
+      setCapabilityPanel: sink.setCapabilityPanel,
+      setTerminalProcessId,
+      terminalProcessId,
+    });
+    await writeWorkbenchTerminalInputAction({
+      appendTerminalOutputLine: (notice) => outputLines.push(notice),
+      client,
+      input: "cd /tmp\n",
+      locale: "en",
+      terminalProcessId,
+    });
+    await resizeWorkbenchTerminalAction({
+      client,
+      cols: 120,
+      rows: 36,
+      terminalProcessId,
+    });
+    await stopWorkbenchTerminalSessionAction({
+      appendTerminalOutputLine: (notice) => outputLines.push(notice),
+      client,
+      input: "",
+      locale: "en",
+      terminalProcessId,
+    });
+
+    expect(calls).toEqual([
+      "start:/repo:pty-1:100x30",
+      "write:pty-1:cd /tmp\n",
+      "resize:pty-1:120x36",
+      "stop:pty-1",
+    ]);
+    expect(processIds).toEqual(["pty-1"]);
+    /*
+     * A live PTY must not touch the shared capability panel: that panel is
+     * replaced whenever another workbench surface opens, which used to drop the
+     * rest of the session's output.
+     */
+    expect(sink.panel).toBeNull();
+    expect(outputLines).toEqual([]);
+
+    finishSession({ exitCode: 0, stderr: null, stdout: "" });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(processIds).toEqual(["pty-1", null]);
+    expect(outputLines).toEqual(["\x1b[2m[Session ended · exit 0]\x1b[0m"]);
+    expect(sink.panel).toBeNull();
+  });
+
   it("reads the workspace file panel from the backend cwd", async () => {
     const sink = panelSink();
     const busyStates: Array<string | null> = [];
@@ -200,7 +300,7 @@ describe("workspace capability actions", () => {
     });
   });
 
-  it("renders the current tracked diff without starting a review thread", async () => {
+  it("renders tracked and untracked changes without starting a review thread", async () => {
     const sink = panelSink();
     const busyStates: Array<string | null> = [];
     const commands: Array<{
@@ -236,16 +336,20 @@ describe("workspace capability actions", () => {
     expect(commands).toEqual([
       {
         command: expect.stringContaining(
-          "git status --porcelain=v1 --untracked-files=no",
+          "git diff --name-only --no-ext-diff HEAD",
         ),
         cwd: "/repo",
         processId: undefined,
       },
     ]);
+    expect(commands[0]?.command).toContain(
+      "git ls-files --others --exclude-standard",
+    );
+    expect(commands[0]?.command).toContain("git diff --no-ext-diff --no-index");
     expect(busyStates).toEqual(["review", null]);
     expect(sink.panel).toEqual({
       body: diff,
-      subtitle: "1 tracked changes · showing 1 files · +1 / -1",
+      subtitle: "1 change · showing 1 file · +1 / -1",
       title: "Current changes",
     });
   });

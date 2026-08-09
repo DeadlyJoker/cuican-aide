@@ -239,6 +239,26 @@ samp,
   box-shadow: none;
 }
 
+/*
+ * Full access drops the sandbox and approvals, so its trigger keeps the warning
+ * colour instead of the neutral control foreground. The `:root` and
+ * `.command-shell-route` prefixes match the per-theme control-colour rules that
+ * would otherwise win on specificity and repaint the trigger neutral.
+ */
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .permission-dropdown[data-selected-tone="warning"]
+  .select-trigger,
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .permission-dropdown[data-selected-tone="warning"]
+  .select-trigger
+  svg {
+  color: var(--warning);
+}
+
 .screen-shell.command-screen .settings-actions button:hover:not(:disabled),
 .screen-shell.command-screen .control-select .select-trigger:hover,
 .screen-shell.command-screen .tab-button:hover:not(:disabled),
@@ -633,4 +653,25 @@ samp,
   --text-muted: var(--contrast-muted);
   --settings-faint: var(--contrast-faint);
   --settings-muted: var(--contrast-muted);
+}
+
+/*
+ * The undecorated desktop window rounds its own corners, so every layer *behind*
+ * .command-window has to stay transparent or it paints over the corner the
+ * window just cut. The per-theme material rules in original-shell-overrides.css
+ * fill those layers with an opaque colour at a specificity app.css cannot reach,
+ * which is why this override lives in the last-loaded sheet and repeats the
+ * `.command-shell-route` and theme prefixes those rules use.
+ *
+ * .command-window itself keeps its fill: it is the surface inside the radius.
+ */
+:root[data-surface="desktop"] .command-shell-route,
+:root[data-surface="desktop"] .screen-shell.command-screen,
+:root[data-surface="desktop"][data-theme]
+  .command-shell-route
+  .screen-shell.command-screen,
+:root[data-surface="desktop"]:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen {
+  background: transparent;
 }

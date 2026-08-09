@@ -97,6 +97,7 @@ use crewon_app_server_protocol::ToolUpdateParams;
 use crewon_app_server_protocol::ToolUpdateResponse;
 use crewon_app_server_protocol::Turn;
 use crewon_app_server_protocol::TurnStatus;
+use crewon_app_server_protocol::WorkflowRunUpdatedNotification;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -303,6 +304,7 @@ pub(crate) struct OfficeRunSyncUpdate {
 #[derive(Clone, Copy)]
 enum DomainKind {
     Agent,
+    Workflow,
     Office,
     Automation,
     Tool,
@@ -312,6 +314,7 @@ impl DomainKind {
     fn record_kind(self) -> &'static str {
         match self {
             Self::Agent => "agent",
+            Self::Workflow => "workflow",
             Self::Office => "office",
             Self::Automation => "automation",
             Self::Tool => "tool",
@@ -321,6 +324,7 @@ impl DomainKind {
     fn directory_name(self) -> &'static str {
         match self {
             Self::Agent => "agents",
+            Self::Workflow => "workflows",
             Self::Office => "offices",
             Self::Automation => "automations",
             Self::Tool => "tools",
@@ -329,7 +333,7 @@ impl DomainKind {
 
     fn title_field(self) -> &'static str {
         match self {
-            Self::Agent => "name",
+            Self::Agent | Self::Workflow => "name",
             Self::Office | Self::Automation | Self::Tool => "title",
         }
     }
@@ -341,6 +345,7 @@ impl DomainKind {
     fn thread_id(self, config: &JsonValue) -> Option<&str> {
         match self {
             Self::Agent | Self::Automation => config.get("threadId").and_then(JsonValue::as_str),
+            Self::Workflow => config.get("workflowId").and_then(JsonValue::as_str),
             Self::Office => config
                 .get("workspace")
                 .and_then(|workspace| workspace.get("threadId"))
@@ -355,6 +360,11 @@ impl DomainKind {
         };
         match self {
             Self::Agent => config.contains_key("name"),
+            Self::Workflow => {
+                config.contains_key("workflowId")
+                    && config.contains_key("name")
+                    && config.get("nodes").is_some_and(JsonValue::is_array)
+            }
             Self::Office => config
                 .get("workspace")
                 .is_some_and(serde_json::Value::is_object),
@@ -368,6 +378,11 @@ impl DomainKind {
         }
     }
 }
+
+#[path = "crewon_domain_workflow.rs"]
+mod workflow;
+pub(crate) use workflow::PreparedWorkflowNodeDispatch;
+pub(crate) use workflow::WorkflowRunUpdate;
 
 #[derive(Clone)]
 pub(crate) struct CrewonDomainRequestProcessor {
@@ -2236,6 +2251,24 @@ pub(crate) fn office_run_updated_notification(
     })
 }
 
+pub(crate) fn workflow_run_updated_notification(
+    cwd: &str,
+    file_path: &str,
+    config: &JsonValue,
+    reason: &str,
+    source_thread_id: Option<&str>,
+    source_turn_id: Option<&str>,
+) -> ServerNotification {
+    ServerNotification::WorkflowRunUpdated(WorkflowRunUpdatedNotification {
+        cwd: cwd.to_string(),
+        file_path: file_path.to_string(),
+        config: config.clone(),
+        reason: reason.to_string(),
+        source_thread_id: source_thread_id.map(str::to_string),
+        source_turn_id: source_turn_id.map(str::to_string),
+    })
+}
+
 async fn list_records(
     kind: DomainKind,
     cwd: &str,
@@ -3969,7 +4002,12 @@ fn domain_file_name(kind: DomainKind, config: &JsonValue) -> String {
     let title = kind.title(config).unwrap_or_else(|| kind.record_kind());
     let suffix = kind
         .thread_id(config)
-        .map(|thread_id| thread_id.chars().take(8).collect::<String>())
+        .map(|thread_id| match kind {
+            DomainKind::Workflow => thread_id.to_string(),
+            DomainKind::Agent | DomainKind::Office | DomainKind::Automation | DomainKind::Tool => {
+                thread_id.chars().take(8).collect::<String>()
+            }
+        })
         .filter(|thread_id| !thread_id.is_empty())
         .unwrap_or_else(|| Utc::now().timestamp_millis().to_string());
     let stem = slugify(title, kind.record_kind());

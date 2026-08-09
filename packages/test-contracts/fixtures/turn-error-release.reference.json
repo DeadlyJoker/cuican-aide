@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-003-turn-error-release",
+  "events": [
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 1,
+      "type": "turn.failed",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "category": "provider",
+        "retryable": false
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 2,
+      "type": "turn.released",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "workItemSettled": true
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 3,
+      "type": "turn.completed",
+      "identity": {
+        "turnSlot": "second"
+      },
+      "data": {
+        "output": "done"
+      }
+    }
+  ],
+  "finalState": {
+    "firstStatus": "failed",
+    "secondStatus": "completed",
+    "pendingWorkItems": 0,
+    "requestCount": 2
+  }
+}

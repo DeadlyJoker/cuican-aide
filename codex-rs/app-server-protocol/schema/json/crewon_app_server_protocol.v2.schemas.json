@@ -3388,6 +3388,174 @@
             },
             "method": {
               "enum": [
+                "workflow/list"
+              ],
+              "title": "Workflow/listRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/WorkflowListParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Workflow/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "workflow/create"
+              ],
+              "title": "Workflow/createRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/WorkflowCreateParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Workflow/createRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "workflow/read"
+              ],
+              "title": "Workflow/readRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/WorkflowReadParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Workflow/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "workflow/run"
+              ],
+              "title": "Workflow/runRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/WorkflowRunParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Workflow/runRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "workflow/gate/resolve"
+              ],
+              "title": "Workflow/gate/resolveRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/WorkflowGateResolveParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Workflow/gate/resolveRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "workflow/run/cancel"
+              ],
+              "title": "Workflow/run/cancelRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/WorkflowRunCancelParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Workflow/run/cancelRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "workflow/delete"
+              ],
+              "title": "Workflow/deleteRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/WorkflowDeleteParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Workflow/deleteRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
                 "agentPlatform/auth"
               ],
               "title": "AgentPlatform/authRequestMethod",
@@ -4987,6 +5155,30 @@
             "params"
           ],
           "title": "ModelProvider/capabilities/readRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "modelProvider/probe"
+              ],
+              "title": "ModelProvider/probeRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ModelProviderProbeParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "ModelProvider/probeRequest",
           "type": "object"
         },
         {
@@ -11824,6 +12016,119 @@
       ],
       "title": "ModelProviderCapabilitiesReadResponse",
       "type": "object"
+    },
+    "ModelProviderProbeParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "providerId": {
+          "description": "Key under `model_providers` in config to probe. When omitted, the currently selected `model_provider` is probed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "title": "ModelProviderProbeParams",
+      "type": "object"
+    },
+    "ModelProviderProbeResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "authenticated": {
+          "description": "Whether a credential was attached, so \"works without auth\" is visible.",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "description": "Endpoint the probe requested, for surfacing a wrong base URL.",
+          "type": "string"
+        },
+        "httpStatus": {
+          "description": "HTTP status returned by the provider, when it answered at all.",
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "latencyMs": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "message": {
+          "description": "Failure detail from the provider or transport.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "modelCount": {
+          "description": "Models the provider advertised, when the catalog parsed.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "providerId": {
+          "description": "Provider that was probed, so a client can tell which entry answered.",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/ModelProviderProbeStatus"
+        }
+      },
+      "required": [
+        "authenticated",
+        "endpoint",
+        "latencyMs",
+        "providerId",
+        "status"
+      ],
+      "title": "ModelProviderProbeResponse",
+      "type": "object"
+    },
+    "ModelProviderProbeStatus": {
+      "description": "Outcome of a provider reachability check.\n\nThe model catalog falls back to a bundled list when a provider cannot be reached, so `model/list` succeeding says nothing about whether the configured provider actually works. These variants let a client tell a wrong key apart from a wrong address instead of reporting one generic failure.",
+      "oneOf": [
+        {
+          "description": "The provider answered and returned a usable model catalog.",
+          "enum": [
+            "ok"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The provider answered, but rejected the credential.",
+          "enum": [
+            "unauthorized"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The provider answered with an error status.",
+          "enum": [
+            "httpError"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The provider could not be reached at all (DNS, TLS, refused, timeout).",
+          "enum": [
+            "unreachable"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The provider answered, but the body was not a model catalog.",
+          "enum": [
+            "invalidResponse"
+          ],
+          "type": "string"
+        }
+      ]
     },
     "ModelRerouteReason": {
       "enum": [
@@ -19210,6 +19515,26 @@
           "properties": {
             "method": {
               "enum": [
+                "workflow/run/updated"
+              ],
+              "title": "Workflow/run/updatedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/WorkflowRunUpdatedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Workflow/run/updatedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "resource/binding/updated"
               ],
               "title": "Resource/binding/updatedNotificationMethod",
@@ -24819,6 +25144,510 @@
         "samplePaths"
       ],
       "title": "WindowsWorldWritableWarningNotification",
+      "type": "object"
+    },
+    "WorkflowCreateParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "lead": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/definitions/WorkflowNodeDefinition"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "cwd",
+        "description",
+        "lead",
+        "name",
+        "nodes"
+      ],
+      "title": "WorkflowCreateParams",
+      "type": "object"
+    },
+    "WorkflowCreateResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "filePath"
+      ],
+      "title": "WorkflowCreateResponse",
+      "type": "object"
+    },
+    "WorkflowDeleteParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "title": "WorkflowDeleteParams",
+      "type": "object"
+    },
+    "WorkflowDeleteResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "title": "WorkflowDeleteResponse",
+      "type": "object"
+    },
+    "WorkflowGateDecision": {
+      "enum": [
+        "approve",
+        "reject"
+      ],
+      "type": "string"
+    },
+    "WorkflowGateResolveParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/WorkflowGateDecision"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "decision",
+        "executionId",
+        "nodeId",
+        "workflowId"
+      ],
+      "title": "WorkflowGateResolveParams",
+      "type": "object"
+    },
+    "WorkflowGateResolveResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executedNodes": {
+          "items": {
+            "$ref": "#/definitions/WorkflowNodeExecution"
+          },
+          "type": "array"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "executedNodes",
+        "executionId",
+        "filePath",
+        "output",
+        "status",
+        "workflowId"
+      ],
+      "title": "WorkflowGateResolveResponse",
+      "type": "object"
+    },
+    "WorkflowListParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "WorkflowListParams",
+      "type": "object"
+    },
+    "WorkflowListResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "data": {
+          "items": {
+            "$ref": "#/definitions/CrewonDomainConfigRecord"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "title": "WorkflowListResponse",
+      "type": "object"
+    },
+    "WorkflowNodeDefinition": {
+      "oneOf": [
+        {
+          "properties": {
+            "agentId": {
+              "type": "string"
+            },
+            "agentName": {
+              "type": "string"
+            },
+            "instruction": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "agent"
+              ],
+              "title": "AgentWorkflowNodeDefinitionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agentId",
+            "agentName",
+            "instruction",
+            "title",
+            "type"
+          ],
+          "title": "AgentWorkflowNodeDefinition",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "instruction": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "humanGate"
+              ],
+              "title": "HumanGateWorkflowNodeDefinitionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "instruction",
+            "title",
+            "type"
+          ],
+          "title": "HumanGateWorkflowNodeDefinition",
+          "type": "object"
+        }
+      ]
+    },
+    "WorkflowNodeExecution": {
+      "properties": {
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeId",
+        "nodeType",
+        "output",
+        "status",
+        "title"
+      ],
+      "type": "object"
+    },
+    "WorkflowReadParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "workflowId"
+      ],
+      "title": "WorkflowReadParams",
+      "type": "object"
+    },
+    "WorkflowReadResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "record": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CrewonDomainConfigRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "title": "WorkflowReadResponse",
+      "type": "object"
+    },
+    "WorkflowRunCancelParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "executionId",
+        "workflowId"
+      ],
+      "title": "WorkflowRunCancelParams",
+      "type": "object"
+    },
+    "WorkflowRunCancelResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executedNodes": {
+          "items": {
+            "$ref": "#/definitions/WorkflowNodeExecution"
+          },
+          "type": "array"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "executedNodes",
+        "executionId",
+        "filePath",
+        "output",
+        "status",
+        "workflowId"
+      ],
+      "title": "WorkflowRunCancelResponse",
+      "type": "object"
+    },
+    "WorkflowRunParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "input": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "input",
+        "workflowId"
+      ],
+      "title": "WorkflowRunParams",
+      "type": "object"
+    },
+    "WorkflowRunResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executedNodes": {
+          "items": {
+            "$ref": "#/definitions/WorkflowNodeExecution"
+          },
+          "type": "array"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "executedNodes",
+        "executionId",
+        "output",
+        "status",
+        "workflowId"
+      ],
+      "title": "WorkflowRunResponse",
+      "type": "object"
+    },
+    "WorkflowRunUpdatedNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "config": true,
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "sourceThreadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceTurnId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "config",
+        "cwd",
+        "filePath",
+        "reason"
+      ],
+      "title": "WorkflowRunUpdatedNotification",
       "type": "object"
     },
     "WorkspaceAccessMode": {

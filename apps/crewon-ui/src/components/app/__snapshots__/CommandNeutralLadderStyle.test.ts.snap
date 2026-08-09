@@ -117,6 +117,12 @@ exports[`command shell neutral ladder > snapshots the radius scale 1`] = `
   --radius-xl: 10px;
   --radius-pill: 999px;
   /*
+   * The undecorated desktop window rounds its own corners, so the radius is a
+   * token: the shell, the sidebar edge, and the drag region all have to agree or
+   * the corner shows a notch. 0 in a browser tab, where there is no window.
+   */
+  --radius-window: 0px;
+  /*
    * Elevation scale, keyed to how far a surface sits off the canvas.
    *
    *   raised   resting cards and controls: a hairline, not a drop
@@ -129,6 +135,13 @@ exports[`command shell neutral ladder > snapshots the radius scale 1`] = `
   --shadow-raised: 0 1px 2px rgba(24, 24, 27, 0.06);
   --shadow-overlay: 0 8px 24px rgba(24, 24, 27, 0.1);
   --shadow-modal: 0 18px 48px rgba(24, 24, 27, 0.16);
+  /*
+   * The composer floats just above the canvas: a close contact shadow plus a
+   * wider, softer ambient one. Lighter than --shadow-overlay, which is tuned for
+   * menus that sit clearly on top of content.
+   */
+  --shadow-composer:
+    0 1px 2px rgba(24, 24, 27, 0.04), 0 6px 20px rgba(24, 24, 27, 0.07);
   /* A drawer casts toward the edge it slid away from, not downward. */
   --shadow-drawer-left: -18px 0 48px rgba(24, 24, 27, 0.16);
   /* A zero-blur hairline under a row: a divider drawn as a shadow, not a drop. */
@@ -171,17 +184,25 @@ exports[`conversation surfaces follow the theme > snapshots the code and tool ou
 exports[`conversation surfaces follow the theme > snapshots the composer surface contract 1`] = `
 "/*
  * Final word on the thread composer; two earlier blocks in this file set the
- * same properties and are overridden here. The composer sits on --surface so it
- * lifts off the canvas by one rung of the grey ladder rather than by a drop
- * shadow, which is how the Cursor agent composer reads.
+ * same properties and are overridden here.
+ *
+ * 720px matches the transcript column above (\`.turn-group\` / \`.message\`), so
+ * the composer's edges line up with the messages instead of overhanging them.
+ *
+ * The composer now lifts off the canvas with a soft outer shadow rather than a
+ * hard edge: the border drops to a hairline and the radius goes past the \`xl\`
+ * container token, which is shared with cards and popovers and cannot round
+ * further without dragging them along.
  */
 .screen-shell.command-screen .command-input.thread-command-input {
-  width: min(980px, 100%);
+  width: min(720px, 100%);
+  max-width: 720px;
   margin-bottom: 6px;
+  border-width: 0.5px;
   border-color: var(--border-strong);
-  border-radius: var(--radius-xl);
+  border-radius: 18px;
   background: var(--surface);
-  box-shadow: none;
+  box-shadow: var(--shadow-composer);
 }"
 `;
 

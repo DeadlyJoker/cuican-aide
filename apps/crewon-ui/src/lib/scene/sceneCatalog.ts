@@ -114,7 +114,7 @@ const autoMode: SceneModeOption = {
 
 export const scenePresets: Record<CommandScene, ScenePreset> = {
   office: {
-    capabilitySummary: "文档整理 · Calendar · Knowledge",
+    capabilitySummary: "Word / PPT / Excel · 知识库",
     contextSummary: "文档 / 日历 / 知识库",
     deliverableSummary: "文档与行动项",
     modes: [
@@ -217,8 +217,8 @@ export const scenePresets: Record<CommandScene, ScenePreset> = {
     tabLabel: "生码",
   },
   design: {
-    capabilitySummary: "Vision · Figma · Image Generation",
-    contextSummary: "Brief / Figma / 品牌与参考",
+    capabilitySummary: "HTML 产物 · 截图渲染 · 设计走查",
+    contextSummary: "Brief / 设计系统 / 品牌与参考",
     deliverableSummary: "方向、视觉产物与交付说明",
     modes: [
       autoMode,
@@ -272,7 +272,7 @@ export const scenePresets: Record<CommandScene, ScenePreset> = {
 
 export const scenePresetsEn: Record<CommandScene, ScenePreset> = {
   office: {
-    capabilitySummary: "Documents · Calendar · Knowledge",
+    capabilitySummary: "Word / PPT / Excel · Knowledge",
     contextSummary: "Documents / calendar / knowledge base",
     deliverableSummary: "Documents and action items",
     modes: [
@@ -414,8 +414,8 @@ export const scenePresetsEn: Record<CommandScene, ScenePreset> = {
     tabLabel: "Code",
   },
   design: {
-    capabilitySummary: "Vision · Figma · Image generation",
-    contextSummary: "Brief / Figma / brand and references",
+    capabilitySummary: "HTML artifacts · Rendered previews · Design audit",
+    contextSummary: "Brief / design system / brand and references",
     deliverableSummary: "Directions, visual assets, and handoff notes",
     modes: [
       {

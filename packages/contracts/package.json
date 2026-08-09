@@ -1,0 +1,25 @@
+{
+  "name": "@crewon/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "node scripts/generate-control-api-types.mjs",
+    "generate:check": "node scripts/generate-control-api-types.mjs --check",
+    "license:check": "node scripts/check-development-licenses.mjs",
+    "test": "pnpm license:check && pnpm generate:check && node --experimental-strip-types --test src/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.5.3",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

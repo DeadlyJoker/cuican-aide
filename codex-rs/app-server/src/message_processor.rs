@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::future::Future;
 use std::path::Path;
@@ -64,8 +65,10 @@ use crate::request_processors::ThreadGoalRequestProcessor;
 use crate::request_processors::ThreadRequestProcessor;
 use crate::request_processors::TurnRequestProcessor;
 use crate::request_processors::WindowsSandboxRequestProcessor;
+use crate::request_processors::WorkflowAgentRuntimeThreadStart;
 use crate::request_processors::office_run_updated_notification;
 use crate::request_processors::read_dispatch_receipt;
+use crate::request_processors::workflow_run_updated_notification;
 use crate::request_serialization::QueuedInitializedRequest;
 use crate::request_serialization::RequestSerializationQueueKey;
 use crate::request_serialization::RequestSerializationQueues;
@@ -114,6 +117,7 @@ use crewon_app_server_protocol::OfficeSaveParams;
 use crewon_app_server_protocol::OfficeVerificationCancelResponse;
 use crewon_app_server_protocol::OfficeVerificationDispatchNextResponse;
 use crewon_app_server_protocol::OfficeVerificationRetryResponse;
+use crewon_app_server_protocol::RequestId;
 use crewon_app_server_protocol::RequestIdentityClientCapabilitiesRef;
 use crewon_app_server_protocol::RequestIdentityClientRef;
 use crewon_app_server_protocol::ServerRequestPayload;
@@ -121,6 +125,8 @@ use crewon_app_server_protocol::TurnInterruptParams;
 use crewon_app_server_protocol::TurnStartParams;
 use crewon_app_server_protocol::TurnStatus;
 use crewon_app_server_protocol::UserInput;
+use crewon_app_server_protocol::WorkflowGateDecision;
+use crewon_app_server_protocol::WorkflowGateResolveResponse;
 use crewon_app_server_protocol::experimental_required_message;
 use crewon_app_server_transport::TransportAuthenticatedPrincipal;
 use crewon_app_server_transport::TransportAuthenticatedPrincipalSource;
@@ -137,6 +143,9 @@ use crewon_login::auth::ExternalAuthRefreshContext;
 use crewon_login::auth::ExternalAuthRefreshReason;
 use crewon_login::auth::ExternalAuthTokens;
 use crewon_protocol::ThreadId;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
 use crewon_protocol::protocol::SessionSource;
 use crewon_protocol::protocol::W3cTraceContext;
 use crewon_rollout::StateDbHandle;
@@ -1345,6 +1354,71 @@ fn bounded_office_runtime_instruction_text(value: &str, max_chars: usize) -> Str
     bounded
 }
 
+fn workflow_agent_runtime_developer_instructions(
+    agent_config: &serde_json::Value,
+    agent_id: &str,
+) -> Option<String> {
+    let agent_id =
+        bounded_office_runtime_instruction_text(agent_id, OFFICE_RUNTIME_REPAIR_MAX_ID_CHARS);
+    let name = agent_config
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("Agent");
+    let name = bounded_office_runtime_instruction_text(name, OFFICE_RUNTIME_REPAIR_MAX_ID_CHARS);
+    let mut parts = vec![format!(
+        "You are the durable local CrewON workflow runtime for Agent {name} ({agent_id}). Execute only the current workflow node task, preserve this Agent's private thread context, obey the active local permission profile, and return a concise result with evidence for the next node."
+    )];
+    for key in [
+        "instructions",
+        "developerInstructions",
+        "systemPrompt",
+        "prompt",
+        "description",
+        "role",
+        "persona",
+        "policy",
+        "guardrails",
+        "constraints",
+    ] {
+        if let Some(value) = office_recovery_text(agent_config, key) {
+            let value = bounded_office_runtime_instruction_text(
+                value,
+                OFFICE_RUNTIME_REPAIR_MAX_FIELD_CHARS,
+            );
+            parts.push(format!("{key}: {value}"));
+        }
+    }
+    let instructions = bounded_office_runtime_instruction_text(
+        &parts.join("\n"),
+        OFFICE_RUNTIME_REPAIR_MAX_INSTRUCTIONS_CHARS,
+    );
+    (!instructions.trim().is_empty()).then_some(instructions)
+}
+
+fn workflow_agent_permission_profile(agent_config: &serde_json::Value) -> Option<String> {
+    let permission = agent_config
+        .get("permission")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)?;
+    let profile = match permission {
+        "只读" | "read-only" => BUILT_IN_PERMISSION_PROFILE_READ_ONLY,
+        "工作区写入" | "workspace-write" => BUILT_IN_PERMISSION_PROFILE_WORKSPACE,
+        "完全访问" | "full-access" => BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS,
+        value
+            if matches!(
+                value,
+                BUILT_IN_PERMISSION_PROFILE_READ_ONLY
+                    | BUILT_IN_PERMISSION_PROFILE_WORKSPACE
+                    | BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS
+            ) =>
+        {
+            value
+        }
+        _ => BUILT_IN_PERMISSION_PROFILE_READ_ONLY,
+    };
+    Some(profile.to_string())
+}
+
 fn rebind_office_runtime_thread_records(
     records: &mut [CrewonDomainConfigRecord],
     old_thread_id: &str,
@@ -2060,6 +2134,16 @@ async fn repair_office_scheduler_dispatch_target_thread(
         .start_office_member_runtime_thread(
             OfficeMemberRuntimeThreadStart {
                 cwd: cwd.to_string(),
+                model: agent_record
+                    .config
+                    .get("model")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+                permissions: agent_record
+                    .config
+                    .get("permission")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
                 base_instructions: None,
                 developer_instructions,
             },
@@ -2939,6 +3023,254 @@ impl MessageProcessor {
         self.thread_processor.connection_closed(connection_id).await;
     }
 
+    async fn ensure_workflow_agent_runtime_thread(
+        &self,
+        cwd: &str,
+        agent_id: &str,
+        connection_id: ConnectionId,
+    ) -> Result<String, JSONRPCErrorError> {
+        let response = self
+            .crewon_domain_processor
+            .agent_read(AgentReadParams {
+                cwd: cwd.to_string(),
+                agent_id: Some(agent_id.to_string()),
+                thread_id: None,
+                name: None,
+            })
+            .await?;
+        let record = response.record.ok_or_else(|| {
+            invalid_request(format!(
+                "workflow agent does not exist in the current workspace: {agent_id}"
+            ))
+        })?;
+        let source_thread_id = record
+            .config
+            .get("threadId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|thread_id| !thread_id.is_empty())
+            .map(str::to_string);
+        if let Some(thread_id) = source_thread_id.as_deref() {
+            match self
+                .thread_processor
+                .ensure_thread_loaded_for_office_dispatch(thread_id, connection_id)
+                .await
+            {
+                Ok(()) => return Ok(thread_id.to_string()),
+                Err(error)
+                    if error.message.contains("thread not found")
+                        || error.message.contains("no rollout found") => {}
+                Err(error) => return Err(error),
+            }
+        }
+
+        let model = record
+            .config
+            .get("model")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|model| !model.is_empty())
+            .map(str::to_string);
+        let permissions = workflow_agent_permission_profile(&record.config);
+        let developer_instructions =
+            workflow_agent_runtime_developer_instructions(&record.config, agent_id);
+        let thread = self
+            .thread_processor
+            .start_workflow_agent_runtime_thread(
+                WorkflowAgentRuntimeThreadStart {
+                    cwd: cwd.to_string(),
+                    model,
+                    permissions,
+                    developer_instructions,
+                },
+                connection_id,
+            )
+            .await?;
+        let thread_id = thread.id;
+        let mut config = record.config;
+        let config_object = config
+            .as_object_mut()
+            .ok_or_else(|| invalid_request("workflow agent config must be an object"))?;
+        config_object.insert(
+            "threadId".to_string(),
+            serde_json::Value::String(thread_id.clone()),
+        );
+        if let Some(source_thread_id) = source_thread_id {
+            config_object.insert(
+                "runtimeRepairSourceThreadId".to_string(),
+                serde_json::Value::String(source_thread_id),
+            );
+            config_object.insert(
+                "runtimeRepairedAt".to_string(),
+                serde_json::Value::String(Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)),
+            );
+        }
+        if let Err(error) = self
+            .crewon_domain_processor
+            .agent_update(AgentUpdateParams {
+                cwd: cwd.to_string(),
+                file_path: record.file_path,
+                config,
+            })
+            .await
+        {
+            if let Err(discard_error) = self
+                .thread_processor
+                .discard_office_runtime_thread(&thread_id)
+                .await
+            {
+                tracing::warn!(
+                    thread_id,
+                    error = %discard_error.message,
+                    "failed to discard uncommitted workflow agent runtime"
+                );
+            }
+            return Err(error);
+        }
+        Ok(thread_id)
+    }
+
+    async fn recover_workflow_runs(&self, cwd: &str, connection_id: ConnectionId) {
+        let recovery = match self
+            .crewon_domain_processor
+            .workflow_recovery_state(cwd)
+            .await
+        {
+            Ok(recovery) => recovery,
+            Err(error) => {
+                tracing::warn!(cwd, error = %error.message, "failed to inspect local workflow recovery state");
+                return;
+            }
+        };
+        for active in recovery.active_turns {
+            self.thread_processor
+                .monitor_office_dispatched_turn_completion(
+                    cwd,
+                    &active.thread_id,
+                    &active.turn_id,
+                    connection_id,
+                )
+                .await;
+        }
+        for mut prepared in recovery.queued {
+            let thread_id = match self
+                .ensure_workflow_agent_runtime_thread(cwd, &prepared.agent_id, connection_id)
+                .await
+            {
+                Ok(thread_id) => thread_id,
+                Err(error) => {
+                    if let Ok(config) = self
+                        .crewon_domain_processor
+                        .workflow_run_mark_failed(&prepared, &error.message)
+                        .await
+                    {
+                        self.outgoing
+                            .send_server_notification(workflow_run_updated_notification(
+                                &prepared.cwd,
+                                &prepared.file_path,
+                                &config,
+                                "recoveryFailed",
+                                Some(&prepared.thread_id),
+                                /*source_turn_id*/ None,
+                            ))
+                            .await;
+                    }
+                    continue;
+                }
+            };
+            if let Err(error) = self
+                .crewon_domain_processor
+                .workflow_run_rebind_thread(&mut prepared, thread_id)
+                .await
+            {
+                tracing::warn!(
+                    run_id = %prepared.run_id,
+                    node_id = %prepared.node_id,
+                    error = %error.message,
+                    "failed to rebind recovered workflow runtime thread"
+                );
+                continue;
+            }
+            let recovery_request_id = ConnectionRequestId {
+                connection_id,
+                request_id: RequestId::String(format!("workflow-recovery-{}", Uuid::now_v7())),
+            };
+            let turn_response = match self
+                .turn_processor
+                .turn_start_response(
+                    recovery_request_id,
+                    TurnStartParams {
+                        thread_id: prepared.thread_id.clone(),
+                        input: vec![UserInput::Text {
+                            text: prepared.prompt.clone(),
+                            text_elements: Vec::new(),
+                        }],
+                        cwd: Some(PathBuf::from(&prepared.cwd)),
+                        ..TurnStartParams::default()
+                    },
+                    Some("app-server-workflow-recovery".to_string()),
+                    /*app_server_client_version*/ None,
+                )
+                .await
+            {
+                Ok(response) => response,
+                Err(error) => {
+                    if let Ok(config) = self
+                        .crewon_domain_processor
+                        .workflow_run_mark_failed(&prepared, &error.message)
+                        .await
+                    {
+                        self.outgoing
+                            .send_server_notification(workflow_run_updated_notification(
+                                &prepared.cwd,
+                                &prepared.file_path,
+                                &config,
+                                "recoveryDispatchFailed",
+                                Some(&prepared.thread_id),
+                                /*source_turn_id*/ None,
+                            ))
+                            .await;
+                    }
+                    continue;
+                }
+            };
+            match self
+                .crewon_domain_processor
+                .workflow_run_mark_started(&prepared, &turn_response.turn.id)
+                .await
+            {
+                Ok(update) => {
+                    self.outgoing
+                        .send_server_notification(workflow_run_updated_notification(
+                            &prepared.cwd,
+                            &prepared.file_path,
+                            &update.config,
+                            "recoveryStarted",
+                            Some(&prepared.thread_id),
+                            Some(&turn_response.turn.id),
+                        ))
+                        .await;
+                    self.thread_processor
+                        .monitor_office_dispatched_turn_completion(
+                            &prepared.cwd,
+                            &prepared.thread_id,
+                            &turn_response.turn.id,
+                            connection_id,
+                        )
+                        .await;
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        run_id = %prepared.run_id,
+                        node_id = %prepared.node_id,
+                        error = %error.message,
+                        "failed to mark recovered workflow node as started"
+                    );
+                }
+            }
+        }
+    }
+
     pub(crate) fn subscribe_running_assistant_turn_count(&self) -> watch::Receiver<usize> {
         self.thread_processor
             .subscribe_running_assistant_turn_count()
@@ -3278,6 +3610,11 @@ impl MessageProcessor {
                 .model_provider_capabilities_read()
                 .await
                 .map(|response| Some(response.into())),
+            ClientRequest::ModelProviderProbe { params, .. } => self
+                .config_processor
+                .model_provider_probe(params)
+                .await
+                .map(|response| Some(response.into())),
             ClientRequest::ThreadStart { params, .. } => {
                 Box::pin(self.authorize_expert_team_thread_start(
                     &request_identity,
@@ -3559,6 +3896,137 @@ impl MessageProcessor {
             ClientRequest::AgentDelete { params, .. } => self
                 .crewon_domain_processor
                 .agent_delete(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowList { params, .. } => {
+                self.recover_workflow_runs(&params.cwd, connection_id).await;
+                self.crewon_domain_processor
+                    .workflow_list(params)
+                    .await
+                    .map(|response| Some(response.into()))
+            }
+            ClientRequest::WorkflowCreate { params, .. } => self
+                .crewon_domain_processor
+                .workflow_create(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowRead { params, .. } => self
+                .crewon_domain_processor
+                .workflow_read(params)
+                .await
+                .map(|response| Some(response.into())),
+            ClientRequest::WorkflowRun { params, .. } => {
+                let agent_ids = self
+                    .crewon_domain_processor
+                    .workflow_agent_ids(&params)
+                    .await?;
+                let mut runtime_threads = HashMap::new();
+                for agent_id in agent_ids {
+                    let thread_id = self
+                        .ensure_workflow_agent_runtime_thread(&params.cwd, &agent_id, connection_id)
+                        .await?;
+                    runtime_threads.insert(agent_id, thread_id);
+                }
+                let prepared = self
+                    .crewon_domain_processor
+                    .workflow_run_prepare(params, &runtime_threads)
+                    .await?;
+                if let Some(next) = prepared.next {
+                    let update = self
+                        .thread_processor
+                        .dispatch_workflow_node(
+                            &next,
+                            request_id.clone(),
+                            app_server_client_name.clone(),
+                            client_version.clone(),
+                            "runStarted",
+                            connection_id,
+                        )
+                        .await?;
+                    Ok(Some(update.response.into()))
+                } else {
+                    self.outgoing
+                        .send_server_notification(workflow_run_updated_notification(
+                            &prepared.cwd,
+                            &prepared.file_path,
+                            &prepared.update.config,
+                            "waitingForApproval",
+                            /*source_thread_id*/ None,
+                            /*source_turn_id*/ None,
+                        ))
+                        .await;
+                    Ok(Some(prepared.update.response.into()))
+                }
+            }
+            ClientRequest::WorkflowGateResolve { params, .. } => {
+                let prepared = self
+                    .crewon_domain_processor
+                    .workflow_gate_resolve(params)
+                    .await?;
+                let reason = match prepared.decision {
+                    WorkflowGateDecision::Approve => "gateApproved",
+                    WorkflowGateDecision::Reject => "gateRejected",
+                };
+                self.outgoing
+                    .send_server_notification(workflow_run_updated_notification(
+                        &prepared.cwd,
+                        &prepared.file_path,
+                        &prepared.update.config,
+                        reason,
+                        /*source_thread_id*/ None,
+                        /*source_turn_id*/ None,
+                    ))
+                    .await;
+                if let Some(next) = &prepared.next {
+                    self.thread_processor
+                        .dispatch_workflow_node(
+                            next,
+                            request_id.clone(),
+                            app_server_client_name.clone(),
+                            client_version.clone(),
+                            "nodeStartedAfterGate",
+                            connection_id,
+                        )
+                        .await?;
+                }
+                Ok(Some(WorkflowGateResolveResponse::from(prepared).into()))
+            }
+            ClientRequest::WorkflowRunCancel { params, .. } => {
+                let prepared = self
+                    .crewon_domain_processor
+                    .workflow_run_cancel_prepare(params)
+                    .await?;
+                if let Some(target) = prepared.target.clone()
+                    && let Err(error) = self
+                        .turn_processor
+                        .turn_interrupt_without_response(&request_id, target)
+                        .await
+                {
+                    tracing::warn!(
+                        execution_id = %prepared.run_id,
+                        error = %error.message,
+                        "workflow run was canceled while its active turn could not be interrupted"
+                    );
+                }
+                let response = self
+                    .crewon_domain_processor
+                    .workflow_run_cancel_commit(&prepared)
+                    .await?;
+                self.outgoing
+                    .send_server_notification(workflow_run_updated_notification(
+                        &prepared.cwd,
+                        &response.file_path,
+                        &response.config,
+                        "canceled",
+                        /*source_thread_id*/ None,
+                        /*source_turn_id*/ None,
+                    ))
+                    .await;
+                Ok(Some(response.into()))
+            }
+            ClientRequest::WorkflowDelete { params, .. } => self
+                .crewon_domain_processor
+                .workflow_delete(params)
                 .await
                 .map(|response| Some(response.into())),
             ClientRequest::AgentPlatformAuth { params, .. } => self

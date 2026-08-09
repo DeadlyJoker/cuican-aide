@@ -31,10 +31,34 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: 22
+          node-version-file: .node-version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Typecheck the architecture foundation
+        run: pnpm --filter './packages/**' -r typecheck
+
+      - name: Test the architecture foundation
+        run: pnpm --filter './packages/**' -r test
+
+      - name: Typecheck the Control API
+        run: pnpm --filter @crewon/control-api typecheck
+
+      - name: Test the Control API
+        run: pnpm --filter @crewon/control-api test
+
+      - name: Typecheck the Runtime Worker
+        run: pnpm --filter @crewon/runtime-worker typecheck
+
+      - name: Test the Runtime Worker
+        run: pnpm --filter @crewon/runtime-worker test
+
+      - name: Typecheck the Device Gateway
+        run: pnpm --filter @crewon/device-gateway typecheck
+
+      - name: Test the Device Gateway
+        run: pnpm --filter @crewon/device-gateway test
 
       - name: Ensure root README.md contains only ASCII and certain Unicode code points
         run: ./scripts/asciicheck.py README.md
@@ -53,3 +77,9 @@ jobs:
 
       - name: Prettier (run `pnpm run format:fix` to fix)
         run: pnpm run format
+
+      - name: Typecheck the UI
+        run: pnpm --filter @crewon/ui lint
+
+      - name: Test the UI
+        run: pnpm --filter @crewon/ui test

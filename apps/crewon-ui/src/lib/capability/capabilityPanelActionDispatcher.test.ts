@@ -104,6 +104,7 @@ function baseParams(
       integrations: () => {},
       keyboard: () => {},
       mcpSettings: () => {},
+      modelProviders: () => {},
       personalization: () => {},
       worktrees: () => {},
     },
@@ -122,6 +123,40 @@ function baseParams(
 describe("capability panel action dispatcher", () => {
   it("returns false for unknown actions", () => {
     expect(handleCapabilityPanelActionDispatch(baseParams())).toBe(false);
+  });
+
+  it("does not fall back to legacy lifecycle mutations for an explicit Control cohort", async () => {
+    let legacyMutationCalled = false;
+    let panel: CapabilityPanel | null = { title: "Panel", body: "Ready" };
+
+    const handled = handleCapabilityPanelActionDispatch(
+      baseParams({
+        actionId: "compact-thread",
+        client: {
+          compactThread: async () => {
+            legacyMutationCalled = true;
+          },
+        } as never,
+        isDemo: true,
+        threadLifecycleClient: null,
+        threadLifecycleConnected: true,
+        threadLifecycleControlConfigured: true,
+        setCapabilityPanel: (panelOrUpdater) => {
+          panel =
+            typeof panelOrUpdater === "function"
+              ? panelOrUpdater(panel)
+              : panelOrUpdater;
+        },
+      }),
+    );
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+
+    expect(handled).toBe(true);
+    expect(legacyMutationCalled).toBe(false);
+    expect(panel).toMatchObject({
+      error: "thread_compaction_unavailable",
+    });
+    expect(panel?.body).not.toContain("(demo)");
   });
 
   it("handles demo thread settings save before backend save handlers", () => {
@@ -152,8 +187,7 @@ describe("capability panel action dispatcher", () => {
     expect(handled).toBe(true);
     expect(saved).toBe(false);
     expect(panel).toMatchObject({
-      body:
-        "Session settings saved (demo). With app-server connected this calls thread/settings/update.",
+      body: "Session settings saved (demo). With app-server connected this calls thread/settings/update.",
       title: "Session settings",
     });
   });
@@ -179,6 +213,7 @@ describe("capability panel action dispatcher", () => {
           integrations: () => {},
           keyboard: () => {},
           mcpSettings: () => {},
+          modelProviders: () => {},
           personalization: () => {},
           worktrees: () => {},
         },
@@ -187,6 +222,30 @@ describe("capability panel action dispatcher", () => {
 
     expect(handled).toBe(true);
     expect(refreshed).toEqual(["config"]);
+  });
+
+  it("does not send legacy Goal mutations after the composer cutover", () => {
+    const notices: string[] = [];
+    let legacyMutationCalled = false;
+
+    const handled = handleCapabilityPanelActionDispatch(
+      baseParams({
+        actionId: "save-thread-goal",
+        client: {
+          setThreadGoal: async () => {
+            legacyMutationCalled = true;
+            return { goal: null };
+          },
+        } as never,
+        setNotice: (notice) => notices.push(notice.text),
+      }),
+    );
+
+    expect(handled).toBe(true);
+    expect(legacyMutationCalled).toBe(false);
+    expect(notices).toEqual([
+      "Goals moved to the conversation composer. Edit, pause, or clear them there.",
+    ]);
   });
 
   it("routes plugin path actions", () => {

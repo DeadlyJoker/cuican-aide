@@ -1,4 +1,9 @@
 import {
+  clearPimLaunchToken,
+  getPimLaunchToken,
+  isPimLaunchSession,
+} from "./pimLaunchBridge";
+import {
   MCP_GLYPHS,
   SKILL_GLYPHS,
   capabilityAccents,
@@ -330,6 +335,14 @@ async function request<T>(
       headers.set("Authorization", `Bearer ${token}`);
     }
   }
+  // Attach PIM launch token when present — the backend uses it to
+  // authorize LLM proxy calls against the PIM platform.
+  if (isPimLaunchSession() && !headers.has("X-PIM-Launch-Token")) {
+    const pimToken = getPimLaunchToken();
+    if (pimToken) {
+      headers.set("X-PIM-Launch-Token", pimToken);
+    }
+  }
 
   const response = await fetch(`${agentPlatformBaseUrl()}${path}`, {
     ...options.init,
@@ -472,6 +485,13 @@ export function buildAgentPlatformWorkflowGraph(
 }
 
 async function getAgentPlatformToken(): Promise<string | null> {
+  // When launched from a PIM showcase page, the launch token IS the
+  // authentication credential — use it directly without any login flow.
+  if (isPimLaunchSession()) {
+    const pimToken = getPimLaunchToken();
+    if (pimToken) return pimToken;
+  }
+
   if (
     cachedToken &&
     tokenMatchesCurrentSessionRequirements(cachedToken) &&
@@ -665,6 +685,7 @@ export function clearAgentPlatformSession(): void {
   cachedToken = null;
   cachedTokenExpiresAt = 0;
   cachedBffUser = null;
+  clearPimLaunchToken();
   if (typeof localStorage === "undefined") {
     return;
   }
@@ -698,6 +719,13 @@ export async function agentPlatformAuthorizedFetch(
     headers.set("Accept", headers.get("Accept") ?? "application/json");
     if (accessToken) {
       headers.set("Authorization", `Bearer ${accessToken}`);
+    }
+    // Attach PIM launch token when present.
+    if (isPimLaunchSession() && !headers.has("X-PIM-Launch-Token")) {
+      const pimToken = getPimLaunchToken();
+      if (pimToken) {
+        headers.set("X-PIM-Launch-Token", pimToken);
+      }
     }
     return fetch(`${agentPlatformBaseUrl()}${path}`, {
       ...init,

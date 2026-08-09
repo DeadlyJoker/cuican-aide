@@ -19,7 +19,10 @@ type SelectedThreadSetter = (
 ) => void;
 
 export type AppThreadListEffectsParams = {
-  client: AppServerClient | null;
+  client: Pick<
+    AppServerClient,
+    "listLoadedThreadIds" | "listThreads" | "searchThreads"
+  > | null;
   emptySelectionBehavior: EmptyThreadSelectionBehavior;
   isConnected: boolean;
   isDemoPreview: boolean;

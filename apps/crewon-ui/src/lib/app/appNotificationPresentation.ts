@@ -154,15 +154,6 @@ export function terminalOutputChunk(
   return `${stream === "stderr" ? "[stderr] " : ""}${text}${capReached ? "\n[output cap reached]" : ""}`;
 }
 
-export function appendTerminalOutput(
-  currentBody: string | undefined,
-  chunk: string,
-  locale: Locale,
-): string {
-  const runningText = locale === "zh" ? "正在运行..." : "Running...";
-  return `${currentBody && currentBody !== runningText ? currentBody : ""}${chunk}`;
-}
-
 function warningNotice(error: unknown, fallback: string): NoticeState {
   return {
     text: error instanceof Error ? error.message : fallback,

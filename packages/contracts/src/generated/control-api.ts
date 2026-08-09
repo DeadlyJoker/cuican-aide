@@ -1,0 +1,2388 @@
+// This file is generated from openapi/control-api.v1.json. Do not edit.
+export interface paths {
+  "/api/v1/threads": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listThreads"];
+    put?: never;
+    post: operations["createThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getThread"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}:archive": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["archiveThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}:rollback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["rollbackThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}:unarchive": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["unarchiveThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}:rename": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["renameThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}:delete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["deleteThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["streamThreadEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/goal": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getThreadGoal"];
+    put: operations["setThreadGoal"];
+    post?: never;
+    delete: operations["clearThreadGoal"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/goal/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["streamThreadGoalEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listThreadMessages"];
+    put?: never;
+    post: operations["appendThreadMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/forks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["forkThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/turns": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["startTurn"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}:compact": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["compactThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listThreadRuns"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["createRun"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/runs/{runId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getRun"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/runs/{runId}:cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["cancelRun"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/runs/{runId}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["streamRunEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tool-approvals/{approvalId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getToolApproval"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tool-approvals/{approvalId}:decide": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["decideToolApproval"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agent-versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listAgentVersions"];
+    put?: never;
+    post: operations["publishAgentVersion"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agent-versions/active": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getActiveAgentVersionCatalog"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agent-versions/{agentVersionId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getAgentVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/artifacts/{artifactId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getArtifact"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/artifacts/{artifactId}/content": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["downloadArtifactContent"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/health/live": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["liveHealth"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/health/ready": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["readyHealth"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+}
+export type webhooks = Record<string, never>;
+export interface components {
+  schemas: {
+    HealthResponse: {
+      /** @constant */
+      status: "ok";
+    };
+    CreateThreadRequest: {
+      title: string | null;
+    };
+    AppendThreadMessageRequest: {
+      expectedRevision: number;
+      content: string;
+    };
+    ForkThreadRequest: {
+      expectedRevision: number;
+      throughHistorySequence: number | null;
+    };
+    RollbackThreadRequest: {
+      expectedRevision: number;
+      numTurns: number;
+    };
+    ArchiveThreadRequest: {
+      expectedRevision: number;
+    };
+    UnarchiveThreadRequest: {
+      expectedRevision: number;
+    };
+    RenameThreadRequest: {
+      expectedRevision: number;
+      title: string | null;
+    };
+    DeleteThreadRequest: {
+      expectedRevision: number;
+    };
+    /** @enum {string} */
+    ThreadStatus: "active" | "archived" | "deleted";
+    ThreadView: {
+      threadId: string;
+      title: string | null;
+      status: components["schemas"]["ThreadStatus"];
+      revision: number;
+      lastMessageSequence: number;
+      forkedFromThreadId: string | null;
+      forkedThroughHistorySequence: number | null;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: date-time */
+      archivedAt: string | null;
+      /** Format: date-time */
+      deletedAt: string | null;
+    };
+    /** @enum {string} */
+    ThreadEventType:
+      | "thread.created"
+      | "thread.message.appended"
+      | "thread.forked"
+      | "thread.archived"
+      | "thread.unarchived"
+      | "thread.renamed"
+      | "thread.rolled_back"
+      | "thread.deleted";
+    /** @enum {string} */
+    ThreadStandardEventType:
+      | "thread.created"
+      | "thread.message.appended"
+      | "thread.forked"
+      | "thread.archived"
+      | "thread.unarchived"
+      | "thread.renamed"
+      | "thread.deleted";
+    ThreadStandardEventView: {
+      /** @constant */
+      schemaVersion: "crewon.thread-event.v0";
+      threadId: string;
+      eventId: string;
+      sequence: number;
+      /** Format: date-time */
+      occurredAt: string;
+      type: components["schemas"]["ThreadStandardEventType"];
+    };
+    /** @description Redacted durable rollback delivery event. Private marker identifiers, raw history ranges, actor identity and tenancy are never exposed. */
+    ThreadRolledBackEventView: {
+      threadId: string;
+      eventId: string;
+      sequence: number;
+      /** Format: date-time */
+      occurredAt: string;
+      /** @constant */
+      type: "thread.rolled_back";
+      requestedTurns: number;
+      removedTurns: number;
+    };
+    ThreadEventView:
+      | components["schemas"]["ThreadStandardEventView"]
+      | components["schemas"]["ThreadRolledBackEventView"];
+    /** @enum {string} */
+    MessageRole: "user" | "assistant" | "system" | "tool";
+    ProposedPlanView: {
+      /** @constant */
+      schemaVersion: "crewon.proposed-plan.v0";
+      planId: string;
+      threadId: string;
+      runId: string;
+      messageId: string;
+      /** @description Complete public Plan body. The server enforces a 9999-byte UTF-8 hard limit; maxLength is the provider-neutral character upper bound. */
+      content: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    MessageView: {
+      messageId: string;
+      threadId: string;
+      sequence: number;
+      role: components["schemas"]["MessageRole"];
+      content: string;
+      proposedPlan: components["schemas"]["ProposedPlanView"] | null;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    ThreadMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      thread: components["schemas"]["ThreadView"];
+    };
+    AppendThreadMessageResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      thread: components["schemas"]["ThreadView"];
+      message: components["schemas"]["MessageView"];
+    };
+    GetThreadResponse: {
+      thread: components["schemas"]["ThreadView"];
+    };
+    /** @enum {string} */
+    ThreadGoalStatus:
+      | "active"
+      | "paused"
+      | "blocked"
+      | "usageLimited"
+      | "budgetLimited"
+      | "complete";
+    ThreadGoalView: {
+      threadId: string;
+      goalId: string;
+      revision: number;
+      objective: string;
+      status: components["schemas"]["ThreadGoalStatus"];
+      tokenBudget: number | null;
+      tokensUsed: number;
+      /** @description Cumulative whole seconds while this Goal is attributed to a started durable Run. Queued time and idle time between Runs are excluded. */
+      timeUsedSeconds: number;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    GetThreadGoalResponse: {
+      goal: components["schemas"]["ThreadGoalView"] | null;
+      /** @description Durable Thread Goal event sequence at the same Store read point as goal. Use it as Last-Event-ID when attaching the Goal event stream. */
+      eventSequence: number;
+    };
+    ThreadGoalTokenBudgetUpdate:
+      | {
+          /** @constant */
+          kind: "keep";
+        }
+      | {
+          /** @constant */
+          kind: "set";
+          value: number | null;
+        };
+    SetThreadGoalRequest: {
+      expectedRevision: number | null;
+      objective: string | null;
+      status: components["schemas"]["ThreadGoalStatus"] | null;
+      tokenBudget: components["schemas"]["ThreadGoalTokenBudgetUpdate"];
+    };
+    ClearThreadGoalRequest: {
+      expectedRevision: number;
+    };
+    ThreadGoalMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      goal: components["schemas"]["ThreadGoalView"] | null;
+      canceledRun: components["schemas"]["RunView"] | null;
+      retainedRun: components["schemas"]["RunView"] | null;
+      continuationRun: components["schemas"]["RunView"] | null;
+    };
+    ThreadGoalEventBaseView: {
+      /** @constant */
+      schemaVersion: "crewon.thread-goal-event.v0";
+      threadId: string;
+      eventId: string;
+      sequence: number;
+      /** Format: date-time */
+      occurredAt: string;
+    };
+    ThreadGoalUpdatedEventView: components["schemas"]["ThreadGoalEventBaseView"] & {
+      /** @constant */
+      type: "goal.updated";
+      data: {
+        goal: components["schemas"]["ThreadGoalView"];
+      };
+    };
+    ThreadGoalClearedEventView: components["schemas"]["ThreadGoalEventBaseView"] & {
+      /** @constant */
+      type: "goal.cleared";
+      data: {
+        previousGoalId: string;
+        previousRevision: number;
+      };
+    };
+    ThreadGoalEventView:
+      | components["schemas"]["ThreadGoalUpdatedEventView"]
+      | components["schemas"]["ThreadGoalClearedEventView"];
+    ListThreadsResponse: {
+      data: components["schemas"]["ThreadView"][];
+      nextCursor: string | null;
+    };
+    ListThreadMessagesResponse: {
+      data: components["schemas"]["MessageView"][];
+      nextCursor: string | null;
+    };
+    CreateRunRequest: {
+      threadId: string;
+      /** @description Optional immutable AgentVersion selection. The server admits it before creating a Run; omission uses the configured default. */
+      agentVersionId?: string | null;
+    };
+    StartTurnRequest: {
+      expectedRevision: number;
+      content: string;
+      /** @description Requested immutable AgentVersion; null uses the active default. The resolved route is server-owned. */
+      agentVersionId: string | null;
+      /**
+       * @description Atomic Turn intent. Goal creates or updates the persistent Thread Goal; Plan clears it and pins this Run to Plan collaboration mode.
+       * @enum {string}
+       */
+      executionIntent: "none" | "goal" | "plan";
+    };
+    CompactThreadRequest: {
+      expectedRevision: number;
+      /** @description Requested immutable AgentVersion for the compactor; null uses the active default. */
+      agentVersionId: string | null;
+    };
+    CancelRunRequest: {
+      expectedRevision: number;
+    };
+    /** @enum {string} */
+    RunStatus:
+      | "queued"
+      | "running"
+      | "waitingApproval"
+      | "suspended"
+      | "reconciling"
+      | "completed"
+      | "failed"
+      | "canceled";
+    RunView: {
+      runId: string;
+      threadId: string;
+      status: components["schemas"]["RunStatus"];
+      revision: number;
+      lastSequence: number;
+      cancelRequested: boolean;
+      waitingApproval: null | {
+        approvalId: string;
+      };
+      /** @enum {string} */
+      collaborationMode: "default" | "plan";
+      /**
+       * @description Immutable Run purpose. Omitted only by legacy servers and interpreted as turn.
+       * @enum {string}
+       */
+      purpose?: "turn" | "manualCompaction";
+      goalBinding: null | {
+        goalId: string;
+        revision: number;
+        objectiveDigest: string;
+      };
+      outputRef: string | null;
+      failure: null | {
+        code: string;
+        retryable: boolean;
+      };
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: date-time */
+      terminalAt: string | null;
+    };
+    RunMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      run: components["schemas"]["RunView"];
+    };
+    StartTurnResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      thread: components["schemas"]["ThreadView"];
+      message: components["schemas"]["MessageView"];
+      run: components["schemas"]["RunView"];
+    };
+    GetRunResponse: {
+      run: components["schemas"]["RunView"];
+    };
+    ListThreadRunsResponse: {
+      data: components["schemas"]["RunView"][];
+      nextCursor: string | null;
+    };
+    /** @enum {string} */
+    ToolApprovalStatus:
+      | "required"
+      | "approved"
+      | "rejected"
+      | "expired"
+      | "superseded";
+    DecideToolApprovalRequest: {
+      expectedRevision: number;
+      /** @enum {string} */
+      decision: "approved" | "rejected";
+      comment: string | null;
+    };
+    ToolApprovalView: {
+      approvalId: string;
+      runId: string;
+      status: components["schemas"]["ToolApprovalStatus"];
+      revision: number;
+      /** Format: date-time */
+      requiredAt: string;
+      /** Format: date-time */
+      expiresAt: string | null;
+      /** @enum {string|null} */
+      decision: "approved" | "rejected" | null;
+      comment: string | null;
+      /** Format: date-time */
+      decidedAt: string | null;
+    };
+    GetToolApprovalResponse: {
+      approval: components["schemas"]["ToolApprovalView"];
+    };
+    ToolApprovalMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      approval: components["schemas"]["ToolApprovalView"];
+      run: components["schemas"]["RunView"];
+    };
+    PublishAgentVersionRequest: {
+      /** @constant */
+      schemaVersion: "crewon.agent-version-source.v0";
+      agentVersionId: string;
+      runtimeGeneration: string;
+      policySnapshotId: string;
+      instructions: string | null;
+      model: components["schemas"]["AgentVersionModel"];
+      execution: components["schemas"]["AgentVersionExecution"];
+      resources: components["schemas"]["AgentVersionResources"];
+      tools: components["schemas"]["AgentVersionTool"][];
+    };
+    AgentVersionModel: {
+      adapterName: string;
+      adapterVersion: string;
+      modelId: string;
+      contextWindowTokens: number;
+      autoCompactAtTokens: number | null;
+    };
+    AgentVersionExecution: {
+      streamMaxRetries: number;
+      maxToolRounds: number;
+    };
+    AgentVersionResources: {
+      workspaceRequired: boolean;
+      governedContextDigest: string | null;
+    };
+    AgentVersionTool:
+      | components["schemas"]["AgentVersionFunctionTool"]
+      | components["schemas"]["AgentVersionCustomTool"];
+    AgentVersionFunctionTool: {
+      /** @constant */
+      schemaVersion: "crewon.tool-definition.v0";
+      /** @constant */
+      kind: "function";
+      name: string;
+      description: string;
+      /** @enum {string} */
+      execution: "serial" | "parallel";
+      inputSchema: {
+        [key: string]: unknown;
+      };
+    };
+    AgentVersionCustomTool: {
+      /** @constant */
+      schemaVersion: "crewon.tool-definition.v0";
+      /** @constant */
+      kind: "custom";
+      name: string;
+      description: string;
+      /** @enum {string} */
+      execution: "serial" | "parallel";
+      /** @constant */
+      inputFormat: "text";
+    };
+    AgentVersionView: {
+      agentVersionId: string;
+      contentDigest: string;
+      runtimeGeneration: string;
+      policySnapshotId: string;
+      model: {
+        adapterName: string;
+        adapterVersion: string;
+        modelId: string;
+      };
+      /** Format: date-time */
+      createdAt: string;
+    };
+    AgentVersionMutationResponse: {
+      /** @enum {string} */
+      disposition: "registered" | "existing";
+      agentVersion: components["schemas"]["AgentVersionView"];
+    };
+    GetAgentVersionResponse: {
+      agentVersion: components["schemas"]["AgentVersionView"];
+    };
+    ListAgentVersionsResponse: {
+      data: components["schemas"]["AgentVersionView"][];
+      nextCursor: string | null;
+    };
+    ActiveAgentVersionCatalogResponse: {
+      releaseId: string;
+      /** Format: date-time */
+      activatedAt: string;
+      defaultAgentVersionId: string;
+      data: components["schemas"]["AgentVersionView"][];
+    };
+    ArtifactView: {
+      artifactId: string;
+      /** @constant */
+      kind: "toolOutput";
+      mediaType: string;
+      /** @enum {string} */
+      sensitivity: "public" | "internal" | "workspaceSensitive";
+      contentDigest: string;
+      byteLength: number;
+      source: {
+        /** @constant */
+        kind: "toolOutput";
+        runId: string;
+        stepId: string;
+        callId: string;
+      };
+      retention: {
+        /** @constant */
+        kind: "run";
+        /** Format: date-time */
+        expiresAt: string;
+      };
+      encryption: {
+        /** @enum {string} */
+        scheme: "aes256gcm" | "externalKms";
+      };
+      scan: {
+        /** @enum {string} */
+        status: "notRequired" | "pending" | "clean" | "blocked";
+        /** Format: date-time */
+        scannedAt: string | null;
+      };
+      /** Format: date-time */
+      createdAt: string;
+    };
+    GetArtifactResponse: {
+      artifact: components["schemas"]["ArtifactView"];
+    };
+    /** @enum {string} */
+    ErrorCategory:
+      | "authentication"
+      | "authorization"
+      | "notFound"
+      | "conflict"
+      | "validation"
+      | "rateLimit"
+      | "providerUnavailable"
+      | "deviceUnavailable"
+      | "unknownOutcome"
+      | "internal";
+    ErrorEnvelope: {
+      error: {
+        category: components["schemas"]["ErrorCategory"];
+        code: string;
+        message: string;
+        requestId: string;
+      };
+    };
+    RunEventEnvelope: {
+      eventId: string;
+      runId: string;
+      sequence: number;
+      /** Format: date-time */
+      occurredAt: string;
+    };
+    RunCreatedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "run.created";
+      data: {
+        threadId: string;
+      };
+    };
+    RunStartedEventView: components["schemas"]["RunEventEnvelope"] &
+      components["schemas"]["EmptyRunEventData"] & {
+        /** @constant */
+        type: "run.started";
+      };
+    RunApprovalRequiredEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "run.approval.required";
+      data: {
+        approvalId: string;
+      };
+    };
+    RunResumedEventView: components["schemas"]["RunEventEnvelope"] &
+      components["schemas"]["RunReasonEventData"] & {
+        /** @constant */
+        type: "run.resumed";
+      };
+    RunSuspendedEventView: components["schemas"]["RunEventEnvelope"] &
+      components["schemas"]["RunReasonEventData"] & {
+        /** @constant */
+        type: "run.suspended";
+      };
+    RunReconciliationRequiredEventView: components["schemas"]["RunEventEnvelope"] &
+      components["schemas"]["EmptyRunEventData"] & {
+        /** @constant */
+        type: "run.reconciliation.required";
+      };
+    RunCancelRequestedEventView: components["schemas"]["RunEventEnvelope"] &
+      components["schemas"]["EmptyRunEventData"] & {
+        /** @constant */
+        type: "run.cancel.requested";
+      };
+    RunCompletedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "run.completed";
+      data: {
+        outputRef: string | null;
+      };
+    };
+    RunFailedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "run.failed";
+      data: {
+        code: string;
+        retryable: boolean;
+      };
+    };
+    RunCanceledEventView: components["schemas"]["RunEventEnvelope"] &
+      components["schemas"]["RunReasonEventData"] & {
+        /** @constant */
+        type: "run.canceled";
+      };
+    SegmentStartedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "segment.started";
+      data: {
+        segmentId: string;
+        attempt: number;
+      };
+    };
+    ModelSamplingRetryEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "model.sampling.retry";
+      data: {
+        segmentId: string;
+        samplingAttempt: number;
+        maxRetries: number;
+        code: string;
+        discardedOutput: boolean;
+      };
+    };
+    ModelTransportFallbackEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "model.transport.fallback";
+      data: {
+        segmentId: string;
+        fromTransport: string;
+        toTransport: string;
+        code: string;
+        discardedOutput: boolean;
+      };
+    };
+    ModelOutputDeltaEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "model.output.delta";
+      data: {
+        segmentId: string;
+        delta: string;
+      };
+    };
+    ToolRequestedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "tool.requested";
+      data: {
+        segmentId: string;
+        callId: string;
+        /** @enum {string} */
+        kind: "function" | "custom";
+        name: string;
+      };
+    };
+    ToolCompletedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "tool.completed";
+      data: {
+        segmentId: string;
+        callId: string;
+        /** @enum {string} */
+        kind: "function" | "custom";
+        name: string;
+        isError: boolean;
+        outputTruncated: boolean;
+        artifactAvailable: boolean;
+      };
+    };
+    ContextCompactedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "context.compacted";
+      data: {
+        /** @enum {string} */
+        mode: "auto" | "manual";
+        replacesThroughSequence: number;
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+      };
+    };
+    RateLimitWindow: {
+      usedPercent: number;
+      windowMinutes: number | null;
+      resetsAt: number | null;
+    };
+    CreditsSnapshot: {
+      hasCredits: boolean;
+      unlimited: boolean;
+      balance: string | null;
+    };
+    SpendControlLimitSnapshot: {
+      limit: string;
+      used: string;
+      remainingPercent: number;
+      resetsAt: number;
+    };
+    RateLimitSnapshot: {
+      limitId: string | null;
+      limitName: string | null;
+      primary: components["schemas"]["RateLimitWindow"] | null;
+      secondary: components["schemas"]["RateLimitWindow"] | null;
+      credits: components["schemas"]["CreditsSnapshot"] | null;
+      individualLimit:
+        | components["schemas"]["SpendControlLimitSnapshot"]
+        | null;
+      planType: string | null;
+      /** @enum {string|null} */
+      rateLimitReachedType:
+        | "rate_limit_reached"
+        | "workspace_owner_credits_depleted"
+        | "workspace_member_credits_depleted"
+        | "workspace_owner_usage_limit_reached"
+        | "workspace_member_usage_limit_reached"
+        | null;
+    };
+    RateLimitUpdatedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "rate_limit.updated";
+      data: {
+        segmentId: string;
+        snapshot: components["schemas"]["RateLimitSnapshot"];
+      };
+    };
+    UsageRecordedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "usage.recorded";
+      data: {
+        segmentId: string;
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+      };
+    };
+    RunGoalAccountingUpdatedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "run.goal.accounting.updated";
+      data: {
+        goalId: string | null;
+        goalRevision: number | null;
+        steeringPending: boolean;
+      };
+    };
+    RunGoalSteeringConsumedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "run.goal.steering.consumed";
+      data: Record<string, never>;
+    };
+    SegmentCompletedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "segment.completed";
+      data: {
+        segmentId: string;
+      };
+    };
+    SegmentCheckpointedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "segment.checkpointed";
+      data: {
+        segmentId: string;
+      };
+    };
+    SegmentFailedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "segment.failed";
+      data: {
+        segmentId: string;
+        code: string;
+        retryable: boolean;
+      };
+    };
+    MessageCompletedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "message.completed";
+      data: {
+        messageId: string;
+        messageSequence: number;
+        /** @constant */
+        role: "assistant";
+      };
+    };
+    PlanProposedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "plan.proposed";
+      data: {
+        planId: string;
+        messageId: string;
+        messageSequence: number;
+      };
+    };
+    RunReasonEventData: {
+      data: {
+        reasonCode: string;
+      };
+    };
+    EmptyRunEventData: {
+      data: Record<string, never>;
+    };
+    RunEventView:
+      | components["schemas"]["RunCreatedEventView"]
+      | components["schemas"]["RunStartedEventView"]
+      | components["schemas"]["RunApprovalRequiredEventView"]
+      | components["schemas"]["RunResumedEventView"]
+      | components["schemas"]["RunSuspendedEventView"]
+      | components["schemas"]["RunReconciliationRequiredEventView"]
+      | components["schemas"]["RunCancelRequestedEventView"]
+      | components["schemas"]["RunCompletedEventView"]
+      | components["schemas"]["RunFailedEventView"]
+      | components["schemas"]["RunCanceledEventView"]
+      | components["schemas"]["SegmentStartedEventView"]
+      | components["schemas"]["ModelSamplingRetryEventView"]
+      | components["schemas"]["ModelTransportFallbackEventView"]
+      | components["schemas"]["ModelOutputDeltaEventView"]
+      | components["schemas"]["ToolRequestedEventView"]
+      | components["schemas"]["ToolCompletedEventView"]
+      | components["schemas"]["ContextCompactedEventView"]
+      | components["schemas"]["RateLimitUpdatedEventView"]
+      | components["schemas"]["UsageRecordedEventView"]
+      | components["schemas"]["RunGoalAccountingUpdatedEventView"]
+      | components["schemas"]["RunGoalSteeringConsumedEventView"]
+      | components["schemas"]["SegmentCheckpointedEventView"]
+      | components["schemas"]["SegmentCompletedEventView"]
+      | components["schemas"]["SegmentFailedEventView"]
+      | components["schemas"]["PlanProposedEventView"]
+      | components["schemas"]["MessageCompletedEventView"];
+  };
+  responses: {
+    /** @description Stable safe error envelope */
+    Error: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorEnvelope"];
+      };
+    };
+  };
+  parameters: {
+    ThreadId: string;
+    RunId: string;
+    ApprovalId: string;
+    AgentVersionId: string;
+    ArtifactId: string;
+    IdempotencyKey: string;
+    /** @description Required by the identity adapter for cookie-authenticated mutations. */
+    CsrfToken: string;
+    /** @description Required for Thread Goal mutations. */
+    RequiredCsrfToken: string;
+    /** @description Decimal durable event sequence last processed by the client; each event resource has an independent sequence. */
+    LastEventId: string;
+    /** @description Client view hides bounded transient retry noise; audit preserves every durable event. */
+    RunEventView: "client" | "audit";
+    /** @description Standard view hides deleted content and emits only its tombstone event; audit requires thread:audit:read and preserves durable history. */
+    ThreadHistoryView: "standard" | "audit";
+    Cursor: string;
+    ResourceCursor: string;
+    AgentVersionCursor: string;
+    Limit: number;
+  };
+  requestBodies: never;
+  headers: never;
+  pathItems: never;
+}
+export type $defs = Record<string, never>;
+export interface operations {
+  listThreads: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["ResourceCursor"];
+        limit?: components["parameters"]["Limit"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Threads ordered by most recent durable update */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListThreadsResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  createThread: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed Thread */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      /** @description A newly committed Thread */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThread: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Thread projection */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetThreadResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  archiveThread: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ArchiveThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or idempotently replayed Thread archive */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  rollbackThread: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RollbackThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed append-only Thread rollback */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      /** @description An append-only Thread rollback committed atomically */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  unarchiveThread: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UnarchiveThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or idempotently replayed Thread restore */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  renameThread: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RenameThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or idempotently replayed Thread rename */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  deleteThread: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DeleteThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or idempotently replayed terminal Thread tombstone */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  streamThreadEvents: {
+    parameters: {
+      query?: {
+        /** @description Standard view hides deleted content and emits only its tombstone event; audit requires thread:audit:read and preserves durable history. */
+        view?: components["parameters"]["ThreadHistoryView"];
+      };
+      header?: {
+        /** @description Decimal durable event sequence last processed by the client; each event resource has an independent sequence. */
+        "Last-Event-ID"?: components["parameters"]["LastEventId"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Durable Thread event catch-up followed by periodic database polling. SSE id is the decimal Thread event sequence. */
+      200: {
+        headers: {
+          "Cache-Control"?: "no-cache";
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThreadGoal: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current persistent Thread Goal, or null when absent */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetThreadGoalResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  setThreadGoal: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetThreadGoalRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed Thread Goal mutation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadGoalMutationResponse"];
+        };
+      };
+      /** @description A newly committed Thread Goal mutation */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadGoalMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  clearThreadGoal: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ClearThreadGoalRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or idempotently replayed Thread Goal clear */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadGoalMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  streamThreadGoalEvents: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Decimal durable event sequence last processed by the client; each event resource has an independent sequence. */
+        "Last-Event-ID"?: components["parameters"]["LastEventId"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Durable catch-up followed by periodic database polling. SSE id is the decimal Thread Goal event sequence; clear events do not terminate the stream. */
+      200: {
+        headers: {
+          "Cache-Control"?: "no-cache";
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listThreadMessages: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["Cursor"];
+        limit?: components["parameters"]["Limit"];
+        /** @description Standard view hides deleted content and emits only its tombstone event; audit requires thread:audit:read and preserves durable history. */
+        view?: components["parameters"]["ThreadHistoryView"];
+      };
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Ordered Thread messages */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListThreadMessagesResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  appendThreadMessage: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AppendThreadMessageRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed Message append */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AppendThreadMessageResponse"];
+        };
+      };
+      /** @description A newly committed Message */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AppendThreadMessageResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  forkThread: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ForkThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed Thread fork */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      /** @description A newly committed Thread fork */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  startTurn: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartTurnRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed atomic Turn start */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StartTurnResponse"];
+        };
+      };
+      /** @description A user Message and Run committed atomically */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StartTurnResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  compactThread: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CompactThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed manual context compaction Run */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      /** @description A manual context compaction maintenance Run admitted atomically */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listThreadRuns: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["ResourceCursor"];
+        limit?: components["parameters"]["Limit"];
+      };
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Runs for a Thread ordered by most recent durable update */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListThreadRunsResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  createRun: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateRunRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed Run */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      /** @description A newly committed Run */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: components["parameters"]["RunId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Run projection */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetRunResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  cancelRun: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        runId: components["parameters"]["RunId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CancelRunRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or replayed cancellation request */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  streamRunEvents: {
+    parameters: {
+      query?: {
+        /** @description Client view hides bounded transient retry noise; audit preserves every durable event. */
+        view?: components["parameters"]["RunEventView"];
+      };
+      header?: {
+        /** @description Decimal durable event sequence last processed by the client; each event resource has an independent sequence. */
+        "Last-Event-ID"?: components["parameters"]["LastEventId"];
+      };
+      path: {
+        runId: components["parameters"]["RunId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Durable catch-up followed by a live event stream. SSE id is the decimal Run sequence. */
+      200: {
+        headers: {
+          "Cache-Control"?: "no-cache";
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getToolApproval: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        approvalId: components["parameters"]["ApprovalId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant-scoped Tool approval */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetToolApprovalResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  decideToolApproval: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        approvalId: components["parameters"]["ApprovalId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DecideToolApprovalRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or replayed Tool approval decision */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ToolApprovalMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listAgentVersions: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["AgentVersionCursor"];
+        limit?: components["parameters"]["Limit"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant-scoped immutable AgentVersions */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListAgentVersionsResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  publishAgentVersion: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PublishAgentVersionRequest"];
+      };
+    };
+    responses: {
+      /** @description An existing identical immutable AgentVersion */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentVersionMutationResponse"];
+        };
+      };
+      /** @description A newly published immutable AgentVersion */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentVersionMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getActiveAgentVersionCatalog: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized runnable AgentVersions from the active immutable release */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActiveAgentVersionCatalogResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getAgentVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentVersionId: components["parameters"]["AgentVersionId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant-scoped immutable AgentVersion */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetAgentVersionResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getArtifact: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        artifactId: components["parameters"]["ArtifactId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized immutable Artifact metadata without storage paths or key identifiers */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetArtifactResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  downloadArtifactContent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        artifactId: components["parameters"]["ArtifactId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized, authenticated and digest-verified Artifact bytes */
+      200: {
+        headers: {
+          /** @description Quoted immutable content digest. */
+          "ETag"?: string;
+          "Content-Disposition"?: "attachment; filename=artifact";
+          [name: string]: unknown;
+        };
+        content: {
+          "application/octet-stream": string;
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  liveHealth: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Process liveness */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HealthResponse"];
+        };
+      };
+    };
+  };
+  readyHealth: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Control API readiness */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HealthResponse"];
+        };
+      };
+      503: components["responses"]["Error"];
+    };
+  };
+}

@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import type { CapabilityPanel } from "../../lib/capability/capabilityPanelTypes";
 import type { Locale } from "../../lib/i18n";
 import type { NoticeState } from "../../lib/shared/noticeState";
+import type { PlatformKind } from "../../lib/platform";
 import type { SettingsSection } from "../../lib/settings/settingsCatalog";
 import { SettingsContent, type SettingsDataMode } from "../settings/SettingsContent";
 import { SettingsNavigation } from "../settings/SettingsNavigation";
@@ -14,6 +15,7 @@ export type CommandSettingsRouteProps = {
   locale: Locale;
   notice: NoticeState | null;
   panel: CapabilityPanel | null;
+  platform: PlatformKind;
   onBack: () => void;
   onDismissNotice: () => void;
   onPanelAction: (actionId: string) => void;
@@ -29,6 +31,7 @@ export function CommandSettingsRoute({
   locale,
   notice,
   panel,
+  platform,
   onBack,
   onDismissNotice,
   onPanelAction,

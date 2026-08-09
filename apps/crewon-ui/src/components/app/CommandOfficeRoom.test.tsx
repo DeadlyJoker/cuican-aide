@@ -77,15 +77,31 @@ const teamViewRuntimeProps = {
   expertTeams: [],
   expertTeamsStatus: "ready" as const,
   workflows: [],
+  workflowStatus: "ready" as const,
   onReloadWorkflows: vi.fn(async () => undefined),
+  onCancelWorkflow: vi.fn(async () => ({
+    executionId: "workflow-run-1",
+    workflowId: "workflow-1",
+    status: "canceled",
+    output: "",
+    executedNodes: [],
+    error: null,
+  })),
+  onResolveWorkflowGate: vi.fn(async () => ({
+    executionId: "workflow-run-1",
+    workflowId: "workflow-1",
+    status: "running",
+    output: "",
+    executedNodes: [],
+    error: null,
+  })),
   onRunWorkflow: vi.fn(async () => ({
-    id: 1,
-    workflow_id: 1,
+    executionId: "workflow-run-1",
+    workflowId: "workflow-1",
     status: "completed",
-    output_data: null,
-    executed_nodes: [],
-    node_results: {},
-    error_message: null,
+    output: "done",
+    executedNodes: [],
+    error: null,
   })),
   onSelectExpert: vi.fn(),
 };
@@ -216,13 +232,14 @@ describe("CommandOfficeRoom", () => {
         officeRuntime={null}
         officeRoomId={null}
         teamMode="workflow"
+        workflowStatus="unavailable"
         onCreateWorkflow={vi.fn()}
         onTeamModeChange={vi.fn()}
       />,
     );
 
-    expect(markup).toContain("当前账号没有可运行的协作流");
-    expect(markup).toContain("不生成本地演示节点");
+    expect(markup).toContain("协作流服务暂不可用");
+    expect(markup).toContain("只读取本地 CrewON 协作流");
     expect(markup).toContain("创建协作流");
     expect(markup).not.toContain("页面交付协作流");
     expect(markup).not.toContain("产品交付专家团");

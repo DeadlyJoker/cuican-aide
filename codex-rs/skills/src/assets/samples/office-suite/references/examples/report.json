@@ -1,0 +1,47 @@
+{
+  "theme": { "headingColor": "#2F6FED", "cjkFont": "Microsoft YaHei", "bodySize": 11 },
+  "page": { "marginTop": 1, "marginBottom": 1, "marginLeft": 1.1, "marginRight": 1.1 },
+  "header": "CrewON 内部资料",
+  "footer": "机密 · 仅供内部使用",
+  "blocks": [
+    { "type": "heading", "level": 0, "text": "2026 Q3 平台交付评审报告" },
+    {
+      "type": "kv",
+      "pairs": [
+        ["报告人", "王启辰"],
+        ["日期", "2026-08-06"],
+        ["状态", "**待评审**"]
+      ]
+    },
+    { "type": "toc", "title": "目录" },
+    { "type": "pageBreak" },
+    { "type": "heading", "level": 1, "text": "一、结论摘要" },
+    {
+      "type": "paragraph",
+      "text": "本季度交付 **3 个** 里程碑，整体进度符合预期。风险集中在 *设计交付* 与 `app-server` 协议对齐两处。"
+    },
+    {
+      "type": "list",
+      "items": [
+        "办公场景已具备文档生成闭环",
+        { "text": "生码场景已接通真实工作台", "level": 1 },
+        "设计场景待补齐渲染验证"
+      ]
+    },
+    { "type": "heading", "level": 1, "text": "二、关键指标" },
+    {
+      "type": "table",
+      "header": ["指标", "目标", "实际", "结论"],
+      "rows": [
+        ["交付里程碑", "3", "3", "达成"],
+        ["缺陷逃逸", "≤ 5", "3", "达成"],
+        ["评审周期", "≤ 5 天", "6 天", "未达成"]
+      ],
+      "widths": [1.6, 1.2, 1.2, 1.4]
+    },
+    { "type": "quote", "text": "只修改标签和提示词不算场景功能完成。" },
+    { "type": "heading", "level": 1, "text": "三、下一步" },
+    { "type": "list", "ordered": true, "items": ["补齐设计渲染验证", "统一场景契约版本校验"] },
+    { "type": "code", "text": "just test -p crewon-app-server" }
+  ]
+}

@@ -55,7 +55,10 @@ type HttpProxyResponse = {
 type HttpProxy = {
   on(
     event: "proxyReq",
-    callback: (proxyReq: { removeHeader: (name: string) => void }) => void,
+    callback: (proxyReq: {
+      removeHeader: (name: string) => void;
+      setHeader: (name: string, value: string) => void;
+    }) => void,
   ): void;
   on(
     event: "error",
@@ -66,6 +69,44 @@ type HttpProxy = {
     ) => void,
   ): void;
 };
+
+function controlSessionPlugin(config: {
+  csrfToken?: string;
+  sessionToken?: string;
+}): Plugin {
+  const configured = Boolean(config.csrfToken && config.sessionToken);
+  return {
+    name: "crewon-control-session",
+    configureServer(server) {
+      server.middlewares.use("/control-api/session", (request, response) => {
+        const method = (request as { method?: string }).method;
+        if (method !== "GET") {
+          response.statusCode = 405;
+          response.end();
+          return;
+        }
+        if (!configured) {
+          response.statusCode = 503;
+          response.setHeader("Cache-Control", "no-store");
+          response.end();
+          return;
+        }
+        response.statusCode = 200;
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("Content-Type", "application/json");
+        response.end(
+          JSON.stringify({ baseUrl: "/", csrfToken: config.csrfToken }),
+        );
+      });
+      if (!configured) {
+        server.middlewares.use("/api/v1", (_request, response) => {
+          response.statusCode = 503;
+          response.end();
+        });
+      }
+    },
+  };
+}
 
 type ReachabilityCache = {
   available: boolean;
@@ -245,11 +286,18 @@ export default defineConfig(({ mode }) => {
   const appServerTarget = env.CREWON_APP_SERVER_TARGET ?? "ws://127.0.0.1:6176";
   const agentPlatformTarget =
     env.CREWON_AGENT_PLATFORM_TARGET ?? "http://127.0.0.1:8000";
+  const controlTarget = env.CREWON_CONTROL_TARGET ?? "http://127.0.0.1:3210";
+  const controlSessionToken = env.CREWON_CONTROL_SESSION_TOKEN;
+  const controlCsrfToken = env.CREWON_CONTROL_CSRF_TOKEN;
   const backendRestartRequestFile = env.CREWON_DEV_BACKEND_RESTART_REQUEST_FILE;
 
   return {
     plugins: [
       localBackendRecoveryPlugin(backendRestartRequestFile),
+      controlSessionPlugin({
+        csrfToken: controlCsrfToken,
+        sessionToken: controlSessionToken,
+      }),
       agentPlatformFallbackPlugin(agentPlatformTarget),
       react(),
     ],
@@ -301,6 +349,20 @@ export default defineConfig(({ mode }) => {
             );
           },
           rewrite: (path) => path.replace(/^\/agent-platform-api/, ""),
+        },
+        "/api/v1": {
+          target: controlTarget,
+          changeOrigin: false,
+          configure(proxy) {
+            (proxy as unknown as HttpProxy).on("proxyReq", (proxyReq) => {
+              if (controlSessionToken) {
+                proxyReq.setHeader(
+                  "authorization",
+                  `Bearer ${controlSessionToken}`,
+                );
+              }
+            });
+          },
         },
       },
     },

@@ -762,6 +762,41 @@ client_request_definitions! {
         serialization: global("crewon-domain"),
         response: v2::AgentDeleteResponse,
     },
+    WorkflowList => "workflow/list" {
+        params: v2::WorkflowListParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowListResponse,
+    },
+    WorkflowCreate => "workflow/create" {
+        params: v2::WorkflowCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowCreateResponse,
+    },
+    WorkflowRead => "workflow/read" {
+        params: v2::WorkflowReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowReadResponse,
+    },
+    WorkflowRun => "workflow/run" {
+        params: v2::WorkflowRunParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowRunResponse,
+    },
+    WorkflowGateResolve => "workflow/gate/resolve" {
+        params: v2::WorkflowGateResolveParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowGateResolveResponse,
+    },
+    WorkflowRunCancel => "workflow/run/cancel" {
+        params: v2::WorkflowRunCancelParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowRunCancelResponse,
+    },
+    WorkflowDelete => "workflow/delete" {
+        params: v2::WorkflowDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowDeleteResponse,
+    },
     AgentPlatformAuth => "agentPlatform/auth" {
         params: v2::AgentPlatformAuthParams,
         serialization: None,
@@ -1131,6 +1166,11 @@ client_request_definitions! {
         params: v2::ModelProviderCapabilitiesReadParams,
         serialization: None,
         response: v2::ModelProviderCapabilitiesReadResponse,
+    },
+    ModelProviderProbe => "modelProvider/probe" {
+        params: v2::ModelProviderProbeParams,
+        serialization: None,
+        response: v2::ModelProviderProbeResponse,
     },
     ExperimentalFeatureList => "experimentalFeature/list" {
         params: v2::ExperimentalFeatureListParams,
@@ -1966,6 +2006,7 @@ server_notification_definitions! {
     AccountRateLimitsUpdated => "account/rateLimits/updated" (v2::AccountRateLimitsUpdatedNotification),
     AppListUpdated => "app/list/updated" (v2::AppListUpdatedNotification),
     OfficeRunUpdated => "office/run/updated" (v2::OfficeRunUpdatedNotification),
+    WorkflowRunUpdated => "workflow/run/updated" (v2::WorkflowRunUpdatedNotification),
     #[experimental("resource/binding/updated")]
     ResourceBindingUpdated => "resource/binding/updated" (v2::ResourceBindingUpdatedNotification),
     RemoteControlStatusChanged => "remoteControl/status/changed" (v2::RemoteControlStatusChangedNotification),

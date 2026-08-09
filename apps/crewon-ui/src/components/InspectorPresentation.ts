@@ -1,6 +1,6 @@
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 
 import type { Locale } from "../lib/i18n";
 import type {
@@ -177,7 +177,7 @@ type InspectorPresentationParams = {
   locale: Locale;
   serverUrl: string;
   thread: Thread | null;
-  threadGoal: ThreadGoal | null;
+  threadGoal: ThreadGoalView | null;
 };
 
 export function inspectorPresentation({
@@ -211,7 +211,9 @@ export function inspectorPresentation({
   return {
     accountLabel: accountLabel(account, locale),
     branch:
-      thread?.gitInfo?.branch ?? thread?.gitInfo?.sha?.slice(0, 7) ?? copy.noGit,
+      thread?.gitInfo?.branch ??
+      thread?.gitInfo?.sha?.slice(0, 7) ??
+      copy.noGit,
     command: latestCommand(thread),
     commands,
     copy,

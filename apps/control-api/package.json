@@ -1,0 +1,35 @@
+{
+  "name": "@crewon/control-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "license:check": "node scripts/check-production-licenses.mjs",
+    "start": "node --experimental-strip-types src/main.ts",
+    "test": "pnpm license:check && node --experimental-strip-types --test src/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@crewon/agent-version": "workspace:*",
+    "@crewon/application": "workspace:*",
+    "@crewon/artifacts": "workspace:*",
+    "@crewon/contracts": "workspace:*",
+    "@crewon/domain": "workspace:*",
+    "@crewon/store": "workspace:*",
+    "fastify": "5.11.0",
+    "uuid": "14.0.1"
+  },
+  "devDependencies": {
+    "@crewon/agent-kernel": "workspace:*",
+    "@crewon/control-client": "workspace:*",
+    "@crewon/runtime-worker": "workspace:*",
+    "@crewon/tool-broker": "workspace:*",
+    "@types/node": "^24.10.1",
+    "@types/pg": "8.20.0",
+    "pg": "8.22.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

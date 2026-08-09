@@ -134,6 +134,11 @@ async fn turn_environment_selection_keeps_environment_backed_tools() -> Result<(
 async fn custom_tool_unknown_returns_custom_output_error() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/unknown-custom-tool.reference.json"
+    )?;
+    let reference: Value = serde_json::from_str(&std::fs::read_to_string(fixture_path)?)?;
+
     let server = start_mock_server().await;
     let mut builder = test_crewon();
     let test = builder.build(&server).await?;
@@ -141,7 +146,7 @@ async fn custom_tool_unknown_returns_custom_output_error() -> Result<()> {
     let call_id = "custom-unsupported";
     let tool_name = "unsupported_tool";
 
-    mount_sse_once(
+    let first_mock = mount_sse_once(
         &server,
         sse(vec![
             ev_response_created("resp-1"),
@@ -171,8 +176,18 @@ async fn custom_tool_unknown_returns_custom_output_error() -> Result<()> {
         .get("output")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let expected = format!("unsupported custom tool call: {tool_name}");
+    let expected = reference
+        .pointer("/events/1/data/output")
+        .and_then(Value::as_str)
+        .expect("AR-013 output fixture");
     assert_eq!(output, expected);
+    assert_eq!(
+        first_mock.requests().len() + mock.requests().len(),
+        reference
+            .pointer("/finalState/requestCount")
+            .and_then(Value::as_u64)
+            .expect("AR-013 request count") as usize
+    );
 
     Ok(())
 }

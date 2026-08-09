@@ -42,10 +42,12 @@ import type {
   AgentPlatformResourceState,
   AgentPlatformResourceStates,
   AgentPlatformSnapshot,
-  PlatformWorkflow,
-  PlatformWorkflowExecution,
 } from "../../lib/agent-platform/agentPlatformClient";
 import type { ExpertTeamRecordReference } from "../../lib/experts/expertTeamRecord";
+import type {
+  CrewonWorkflowExecution,
+  CrewonWorkflowRecord,
+} from "../../lib/workflow/crewonWorkflow";
 
 type FilterOption = {
   label: string;
@@ -355,24 +357,12 @@ function CatalogCard({
           >
             <Plus aria-hidden="true" />
           </button>
-        ) : (
-          <button className="button compact" type="button">
-            {item.action}
-          </button>
-        )
+        ) : null
       ) : item.status ? (
         <span className={classNames("status", item.statusTone)}>
           {item.status}
         </span>
-      ) : (
-        <button
-          className="icon-action compact"
-          type="button"
-          aria-label={`添加 ${item.title}`}
-        >
-          +
-        </button>
-      )}
+      ) : null}
     </article>
   );
 }
@@ -557,9 +547,11 @@ const projectCatalog: CatalogItem[] = [
 export function ProjectsView({
   active,
   resourceStatus,
+  onNewTask,
 }: {
   active: boolean;
   resourceStatus: string;
+  onNewTask: () => void;
 }) {
   const [projectMode, setProjectMode] = useState("current");
   const [projectSource, setProjectSource] = useState("teamflow");
@@ -601,10 +593,11 @@ export function ProjectsView({
               value={query}
               onChange={setQuery}
             />
-            <button className="button" type="button">
-              同步
-            </button>
-            <button className="button primary" type="button">
+            <button
+              className="button primary"
+              type="button"
+              onClick={onNewTask}
+            >
               发起任务
             </button>
           </div>
@@ -664,15 +657,9 @@ export function ProjectsView({
                     <strong>{item.title}</strong>
                     <p>{item.detail}</p>
                   </div>
-                  {item.action ? (
-                    <button className="button compact" type="button">
-                      {item.action}
-                    </button>
-                  ) : (
-                    <span className={classNames("status", item.statusTone)}>
-                      {item.status ?? "待完成"}
-                    </span>
-                  )}
+                  <span className={classNames("status", item.statusTone)}>
+                    {item.status ?? "待完成"}
+                  </span>
                 </article>
               ))}
             </div>
@@ -1388,6 +1375,7 @@ export function TeamView({
   officeRoomId,
   teamMode,
   workflows,
+  workflowStatus,
   expertTeams,
   expertTeamsStatus,
   onCreateOffice,
@@ -1396,6 +1384,8 @@ export function TeamView({
   onRefresh,
   onReloadWorkflows,
   onRunWorkflow,
+  onCancelWorkflow,
+  onResolveWorkflowGate,
   onSelectExpert,
   onTeamModeChange,
 }: {
@@ -1403,7 +1393,8 @@ export function TeamView({
   officeRuntime: Omit<CommandOfficeRoomProps, "isOpen"> | null;
   officeRoomId: string | null;
   teamMode: TeamMode;
-  workflows: PlatformWorkflow[];
+  workflows: CrewonWorkflowRecord[];
+  workflowStatus: "loading" | "ready" | "unavailable";
   expertTeams: ExpertTeamRecordReference[];
   expertTeamsStatus: "loading" | "ready" | "unavailable";
   onCreateOffice?: () => void;
@@ -1412,9 +1403,20 @@ export function TeamView({
   onRefresh?: () => void;
   onReloadWorkflows: () => Promise<void>;
   onRunWorkflow: (
-    workflow: PlatformWorkflow,
+    workflow: CrewonWorkflowRecord,
     input: string,
-  ) => Promise<PlatformWorkflowExecution>;
+  ) => Promise<CrewonWorkflowExecution>;
+  onCancelWorkflow: (
+    workflow: CrewonWorkflowRecord,
+    executionId: string,
+  ) => Promise<CrewonWorkflowExecution>;
+  onResolveWorkflowGate: (
+    workflow: CrewonWorkflowRecord,
+    executionId: string,
+    nodeId: string,
+    decision: "approve" | "reject",
+    comment: string | null,
+  ) => Promise<CrewonWorkflowExecution>;
   onSelectExpert: (record: ExpertTeamRecordReference) => void;
   onTeamModeChange: (mode: TeamMode) => void;
 }) {
@@ -1547,9 +1549,12 @@ export function TeamView({
           data-workflow-shell=""
           hidden={teamMode !== "workflow"}
         >
-          <CommandWorkflowPanel
-            workflows={workflows}
+            <CommandWorkflowPanel
+              status={workflowStatus}
+              workflows={workflows}
+            onCancel={onCancelWorkflow}
             onReload={onReloadWorkflows}
+            onResolveGate={onResolveWorkflowGate}
             onRun={onRunWorkflow}
             onRoomOpenChange={setWorkflowRoomOpen}
           />

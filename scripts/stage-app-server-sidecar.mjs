@@ -1,24 +1,40 @@
 #!/usr/bin/env node
-// Builds `crewon-app-server` and stages it where Tauri expects a sidecar.
+// Stages every executable/resource required by the packaged desktop runtime.
 //
-// Tauri resolves `externalBin` entries by appending the target triple, so the
-// binary has to land as `crewon-app-server-<triple><exe>`. Written in Node rather
-// than shell so `pnpm desktop:build` works the same on Windows and macOS.
+// `crewon-app-server` remains a native Rust sidecar for the compatibility path.
+// The final Control API and runtime-worker are bundled as self-contained ESM
+// resources and run under an explicitly supplied, open-source Node 24 binary.
+// A release build must attest the Node target and digest; copying the developer's
+// Homebrew installation is allowed only by an explicit local-smoke override.
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const outDir = join(repoRoot, "apps", "crewon-ui", "src-tauri", "binaries");
+const tauriRoot = join(repoRoot, "apps", "crewon-ui", "src-tauri");
+const outDir = join(tauriRoot, "binaries");
+const runtimeOutDir = join(outDir, "runtime");
 
-function run(command, args) {
-  return execFileSync(command, args, { encoding: "utf8" });
+function run(command, args, options = {}) {
+  return execFileSync(command, args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    ...options,
+  });
 }
 
 /** Host target triple, as reported by the toolchain that will do the build. */
-function hostTriple() {
+export function hostTriple() {
   const line = run("rustc", ["-vV"])
     .split("\n")
     .find((candidate) => candidate.startsWith("host:"));
@@ -28,12 +44,85 @@ function hostTriple() {
   return line.slice("host:".length).trim();
 }
 
-function main() {
-  // Allow an explicit triple for cross builds; default to the host.
-  const triple = process.env.CREWON_SIDECAR_TARGET || hostTriple();
-  const release = process.env.CREWON_SIDECAR_PROFILE !== "debug";
-  const exeSuffix = triple.includes("windows") ? ".exe" : "";
+export function assertNode24Version(versionOutput) {
+  const match = /^v(\d+)\./u.exec(versionOutput.trim());
+  if (match?.[1] !== "24") {
+    throw new Error("CREWON_NODE_BINARY must be a Node 24 executable");
+  }
+}
 
+export function assertReleaseNodeMetadata({
+  actualSha256,
+  declaredSha256,
+  declaredTarget,
+  distributable,
+  target,
+}) {
+  if (distributable !== "1") {
+    throw new Error(
+      "release staging requires CREWON_NODE_DISTRIBUTABLE=1 for a redistributable Node 24 build",
+    );
+  }
+  if (declaredTarget !== target) {
+    throw new Error(`CREWON_NODE_BINARY_TARGET must exactly match ${target}`);
+  }
+  if (!/^[a-f0-9]{64}$/u.test(declaredSha256 ?? "")) {
+    throw new Error("CREWON_NODE_BINARY_SHA256 must be a lowercase SHA-256");
+  }
+  if (declaredSha256 !== actualSha256) {
+    throw new Error(
+      "CREWON_NODE_BINARY_SHA256 does not match the supplied binary",
+    );
+  }
+}
+
+function sha256File(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function copyExecutable(source, destination) {
+  try {
+    chmodSync(destination, 0o755);
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+  copyFileSync(source, destination);
+  if (process.platform !== "win32") {
+    chmodSync(destination, 0o755);
+  }
+}
+
+function resolveNodeRuntime(target) {
+  const allowHostNode = process.env.CREWON_ALLOW_HOST_NODE_SIDECAR === "1";
+  const configuredPath = process.env.CREWON_NODE_BINARY?.trim();
+  if (!configuredPath && !allowHostNode) {
+    throw new Error(
+      "CREWON_NODE_BINARY is required; use an official redistributable Node 24 binary",
+    );
+  }
+
+  const binary = realpathSync(configuredPath || process.execPath);
+  if (!statSync(binary).isFile()) {
+    throw new Error("CREWON_NODE_BINARY must resolve to a regular file");
+  }
+  assertNode24Version(run(binary, ["--version"]));
+
+  if (!allowHostNode) {
+    assertReleaseNodeMetadata({
+      actualSha256: sha256File(binary),
+      declaredSha256: process.env.CREWON_NODE_BINARY_SHA256?.trim(),
+      declaredTarget: process.env.CREWON_NODE_BINARY_TARGET?.trim(),
+      distributable: process.env.CREWON_NODE_DISTRIBUTABLE,
+      target,
+    });
+  }
+  return binary;
+}
+
+function stageAppServer(target, release) {
+  const exeSuffix = target.includes("windows") ? ".exe" : "";
   const cargoArgs = [
     "build",
     "--manifest-path",
@@ -43,28 +132,99 @@ function main() {
     "--bin",
     "crewon-app-server",
     "--target",
-    triple,
+    target,
   ];
   if (release) {
     cargoArgs.push("--release");
   }
 
-  console.log(`building crewon-app-server for ${triple}`);
-  execFileSync("cargo", cargoArgs, { stdio: "inherit" });
+  console.log(`building crewon-app-server for ${target}`);
+  run("cargo", cargoArgs, { stdio: "inherit" });
 
   const built = join(
     repoRoot,
     "codex-rs",
     "target",
-    triple,
+    target,
     release ? "release" : "debug",
     `crewon-app-server${exeSuffix}`,
   );
-  const staged = join(outDir, `crewon-app-server-${triple}${exeSuffix}`);
-
+  const staged = join(outDir, `crewon-app-server-${target}${exeSuffix}`);
   mkdirSync(outDir, { recursive: true });
-  copyFileSync(built, staged);
+  copyExecutable(built, staged);
   console.log(`staged ${staged}`);
 }
 
-main();
+function pnpmExecutable() {
+  return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+}
+
+function bundleRuntime(entry, outfile) {
+  run(
+    pnpmExecutable(),
+    [
+      "exec",
+      "esbuild",
+      entry,
+      "--bundle",
+      "--platform=node",
+      "--format=esm",
+      "--target=node24",
+      "--packages=bundle",
+      "--tree-shaking=true",
+      "--legal-comments=none",
+      '--banner:js=import { createRequire as __crewonCreateRequire } from "node:module"; const require = __crewonCreateRequire(import.meta.url);',
+      `--outfile=${outfile}`,
+    ],
+    { stdio: "inherit" },
+  );
+}
+
+function stageControlRuntime(target) {
+  const exeSuffix = target.includes("windows") ? ".exe" : "";
+  const nodeBinary = resolveNodeRuntime(target);
+  const stagedNode = join(outDir, `crewon-node-${target}${exeSuffix}`);
+  mkdirSync(runtimeOutDir, { recursive: true });
+  copyExecutable(nodeBinary, stagedNode);
+  // Catch launchers such as Homebrew's tiny `node` shim whose sibling dylibs are
+  // not present after copying. A staged executable that cannot start is never a
+  // valid local smoke artifact, even with the explicit host override.
+  assertNode24Version(run(stagedNode, ["--version"]));
+
+  bundleRuntime(
+    join(repoRoot, "apps", "control-api", "src", "main.ts"),
+    join(runtimeOutDir, "control-api.mjs"),
+  );
+  bundleRuntime(
+    join(
+      repoRoot,
+      "apps",
+      "crewon-ui",
+      "src-tauri",
+      "sidecars",
+      "runtime-worker-entry.mjs",
+    ),
+    join(runtimeOutDir, "runtime-worker.mjs"),
+  );
+  bundleRuntime(
+    join(repoRoot, "apps", "runtime-worker", "src", "release-main.ts"),
+    join(runtimeOutDir, "runtime-release.mjs"),
+  );
+
+  console.log(`staged ${stagedNode}`);
+  console.log(`staged ${runtimeOutDir}`);
+}
+
+function main() {
+  const target = process.env.CREWON_SIDECAR_TARGET || hostTriple();
+  const release = process.env.CREWON_SIDECAR_PROFILE !== "debug";
+  if (process.env.CREWON_STAGE_APP_SERVER !== "0") {
+    stageAppServer(target, release);
+  }
+  stageControlRuntime(target);
+}
+
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : null;
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  main();
+}

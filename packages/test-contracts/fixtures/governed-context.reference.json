@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "crewon.governed-context-parity.v0",
+  "caseId": "AR-029-governed-context",
+  "audience": {
+    "bindingId": "binding-single",
+    "scopeKind": "single",
+    "scopeId": "thread-1"
+  },
+  "expected": {
+    "roles": ["developer", "user"],
+    "trustedMarker": "\"trust\":\"trustedApplication\"",
+    "untrustedSourceMarker": "\"sourceKind\":\"provider\"",
+    "providerTruncated": true,
+    "stableAcrossRequests": true
+  }
+}

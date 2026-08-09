@@ -17,7 +17,6 @@ import {
 import {
   activeTurnByThreadAfterTurn,
   appendFileChangesToPanel,
-  appendTerminalChunkToPanel,
   appendThreadText,
   clearThreadText,
   removeRecordKey,
@@ -48,6 +47,7 @@ type StateSetter<T> = (updater: (current: T) => T) => void;
 
 export type LocalNotificationHandlerParams = {
   appendStreamingTextDelta?: (threadId: string, delta: string) => void;
+  appendTerminalOutputDelta: (processId: string, chunk: string) => void;
   locale: Locale;
   notification: AppServerNotification;
   selectedThreadId: string | null;
@@ -68,6 +68,7 @@ export type LocalNotificationHandlerParams = {
 
 export function handleLocalAppNotification({
   appendStreamingTextDelta,
+  appendTerminalOutputDelta,
   locale,
   notification,
   selectedThreadId,
@@ -101,9 +102,12 @@ export function handleLocalAppNotification({
 
       const text = decodeBase64Text(deltaBase64);
       const chunk = terminalOutputChunk(stream, text, capReached);
-      setCapabilityPanel((currentPanel) =>
-        appendTerminalChunkToPanel(currentPanel, chunk, locale),
-      );
+      /*
+       * Output goes to the terminal's own stream, not the shared capability
+       * panel: the panel is replaced whenever another workbench surface opens,
+       * which used to silently drop the rest of a live session.
+       */
+      appendTerminalOutputDelta(processId, chunk);
       return true;
     }
     case "fs/changed": {

@@ -18,8 +18,9 @@
         "minWidth": 980,
         "minHeight": 620,
         "decorations": false,
-        "shadow": true,
-        "transparent": true
+        "transparent": true,
+        "shadow": false,
+        "backgroundColor": "#00000000"
       }
     ],
     "macOSPrivateApi": true,
@@ -29,7 +30,12 @@
   },
   "bundle": {
     "active": true,
-    "externalBin": ["binaries/crewon-app-server"],
+    "externalBin": ["binaries/crewon-app-server", "binaries/crewon-node"],
+    "resources": [
+      "binaries/runtime/control-api.mjs",
+      "binaries/runtime/runtime-release.mjs",
+      "binaries/runtime/runtime-worker.mjs"
+    ],
     "targets": ["dmg", "app", "nsis"],
     "category": "DeveloperTool",
     "shortDescription": "Crewon desktop client",

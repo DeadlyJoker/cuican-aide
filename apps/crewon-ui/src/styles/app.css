@@ -60,6 +60,12 @@
   --radius-xl: 10px;
   --radius-pill: 999px;
   /*
+   * The undecorated desktop window rounds its own corners, so the radius is a
+   * token: the shell, the sidebar edge, and the drag region all have to agree or
+   * the corner shows a notch. 0 in a browser tab, where there is no window.
+   */
+  --radius-window: 0px;
+  /*
    * Elevation scale, keyed to how far a surface sits off the canvas.
    *
    *   raised   resting cards and controls: a hairline, not a drop
@@ -72,6 +78,13 @@
   --shadow-raised: 0 1px 2px rgba(24, 24, 27, 0.06);
   --shadow-overlay: 0 8px 24px rgba(24, 24, 27, 0.1);
   --shadow-modal: 0 18px 48px rgba(24, 24, 27, 0.16);
+  /*
+   * The composer floats just above the canvas: a close contact shadow plus a
+   * wider, softer ambient one. Lighter than --shadow-overlay, which is tuned for
+   * menus that sit clearly on top of content.
+   */
+  --shadow-composer:
+    0 1px 2px rgba(24, 24, 27, 0.04), 0 6px 20px rgba(24, 24, 27, 0.07);
   /* A drawer casts toward the edge it slid away from, not downward. */
   --shadow-drawer-left: -18px 0 48px rgba(24, 24, 27, 0.16);
   /* A zero-blur hairline under a row: a divider drawn as a shadow, not a drop. */
@@ -101,10 +114,10 @@
   --dur-slow: 240ms;
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   /* right space to reserve when the fixed Inspector is open:
-     inspector width 232 + its 12px right offset + 24px to mirror the left padding.
+     inspector width 208 + its 14px right offset + 24px to mirror the left padding.
      Constant (not vw-based) so the centered content keeps equal L/R margins and
      never slides under the Inspector as the window narrows. */
-  --inspector-reserve: 268px;
+  --inspector-reserve: 246px;
   background: var(--bg);
   color: var(--text);
   text-rendering: geometricPrecision;
@@ -697,6 +710,8 @@
   --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.24);
   --shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.36);
   --shadow-modal: 0 18px 48px rgba(0, 0, 0, 0.48);
+  --shadow-composer:
+    0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.34);
   --shadow-drawer-left: -18px 0 48px rgba(0, 0, 0, 0.48);
   --shadow-hairline: 0 1px 0 rgba(0, 0, 0, 0.2);
   --surface-strong: #1f1f1f;
@@ -715,6 +730,126 @@ body {
 
 :root[data-theme="dark"] body {
   background: var(--bg);
+}
+
+/*
+ * The desktop window is undecorated and transparent, so the corners are ours to
+ * cut. The document itself must go transparent or the page background would
+ * paint a square behind the rounded shell; the shells below re-establish their
+ * own opaque fill inside the radius.
+ */
+:root[data-surface="desktop"],
+:root[data-surface="desktop"] body {
+  background: transparent;
+}
+
+:root[data-surface="desktop"] {
+  --radius-window: 11px;
+}
+
+/*
+ * The rounded shells clip their own children, which is what keeps a full-bleed
+ * sidebar or canvas from squaring off the corner it sits in. The inset hairline
+ * gives the window a visible edge, which the system frame used to provide.
+ */
+:root[data-surface="desktop"] .app-shell,
+:root[data-surface="desktop"] .screen-shell.command-screen .command-window {
+  overflow: hidden;
+  border-radius: var(--radius-window);
+  box-shadow: inset 0 0 0 1px var(--n-alpha-10);
+}
+
+/*
+ * .app-shell inherited its fill from the body, which is now transparent, so it
+ * has to own the opaque surface inside its radius or the window shows straight
+ * through to the desktop. .command-window already paints its own.
+ */
+:root[data-surface="desktop"] .app-shell {
+  background: var(--bg);
+}
+
+/*
+ * The global window frame. It wraps every route, so the rounding, the drag
+ * surface, and the controls are declared once rather than per screen.
+ */
+.desktop-window-frame {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  border-radius: var(--radius-window);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--n-alpha-10);
+}
+
+:root[data-window-state="maximized"] .desktop-window-frame {
+  box-shadow: none;
+}
+
+/*
+ * A frameless window has no system title bar to grab. This strip is the drag
+ * surface; it spans the full width so any empty header area moves the window.
+ */
+.desktop-window-drag-strip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 40;
+  height: 34px;
+}
+
+/*
+ * The controls sit above the drag strip so they receive their own clicks. The
+ * slot is inline-size only, leaving the rest of the strip draggable.
+ */
+.desktop-window-controls-slot {
+  position: absolute;
+  top: 9px;
+  left: 14px;
+  z-index: 41;
+  display: flex;
+  align-items: center;
+}
+
+/*
+ * The controls float above every route, so each screen's first row has to clear
+ * them instead of sitting underneath. The workspace already reserved a topbar
+ * for its own copy; the login and settings rails did not.
+ */
+:root[data-surface="desktop"] .crewon-auth-story,
+:root[data-surface="desktop"] .settings-sidebar {
+  padding-top: 42px;
+}
+
+/*
+ * The command shell is the full-viewport layer behind the window, and it paints
+ * an opaque canvas of its own. Left alone it would fill the four corners the
+ * window just rounded away.
+ *
+ * The dark theme repeats this selector with its own background at (0,2,0), so
+ * the theme attribute is named here too rather than relying on source order.
+ */
+:root[data-surface="desktop"] .screen-shell.command-screen {
+  background: transparent;
+}
+
+/*
+ * A maximized or fullscreen window has no exposed corner to round, and macOS
+ * fullscreen would otherwise show desktop through the four gaps.
+ */
+:root[data-surface="desktop"][data-window-state="maximized"] {
+  --radius-window: 0px;
+}
+
+:root[data-surface="desktop"][data-window-state="maximized"] .app-shell,
+:root[data-surface="desktop"][data-window-state="maximized"]
+  .screen-shell.command-screen
+  .command-window {
+  box-shadow: none;
 }
 
 button,
@@ -781,32 +916,67 @@ textarea:focus-visible {
   grid-template-columns: 120px 32px 56px minmax(0, 1fr) auto;
 }
 
+/*
+ * The group is laid out from its own platform attribute rather than the parent
+ * shell's, so it carries the correct gap and inset wherever it is mounted. Only
+ * the title bar's full-height stretch stays shell-specific.
+ */
 .window-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
+  justify-content: flex-start;
+}
+
+.titlebar .window-controls {
   height: 100%;
+}
+
+.titlebar .window-controls[data-window-platform="mac"] {
   padding-left: 14px;
 }
 
-.titlebar[data-platform="windows"] .window-controls,
-.titlebar[data-platform="web"] .window-controls {
-  justify-content: flex-start;
-  gap: 0;
-  padding-left: 0;
+/*
+ * One traffic-light definition for every shell. The title bar, the command
+ * sidebar, and the settings sidebar all render the same component, so the sizes
+ * and the three hues are declared once instead of drifting per screen.
+ */
+.window-controls[data-window-platform="mac"] {
+  gap: 8px;
 }
 
 .traffic-light {
-  display: block;
+  display: grid;
   flex: 0 0 auto;
   width: 12px;
   height: 12px;
+  place-items: center;
   appearance: none;
   border: 0;
   border-radius: var(--radius-pill);
   padding: 0;
   box-shadow: inset 0 0 0 1px var(--n-alpha-10);
   cursor: default;
+  transition:
+    filter var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+/*
+ * 12px is the correct macOS dot size, so the visual stays; the target does not
+ * have to. This pads the hit area to 20px around each light without moving or
+ * resizing the dot, which is why it is a pseudo-element rather than padding.
+ * The lights sit 20px apart, so the pads meet without overlapping.
+ */
+.window-controls[data-window-controls="native"] .traffic-light::after {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  content: "";
+}
+
+.window-controls[data-window-controls="native"] .traffic-light {
+  position: relative;
 }
 
 .traffic-light.close {
@@ -819,6 +989,57 @@ textarea:focus-visible {
 
 .traffic-light.zoom {
   background: #28c840;
+}
+
+/*
+ * A disabled light is a browser tab with no window behind it: keep the shape,
+ * drop the affordance. Colour stays so the shell still reads as a window.
+ */
+.traffic-light:disabled {
+  cursor: default;
+}
+
+/*
+ * macOS reveals the glyph in all three lights as soon as the pointer enters the
+ * group, not just the light under the cursor, which is why the hover target is
+ * the container.
+ */
+.traffic-light-glyph {
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  fill: none;
+  /*
+   * A 1.35px stroke on a 12px circle needs the weight: at 0.55 alpha the glyph
+   * read as a smudge rather than a symbol.
+   */
+  stroke: rgb(0 0 0 / 0.68);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.window-controls[data-window-controls="native"]:hover .traffic-light-glyph,
+.traffic-light:focus-visible .traffic-light-glyph {
+  opacity: 1;
+}
+
+.window-controls[data-window-controls="native"] .traffic-light {
+  cursor: pointer;
+}
+
+.window-controls[data-window-controls="native"] .traffic-light:hover {
+  filter: brightness(0.94);
+}
+
+.window-controls[data-window-controls="native"] .traffic-light:active {
+  filter: brightness(0.84);
+  transform: scale(0.92);
+}
+
+.traffic-light:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--focus), var(--n-0) 18%);
+  outline-offset: 2px;
 }
 
 .window-button {
@@ -6646,7 +6867,8 @@ body.mermaid-lightbox-open {
 }
 
 .capability-field-list input,
-.capability-field-list select {
+.capability-field-list select,
+.capability-field-list textarea {
   height: 30px;
   min-width: 0;
   padding: 0 9px;
@@ -6659,8 +6881,16 @@ body.mermaid-lightbox-open {
   outline: none;
 }
 
+.capability-field-list textarea {
+  height: auto;
+  padding: 7px 9px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
 .capability-field-list input:focus,
-.capability-field-list select:focus {
+.capability-field-list select:focus,
+.capability-field-list textarea:focus {
   box-shadow: inset 0 0 0 1px var(--n-alpha-20);
 }
 
@@ -9006,31 +9236,16 @@ button.library-item:hover .library-card-chevron {
   color: var(--settings-fg);
 }
 
+/*
+ * The settings sidebar hosts the shared control group rather than its own dots,
+ * so it only owns the row's inset. Previously it painted three 11px spans in
+ * slightly different hues, on every OS, with no click handler at all.
+ */
 .settings-traffic {
   display: flex;
   min-height: 28px;
   align-items: center;
-  gap: 8px;
   padding: 0 5px;
-}
-
-.settings-traffic .dot {
-  display: block !important;
-  width: 11px;
-  height: 11px;
-  border-radius: var(--radius-pill);
-}
-
-.settings-traffic .dot.close {
-  background: #ed6a5e;
-}
-
-.settings-traffic .dot.min {
-  background: #f4bf4f;
-}
-
-.settings-traffic .dot.max {
-  background: #61c454;
 }
 
 .screen-shell.command-screen .settings-back-button {
@@ -10092,31 +10307,36 @@ button.library-item:hover .library-card-chevron {
   border-bottom-color: var(--n-alpha-06);
 }
 
+/*
+ * The environment panel is a reference table, not a card stack: 208px wide with
+ * 3px between rows and 7px between sections, matching the desktop design where
+ * every row is one icon and one line of text.
+ */
 .inspector {
-  width: 240px;
+  width: 208px;
   right: 14px;
 }
 
 .inspector-panel {
-  padding: 10px 10px 11px;
+  padding: 8px 8px 9px;
   border-color: var(--n-alpha-08);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   background: rgba(42, 42, 42, 0.92);
   box-shadow: 0 16px 34px var(--n-alpha-20);
 }
 
 .inspector-section {
-  gap: 6px;
-  padding-bottom: 10px;
+  gap: 3px;
+  padding-bottom: 7px;
 }
 
 .inspector-section + .inspector-section {
-  padding-top: 10px;
+  padding-top: 7px;
   border-top-color: var(--n-alpha-08);
 }
 
 .inspector-card-header {
-  min-height: 18px;
+  min-height: 16px;
   color: var(--n-alpha-45);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 500;
@@ -10124,8 +10344,8 @@ button.library-item:hover .library-card-chevron {
 
 .inspector-row,
 .inspector-progress span {
-  min-height: 19px;
-  gap: 7px;
+  min-height: 17px;
+  gap: 6px;
   color: var(--n-alpha-45);
 }
 
@@ -10134,7 +10354,7 @@ button.library-item:hover .library-card-chevron {
 }
 
 .inspector-progress {
-  gap: 4px;
+  gap: 3px;
 }
 
 :root:not([data-theme="dark"]) .tool-card {
@@ -11853,7 +12073,7 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .command-window {
   display: grid;
-  grid-template-columns: 264px minmax(0, 1fr);
+  grid-template-columns: 232px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   width: 100vw;
   height: 100vh;
@@ -11861,20 +12081,25 @@ button.library-item:hover .library-card-chevron {
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
-  border-radius: 0;
+  /* Corners come from --radius-window, which is 0 in a browser tab. */
+  border-radius: var(--radius-window);
   background: var(--n-25);
-  box-shadow: none;
   transition: grid-template-columns 180ms ease;
 }
 
+/*
+ * Sidebar density follows the Codex desktop rail: a 232px column, an 8px gap
+ * between blocks, and 8px side padding, so the rail carries the same number of
+ * rows in noticeably less vertical space.
+ */
 .screen-shell.command-screen .command-sidebar {
   position: relative;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
-  padding: 20px 12px 14px;
+  padding: 14px 8px 10px;
   border-right: 1px solid var(--command-sidebar-border);
   background: var(--command-sidebar-bg);
 }
@@ -11883,58 +12108,55 @@ button.library-item:hover .library-card-chevron {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 32px;
-  padding: 0 6px 0 8px;
+  min-height: 26px;
+  padding: 0 2px 0 4px;
 }
 
-.screen-shell.command-screen .traffic {
-  display: none !important;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding-left: 0;
+/*
+ * Windows has no traffic lights, so its square buttons need a real box: the
+ * title-bar rule sizes them to a 38px bar via `height: 100%`, which would
+ * collapse them inside the floating frame slot.
+ */
+.desktop-window-controls-slot .traffic .window-button {
+  width: 30px;
+  height: 26px;
+  border-radius: var(--radius-sm);
 }
 
-.screen-shell.command-screen .traffic[data-window-controls="native"] {
-  display: flex !important;
+/*
+ * The sidebar rail no longer hosts the controls, so its tool row has to leave
+ * room for the ones floating above it or the collapse button lands under them.
+ */
+:root[data-surface="desktop"]
+  .screen-shell.command-screen
+  .sidebar-topbar {
+  padding-left: 88px;
 }
 
-.screen-shell.command-screen .traffic .traffic-light {
-  transition:
-    filter var(--dur-fast) var(--ease),
-    transform var(--dur-fast) var(--ease);
+/*
+ * Collapsed, the topbar is absolutely positioned at top: 18px, which put the top
+ * 3px of the collapse button under the controls slot. The slot has the higher
+ * z-index, so those 3px swallowed the button's clicks. Dropping it clear of the
+ * lights' 21px bottom edge gives the whole 32px button box back.
+ */
+:root[data-surface="desktop"]
+  .screen-shell.command-screen
+  .command-window.sidebar-collapsed
+  .sidebar-topbar {
+  top: 28px;
 }
 
-.screen-shell.command-screen .traffic .traffic-light:hover {
-  filter: brightness(0.94);
-}
-
-.screen-shell.command-screen .traffic .traffic-light:active {
-  transform: scale(0.9);
-}
-
-.screen-shell.command-screen .traffic .traffic-light:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--focus), var(--n-0) 18%);
-  outline-offset: 2px;
-}
-
-.screen-shell.command-screen .dot {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-pill);
-  background: var(--n-450);
-}
-
-.screen-shell.command-screen .dot.close {
-  background: oklch(70% 0.16 25);
-}
-
-.screen-shell.command-screen .dot.min {
-  background: oklch(78% 0.14 80);
-}
-
-.screen-shell.command-screen .dot.max {
-  background: oklch(68% 0.14 150);
+/*
+ * The drag strip spans the full width at z-index 40, so it covered the top edge
+ * of the sidebar tools and ate their clicks. Lifting the buttons above it keeps
+ * their whole box clickable while the empty space around them still drags.
+ */
+:root[data-surface="desktop"]
+  .screen-shell.command-screen
+  .sidebar-topbar
+  .sidebar-tool {
+  position: relative;
+  z-index: 42;
 }
 
 .screen-shell.command-screen .sidebar-tools {
@@ -11945,8 +12167,8 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .sidebar-tool {
   display: grid;
-  width: 34px;
-  height: 32px;
+  width: 26px;
+  height: 24px;
   place-items: center;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -11970,8 +12192,8 @@ button.library-item:hover .library-card-chevron {
 }
 
 .screen-shell.command-screen .sidebar-tool svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   stroke-width: 1.75;
 }
 
@@ -11991,9 +12213,9 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .sidebar-search-panel {
   position: absolute;
-  top: 58px;
-  right: 12px;
-  left: 12px;
+  top: 46px;
+  right: 8px;
+  left: 8px;
   z-index: 24;
   display: grid;
   gap: 8px;
@@ -12185,15 +12407,15 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .sidebar-brand {
   position: absolute;
-  top: 22px;
-  left: 18px;
+  top: 15px;
+  left: 14px;
   z-index: 2;
   display: flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 4px;
   padding: 0;
   color: var(--n-700);
-  font-size: calc(13px + var(--user-ui-font-delta));
+  font-size: calc(12px + var(--user-ui-font-delta));
   text-decoration: none;
 }
 
@@ -12212,31 +12434,31 @@ button.library-item:hover .library-card-chevron {
 }
 
 /*
- * Sidebar density follows the Cursor agent rail: a 28px row at 13px with a 2px
+ * Sidebar density follows the Codex desktop rail: a 24px row at 12px with a 1px
  * gap, so the nav reads as one continuous column rather than a stack of loosely
  * spaced buttons. Padding stays generous because the whole row is the hit area.
  */
 .screen-shell.command-screen .sidebar-nav {
   display: grid;
-  gap: 2px;
-  padding-top: 4px;
+  gap: 1px;
+  padding-top: 2px;
 }
 
 .screen-shell.command-screen .sidebar-nav a,
 .screen-shell.command-screen .sidebar-nav button {
   display: grid;
-  grid-template-columns: 20px minmax(0, auto) minmax(0, 1fr);
+  grid-template-columns: 16px minmax(0, auto) minmax(0, 1fr);
   align-items: center;
   column-gap: 6px;
   width: 100%;
-  min-height: 28px;
-  padding: 0 9px 0 8px;
+  min-height: 24px;
+  padding: 0 7px 0 6px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--n-900);
   cursor: pointer;
-  font-size: calc(13px + var(--user-ui-font-delta));
+  font-size: calc(12px + var(--user-ui-font-delta));
   text-decoration: none;
 }
 
@@ -12251,17 +12473,17 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .nav-glyph {
   display: grid;
-  width: 20px;
-  height: 16px;
+  width: 16px;
+  height: 14px;
   place-items: center;
-  color: var(--n-700);
+  color: var(--n-650);
   font-size: 0;
   line-height: 1;
 }
 
 .screen-shell.command-screen .nav-glyph svg {
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
   stroke-width: 1.5;
 }
 
@@ -12303,20 +12525,30 @@ button.library-item:hover .library-card-chevron {
   scrollbar-width: thin;
 }
 
-.screen-shell.command-screen .tree-head button {
-  min-height: 28px;
+.screen-shell.command-screen .tree-head button,
+.screen-shell.command-screen .tree-head-label {
+  min-height: 22px;
   border: 0;
   background: transparent;
-  color: var(--n-750);
-  cursor: pointer;
-  font-size: calc(12px + var(--user-ui-font-delta));
+  color: var(--n-650);
+  font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 500;
   letter-spacing: 0.06em;
 }
 
+.screen-shell.command-screen .tree-head button {
+  cursor: pointer;
+}
+
+.screen-shell.command-screen .tree-head-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+}
+
 .screen-shell.command-screen .tree-add {
   display: grid;
-  width: 26px;
+  width: 22px;
   place-items: center;
   border-radius: var(--radius-sm) !important;
   font-size: calc(16px + var(--user-ui-font-delta)) !important;
@@ -12456,7 +12688,7 @@ button.library-item:hover .library-card-chevron {
   align-self: end;
   display: block;
   min-width: 0;
-  padding: 10px 4px 0;
+  padding: 7px 2px 0;
   border-top: 1px solid var(--n-350);
   background: var(--command-sidebar-bg);
 }
@@ -12469,12 +12701,12 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen .sidebar-account-menu > summary {
   display: grid;
   min-width: 0;
-  min-height: 46px;
-  grid-template-columns: 32px minmax(0, 1fr) 28px;
+  min-height: 36px;
+  grid-template-columns: 26px minmax(0, 1fr) 22px;
   align-items: center;
-  gap: 9px;
-  border-radius: var(--radius-lg);
-  padding: 6px 8px;
+  gap: 8px;
+  border-radius: var(--radius-md);
+  padding: 4px 6px;
   color: var(--n-950);
   cursor: pointer;
   list-style: none;
@@ -12495,24 +12727,26 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .account-mark {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   place-items: center;
   border-radius: 50%;
   background: var(--n-900);
   color: var(--n-0);
+  font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
 }
 
 .screen-shell.command-screen .sidebar-account-copy {
   display: grid;
   min-width: 0;
-  gap: 1px;
+  gap: 0;
+  line-height: 1.35;
 }
 
 .screen-shell.command-screen .sidebar-account strong {
   overflow: hidden;
-  font-size: calc(13px + var(--user-ui-font-delta));
+  font-size: calc(12px + var(--user-ui-font-delta));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -12527,15 +12761,15 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .sidebar-account-chevron {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   color: var(--n-750);
 }
 
 .screen-shell.command-screen .sidebar-account-chevron svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   transition: transform 140ms ease;
 }
 
@@ -12606,6 +12840,13 @@ button.library-item:hover .library-card-chevron {
   overflow: hidden;
   padding: 0;
   background: var(--n-25);
+  /*
+   * The canvas, not the viewport, is what the composer has to fit into: the
+   * workbench takes up to 840px of a window that stays wide, so viewport queries
+   * never fire and the composer control row was clipped at its right edge.
+   */
+  container-name: command-canvas;
+  container-type: inline-size;
 }
 
 .screen-shell.command-screen .shell-view {
@@ -13344,7 +13585,6 @@ button.library-item:hover .library-card-chevron {
   width: min(780px, 100%);
   justify-self: center;
   padding: 8px 2px 10px;
-  border-bottom: 1px solid var(--n-alpha-08);
   color: var(--n-650);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
@@ -14591,21 +14831,26 @@ button.library-item:hover .library-card-chevron {
   display: none !important;
 }
 
+/*
+ * Menu rows match the desktop design's narrow items: a 26px row with the label
+ * left and its shortcut right, so a long menu stays one scannable column rather
+ * than a stack of cards.
+ */
 .screen-shell.command-screen .select-menu .select-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  min-height: 34px;
+  min-height: 26px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 3px 8px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--n-950);
   cursor: pointer;
   font: inherit;
-  font-size: calc(13px + var(--user-ui-font-delta));
+  font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
   text-align: left;
   white-space: nowrap;
@@ -14623,7 +14868,7 @@ button.library-item:hover .library-card-chevron {
 
 .screen-shell.command-screen .select-menu .select-option strong {
   overflow: hidden;
-  font-size: calc(13px + var(--user-ui-font-delta));
+  font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -15096,8 +15341,8 @@ button.library-item:hover .library-card-chevron {
 }
 
 .screen-shell.command-screen .space-tree {
-  gap: 8px;
-  padding: 6px 6px 14px;
+  gap: 4px;
+  padding: 2px 2px 12px;
 }
 
 .screen-shell.command-screen .tree-head {
@@ -15106,7 +15351,7 @@ button.library-item:hover .library-card-chevron {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 0 6px 2px;
+  padding: 0 4px 1px;
 }
 
 .screen-shell.command-screen .tree-head > span,
@@ -15288,15 +15533,45 @@ button.library-item:hover .library-card-chevron {
   stroke-width: 2;
 }
 
+/*
+ * A popover anchored to the tree head rather than a row inside the tree. Inline
+ * it pushed the workspace list down on every open and had to share the tree's
+ * cramped two-column grid, which is what made the label, field, and button
+ * collide.
+ */
 .screen-shell.command-screen .sidebar-workspace-form {
-  grid-column: 1 / -1;
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
-  padding: 8px;
+  gap: 8px;
+  padding: 12px;
   border: 1px solid var(--n-300);
   border-radius: var(--radius-lg);
-  background: var(--n-25);
+  background: var(--n-0);
+  box-shadow: var(--shadow-modal);
+}
+
+.screen-shell.command-screen .sidebar-workspace-form-title {
+  color: var(--n-900);
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 600;
+}
+
+.screen-shell.command-screen .sidebar-workspace-form-hint {
+  margin: 0;
+  color: var(--n-650);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.45;
+}
+
+.screen-shell.command-screen .sidebar-workspace-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 2px;
 }
 
 .screen-shell.command-screen .sidebar-workspace-form[hidden] {
@@ -15304,16 +15579,17 @@ button.library-item:hover .library-card-chevron {
 }
 
 .screen-shell.command-screen .sidebar-workspace-form label {
-  grid-column: 1 / -1;
   color: var(--n-750);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .screen-shell.command-screen .sidebar-workspace-form input {
+  width: 100%;
   min-width: 0;
-  height: 30px;
-  padding: 0 9px;
+  height: 32px;
+  padding: 0 10px;
   border: 1px solid var(--n-350);
   border-radius: var(--radius-md);
   background: var(--n-25);
@@ -15321,25 +15597,122 @@ button.library-item:hover .library-card-chevron {
   font-size: calc(12px + var(--user-ui-font-delta));
 }
 
-.screen-shell.command-screen .sidebar-workspace-form button {
+.screen-shell.command-screen .sidebar-workspace-form input:focus-visible {
+  border-color: var(--n-500);
+  outline: 0;
+}
+
+.screen-shell.command-screen .sidebar-workspace-form-actions button {
   min-height: 30px;
-  padding: 0 10px;
-  border: 0;
+  padding: 0 12px;
+  border: 1px solid var(--n-300);
   border-radius: var(--radius-md);
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: transparent;
+  color: var(--n-800);
   cursor: pointer;
   font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
+}
+
+.screen-shell.command-screen .sidebar-workspace-form-actions button:hover {
+  background: var(--n-100);
+}
+
+.screen-shell.command-screen .sidebar-workspace-form-actions button.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 
-.screen-shell.command-screen .sidebar-workspace-form button:disabled {
+.screen-shell.command-screen .sidebar-workspace-form-actions button:disabled {
   cursor: default;
   opacity: 0.45;
 }
 
 .screen-shell.command-screen .workspace-empty-hint {
   margin: 0 8px 6px;
+}
+
+/* Destructive, so it only takes its warning colour once the user is on it. */
+.screen-shell.command-screen .workspace-remove-action:hover,
+.screen-shell.command-screen .workspace-remove-action:focus-visible {
+  color: oklch(52% 0.17 25);
+}
+
+.workspace-remove-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 0.34);
+}
+
+.workspace-remove-dialog {
+  display: grid;
+  gap: 10px;
+  width: min(420px, 100%);
+  padding: 20px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-lg);
+  background: var(--n-0);
+  box-shadow: var(--shadow-modal);
+}
+
+.workspace-remove-dialog strong {
+  color: var(--n-950);
+  font-size: calc(15px + var(--user-ui-font-delta));
+  font-weight: 600;
+}
+
+.workspace-remove-dialog code {
+  overflow: hidden;
+  padding: 7px 9px;
+  border-radius: var(--radius-md);
+  background: var(--n-100);
+  color: var(--n-800);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-remove-dialog p {
+  margin: 0;
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.5;
+}
+
+.workspace-remove-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.workspace-remove-dialog footer button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--n-800);
+  cursor: pointer;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
+}
+
+.workspace-remove-dialog footer button:hover {
+  background: var(--n-100);
+}
+
+.workspace-remove-dialog footer button.danger {
+  border-color: transparent;
+  background: oklch(52% 0.17 25);
+  color: #fff;
+  font-weight: 600;
 }
 
 .screen-shell.command-screen .recent-thread-list {
@@ -15367,15 +15740,16 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen .workspace-title-toggle {
   display: flex;
   min-width: 0;
-  min-height: 28px;
+  min-height: 24px;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
   text-align: left;
+  transition: color 0.14s ease;
 }
 
 .screen-shell.command-screen .workspace-title-toggle:hover strong,
@@ -15455,6 +15829,9 @@ button.library-item:hover .library-card-chevron {
   background: transparent;
   color: var(--n-750);
   cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
 }
 
 .screen-shell.command-screen .space-title:hover .workspace-row-actions,
@@ -15503,9 +15880,9 @@ button.library-item:hover .library-card-chevron {
 }
 
 .screen-shell.command-screen .space-title {
-  min-height: 32px;
-  padding: 0 8px;
-  border-radius: var(--radius-md);
+  min-height: 24px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
   color: var(--n-800);
   font-size: calc(12px + var(--user-ui-font-delta));
 }
@@ -15516,18 +15893,19 @@ button.library-item:hover .library-card-chevron {
 }
 
 .screen-shell.command-screen .conversation-list {
-  gap: 3px;
+  gap: 1px;
   margin: 0;
-  padding: 1px 0 2px 18px;
+  padding: 0 0 2px 16px;
   border-left: 0;
 }
 
 .screen-shell.command-screen .conversation-item {
   position: relative;
-  min-height: 28px;
-  padding: 0 9px;
-  border-radius: var(--radius-md);
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
   color: var(--n-850);
+  font-size: calc(12px + var(--user-ui-font-delta));
 }
 
 .screen-shell.command-screen .conversation-item::before {
@@ -15551,8 +15929,13 @@ button.library-item:hover .library-card-chevron {
   color: oklch(30% 0.072 215);
 }
 
+/*
+ * The selected thread is marked by its ground, not by colour: the dot was the
+ * only chromatic pixel in the rail, and the nav rows above it already establish
+ * that selection reads as a tinted row with a neutral glyph.
+ */
 .screen-shell.command-screen .conversation-item.active::before {
-  background: var(--accent);
+  background: var(--n-1000);
 }
 
 .screen-shell.command-screen .linked-conversation-group {
@@ -15582,42 +15965,51 @@ button.library-item:hover .library-card-chevron {
   box-shadow: none;
 }
 
-.screen-shell.command-screen .command-thread-toolbar {
-  width: min(780px, 100%);
-  min-height: 36px;
-  padding: 8px 2px 10px;
-  border-bottom: 1px solid var(--n-alpha-08);
+/*
+ * The task bar spans the canvas above the work column rather than living inside
+ * it, so the name starts at the left edge and the bar cannot overlap messages.
+ * Its 26px box starts at 14px to share one horizontal centre line (y=27) with
+ * the sidebar tools and the workbench close control.
+ */
+.screen-shell.command-screen .command-home-view > .command-thread-toolbar {
+  position: absolute;
+  top: 14px;
+  right: 0;
+  left: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 26px;
+  padding: 0 16px;
   background: transparent;
 }
 
-/* The context eyebrow duplicates the shell nav; keep it for a11y only. */
-.screen-shell.command-screen .command-thread-identity > span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-.screen-shell.command-screen .command-thread-runtime {
-  align-self: center;
-  margin-top: 0;
+.screen-shell.command-screen .command-thread-identity {
+  justify-content: flex-start;
 }
 
 /*
  * Final word on the thread composer; two earlier blocks in this file set the
- * same properties and are overridden here. The composer sits on --surface so it
- * lifts off the canvas by one rung of the grey ladder rather than by a drop
- * shadow, which is how the Cursor agent composer reads.
+ * same properties and are overridden here.
+ *
+ * 720px matches the transcript column above (`.turn-group` / `.message`), so
+ * the composer's edges line up with the messages instead of overhanging them.
+ *
+ * The composer now lifts off the canvas with a soft outer shadow rather than a
+ * hard edge: the border drops to a hairline and the radius goes past the `xl`
+ * container token, which is shared with cards and popovers and cannot round
+ * further without dragging them along.
  */
 .screen-shell.command-screen .command-input.thread-command-input {
-  width: min(980px, 100%);
+  width: min(720px, 100%);
+  max-width: 720px;
   margin-bottom: 6px;
+  border-width: 0.5px;
   border-color: var(--border-strong);
-  border-radius: var(--radius-xl);
+  border-radius: 18px;
   background: var(--surface);
-  box-shadow: none;
+  box-shadow: var(--shadow-composer);
 }
 
 .screen-shell.command-screen .thread-command-input .composer-state-row {
@@ -15629,10 +16021,17 @@ button.library-item:hover .library-card-chevron {
   padding: 30px 10px 24px;
 }
 
+/*
+ * 720px, same as the composer above. This value is also set at 840px and 920px
+ * earlier in this file and again in original-shell-overrides.css; that last
+ * sheet loads after this one and wins at equal specificity, so the value there
+ * is what actually renders. Stated here too so the intended column width is
+ * visible from either sheet.
+ */
 .screen-shell.command-screen .command-thread-room .turn-group,
 .screen-shell.command-screen .command-thread-room .message-list > .message {
-  width: min(920px, 100%);
-  max-width: 920px;
+  width: min(720px, 100%);
+  max-width: 720px;
 }
 
 .screen-shell.command-screen .command-thread-room .message {

@@ -10,6 +10,7 @@ import {
   commandComposerResourceSelection,
   commandComposerKeyIntent,
   CommandWorkspace,
+  executionIntentAfterCommit,
   insertTokenIntoComposerValue,
   nextExecutionIntent,
   SelectedExecutionIntent,
@@ -718,6 +719,132 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain('data-od-id="workspace-node-product"');
   });
 
+  it("offers full access as a warning-toned permission", () => {
+    const markup = renderCommandWorkspace();
+
+    expect(markup).toContain('data-tone="warning" data-value="full-access"');
+    expect(markup).toContain("完全访问");
+    expect(markup).toContain("跳过沙箱与审批");
+  });
+
+  it("pairs the model with its reasoning effort in one control", () => {
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        modelOptions={[
+          {
+            defaultReasoningEffort: "xhigh",
+            isDefault: true,
+            label: "gpt-5-mini",
+            reasoningEfforts: [
+              { value: "medium" },
+              { description: "最深入的推理", value: "xhigh" },
+            ],
+            value: "gpt-5-mini",
+          },
+        ]}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="模型与推理档位"');
+    expect(markup).toContain("gpt-5-mini 极高");
+    expect(markup).toContain('data-value="effort:medium"');
+    expect(markup).toContain(
+      '<button aria-selected="true" class="select-option" data-tone="normal" data-value="effort:xhigh"',
+    );
+    expect(markup).toContain("推理档位");
+    expect(markup).toContain("最深入的推理");
+  });
+
+  it("shows run progress and the active goal above a thread composer", () => {
+    const thread = {
+      cwd: "/repo/frontend",
+      id: "thread-1",
+      turns: [
+        {
+          id: "turn-1",
+          items: [
+            {
+              type: "plan",
+              id: "plan-1",
+              text: "- [completed] 一\n- [completed] 二\n- [inProgress] 三\n- [pending] 四\n- [pending] 五",
+            },
+            {
+              type: "fileChange",
+              id: "change-1",
+              status: { type: "completed" },
+              changes: [
+                {
+                  path: "a.ts",
+                  kind: { type: "update" },
+                  diff: "+one\n+two\n-three",
+                },
+              ],
+            },
+          ],
+          status: "completed",
+        },
+      ],
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        selectedThread={thread}
+        selectedThreadId="thread-1"
+        threadGoal={{
+          createdAt: "2026-08-09T07:00:00.000Z",
+          goalId: "goal-1",
+          objective: "看一下我们之前的设计",
+          revision: 1,
+          status: "active",
+          threadId: "thread-1",
+          timeUsedSeconds: 2913,
+          tokenBudget: null,
+          tokensUsed: 0,
+          updatedAt: "2026-08-09T07:00:00.000Z",
+        }}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-od-id="composer-progress-pill"');
+    expect(markup).toContain("第 3 / 5 步");
+    expect(markup).toContain("1 个文件已更改");
+    expect(markup).toContain("+2");
+    expect(markup).toContain("-1");
+    expect(markup).toContain('data-od-id="composer-goal-bar"');
+    expect(markup).toContain("进行中的目标");
+    expect(markup).toContain("看一下我们之前的设计");
+    expect(markup).toContain("48m 33s");
+    expect(markup).toContain('aria-label="编辑目标"');
+    expect(markup).toContain('aria-label="暂停目标"');
+    expect(markup).toContain('aria-label="删除目标"');
+  });
+
+  it("keeps progress and goal off the new-task home composer", () => {
+    const markup = renderCommandWorkspace();
+
+    expect(markup).not.toContain('data-od-id="composer-progress-pill"');
+    expect(markup).not.toContain('data-od-id="composer-goal-bar"');
+  });
+
   it("keeps only execution-relevant composer controls and hidden palette hooks", () => {
     const markup = renderCommandWorkspace();
     const commandHomeMarkup = markup.slice(
@@ -750,7 +877,7 @@ describe("CommandWorkspace", () => {
     expect(addPanelMarkup).toContain('aria-pressed="false"');
     expect(addPanelMarkup).not.toContain(">工作空间<");
     expect(commandHomeMarkup).toContain('aria-label="执行主体"');
-    expect(commandHomeMarkup).toContain('aria-label="模型选择"');
+    expect(commandHomeMarkup).toContain('aria-label="模型与推理档位"');
     expect(commandHomeMarkup).toContain('aria-label="工作空间选择"');
     expect(commandHomeMarkup).toContain('data-value="__no_workspace__"');
     expect(commandHomeMarkup).toContain("无工作空间");
@@ -773,6 +900,9 @@ describe("CommandWorkspace", () => {
     expect(nextExecutionIntent("goal", "plan")).toBe("plan");
     expect(nextExecutionIntent("plan", "goal")).toBe("goal");
     expect(nextExecutionIntent("plan", "plan")).toBe("none");
+    expect(executionIntentAfterCommit("goal", "goal")).toBe("none");
+    expect(executionIntentAfterCommit("plan", "goal")).toBe("plan");
+    expect(executionIntentAfterCommit("none", "plan")).toBe("none");
   });
 
   it("snapshots selected execution intents as dismissible composer chips", () => {
@@ -926,8 +1056,8 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("\u5f53\u524d\u4efb\u52a1");
     expect(markup).toContain("Workflow \u6267\u884c\u961f\u5217");
     expect(markup).toContain("\u6267\u884c\u72b6\u6001\u673a");
-    expect(markup).toContain("\u6280\u80fd\u00b7\u8fde\u63a5\u5668");
-    expect(markup).toContain("\u8ba1\u5212\u00b7\u63d0\u9192");
+    expect(markup).toContain("\u667a\u80fd\u4f53");
+    expect(markup).toContain("\u65e5\u7a0b\u5b89\u6392");
     expect(markup).toContain("\u529e\u516c\u5ba4");
   });
 
@@ -1255,7 +1385,9 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('data-od-id="command-thread-room"');
     expect(markup).toContain('class="command-thread-identity"');
     expect(markup).toContain("Agent 对话");
-    expect(markup).toContain(">frontend</em>");
+    // The task bar carries the task name only; workspace and run state moved out.
+    expect(markup).not.toContain('class="command-thread-cwd"');
+    expect(markup).not.toContain('class="command-thread-runtime"');
     expect(markup).toContain("Command room transcript");
     expect(markup).toContain('class="transcript"');
     expect(markup).toContain(
@@ -1378,9 +1510,6 @@ describe("CommandWorkspace", () => {
 
     expect(markup).toContain('data-od-id="command-thread-room"');
     expect(markup).toContain('class="transcript"');
-    expect(markup).toContain("MCP 1");
-    expect(markup).toContain("Skill 1");
-    expect(markup).toContain("命令 1");
     expect(markup).toContain("filesystem.read_file");
     expect(markup).toContain("已读取 1 个文件");
     expect(markup).toContain("README.md");
@@ -1452,7 +1581,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('title="停止"');
   });
 
-  it("summarizes live backend agent work in the command transcript toolbar", () => {
+  it("renders live backend agent work in the command transcript", () => {
     const runningThread = {
       id: "thread-live-agent-runtime",
       name: "Live agent runtime",
@@ -1538,13 +1667,12 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain('class="command-thread-runtime"');
-    expect(markup).toContain('data-state="running"');
-    expect(markup).toContain("实时渲染中");
-    expect(markup).toContain("MCP 1");
-    expect(markup).toContain("Skill 1");
-    expect(markup).toContain("命令 1");
+    // Run state belongs to the transcript and composer, not the task bar.
+    expect(markup).not.toContain('class="command-thread-runtime"');
     expect(markup).toContain("正在实时生成最终回复");
+    expect(markup).toContain("filesystem");
+    expect(markup).toContain("code-review-system");
+    expect(markup).toContain("pnpm test");
   });
 
   it("makes sidebar search results actionable for real conversations and views", () => {

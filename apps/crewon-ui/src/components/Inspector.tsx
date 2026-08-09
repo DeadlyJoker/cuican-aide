@@ -1,6 +1,6 @@
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 import type {
   AccountStatus,
   GitRemoteDiffSummary,
@@ -24,7 +24,7 @@ type InspectorProps = {
   locale: Locale;
   serverUrl: string;
   thread: Thread | null;
-  threadGoal: ThreadGoal | null;
+  threadGoal: ThreadGoalView | null;
 };
 
 export function Inspector({
@@ -54,10 +54,7 @@ export function Inspector({
           loadedThreadCount={loadedThreadIds.length}
           presentation={presentation}
         />
-        <InspectorProgressSection
-          presentation={presentation}
-          thread={thread}
-        />
+        <InspectorProgressSection presentation={presentation} thread={thread} />
         <InspectorGoalSection
           presentation={presentation}
           threadGoal={threadGoal}

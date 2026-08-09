@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "crewon.compaction-parity.v0",
+  "caseId": "AR-025-context-window-compaction-retry",
+  "providerFailureCode": "context_length_exceeded",
+  "kernelFailureCode": "responses_provider_context_length_exceeded",
+  "expected": {
+    "compactionRequestCount": 2,
+    "historyItemsDroppedPerContextError": 1,
+    "oldestItemChanged": true,
+    "promptStable": true,
+    "terminal": "completed"
+  }
+}

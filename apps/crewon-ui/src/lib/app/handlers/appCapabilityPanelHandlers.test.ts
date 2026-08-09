@@ -117,6 +117,7 @@ function createParams(
       integrations: () => {},
       keyboard: () => {},
       mcpSettings: () => {},
+      modelProviders: () => {},
       personalization: () => {},
       worktrees: () => {},
     },

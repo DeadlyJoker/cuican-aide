@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-001-basic-text-turn",
+  "events": [
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 1,
+      "type": "turn.started",
+      "identity": { "turnSlot": "first" },
+      "data": { "input": "hello" }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 2,
+      "type": "model.requested",
+      "identity": { "turnSlot": "first" },
+      "data": {
+        "requestIndex": 1,
+        "history": [{ "type": "message", "role": "user", "content": "hello" }]
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 3,
+      "type": "model.output.delta",
+      "identity": { "turnSlot": "first" },
+      "data": { "delta": "do" }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 4,
+      "type": "model.output.delta",
+      "identity": { "turnSlot": "first" },
+      "data": { "delta": "ne" }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 5,
+      "type": "assistant.committed",
+      "identity": { "turnSlot": "first" },
+      "data": { "output": "done" }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 6,
+      "type": "turn.completed",
+      "identity": { "turnSlot": "first" },
+      "data": { "output": "done" }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 7,
+      "type": "turn.released",
+      "identity": { "turnSlot": "first" },
+      "data": { "activeTurn": false }
+    }
+  ],
+  "finalState": {
+    "activeTurn": false,
+    "history": [
+      { "type": "message", "role": "user", "content": "hello" },
+      { "type": "message", "role": "assistant", "content": "done" }
+    ],
+    "lastAssistantMessage": "done",
+    "requestCount": 1,
+    "terminalStatus": "completed",
+    "usage": {
+      "inputTokens": 4,
+      "cachedInputTokens": 0,
+      "outputTokens": 1,
+      "totalTokens": 5
+    }
+  }
+}

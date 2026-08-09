@@ -105,6 +105,16 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     use pretty_assertions::assert_eq;
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/prompt-tool-stability.reference.json"
+    )
+    .expect("resolve AR-012 prompt and Tool stability fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path)
+            .expect("read AR-012 prompt and Tool stability fixture"),
+    )
+    .expect("parse AR-012 prompt and Tool stability fixture");
+
     let server = start_mock_server().await;
     let req1 = mount_sse_once(
         &server,
@@ -209,7 +219,33 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
     assert_tool_names(&body0, &expected_tools_names);
 
     let body1 = req2.single_request().body_json();
-    assert_eq!(body1["instructions"], body0["instructions"]);
+    assert_eq!(reference["expected"]["requestCount"], 2);
+    assert_eq!(
+        body1["instructions"] == body0["instructions"],
+        reference["expected"]["instructionsStable"]
+    );
+    assert_eq!(
+        body1["tools"] == body0["tools"],
+        reference["expected"]["toolDefinitionsStable"]
+    );
+    let tool_names = |body: &serde_json::Value| {
+        body["tools"]
+            .as_array()
+            .expect("tools should be an array")
+            .iter()
+            .map(|tool| {
+                tool.get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| tool.get("type").and_then(serde_json::Value::as_str))
+                    .expect("Tool should have a name or type")
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        tool_names(&body1) == tool_names(&body0),
+        reference["expected"]["toolOrderStable"]
+    );
     assert_tool_names(&body1, &expected_tools_names);
 
     Ok(())

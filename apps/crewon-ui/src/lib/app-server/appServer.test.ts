@@ -250,6 +250,60 @@ describe("app server client connection lifecycle", () => {
     expect(onNotification).not.toHaveBeenCalled();
   });
 
+  it("routes local Workflow gate decisions and cancellation without credentials", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+    const calls = [
+      {
+        method: "workflow/gate/resolve",
+        run: () =>
+          client.resolveWorkflowGate(
+            "/repo",
+            "workflow-1",
+            "run-1",
+            "node-2",
+            "approve",
+            "范围已确认",
+          ),
+      },
+      {
+        method: "workflow/run/cancel",
+        run: () => client.cancelWorkflowRun("/repo", "workflow-1", "run-1"),
+      },
+    ];
+
+    for (const call of calls) {
+      const pending = call.run();
+      const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+        id: number;
+        method: string;
+        params: unknown;
+      };
+      expect(request.method).toBe(call.method);
+      expect(JSON.stringify(request.params)).not.toMatch(
+        /accessToken|apiKey|credential|pim/i,
+      );
+      (
+        client as unknown as {
+          handleMessage: (rawData: string) => void;
+        }
+      ).handleMessage(
+        JSON.stringify({
+          id: request.id,
+          result: {
+            executionId: "run-1",
+            workflowId: "workflow-1",
+            status: "completed",
+            output: "done",
+            executedNodes: [],
+            error: null,
+          },
+        }),
+      );
+      await expect(pending).resolves.toMatchObject({ executionId: "run-1" });
+    }
+  });
+
   it("does not report connection loss for an intentional close", async () => {
     const onClose = vi.fn();
     const client = new AppServerClient(
@@ -1026,6 +1080,49 @@ describe("app server notifications", () => {
           sourceTurnId: "turn-member",
         }),
       }),
+    ]);
+  });
+
+  it("publishes workflow run updates to local subscribers", () => {
+    const notifications: unknown[] = [];
+    const workflowUpdates: unknown[] = [];
+    const client = new AppServerClient("ws://app-server", (notification) => {
+      notifications.push(notification);
+    });
+    const unsubscribe = client.subscribeWorkflowRunUpdates((notification) => {
+      workflowUpdates.push(notification);
+    });
+
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({
+        method: "workflow/run/updated",
+        params: {
+          cwd: "/repo",
+          filePath: "/repo/.crewon/workflows/workflow.json",
+          reason: "terminalTurnSynced",
+          sourceThreadId: "agent-thread",
+          sourceTurnId: "turn-agent",
+          config: {
+            workflowId: "workflow-1",
+            status: "ready",
+          },
+        },
+      }),
+    );
+    unsubscribe();
+
+    expect(workflowUpdates).toEqual([
+      expect.objectContaining({
+        reason: "terminalTurnSynced",
+        sourceTurnId: "turn-agent",
+      }),
+    ]);
+    expect(notifications).toEqual([
+      expect.objectContaining({ method: "workflow/run/updated" }),
     ]);
   });
 });

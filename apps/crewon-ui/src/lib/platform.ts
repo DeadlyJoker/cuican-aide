@@ -36,7 +36,15 @@ export function detectPlatform(): PlatformKind {
   return "web";
 }
 
+/*
+ * Returns null when there is no DOM. Surface detection now runs during render of
+ * the window chrome, which unit tests mount without a location, and a throw
+ * there would take the whole tree down over a debug-only query parameter.
+ */
 function overrideParam(name: string): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
   return new URLSearchParams(window.location.search).get(name);
 }
 
@@ -70,10 +78,19 @@ export function detectRuntimeSurface(): RuntimeSurface {
     return override;
   }
 
-  // Tauri injects this global into the desktop webview.
-  return "isTauri" in globalThis || "__TAURI_INTERNALS__" in globalThis
-    ? "desktop"
-    : "web";
+  return hasDesktopBridge() ? "desktop" : "web";
+}
+
+/**
+ * Whether Tauri's IPC bridge is actually present, ignoring `?surface=`.
+ *
+ * `detectRuntimeSurface` answers "which chrome should this look like", which the
+ * override is allowed to fake. This answers "can we call into the host", which it
+ * is not: faking it makes every IPC call fail inside the plugin instead.
+ */
+export function hasDesktopBridge(): boolean {
+  // Tauri injects these globals into the desktop webview.
+  return "isTauri" in globalThis || "__TAURI_INTERNALS__" in globalThis;
 }
 
 /**

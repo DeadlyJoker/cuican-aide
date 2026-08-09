@@ -7,6 +7,11 @@ use accounting::GoalAccountingState;
 use crewon_protocol::config_types::ModeKind;
 use crewon_protocol::protocol::TokenUsage;
 use pretty_assertions::assert_eq;
+use serde_json::Value;
+
+const GOAL_RUNTIME_REFERENCE: &str = include_str!(
+    "../../../../packages/test-contracts/fixtures/goal-runtime-semantics.reference.json"
+);
 
 #[test]
 fn goal_accounting_uses_turn_start_baseline_for_exact_deltas() {
@@ -49,6 +54,37 @@ fn goal_accounting_ignores_plan_mode_turns() {
     );
 
     assert_eq!(None, recorded);
+}
+
+#[test]
+fn first_budget_crossing_reports_steering_at_most_once_per_goal() {
+    let reference: Value =
+        serde_json::from_str(GOAL_RUNTIME_REFERENCE).expect("parse Goal runtime reference");
+    let budget_case = reference
+        .pointer("/toolBoundaryCases")
+        .and_then(Value::as_array)
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case.pointer("/id").and_then(Value::as_str) == Some("first-budget-crossing")
+            })
+        })
+        .expect("budget Tool boundary reference");
+    assert_eq!(
+        budget_case
+            .pointer("/budgetSteering/required")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        budget_case
+            .pointer("/budgetSteering/atMostOncePerGoal")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+
+    let accounting = GoalAccountingState::default();
+    assert!(accounting.mark_budget_limit_reported_if_new("goal-reference"));
+    assert!(!accounting.mark_budget_limit_reported_if_new("goal-reference"));
 }
 
 fn token_usage(

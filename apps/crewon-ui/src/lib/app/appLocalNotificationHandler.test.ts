@@ -13,6 +13,10 @@ import type {
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { ActiveFileWatch } from "../file/filePanelActions";
 import { handleLocalAppNotification } from "./appLocalNotificationHandler";
+import {
+  appendTerminalOutputChunk,
+  type TerminalOutputStream,
+} from "../terminal/terminalOutputStream";
 
 beforeEach(() => {
   vi.stubGlobal("window", { atob });
@@ -34,6 +38,7 @@ type CapturedLocalNotificationState = {
   pendingUserInputRequest: PendingUserInputRequest | null;
   selectedThreadId: string | null;
   streamingTextByThread: Record<string, string>;
+  terminalOutput: TerminalOutputStream;
   threads: Thread[];
 };
 
@@ -58,12 +63,24 @@ function handleNotification(
     pendingUserInputRequest: null,
     selectedThreadId: "thread-1",
     streamingTextByThread: {},
+    terminalOutput: {
+      generation: 1,
+      processId: "process-1",
+      text: "",
+    },
     threads: [],
     ...stateOverrides,
   };
 
   const handled = handleLocalAppNotification({
     appendStreamingTextDelta,
+    appendTerminalOutputDelta: (processId, chunk) => {
+      state.terminalOutput = appendTerminalOutputChunk(
+        state.terminalOutput,
+        processId,
+        chunk,
+      );
+    },
     locale: "en",
     notification,
     selectedThreadId: state.selectedThreadId,
@@ -126,11 +143,37 @@ describe("local app notification handler", () => {
     } as AppServerNotification);
 
     expect(handled).toBe(true);
-    expect(state.capabilityPanel).toEqual({
-      title: "Terminal",
-      body: "done",
-      commandInput: true,
+    expect(state.terminalOutput).toEqual({
+      generation: 1,
+      processId: "process-1",
+      text: "done",
     });
+  });
+
+  /*
+   * Terminal output must not touch the shared capability panel: opening any
+   * other workbench surface replaces that panel, which used to silently kill a
+   * live session's output.
+   */
+  it("leaves the capability panel untouched when terminal output arrives", () => {
+    const { state } = handleNotification(
+      {
+        method: "command/exec/outputDelta",
+        params: {
+          processId: "process-1",
+          stream: "stdout",
+          deltaBase64: btoa("done"),
+          capReached: false,
+        },
+      } as AppServerNotification,
+      { capabilityPanel: { title: "Current changes", body: "diff --git" } },
+    );
+
+    expect(state.capabilityPanel).toEqual({
+      title: "Current changes",
+      body: "diff --git",
+    });
+    expect(state.terminalOutput.text).toBe("done");
   });
 
   it("ignores terminal output from another process after marking it handled", () => {
@@ -145,7 +188,7 @@ describe("local app notification handler", () => {
     } as AppServerNotification);
 
     expect(handled).toBe(true);
-    expect(state.capabilityPanel?.body).toBe("Running...");
+    expect(state.terminalOutput.text).toBe("");
   });
 
   it("appends command execution output deltas into the active thread state", () => {

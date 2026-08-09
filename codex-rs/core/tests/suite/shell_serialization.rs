@@ -34,6 +34,24 @@ const FIXTURE_JSON: &str = r#"{
 }
 "#;
 
+fn shell_output_reference() -> Value {
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/shell-tool-output.reference.json"
+    )
+    .expect("resolve AR-014/015 shell output fixture");
+    serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-014/015 shell output fixture"),
+    )
+    .expect("parse AR-014/015 shell output fixture")
+}
+
+fn normalize_wall_time(output: &str) -> String {
+    Regex::new(r"Wall time: [0-9]+(?:\.[0-9]+)? seconds")
+        .expect("compile wall-time normalization regex")
+        .replace(output, "Wall time: 0.25 seconds")
+        .into_owned()
+}
+
 fn shell_responses(call_id: &str, command: Vec<&str>) -> Result<Vec<String>> {
     let command = shlex::try_join(command)?;
     let parameters = json!({
@@ -60,13 +78,18 @@ fn shell_responses(call_id: &str, command: Vec<&str>) -> Result<Vec<String>> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_output_preserves_fixture_json_as_freeform() -> Result<()> {
     skip_if_no_network!(Ok(()));
+    let reference = shell_output_reference();
+    let fixture_output = reference["cases"][0]["output"]
+        .as_str()
+        .expect("AR-014 fixture output");
+    assert_eq!(fixture_output, FIXTURE_JSON);
 
     let server = start_mock_server().await;
     let mut builder = test_crewon().with_model("test-gpt-5-codex");
     let test = builder.build(&server).await?;
 
     let fixture_path = test.cwd.path().join("fixture.json");
-    fs::write(&fixture_path, FIXTURE_JSON)?;
+    fs::write(&fixture_path, fixture_output)?;
     let fixture_path_str = fixture_path.to_string_lossy().to_string();
 
     let call_id = "shell-freeform-fixture";
@@ -101,8 +124,14 @@ async fn shell_output_preserves_fixture_json_as_freeform() -> Result<()> {
         header.trim_end(),
     );
     assert_eq!(
-        body, FIXTURE_JSON,
+        body, fixture_output,
         "expected Output section to include the fixture contents"
+    );
+    assert_eq!(
+        normalize_wall_time(output),
+        reference["cases"][0]["modelVisibleOutput"]
+            .as_str()
+            .expect("AR-014 model-visible output")
     );
 
     Ok(())
@@ -268,13 +297,18 @@ async fn apply_patch_custom_tool_call_reports_failure_output() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_output_is_freeform_for_nonzero_exit() -> Result<()> {
     skip_if_no_network!(Ok(()));
+    let reference = shell_output_reference();
+    let exit_code = reference["cases"][1]["exitCode"]
+        .as_i64()
+        .expect("AR-015 exit code");
 
     let server = start_mock_server().await;
     let mut builder = test_crewon().with_model("gpt-5.4");
     let test = builder.build(&server).await?;
 
     let call_id = "shell-nonzero-exit";
-    let responses = shell_responses(call_id, vec!["/bin/sh", "-c", "exit 42"])?;
+    let command = format!("exit {exit_code}");
+    let responses = shell_responses(call_id, vec!["/bin/sh", "-c", command.as_str()])?;
     let mock = mount_sse_sequence(&server, responses).await;
 
     test.submit_turn_with_permission_profile(
@@ -290,11 +324,19 @@ async fn shell_output_is_freeform_for_nonzero_exit() -> Result<()> {
         .and_then(Value::as_str)
         .expect("shell output string");
 
-    let expected_pattern = r"(?s)^Exit code: 42
+    let expected_pattern = format!(
+        r"(?s)^Exit code: {exit_code}
 Wall time: [0-9]+(?:\.[0-9]+)? seconds
 Output:
-?$";
-    assert_regex_match(expected_pattern, output);
+?$"
+    );
+    assert_regex_match(&expected_pattern, output);
+    assert_eq!(
+        normalize_wall_time(output),
+        reference["cases"][1]["modelVisibleOutput"]
+            .as_str()
+            .expect("AR-015 model-visible output")
+    );
 
     Ok(())
 }

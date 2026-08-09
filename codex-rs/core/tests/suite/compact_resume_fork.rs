@@ -134,6 +134,16 @@ async fn compact_resume_and_fork_preserve_model_history_view() {
         return;
     }
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/legacy-rollout-resume-fork.reference.json"
+    )
+    .expect("resolve AR-026/027 legacy rollout fixture");
+    let reference: Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-026/027 legacy rollout fixture"),
+    )
+    .expect("parse AR-026/027 legacy rollout fixture");
+    let expected_views = &reference["expected"]["userTextViews"];
+
     // 1. Arrange mocked SSE responses for the initial compact/resume/fork flow.
     let server = MockServer::start().await;
     let request_log = mount_initial_flow(&server).await;
@@ -278,7 +288,31 @@ async fn compact_resume_and_fork_preserve_model_history_view() {
             assert_eq!(chunk, seeded_user_prefix);
         }
     }
+    assert_relevant_user_view(
+        &json_message_input_texts(&requests[2], "user"),
+        &expected_views["afterCompact"],
+    );
+    assert_relevant_user_view(
+        &json_message_input_texts(&requests[3], "user"),
+        &expected_views["afterResume"],
+    );
+    assert_relevant_user_view(&after_fork_user_texts, &expected_views["afterFork"]);
     assert_eq!(requests.len(), 5);
+}
+
+fn assert_relevant_user_view(actual: &[String], expected: &Value) {
+    let expected = expected
+        .as_array()
+        .expect("fixture user text view")
+        .iter()
+        .map(|value| value.as_str().expect("fixture user text").to_string())
+        .collect::<Vec<_>>();
+    let relevant = actual
+        .iter()
+        .filter(|value| expected.contains(value))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(relevant, expected);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

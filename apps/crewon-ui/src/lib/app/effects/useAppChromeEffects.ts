@@ -5,6 +5,7 @@ import {
   closeCrampedInspectorAction,
   closeInspectorFromOutsideTargetAction,
 } from "../appViewActions";
+import { observeWindowCornerState } from "../../desktop/windowCornerState";
 
 export type AppChromeEffectsParams = {
   capabilityDockOpen: boolean;
@@ -26,6 +27,10 @@ export function useAppChromeEffects({
   shouldAutoCloseInspector,
   sidebarOpen,
 }: AppChromeEffectsParams) {
+  // The undecorated window draws its own corners, so the shells need to know
+  // when there is no exposed corner left to round.
+  useEffect(() => observeWindowCornerState(), []);
+
   useEffect(() => {
     if (!sidebarOpen && !inspectorOpen) {
       return;

@@ -1,5 +1,3 @@
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
-
 import type { AppServerNotification } from "../app-server/appServer";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import { panelHasField } from "../shared/panelState";
@@ -12,7 +10,7 @@ export type ThreadNotificationHandlerParams = {
   refreshThread: (threadId: string) => void;
   reloadThreads: () => void;
   selectedThreadId: string | null;
-  setThreadGoal: (goal: ThreadGoal | null) => void;
+  setThreadGoal: (goal: null) => void;
 };
 
 export function handleThreadAppNotification({

@@ -26,6 +26,8 @@ members = [
     "connectors",
     "config",
     "context-fragments",
+    "device",
+    "device-protocol",
     "shell-command",
     "shell-escalation",
     "skills",
@@ -156,6 +158,8 @@ crewon-core = { path = "core" }
 crewon-core-api = { path = "core-api" }
 crewon-core-plugins = { path = "core-plugins" }
 crewon-core-skills = { path = "core-skills" }
+crewon-device = { path = "device" }
+crewon-device-protocol = { path = "device-protocol" }
 crewon-file-system = { path = "file-system" }
 crewon-exec-server = { path = "exec-server" }
 crewon-execpolicy = { path = "execpolicy" }

@@ -52,6 +52,42 @@ fn office_turn_from_error_status_becomes_failed_turn() {
 }
 
 #[test]
+fn workflow_terminal_turn_preserves_failed_event_over_completed_history() {
+    let failed = office_turn_from_agent_status("turn-1", &AgentStatus::Errored("boom".to_string()));
+    let completed = office_turn_from_agent_status(
+        "turn-1",
+        &AgentStatus::Completed(Some("incorrect success".to_string())),
+    );
+
+    let got = workflow_terminal_turn_from_sources(
+        failed.clone(),
+        Some(completed),
+        &AgentStatus::Completed(Some("incorrect success".to_string())),
+    );
+
+    assert_eq!(got, failed);
+}
+
+#[test]
+fn workflow_terminal_turn_uses_error_status_over_completed_event() {
+    let completed = office_turn_from_agent_status(
+        "turn-1",
+        &AgentStatus::Completed(Some("incorrect success".to_string())),
+    );
+
+    let got = workflow_terminal_turn_from_sources(
+        completed.clone(),
+        Some(completed),
+        &AgentStatus::Errored("boom".to_string()),
+    );
+
+    assert_eq!(
+        got,
+        office_turn_from_agent_status("turn-1", &AgentStatus::Errored("boom".to_string()))
+    );
+}
+
+#[test]
 fn office_status_fallback_waits_for_target_turn_to_appear() {
     let got = office_status_fallback_ready(
         &AgentStatus::Completed(Some("previous turn".to_string())),

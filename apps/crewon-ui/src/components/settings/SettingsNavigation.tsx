@@ -73,11 +73,8 @@ export function SettingsNavigation({
 
   return (
     <aside className="settings-sidebar" aria-label={copy.title}>
-      <div className="settings-traffic" aria-hidden="true">
-        <span className="dot close" />
-        <span className="dot min" />
-        <span className="dot max" />
-      </div>
+      {/* Window controls come from the global DesktopWindowFrame. */}
+      <div className="settings-traffic" aria-hidden="true" />
       <button className="settings-back-button" type="button" onClick={onBack}>
         <ArrowLeft size={13} />
         <span>{copy.back}</span>

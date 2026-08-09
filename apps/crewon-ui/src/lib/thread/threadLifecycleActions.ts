@@ -22,15 +22,19 @@ import {
 } from "./threadSettingsPanel";
 import { upsertThread } from "./threadModel";
 
-export type ThreadLifecycleAction = "compact" | "memoryDisabled" | "memoryEnabled" | "rollback";
+export type ThreadLifecycleAction =
+  | "compact"
+  | "memoryDisabled"
+  | "memoryEnabled"
+  | "rollback";
 
 type ThreadMemoryMode = "disabled" | "enabled";
 
-type ThreadLifecycleClient = {
+export type ThreadLifecycleClient = {
   compactThread(threadId: string): Promise<void>;
   readThread(threadId: string): Promise<Thread>;
   rollbackThread(threadId: string, numTurns?: number): Promise<Thread>;
-  setThreadMemoryMode(threadId: string, mode: ThreadMemoryMode): Promise<void>;
+  setThreadMemoryMode?(threadId: string, mode: ThreadMemoryMode): Promise<void>;
 };
 
 type SetCapabilityPanel = (
@@ -115,8 +119,9 @@ function compactThread(params: ThreadLifecycleActionHandlersParams) {
     );
 
     try {
-      await client?.compactThread(threadId);
-      const thread = await client?.readThread(threadId);
+      if (!client) throw new Error("thread_compaction_unavailable");
+      await client.compactThread(threadId);
+      const thread = await client.readThread(threadId);
       if (thread) {
         setThreads((current) => upsertThread(current, thread));
       }
@@ -171,7 +176,8 @@ function rollbackThread(params: ThreadLifecycleActionHandlersParams) {
     );
 
     try {
-      const thread = await client?.rollbackThread(threadId, 1);
+      if (!client) throw new Error("thread_rollback_unavailable");
+      const thread = await client.rollbackThread(threadId, 1);
       if (thread) {
         setThreads((current) => upsertThread(current, thread));
       }
@@ -226,7 +232,10 @@ function setThreadMemory(
     );
 
     try {
-      await client?.setThreadMemoryMode(threadId, mode);
+      if (!client?.setThreadMemoryMode) {
+        throw new Error("thread_memory_mode_not_supported");
+      }
+      await client.setThreadMemoryMode(threadId, mode);
       setCapabilityPanel((currentPanel) =>
         threadMemorySuccessPanel(currentPanel, mode, locale),
       );

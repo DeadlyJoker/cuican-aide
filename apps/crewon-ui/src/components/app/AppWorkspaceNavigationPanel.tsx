@@ -77,6 +77,7 @@ export function AppWorkspaceNavigationPanel({
       loadingThreadsLabel={t.loadingThreads}
       locale={locale}
       newThreadLabel={t.newThread}
+      platform={platform}
       newThreadShortcutLabel={newThreadShortcutLabel}
       noThreadsFoundLabel={t.noThreadsFound}
       renameThreadLabel={locale === "zh" ? "重命名会话" : "Rename session"}

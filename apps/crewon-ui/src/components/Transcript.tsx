@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type MutableRefObject,
-} from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { ArrowDown, Code2, ListTree, Sparkles, Terminal } from "lucide-react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
@@ -98,9 +93,8 @@ function isAgentMessageItem(item: ThreadItem): item is AgentMessageItem {
 function finalAgentMessageForTurn(turn: Turn): FinalAgentMessageRender | null {
   const agentEntries = turn.items
     .map((item, index) => ({ item, index }))
-    .filter(
-      (entry): entry is { item: AgentMessageItem; index: number } =>
-        isAgentMessageItem(entry.item),
+    .filter((entry): entry is { item: AgentMessageItem; index: number } =>
+      isAgentMessageItem(entry.item),
     );
 
   if (agentEntries.length === 0) {
@@ -141,7 +135,7 @@ function isTurnProcessSourceItem(
   item: ThreadItem,
   finalAgentSourceIds: Set<string>,
 ): boolean {
-  if (item.type === "userMessage") {
+  if (item.type === "userMessage" || item.type === "plan") {
     return false;
   }
 
@@ -363,7 +357,9 @@ function turnDurationLabel(durationMs: number | null): string | null {
   return parts.filter(Boolean).join(" ");
 }
 
-function processActionStatus(item: ThreadItem): "completed" | "failed" | "inProgress" {
+function processActionStatus(
+  item: ThreadItem,
+): "completed" | "failed" | "inProgress" {
   switch (item.type) {
     case "commandExecution":
     case "fileChange":
@@ -847,7 +843,12 @@ export function Transcript({
           <h1>{emptyTitle}</h1>
           <p>{emptyDescription}</p>
           <div className="mode-switch" aria-label={modeTitleLabel}>
-            <button type="button" aria-pressed={mode === "code"} data-active={mode === "code"} onClick={() => onModeChange("code")}>
+            <button
+              type="button"
+              aria-pressed={mode === "code"}
+              data-active={mode === "code"}
+              onClick={() => onModeChange("code")}
+            >
               <Code2 size={15} />
               {modeCodeLabel}
             </button>
@@ -861,7 +862,9 @@ export function Transcript({
               {modeOfficeLabel}
             </button>
           </div>
-          <div className="mode-description">{mode === "code" ? modeCodeDescription : modeOfficeDescription}</div>
+          <div className="mode-description">
+            {mode === "code" ? modeCodeDescription : modeOfficeDescription}
+          </div>
         </div>
       </main>
     );
@@ -869,9 +872,19 @@ export function Transcript({
 
   return (
     <main className="transcript">
-      <div className="message-list" role="log" aria-busy={Boolean(streamingText) || shouldShowThinking} aria-live="polite" aria-relevant="additions text">
+      <div
+        className="message-list"
+        role="log"
+        aria-busy={Boolean(streamingText) || shouldShowThinking}
+        aria-live="polite"
+        aria-relevant="additions text"
+      >
         {items.length === 0 && !streamingText && !shouldShowThinking ? (
-          <div className="message-empty-state" aria-label={`${emptyThreadTitle}. ${emptyThreadDescription}`} role="status">
+          <div
+            className="message-empty-state"
+            aria-label={`${emptyThreadTitle}. ${emptyThreadDescription}`}
+            role="status"
+          >
             <span className="message-empty-icon" aria-hidden="true">
               <Sparkles size={18} />
             </span>
@@ -881,11 +894,16 @@ export function Transcript({
         ) : null}
         {thread.turns.map((turn, turnIndex) => {
           const durationLabel = turnDurationLabel(turn.durationMs);
-          const dividerDetailLabel = durationLabel ?? turnTimeLabel(turn, locale);
+          const dividerDetailLabel =
+            durationLabel ?? turnTimeLabel(turn, locale);
           const dividerLabel = turnLabel(turn, locale);
           const finalAgentMessage = finalAgentMessageForTurn(turn);
-          const finalAgentSourceIds = finalAgentMessage?.sourceIds ?? new Set<string>();
-          const processRender = turnProcessRenderItems(turn, finalAgentSourceIds);
+          const finalAgentSourceIds =
+            finalAgentMessage?.sourceIds ?? new Set<string>();
+          const processRender = turnProcessRenderItems(
+            turn,
+            finalAgentSourceIds,
+          );
           const processItems = processRender.items;
           const firstProcessIndex = processRender.firstIndex;
           const processGroup =

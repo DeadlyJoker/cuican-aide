@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "crewon.legacy-rollout-reference.v0",
+  "caseIds": [
+    "AR-026-resume-rollout-history",
+    "AR-027-compact-resume-fork-model-view"
+  ],
+  "rollout": [
+    {
+      "timestamp": "2026-01-02T03:04:05Z",
+      "type": "session_meta",
+      "payload": {
+        "id": "019b7a8f-8e88-72db-a08a-4929c0d4fe71",
+        "timestamp": "2026-01-02T03:04:05Z",
+        "cwd": "/workspace",
+        "originator": "crewon",
+        "client_version": "0.0.0",
+        "source": "legacy_cli"
+      }
+    },
+    {
+      "timestamp": "2026-01-02T03:04:06Z",
+      "type": "response_item",
+      "payload": {
+        "type": "message",
+        "role": "user",
+        "content": [{ "type": "input_text", "text": "hello world" }]
+      }
+    },
+    {
+      "timestamp": "2026-01-02T03:04:06Z",
+      "type": "event_msg",
+      "payload": {
+        "type": "user_message",
+        "message": "hello world",
+        "text_elements": [],
+        "local_images": []
+      }
+    },
+    {
+      "timestamp": "2026-01-02T03:04:07Z",
+      "type": "response_item",
+      "payload": {
+        "type": "message",
+        "role": "assistant",
+        "content": [{ "type": "output_text", "text": "first answer" }]
+      }
+    },
+    {
+      "timestamp": "2026-01-02T03:04:07Z",
+      "type": "event_msg",
+      "payload": {
+        "type": "agent_message",
+        "message": "first answer"
+      }
+    },
+    {
+      "timestamp": "2026-01-02T03:04:08Z",
+      "type": "compacted",
+      "payload": {
+        "message": "SUMMARY_ONLY_CONTEXT",
+        "replacement_history": [
+          {
+            "type": "message",
+            "role": "user",
+            "content": [{ "type": "input_text", "text": "hello world" }]
+          },
+          {
+            "type": "message",
+            "role": "user",
+            "content": [
+              { "type": "input_text", "text": "SUMMARY_ONLY_CONTEXT" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-01-02T03:04:09Z",
+      "type": "response_item",
+      "payload": {
+        "type": "message",
+        "role": "user",
+        "content": [{ "type": "input_text", "text": "AFTER_COMPACT" }]
+      }
+    },
+    {
+      "timestamp": "2026-01-02T03:04:09Z",
+      "type": "event_msg",
+      "payload": {
+        "type": "user_message",
+        "message": "AFTER_COMPACT",
+        "text_elements": [],
+        "local_images": []
+      }
+    },
+    {
+      "timestamp": "2026-01-02T03:04:10Z",
+      "type": "response_item",
+      "payload": {
+        "type": "message",
+        "role": "assistant",
+        "content": [{ "type": "output_text", "text": "after compact answer" }]
+      }
+    },
+    {
+      "timestamp": "2026-01-02T03:04:10Z",
+      "type": "event_msg",
+      "payload": {
+        "type": "agent_message",
+        "message": "after compact answer"
+      }
+    }
+  ],
+  "expected": {
+    "initialMessages": [
+      { "role": "user", "content": "hello world" },
+      { "role": "assistant", "content": "first answer" },
+      { "role": "user", "content": "AFTER_COMPACT" },
+      { "role": "assistant", "content": "after compact answer" }
+    ],
+    "importedModelView": [
+      { "type": "message", "role": "user", "content": "hello world" },
+      {
+        "type": "message",
+        "role": "user",
+        "content": "Another language model started to solve this problem and produced a summary of its thinking process. You also have access to the state of the tools that were used by that language model. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model, use the information in this summary to assist with your own analysis:\nSUMMARY_ONLY_CONTEXT"
+      },
+      { "type": "message", "role": "user", "content": "AFTER_COMPACT" },
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": "after compact answer"
+      }
+    ],
+    "userTextViews": {
+      "afterCompact": [
+        "hello world",
+        "Another language model started to solve this problem and produced a summary of its thinking process. You also have access to the state of the tools that were used by that language model. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model, use the information in this summary to assist with your own analysis:\nSUMMARY_ONLY_CONTEXT",
+        "AFTER_COMPACT"
+      ],
+      "afterResume": [
+        "hello world",
+        "Another language model started to solve this problem and produced a summary of its thinking process. You also have access to the state of the tools that were used by that language model. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model, use the information in this summary to assist with your own analysis:\nSUMMARY_ONLY_CONTEXT",
+        "AFTER_COMPACT",
+        "AFTER_RESUME"
+      ],
+      "afterFork": [
+        "hello world",
+        "Another language model started to solve this problem and produced a summary of its thinking process. You also have access to the state of the tools that were used by that language model. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model, use the information in this summary to assist with your own analysis:\nSUMMARY_ONLY_CONTEXT",
+        "AFTER_COMPACT",
+        "AFTER_FORK"
+      ]
+    },
+    "forkThroughHistorySequence": 5
+  }
+}

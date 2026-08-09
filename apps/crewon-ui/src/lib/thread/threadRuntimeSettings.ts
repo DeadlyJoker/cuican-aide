@@ -17,10 +17,21 @@ export type CommandComposerPermission =
 
 export type CommandExecutionIntent = "goal" | "none" | "plan";
 
+export type CommandModelReasoningEffort = {
+  description?: string;
+  value: string;
+};
+
 export type CommandModelOption = {
+  defaultReasoningEffort?: string;
   detail?: string;
   isDefault?: boolean;
   label: string;
+  /**
+   * Efforts the backend catalog reports for this model, in catalog order. Empty
+   * or absent when the model exposes no effort choice.
+   */
+  reasoningEfforts?: CommandModelReasoningEffort[];
   value: string;
 };
 
@@ -80,14 +91,24 @@ export function commandModelOptionsFromModels(
         return [];
       }
       seen.add(model.model);
+      const reasoningEfforts = model.supportedReasoningEfforts.map(
+        (effort) => ({
+          ...(effort.description ? { description: effort.description } : {}),
+          value: effort.reasoningEffort,
+        }),
+      );
       return [
         {
+          ...(model.defaultReasoningEffort
+            ? { defaultReasoningEffort: model.defaultReasoningEffort }
+            : {}),
           detail:
             model.displayName && model.displayName !== model.model
               ? model.displayName
               : undefined,
           isDefault: model.isDefault,
           label: model.model,
+          ...(reasoningEfforts.length ? { reasoningEfforts } : {}),
           value: model.model,
         },
       ];

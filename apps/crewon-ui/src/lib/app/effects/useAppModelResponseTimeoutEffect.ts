@@ -12,7 +12,7 @@ type StateSetter<T> = (updater: (current: T) => T) => void;
 
 export type AppModelResponseTimeoutEffectParams = {
   activeTurnId: string | null;
-  client: AppServerClient | null;
+  client: Pick<AppServerClient, "interruptTurn"> | null;
   isConnected: boolean;
   locale: Locale;
   selectedThread: Thread | null;
@@ -69,7 +69,9 @@ export function useAppModelResponseTimeoutEffect({
           turnId: activeTurnId,
         }),
       );
-      void client?.interruptTurn(selectedThreadId, activeTurnId).catch(() => undefined);
+      void client
+        ?.interruptTurn(selectedThreadId, activeTurnId)
+        .catch(() => undefined);
     }, delayMs);
 
     return () => window.clearTimeout(timeoutId);

@@ -2890,6 +2890,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "crewon-device"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "crewon-device-protocol",
+ "crewon-utils-cargo-bin",
+ "ed25519-dalek",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "crewon-device-protocol"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "crewon-utils-cargo-bin",
+ "ed25519-dalek",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "crewon-exec-server"
 version = "0.0.0"
 dependencies = [
@@ -3432,6 +3463,7 @@ dependencies = [
  "crewon-response-debug-context",
  "http 1.4.2",
  "pretty_assertions",
+ "serde",
  "serde_json",
  "tokio",
  "tracing",

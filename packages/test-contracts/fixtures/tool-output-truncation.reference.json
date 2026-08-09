@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-016-tool-output-truncation",
+  "expectations": {
+    "plainText": true,
+    "containsTruncationMarker": true,
+    "preservesHead": true,
+    "preservesTail": true,
+    "modelVisibleBytesAtMost": 40100
+  }
+}

@@ -1,9 +1,12 @@
 import { Minus, Square, X } from "lucide-react";
-import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { Locale } from "../lib/i18n";
-import type { PlatformKind } from "../lib/platform";
+import {
+  detectRuntimeSurface,
+  hasDesktopBridge,
+  type PlatformKind,
+} from "../lib/platform";
 
 type WindowControlAction = "close" | "minimize" | "zoom";
 type ControlledWindow = Pick<
@@ -25,6 +28,56 @@ export function invokeWindowControl(
   }
 }
 
+/*
+ * macOS paints a glyph inside each light while the pointer is anywhere over the
+ * group, so the lights read as buttons rather than decoration. The paths are
+ * drawn in a 12x12 box to match the light itself; CSS owns the reveal.
+ */
+const macGlyphPaths: Record<WindowControlAction, string> = {
+  close: "M4 4 8 8 M8 4 4 8",
+  minimize: "M3.6 6 H8.4",
+  zoom: "M6 3.6 V8.4 M3.6 6 H8.4",
+};
+
+const macOrder: readonly WindowControlAction[] = ["close", "minimize", "zoom"];
+const windowsOrder: readonly WindowControlAction[] = [
+  "minimize",
+  "zoom",
+  "close",
+];
+const windowsIcons: Record<WindowControlAction, typeof Minus> = {
+  close: X,
+  minimize: Minus,
+  zoom: Square,
+};
+
+function controlLabels(locale: Locale): Record<
+  WindowControlAction | "group",
+  string
+> {
+  return locale === "zh"
+    ? {
+        close: "关闭窗口",
+        group: "窗口控制",
+        minimize: "最小化窗口",
+        zoom: "缩放窗口",
+      }
+    : {
+        close: "Close window",
+        group: "Window controls",
+        minimize: "Minimize window",
+        zoom: "Zoom window",
+      };
+}
+
+/**
+ * The one window-control surface. Every shell (title bar, command sidebar,
+ * settings sidebar) renders this so macOS and Windows stay consistent instead of
+ * each screen hardcoding its own three dots.
+ *
+ * Outside the desktop runtime the same markup renders disabled, so one set of
+ * styles covers both cases.
+ */
 export function TitleBarWindowControls({
   desktopOnly = false,
   locale = "zh",
@@ -36,146 +89,111 @@ export function TitleBarWindowControls({
   platform: PlatformKind;
   variant?: "command" | "titlebar";
 }) {
-  const desktopRuntime = isTauri();
-  if (!desktopRuntime) {
-    if (desktopOnly) {
-      return null;
-    }
+  /*
+   * Keyed to the runtime surface, not `isTauri()`, so `?surface=desktop` renders
+   * the live chrome in a browser. The Tauri call itself stays guarded in
+   * `runAction`: there is a window to *draw* here, but not always one to move.
+   */
+  const interactive = detectRuntimeSurface() === "desktop";
+  if (!interactive && desktopOnly) {
+    return null;
+  }
 
+  /*
+   * `web` means "neither macOS nor Windows": a browser tab has no window to
+   * control, so it only reserves the space the title bar grid expects. Inside
+   * the desktop runtime there *is* a window, and it needs a control set, so the
+   * host OS decides which one.
+   */
+  if (platform === "web" && !interactive) {
     return (
       <div className="window-controls" aria-hidden="true">
-        {platform === "mac" ? (
-          <>
-            <span className="traffic-light close" />
-            <span className="traffic-light minimize" />
-            <span className="traffic-light zoom" />
-          </>
-        ) : platform === "windows" ? (
-          <>
-            <button className="window-button" type="button" tabIndex={-1}>
-              <Minus size={14} />
-            </button>
-            <button className="window-button" type="button" tabIndex={-1}>
-              <Square size={12} />
-            </button>
-            <button
-              className="window-button close-button"
-              type="button"
-              tabIndex={-1}
-            >
-              <X size={14} />
-            </button>
-          </>
-        ) : (
-          <span className="web-window-spacer" />
-        )}
+        <span className="web-window-spacer" />
       </div>
     );
   }
-
-  const resolvedPlatform: PlatformKind =
+  const resolvedPlatform =
     platform === "web"
-      ? navigator.userAgent.toLowerCase().includes("win")
-        ? "windows"
-        : "mac"
+      ? navigator.userAgent.toLowerCase().includes("mac")
+        ? "mac"
+        : "windows"
       : platform;
 
-  const labels =
-    locale === "zh"
-      ? {
-          close: "关闭窗口",
-          minimize: "最小化窗口",
-          zoom: "缩放窗口",
-          group: "窗口控制",
-        }
-      : {
-          close: "Close window",
-          minimize: "Minimize window",
-          zoom: "Zoom window",
-          group: "Window controls",
-        };
-  const className =
-    variant === "command" ? "window-controls traffic" : "window-controls";
+  const labels = controlLabels(locale);
   const runAction = (action: WindowControlAction) => {
+    // `?surface=desktop` in a browser draws the chrome but has no window behind
+    // it, so the call itself has to check for the real bridge.
+    if (!hasDesktopBridge()) {
+      return;
+    }
     void invokeWindowControl(action).catch((error: unknown) => {
       console.error(`Failed to ${action} the desktop window`, error);
     });
   };
 
+  /*
+   * Only macOS gets traffic lights. Windows and Linux both get the square
+   * button row, which is why this is a single check rather than a per-OS
+   * lookup: "not mac" is the whole rule.
+   */
+  const isMac = resolvedPlatform === "mac";
+  const order = isMac ? macOrder : windowsOrder;
+
   return (
     <div
-      aria-label={labels.group}
-      className={className}
-      data-window-controls={variant === "command" ? "native" : undefined}
-      role="group"
+      aria-hidden={interactive ? undefined : true}
+      aria-label={interactive ? labels.group : undefined}
+      className={variant === "command" ? "window-controls traffic" : "window-controls"}
+      data-window-controls={interactive ? "native" : "static"}
+      data-window-platform={isMac ? "mac" : "windows"}
+      role={interactive ? "group" : undefined}
     >
-      {resolvedPlatform === "mac" ? (
-        <>
+      {order.map((action) => {
+        const Icon = windowsIcons[action];
+        return isMac ? (
           <button
-            aria-label={labels.close}
-            className="traffic-light close"
-            data-window-action="close"
-            title={labels.close}
+            key={action}
+            aria-label={labels[action]}
+            className={`traffic-light ${action}`}
+            data-window-action={action}
+            disabled={!interactive}
+            tabIndex={interactive ? undefined : -1}
+            title={labels[action]}
             type="button"
-            onClick={() => runAction("close")}
-          />
-          <button
-            aria-label={labels.minimize}
-            className="traffic-light minimize"
-            data-window-action="minimize"
-            title={labels.minimize}
-            type="button"
-            onClick={() => runAction("minimize")}
-          />
-          <button
-            aria-label={labels.zoom}
-            className="traffic-light zoom"
-            data-window-action="zoom"
-            title={labels.zoom}
-            type="button"
-            onClick={() => runAction("zoom")}
-          />
-        </>
-      ) : resolvedPlatform === "windows" ? (
-        <>
-          <button
-            aria-label={labels.minimize}
-            className="window-button"
-            data-window-action="minimize"
-            title={labels.minimize}
-            type="button"
-            onClick={() => runAction("minimize")}
+            onClick={interactive ? () => runAction(action) : undefined}
           >
-            <Minus size={14} />
+            <svg
+              aria-hidden="true"
+              className="traffic-light-glyph"
+              viewBox="0 0 12 12"
+            >
+              <path d={macGlyphPaths[action]} />
+            </svg>
           </button>
+        ) : (
           <button
-            aria-label={labels.zoom}
-            className="window-button"
-            data-window-action="zoom"
-            title={labels.zoom}
+            key={action}
+            aria-label={labels[action]}
+            className={
+              action === "close" ? "window-button close-button" : "window-button"
+            }
+            data-window-action={action}
+            disabled={!interactive}
+            tabIndex={interactive ? undefined : -1}
+            title={labels[action]}
             type="button"
-            onClick={() => runAction("zoom")}
+            onClick={interactive ? () => runAction(action) : undefined}
           >
-            <Square size={12} />
+            <Icon size={action === "zoom" ? 12 : 14} />
           </button>
-          <button
-            aria-label={labels.close}
-            className="window-button close-button"
-            data-window-action="close"
-            title={labels.close}
-            type="button"
-            onClick={() => runAction("close")}
-          >
-            <X size={14} />
-          </button>
-        </>
-      ) : null}
+        );
+      })}
     </div>
   );
 }
 
 export function DesktopWindowDragRegion() {
-  if (!isTauri()) {
+  if (detectRuntimeSurface() !== "desktop") {
     return null;
   }
 

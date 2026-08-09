@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-013-unknown-custom-tool",
+  "events": [
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 1,
+      "type": "tool.requested",
+      "identity": { "turnSlot": "first" },
+      "data": {
+        "callId": "custom-unsupported",
+        "kind": "custom",
+        "name": "unsupported_tool",
+        "input": "\"payload\""
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 2,
+      "type": "tool.completed",
+      "identity": { "turnSlot": "first" },
+      "data": {
+        "callId": "custom-unsupported",
+        "kind": "custom",
+        "name": "unsupported_tool",
+        "output": "unsupported custom tool call: unsupported_tool",
+        "isError": true,
+        "artifactRef": null,
+        "outputTruncated": false
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 3,
+      "type": "turn.completed",
+      "identity": { "turnSlot": "first" },
+      "data": { "output": "done" }
+    }
+  ],
+  "followupInput": [
+    {
+      "type": "tool_call",
+      "kind": "custom",
+      "callId": "custom-unsupported",
+      "name": "unsupported_tool",
+      "input": "\"payload\""
+    },
+    {
+      "type": "tool_result",
+      "kind": "custom",
+      "callId": "custom-unsupported",
+      "output": "unsupported custom tool call: unsupported_tool"
+    }
+  ],
+  "finalState": {
+    "status": "completed",
+    "requestCount": 2,
+    "toolInvocationCount": 1,
+    "finalOutput": "done"
+  }
+}

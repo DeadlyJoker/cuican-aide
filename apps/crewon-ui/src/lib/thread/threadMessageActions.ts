@@ -39,7 +39,6 @@ type ActiveTurnByThreadSetter = (
 type ThreadListSetter = (updater: (current: Thread[]) => Thread[]) => void;
 
 type ThreadMessageClient = {
-  clearThreadGoal?(threadId: string): Promise<unknown>;
   interruptTurn(threadId: string, turnId: string): Promise<unknown>;
   readThread?(threadId: string): Promise<Thread>;
   resumeThread(threadId: string): Promise<Thread>;
@@ -69,11 +68,6 @@ type ThreadMessageClient = {
     threadId: string,
     target?: ReviewTarget,
   ): Promise<ReviewStartResponse>;
-  setThreadGoal?(
-    threadId: string,
-    objective: string,
-    tokenBudget: number | null,
-  ): Promise<unknown>;
   steerTurn(
     threadId: string,
     text: string,
@@ -135,13 +129,11 @@ export type SendMessageActionParams = {
   client:
     | Pick<
         ThreadMessageClient,
-        | "clearThreadGoal"
         | "readThread"
         | "resumeThread"
         | "startReview"
         | "startTurn"
         | "steerTurn"
-        | "setThreadGoal"
         | "updateThreadSettings"
       >
     | null
@@ -152,6 +144,11 @@ export type SendMessageActionParams = {
   isDemoPreview: boolean;
   isSending: boolean;
   locale: Locale;
+  /**
+   * Called only after startTurn atomically commits a Goal or Plan intent.
+   * App wiring should compare-and-clear the matching visible composer choice.
+   */
+  onExecutionIntentCommitted?: (intent: "goal" | "plan") => void;
   pendingComposerMentions: PendingComposerMention[];
   preserveThreadsAfterConnectionLoss: () => void;
   selectedThread: Thread | null;
@@ -311,6 +308,7 @@ export async function sendMessageAction({
   isDemoPreview,
   isSending,
   locale,
+  onExecutionIntentCommitted,
   pendingComposerMentions,
   preserveThreadsAfterConnectionLoss,
   selectedThread,
@@ -399,11 +397,6 @@ export async function sendMessageAction({
 
     const turnThreadId = (resumedThread ?? activeThread).id;
     failedThreadId = turnThreadId;
-    if (threadSettings?.executionIntent === "goal") {
-      await client?.setThreadGoal?.(turnThreadId, text, null);
-    } else if (threadSettings?.executionIntent === "plan") {
-      await client?.clearThreadGoal?.(turnThreadId);
-    }
     if (threadSettings && !createdThreadForMessage) {
       await client?.updateThreadSettings?.(turnThreadId, threadSettings);
     }
@@ -440,6 +433,10 @@ export async function sendMessageAction({
       images,
     );
     if (response) {
+      const committedIntent = threadSettings?.executionIntent;
+      if (committedIntent === "goal" || committedIntent === "plan") {
+        onExecutionIntentCommitted?.(committedIntent);
+      }
       setPendingComposerMentions([]);
       setThreads((current) =>
         upsertTurnInThread(current, turnThreadId, response.turn),

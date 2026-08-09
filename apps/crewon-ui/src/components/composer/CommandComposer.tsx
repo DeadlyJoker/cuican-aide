@@ -19,15 +19,22 @@ export type CommandComposerSelectOption<TValue extends string = string> = {
 };
 
 export function CommandComposerSelect<TValue extends string>({
+  activeValues,
   ariaLabel,
   className,
   disabled = false,
   groups,
   icon,
   options,
+  triggerLabel,
   value,
   onChange,
 }: {
+  /**
+   * Values to mark as selected when one menu drives more than one setting, for
+   * example a model paired with its reasoning effort. Defaults to `value`.
+   */
+  activeValues?: TValue[];
   ariaLabel: string;
   className: string;
   disabled?: boolean;
@@ -38,6 +45,8 @@ export function CommandComposerSelect<TValue extends string>({
   groups?: Array<{ id: string; label: string }>;
   icon?: ReactNode;
   options: CommandComposerSelectOption<TValue>[];
+  /** Overrides the trigger text when it summarizes several selections. */
+  triggerLabel?: string;
   value: TValue;
   onChange: (value: TValue) => void;
 }) {
@@ -46,6 +55,7 @@ export function CommandComposerSelect<TValue extends string>({
   const [open, setOpen] = useState(false);
   const selectedOption =
     options.find((option) => option.value === value) ?? options[0];
+  const selectedValues = activeValues ?? [value];
   // One unlabelled section when the caller declares no groups, so the flat menu
   // and the grouped menu render through the same path.
   const sections = composerSelectSections(options, groups ?? []);
@@ -54,7 +64,7 @@ export function CommandComposerSelect<TValue extends string>({
     return (
       <button
         key={option.value}
-        aria-selected={option.value === value}
+        aria-selected={selectedValues.includes(option.value)}
         className="select-option"
         data-tone={option.tone ?? "normal"}
         data-value={option.value}
@@ -104,6 +114,7 @@ export function CommandComposerSelect<TValue extends string>({
       ref={rootRef}
       className={`control-select ${className}`}
       data-open={open ? "true" : "false"}
+      data-selected-tone={selectedOption?.tone ?? "normal"}
     >
       <span className="visually-hidden">{ariaLabel}</span>
       <button
@@ -117,7 +128,7 @@ export function CommandComposerSelect<TValue extends string>({
         onClick={() => setOpen((current) => !current)}
       >
         {icon}
-        {selectedOption?.label ?? value}
+        {triggerLabel ?? selectedOption?.label ?? value}
       </button>
       <div className="select-menu" hidden={!open} id={menuId} role="listbox">
         {sections.map((section) => (

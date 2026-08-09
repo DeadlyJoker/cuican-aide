@@ -1,7 +1,7 @@
 import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse";
 import type { ConfigRequirementsReadResponse } from "@crewon-protocol/v2/ConfigRequirementsReadResponse";
 import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
@@ -36,7 +36,7 @@ export type OpenThreadSettingsPanelActionParams = {
   resolveBackendCwd: () => Promise<string | null | undefined>;
   setCapabilityDockOpen: (open: boolean) => void;
   setCapabilityPanel: SetCapabilityPanel;
-  threadGoal: ThreadGoal | null;
+  threadGoal: ThreadGoalView | null;
 };
 
 export async function openThreadSettingsPanelAction(

@@ -12,10 +12,19 @@
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
     "baseUrl": ".",
+    "types": [],
+    "typeRoots": ["src/type-roots"],
     "paths": {
-      "@crewon-protocol/*": ["../../codex-rs/app-server-protocol/schema/typescript/*"],
-      "@crewon-platform-protocol/*": ["../../codex-rs/app-server-protocol/schema/typescript-experimental-platform/*"]
+      "node:fs": ["src/type-roots/node/index.d.ts"],
+      "node:fs/promises": ["src/type-roots/node/index.d.ts"],
+      "@crewon-protocol/*": [
+        "../../codex-rs/app-server-protocol/schema/typescript/*"
+      ],
+      "@crewon-platform-protocol/*": [
+        "../../codex-rs/app-server-protocol/schema/typescript-experimental-platform/*"
+      ]
     },
     "resolveJsonModule": true,
     "isolatedModules": true,

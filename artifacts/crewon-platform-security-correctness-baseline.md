@@ -10,6 +10,13 @@
 - `artifacts/crewon-terminal-module-detailed-design.md`
 - `artifacts/crewon-system-architecture-current-future.md`
 
+> [!IMPORTANT]
+> 本文的身份、单写 Authority、Workspace、Credential、Context、Policy、Approval、Artifact、
+> 审计和迁移不变量继续有效。`ARCHITECTURE_FINAL.md` 已确定目标实现语言、进程拓扑和传输：
+> 新产品 API 使用 REST/SSE，设备执行使用独立 Device Protocol。本文中限定
+> `app-server v2`、CrewON Core 或旧 Local/Cloud 物理实现的条目只适用于迁移期；发生冲突时，
+> 以 Final Architecture 和 `artifacts/architecture-next/` 下已接受的 ADR 为准。
+
 ## 1. 文档定位
 
 本文定义整个 CrewON Agent 中台必须共同遵守的安全、正确性和数据治理规则。Single、Office、Workflow、Experts、Automation、Schedule、Agent、Skill、MCP、Knowledge 和 Plugin 都是中台消费者，不能分别实现身份、权限、上下文、凭据、事件或恢复机制。

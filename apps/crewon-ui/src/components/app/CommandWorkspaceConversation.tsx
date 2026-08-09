@@ -1,11 +1,9 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
 
 import type { Locale } from "../../lib/i18n";
 import type { WorkMode } from "../../lib/workMode";
 import { sidebarThreadTitle } from "../SidebarPresentation";
 import { Transcript } from "../Transcript";
-import { dynamicToolKindLabel } from "../transcriptToolPresentation";
 
 type CommandThreadRoomProps = {
   activeTurnId: string | null;
@@ -61,43 +59,6 @@ function transcriptLabels(locale: Locale) {
       };
 }
 
-type CommandThreadRunSummary = {
-  chips: string[];
-  state: "completed" | "failed" | "idle" | "interrupted" | "running";
-  title: string;
-};
-
-function countableProcessItem(item: ThreadItem): boolean {
-  switch (item.type) {
-    case "commandExecution":
-    case "fileChange":
-    case "mcpToolCall":
-    case "dynamicToolCall":
-    case "collabAgentToolCall":
-    case "subAgentActivity":
-      return true;
-    default:
-      return false;
-  }
-}
-
-function isRunningProcessItem(item: ThreadItem): boolean {
-  switch (item.type) {
-    case "commandExecution":
-    case "fileChange":
-    case "mcpToolCall":
-    case "dynamicToolCall":
-    case "collabAgentToolCall":
-      return item.status === "inProgress";
-    default:
-      return false;
-  }
-}
-
-function chipLabel(label: string, count: number): string | null {
-  return count > 0 ? `${label} ${count}` : null;
-}
-
 function workspaceDisplayName(path: string): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
   return normalized.split("/").filter(Boolean).pop() || normalized || path;
@@ -108,101 +69,6 @@ function workspaceLabel(path: string | null, locale: Locale): string {
     return locale === "zh" ? "无工作空间" : "No workspace";
   }
   return workspaceDisplayName(path);
-}
-
-export function commandThreadRunSummary({
-  activeTurnId,
-  locale,
-  streamingText,
-  thread,
-}: {
-  activeTurnId: string | null;
-  locale: Locale;
-  streamingText: string;
-  thread: Thread;
-}): CommandThreadRunSummary {
-  const lastTurn = thread.turns[thread.turns.length - 1] ?? null;
-  const processItems =
-    lastTurn?.items.filter((item) => countableProcessItem(item)) ?? [];
-  const runningProcessCount = processItems.filter(isRunningProcessItem).length;
-  const counts = processItems.reduce(
-    (current, item) => {
-      switch (item.type) {
-        case "commandExecution":
-          return { ...current, commands: current.commands + 1 };
-        case "fileChange":
-          return { ...current, files: current.files + 1 };
-        case "mcpToolCall":
-          return { ...current, mcps: current.mcps + 1 };
-        case "dynamicToolCall":
-          return dynamicToolKindLabel(item, locale) === "Skill"
-            ? { ...current, skills: current.skills + 1 }
-            : { ...current, tools: current.tools + 1 };
-        case "collabAgentToolCall":
-        case "subAgentActivity":
-          return { ...current, agents: current.agents + 1 };
-        default:
-          return current;
-      }
-    },
-    { agents: 0, commands: 0, files: 0, mcps: 0, skills: 0, tools: 0 },
-  );
-
-  const hasRunningTurn =
-    Boolean(activeTurnId) || lastTurn?.status === "inProgress";
-  let state: CommandThreadRunSummary["state"] = "idle";
-  if (hasRunningTurn) {
-    state = "running";
-  } else if (lastTurn?.status === "completed") {
-    state = "completed";
-  } else if (lastTurn?.status === "failed") {
-    state = "failed";
-  } else if (lastTurn?.status === "interrupted") {
-    state = "interrupted";
-  }
-  const title =
-    locale === "zh"
-      ? state === "running" && streamingText
-        ? "实时渲染中"
-        : state === "running" && runningProcessCount > 0
-          ? `执行中 · ${runningProcessCount} 项`
-          : state === "running"
-            ? "Agent 正在执行"
-            : state === "failed"
-              ? "最近失败"
-              : state === "interrupted"
-                ? "已中断"
-                : state === "completed"
-                  ? "最近完成"
-                  : "等待任务"
-      : state === "running" && streamingText
-        ? "Streaming live"
-        : state === "running" && runningProcessCount > 0
-          ? `Running · ${runningProcessCount} item${runningProcessCount === 1 ? "" : "s"}`
-          : state === "running"
-            ? "Agent running"
-            : state === "failed"
-              ? "Latest failed"
-              : state === "interrupted"
-                ? "Interrupted"
-                : state === "completed"
-                  ? "Latest completed"
-                  : "Waiting";
-
-  const chips = [
-    chipLabel("MCP", counts.mcps),
-    chipLabel("Skill", counts.skills),
-    chipLabel(locale === "zh" ? "工具" : "Tool", counts.tools),
-    chipLabel(locale === "zh" ? "命令" : "Command", counts.commands),
-    chipLabel(locale === "zh" ? "文件" : "Files", counts.files),
-    chipLabel(locale === "zh" ? "Agent" : "Agent", counts.agents),
-  ].filter((chip): chip is string => Boolean(chip));
-
-  return {
-    chips,
-    state,
-    title,
-  };
 }
 
 export function CommandThreadRoom({
@@ -229,12 +95,6 @@ export function CommandThreadRoom({
           selectedThread,
           locale === "zh" ? "未命名会话" : "Untitled thread",
         );
-  const runSummary = commandThreadRunSummary({
-    activeTurnId,
-    locale,
-    streamingText,
-    thread: selectedThread,
-  });
   const contextLabel =
     variant === "assistant"
       ? locale === "zh"
@@ -273,36 +133,6 @@ export function CommandThreadRoom({
         }
         data-od-id="command-thread-room"
       >
-        {variant === "default" ? (
-          <div className="command-thread-toolbar">
-            <div className="command-thread-identity">
-              <span>{contextLabel}</span>
-              <strong title={title}>{title}</strong>
-              <em
-                className="command-thread-cwd"
-                title={workspacePath ?? undefined}
-              >
-                {workspaceText}
-              </em>
-            </div>
-            <div
-              className="command-thread-runtime"
-              role="status"
-              aria-live="polite"
-              data-state={runSummary.state}
-              data-has-chips={runSummary.chips.length > 0 ? "true" : "false"}
-            >
-              <strong>{runSummary.title}</strong>
-              {runSummary.chips.length > 0 ? (
-                <span>
-                  {runSummary.chips.map((chip) => (
-                    <em key={chip}>{chip}</em>
-                  ))}
-                </span>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
         <Transcript
           commandLabel={labels.commandLabel}
           crewonLabel={labels.crewonLabel}

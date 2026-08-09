@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "crewon.context-normalization-reference.v0",
+  "caseId": "AR-028",
+  "rustSource": "codex-rs/core/src/context_manager/normalize.rs",
+  "cases": [
+    {
+      "name": "drops an orphan function result",
+      "input": [
+        {
+          "type": "tool_result",
+          "kind": "function",
+          "callId": "orphan-1",
+          "output": "ok"
+        }
+      ],
+      "expected": [],
+      "repairs": [
+        {
+          "kind": "orphanToolResultDropped",
+          "toolKind": "function",
+          "callId": "orphan-1"
+        }
+      ]
+    },
+    {
+      "name": "preserves a matched pair without rewriting the prefix",
+      "input": [
+        {
+          "type": "tool_call",
+          "kind": "custom",
+          "callId": "matched-1",
+          "name": "lookup",
+          "input": "query"
+        },
+        {
+          "type": "tool_result",
+          "kind": "custom",
+          "callId": "matched-1",
+          "output": "found"
+        }
+      ],
+      "expected": [
+        {
+          "type": "tool_call",
+          "kind": "custom",
+          "callId": "matched-1",
+          "name": "lookup",
+          "input": "query"
+        },
+        {
+          "type": "tool_result",
+          "kind": "custom",
+          "callId": "matched-1",
+          "output": "found"
+        }
+      ],
+      "repairs": []
+    },
+    {
+      "name": "drops orphan results and inserts an aborted missing result",
+      "input": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": "continue"
+        },
+        {
+          "type": "tool_result",
+          "kind": "custom",
+          "callId": "orphan-2",
+          "output": "ignored"
+        },
+        {
+          "type": "tool_call",
+          "kind": "function",
+          "callId": "missing-1",
+          "name": "read_file",
+          "input": "{}"
+        }
+      ],
+      "expected": [
+        {
+          "type": "message",
+          "role": "user",
+          "content": "continue"
+        },
+        {
+          "type": "tool_call",
+          "kind": "function",
+          "callId": "missing-1",
+          "name": "read_file",
+          "input": "{}"
+        },
+        {
+          "type": "tool_result",
+          "kind": "function",
+          "callId": "missing-1",
+          "output": "aborted"
+        }
+      ],
+      "repairs": [
+        {
+          "kind": "orphanToolResultDropped",
+          "toolKind": "custom",
+          "callId": "orphan-2"
+        },
+        {
+          "kind": "missingToolResultInserted",
+          "toolKind": "function",
+          "callId": "missing-1"
+        }
+      ]
+    }
+  ]
+}

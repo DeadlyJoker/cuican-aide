@@ -7,8 +7,6 @@ export type ShellNavItem = {
   key: CommandShellView;
   label: string;
   en: string;
-  meta?: string;
-  metaEn?: string;
 };
 
 export type ResourceCard = {
@@ -18,23 +16,16 @@ export type ResourceCard = {
   detail: string;
 };
 
+/*
+ * Nav rows carry a label only. The subtitles ("技能·连接器", "计划·提醒") restated
+ * what the destination page already says while doubling every row's height, so
+ * the rail lost the density the desktop design depends on.
+ */
 export const shellNavItems: ShellNavItem[] = [
   { key: "command", label: "新建任务", en: "New task" },
   { key: "assist", label: "助理", en: "Assistant" },
-  {
-    key: "agents",
-    label: "智能体",
-    en: "Agents",
-    meta: "技能·连接器",
-    metaEn: "Skills · connectors",
-  },
-  {
-    key: "schedule",
-    label: "日程安排",
-    en: "Schedule",
-    meta: "计划·提醒",
-    metaEn: "Plans · reminders",
-  },
+  { key: "agents", label: "智能体", en: "Agents" },
+  { key: "schedule", label: "日程安排", en: "Schedule" },
   { key: "team", label: "团队", en: "Team" },
 ];
 

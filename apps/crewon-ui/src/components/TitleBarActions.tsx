@@ -1,9 +1,4 @@
-import {
-  ChevronDown,
-  Code2,
-  PanelRight,
-  SlidersHorizontal,
-} from "lucide-react";
+import { PanelRight, SlidersHorizontal } from "lucide-react";
 
 import type { Locale } from "../lib/i18n";
 import type { Theme } from "../lib/theme";
@@ -31,14 +26,6 @@ export function TitleBarActions({
 }) {
   return (
     <div className="titlebar-actions">
-      <button
-        className="icon-button titlebar-model-button"
-        type="button"
-        aria-label="Model"
-      >
-        <Code2 size={14} />
-        <ChevronDown size={12} />
-      </button>
       <button
         className="icon-button titlebar-env-toggle"
         type="button"

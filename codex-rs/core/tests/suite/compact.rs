@@ -1055,6 +1055,15 @@ async fn manual_compact_emits_context_compaction_items() {
 async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
     skip_if_no_network!();
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/token-limit-compaction.reference.json"
+    )
+    .expect("resolve AR-023 token-limit compaction fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-023 token-limit compaction fixture"),
+    )
+    .expect("parse AR-023 token-limit compaction fixture");
+
     let server = start_mock_server().await;
 
     let non_openai_provider_name = non_openai_model_provider(&server).name;
@@ -1081,9 +1090,13 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
     let prefixed_second_summary = summary_with_prefix(second_summary_text);
     let prefixed_third_summary = summary_with_prefix(third_summary_text);
     // token used count after long work
-    let token_count_used = 270_000;
+    let token_count_used = reference["triggerTotalTokens"]
+        .as_i64()
+        .expect("triggerTotalTokens should be an integer");
     // token used count after compaction
-    let token_count_used_after_compaction = 80000;
+    let token_count_used_after_compaction = reference["postCompactionTotalTokens"]
+        .as_i64()
+        .expect("postCompactionTotalTokens should be an integer");
 
     // mock responses from the model
 
@@ -1180,6 +1193,26 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
 
     // collect the requests payloads from the model
     let requests_payloads = request_log.requests();
+    let request_kinds = requests_payloads
+        .iter()
+        .map(|request| {
+            if body_contains_text(&request.body_json().to_string(), SUMMARIZATION_PROMPT) {
+                "compaction"
+            } else {
+                "model"
+            }
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(json!(request_kinds), reference["expected"]["requestKinds"]);
+    assert_eq!(
+        request_kinds
+            .iter()
+            .filter(|kind| **kind == "compaction")
+            .count(),
+        reference["expected"]["contextCompactedEventCount"]
+            .as_u64()
+            .expect("contextCompactedEventCount should be an integer") as usize
+    );
     let body = requests_payloads[0].body_json();
     let input = body.get("input").and_then(|v| v.as_array()).unwrap();
 
@@ -2102,16 +2135,40 @@ async fn auto_compact_runs_after_resume_when_token_usage_is_over_limit() {
 async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
     skip_if_no_network!();
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/model-switch-compaction.reference.json"
+    )
+    .expect("resolve AR-024 model-switch compaction fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path)
+            .expect("read AR-024 model-switch compaction fixture"),
+    )
+    .expect("parse AR-024 model-switch compaction fixture");
+
     let server = MockServer::start().await;
-    let previous_model = "gpt-5.3-codex";
-    let next_model = "gpt-5.2";
+    let previous_model = reference["previous"]["modelId"]
+        .as_str()
+        .expect("previous modelId should be text");
+    let next_model = reference["next"]["modelId"]
+        .as_str()
+        .expect("next modelId should be text");
 
     let models_mock = mount_models_once(
         &server,
         ModelsResponse {
             models: vec![
-                model_info_with_context_window(previous_model, /*context_window*/ 273_000),
-                model_info_with_context_window(next_model, /*context_window*/ 125_000),
+                model_info_with_context_window(
+                    previous_model,
+                    reference["previous"]["contextWindowTokens"]
+                        .as_i64()
+                        .expect("previous contextWindowTokens should be an integer"),
+                ),
+                model_info_with_context_window(
+                    next_model,
+                    reference["next"]["contextWindowTokens"]
+                        .as_i64()
+                        .expect("next contextWindowTokens should be an integer"),
+                ),
             ],
         },
     )
@@ -2122,7 +2179,12 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
         vec![
             sse(vec![
                 ev_assistant_message("m1", "before switch"),
-                ev_completed_with_tokens("r1", /*total_tokens*/ 120_000),
+                ev_completed_with_tokens(
+                    "r1",
+                    reference["previous"]["totalTokens"]
+                        .as_i64()
+                        .expect("previous totalTokens should be an integer"),
+                ),
             ]),
             sse(vec![
                 ev_assistant_message("m2", "PRE_SAMPLING_SUMMARY"),
@@ -2175,6 +2237,27 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
         requests.len(),
         3,
         "expected user, compact, and follow-up requests"
+    );
+    assert_eq!(
+        json!(
+            requests
+                .iter()
+                .map(|request| request.body_json()["model"].clone())
+                .collect::<Vec<_>>()
+        ),
+        reference["expected"]["requestModels"]
+    );
+    assert_eq!(
+        !body_contains_text(&requests[1].body_json().to_string(), "after switch"),
+        reference["expected"]["compactionExcludesIncomingUser"]
+            .as_bool()
+            .expect("compactionExcludesIncomingUser should be a boolean")
+    );
+    assert_eq!(
+        body_contains_text(&requests[2].body_json().to_string(), "after switch"),
+        reference["expected"]["followUpIncludesIncomingUser"]
+            .as_bool()
+            .expect("followUpIncludesIncomingUser should be a boolean")
     );
     assert_pre_sampling_switch_compaction_requests(
         &requests[0].body_json(),
@@ -3020,6 +3103,15 @@ async fn auto_compact_persists_rollout_entries() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn manual_compact_retries_after_context_window_error() {
     skip_if_no_network!();
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/context-window-compaction.reference.json"
+    )
+    .expect("resolve AR-025 context-window compaction fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path)
+            .expect("read AR-025 context-window compaction fixture"),
+    )
+    .expect("parse AR-025 context-window compaction fixture");
 
     let server = start_mock_server().await;
 
@@ -3029,7 +3121,9 @@ async fn manual_compact_retries_after_context_window_error() {
     ]);
     let compact_failed = sse_failed(
         "resp-fail",
-        "context_length_exceeded",
+        reference["providerFailureCode"]
+            .as_str()
+            .expect("AR-025 provider failure code"),
         CONTEXT_LIMIT_MESSAGE,
     );
     let compact_succeeds = sse(vec![
@@ -3118,6 +3212,14 @@ async fn manual_compact_retries_after_context_window_error() {
     } else {
         panic!("expected non-empty compact inputs");
     }
+    let candidate = json!({
+        "compactionRequestCount": requests.len().saturating_sub(1),
+        "historyItemsDroppedPerContextError": compact_input.len().saturating_sub(retry_input.len()),
+        "oldestItemChanged": compact_input.first() != retry_input.first(),
+        "promptStable": compact_contains_prompt == retry_contains_prompt,
+        "terminal": "completed",
+    });
+    assert_eq!(candidate, reference["expected"]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

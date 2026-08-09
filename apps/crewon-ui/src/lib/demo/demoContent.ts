@@ -1,6 +1,9 @@
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
-import type { AccountStatus, GitRemoteDiffSummary } from "../shared/statusTypes";
+import type { ThreadGoalView } from "@crewon/contracts";
+import type {
+  AccountStatus,
+  GitRemoteDiffSummary,
+} from "../shared/statusTypes";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type {
   ActivityData,
@@ -40,9 +43,11 @@ export function demoGitRemoteDiff(): GitRemoteDiffSummary {
   };
 }
 
-export function demoThreadGoal(locale: Locale): ThreadGoal {
-  const now = Math.floor(Date.now() / 1000);
+export function demoThreadGoal(locale: Locale): ThreadGoalView {
+  const now = Date.now();
   return {
+    goalId: "demo-goal-1",
+    revision: 1,
     threadId: "demo-1",
     objective: zh(locale)
       ? "今天交付一版可发给甲方的 demo 截图"
@@ -51,8 +56,8 @@ export function demoThreadGoal(locale: Locale): ThreadGoal {
     tokenBudget: 200000,
     tokensUsed: 86400,
     timeUsedSeconds: 5400,
-    createdAt: now - 5400,
-    updatedAt: now - 120,
+    createdAt: new Date(now - 5_400_000).toISOString(),
+    updatedAt: new Date(now - 120_000).toISOString(),
   };
 }
 
@@ -1411,6 +1416,29 @@ function demoPluginsPanel(title: string, locale: Locale): LibraryPanel {
 }
 
 // [SETTINGS]
+/**
+ * Demo copy for the model access page.
+ *
+ * The live panel is built from config, so the demo has to restate the same
+ * caveats (Responses-only, cleartext key) rather than let the reader assume
+ * they only apply once connected.
+ */
+function demoModelProvidersSettingsPanel(locale: Locale): CapabilityPanel {
+  return {
+    title: zh(locale) ? "模型接入" : "Model access",
+    subtitle: zh(locale) ? "演示模式" : "Demo mode",
+    body: zh(locale)
+      ? "已配置的模型服务\n- 我的模型网关 (my-gateway) · https://api.example.com/v1 · 已保存密钥 · 当前使用\n- 本地模型 (local-llm) · http://127.0.0.1:11434/v1 · 无需密钥\n\n说明\n- 只支持 Responses 兼容接口，不支持 Chat Completions 格式的服务。\n- 直接填写的 API Key 会以明文保存在本机 ~/.crewon/config.toml（权限 600）。\n- 连接本地 app-server 后，这里可以新增、编辑、删除并测试模型服务。"
+      : "Configured model services\n- My model gateway (my-gateway) · https://api.example.com/v1 · key stored · in use\n- Local model (local-llm) · http://127.0.0.1:11434/v1 · no credential\n\nNotes\n- Responses-compatible APIs only; Chat Completions endpoints are not supported.\n- An API key entered here is stored in cleartext in ~/.crewon/config.toml on this machine (mode 600).\n- Connect the local app-server to add, edit, delete, and test model services here.",
+    actions: [
+      {
+        id: "refresh-model-providers",
+        label: zh(locale) ? "刷新" : "Refresh",
+      },
+    ],
+  };
+}
+
 export function demoSettingsPanel(
   section: SettingsSection,
   locale: Locale,
@@ -1593,6 +1621,9 @@ export function demoSettingsPanel(
         },
       ],
     };
+  }
+  if (section === "model-providers") {
+    return demoModelProvidersSettingsPanel(locale);
   }
   if (section === "mcp-servers") {
     return {
@@ -2124,7 +2155,10 @@ function demoActivityData(locale: Locale): ActivityData {
           promptPreview: "汇总当前任务、审批和产物，给出下一步。",
           plan: [
             { step: "索引办公室执行记录", status: "completed" as const },
-            { step: "接入取消、重试和结构化 reducer", status: "inProgress" as const },
+            {
+              step: "接入取消、重试和结构化 reducer",
+              status: "inProgress" as const,
+            },
             { step: "补 ActivityBoard 快照测试", status: "pending" as const },
           ],
           delegations: [
@@ -2150,12 +2184,18 @@ function demoActivityData(locale: Locale): ActivityData {
           promptPreview:
             "Summarize current tasks, approvals, artifacts, and next steps.",
           plan: [
-            { step: "Index office execution records", status: "completed" as const },
+            {
+              step: "Index office execution records",
+              status: "completed" as const,
+            },
             {
               step: "Wire cancel, retry, and structured reducer",
               status: "inProgress" as const,
             },
-            { step: "Add ActivityBoard snapshot coverage", status: "pending" as const },
+            {
+              step: "Add ActivityBoard snapshot coverage",
+              status: "pending" as const,
+            },
           ],
           delegations: [
             {

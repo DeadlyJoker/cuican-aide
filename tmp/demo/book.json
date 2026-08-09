@@ -1,0 +1,49 @@
+{
+  "sheets": [
+    {
+      "name": "验证矩阵",
+      "title": "CrewON 三场景落地验证矩阵",
+      "header": ["验证项", "命令", "用例数", "通过数", "通过率", "耗时(秒)"],
+      "rows": [
+        ["Rust 测试", "just test -p crewon-skills -p crewon-scene-runtime", 18, 18, "=IF(C4=0,0,D4/C4)", 1.8],
+        ["前端测试", "pnpm --filter @crewon/ui test", 1548, 1548, "=IF(C5=0,0,D5/C5)", 15.2],
+        ["类型检查", "tsc -b --noEmit", 1, 1, "=IF(C6=0,0,D6/C6)", 3.1],
+        ["构建", "pnpm --filter @crewon/ui build", 1, 1, "=IF(C7=0,0,D7/C7)", 5.9],
+        ["设计审计", "audit_design.py 浅色/暗色", 2, 2, "=IF(C8=0,0,D8/C8)", 2.9],
+        ["合计", "", "=SUM(C4:C8)", "=SUM(D4:D8)", "=IF(C9=0,0,D9/C9)", "=SUM(F4:F8)"]
+      ],
+      "numberFormats": { "C": "#,##0", "D": "#,##0", "E": "0.0%", "F": "0.0" },
+      "widths": { "A": 20, "B": 44, "C": 10, "D": 10, "E": 12, "F": 11 },
+      "conditional": [
+        { "range": "E4:E8", "kind": "cellIs", "operator": "lessThan", "formula": "1", "fill": "FFC7CE" }
+      ]
+    },
+    {
+      "name": "缺陷统计",
+      "title": "各轮次缺陷发现与修复",
+      "header": ["轮次", "发现", "修复", "未闭环"],
+      "rows": [
+        ["工具落地", 0, 0, "=B4-C4"],
+        ["渲染修复", 2, 2, "=B5-C5"],
+        ["UI 接线", 2, 2, "=B6-C6"],
+        ["demo 验证", 2, 2, "=B7-C7"],
+        ["合计", "=SUM(B4:B7)", "=SUM(C4:C7)", "=SUM(D4:D7)"]
+      ],
+      "numberFormats": { "B": "#,##0", "C": "#,##0", "D": "#,##0" },
+      "widths": { "A": 14, "B": 10, "C": 10, "D": 12 },
+      "charts": [
+        {
+          "kind": "bar",
+          "title": "缺陷发现与修复",
+          "dataMinCol": 2,
+          "dataMaxCol": 3,
+          "dataMaxRow": 7,
+          "catCol": 1,
+          "anchor": "F4",
+          "width": 16,
+          "height": 8
+        }
+      ]
+    }
+  ]
+}

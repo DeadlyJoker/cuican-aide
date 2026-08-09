@@ -29,6 +29,12 @@ import {
   type AgentPlatformUser,
   type WeComLoginConfig,
 } from "../../lib/agent-platform/agentPlatformSession";
+import {
+  clearPimLaunchToken,
+  getPimLaunchToken,
+  isPimLaunchSession,
+  setPimLaunchToken,
+} from "../../lib/agent-platform/pimLaunchBridge";
 
 type AuthMode = "login" | "register";
 
@@ -337,7 +343,30 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
       try {
         const config = await readWeComLoginConfig();
         if (!cancelled) setWeComConfig(config);
+
         const params = new URLSearchParams(window.location.search);
+
+        // --- PIM launch token path ---
+        // When the user enters from a PIM showcase page, the launch token
+        // anchors the session. Use it to fetch the current user and skip
+        // the login screen entirely.
+        if (isPimLaunchSession()) {
+          try {
+            const currentUser = await readAgentPlatformCurrentUser();
+            if (!cancelled) setUser(currentUser);
+          } catch {
+            // Token is invalid or expired — clear it and let the user
+            // re-enter from PIM.
+            if (!cancelled) {
+              clearPimLaunchToken();
+              setError("演示访问会话已过期，请从 PIM 样例展示页重新进入。");
+            }
+          } finally {
+            if (!cancelled) setChecking(false);
+          }
+          return;
+        }
+
         const ssoError = params.get("sso_error");
         if (ssoError) {
           setError(
@@ -479,6 +508,14 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
   const needsPassword = user.password_login_enabled === false;
   const logout = () => {
     setBusy(true);
+    // When in a PIM launch session, clearing the token is sufficient —
+    // there is no server-side session to destroy.
+    if (isPimLaunchSession()) {
+      clearPimLaunchToken();
+      setUser(null);
+      setBusy(false);
+      return;
+    }
     void logoutAgentPlatform()
       .catch(() => undefined)
       .finally(() => {

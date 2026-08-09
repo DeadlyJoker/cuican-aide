@@ -32,9 +32,6 @@ const SERVER_MODEL: &str = "gpt-5.2";
 const REQUESTED_MODEL: &str = "gpt-5.3-codex";
 const TRUSTED_ACCESS_FOR_CYBER_VERIFICATION: &str = "trusted_access_for_cyber";
 
-const CYBER_POLICY_MESSAGE: &str =
-    "This request has been flagged for potentially high-risk cyber activity.";
-
 fn disabled_text_turn(test: &TestCrewon, text: &str) -> Op {
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, test.cwd_path());
@@ -110,13 +107,41 @@ async fn openai_model_header_mismatch_emits_warning_event() -> Result<()> {
 async fn cyber_policy_response_emits_typed_error_without_retry() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/typed-policy-failure.reference.json"
+    )
+    .expect("resolve AR-030 typed policy failure fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-030 typed policy failure fixture"),
+    )
+    .expect("parse AR-030 typed policy failure fixture");
+    let provider_failure = &reference["providerFailure"];
+    let status = u16::try_from(
+        provider_failure["httpStatus"]
+            .as_u64()
+            .expect("fixture provider HTTP status"),
+    )
+    .expect("fixture provider HTTP status fits u16");
+    let provider_type = provider_failure["type"]
+        .as_str()
+        .expect("fixture provider error type");
+    let provider_code = provider_failure["code"]
+        .as_str()
+        .expect("fixture provider error code");
+    let provider_message = provider_failure["message"]
+        .as_str()
+        .expect("fixture provider error message");
+    assert_eq!(reference["finalState"]["requestCount"], 1);
+    assert_eq!(reference["finalState"]["samplingRetries"], 0);
+    assert_eq!(reference["events"][0]["data"]["retryable"], false);
+
     let server = start_mock_server().await;
-    let response = ResponseTemplate::new(400).set_body_json(serde_json::json!({
+    let response = ResponseTemplate::new(status).set_body_json(serde_json::json!({
         "error": {
-            "message": CYBER_POLICY_MESSAGE,
-            "type": "invalid_request",
+            "message": provider_message,
+            "type": provider_type,
             "param": null,
-            "code": "cyber_policy"
+            "code": provider_code
         }
     }));
     let mock = mount_response_once(&server, response).await;
@@ -132,7 +157,7 @@ async fn cyber_policy_response_emits_typed_error_without_retry() -> Result<()> {
     let EventMsg::Error(error) = error else {
         panic!("expected error event");
     };
-    assert_eq!(error.message, CYBER_POLICY_MESSAGE);
+    assert_eq!(error.message, provider_message);
     assert_eq!(error.codex_error_info, Some(CodexErrorInfo::CyberPolicy));
 
     mock.single_request();

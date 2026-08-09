@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "WorkflowNodeDefinition": {
+      "oneOf": [
+        {
+          "properties": {
+            "agentId": {
+              "type": "string"
+            },
+            "agentName": {
+              "type": "string"
+            },
+            "instruction": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "agent"
+              ],
+              "title": "AgentWorkflowNodeDefinitionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agentId",
+            "agentName",
+            "instruction",
+            "title",
+            "type"
+          ],
+          "title": "AgentWorkflowNodeDefinition",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "instruction": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "humanGate"
+              ],
+              "title": "HumanGateWorkflowNodeDefinitionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "instruction",
+            "title",
+            "type"
+          ],
+          "title": "HumanGateWorkflowNodeDefinition",
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "cwd": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "lead": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/definitions/WorkflowNodeDefinition"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "cwd",
+    "description",
+    "lead",
+    "name",
+    "nodes"
+  ],
+  "title": "WorkflowCreateParams",
+  "type": "object"
+}

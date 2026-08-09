@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 
 import type {
   AccountStatus,
@@ -16,7 +16,8 @@ export function useAppWorkspaceStatusState() {
     useState<ConversationSummary | null>(null);
   const [gitRemoteDiff, setGitRemoteDiff] =
     useState<GitRemoteDiffSummary | null>(null);
-  const [threadGoal, setThreadGoal] = useState<ThreadGoal | null>(null);
+  const [threadGoal, setThreadGoal] = useState<ThreadGoalView | null>(null);
+  const [threadGoalBusy, setThreadGoalBusy] = useState(false);
   const [activeFileWatch, setActiveFileWatch] = useState<{
     id: string;
     path: string;
@@ -35,6 +36,8 @@ export function useAppWorkspaceStatusState() {
     setConversationSummary,
     setGitRemoteDiff,
     setThreadGoal,
+    setThreadGoalBusy,
     threadGoal,
+    threadGoalBusy,
   };
 }

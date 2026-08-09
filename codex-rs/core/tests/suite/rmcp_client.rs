@@ -95,6 +95,24 @@ fn split_wall_time_wrapped_output(output: &str) -> &str {
     output
 }
 
+fn legacy_mcp_scheduling(case_id: &str) -> Value {
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/mcp-tool-scheduling.reference.json"
+    )
+    .expect("resolve MCP scheduling fixture");
+    let fixture: Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read MCP scheduling fixture"),
+    )
+    .expect("parse MCP scheduling fixture");
+    fixture["cases"]
+        .as_array()
+        .expect("MCP scheduling cases")
+        .iter()
+        .find(|case| case["caseId"].as_str() == Some(case_id))
+        .unwrap_or_else(|| panic!("missing MCP scheduling case {case_id}"))["legacyRust"]
+        .clone()
+}
+
 fn assert_wall_time_header(output: &str) {
     let Some((wall_time, marker)) = output.split_once('\n') else {
         panic!("wall-time header should contain an Output marker: {output}");
@@ -933,6 +951,14 @@ async fn stdio_mcp_parallel_tool_calls_default_false_runs_serially() -> anyhow::
         first_end < second_begin || second_end < first_begin,
         "default MCP tool calls should run serially; saw events: {call_events:?}"
     );
+    assert_eq!(
+        json!({
+            "admission": "available",
+            "execution": "serial",
+            "decision": "server-default"
+        }),
+        legacy_mcp_scheduling("AR-017-default-unknown-tool")
+    );
 
     wait_for_event(&fixture.crewon, |ev| {
         matches!(ev, EventMsg::TurnComplete(_))
@@ -949,7 +975,6 @@ async fn stdio_mcp_parallel_tool_calls_default_false_runs_serially() -> anyhow::
             .expect("wrapped MCP output should preserve structured JSON");
         assert_eq!(output_json, json!({ "result": "ok" }));
     }
-
     server.verify().await;
 
     Ok(())
@@ -1050,6 +1075,14 @@ async fn stdio_mcp_read_only_tool_calls_run_concurrently_without_server_opt_in()
             .expect("wrapped MCP output should preserve structured JSON");
         assert_eq!(output_json, json!({ "result": "ok" }));
     }
+    assert_eq!(
+        json!({
+            "admission": "available",
+            "execution": "parallel",
+            "decision": "read-only"
+        }),
+        legacy_mcp_scheduling("AR-018-reviewed-read-only-tool")
+    );
 
     server.verify().await;
 
@@ -1140,6 +1173,14 @@ async fn stdio_mcp_parallel_tool_calls_opt_in_runs_concurrently() -> anyhow::Res
             .expect("wrapped MCP output should preserve structured JSON");
         assert_eq!(output_json, json!({ "result": "ok" }));
     }
+    assert_eq!(
+        json!({
+            "admission": "available",
+            "execution": "parallel",
+            "decision": "server-opt-in"
+        }),
+        legacy_mcp_scheduling("AR-019-server-opt-in-mutation-tool")
+    );
 
     server.verify().await;
 

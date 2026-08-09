@@ -50,6 +50,7 @@ use crewon_rollout_trace::replay_bundle;
 use futures::StreamExt;
 use opentelemetry_sdk::metrics::InMemoryMetricExporter;
 use pretty_assertions::assert_eq;
+use serde_json::Value;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -859,6 +860,14 @@ async fn responses_websocket_v2_requests_use_v2_when_provider_supports_websocket
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn responses_websocket_v2_incremental_requests_are_reused_across_turns() {
     skip_if_no_network!();
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/websocket-transport.reference.json"
+    )
+    .expect("resolve AR-011 WebSocket fixture");
+    let reference: Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-011 WebSocket fixture"),
+    )
+    .expect("parse AR-011 WebSocket fixture");
 
     let server = start_websocket_server(vec![vec![
         vec![
@@ -886,9 +895,18 @@ async fn responses_websocket_v2_incremental_requests_are_reused_across_turns() {
     let mut client_session = harness.client.new_session();
     stream_until_complete(&mut client_session, &harness, &prompt_two).await;
 
-    assert_eq!(server.handshakes().len(), 1);
+    assert_eq!(
+        server.handshakes().len(),
+        reference["incremental"]["connectionCount"]
+            .as_u64()
+            .expect("AR-011 connection count") as usize
+    );
     let connection = server.single_connection();
     assert_eq!(connection.len(), 2);
+    let first = connection
+        .first()
+        .expect("missing first request")
+        .body_json();
     let second = connection.get(1).expect("missing request").body_json();
     assert_eq!(second["type"].as_str(), Some("response.create"));
     assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
@@ -896,8 +914,45 @@ async fn responses_websocket_v2_incremental_requests_are_reused_across_turns() {
         second["input"],
         serde_json::to_value(&prompt_two.input[2..]).unwrap()
     );
+    let candidate = json!({
+        "caseId": reference["incremental"]["caseId"],
+        "connectionCount": server.handshakes().len(),
+        "firstRequest": normalized_incremental_request(&first),
+        "secondRequest": normalized_incremental_request(&second),
+    });
+    assert_eq!(candidate, reference["incremental"]);
 
     server.shutdown().await;
+}
+
+fn normalized_incremental_request(body: &Value) -> Value {
+    let input = body["input"]
+        .as_array()
+        .expect("WebSocket request input must be an array")
+        .iter()
+        .map(|item| {
+            let content = item["content"]
+                .as_str()
+                .or_else(|| {
+                    item["content"]
+                        .as_array()
+                        .and_then(|content| content.first())
+                        .and_then(|content| content["text"].as_str())
+                })
+                .expect("WebSocket message content must contain text");
+            json!({
+                "role": item["role"],
+                "content": content,
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "previousResponseId": body
+            .get("previous_response_id")
+            .cloned()
+            .unwrap_or(Value::Null),
+        "input": input,
+    })
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

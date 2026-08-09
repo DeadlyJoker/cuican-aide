@@ -1,0 +1,3146 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "CrewON Control API",
+    "version": "1.0.0"
+  },
+  "servers": [{ "url": "/" }],
+  "security": [{ "sessionCookie": [] }, { "mobileBearer": [] }],
+  "paths": {
+    "/api/v1/threads": {
+      "get": {
+        "operationId": "listThreads",
+        "parameters": [
+          { "$ref": "#/components/parameters/ResourceCursor" },
+          { "$ref": "#/components/parameters/Limit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Threads ordered by most recent durable update",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListThreadsResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createThread",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateThreadRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed Thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A newly committed Thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}": {
+      "get": {
+        "operationId": "getThread",
+        "parameters": [{ "$ref": "#/components/parameters/ThreadId" }],
+        "responses": {
+          "200": {
+            "description": "Thread projection",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GetThreadResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}:archive": {
+      "post": {
+        "operationId": "archiveThread",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveThreadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or idempotently replayed Thread archive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}:rollback": {
+      "post": {
+        "operationId": "rollbackThread",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackThreadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed append-only Thread rollback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "An append-only Thread rollback committed atomically",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}:unarchive": {
+      "post": {
+        "operationId": "unarchiveThread",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnarchiveThreadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or idempotently replayed Thread restore",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}:rename": {
+      "post": {
+        "operationId": "renameThread",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RenameThreadRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or idempotently replayed Thread rename",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}:delete": {
+      "post": {
+        "operationId": "deleteThread",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DeleteThreadRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or idempotently replayed terminal Thread tombstone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/events": {
+      "get": {
+        "operationId": "streamThreadEvents",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/LastEventId" },
+          { "$ref": "#/components/parameters/ThreadHistoryView" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable Thread event catch-up followed by periodic database polling. SSE id is the decimal Thread event sequence.",
+            "headers": {
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "no-cache" }
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": { "type": "string" },
+                "x-crewon-event-schema": {
+                  "$ref": "#/components/schemas/ThreadEventView"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/goal": {
+      "get": {
+        "operationId": "getThreadGoal",
+        "parameters": [{ "$ref": "#/components/parameters/ThreadId" }],
+        "responses": {
+          "200": {
+            "description": "Current persistent Thread Goal, or null when absent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetThreadGoalResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "put": {
+        "operationId": "setThreadGoal",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetThreadGoalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed Thread Goal mutation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadGoalMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A newly committed Thread Goal mutation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadGoalMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "delete": {
+        "operationId": "clearThreadGoal",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClearThreadGoalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or idempotently replayed Thread Goal clear",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadGoalMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/goal/events": {
+      "get": {
+        "operationId": "streamThreadGoalEvents",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/LastEventId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable catch-up followed by periodic database polling. SSE id is the decimal Thread Goal event sequence; clear events do not terminate the stream.",
+            "headers": {
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "no-cache" }
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": { "type": "string" },
+                "x-crewon-event-schema": {
+                  "$ref": "#/components/schemas/ThreadGoalEventView"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/messages": {
+      "post": {
+        "operationId": "appendThreadMessage",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendThreadMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed Message append",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppendThreadMessageResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A newly committed Message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppendThreadMessageResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "get": {
+        "operationId": "listThreadMessages",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/Cursor" },
+          { "$ref": "#/components/parameters/Limit" },
+          { "$ref": "#/components/parameters/ThreadHistoryView" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ordered Thread messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListThreadMessagesResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/forks": {
+      "post": {
+        "operationId": "forkThread",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ForkThreadRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed Thread fork",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A newly committed Thread fork",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/turns": {
+      "post": {
+        "operationId": "startTurn",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/StartTurnRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed atomic Turn start",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StartTurnResponse" }
+              }
+            }
+          },
+          "201": {
+            "description": "A user Message and Run committed atomically",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StartTurnResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}:compact": {
+      "post": {
+        "operationId": "compactThread",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CompactThreadRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed manual context compaction Run",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+              }
+            }
+          },
+          "201": {
+            "description": "A manual context compaction maintenance Run admitted atomically",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/runs": {
+      "get": {
+        "operationId": "listThreadRuns",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/ResourceCursor" },
+          { "$ref": "#/components/parameters/Limit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runs for a Thread ordered by most recent durable update",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListThreadRunsResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/runs": {
+      "post": {
+        "operationId": "createRun",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateRunRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed Run",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+              }
+            }
+          },
+          "201": {
+            "description": "A newly committed Run",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/runs/{runId}": {
+      "get": {
+        "operationId": "getRun",
+        "parameters": [{ "$ref": "#/components/parameters/RunId" }],
+        "responses": {
+          "200": {
+            "description": "Run projection",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GetRunResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/runs/{runId}:cancel": {
+      "post": {
+        "operationId": "cancelRun",
+        "parameters": [
+          { "$ref": "#/components/parameters/RunId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CancelRunRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or replayed cancellation request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/runs/{runId}/events": {
+      "get": {
+        "operationId": "streamRunEvents",
+        "parameters": [
+          { "$ref": "#/components/parameters/RunId" },
+          { "$ref": "#/components/parameters/LastEventId" },
+          { "$ref": "#/components/parameters/RunEventView" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable catch-up followed by a live event stream. SSE id is the decimal Run sequence.",
+            "headers": {
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "no-cache" }
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": { "type": "string" },
+                "x-crewon-event-schema": {
+                  "$ref": "#/components/schemas/RunEventView"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/tool-approvals/{approvalId}": {
+      "get": {
+        "operationId": "getToolApproval",
+        "parameters": [{ "$ref": "#/components/parameters/ApprovalId" }],
+        "responses": {
+          "200": {
+            "description": "Tenant-scoped Tool approval",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetToolApprovalResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/tool-approvals/{approvalId}:decide": {
+      "post": {
+        "operationId": "decideToolApproval",
+        "parameters": [
+          { "$ref": "#/components/parameters/ApprovalId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideToolApprovalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or replayed Tool approval decision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolApprovalMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/agent-versions": {
+      "post": {
+        "operationId": "publishAgentVersion",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfToken" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishAgentVersionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An existing identical immutable AgentVersion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersionMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A newly published immutable AgentVersion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersionMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "get": {
+        "operationId": "listAgentVersions",
+        "parameters": [
+          { "$ref": "#/components/parameters/AgentVersionCursor" },
+          { "$ref": "#/components/parameters/Limit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant-scoped immutable AgentVersions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAgentVersionsResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/agent-versions/active": {
+      "get": {
+        "operationId": "getActiveAgentVersionCatalog",
+        "responses": {
+          "200": {
+            "description": "Authorized runnable AgentVersions from the active immutable release",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveAgentVersionCatalogResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/agent-versions/{agentVersionId}": {
+      "get": {
+        "operationId": "getAgentVersion",
+        "parameters": [{ "$ref": "#/components/parameters/AgentVersionId" }],
+        "responses": {
+          "200": {
+            "description": "Tenant-scoped immutable AgentVersion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAgentVersionResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/artifacts/{artifactId}": {
+      "get": {
+        "operationId": "getArtifact",
+        "parameters": [{ "$ref": "#/components/parameters/ArtifactId" }],
+        "responses": {
+          "200": {
+            "description": "Authorized immutable Artifact metadata without storage paths or key identifiers",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GetArtifactResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/artifacts/{artifactId}/content": {
+      "get": {
+        "operationId": "downloadArtifactContent",
+        "parameters": [{ "$ref": "#/components/parameters/ArtifactId" }],
+        "responses": {
+          "200": {
+            "description": "Authorized, authenticated and digest-verified Artifact bytes",
+            "headers": {
+              "ETag": {
+                "schema": { "type": "string" },
+                "description": "Quoted immutable content digest."
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string",
+                  "const": "attachment; filename=artifact"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/health/live": {
+      "get": {
+        "operationId": "liveHealth",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Process liveness",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health/ready": {
+      "get": {
+        "operationId": "readyHealth",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Control API readiness",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "crewon_session"
+      },
+      "mobileBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque"
+      }
+    },
+    "parameters": {
+      "ThreadId": {
+        "name": "threadId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "RunId": {
+        "name": "runId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "ApprovalId": {
+        "name": "approvalId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "AgentVersionId": {
+        "name": "agentVersionId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "ArtifactId": {
+        "name": "artifactId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1, "maxLength": 256 }
+      },
+      "CsrfToken": {
+        "name": "X-CSRF-Token",
+        "in": "header",
+        "required": false,
+        "description": "Required by the identity adapter for cookie-authenticated mutations.",
+        "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
+      },
+      "RequiredCsrfToken": {
+        "name": "X-CSRF-Token",
+        "in": "header",
+        "required": true,
+        "description": "Required for Thread Goal mutations.",
+        "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
+      },
+      "LastEventId": {
+        "name": "Last-Event-ID",
+        "in": "header",
+        "required": false,
+        "description": "Decimal durable event sequence last processed by the client; each event resource has an independent sequence.",
+        "schema": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$",
+          "maxLength": 20
+        }
+      },
+      "RunEventView": {
+        "name": "view",
+        "in": "query",
+        "required": false,
+        "description": "Client view hides bounded transient retry noise; audit preserves every durable event.",
+        "schema": {
+          "type": "string",
+          "enum": ["client", "audit"],
+          "default": "client"
+        }
+      },
+      "ThreadHistoryView": {
+        "name": "view",
+        "in": "query",
+        "required": false,
+        "description": "Standard view hides deleted content and emits only its tombstone event; audit requires thread:audit:read and preserves durable history.",
+        "schema": {
+          "type": "string",
+          "enum": ["standard", "audit"],
+          "default": "standard"
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$",
+          "maxLength": 128
+        }
+      },
+      "ResourceCursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+          "maxLength": 512
+        }
+      },
+      "AgentVersionCursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,768}$",
+          "maxLength": 768
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 100
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Stable safe error envelope",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": { "status": { "type": "string", "const": "ok" } }
+      },
+      "CreateThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "AppendThreadMessageRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision", "content"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 },
+          "content": { "type": "string", "minLength": 1, "maxLength": 32768 }
+        }
+      },
+      "ForkThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision", "throughHistorySequence"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 },
+          "throughHistorySequence": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          }
+        }
+      },
+      "RollbackThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision", "numTurns"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 },
+          "numTurns": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          }
+        }
+      },
+      "ArchiveThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "UnarchiveThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "RenameThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision", "title"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 },
+          "title": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "DeleteThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "ThreadStatus": {
+        "type": "string",
+        "enum": ["active", "archived", "deleted"]
+      },
+      "ThreadView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "threadId",
+          "title",
+          "status",
+          "revision",
+          "lastMessageSequence",
+          "forkedFromThreadId",
+          "forkedThroughHistorySequence",
+          "createdAt",
+          "updatedAt",
+          "archivedAt",
+          "deletedAt"
+        ],
+        "properties": {
+          "threadId": { "type": "string" },
+          "title": { "type": ["string", "null"] },
+          "status": { "$ref": "#/components/schemas/ThreadStatus" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "lastMessageSequence": { "type": "integer", "minimum": 0 },
+          "forkedFromThreadId": { "type": ["string", "null"] },
+          "forkedThroughHistorySequence": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "archivedAt": { "type": ["string", "null"], "format": "date-time" },
+          "deletedAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "ThreadEventType": {
+        "type": "string",
+        "enum": [
+          "thread.created",
+          "thread.message.appended",
+          "thread.forked",
+          "thread.archived",
+          "thread.unarchived",
+          "thread.renamed",
+          "thread.rolled_back",
+          "thread.deleted"
+        ]
+      },
+      "ThreadStandardEventType": {
+        "type": "string",
+        "enum": [
+          "thread.created",
+          "thread.message.appended",
+          "thread.forked",
+          "thread.archived",
+          "thread.unarchived",
+          "thread.renamed",
+          "thread.deleted"
+        ]
+      },
+      "ThreadStandardEventView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "threadId",
+          "eventId",
+          "sequence",
+          "occurredAt",
+          "type"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.thread-event.v0"
+          },
+          "threadId": { "type": "string" },
+          "eventId": { "type": "string" },
+          "sequence": { "type": "integer", "minimum": 1 },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "type": { "$ref": "#/components/schemas/ThreadStandardEventType" }
+        }
+      },
+      "ThreadRolledBackEventView": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Redacted durable rollback delivery event. Private marker identifiers, raw history ranges, actor identity and tenancy are never exposed.",
+        "required": [
+          "threadId",
+          "eventId",
+          "sequence",
+          "occurredAt",
+          "type",
+          "requestedTurns",
+          "removedTurns"
+        ],
+        "properties": {
+          "threadId": { "type": "string" },
+          "eventId": { "type": "string" },
+          "sequence": { "type": "integer", "minimum": 1 },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "type": { "type": "string", "const": "thread.rolled_back" },
+          "requestedTurns": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          },
+          "removedTurns": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          }
+        }
+      },
+      "ThreadEventView": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/ThreadStandardEventView" },
+          { "$ref": "#/components/schemas/ThreadRolledBackEventView" }
+        ]
+      },
+      "MessageRole": {
+        "type": "string",
+        "enum": ["user", "assistant", "system", "tool"]
+      },
+      "ProposedPlanView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "planId",
+          "threadId",
+          "runId",
+          "messageId",
+          "content",
+          "createdAt"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "crewon.proposed-plan.v0" },
+          "planId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "runId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "messageId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 9999,
+            "description": "Complete public Plan body. The server enforces a 9999-byte UTF-8 hard limit; maxLength is the provider-neutral character upper bound."
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "MessageView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "messageId",
+          "threadId",
+          "sequence",
+          "role",
+          "content",
+          "proposedPlan",
+          "createdAt"
+        ],
+        "properties": {
+          "messageId": { "type": "string" },
+          "threadId": { "type": "string" },
+          "sequence": { "type": "integer", "minimum": 1 },
+          "role": { "$ref": "#/components/schemas/MessageRole" },
+          "content": { "type": "string" },
+          "proposedPlan": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/ProposedPlanView" },
+              { "type": "null" }
+            ]
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ThreadMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "thread"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "thread": { "$ref": "#/components/schemas/ThreadView" }
+        }
+      },
+      "AppendThreadMessageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "thread", "message"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "thread": { "$ref": "#/components/schemas/ThreadView" },
+          "message": { "$ref": "#/components/schemas/MessageView" }
+        }
+      },
+      "GetThreadResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["thread"],
+        "properties": {
+          "thread": { "$ref": "#/components/schemas/ThreadView" }
+        }
+      },
+      "ThreadGoalStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "paused",
+          "blocked",
+          "usageLimited",
+          "budgetLimited",
+          "complete"
+        ]
+      },
+      "ThreadGoalView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "threadId",
+          "goalId",
+          "revision",
+          "objective",
+          "status",
+          "tokenBudget",
+          "tokensUsed",
+          "timeUsedSeconds",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "threadId": { "type": "string" },
+          "goalId": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "objective": { "type": "string", "minLength": 1, "maxLength": 32768 },
+          "status": { "$ref": "#/components/schemas/ThreadGoalStatus" },
+          "tokenBudget": { "type": ["integer", "null"], "minimum": 1 },
+          "tokensUsed": { "type": "integer", "minimum": 0 },
+          "timeUsedSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Cumulative whole seconds while this Goal is attributed to a started durable Run. Queued time and idle time between Runs are excluded."
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "GetThreadGoalResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["goal", "eventSequence"],
+        "properties": {
+          "goal": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/ThreadGoalView" },
+              { "type": "null" }
+            ]
+          },
+          "eventSequence": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Durable Thread Goal event sequence at the same Store read point as goal. Use it as Last-Event-ID when attaching the Goal event stream."
+          }
+        }
+      },
+      "ThreadGoalTokenBudgetUpdate": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": {
+              "kind": { "type": "string", "const": "keep" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "value"],
+            "properties": {
+              "kind": { "type": "string", "const": "set" },
+              "value": { "type": ["integer", "null"], "minimum": 1 }
+            }
+          }
+        ]
+      },
+      "SetThreadGoalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision", "objective", "status", "tokenBudget"],
+        "properties": {
+          "expectedRevision": {
+            "type": ["integer", "null"],
+            "minimum": 1
+          },
+          "objective": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "status": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/ThreadGoalStatus" },
+              { "type": "null" }
+            ]
+          },
+          "tokenBudget": {
+            "$ref": "#/components/schemas/ThreadGoalTokenBudgetUpdate"
+          }
+        }
+      },
+      "ClearThreadGoalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "ThreadGoalMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disposition",
+          "goal",
+          "canceledRun",
+          "retainedRun",
+          "continuationRun"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "goal": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/ThreadGoalView" },
+              { "type": "null" }
+            ]
+          },
+          "canceledRun": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/RunView" },
+              { "type": "null" }
+            ]
+          },
+          "retainedRun": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/RunView" },
+              { "type": "null" }
+            ]
+          },
+          "continuationRun": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/RunView" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
+      "ThreadGoalEventBaseView": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "threadId",
+          "eventId",
+          "sequence",
+          "occurredAt"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.thread-goal-event.v0"
+          },
+          "threadId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "eventId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "sequence": { "type": "integer", "minimum": 1 },
+          "occurredAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ThreadGoalUpdatedEventView": {
+        "unevaluatedProperties": false,
+        "allOf": [
+          { "$ref": "#/components/schemas/ThreadGoalEventBaseView" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "type": "string", "const": "goal.updated" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["goal"],
+                "properties": {
+                  "goal": { "$ref": "#/components/schemas/ThreadGoalView" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ThreadGoalClearedEventView": {
+        "unevaluatedProperties": false,
+        "allOf": [
+          { "$ref": "#/components/schemas/ThreadGoalEventBaseView" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "type": "string", "const": "goal.cleared" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["previousGoalId", "previousRevision"],
+                "properties": {
+                  "previousGoalId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "previousRevision": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ThreadGoalEventView": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/ThreadGoalUpdatedEventView" },
+          { "$ref": "#/components/schemas/ThreadGoalClearedEventView" }
+        ]
+      },
+      "ListThreadsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "nextCursor"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ThreadView" }
+          },
+          "nextCursor": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9_-]{1,512}$",
+            "maxLength": 512
+          }
+        }
+      },
+      "ListThreadMessagesResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "nextCursor"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/MessageView" }
+          },
+          "nextCursor": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "maxLength": 128
+          }
+        }
+      },
+      "CreateRunRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["threadId"],
+        "properties": {
+          "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "agentVersionId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Optional immutable AgentVersion selection. The server admits it before creating a Run; omission uses the configured default."
+          }
+        }
+      },
+      "StartTurnRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "content",
+          "agentVersionId",
+          "executionIntent"
+        ],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 },
+          "content": { "type": "string", "minLength": 1, "maxLength": 32768 },
+          "agentVersionId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Requested immutable AgentVersion; null uses the active default. The resolved route is server-owned."
+          },
+          "executionIntent": {
+            "type": "string",
+            "enum": ["none", "goal", "plan"],
+            "description": "Atomic Turn intent. Goal creates or updates the persistent Thread Goal; Plan clears it and pins this Run to Plan collaboration mode."
+          }
+        }
+      },
+      "CompactThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision", "agentVersionId"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 },
+          "agentVersionId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Requested immutable AgentVersion for the compactor; null uses the active default."
+          }
+        }
+      },
+      "CancelRunRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "RunStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "waitingApproval",
+          "suspended",
+          "reconciling",
+          "completed",
+          "failed",
+          "canceled"
+        ]
+      },
+      "RunView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "threadId",
+          "status",
+          "revision",
+          "lastSequence",
+          "cancelRequested",
+          "waitingApproval",
+          "collaborationMode",
+          "goalBinding",
+          "outputRef",
+          "failure",
+          "createdAt",
+          "updatedAt",
+          "terminalAt"
+        ],
+        "properties": {
+          "runId": { "type": "string" },
+          "threadId": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/RunStatus" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "lastSequence": { "type": "integer", "minimum": 1 },
+          "cancelRequested": { "type": "boolean" },
+          "waitingApproval": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["approvalId"],
+                "properties": { "approvalId": { "type": "string" } }
+              }
+            ]
+          },
+          "collaborationMode": {
+            "type": "string",
+            "enum": ["default", "plan"]
+          },
+          "purpose": {
+            "type": "string",
+            "enum": ["turn", "manualCompaction"],
+            "description": "Immutable Run purpose. Omitted only by legacy servers and interpreted as turn."
+          },
+          "goalBinding": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["goalId", "revision", "objectiveDigest"],
+                "properties": {
+                  "goalId": { "type": "string", "minLength": 1 },
+                  "revision": { "type": "integer", "minimum": 1 },
+                  "objectiveDigest": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              }
+            ]
+          },
+          "outputRef": { "type": ["string", "null"] },
+          "failure": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code", "retryable"],
+                "properties": {
+                  "code": { "type": "string" },
+                  "retryable": { "type": "boolean" }
+                }
+              }
+            ]
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "terminalAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "RunMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "run"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "run": { "$ref": "#/components/schemas/RunView" }
+        }
+      },
+      "StartTurnResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "thread", "message", "run"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "thread": { "$ref": "#/components/schemas/ThreadView" },
+          "message": { "$ref": "#/components/schemas/MessageView" },
+          "run": { "$ref": "#/components/schemas/RunView" }
+        }
+      },
+      "GetRunResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run"],
+        "properties": { "run": { "$ref": "#/components/schemas/RunView" } }
+      },
+      "ListThreadRunsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "nextCursor"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RunView" }
+          },
+          "nextCursor": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9_-]{1,512}$",
+            "maxLength": 512
+          }
+        }
+      },
+      "ToolApprovalStatus": {
+        "type": "string",
+        "enum": ["required", "approved", "rejected", "expired", "superseded"]
+      },
+      "DecideToolApprovalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedRevision", "decision", "comment"],
+        "properties": {
+          "expectedRevision": { "type": "integer", "minimum": 1 },
+          "decision": { "type": "string", "enum": ["approved", "rejected"] },
+          "comment": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
+      },
+      "ToolApprovalView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "approvalId",
+          "runId",
+          "status",
+          "revision",
+          "requiredAt",
+          "expiresAt",
+          "decision",
+          "comment",
+          "decidedAt"
+        ],
+        "properties": {
+          "approvalId": { "type": "string" },
+          "runId": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/ToolApprovalStatus" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "requiredAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": ["string", "null"], "format": "date-time" },
+          "decision": {
+            "type": ["string", "null"],
+            "enum": ["approved", "rejected", null]
+          },
+          "comment": { "type": ["string", "null"] },
+          "decidedAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "GetToolApprovalResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["approval"],
+        "properties": {
+          "approval": { "$ref": "#/components/schemas/ToolApprovalView" }
+        }
+      },
+      "ToolApprovalMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "approval", "run"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "approval": { "$ref": "#/components/schemas/ToolApprovalView" },
+          "run": { "$ref": "#/components/schemas/RunView" }
+        }
+      },
+      "PublishAgentVersionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "agentVersionId",
+          "runtimeGeneration",
+          "policySnapshotId",
+          "instructions",
+          "model",
+          "execution",
+          "resources",
+          "tools"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.agent-version-source.v0"
+          },
+          "agentVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "runtimeGeneration": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "policySnapshotId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "instructions": {
+            "type": ["string", "null"],
+            "maxLength": 32768
+          },
+          "model": {
+            "$ref": "#/components/schemas/AgentVersionModel"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/AgentVersionExecution"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/AgentVersionResources"
+          },
+          "tools": {
+            "type": "array",
+            "maxItems": 128,
+            "items": { "$ref": "#/components/schemas/AgentVersionTool" }
+          }
+        }
+      },
+      "AgentVersionModel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "adapterName",
+          "adapterVersion",
+          "modelId",
+          "contextWindowTokens",
+          "autoCompactAtTokens"
+        ],
+        "properties": {
+          "adapterName": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "adapterVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "modelId": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "contextWindowTokens": { "type": "integer", "minimum": 1 },
+          "autoCompactAtTokens": { "type": ["integer", "null"], "minimum": 1 }
+        }
+      },
+      "AgentVersionExecution": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["streamMaxRetries", "maxToolRounds"],
+        "properties": {
+          "streamMaxRetries": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "maxToolRounds": { "type": "integer", "minimum": 1, "maximum": 128 }
+        }
+      },
+      "AgentVersionResources": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workspaceRequired", "governedContextDigest"],
+        "properties": {
+          "workspaceRequired": { "type": "boolean" },
+          "governedContextDigest": {
+            "type": ["string", "null"],
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      },
+      "AgentVersionTool": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/AgentVersionFunctionTool" },
+          { "$ref": "#/components/schemas/AgentVersionCustomTool" }
+        ]
+      },
+      "AgentVersionFunctionTool": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "kind",
+          "name",
+          "description",
+          "execution",
+          "inputSchema"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.tool-definition.v0"
+          },
+          "kind": { "type": "string", "const": "function" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "description": { "type": "string", "maxLength": 4096 },
+          "execution": { "type": "string", "enum": ["serial", "parallel"] },
+          "inputSchema": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "AgentVersionCustomTool": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "kind",
+          "name",
+          "description",
+          "execution",
+          "inputFormat"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.tool-definition.v0"
+          },
+          "kind": { "type": "string", "const": "custom" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "description": { "type": "string", "maxLength": 4096 },
+          "execution": { "type": "string", "enum": ["serial", "parallel"] },
+          "inputFormat": { "type": "string", "const": "text" }
+        }
+      },
+      "AgentVersionView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agentVersionId",
+          "contentDigest",
+          "runtimeGeneration",
+          "policySnapshotId",
+          "model",
+          "createdAt"
+        ],
+        "properties": {
+          "agentVersionId": { "type": "string" },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "runtimeGeneration": { "type": "string" },
+          "policySnapshotId": { "type": "string" },
+          "model": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["adapterName", "adapterVersion", "modelId"],
+            "properties": {
+              "adapterName": { "type": "string" },
+              "adapterVersion": { "type": "string" },
+              "modelId": { "type": "string" }
+            }
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AgentVersionMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "agentVersion"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["registered", "existing"]
+          },
+          "agentVersion": { "$ref": "#/components/schemas/AgentVersionView" }
+        }
+      },
+      "GetAgentVersionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agentVersion"],
+        "properties": {
+          "agentVersion": { "$ref": "#/components/schemas/AgentVersionView" }
+        }
+      },
+      "ListAgentVersionsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "nextCursor"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AgentVersionView" }
+          },
+          "nextCursor": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9_-]{1,768}$",
+            "maxLength": 768
+          }
+        }
+      },
+      "ActiveAgentVersionCatalogResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "releaseId",
+          "activatedAt",
+          "defaultAgentVersionId",
+          "data"
+        ],
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "activatedAt": { "type": "string", "format": "date-time" },
+          "defaultAgentVersionId": { "type": "string" },
+          "data": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/AgentVersionView" }
+          }
+        }
+      },
+      "ArtifactView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifactId",
+          "kind",
+          "mediaType",
+          "sensitivity",
+          "contentDigest",
+          "byteLength",
+          "source",
+          "retention",
+          "encryption",
+          "scan",
+          "createdAt"
+        ],
+        "properties": {
+          "artifactId": { "type": "string" },
+          "kind": { "type": "string", "const": "toolOutput" },
+          "mediaType": { "type": "string" },
+          "sensitivity": {
+            "type": "string",
+            "enum": ["public", "internal", "workspaceSensitive"]
+          },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "byteLength": { "type": "integer", "minimum": 1 },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "runId", "stepId", "callId"],
+            "properties": {
+              "kind": { "type": "string", "const": "toolOutput" },
+              "runId": { "type": "string" },
+              "stepId": { "type": "string" },
+              "callId": { "type": "string" }
+            }
+          },
+          "retention": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "expiresAt"],
+            "properties": {
+              "kind": { "type": "string", "const": "run" },
+              "expiresAt": { "type": "string", "format": "date-time" }
+            }
+          },
+          "encryption": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["scheme"],
+            "properties": {
+              "scheme": {
+                "type": "string",
+                "enum": ["aes256gcm", "externalKms"]
+              }
+            }
+          },
+          "scan": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "scannedAt"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["notRequired", "pending", "clean", "blocked"]
+              },
+              "scannedAt": {
+                "type": ["string", "null"],
+                "format": "date-time"
+              }
+            }
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "GetArtifactResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact"],
+        "properties": {
+          "artifact": { "$ref": "#/components/schemas/ArtifactView" }
+        }
+      },
+      "ErrorCategory": {
+        "type": "string",
+        "enum": [
+          "authentication",
+          "authorization",
+          "notFound",
+          "conflict",
+          "validation",
+          "rateLimit",
+          "providerUnavailable",
+          "deviceUnavailable",
+          "unknownOutcome",
+          "internal"
+        ]
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["category", "code", "message", "requestId"],
+            "properties": {
+              "category": { "$ref": "#/components/schemas/ErrorCategory" },
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "requestId": { "type": "string" }
+            }
+          }
+        }
+      },
+      "RunEventEnvelope": {
+        "type": "object",
+        "required": ["eventId", "runId", "sequence", "occurredAt"],
+        "properties": {
+          "eventId": { "type": "string" },
+          "runId": { "type": "string" },
+          "sequence": { "type": "integer", "minimum": 1 },
+          "occurredAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RunCreatedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "type": "string", "const": "run.created" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["threadId"],
+                "properties": { "threadId": { "type": "string" } }
+              }
+            }
+          }
+        ]
+      },
+      "RunStartedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          { "$ref": "#/components/schemas/EmptyRunEventData" },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": { "type": { "const": "run.started" } }
+          }
+        ]
+      },
+      "RunApprovalRequiredEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "run.approval.required" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["approvalId"],
+                "properties": { "approvalId": { "type": "string" } }
+              }
+            }
+          }
+        ]
+      },
+      "RunResumedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          { "$ref": "#/components/schemas/RunReasonEventData" },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": { "type": { "const": "run.resumed" } }
+          }
+        ]
+      },
+      "RunSuspendedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          { "$ref": "#/components/schemas/RunReasonEventData" },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": { "type": { "const": "run.suspended" } }
+          }
+        ]
+      },
+      "RunReconciliationRequiredEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          { "$ref": "#/components/schemas/EmptyRunEventData" },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": { "type": { "const": "run.reconciliation.required" } }
+          }
+        ]
+      },
+      "RunCancelRequestedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          { "$ref": "#/components/schemas/EmptyRunEventData" },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": { "type": { "const": "run.cancel.requested" } }
+          }
+        ]
+      },
+      "RunCompletedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "run.completed" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["outputRef"],
+                "properties": { "outputRef": { "type": ["string", "null"] } }
+              }
+            }
+          }
+        ]
+      },
+      "RunFailedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "run.failed" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code", "retryable"],
+                "properties": {
+                  "code": { "type": "string" },
+                  "retryable": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RunCanceledEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          { "$ref": "#/components/schemas/RunReasonEventData" },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": { "type": { "const": "run.canceled" } }
+          }
+        ]
+      },
+      "SegmentStartedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "segment.started" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["segmentId", "attempt"],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "attempt": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ModelSamplingRetryEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "model.sampling.retry" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "segmentId",
+                  "samplingAttempt",
+                  "maxRetries",
+                  "code",
+                  "discardedOutput"
+                ],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "samplingAttempt": { "type": "integer", "minimum": 1 },
+                  "maxRetries": { "type": "integer", "minimum": 1 },
+                  "code": { "type": "string" },
+                  "discardedOutput": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ModelTransportFallbackEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "model.transport.fallback" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "segmentId",
+                  "fromTransport",
+                  "toTransport",
+                  "code",
+                  "discardedOutput"
+                ],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "fromTransport": { "type": "string" },
+                  "toTransport": { "type": "string" },
+                  "code": { "type": "string" },
+                  "discardedOutput": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ModelOutputDeltaEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "model.output.delta" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["segmentId", "delta"],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "delta": { "type": "string", "maxLength": 16384 }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ToolRequestedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "tool.requested" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["segmentId", "callId", "kind", "name"],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "callId": { "type": "string" },
+                  "kind": { "type": "string", "enum": ["function", "custom"] },
+                  "name": { "type": "string", "maxLength": 128 }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ToolCompletedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "tool.completed" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "segmentId",
+                  "callId",
+                  "kind",
+                  "name",
+                  "isError",
+                  "outputTruncated",
+                  "artifactAvailable"
+                ],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "callId": { "type": "string" },
+                  "kind": { "type": "string", "enum": ["function", "custom"] },
+                  "name": { "type": "string", "maxLength": 128 },
+                  "isError": { "type": "boolean" },
+                  "outputTruncated": { "type": "boolean" },
+                  "artifactAvailable": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ContextCompactedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "context.compacted" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mode",
+                  "replacesThroughSequence",
+                  "inputTokens",
+                  "outputTokens",
+                  "totalTokens"
+                ],
+                "properties": {
+                  "mode": { "type": "string", "enum": ["auto", "manual"] },
+                  "replacesThroughSequence": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "inputTokens": { "type": "integer", "minimum": 0 },
+                  "outputTokens": { "type": "integer", "minimum": 0 },
+                  "totalTokens": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RateLimitWindow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["usedPercent", "windowMinutes", "resetsAt"],
+        "properties": {
+          "usedPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+          "windowMinutes": { "type": ["integer", "null"], "minimum": 0 },
+          "resetsAt": { "type": ["integer", "null"], "minimum": 0 }
+        }
+      },
+      "CreditsSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hasCredits", "unlimited", "balance"],
+        "properties": {
+          "hasCredits": { "type": "boolean" },
+          "unlimited": { "type": "boolean" },
+          "balance": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "SpendControlLimitSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["limit", "used", "remainingPercent", "resetsAt"],
+        "properties": {
+          "limit": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "used": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "remainingPercent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "resetsAt": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "RateLimitSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "limitId",
+          "limitName",
+          "primary",
+          "secondary",
+          "credits",
+          "individualLimit",
+          "planType",
+          "rateLimitReachedType"
+        ],
+        "properties": {
+          "limitId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "limitName": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "primary": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/RateLimitWindow" },
+              { "type": "null" }
+            ]
+          },
+          "secondary": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/RateLimitWindow" },
+              { "type": "null" }
+            ]
+          },
+          "credits": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/CreditsSnapshot" },
+              { "type": "null" }
+            ]
+          },
+          "individualLimit": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/SpendControlLimitSnapshot" },
+              { "type": "null" }
+            ]
+          },
+          "planType": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "rateLimitReachedType": {
+            "type": ["string", "null"],
+            "enum": [
+              "rate_limit_reached",
+              "workspace_owner_credits_depleted",
+              "workspace_member_credits_depleted",
+              "workspace_owner_usage_limit_reached",
+              "workspace_member_usage_limit_reached",
+              null
+            ]
+          }
+        }
+      },
+      "RateLimitUpdatedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "rate_limit.updated" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["segmentId", "snapshot"],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "snapshot": {
+                    "$ref": "#/components/schemas/RateLimitSnapshot"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "UsageRecordedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "usage.recorded" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "segmentId",
+                  "inputTokens",
+                  "outputTokens",
+                  "totalTokens"
+                ],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "inputTokens": { "type": "integer", "minimum": 0 },
+                  "outputTokens": { "type": "integer", "minimum": 0 },
+                  "totalTokens": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RunGoalAccountingUpdatedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "run.goal.accounting.updated" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["goalId", "goalRevision", "steeringPending"],
+                "properties": {
+                  "goalId": { "type": ["string", "null"] },
+                  "goalRevision": {
+                    "type": ["integer", "null"],
+                    "minimum": 1
+                  },
+                  "steeringPending": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RunGoalSteeringConsumedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "run.goal.steering.consumed" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      },
+      "SegmentCompletedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "segment.completed" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["segmentId"],
+                "properties": { "segmentId": { "type": "string" } }
+              }
+            }
+          }
+        ]
+      },
+      "SegmentCheckpointedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "segment.checkpointed" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["segmentId"],
+                "properties": { "segmentId": { "type": "string" } }
+              }
+            }
+          }
+        ]
+      },
+      "SegmentFailedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "segment.failed" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["segmentId", "code", "retryable"],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "code": { "type": "string" },
+                  "retryable": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "MessageCompletedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "message.completed" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["messageId", "messageSequence", "role"],
+                "properties": {
+                  "messageId": { "type": "string" },
+                  "messageSequence": { "type": "integer", "minimum": 1 },
+                  "role": { "const": "assistant" }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PlanProposedEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "plan.proposed" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["planId", "messageId", "messageSequence"],
+                "properties": {
+                  "planId": { "type": "string" },
+                  "messageId": { "type": "string" },
+                  "messageSequence": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RunReasonEventData": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["reasonCode"],
+            "properties": {
+              "reasonCode": { "type": "string" }
+            }
+          }
+        }
+      },
+      "EmptyRunEventData": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": { "type": "object", "additionalProperties": false }
+        }
+      },
+      "RunEventView": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/RunCreatedEventView" },
+          { "$ref": "#/components/schemas/RunStartedEventView" },
+          { "$ref": "#/components/schemas/RunApprovalRequiredEventView" },
+          { "$ref": "#/components/schemas/RunResumedEventView" },
+          { "$ref": "#/components/schemas/RunSuspendedEventView" },
+          { "$ref": "#/components/schemas/RunReconciliationRequiredEventView" },
+          { "$ref": "#/components/schemas/RunCancelRequestedEventView" },
+          { "$ref": "#/components/schemas/RunCompletedEventView" },
+          { "$ref": "#/components/schemas/RunFailedEventView" },
+          { "$ref": "#/components/schemas/RunCanceledEventView" },
+          { "$ref": "#/components/schemas/SegmentStartedEventView" },
+          { "$ref": "#/components/schemas/ModelSamplingRetryEventView" },
+          { "$ref": "#/components/schemas/ModelTransportFallbackEventView" },
+          { "$ref": "#/components/schemas/ModelOutputDeltaEventView" },
+          { "$ref": "#/components/schemas/ToolRequestedEventView" },
+          { "$ref": "#/components/schemas/ToolCompletedEventView" },
+          { "$ref": "#/components/schemas/ContextCompactedEventView" },
+          { "$ref": "#/components/schemas/RateLimitUpdatedEventView" },
+          { "$ref": "#/components/schemas/UsageRecordedEventView" },
+          {
+            "$ref": "#/components/schemas/RunGoalAccountingUpdatedEventView"
+          },
+          {
+            "$ref": "#/components/schemas/RunGoalSteeringConsumedEventView"
+          },
+          { "$ref": "#/components/schemas/SegmentCheckpointedEventView" },
+          { "$ref": "#/components/schemas/SegmentCompletedEventView" },
+          { "$ref": "#/components/schemas/SegmentFailedEventView" },
+          { "$ref": "#/components/schemas/PlanProposedEventView" },
+          { "$ref": "#/components/schemas/MessageCompletedEventView" }
+        ]
+      }
+    }
+  }
+}

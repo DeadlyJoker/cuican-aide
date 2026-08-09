@@ -1,0 +1,26 @@
+{
+  "name": "@crewon/mcp-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "license:check": "node scripts/check-runtime-license.mjs",
+    "test": "pnpm license:check && node --experimental-strip-types --test src/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@crewon/tool-broker": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.26.0"
+  },
+  "devDependencies": {
+    "@crewon/contracts": "workspace:*",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

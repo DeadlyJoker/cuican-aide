@@ -1,0 +1,41 @@
+{
+  "name": "@crewon/runtime-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "license:check": "pnpm --filter @crewon/mcp-runtime license:check && node scripts/check-production-licenses.mjs",
+    "release": "node --experimental-strip-types src/release-main.ts",
+    "release:rollback": "node --experimental-strip-types src/release-rollback-main.ts",
+    "start": "node --experimental-strip-types src/main.ts",
+    "test": "pnpm license:check && node --experimental-strip-types --test src/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@crewon/agent-kernel": "workspace:*",
+    "@crewon/agent-responses": "workspace:*",
+    "@crewon/agent-version": "workspace:*",
+    "@crewon/application": "workspace:*",
+    "@crewon/artifacts": "workspace:*",
+    "@crewon/contracts": "workspace:*",
+    "@crewon/context": "workspace:*",
+    "@crewon/domain": "workspace:*",
+    "@crewon/device-dispatch": "workspace:*",
+    "@crewon/mcp-runtime": "workspace:*",
+    "@crewon/store": "workspace:*",
+    "@crewon/tool-broker": "workspace:*",
+    "uuid": "14.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/pg": "8.20.0",
+    "pg": "8.22.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

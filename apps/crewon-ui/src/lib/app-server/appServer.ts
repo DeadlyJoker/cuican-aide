@@ -55,6 +55,7 @@ import type { AgentCreateResponse } from "@crewon-protocol/v2/AgentCreateRespons
 import type { AgentUpdateResponse } from "@crewon-protocol/v2/AgentUpdateResponse";
 import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
 import type { ModelProviderCapabilitiesReadResponse } from "@crewon-protocol/v2/ModelProviderCapabilitiesReadResponse";
+import type { ModelProviderProbeResponse } from "@crewon-protocol/v2/ModelProviderProbeResponse";
 import type { PermissionProfileListResponse } from "@crewon-protocol/v2/PermissionProfileListResponse";
 import type { PluginInstallResponse } from "@crewon-protocol/v2/PluginInstallResponse";
 import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse";
@@ -62,6 +63,7 @@ import type { PluginReadResponse } from "@crewon-protocol/v2/PluginReadResponse"
 import type { PluginSkillReadResponse } from "@crewon-protocol/v2/PluginSkillReadResponse";
 import type { PlanDeltaNotification } from "@crewon-protocol/v2/PlanDeltaNotification";
 import type { OfficeRunUpdatedNotification } from "@crewon-protocol/v2/OfficeRunUpdatedNotification";
+import type { WorkflowRunUpdatedNotification } from "@crewon-protocol/v2/WorkflowRunUpdatedNotification";
 import type { RemoteControlStatusChangedNotification } from "@crewon-protocol/v2/RemoteControlStatusChangedNotification";
 import type { ReasoningSummaryPartAddedNotification } from "@crewon-protocol/v2/ReasoningSummaryPartAddedNotification";
 import type { ReasoningSummaryTextDeltaNotification } from "@crewon-protocol/v2/ReasoningSummaryTextDeltaNotification";
@@ -85,6 +87,7 @@ import type { ThreadForkResponse } from "@crewon-protocol/v2/ThreadForkResponse"
 import type { ThreadGoalClearedNotification } from "@crewon-protocol/v2/ThreadGoalClearedNotification";
 import type { ThreadGoalGetResponse } from "@crewon-protocol/v2/ThreadGoalGetResponse";
 import type { ThreadGoalSetResponse } from "@crewon-protocol/v2/ThreadGoalSetResponse";
+import type { ThreadGoalStatus } from "@crewon-protocol/v2/ThreadGoalStatus";
 import type { ThreadGoalUpdatedNotification } from "@crewon-protocol/v2/ThreadGoalUpdatedNotification";
 import type { ThreadListResponse } from "@crewon-protocol/v2/ThreadListResponse";
 import type { ThreadNameUpdatedNotification } from "@crewon-protocol/v2/ThreadNameUpdatedNotification";
@@ -136,6 +139,12 @@ import type {
   OfficeMessageSubmitMention,
 } from "../domain/officeMessageDelivery";
 import type { ThreadRuntimeSettings } from "../thread/threadRuntimeSettings";
+import type {
+  CrewonWorkflowConfig,
+  CrewonWorkflowExecution,
+  CrewonWorkflowNodeInput,
+  CrewonWorkflowRecord,
+} from "../workflow/crewonWorkflow";
 import {
   ProviderResourceClient,
   type ProviderResourceRpc,
@@ -287,6 +296,16 @@ export type AgentReadResponse = {
 
 export type AgentRecruitableListResponse =
   DomainConfigListResponse<AgentConfig>;
+
+export type WorkflowListResponse = {
+  data: CrewonWorkflowRecord[];
+  nextCursor: string | null;
+};
+
+export type WorkflowCreateResponse = {
+  filePath: string;
+  config: CrewonWorkflowConfig;
+};
 
 export type DomainConfigDeleteResponse = {
   deleted: boolean;
@@ -849,6 +868,10 @@ export type KnownAppServerNotification =
       params: OfficeRunUpdatedNotification;
     }
   | {
+      method: "workflow/run/updated";
+      params: WorkflowRunUpdatedNotification;
+    }
+  | {
       method: "resource/binding/updated";
       params: ResourceBindingUpdatedNotification;
     }
@@ -895,6 +918,9 @@ export class AppServerClient {
   private socket: WebSocket | null = null;
   private closedIntentionally = false;
   private nextId = 1;
+  private workflowRunUpdateListeners = new Set<
+    (notification: WorkflowRunUpdatedNotification) => void
+  >();
   private pending = new Map<
     number | string,
     {
@@ -933,6 +959,15 @@ export class AppServerClient {
       });
     }
     return this.openSocket();
+  }
+
+  subscribeWorkflowRunUpdates(
+    listener: (notification: WorkflowRunUpdatedNotification) => void,
+  ): () => void {
+    this.workflowRunUpdateListeners.add(listener);
+    return () => {
+      this.workflowRunUpdateListeners.delete(listener);
+    };
   }
 
   private openSocket(protocols?: string[]): Promise<void> {
@@ -1069,6 +1104,21 @@ export class AppServerClient {
       "modelProvider/capabilities/read",
       {},
     );
+  }
+
+  /**
+   * Checks whether a configured provider actually answers.
+   *
+   * `listModels` cannot answer this: the backend falls back to a bundled
+   * catalog when a provider is unreachable, so it succeeds even for a provider
+   * that no turn could ever use.
+   */
+  async probeModelProvider(
+    providerId?: string,
+  ): Promise<ModelProviderProbeResponse> {
+    return this.request<ModelProviderProbeResponse>("modelProvider/probe", {
+      providerId: providerId ?? null,
+    });
   }
 
   async readConfig(cwd?: string): Promise<ConfigReadResponse> {
@@ -1279,12 +1329,27 @@ export class AppServerClient {
     threadId: string,
     objective: string,
     tokenBudget: number | null,
+    status: ThreadGoalStatus = "active",
   ): Promise<ThreadGoalSetResponse> {
     return this.request<ThreadGoalSetResponse>("thread/goal/set", {
       threadId,
       objective,
-      status: "active",
+      status,
       tokenBudget,
+    });
+  }
+
+  /**
+   * Status-only update. `thread/goal/set` treats objective and budget as
+   * optional, so pausing or resuming does not have to resend the objective.
+   */
+  async setThreadGoalStatus(
+    threadId: string,
+    status: ThreadGoalStatus,
+  ): Promise<ThreadGoalSetResponse> {
+    return this.request<ThreadGoalSetResponse>("thread/goal/set", {
+      threadId,
+      status,
     });
   }
 
@@ -1528,6 +1593,7 @@ export class AppServerClient {
     cwd: string,
     command: string,
     processId?: string,
+    options: { outputBytesCap?: number; timeoutMs?: number } = {},
   ): Promise<CommandExecResponse> {
     return this.request<CommandExecResponse>(
       "command/exec",
@@ -1537,10 +1603,36 @@ export class AppServerClient {
         streamStdoutStderr: Boolean(processId),
         streamStdin: Boolean(processId),
         cwd,
-        outputBytesCap: 12000,
-        timeoutMs: 8000,
+        outputBytesCap: options.outputBytesCap ?? 12000,
+        timeoutMs: options.timeoutMs ?? 8000,
       },
-      { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
+      {
+        timeoutMs: Math.max(
+          LONG_REQUEST_TIMEOUT_MS,
+          (options.timeoutMs ?? 8000) + 5000,
+        ),
+      },
+    );
+  }
+
+  async startTerminalSession(
+    cwd: string,
+    processId: string,
+    size: { cols: number; rows: number },
+  ): Promise<CommandExecResponse> {
+    return this.request<CommandExecResponse>(
+      "command/exec",
+      {
+        command: ["sh", "-l"],
+        processId,
+        tty: true,
+        disableOutputCap: true,
+        disableTimeout: true,
+        cwd,
+        env: { TERM: "xterm-256color" },
+        size,
+      },
+      { timeoutMs: 24 * 60 * 60 * 1000 },
     );
   }
 
@@ -1558,6 +1650,13 @@ export class AppServerClient {
 
   async terminateCommand(processId: string): Promise<void> {
     await this.request("command/exec/terminate", { processId });
+  }
+
+  async resizeCommand(
+    processId: string,
+    size: { cols: number; rows: number },
+  ): Promise<void> {
+    await this.request("command/exec/resize", { processId, size });
   }
 
   async readDirectory(path: string): Promise<FsReadDirectoryResponse> {
@@ -1673,6 +1772,81 @@ export class AppServerClient {
     filePath: string,
   ): Promise<DomainConfigDeleteResponse> {
     return this.request<DomainConfigDeleteResponse>("agent/delete", {
+      cwd,
+      filePath,
+    });
+  }
+
+  async listWorkflowConfigs(cwd: string): Promise<WorkflowListResponse> {
+    return this.request<WorkflowListResponse>("workflow/list", {
+      cwd,
+      cursor: null,
+      limit: 100,
+    });
+  }
+
+  async createWorkflowConfig(
+    cwd: string,
+    input: {
+      name: string;
+      description: string;
+      lead: string;
+      nodes: CrewonWorkflowNodeInput[];
+    },
+  ): Promise<WorkflowCreateResponse> {
+    return this.request<WorkflowCreateResponse>("workflow/create", {
+      cwd,
+      ...input,
+    });
+  }
+
+  async runWorkflowConfig(
+    cwd: string,
+    workflowId: string,
+    input: string,
+  ): Promise<CrewonWorkflowExecution> {
+    return this.request<CrewonWorkflowExecution>(
+      "workflow/run",
+      { cwd, workflowId, input },
+      { timeoutMs: 5 * LONG_REQUEST_TIMEOUT_MS },
+    );
+  }
+
+  async resolveWorkflowGate(
+    cwd: string,
+    workflowId: string,
+    executionId: string,
+    nodeId: string,
+    decision: "approve" | "reject",
+    comment: string | null,
+  ): Promise<CrewonWorkflowExecution> {
+    return this.request<CrewonWorkflowExecution>("workflow/gate/resolve", {
+      cwd,
+      workflowId,
+      executionId,
+      nodeId,
+      decision,
+      comment,
+    });
+  }
+
+  async cancelWorkflowRun(
+    cwd: string,
+    workflowId: string,
+    executionId: string,
+  ): Promise<CrewonWorkflowExecution> {
+    return this.request<CrewonWorkflowExecution>("workflow/run/cancel", {
+      cwd,
+      workflowId,
+      executionId,
+    });
+  }
+
+  async deleteWorkflowConfig(
+    cwd: string,
+    filePath: string,
+  ): Promise<DomainConfigDeleteResponse> {
+    return this.request<DomainConfigDeleteResponse>("workflow/delete", {
       cwd,
       filePath,
     });
@@ -2777,6 +2951,11 @@ export class AppServerClient {
     }
 
     if (isKnownNotification(message)) {
+      if (message.method === "workflow/run/updated") {
+        for (const listener of this.workflowRunUpdateListeners) {
+          listener(message.params);
+        }
+      }
       this.onNotification(message);
     }
   }
@@ -2843,6 +3022,7 @@ function isKnownNotification(
     message.method === "mcpServer/oauthLogin/completed" ||
     message.method === "mcpServer/startupStatus/updated" ||
     message.method === "office/run/updated" ||
+    message.method === "workflow/run/updated" ||
     message.method === "remoteControl/status/changed" ||
     message.method === "resource/binding/updated" ||
     message.method === "serverRequest/resolved" ||

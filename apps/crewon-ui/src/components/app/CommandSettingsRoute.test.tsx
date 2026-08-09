@@ -12,6 +12,7 @@ describe("CommandSettingsRoute", () => {
         disabled={false}
         locale="zh"
         notice={null}
+        platform="mac"
         panel={{
           title: "外观",
           subtitle: "全局配置",

@@ -5,6 +5,11 @@ import { AgentPlatformAuthGate } from "./components/auth/AgentPlatformAuthGate";
 import { DesktopWindowFrame } from "./components/DesktopWindowFrame";
 import { installDesktopFetch } from "./lib/desktop/desktopFetch";
 import { detectRuntimeSurface } from "./lib/platform";
+import { loadControlApiClient } from "./lib/control-runtime/controlRuntimeBootstrap";
+// Captured before the auth gate mounts: extracts a PIM launch token from
+// the URL (if present), stores it in sessionStorage, and cleans the URL
+// so the token is never bookmarked or shared.
+import "./lib/agent-platform/pimLaunchBridge";
 // Loaded first: the theme-aware neutral scale every other sheet resolves against.
 import "./styles/neutral-scale.css";
 import "./styles/app.css";
@@ -27,6 +32,7 @@ document.documentElement.dataset.surface = detectRuntimeSurface();
  * that request is blocked by the webview's CORS rules.
  */
 await installDesktopFetch();
+const controlClient = await loadControlApiClient();
 
 /*
  * The window frame sits *outside* the auth gate so the login and connecting
@@ -38,7 +44,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <DesktopWindowFrame>
       <AgentPlatformAuthGate>
-        <App />
+        <App controlClient={controlClient} />
       </AgentPlatformAuthGate>
     </DesktopWindowFrame>
   </StrictMode>,

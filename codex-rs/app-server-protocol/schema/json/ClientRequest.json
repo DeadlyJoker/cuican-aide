@@ -2816,6 +2816,18 @@
     "ModelProviderCapabilitiesReadParams": {
       "type": "object"
     },
+    "ModelProviderProbeParams": {
+      "properties": {
+        "providerId": {
+          "description": "Key under `model_providers` in config to probe. When omitted, the currently selected `model_provider` is probed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "NetworkAccess": {
       "enum": [
         "restricted",
@@ -7683,6 +7695,229 @@
       ],
       "type": "object"
     },
+    "WorkflowCreateParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "lead": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/definitions/WorkflowNodeDefinition"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "cwd",
+        "description",
+        "lead",
+        "name",
+        "nodes"
+      ],
+      "type": "object"
+    },
+    "WorkflowDeleteParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "filePath"
+      ],
+      "type": "object"
+    },
+    "WorkflowGateDecision": {
+      "enum": [
+        "approve",
+        "reject"
+      ],
+      "type": "string"
+    },
+    "WorkflowGateResolveParams": {
+      "properties": {
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/WorkflowGateDecision"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "decision",
+        "executionId",
+        "nodeId",
+        "workflowId"
+      ],
+      "type": "object"
+    },
+    "WorkflowListParams": {
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "WorkflowNodeDefinition": {
+      "oneOf": [
+        {
+          "properties": {
+            "agentId": {
+              "type": "string"
+            },
+            "agentName": {
+              "type": "string"
+            },
+            "instruction": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "agent"
+              ],
+              "title": "AgentWorkflowNodeDefinitionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agentId",
+            "agentName",
+            "instruction",
+            "title",
+            "type"
+          ],
+          "title": "AgentWorkflowNodeDefinition",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "instruction": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "humanGate"
+              ],
+              "title": "HumanGateWorkflowNodeDefinitionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "instruction",
+            "title",
+            "type"
+          ],
+          "title": "HumanGateWorkflowNodeDefinition",
+          "type": "object"
+        }
+      ]
+    },
+    "WorkflowReadParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "workflowId"
+      ],
+      "type": "object"
+    },
+    "WorkflowRunCancelParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "executionId",
+        "workflowId"
+      ],
+      "type": "object"
+    },
+    "WorkflowRunParams": {
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "input": {
+          "type": "string"
+        },
+        "workflowId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cwd",
+        "input",
+        "workflowId"
+      ],
+      "type": "object"
+    },
     "WorkspaceScope": {
       "enum": [
         "conversation",
@@ -8775,6 +9010,174 @@
         "params"
       ],
       "title": "Agent/deleteRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "workflow/list"
+          ],
+          "title": "Workflow/listRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/WorkflowListParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Workflow/listRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "workflow/create"
+          ],
+          "title": "Workflow/createRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/WorkflowCreateParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Workflow/createRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "workflow/read"
+          ],
+          "title": "Workflow/readRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/WorkflowReadParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Workflow/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "workflow/run"
+          ],
+          "title": "Workflow/runRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/WorkflowRunParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Workflow/runRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "workflow/gate/resolve"
+          ],
+          "title": "Workflow/gate/resolveRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/WorkflowGateResolveParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Workflow/gate/resolveRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "workflow/run/cancel"
+          ],
+          "title": "Workflow/run/cancelRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/WorkflowRunCancelParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Workflow/run/cancelRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "workflow/delete"
+          ],
+          "title": "Workflow/deleteRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/WorkflowDeleteParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Workflow/deleteRequest",
       "type": "object"
     },
     {
@@ -10383,6 +10786,30 @@
         "params"
       ],
       "title": "ModelProvider/capabilities/readRequest",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "modelProvider/probe"
+          ],
+          "title": "ModelProvider/probeRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ModelProviderProbeParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "ModelProvider/probeRequest",
       "type": "object"
     },
     {

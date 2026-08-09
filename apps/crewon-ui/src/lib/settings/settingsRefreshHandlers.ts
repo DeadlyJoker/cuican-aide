@@ -1,11 +1,12 @@
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 
 import { refreshAccountPanelAction } from "../account/accountActions";
 import type { AppServerClient } from "../app-server/appServer";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
+import { refreshModelProvidersPanelAction } from "../model-provider/modelProviderActions";
 import type { ConnectionState } from "../shared/connectionState";
 import type { AgentPlatformUser } from "../agent-platform/agentPlatformSession";
 import type { AccountStatus } from "../shared/statusTypes";
@@ -66,6 +67,7 @@ export type AppSettingsRefreshHandlers = {
   refreshIntegrationsPanel: () => Promise<void>;
   refreshKeyboardSettingsPanel: () => Promise<void>;
   refreshMcpSettingsPanel: () => Promise<void>;
+  refreshModelProvidersPanel: () => Promise<void>;
   refreshPersonalizationSettingsPanel: () => Promise<void>;
   refreshWorktreesSettingsPanel: () => Promise<void>;
   openThreadSettingsPanel: () => Promise<void>;
@@ -94,7 +96,7 @@ export function createAppSettingsRefreshHandlers(params: {
   setThreads: (updater: (currentThreads: Thread[]) => Thread[]) => void;
   surface?: RuntimeSurface;
   theme: Theme;
-  threadGoal: ThreadGoal | null;
+  threadGoal: ThreadGoalView | null;
   threads: Thread[];
 }): AppSettingsRefreshHandlers {
   const baseParams = {
@@ -127,6 +129,8 @@ export function createAppSettingsRefreshHandlers(params: {
         isDemoPreview: params.isDemoPreview,
         selectedThreadId: params.selectedThreadId,
       }),
+    refreshModelProvidersPanel: () =>
+      refreshModelProvidersPanelAction(baseParams),
     refreshBrowserSettingsPanel: () =>
       refreshBrowserSettingsPanelAction({
         client: params.client,
@@ -226,6 +230,7 @@ export function createSettingsSectionRefreshHandlers(
     hooks: handlers.refreshHooksPanel,
     keyboard: handlers.refreshKeyboardSettingsPanel,
     mcpServers: handlers.refreshMcpSettingsPanel,
+    modelProviders: handlers.refreshModelProvidersPanel,
     personalization: handlers.refreshPersonalizationSettingsPanel,
     worktrees: handlers.refreshWorktreesSettingsPanel,
   };
@@ -247,6 +252,7 @@ export function createSettingsRefreshHandlers(
     integrations: () => void handlers.refreshIntegrationsPanel(),
     keyboard: () => void handlers.refreshKeyboardSettingsPanel(),
     mcpSettings: () => void handlers.refreshMcpSettingsPanel(),
+    modelProviders: () => void handlers.refreshModelProvidersPanel(),
     personalization: () => void handlers.refreshPersonalizationSettingsPanel(),
     worktrees: () => void handlers.refreshWorktreesSettingsPanel(),
   };

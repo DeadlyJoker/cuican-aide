@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ComposerProgressPill > snapshots an authoritative proposed Plan without inferred step progress 1`] = `"<div class="composer-progress-pill" data-od-id="composer-progress-pill" role="status"><span class="composer-progress-step">计划已生成</span></div>"`;

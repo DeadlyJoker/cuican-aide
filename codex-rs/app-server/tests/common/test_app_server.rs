@@ -56,6 +56,7 @@ use crewon_app_server_protocol::McpServerToolCallParams;
 use crewon_app_server_protocol::MockExperimentalMethodParams;
 use crewon_app_server_protocol::ModelListParams;
 use crewon_app_server_protocol::ModelProviderCapabilitiesReadParams;
+use crewon_app_server_protocol::ModelProviderProbeParams;
 use crewon_app_server_protocol::PermissionProfileListParams;
 use crewon_app_server_protocol::PluginInstallParams;
 use crewon_app_server_protocol::PluginInstalledParams;
@@ -729,6 +730,15 @@ impl TestAppServer {
         let params = Some(serde_json::to_value(params)?);
         self.send_request("modelProvider/capabilities/read", params)
             .await
+    }
+
+    /// Send a `modelProvider/probe` JSON-RPC request.
+    pub async fn send_model_provider_probe_request(
+        &mut self,
+        params: ModelProviderProbeParams,
+    ) -> anyhow::Result<i64> {
+        let params = Some(serde_json::to_value(params)?);
+        self.send_request("modelProvider/probe", params).await
     }
 
     /// Send an `experimentalFeature/list` JSON-RPC request.

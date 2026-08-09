@@ -10,7 +10,6 @@ import {
   KeyRound,
   ListChecks,
   LogOut,
-  MoreHorizontal,
   Paperclip,
   PanelLeft,
   Plug,
@@ -20,10 +19,16 @@ import {
   Settings2,
   Sparkles,
   Target,
+  Trash2,
   Users,
 } from "lucide-react";
-import { isTauri } from "@tauri-apps/api/core";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { shellNavItems } from "./commandWorkspaceData";
 import type {
@@ -34,7 +39,24 @@ import type {
 import { classNames } from "./commandWorkspaceUtils";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
-import type { PlatformKind } from "../../lib/platform";
+import {
+  canPickWorkspaceFolder,
+  pickWorkspaceFolder,
+} from "../../lib/desktop/workspaceFolderPicker";
+import {
+  detectRuntimeSurface,
+  type PlatformKind,
+} from "../../lib/platform";
+import {
+  forgetWorkspace,
+  mergeWorkspaceRoster,
+  nextActiveWorkspace,
+  normalizeWorkspacePath,
+  readWorkspaceRoster,
+  rememberWorkspace,
+  writeWorkspaceRoster,
+  type WorkspaceRosterEntry,
+} from "../../lib/workspace/workspaceRoster";
 import { TitleBarWindowControls } from "../TitleBarWindowControls";
 import {
   type AgentPlatformAccount,
@@ -105,6 +127,26 @@ export function SidebarAccount({
       account.user.username
     ).trim() || account.user.username;
   const initial = displayName.charAt(0).toUpperCase() || "U";
+  const accountMenuRef = useRef<HTMLDetailsElement>(null);
+  /*
+   * Closing on blur ate the click: focus leaves `summary` on pointerdown, so the
+   * menu unmounted before the button it was heading for could fire. Dismissal
+   * keys off a pointerdown that lands outside the menu instead.
+   */
+  useEffect(() => {
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const menu = accountMenuRef.current;
+      if (!menu?.open || !(event.target instanceof Node)) {
+        return;
+      }
+      if (!menu.contains(event.target)) {
+        menu.removeAttribute("open");
+      }
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, []);
   const secondaryLabel =
     account.providerLabel !== displayName
       ? account.providerLabel
@@ -120,15 +162,7 @@ export function SidebarAccount({
     >
       <details
         className="sidebar-account-menu"
-        onBlur={(event) => {
-          const nextTarget = event.relatedTarget;
-          if (
-            !(nextTarget instanceof Node) ||
-            !event.currentTarget.contains(nextTarget)
-          ) {
-            event.currentTarget.removeAttribute("open");
-          }
-        }}
+        ref={accountMenuRef}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.currentTarget.removeAttribute("open");
@@ -249,21 +283,34 @@ export function CommandSidebar({
   onToggleSearch: () => void;
 }) {
   const account = useAgentPlatformAccount();
-  const desktopRuntime = isTauri();
+  /*
+   * This drives layout only: the drag region and the brand offset that clears
+   * the floating window controls. It has to match whatever the window frame
+   * decided to draw, so it keys off the surface rather than `isTauri()`.
+   */
+  const desktopRuntime = detectRuntimeSurface() === "desktop";
   const copy =
     locale === "zh"
       ? {
           addWorkspace: "新增空间",
+          cancel: "取消",
           collapseSidebar: "折叠侧栏",
           conversation: "对话",
           feature: "功能",
           folderPath: "文件夹路径",
+          folderPathHint: "填写本地绝对路径，会话会绑定到这个目录。",
           knowledge: "知识库",
+          chooseFolder: "选择文件夹…",
           newStandaloneThread: "新建无工作空间会话",
           newThread: "新建会话",
           noMatches: "没有匹配",
           noWorkspace: "无工作空间",
           open: "打开",
+          remove: "移出列表",
+          removeWorkspace: (name: string) => `将 ${name} 移出空间列表`,
+          removeWorkspaceHint:
+            "只从侧栏移除这个文件夹，磁盘上的文件和已有会话都不会被删除。",
+          removeWorkspaceTitle: (name: string) => `移出空间「${name}」`,
           search: "搜索",
           searchLabel: "搜索对话和能力",
           searchResults: "搜索结果",
@@ -278,16 +325,26 @@ export function CommandSidebar({
         }
       : {
           addWorkspace: "Add workspace",
+          cancel: "Cancel",
           collapseSidebar: "Collapse sidebar",
           conversation: "Conversation",
           feature: "Feature",
           folderPath: "Folder path",
+          folderPathHint:
+            "Use an absolute local path; conversations bind to this folder.",
           knowledge: "Knowledge base",
+          chooseFolder: "Choose folder…",
           newStandaloneThread: "New conversation without a workspace",
           newThread: "New conversation",
           noMatches: "No matches",
           noWorkspace: "No workspace",
           open: "Open",
+          remove: "Remove",
+          removeWorkspace: (name: string) =>
+            `Remove ${name} from the workspace list`,
+          removeWorkspaceHint:
+            "Removes the folder from the sidebar only. Files on disk and existing conversations are kept.",
+          removeWorkspaceTitle: (name: string) => `Remove workspace ${name}`,
           search: "Search",
           searchLabel: "Search conversations and capabilities",
           searchResults: "Search results",
@@ -304,9 +361,68 @@ export function CommandSidebar({
         };
   const [workspaceFormOpen, setWorkspaceFormOpen] = useState(false);
   const [workspaceDraft, setWorkspaceDraft] = useState(cwd);
+  /*
+   * A native dialog is the only way to learn an absolute folder path, so where
+   * one exists the `+` button is the picker and the typed-path form never
+   * appears. The form stays for web, where no such dialog exists.
+   */
+  const nativeFolderPicker = canPickWorkspaceFolder();
+  const [pickerBusy, setPickerBusy] = useState(false);
+  const workspaceFormRef = useRef<HTMLDivElement>(null);
   const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<
     Set<string>
   >(() => new Set());
+  const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
+  const accountId = account ? String(account.user.id) : null;
+  const [storedWorkspaces, setStoredWorkspaces] = useState<
+    WorkspaceRosterEntry[]
+  >(() => readWorkspaceRoster(accountId));
+  const [removedWorkspaces, setRemovedWorkspaces] = useState<Set<string>>(
+    () => new Set(),
+  );
+  /*
+   * The roster is per account, so switching users must not inherit the previous
+   * one's folders or their removals.
+   */
+  useEffect(() => {
+    setStoredWorkspaces(readWorkspaceRoster(accountId));
+    setRemovedWorkspaces(new Set());
+  }, [accountId]);
+  /*
+   * Derived during render rather than in an effect: a folder that only its
+   * conversations know about has to be in the very first frame, or the tree
+   * renders without it and pops it in afterwards. The effect below only
+   * persists the result.
+   *
+   * `removedWorkspaces` is applied last so a folder the user just removed does
+   * not come straight back via one of its own conversations.
+   */
+  const workspaces = mergeWorkspaceRoster(
+    cwd ? rememberWorkspace(storedWorkspaces, cwd, Date.now()) : storedWorkspaces,
+    linkedThreads.map((thread) => thread.cwd),
+    0,
+  ).filter((entry) => !removedWorkspaces.has(entry.path));
+  const workspacePathsKey = workspaces.map((entry) => entry.path).join("\u0000");
+  useEffect(() => {
+    writeWorkspaceRoster(accountId, workspaces);
+    // Keyed on the paths rather than the array so a re-render with the same
+    // folders does not rewrite storage on every pass.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, workspacePathsKey]);
+
+  function removeWorkspace(path: string) {
+    const normalized = normalizeWorkspacePath(path);
+    setRemovedWorkspaces((current) => new Set(current).add(normalized));
+    const remaining = forgetWorkspace(workspaces, path);
+    setStoredWorkspaces(remaining);
+    writeWorkspaceRoster(accountId, remaining);
+    // Removing the folder the shell is currently pointed at has to move it
+    // somewhere, or the tree would keep showing it as the active workspace.
+    if (normalizeWorkspacePath(path) === normalizeWorkspacePath(cwd)) {
+      onCreateWorkspace?.(nextActiveWorkspace(workspaces, path) ?? "");
+    }
+  }
+
   const currentWorkspaceName = workspaceName(cwd, copy.noWorkspace);
   const currentWorkspaceThreads = linkedThreads
     .filter((thread) => Boolean(cwd) && thread.cwd === cwd)
@@ -314,22 +430,27 @@ export function CommandSidebar({
   const standaloneThreads = linkedThreads
     .filter((thread) => !thread.cwd)
     .slice(0, 5);
-  const otherWorkspaceGroups = Array.from(
-    linkedThreads.reduce((groups, thread) => {
-      const threadCwd = thread.cwd?.trim();
-      if (!threadCwd || threadCwd === cwd) {
-        return groups;
-      }
-      const group = groups.get(threadCwd) ?? [];
-      if (group.length < 5) {
-        group.push(thread);
-      }
-      groups.set(threadCwd, group);
+  /*
+   * Driven by the roster rather than by conversation grouping: a folder the user
+   * opened but has not used yet still belongs in the tree, and a folder they
+   * removed must stay out of it even while its old conversations exist.
+   */
+  const threadsByWorkspace = linkedThreads.reduce((groups, thread) => {
+    const threadCwd = normalizeWorkspacePath(thread.cwd ?? "");
+    if (!threadCwd) {
       return groups;
-    }, new Map<string, CommandLinkedThread[]>()),
-  )
+    }
+    groups.set(threadCwd, [...(groups.get(threadCwd) ?? []), thread]);
+    return groups;
+  }, new Map<string, CommandLinkedThread[]>());
+  const otherWorkspaceGroups = workspaces
+    .map((entry) => entry.path)
+    .filter((path) => path !== normalizeWorkspacePath(cwd))
     .slice(0, 8)
-    .map(([path, threads]) => ({ path, threads }));
+    .map((path) => ({
+      path,
+      threads: (threadsByWorkspace.get(path) ?? []).slice(0, 5),
+    }));
 
   useEffect(() => {
     setWorkspaceDraft(cwd);
@@ -343,6 +464,24 @@ export function CommandSidebar({
     }
     onCreateWorkspace?.(trimmed);
     setWorkspaceFormOpen(false);
+  }
+
+  async function chooseWorkspaceFolder() {
+    // Guards a second dialog while one is already open: the OS keeps the first
+    // modal and the extra request resolves as a cancellation.
+    if (pickerBusy) {
+      return;
+    }
+    setPickerBusy(true);
+    try {
+      const picked = await pickWorkspaceFolder(copy.addWorkspace);
+      if (!picked) {
+        return;
+      }
+      onCreateWorkspace?.(normalizeWorkspacePath(picked));
+    } finally {
+      setPickerBusy(false);
+    }
   }
 
   function toggleWorkspaceGroup(groupId: string) {
@@ -415,20 +554,11 @@ export function CommandSidebar({
         data-od-id="desktop-sidebar-topbar"
         data-tauri-drag-region={desktopRuntime ? "" : undefined}
       >
-        {desktopRuntime ? (
-          <TitleBarWindowControls
-            desktopOnly
-            locale={locale}
-            platform={platform}
-            variant="command"
-          />
-        ) : (
-          <div className="traffic" aria-hidden="true">
-            <span className="dot close" />
-            <span className="dot min" />
-            <span className="dot max" />
-          </div>
-        )}
+        {/*
+         * Window controls come from the global DesktopWindowFrame, which wraps
+         * every route. Mounting them here too would show two sets at once, and
+         * would leave any screen that forgets them frameless.
+         */}
         <div className="sidebar-tools" aria-label={copy.sidebarTools}>
           <button
             aria-label={copy.collapseSidebar}
@@ -553,9 +683,6 @@ export function CommandSidebar({
               {viewIcons[item.key]}
             </span>
             <strong>{locale === "zh" ? item.label : item.en}</strong>
-            {locale === "zh"
-              ? item.meta && <em>{item.meta}</em>
-              : item.metaEn && <em>{item.metaEn}</em>}
           </button>
         ))}
         <button
@@ -579,36 +706,67 @@ export function CommandSidebar({
         aria-label={copy.workspaceTree}
       >
         <div className="tree-head">
-          <button type="button">{copy.workspace}</button>
+          <strong className="tree-head-label">{copy.workspace}</strong>
           <button
-            aria-expanded={workspaceFormOpen}
-            aria-label={copy.addWorkspace}
+            aria-expanded={nativeFolderPicker ? undefined : workspaceFormOpen}
+            aria-label={
+              nativeFolderPicker ? copy.chooseFolder : copy.addWorkspace
+            }
             className="tree-head-action"
+            /*
+             * Only the picker path disables: a dialog already on screen must not
+             * be asked for a second one. The form path keeps its old behaviour of
+             * opening regardless, with the submit button carrying the guard.
+             */
+            disabled={nativeFolderPicker && (pickerBusy || !onCreateWorkspace)}
+            title={nativeFolderPicker ? copy.chooseFolder : copy.addWorkspace}
             type="button"
-            onClick={() => setWorkspaceFormOpen((open) => !open)}
+            onClick={() => {
+              if (nativeFolderPicker) {
+                void chooseWorkspaceFolder();
+                return;
+              }
+              setWorkspaceFormOpen((open) => !open);
+            }}
           >
             <Plus aria-hidden="true" />
           </button>
-        </div>
-        <form
-          className="sidebar-workspace-form"
-          hidden={!workspaceFormOpen}
-          onSubmit={submitWorkspace}
-        >
-          <label htmlFor="command-workspace-path">{copy.folderPath}</label>
-          <input
-            id="command-workspace-path"
-            placeholder="/Users/me/project"
-            value={workspaceDraft}
-            onChange={(event) => setWorkspaceDraft(event.target.value)}
-          />
-          <button
-            type="submit"
-            disabled={!workspaceDraft.trim() || !onCreateWorkspace}
+          <form
+            className="sidebar-workspace-form"
+            hidden={nativeFolderPicker || !workspaceFormOpen}
+            onSubmit={submitWorkspace}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setWorkspaceFormOpen(false);
+              }
+            }}
           >
-            {copy.open}
-          </button>
-        </form>
+            <strong className="sidebar-workspace-form-title">
+              {copy.addWorkspace}
+            </strong>
+            <label htmlFor="command-workspace-path">{copy.folderPath}</label>
+            <input
+              id="command-workspace-path"
+              placeholder="/Users/me/project"
+              value={workspaceDraft}
+              onChange={(event) => setWorkspaceDraft(event.target.value)}
+            />
+            <p className="sidebar-workspace-form-hint">{copy.folderPathHint}</p>
+            <div className="sidebar-workspace-form-actions">
+              <button type="button" onClick={() => setWorkspaceFormOpen(false)}>
+                {copy.cancel}
+              </button>
+              <button
+                className="primary"
+                type="submit"
+                disabled={!workspaceDraft.trim() || !onCreateWorkspace}
+              >
+                {copy.open}
+              </button>
+            </div>
+          </form>
+        </div>
         {cwd ? (
           <div
             className={classNames(
@@ -633,19 +791,21 @@ export function CommandSidebar({
               </button>
               <span className="workspace-row-actions">
                 <button
-                  aria-expanded={workspaceFormOpen}
-                  aria-label={copy.addWorkspace}
-                  type="button"
-                  onClick={() => setWorkspaceFormOpen((open) => !open)}
-                >
-                  <MoreHorizontal aria-hidden="true" />
-                </button>
-                <button
                   aria-label={copy.newThread}
+                  title={copy.newThread}
                   type="button"
                   onClick={() => onNewThread(cwd)}
                 >
                   <SquarePen aria-hidden="true" />
+                </button>
+                <button
+                  aria-label={copy.removeWorkspace(currentWorkspaceName)}
+                  className="workspace-remove-action"
+                  title={copy.removeWorkspace(currentWorkspaceName)}
+                  type="button"
+                  onClick={() => setPendingRemoval(cwd)}
+                >
+                  <Trash2 aria-hidden="true" />
                 </button>
               </span>
             </div>
@@ -702,10 +862,20 @@ export function CommandSidebar({
                 <span className="workspace-row-actions">
                   <button
                     aria-label={copy.threadInWorkspace(name)}
+                    title={copy.threadInWorkspace(name)}
                     type="button"
                     onClick={() => onNewThread(group.path)}
                   >
                     <SquarePen aria-hidden="true" />
+                  </button>
+                  <button
+                    aria-label={copy.removeWorkspace(name)}
+                    className="workspace-remove-action"
+                    title={copy.removeWorkspace(name)}
+                    type="button"
+                    onClick={() => setPendingRemoval(group.path)}
+                  >
+                    <Trash2 aria-hidden="true" />
                   </button>
                 </span>
               </div>
@@ -787,6 +957,21 @@ export function CommandSidebar({
         ) : null}
       </section>
 
+      {pendingRemoval ? (
+        <WorkspaceRemoveDialog
+          cancelLabel={copy.cancel}
+          confirmLabel={copy.remove}
+          hint={copy.removeWorkspaceHint}
+          path={pendingRemoval}
+          title={copy.removeWorkspaceTitle(workspaceName(pendingRemoval))}
+          onCancel={() => setPendingRemoval(null)}
+          onConfirm={() => {
+            removeWorkspace(pendingRemoval);
+            setPendingRemoval(null);
+          }}
+        />
+      ) : null}
+
       {account ? (
         <SidebarAccount
           account={account}
@@ -795,6 +980,65 @@ export function CommandSidebar({
         />
       ) : null}
     </aside>
+  );
+}
+
+/**
+ * Removal is not undoable, so it asks first and states what is *not* affected.
+ * Users read "remove workspace" as "delete my folder", and the sidebar has no
+ * way to walk that back.
+ */
+function WorkspaceRemoveDialog({
+  cancelLabel,
+  confirmLabel,
+  hint,
+  path,
+  title,
+  onCancel,
+  onConfirm,
+}: {
+  cancelLabel: string;
+  confirmLabel: string;
+  hint: string;
+  path: string;
+  title: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="workspace-remove-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onCancel();
+        }
+      }}
+    >
+      <div
+        aria-labelledby="workspace-remove-title"
+        aria-modal="true"
+        className="workspace-remove-dialog"
+        role="dialog"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onCancel();
+          }
+        }}
+      >
+        <strong id="workspace-remove-title">{title}</strong>
+        <code title={path}>{path}</code>
+        <p>{hint}</p>
+        <footer>
+          <button autoFocus type="button" onClick={onCancel}>
+            {cancelLabel}
+          </button>
+          <button className="danger" type="button" onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </footer>
+      </div>
+    </div>
   );
 }
 export function Palette({

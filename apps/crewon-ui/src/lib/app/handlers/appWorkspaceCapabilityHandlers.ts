@@ -6,7 +6,11 @@ import {
   loadBrowserAppsAction,
   readWorkspaceDiffAction,
   readWorkspaceFilesAction,
+  resizeWorkbenchTerminalAction,
   runTerminalStatusAction,
+  startWorkbenchTerminalSessionAction,
+  stopWorkbenchTerminalSessionAction,
+  writeWorkbenchTerminalInputAction,
 } from "../../capability/workspaceCapabilityActions";
 
 type SetCapabilityPanel = (
@@ -21,10 +25,15 @@ export type AppWorkspaceCapabilityHandlers = {
   loadBrowserApps: () => Promise<void>;
   readWorkspaceDiff: () => Promise<void>;
   readWorkspaceFiles: () => Promise<void>;
+  resizeWorkbenchTerminal: (cols: number, rows: number) => Promise<void>;
   runTerminalStatus: () => Promise<void>;
+  startWorkbenchTerminal: () => Promise<void>;
+  stopWorkbenchTerminal: () => Promise<void>;
+  writeWorkbenchTerminalInput: (input: string) => Promise<void>;
 };
 
 export type AppWorkspaceCapabilityHandlersParams = {
+  appendTerminalOutputLine: (notice: string) => void;
   busyToolId: ToolId | null;
   client: AppServerClient | null;
   getTerminalProcessId: () => string | null;
@@ -105,6 +114,43 @@ export function createAppWorkspaceCapabilityHandlers(
         setCapabilityPanel: params.setCapabilityPanel,
         setTerminalProcessId: params.setTerminalProcessId,
         terminalCommand: params.terminalCommand,
+        terminalProcessId: params.getTerminalProcessId,
+      }),
+    startWorkbenchTerminal: () =>
+      startWorkbenchTerminalSessionAction({
+        appendTerminalOutputLine: params.appendTerminalOutputLine,
+        busyToolId: params.busyToolId,
+        client: params.client,
+        isConnected: params.isConnected,
+        isDemo: params.isDemo,
+        locale: params.locale,
+        resolveBackendCwd: params.resolveBackendCwd,
+        setBusyToolId: params.setBusyToolId,
+        setCapabilityPanel: params.setCapabilityPanel,
+        setTerminalProcessId: params.setTerminalProcessId,
+        terminalProcessId: params.getTerminalProcessId,
+      }),
+    writeWorkbenchTerminalInput: (input) =>
+      writeWorkbenchTerminalInputAction({
+        appendTerminalOutputLine: params.appendTerminalOutputLine,
+        client: params.client,
+        input,
+        locale: params.locale,
+        terminalProcessId: params.getTerminalProcessId,
+      }),
+    resizeWorkbenchTerminal: (cols, rows) =>
+      resizeWorkbenchTerminalAction({
+        client: params.client,
+        cols,
+        rows,
+        terminalProcessId: params.getTerminalProcessId,
+      }),
+    stopWorkbenchTerminal: () =>
+      stopWorkbenchTerminalSessionAction({
+        appendTerminalOutputLine: params.appendTerminalOutputLine,
+        client: params.client,
+        input: "",
+        locale: params.locale,
         terminalProcessId: params.getTerminalProcessId,
       }),
   };

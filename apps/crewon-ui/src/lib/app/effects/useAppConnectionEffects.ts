@@ -1,7 +1,12 @@
-import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import {
+  useEffect,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 
 import {
   AppServerClient,
@@ -17,10 +22,7 @@ import {
   syncDemoInspectorStateAction,
 } from "../appDemoStateActions";
 import type { ConnectionState, NoticeState } from "../appRuntimeState";
-import type {
-  AccountStatus,
-  GitRemoteDiffSummary,
-} from "../appStatusTypes";
+import type { AccountStatus, GitRemoteDiffSummary } from "../appStatusTypes";
 import type { Locale } from "../../i18n";
 import type { EmptyThreadSelectionBehavior } from "../../thread/threadModel";
 import { createPrincipalSessionProtocols } from "../../app-server/principalSession";
@@ -35,6 +37,7 @@ export type AppConnectionEffectsParams = {
   isDemo: boolean;
   isDemoPreview: boolean;
   locale: Locale;
+  manageThreads?: boolean;
   preserveThreadsAfterConnectionLoss: (showConnectionNotice?: boolean) => void;
   principalSessionEnabled: boolean;
   selectedThread: Thread | null;
@@ -47,7 +50,7 @@ export type AppConnectionEffectsParams = {
   setGitRemoteDiff: (diff: GitRemoteDiffSummary | null) => void;
   setNotice: (notice: NoticeState | null) => void;
   setSelectedThreadId: (threadId: string | null) => void;
-  setThreadGoal: (goal: ThreadGoal | null) => void;
+  setThreadGoal: (goal: ThreadGoalView | null) => void;
   setThreads: Dispatch<SetStateAction<Thread[]>>;
   showArchivedThreadsRef: MutableRefObject<boolean>;
   showDemoThreads: () => void;
@@ -64,6 +67,7 @@ export function useAppConnectionEffects({
   isDemo,
   isDemoPreview,
   locale,
+  manageThreads = true,
   preserveThreadsAfterConnectionLoss,
   principalSessionEnabled,
   selectedThread,
@@ -99,6 +103,7 @@ export function useAppConnectionEffects({
       currentClient: () => clientRef.current,
       emptySelectionBehavior,
       isDemoPreview,
+      manageThreads,
       preserveThreadsAfterConnectionLoss,
       setAccountStatus,
       setClient: (client) => {
@@ -118,6 +123,7 @@ export function useAppConnectionEffects({
     handleNotification,
     handleServerRequest,
     isDemoPreview,
+    manageThreads,
     preserveThreadsAfterConnectionLoss,
     principalSessionEnabled,
     serverUrl,

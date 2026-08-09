@@ -1,6 +1,6 @@
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 
 import {
   demoAccountStatus,
@@ -13,7 +13,9 @@ import type { AccountStatus, GitRemoteDiffSummary } from "./appStatusTypes";
 import type { ConnectionState } from "./appRuntimeState";
 import type { Locale } from "../i18n";
 
-type ThreadListSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
+type ThreadListSetter = (
+  updater: (currentThreads: Thread[]) => Thread[],
+) => void;
 
 export function localizeDemoThreadsAction(params: {
   connectionState: ConnectionState;
@@ -37,7 +39,7 @@ export function syncDemoInspectorStateAction(params: {
   setAccountStatus: (accountStatus: AccountStatus | null) => void;
   setConversationSummary: (summary: ConversationSummary | null) => void;
   setGitRemoteDiff: (diff: GitRemoteDiffSummary | null) => void;
-  setThreadGoal: (goal: ThreadGoal | null) => void;
+  setThreadGoal: (goal: ThreadGoalView | null) => void;
 }): boolean {
   if (!params.isDemo) {
     return false;

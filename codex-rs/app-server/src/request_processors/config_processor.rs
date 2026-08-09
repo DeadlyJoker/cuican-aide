@@ -24,6 +24,8 @@ use crewon_app_server_protocol::ExperimentalFeatureEnablementSetResponse;
 use crewon_app_server_protocol::JSONRPCErrorError;
 use crewon_app_server_protocol::ManagedHooksRequirements;
 use crewon_app_server_protocol::ModelProviderCapabilitiesReadResponse;
+use crewon_app_server_protocol::ModelProviderProbeParams;
+use crewon_app_server_protocol::ModelProviderProbeResponse;
 use crewon_app_server_protocol::NetworkDomainPermission;
 use crewon_app_server_protocol::NetworkRequirements;
 use crewon_app_server_protocol::NetworkUnixSocketPermission;
@@ -152,6 +154,17 @@ impl ConfigRequestProcessor {
             )
             .await;
         Ok(None)
+    }
+
+    /// Checks whether a configured provider actually answers.
+    ///
+    /// Delegates to a dedicated module because `model/list` cannot answer this:
+    /// it falls back to a bundled catalog when the provider is unreachable.
+    pub(crate) async fn model_provider_probe(
+        &self,
+        params: ModelProviderProbeParams,
+    ) -> Result<ModelProviderProbeResponse, JSONRPCErrorError> {
+        super::model_provider_probe::probe(&self.config_manager, &self.thread_manager, params).await
     }
 
     pub(crate) async fn model_provider_capabilities_read(

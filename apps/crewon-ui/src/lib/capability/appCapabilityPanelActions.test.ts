@@ -39,6 +39,7 @@ function refreshHandlers(overrides: Partial<Record<SettingsRefreshAction, () => 
     refreshIntegrationsPanel: handler("integrations"),
     refreshKeyboardSettingsPanel: handler("keyboard"),
     refreshMcpSettingsPanel: handler("mcpSettings"),
+    refreshModelProvidersPanel: handler("modelProviders"),
     refreshPersonalizationSettingsPanel: handler("personalization"),
     refreshWorktreesSettingsPanel: handler("worktrees"),
   } satisfies AppSettingsRefreshHandlers;

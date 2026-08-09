@@ -26,6 +26,14 @@ import {
 } from "../context/contextAttachPanel";
 import { demoCapabilityPanel } from "../demo/demoContent";
 import {
+  workbenchTerminalDemoNotice,
+  workbenchTerminalErrorNotice,
+  workbenchTerminalExitNotice,
+  workbenchTerminalStopErrorNotice,
+  workbenchTerminalWorkspaceRequiredNotice,
+  workbenchTerminalWriteErrorNotice,
+} from "../terminal/workbenchTerminalNotices";
+import {
   directoryEntriesToPanelItems,
   directoryPanel,
   fileErrorPanel,
@@ -87,7 +95,23 @@ type WorkspaceCapabilityClient = {
     cwd: string,
     command: string,
     processId?: string,
+    options?: { outputBytesCap?: number; timeoutMs?: number },
   ): Promise<TerminalCommandResponse>;
+  resizeCommand(
+    processId: string,
+    size: { cols: number; rows: number },
+  ): Promise<void>;
+  startTerminalSession(
+    cwd: string,
+    processId: string,
+    size: { cols: number; rows: number },
+  ): Promise<TerminalCommandResponse>;
+  terminateCommand(processId: string): Promise<void>;
+  writeCommandInput(
+    processId: string,
+    text: string,
+    closeStdin?: boolean,
+  ): Promise<void>;
 };
 
 type SetCapabilityPanel = (
@@ -115,6 +139,29 @@ export type RunTerminalStatusActionParams =
     terminalCommand: string;
     terminalProcessId: () => string | null;
   };
+
+export type WorkbenchTerminalSessionActionParams =
+  BaseWorkspaceCapabilityActionParams & {
+    appendTerminalOutputLine: (notice: string) => void;
+    processIdFactory?: () => string;
+    setTerminalProcessId: (processId: string | null) => void;
+    terminalProcessId: () => string | null;
+  };
+
+export type WorkbenchTerminalInputActionParams = {
+  appendTerminalOutputLine: (notice: string) => void;
+  client: WorkspaceCapabilityClient | null | undefined;
+  input: string;
+  locale: Locale;
+  terminalProcessId: () => string | null;
+};
+
+export type WorkbenchTerminalResizeActionParams = {
+  client: WorkspaceCapabilityClient | null | undefined;
+  cols: number;
+  rows: number;
+  terminalProcessId: () => string | null;
+};
 
 export type ReadWorkspaceFilesActionParams =
   BaseWorkspaceCapabilityActionParams;
@@ -191,6 +238,109 @@ export async function runTerminalStatusAction(
       setTerminalProcessId(null);
     }
     setBusyToolId(null);
+  }
+}
+
+export async function startWorkbenchTerminalSessionAction(
+  params: WorkbenchTerminalSessionActionParams,
+) {
+  const {
+    appendTerminalOutputLine,
+    busyToolId,
+    client,
+    isConnected,
+    isDemo,
+    locale,
+    processIdFactory = () => `crewon-ui-pty-${Date.now()}`,
+    resolveBackendCwd,
+    setBusyToolId,
+    setTerminalProcessId,
+    terminalProcessId,
+  } = params;
+
+  if (isDemo) {
+    appendTerminalOutputLine(workbenchTerminalDemoNotice(locale));
+    return;
+  }
+  if (busyToolId || !isConnected || terminalProcessId()) {
+    return;
+  }
+
+  const terminalCwd = await resolveBackendCwd();
+  if (!terminalCwd || !client) {
+    appendTerminalOutputLine(workbenchTerminalWorkspaceRequiredNotice(locale));
+    return;
+  }
+
+  const processId = processIdFactory();
+  setBusyToolId("terminal");
+  setTerminalProcessId(processId);
+  const session = client.startTerminalSession(terminalCwd, processId, {
+    cols: 100,
+    rows: 30,
+  });
+  setBusyToolId(null);
+
+  /*
+   * Session status is written into the terminal's own output stream. It used to
+   * go into `capabilityPanel`, which any other workbench surface would replace.
+   */
+  void session
+    .then((response) => {
+      appendTerminalOutputLine(
+        workbenchTerminalExitNotice(response?.exitCode, locale),
+      );
+    })
+    .catch((error) => {
+      appendTerminalOutputLine(workbenchTerminalErrorNotice(error, locale));
+    })
+    .finally(() => {
+      if (terminalProcessId() === processId) {
+        setTerminalProcessId(null);
+      }
+    });
+}
+
+export async function writeWorkbenchTerminalInputAction(
+  params: WorkbenchTerminalInputActionParams,
+) {
+  const { appendTerminalOutputLine, client, input, locale, terminalProcessId } =
+    params;
+  const processId = terminalProcessId();
+  if (!client || !processId || !input) {
+    return;
+  }
+  try {
+    await client.writeCommandInput(processId, input);
+  } catch (error) {
+    appendTerminalOutputLine(workbenchTerminalWriteErrorNotice(error, locale));
+  }
+}
+
+export async function resizeWorkbenchTerminalAction(
+  params: WorkbenchTerminalResizeActionParams,
+) {
+  const { client, cols, rows, terminalProcessId } = params;
+  const processId = terminalProcessId();
+  if (!client || !processId || cols < 1 || rows < 1) {
+    return;
+  }
+  await client.resizeCommand(processId, { cols, rows });
+}
+
+export async function stopWorkbenchTerminalSessionAction(
+  params: WorkbenchTerminalInputActionParams,
+) {
+  const { appendTerminalOutputLine, client, locale, terminalProcessId } =
+    params;
+  const processId = terminalProcessId();
+  if (!client || !processId) {
+    return;
+  }
+  try {
+    await client.terminateCommand(processId);
+  } catch (error) {
+    appendTerminalOutputLine(workbenchTerminalStopErrorNotice(error, locale));
   }
 }
 
@@ -296,12 +446,19 @@ export async function readWorkspaceDiffAction(
   });
 
   const command = [
-    "count=$(git status --porcelain=v1 --untracked-files=no | wc -l | tr -d ' ')",
+    "tracked_files=$(git diff --name-only --no-ext-diff HEAD -- . ':(exclude).crewon/**')",
+    "untracked_files=$(git ls-files --others --exclude-standard -- . ':(exclude).crewon/**')",
+    "all_files=$(printf '%s\\n%s\\n' \"$tracked_files\" \"$untracked_files\" | sed '/^$/d' | sort -u)",
+    "count=$(printf '%s\\n' \"$all_files\" | sed '/^$/d' | wc -l | tr -d ' ')",
+    "files=$(printf '%s\\n' \"$all_files\" | sed -n '1,200p')",
     'printf "__CREWON_DIFF_COUNT__=%s\\n" "$count"',
-    "git status --porcelain=v1 --untracked-files=no | sed -n '1,24p' | cut -c4- | while IFS= read -r file_path; do case \"$file_path\" in *\" -> \"*) file_path=${file_path##* -> } ;; esac; git diff --no-ext-diff --unified=3 HEAD -- \"$file_path\"; done",
+    'printf \'%s\\n\' "$files" | while IFS= read -r file_path; do test -n "$file_path" || continue; if git ls-files --error-unmatch -- "$file_path" >/dev/null 2>&1; then git diff --no-ext-diff --unified=3 HEAD -- "$file_path"; else git diff --no-ext-diff --no-index --unified=3 -- /dev/null "$file_path" || test $? -eq 1; fi; done',
   ].join("; ");
   try {
-    const response = await client?.runCommand(diffCwd, command);
+    const response = await client?.runCommand(diffCwd, command, undefined, {
+      outputBytesCap: 2_000_000,
+      timeoutMs: 30_000,
+    });
     if (!response) {
       throw new Error(
         locale === "zh" ? "未收到 git diff 响应" : "No git diff response",
@@ -316,12 +473,12 @@ export async function readWorkspaceDiffAction(
 
     const output = response.stdout?.trim() ?? "";
     const countMatch = output.match(/^__CREWON_DIFF_COUNT__=(\d+)\n?/);
-    const trackedChanges = Number(countMatch?.[1] ?? 0);
+    const totalChanges = Number(countMatch?.[1] ?? 0);
     const diff = output.replace(/^__CREWON_DIFF_COUNT__=\d+\n?/, "");
     const added = diff.match(/^\+(?!\+\+)/gm)?.length ?? 0;
     const removed = diff.match(/^-(?!--)/gm)?.length ?? 0;
     const files = diff.match(/^diff --git /gm)?.length ?? 0;
-    const maxDiffCharacters = 200_000;
+    const maxDiffCharacters = 2_000_000;
     const body = diff
       ? diff.length > maxDiffCharacters
         ? `${diff.slice(0, maxDiffCharacters)}\n\n${
@@ -331,15 +488,15 @@ export async function readWorkspaceDiffAction(
           }`
         : diff
       : locale === "zh"
-        ? "当前没有已跟踪文件改动。"
-        : "There are no tracked file changes.";
+        ? "当前没有文件改动。"
+        : "There are no file changes.";
 
     setCapabilityPanel({
       title: locale === "zh" ? "当前改动" : "Current changes",
       subtitle:
         locale === "zh"
-          ? `${trackedChanges} 个已跟踪改动 · 当前显示 ${files} 个文件 · +${added} / -${removed}`
-          : `${trackedChanges} tracked changes · showing ${files} files · +${added} / -${removed}`,
+          ? `${totalChanges} 个改动 · 当前显示 ${files} 个文件 · +${added} / -${removed}`
+          : `${totalChanges} ${totalChanges === 1 ? "change" : "changes"} · showing ${files} ${files === 1 ? "file" : "files"} · +${added} / -${removed}`,
       body,
     });
   } catch (error) {

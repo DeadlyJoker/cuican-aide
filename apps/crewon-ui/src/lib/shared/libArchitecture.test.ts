@@ -116,6 +116,9 @@ describe("lib architecture", () => {
       }),
     )
       .map((path) => path.replace("../", ""))
+      // The rule is about feature modules landing in the lib root, so a test
+      // beside an already-allowed module is not a new root module.
+      .filter((file) => !file.endsWith(".test.ts"))
       .sort();
 
     expect(rootModuleFiles).toEqual(ALLOWED_ROOT_LIB_MODULES);

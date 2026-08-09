@@ -643,9 +643,20 @@ async fn turn_start_emits_thread_scoped_warning_notification_for_trimmed_skills(
     let warning: WarningNotification =
         serde_json::from_value(params).expect("deserialize warning notification");
     assert_eq!(warning.thread_id.as_deref(), Some(thread.id.as_str()));
-    assert_eq!(
-        warning.message,
-        "Exceeded skills context budget of 2%. All skill descriptions were removed and 6 additional skills were not included in the model-visible skills list."
+    /*
+     * The omitted count depends on how many skills ship bundled, so asserting it
+     * exactly makes this test fail every time a built-in skill is added, for a
+     * reason unrelated to what it covers: that the warning is emitted, scoped to
+     * the thread, and says descriptions were dropped.
+     */
+    assert!(
+        warning.message.starts_with(
+            "Exceeded skills context budget of 2%. All skill descriptions were removed and"
+        ) && warning
+            .message
+            .ends_with("were not included in the model-visible skills list."),
+        "unexpected skills budget warning: {}",
+        warning.message
     );
 
     timeout(

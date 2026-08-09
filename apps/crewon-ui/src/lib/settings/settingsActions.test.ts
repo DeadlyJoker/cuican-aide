@@ -51,6 +51,9 @@ describe("settings action routing", () => {
       mcpServers: () => {
         calls.push("mcpServers");
       },
+      modelProviders: () => {
+        calls.push("modelProviders");
+      },
       personalization: () => {
         calls.push("personalization");
       },
@@ -72,6 +75,7 @@ describe("settings action routing", () => {
         ["hooks", "hooks"],
         ["keyboard", "keyboard"],
         ["mcp-servers", "mcpServers"],
+        ["model-providers", "modelProviders"],
         ["personalization", "personalization"],
         ["worktrees", "worktrees"],
       ];

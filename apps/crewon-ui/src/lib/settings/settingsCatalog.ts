@@ -13,6 +13,7 @@ export const SETTINGS_SECTIONS = [
   "hooks",
   "keyboard",
   "mcp-servers",
+  "model-providers",
   "personalization",
   "worktrees",
 ] as const;
@@ -47,6 +48,7 @@ type SettingsCopyKey =
   | "integrations"
   | "keyboard"
   | "mcpServers"
+  | "modelProviders"
   | "personal"
   | "personalization"
   | "worktrees";
@@ -110,6 +112,7 @@ const sidebarCopy: Record<Locale, SettingsSidebarCopy> = {
     integrations: "集成",
     keyboard: "键盘快捷键",
     mcpServers: "MCP 服务器",
+    modelProviders: "模型接入",
     personal: "个人",
     personalization: "助理人格与记忆",
     search: "搜索设置...",
@@ -132,6 +135,7 @@ const sidebarCopy: Record<Locale, SettingsSidebarCopy> = {
     integrations: "Integrations",
     keyboard: "Keyboard shortcuts",
     mcpServers: "MCP servers",
+    modelProviders: "Model access",
     personal: "Personal",
     personalization: "Assistant profile & memory",
     search: "Search settings...",
@@ -255,6 +259,29 @@ export const settingsCatalog = [
     id: "personal",
     labelKey: "personal",
     items: [
+      /*
+       * Listed before the general page because nothing else in the app works
+       * until a provider is reachable, and until now this could only be set up
+       * by hand-editing config.toml.
+       *
+       * `mode: "action"` because the panel manages a list of providers through
+       * its own actions rather than mapping one field to one config key, so it
+       * has no `fields` binding for commitSettingsFieldAction to drive.
+       */
+      {
+        id: "model-providers",
+        labelKey: "modelProviders",
+        icon: "cable",
+        mode: "action",
+        description: {
+          zh: "接入模型服务：地址、密钥与连通性测试",
+          en: "Connect a model service: address, credential, and connectivity test",
+        },
+        backend: {
+          refreshTarget: "model-providers",
+          scope: "workspace",
+        },
+      },
       {
         id: "config",
         labelKey: "general",

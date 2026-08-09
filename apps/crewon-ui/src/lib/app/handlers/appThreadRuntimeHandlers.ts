@@ -1,6 +1,5 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
-import type { AppServerClient } from "../../app-server/appServer";
 import type { ComposerImageInput } from "../../shared/composerImages";
 import type { AppView } from "../appRouting";
 import type { PendingComposerMention } from "../../shared/composerMentions";
@@ -8,7 +7,10 @@ import type { ConfirmHandler } from "../../shared/confirmHandler";
 import type { NoticeState } from "../appRuntimeState";
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { Locale, ToolId } from "../../i18n";
-import { type ThreadRuntimeSettings } from "../../thread/threadRuntimeSettings";
+import {
+  type CommandExecutionIntent,
+  type ThreadRuntimeSettings,
+} from "../../thread/threadRuntimeSettings";
 import {
   archiveThreadAction,
   clearAssistantThreadAction,
@@ -17,17 +19,28 @@ import {
   selectThreadAction,
   startDraftThreadAction,
   toggleArchivedThreadsAction,
+  type ArchiveThreadActionParams,
+  type ClearAssistantThreadActionParams,
+  type DeleteArchivedThreadActionParams,
+  type RenameThreadActionParams,
+  type SelectThreadActionParams,
+  type ToggleArchivedThreadsActionParams,
 } from "../../thread/threadListActions";
 import {
   createDemoThreadAction,
   createThreadAction,
   interruptActiveTurnAction,
   sendMessageAction,
+  type CreateThreadActionParams,
+  type InterruptActiveTurnActionParams,
+  type SendMessageActionParams,
 } from "../../thread/threadMessageActions";
 import type { ThreadExecutionContextPreparation } from "../../thread/threadMessageActions";
 import {
   startReviewAction,
   startSideChatAction,
+  type StartReviewActionParams,
+  type StartSideChatActionParams,
 } from "../../thread/threadToolActions";
 
 type ThreadSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
@@ -40,6 +53,18 @@ type SetCapabilityPanel = (
     | null
     | ((currentPanel: CapabilityPanel | null) => CapabilityPanel | null),
 ) => void;
+
+type AppThreadRuntimeClient = NonNullable<ArchiveThreadActionParams["client"]> &
+  NonNullable<ClearAssistantThreadActionParams["client"]> &
+  NonNullable<CreateThreadActionParams["client"]> &
+  NonNullable<DeleteArchivedThreadActionParams["client"]> &
+  NonNullable<InterruptActiveTurnActionParams["client"]> &
+  NonNullable<RenameThreadActionParams["client"]> &
+  NonNullable<SelectThreadActionParams["client"]> &
+  NonNullable<SendMessageActionParams["client"]> &
+  NonNullable<StartReviewActionParams["client"]> &
+  NonNullable<StartSideChatActionParams["client"]> &
+  NonNullable<ToggleArchivedThreadsActionParams["client"]>;
 
 export type AppThreadRuntimeHandlers = {
   archiveThread: (thread: Thread) => Promise<void>;
@@ -82,7 +107,7 @@ export type AppThreadRuntimeHandlersParams = {
   activeTurnByThread?: Record<string, string>;
   activeTurnId: string | null;
   busyToolId: ToolId | null;
-  client: AppServerClient | null;
+  client: AppThreadRuntimeClient | null;
   confirm: ConfirmHandler;
   demoResponse: string;
   getShowArchivedThreads: () => boolean;
@@ -91,6 +116,9 @@ export type AppThreadRuntimeHandlersParams = {
   isDemoPreview: boolean;
   isSending: boolean;
   locale: Locale;
+  onExecutionIntentCommitted?: (
+    intent: Exclude<CommandExecutionIntent, "none">,
+  ) => void;
   newDraftPreview: string;
   newDraftThread: string;
   pendingComposerMentions: PendingComposerMention[];
@@ -195,6 +223,7 @@ export function createAppThreadRuntimeHandlers(
       isDemoPreview: params.isDemoPreview,
       isSending: params.isSending,
       locale: params.locale,
+      onExecutionIntentCommitted: params.onExecutionIntentCommitted,
       pendingComposerMentions: params.pendingComposerMentions,
       preserveThreadsAfterConnectionLoss:
         params.preserveThreadsAfterConnectionLoss,

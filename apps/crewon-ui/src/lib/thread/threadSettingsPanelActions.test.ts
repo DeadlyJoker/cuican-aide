@@ -1,7 +1,7 @@
 import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse";
 import type { ConfigRequirementsReadResponse } from "@crewon-protocol/v2/ConfigRequirementsReadResponse";
 import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 import { describe, expect, it } from "vitest";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
@@ -94,16 +94,18 @@ function models(): ModelListResponse {
   };
 }
 
-function threadGoal(): ThreadGoal {
+function threadGoal(): ThreadGoalView {
   return {
-    createdAt: 1,
+    createdAt: "2026-08-09T07:00:00.000Z",
+    goalId: "goal-1",
     objective: "Finish refactor",
+    revision: 1,
     status: "active",
     threadId: "thread-1",
     timeUsedSeconds: 10,
     tokenBudget: 1000,
     tokensUsed: 20,
-    updatedAt: 2,
+    updatedAt: "2026-08-09T07:00:10.000Z",
   };
 }
 

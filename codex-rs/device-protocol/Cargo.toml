@@ -1,0 +1,26 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "crewon-device-protocol"
+version.workspace = true
+
+[lib]
+name = "crewon_device_protocol"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+chrono = { workspace = true }
+ed25519-dalek = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+crewon-utils-cargo-bin = { workspace = true }
+pretty_assertions = { workspace = true }
+sha2 = { workspace = true }

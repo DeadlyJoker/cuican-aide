@@ -9,21 +9,21 @@ import type {
 export type CommandTeamCapabilityKind = "experts" | "workflow";
 
 export type WorkflowAgentOption = {
-  apiEnabled: boolean;
   description: string;
-  id: number;
+  id: string;
   modelName: string;
-  modelProvider: string;
   name: string;
   systemPrompt: string;
 };
 
 export type WorkflowAgentNodeInput = {
-  agentId: number;
+  type: "agent";
+  agentId: string;
   instruction: string;
-  modelName: string;
-  modelProvider: string;
-  systemPrompt: string;
+  title: string;
+} | {
+  type: "humanGate";
+  instruction: string;
   title: string;
 };
 
@@ -50,6 +50,7 @@ type ExpertDraft = {
 };
 
 type WorkflowNodeDraft = {
+  type: "agent" | "humanGate";
   agentId: string;
   instruction: string;
   title: string;
@@ -62,6 +63,7 @@ const EMPTY_EXPERT: ExpertDraft = {
 };
 
 const EMPTY_WORKFLOW_NODE: WorkflowNodeDraft = {
+  type: "agent",
   agentId: "",
   instruction: "",
   title: "",
@@ -94,13 +96,12 @@ export function CommandTeamCapabilityCreateDialog({
     EMPTY_EXPERT,
     { ...EMPTY_EXPERT, agentType: "worker" },
   ]);
-  const [workflowNodes, setWorkflowNodes] = useState<WorkflowNodeDraft[]>([
-    EMPTY_WORKFLOW_NODE,
+  const [workflowNodes, setWorkflowNodes] = useState<WorkflowNodeDraft[]>(() => [
+    workflowAgents.length > 0
+      ? EMPTY_WORKFLOW_NODE
+      : { ...EMPTY_WORKFLOW_NODE, type: "humanGate" },
   ]);
   const workflow = kind === "workflow";
-  const runnableWorkflowAgents = workflowAgents.filter(
-    (agent) => agent.apiEnabled,
-  );
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -125,16 +126,18 @@ export function CommandTeamCapabilityCreateDialog({
     }
     if (workflow) {
       const normalizedNodes = workflowNodes.map((node) => {
-        const agentId = Number(node.agentId);
-        const agent = workflowAgents.find(
-          (candidate) => candidate.id === agentId,
-        );
+        if (node.type === "humanGate") {
+          return {
+            type: "humanGate" as const,
+            instruction: node.instruction.trim(),
+            title: node.title.trim(),
+          };
+        }
+        const agentId = node.agentId.trim();
         return {
+          type: "agent" as const,
           agentId,
           instruction: node.instruction.trim(),
-          modelName: agent?.modelName || "qwen-plus",
-          modelProvider: agent?.modelProvider || "openai",
-          systemPrompt: agent?.systemPrompt || "",
           title: node.title.trim(),
         };
       });
@@ -142,22 +145,25 @@ export function CommandTeamCapabilityCreateDialog({
         normalizedNodes.length === 0 ||
         normalizedNodes.some(
           (node) =>
-            !Number.isInteger(node.agentId) ||
-            node.agentId <= 0 ||
             !node.title ||
-            !node.instruction,
+            !node.instruction ||
+            (node.type === "agent" &&
+              (!node.agentId ||
+                !workflowAgents.some((agent) => agent.id === node.agentId))),
         )
       ) {
-        setFormError("请至少配置一个完整的 Agent 节点。");
+        setFormError("请至少配置一个完整的 Agent 或 Human Gate 节点。");
         return;
       }
-      const leadAgent = workflowAgents.find(
-        (agent) => agent.id === normalizedNodes[0]?.agentId,
-      );
+      const firstNode = normalizedNodes[0];
+      const leadAgent =
+        firstNode?.type === "agent"
+          ? workflowAgents.find((agent) => agent.id === firstNode.agentId)
+          : null;
       onSubmit({
         kind: "workflow",
         goal: normalizedGoal,
-        lead: leadAgent?.name ?? normalizedNodes[0]?.title ?? "Workflow Lead",
+        lead: leadAgent?.name ?? firstNode?.title ?? "Workflow Lead",
         nodes: normalizedNodes,
         title: normalizedTitle,
       });
@@ -284,16 +290,19 @@ export function CommandTeamCapabilityCreateDialog({
             <div className="workflow-node-builder-head">
               <div>
                 <strong id="workflow-node-builder-title">执行节点</strong>
-                <p>节点按当前顺序串行执行，前一个 Agent 的输出会交给下一个。</p>
+                <p>Agent 节点自动执行；Human Gate 会持久等待批准或驳回，再决定是否继续。</p>
               </div>
               <button
                 className="button compact"
                 type="button"
-                disabled={runnableWorkflowAgents.length === 0}
                 onClick={() =>
                   setWorkflowNodes((current) => [
                     ...current,
-                    { ...EMPTY_WORKFLOW_NODE },
+                    {
+                      ...EMPTY_WORKFLOW_NODE,
+                      type:
+                        workflowAgents.length > 0 ? "agent" : "humanGate",
+                    },
                   ])
                 }
               >
@@ -301,9 +310,9 @@ export function CommandTeamCapabilityCreateDialog({
                 添加节点
               </button>
             </div>
-            {runnableWorkflowAgents.length === 0 ? (
+            {workflowAgents.length === 0 ? (
               <p className="team-office-create-error" role="alert">
-                当前没有已启用 Open API 的云智能体。请先在智能体页启用 Agent API，再创建协作流。
+                当前工作空间还没有本地智能体；仍可配置 Human Gate，Agent 节点需先创建或导入本地智能体。
               </p>
             ) : null}
             <div className="workflow-node-list">
@@ -311,7 +320,9 @@ export function CommandTeamCapabilityCreateDialog({
                 <article className="workflow-node-editor" key={index}>
                   <header>
                     <span>{index + 1}</span>
-                    <strong>Agent 节点</strong>
+                    <strong>
+                      {node.type === "humanGate" ? "Human Gate" : "Agent 节点"}
+                    </strong>
                     <div>
                       <button
                         className="icon-action compact"
@@ -348,32 +359,24 @@ export function CommandTeamCapabilityCreateDialog({
                   </header>
                   <div className="modal-form-grid">
                     <label className="form-field">
-                      <span>云智能体</span>
+                      <span>节点类型</span>
                       <select
                         required
-                        value={node.agentId}
+                        value={node.type}
                         onChange={(event) => {
-                          const agent = workflowAgents.find(
-                            (candidate) =>
-                              String(candidate.id) === event.target.value,
-                          );
                           updateWorkflowNode(index, {
-                            agentId: event.target.value,
-                            title: node.title || agent?.name || "",
+                            type: event.target.value as
+                              | "agent"
+                              | "humanGate",
+                            agentId:
+                              event.target.value === "agent"
+                                ? node.agentId
+                                : "",
                           });
                         }}
                       >
-                        <option value="">选择智能体</option>
-                        {workflowAgents.map((agent) => (
-                          <option
-                            disabled={!agent.apiEnabled}
-                            key={agent.id}
-                            value={agent.id}
-                          >
-                            {agent.name}
-                            {agent.apiEnabled ? "" : " · API 未启用"}
-                          </option>
-                        ))}
+                        <option value="agent">Agent · 自动执行</option>
+                        <option value="humanGate">Human Gate · 人工确认</option>
                       </select>
                     </label>
                     <label className="form-field">
@@ -391,12 +394,43 @@ export function CommandTeamCapabilityCreateDialog({
                       />
                     </label>
                   </div>
+                  {node.type === "agent" ? (
+                    <label className="form-field">
+                      <span>本地智能体</span>
+                      <select
+                        required
+                        value={node.agentId}
+                        onChange={(event) => {
+                          const agent = workflowAgents.find(
+                            (candidate) => candidate.id === event.target.value,
+                          );
+                          updateWorkflowNode(index, {
+                            agentId: event.target.value,
+                            title: node.title || agent?.name || "",
+                          });
+                        }}
+                      >
+                        <option value="">选择智能体</option>
+                        {workflowAgents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <label className="form-field">
-                    <span>本节点任务</span>
+                    <span>
+                      {node.type === "humanGate" ? "确认口径" : "本节点任务"}
+                    </span>
                     <textarea
                       required
                       maxLength={2_000}
-                      placeholder="说明这个节点要完成的任务、输出格式和验收要求。"
+                      placeholder={
+                        node.type === "humanGate"
+                          ? "说明人工需要确认的内容，以及批准或驳回的判断口径。"
+                          : "说明这个节点要完成的任务、输出格式和验收要求。"
+                      }
                       value={node.instruction}
                       onChange={(event) =>
                         updateWorkflowNode(index, {
@@ -506,13 +540,15 @@ export function CommandTeamCapabilityCreateDialog({
           </>
         ) : null}
         <div className="team-capability-scope-preview">
-          <strong>{workflow ? "云端执行边界" : "团长单聊工作空间"}</strong>
+          <strong>{workflow ? "本地执行边界" : "团长单聊工作空间"}</strong>
           <span title={workflow ? undefined : workspaceCwd}>
-            {workflow ? "Agent Platform 云端" : workspaceCwd || "无工作空间"}
+            {workflow
+              ? workspaceCwd || "当前工作空间"
+              : workspaceCwd || "无工作空间"}
           </span>
           <em>
             {workflow
-              ? "创建真实 Workflow 定义，不上传本机路径或工作空间内容"
+              ? "定义、节点 Agent 和运行状态由本地 App Server 管理"
               : "后台专家不直接进入用户会话"}
           </em>
         </div>
@@ -532,7 +568,7 @@ export function CommandTeamCapabilityCreateDialog({
           </button>
           <button
             className="button primary"
-            disabled={busy || (workflow && runnableWorkflowAgents.length === 0)}
+            disabled={busy || (workflow && workflowAgents.length === 0)}
             type="submit"
           >
             {busy

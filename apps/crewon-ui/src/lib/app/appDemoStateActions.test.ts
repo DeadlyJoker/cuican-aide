@@ -1,6 +1,6 @@
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 import { describe, expect, it } from "vitest";
 
 import type { AccountStatus, GitRemoteDiffSummary } from "./appStatusTypes";
@@ -65,7 +65,7 @@ describe("app demo state actions", () => {
     const accountStatuses: Array<AccountStatus | null> = [];
     const gitRemoteDiffs: Array<GitRemoteDiffSummary | null> = [];
     const conversationSummaries: Array<ConversationSummary | null> = [];
-    const threadGoals: Array<ThreadGoal | null> = [];
+    const threadGoals: Array<ThreadGoalView | null> = [];
 
     expect(
       syncDemoInspectorStateAction({
@@ -102,7 +102,7 @@ describe("app demo state actions", () => {
   it("clears optional demo inspector data when no thread is selected", () => {
     let gitRemoteDiff: GitRemoteDiffSummary | null | undefined = undefined;
     let conversationSummary: ConversationSummary | null | undefined = undefined;
-    let threadGoal: ThreadGoal | null | undefined = undefined;
+    let threadGoal: ThreadGoalView | null | undefined = undefined;
 
     syncDemoInspectorStateAction({
       isDemo: true,

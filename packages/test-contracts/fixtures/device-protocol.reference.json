@@ -1,0 +1,367 @@
+{
+  "schemaVersion": "crewon.device-protocol-reference.v0",
+  "signingPayloadSha256": "sha256:14a35c6cc6f233dd4340e6ec86ca6e0eace43d05a333b6be4c1e8d54117a9873",
+  "valid": {
+    "command": {
+      "schemaVersion": "crewon.device-command.v0",
+      "protocolVersion": 1,
+      "deviceId": "device-1",
+      "leaseId": "lease-1",
+      "leaseEpoch": 2,
+      "expiresAt": "2026-08-08T01:00:00Z",
+      "runId": "run-1",
+      "stepId": "step-1",
+      "attemptId": "attempt-1",
+      "executionId": "execution-1",
+      "workspaceBindingId": "workspace-opaque-1",
+      "capability": "workspace.read",
+      "actionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "authorization": {
+        "schemaVersion": "crewon.device-authorization.v0",
+        "scheme": "ed25519",
+        "keyId": "control-key-1",
+        "issuedAt": "2026-08-08T00:00:02Z",
+        "expiresAt": "2026-08-08T00:30:00Z",
+        "approvalProof": {
+          "schemaVersion": "crewon.device-approval-proof.v0",
+          "approvalId": "approval-1",
+          "approvalRevision": 2,
+          "actionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policySnapshotId": "policy-1",
+          "decidedAt": "2026-08-08T00:00:01Z"
+        },
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "arguments": { "path": "relative/file.txt" },
+      "payloadRef": null,
+      "limits": {
+        "timeoutMs": 30000,
+        "maxOutputBytes": 65536,
+        "maxArtifactBytes": 16777216
+      },
+      "idempotencyKey": "run-1:step-1:attempt-1",
+      "traceContext": { "traceparent": null, "tracestate": null }
+    },
+    "hello": {
+      "schemaVersion": "crewon.device-hello.v0",
+      "supportedProtocolVersions": [1],
+      "deviceId": "device-1",
+      "connectionId": "connection-1",
+      "capabilities": ["workspace.read", "process.execute"],
+      "lastAcknowledged": [{ "executionId": "execution-1", "sequence": 3 }],
+      "sentAt": "2026-08-08T00:00:04Z"
+    },
+    "welcome": {
+      "schemaVersion": "crewon.device-welcome.v0",
+      "protocolVersion": 1,
+      "deviceId": "device-1",
+      "connectionId": "connection-1",
+      "gatewayId": "gateway-1",
+      "connectionEpoch": 3,
+      "leaseExpiresAt": "2026-08-08T00:00:34Z",
+      "sentAt": "2026-08-08T00:00:04Z"
+    },
+    "ack": {
+      "schemaVersion": "crewon.device-ack.v0",
+      "protocolVersion": 1,
+      "deviceId": "device-1",
+      "executionId": "execution-1",
+      "throughSequence": 3,
+      "acknowledgedAt": "2026-08-08T00:00:05Z"
+    },
+    "cancel": {
+      "schemaVersion": "crewon.device-cancel.v0",
+      "protocolVersion": 1,
+      "deviceId": "device-1",
+      "executionId": "execution-1",
+      "leaseId": "lease-1",
+      "leaseEpoch": 2,
+      "reasonCode": "run_canceled",
+      "requestedAt": "2026-08-08T00:00:06Z"
+    },
+    "events": [
+      {
+        "schemaVersion": "crewon.device-event.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-1",
+        "receiptId": "receipt-1",
+        "sequence": 1,
+        "observedAt": "2026-08-08T00:00:01Z",
+        "type": "execution.accepted",
+        "data": {
+          "leaseEpoch": 2,
+          "actionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "schemaVersion": "crewon.device-event.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-1",
+        "receiptId": "receipt-1",
+        "sequence": 2,
+        "observedAt": "2026-08-08T00:00:02Z",
+        "type": "execution.output",
+        "data": { "channel": "stdout", "chunk": "hello" }
+      },
+      {
+        "schemaVersion": "crewon.device-event.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-1",
+        "receiptId": "receipt-1",
+        "sequence": 3,
+        "observedAt": "2026-08-08T00:00:03Z",
+        "type": "execution.completed",
+        "data": {
+          "output": "done",
+          "artifactRef": null,
+          "outputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "stdoutDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "stderrDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "exitCode": 0,
+          "exitSignal": null
+        }
+      },
+      {
+        "schemaVersion": "crewon.device-event.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-2",
+        "receiptId": "receipt-2",
+        "sequence": 1,
+        "observedAt": "2026-08-08T00:00:03Z",
+        "type": "execution.failed",
+        "data": { "code": "process_failed", "retryable": false }
+      },
+      {
+        "schemaVersion": "crewon.device-event.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-3",
+        "receiptId": "receipt-3",
+        "sequence": 1,
+        "observedAt": "2026-08-08T00:00:03Z",
+        "type": "execution.canceled",
+        "data": { "reasonCode": "run_canceled" }
+      },
+      {
+        "schemaVersion": "crewon.device-event.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-4",
+        "receiptId": "receipt-4",
+        "sequence": 1,
+        "observedAt": "2026-08-08T00:00:03Z",
+        "type": "execution.unknown_outcome",
+        "data": { "providerReceiptId": "provider-receipt-4" }
+      }
+    ]
+  },
+  "invalid": [
+    {
+      "parser": "command",
+      "code": "device_protocol_unsupported",
+      "value": {
+        "schemaVersion": "crewon.device-command.v0",
+        "protocolVersion": 2,
+        "deviceId": "device-1",
+        "leaseId": "lease-1",
+        "leaseEpoch": 2,
+        "expiresAt": "2026-08-08T01:00:00Z",
+        "runId": "run-1",
+        "stepId": "step-1",
+        "attemptId": "attempt-1",
+        "executionId": "execution-1",
+        "workspaceBindingId": "workspace-opaque-1",
+        "capability": "workspace.read",
+        "actionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authorization": {
+          "schemaVersion": "crewon.device-authorization.v0",
+          "scheme": "ed25519",
+          "keyId": "control-key-1",
+          "issuedAt": "2026-08-08T00:00:00Z",
+          "expiresAt": "2026-08-08T00:30:00Z",
+          "approvalProof": null,
+          "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        },
+        "arguments": { "path": "relative/file.txt" },
+        "payloadRef": null,
+        "limits": {
+          "timeoutMs": 30000,
+          "maxOutputBytes": 65536,
+          "maxArtifactBytes": 16777216
+        },
+        "idempotencyKey": "run-1:step-1:attempt-1",
+        "traceContext": { "traceparent": null, "tracestate": null }
+      }
+    },
+    {
+      "parser": "command",
+      "code": "device_payload_choice_invalid",
+      "value": {
+        "schemaVersion": "crewon.device-command.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "leaseId": "lease-1",
+        "leaseEpoch": 2,
+        "expiresAt": "2026-08-08T01:00:00Z",
+        "runId": "run-1",
+        "stepId": "step-1",
+        "attemptId": "attempt-1",
+        "executionId": "execution-1",
+        "workspaceBindingId": "workspace-opaque-1",
+        "capability": "workspace.read",
+        "actionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authorization": {
+          "schemaVersion": "crewon.device-authorization.v0",
+          "scheme": "ed25519",
+          "keyId": "control-key-1",
+          "issuedAt": "2026-08-08T00:00:00Z",
+          "expiresAt": "2026-08-08T00:30:00Z",
+          "approvalProof": null,
+          "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        },
+        "arguments": null,
+        "payloadRef": null,
+        "limits": {
+          "timeoutMs": 30000,
+          "maxOutputBytes": 65536,
+          "maxArtifactBytes": 16777216
+        },
+        "idempotencyKey": "run-1:step-1:attempt-1",
+        "traceContext": { "traceparent": null, "tracestate": null }
+      }
+    },
+    {
+      "parser": "command",
+      "code": "device_authorization_signature_invalid",
+      "value": {
+        "schemaVersion": "crewon.device-command.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "leaseId": "lease-1",
+        "leaseEpoch": 2,
+        "expiresAt": "2026-08-08T01:00:00Z",
+        "runId": "run-1",
+        "stepId": "step-1",
+        "attemptId": "attempt-1",
+        "executionId": "execution-1",
+        "workspaceBindingId": "workspace-opaque-1",
+        "capability": "workspace.read",
+        "actionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authorization": {
+          "schemaVersion": "crewon.device-authorization.v0",
+          "scheme": "ed25519",
+          "keyId": "control-key-1",
+          "issuedAt": "2026-08-08T00:00:00Z",
+          "expiresAt": "2026-08-08T00:30:00Z",
+          "approvalProof": null,
+          "signature": "short"
+        },
+        "arguments": { "path": "relative/file.txt" },
+        "payloadRef": null,
+        "limits": {
+          "timeoutMs": 30000,
+          "maxOutputBytes": 65536,
+          "maxArtifactBytes": 16777216
+        },
+        "idempotencyKey": "run-1:step-1:attempt-1",
+        "traceContext": { "traceparent": null, "tracestate": null }
+      }
+    },
+    {
+      "parser": "event",
+      "code": "device_action_digest_invalid",
+      "value": {
+        "schemaVersion": "crewon.device-event.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-1",
+        "receiptId": "receipt-1",
+        "sequence": 1,
+        "observedAt": "2026-08-08T00:00:01Z",
+        "type": "execution.accepted",
+        "data": { "leaseEpoch": 2, "actionDigest": "sha256:invalid" }
+      }
+    },
+    {
+      "parser": "event",
+      "code": "device_fields_invalid",
+      "value": {
+        "schemaVersion": "crewon.device-event.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-1",
+        "receiptId": "receipt-1",
+        "sequence": 3,
+        "observedAt": "2026-08-08T00:00:03Z",
+        "type": "execution.completed",
+        "data": {
+          "output": "done",
+          "artifactRef": null,
+          "outputDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "stdoutDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "stderrDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "exitCode": 0,
+          "exitSignal": null,
+          "providerMessage": "secret"
+        }
+      }
+    },
+    {
+      "parser": "hello",
+      "code": "device_capabilities_invalid",
+      "value": {
+        "schemaVersion": "crewon.device-hello.v0",
+        "supportedProtocolVersions": [1],
+        "deviceId": "device-1",
+        "connectionId": "connection-1",
+        "capabilities": ["workspace.read", "workspace.read"],
+        "lastAcknowledged": [],
+        "sentAt": "2026-08-08T00:00:04Z"
+      }
+    },
+    {
+      "parser": "ack",
+      "code": "device_ack_sequence_invalid",
+      "value": {
+        "schemaVersion": "crewon.device-ack.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-1",
+        "throughSequence": 0,
+        "acknowledgedAt": "2026-08-08T00:00:05Z"
+      }
+    },
+    {
+      "parser": "welcome",
+      "code": "device_connection_epoch_invalid",
+      "value": {
+        "schemaVersion": "crewon.device-welcome.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "connectionId": "connection-1",
+        "gatewayId": "gateway-1",
+        "connectionEpoch": 0,
+        "leaseExpiresAt": "2026-08-08T00:00:34Z",
+        "sentAt": "2026-08-08T00:00:04Z"
+      }
+    },
+    {
+      "parser": "cancel",
+      "code": "device_cancel_reason_invalid",
+      "value": {
+        "schemaVersion": "crewon.device-cancel.v0",
+        "protocolVersion": 1,
+        "deviceId": "device-1",
+        "executionId": "execution-1",
+        "leaseId": "lease-1",
+        "leaseEpoch": 2,
+        "reasonCode": "unsafe reason",
+        "requestedAt": "2026-08-08T00:00:06Z"
+      }
+    }
+  ]
+}

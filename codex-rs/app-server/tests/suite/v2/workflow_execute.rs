@@ -74,11 +74,17 @@ async fn workflow_execute_rpc_uses_bearer_preflight_and_server_api_key() -> Resu
         .expect(1)
         .mount(&agent_platform)
         .await;
+    /*
+     * Execution runs on the authenticated route with the caller's bearer token,
+     * not the Open API surface: it deliberately works without public API
+     * enablement or a space key, which is what the unit tests in
+     * `agent_platform_processor_tests` pin down.
+     */
     Mock::given(method("POST"))
-        .and(path(format!("/api/v1/open/workflow/{WORKFLOW_ID}/execute")))
-        .and(header("x-api-key", API_KEY))
+        .and(path(format!("/api/v1/workflows/{WORKFLOW_ID}/execute")))
+        .and(header("authorization", format!("Bearer {ACCESS_TOKEN}")))
         .and(body_json(json!({
-            "inputs": {
+            "input_data": {
                 "input": "Review this delivery",
                 "prompt": "Review this delivery",
             }
@@ -140,7 +146,7 @@ async fn workflow_execute_rpc_uses_bearer_preflight_and_server_api_key() -> Resu
     let execution = requests
         .iter()
         .find(|request| request.url.path().ends_with("/execute"))
-        .expect("Open API execution request should be recorded");
+        .expect("authenticated execution request should be recorded");
     assert_eq!(
         preflight
             .headers
@@ -149,14 +155,19 @@ async fn workflow_execute_rpc_uses_bearer_preflight_and_server_api_key() -> Resu
         Some("Bearer owner-token")
     );
     assert_eq!(preflight.headers.get("x-api-key"), None);
-    assert_eq!(execution.headers.get("authorization"), None);
+    /*
+     * Both hops carry the caller's bearer token and neither carries the space
+     * key: execution is authorized as the user, so a space key here would widen
+     * the request past the authority the preflight established.
+     */
     assert_eq!(
         execution
             .headers
-            .get("x-api-key")
+            .get("authorization")
             .and_then(|value| value.to_str().ok()),
-        Some(API_KEY)
+        Some("Bearer owner-token")
     );
+    assert_eq!(execution.headers.get("x-api-key"), None);
     agent_platform.verify().await;
     app.shutdown().await?;
     Ok(())

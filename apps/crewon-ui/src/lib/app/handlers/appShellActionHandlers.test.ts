@@ -57,6 +57,7 @@ function refreshHandlers(
     hooks: vi.fn(),
     keyboard: vi.fn(),
     mcpServers: vi.fn(),
+    modelProviders: vi.fn(),
     personalization: vi.fn(),
     worktrees: vi.fn(),
     ...overrides,

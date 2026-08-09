@@ -18,6 +18,7 @@ use crewon_protocol::protocol::EventMsg;
 use crewon_protocol::protocol::Op;
 use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
+use serde_json::Value;
 use tokio::time::Duration;
 use tokio::time::timeout;
 use wiremock::Mock;
@@ -81,6 +82,7 @@ async fn websocket_fallback_switches_to_http_on_upgrade_required_connect() -> Re
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn websocket_fallback_switches_to_http_after_retries_exhausted() -> Result<()> {
     skip_if_no_network!(Ok(()));
+    let reference = websocket_parity_reference()?;
 
     let server = responses::start_mock_server().await;
     let response_mock = mount_sse_once(
@@ -116,8 +118,16 @@ async fn websocket_fallback_switches_to_http_after_retries_exhausted() -> Result
     // Deferred request prewarm is attempted at startup.
     // The first turn then makes 3 websocket stream attempts (initial try + 2 retries),
     // after which fallback activates and the request is replayed over HTTP.
-    assert_eq!(websocket_attempts, 4);
-    assert_eq!(http_attempts, 1);
+    assert_eq!(
+        websocket_attempts
+            .checked_sub(reference_u64(&reference, "/fallback/startupPrewarmAttempts",) as usize)
+            .expect("startup prewarm must not exceed websocket attempts"),
+        reference_u64(&reference, "/fallback/firstTurn/websocketAttempts") as usize
+    );
+    assert_eq!(
+        http_attempts,
+        reference_u64(&reference, "/fallback/firstTurn/httpAttempts") as usize
+    );
     assert_eq!(response_mock.requests().len(), 1);
 
     Ok(())
@@ -126,6 +136,7 @@ async fn websocket_fallback_switches_to_http_after_retries_exhausted() -> Result
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn websocket_fallback_hides_first_websocket_retry_stream_error() -> Result<()> {
     skip_if_no_network!(Ok(()));
+    let reference = websocket_parity_reference()?;
 
     let server = responses::start_mock_server().await;
     let response_mock = mount_sse_once(
@@ -194,12 +205,15 @@ async fn websocket_fallback_hides_first_websocket_retry_stream_error() -> Result
         }
     }
 
-    let expected_stream_errors = if cfg!(debug_assertions) {
-        vec!["Reconnecting... 1/2", "Reconnecting... 2/2"]
+    let expected_attempts = if cfg!(debug_assertions) {
+        reference_u64_array(&reference, "/fallback/debugVisibleRetryAttempts")
     } else {
-        vec!["Reconnecting... 2/2"]
+        reference_u64_array(&reference, "/fallback/releaseVisibleRetryAttempts")
     };
-    assert_eq!(stream_error_messages, expected_stream_errors);
+    assert_eq!(
+        reconnect_attempts(&stream_error_messages),
+        expected_attempts
+    );
     assert_eq!(response_mock.requests().len(), 1);
 
     Ok(())
@@ -208,6 +222,7 @@ async fn websocket_fallback_hides_first_websocket_retry_stream_error() -> Result
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn websocket_fallback_is_sticky_across_turns() -> Result<()> {
     skip_if_no_network!(Ok(()));
+    let reference = websocket_parity_reference()?;
 
     let server = responses::start_mock_server().await;
     let response_mock = mount_sse_sequence(
@@ -248,9 +263,62 @@ async fn websocket_fallback_is_sticky_across_turns() -> Result<()> {
     // 1 deferred request prewarm attempt (startup) + 3 stream attempts
     // (initial try + 2 retries) before fallback.
     // Fallback is sticky, so the second turn stays on HTTP and adds no websocket attempts.
-    assert_eq!(websocket_attempts, 4);
-    assert_eq!(http_attempts, 2);
+    let prewarm = reference_u64(&reference, "/fallback/startupPrewarmAttempts") as usize;
+    let first_websocket =
+        reference_u64(&reference, "/fallback/firstTurn/websocketAttempts") as usize;
+    let second_websocket =
+        reference_u64(&reference, "/fallback/secondTurn/websocketAttempts") as usize;
+    assert_eq!(
+        websocket_attempts,
+        prewarm + first_websocket + second_websocket
+    );
+    assert_eq!(
+        http_attempts,
+        reference_u64(&reference, "/fallback/firstTurn/httpAttempts") as usize
+            + reference_u64(&reference, "/fallback/secondTurn/httpAttempts") as usize
+    );
     assert_eq!(response_mock.requests().len(), 2);
 
     Ok(())
+}
+
+fn websocket_parity_reference() -> Result<Value> {
+    let path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/websocket-transport.reference.json"
+    )?;
+    Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
+}
+
+fn reference_u64(reference: &Value, pointer: &str) -> u64 {
+    reference
+        .pointer(pointer)
+        .and_then(Value::as_u64)
+        .unwrap_or_else(|| panic!("missing unsigned fixture value at {pointer}"))
+}
+
+fn reference_u64_array(reference: &Value, pointer: &str) -> Vec<u64> {
+    reference
+        .pointer(pointer)
+        .and_then(Value::as_array)
+        .unwrap_or_else(|| panic!("missing fixture array at {pointer}"))
+        .iter()
+        .map(|value| {
+            value
+                .as_u64()
+                .unwrap_or_else(|| panic!("non-integer fixture value at {pointer}"))
+        })
+        .collect()
+}
+
+fn reconnect_attempts(messages: &[String]) -> Vec<u64> {
+    messages
+        .iter()
+        .map(|message| {
+            message
+                .strip_prefix("Reconnecting... ")
+                .and_then(|suffix| suffix.split_once('/'))
+                .and_then(|(attempt, _)| attempt.parse::<u64>().ok())
+                .unwrap_or_else(|| panic!("unexpected reconnect warning: {message}"))
+        })
+        .collect()
 }

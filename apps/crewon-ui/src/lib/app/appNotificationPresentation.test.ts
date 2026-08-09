@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   accountLoginNotice,
   accountRateLimitNotice,
-  appendTerminalOutput,
   appWarningNotice,
   automationRunSyncFailureNotice,
   configWarningNotice,
@@ -123,13 +122,10 @@ describe("app notification presentation helpers", () => {
     );
   });
 
-  it("builds terminal output chunks and appends over running placeholders", () => {
-    const chunk = terminalOutputChunk("stderr", "failed", true);
-
-    expect(chunk).toBe("[stderr] failed\n[output cap reached]");
-    expect(appendTerminalOutput("Running...", chunk, "en")).toBe(chunk);
-    expect(appendTerminalOutput("previous\n", "next", "en")).toBe(
-      "previous\nnext",
+  it("builds terminal output chunks", () => {
+    expect(terminalOutputChunk("stderr", "failed", true)).toBe(
+      "[stderr] failed\n[output cap reached]",
     );
+    expect(terminalOutputChunk("stdout", "ok", false)).toBe("ok");
   });
 });

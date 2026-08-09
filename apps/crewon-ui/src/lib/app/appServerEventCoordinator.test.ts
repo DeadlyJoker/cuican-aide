@@ -32,6 +32,7 @@ function createParams(
   return {
     appViewRef: { current: "chat" as AppView },
     appendStreamingTextDelta: () => {},
+    appendTerminalOutputDelta: () => {},
     automationRunByTurnRef: { current: {} },
     capabilityPanelRef: { current: null },
     clientRef: { current: null as AppServerClient | null },

@@ -1,5 +1,6 @@
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use core_test_support::responses;
 use wiremock::Mock;
@@ -46,6 +47,38 @@ pub async fn create_mock_responses_server_sequence_unchecked(responses: Vec<Stri
         .mount(&server)
         .await;
 
+    server
+}
+
+/// Create an unchecked response sequence whose entries may be delayed.
+pub async fn create_mock_responses_server_sequence_unchecked_with_delays(
+    responses: Vec<(String, Duration)>,
+) -> MockServer {
+    struct DelayedSeqResponder {
+        num_calls: AtomicUsize,
+        responses: Vec<(String, Duration)>,
+    }
+
+    impl Respond for DelayedSeqResponder {
+        fn respond(&self, _: &wiremock::Request) -> ResponseTemplate {
+            let call_num = self.num_calls.fetch_add(1, Ordering::SeqCst);
+            let (body, delay) = self
+                .responses
+                .get(call_num)
+                .unwrap_or_else(|| panic!("no response for {call_num}"));
+            responses::sse_response(body.clone()).set_delay(*delay)
+        }
+    }
+
+    let server = responses::start_mock_server().await;
+    Mock::given(method("POST"))
+        .and(path_regex(".*/responses$"))
+        .respond_with(DelayedSeqResponder {
+            num_calls: AtomicUsize::new(0),
+            responses,
+        })
+        .mount(&server)
+        .await;
     server
 }
 

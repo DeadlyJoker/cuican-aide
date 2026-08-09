@@ -62,6 +62,24 @@ async fn resume_until_initial_messages(
 async fn resume_includes_initial_messages_from_rollout_events() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/legacy-rollout-resume-fork.reference.json"
+    )
+    .expect("resolve AR-026/027 legacy rollout fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-026/027 legacy rollout fixture"),
+    )
+    .expect("parse AR-026/027 legacy rollout fixture");
+    let expected_initial_messages = reference["expected"]["initialMessages"]
+        .as_array()
+        .expect("fixture initial messages");
+    let expected_user = expected_initial_messages[0]["content"]
+        .as_str()
+        .expect("fixture initial user message");
+    let expected_assistant = expected_initial_messages[1]["content"]
+        .as_str()
+        .expect("fixture initial assistant message");
+
     let server = start_mock_server().await;
     let mut builder = test_crewon();
     let initial = builder.build(&server).await?;
@@ -75,7 +93,7 @@ async fn resume_includes_initial_messages_from_rollout_events() -> Result<()> {
 
     let initial_sse = sse(vec![
         ev_response_created("resp-initial"),
-        ev_assistant_message("msg-1", "Completed first turn"),
+        ev_assistant_message("msg-1", expected_assistant),
         ev_completed("resp-initial"),
     ]);
     mount_sse_once(&server, initial_sse).await;
@@ -88,7 +106,7 @@ async fn resume_includes_initial_messages_from_rollout_events() -> Result<()> {
     codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
-                text: "Record some messages".into(),
+                text: expected_user.into(),
                 text_elements: text_elements.clone(),
             }],
             final_output_json_schema: None,
@@ -132,13 +150,13 @@ async fn resume_includes_initial_messages_from_rollout_events() -> Result<()> {
             EventMsg::TokenCount(_),
             EventMsg::TurnComplete(completed),
         ] => {
-            assert_eq!(first_user.message, "Record some messages");
+            assert_eq!(first_user.message, expected_user);
             assert_eq!(first_user.text_elements, text_elements);
-            assert_eq!(assistant_message.message, "Completed first turn");
+            assert_eq!(assistant_message.message, expected_assistant);
             assert_eq!(completed.turn_id, started.turn_id);
             assert_eq!(
                 completed.last_agent_message.as_deref(),
-                Some("Completed first turn")
+                Some(expected_assistant)
             );
         }
         other => panic!("unexpected initial messages after resume: {other:#?}"),

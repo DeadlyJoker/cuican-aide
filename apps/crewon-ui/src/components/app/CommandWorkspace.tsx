@@ -1,5 +1,7 @@
 import { ListChecks, Plus, ShieldCheck, Target } from "lucide-react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { ThreadGoalView } from "@crewon/contracts";
+import type { WorkflowRunUpdatedNotification } from "@crewon-protocol/v2/WorkflowRunUpdatedNotification";
 import {
   type ChangeEvent,
   type ClipboardEvent,
@@ -33,10 +35,7 @@ import {
 } from "./CommandWorkspaceChrome";
 import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
-import {
-  CommandSceneHeader,
-  CommandSceneQuickRow,
-} from "./CommandSceneHeader";
+import { CommandSceneHeader, CommandSceneQuickRow } from "./CommandSceneHeader";
 import {
   AgentsView,
   KnowledgeCatalogView,
@@ -45,6 +44,8 @@ import {
 } from "./CommandWorkspaceViews";
 import { ScheduleView, type ScheduleClient } from "./CommandWorkspaceSchedule";
 import { classNames } from "./commandWorkspaceUtils";
+
+type ThreadGoalStatus = ThreadGoalView["status"];
 import {
   agentPlatformResourceStates as selectAgentPlatformResourceStates,
   emptyAgentPlatformSnapshot,
@@ -59,9 +60,6 @@ import {
   commandSceneSlashItems,
 } from "./commandWorkspaceSceneResources";
 import {
-  buildAgentPlatformWorkflowGraph,
-  createAgentPlatformWorkflow,
-  getAgentPlatformAccessToken,
   platformAgentToConfig,
   readAgentPlatformSnapshot,
   type AgentPlatformSnapshot,
@@ -110,7 +108,25 @@ import {
   type CommandModelOption,
   type ThreadRuntimeSettings,
 } from "../../lib/thread/threadRuntimeSettings";
+import {
+  commandModelEffortLabel,
+  commandReasoningEffortOptions,
+  resolveReasoningEffort,
+} from "../../lib/thread/threadReasoningEffort";
+import {
+  hasThreadProgress,
+  threadProgressSummary,
+} from "../../lib/thread/threadProgressSummary";
 import type { WorkMode } from "../../lib/workMode";
+import type {
+  CrewonWorkflowExecution,
+  CrewonWorkflowNodeInput,
+  CrewonWorkflowRecord,
+} from "../../lib/workflow/crewonWorkflow";
+import {
+  crewonWorkflowConfigFromValue,
+  workflowRecordsWithRuntimeUpdate,
+} from "../../lib/workflow/crewonWorkflow";
 import { sidebarThreadTitle } from "../SidebarPresentation";
 import { DesktopWindowDragRegion } from "../TitleBarWindowControls";
 import {
@@ -122,6 +138,18 @@ import {
   ComposerResourceTags,
   type ComposerResourceTag,
 } from "../composer/ComposerResourceTags";
+import { ComposerGoalBar } from "../composer/ComposerGoalBar";
+import {
+  composerGoalBarState,
+  goalPauseToggleStatus,
+} from "../composer/composerGoalBarState";
+import { ComposerProgressPill } from "../composer/ComposerProgressPill";
+import {
+  effortFromOptionValue,
+  effortOptionValue,
+  modelEffortGroups,
+  modelEffortMenuOptions,
+} from "../composer/composerModelEffortMenu";
 import {
   ProviderResourceComposerPopover,
   providerResourceComposerTag,
@@ -173,19 +201,39 @@ type CommandWorkspaceProps = {
       config: AgentConfig,
     ) => Promise<unknown>;
     deleteAgentConfig?: (cwd: string, filePath: string) => Promise<unknown>;
-    executeAgentPlatformWorkflow?: (
-      accessToken: string,
+    listWorkflowConfigs?: (cwd: string) => Promise<{
+      data: CrewonWorkflowRecord[];
+    }>;
+    createWorkflowConfig?: (
+      cwd: string,
+      input: {
+        name: string;
+        description: string;
+        lead: string;
+        nodes: CrewonWorkflowNodeInput[];
+      },
+    ) => Promise<unknown>;
+    runWorkflowConfig?: (
+      cwd: string,
       workflowId: string,
       input: string,
-    ) => Promise<{
-      workflowId: number;
-      executionId: number;
-      status: string;
-      outputs: unknown;
-      executedNodes: unknown[];
-      nodeResults: unknown;
-      error: string | null;
-    }>;
+    ) => Promise<CrewonWorkflowExecution>;
+    resolveWorkflowGate?: (
+      cwd: string,
+      workflowId: string,
+      executionId: string,
+      nodeId: string,
+      decision: "approve" | "reject",
+      comment: string | null,
+    ) => Promise<CrewonWorkflowExecution>;
+    cancelWorkflowRun?: (
+      cwd: string,
+      workflowId: string,
+      executionId: string,
+    ) => Promise<CrewonWorkflowExecution>;
+    subscribeWorkflowRunUpdates?: (
+      listener: (notification: WorkflowRunUpdatedNotification) => void,
+    ) => () => void;
     listExpertTeams?: (
       workspaceKey: string,
     ) => Promise<{ data: ExpertTeamRecordReference[] }>;
@@ -212,6 +260,16 @@ type CommandWorkspaceProps = {
   selectedThreadId?: string | null;
   slashCommands?: ComposerSlashCommand[];
   streamingText?: string;
+  /**
+   * Goal steering the selected thread, when the backend reports one. The
+   * composer renders it as an editable bar above the input.
+   */
+  threadGoal?: ThreadGoalView | null;
+  threadGoalBusy?: boolean;
+  committedExecutionIntent?: {
+    intent: Exclude<CommandExecutionIntent, "none">;
+    sequence: number;
+  } | null;
   workMode: WorkMode;
   onAttachContext: (workspaceCwd?: string | null) => void;
   onAddLocalResources?: (
@@ -248,6 +306,9 @@ type CommandWorkspaceProps = {
   onSelectLinkedThread?: (threadId: string | null) => void;
   onSlashCommandSelect?: (command: ComposerSlashCommand) => void;
   onStop?: () => void;
+  onClearThreadGoal?: (threadId: string) => void;
+  onSetThreadGoalObjective?: (threadId: string, objective: string) => void;
+  onSetThreadGoalStatus?: (threadId: string, status: ThreadGoalStatus) => void;
   providerResource?: {
     snapshot: ProviderResourceSnapshot;
     selectedResource: ResourceRef | null;
@@ -402,6 +463,13 @@ export function nextExecutionIntent(
   return current === selected ? "none" : selected;
 }
 
+export function executionIntentAfterCommit(
+  current: CommandExecutionIntent,
+  committed: Exclude<CommandExecutionIntent, "none">,
+): CommandExecutionIntent {
+  return current === committed ? "none" : current;
+}
+
 export function SelectedExecutionIntent({
   intent,
   locale,
@@ -482,6 +550,9 @@ export function CommandWorkspace({
   selectedThreadId = null,
   slashCommands = [],
   streamingText = "",
+  threadGoal = null,
+  threadGoalBusy = false,
+  committedExecutionIntent = null,
   workMode,
   onAddLocalResources,
   onChangeComposerValue,
@@ -499,6 +570,9 @@ export function CommandWorkspace({
   onSelectLinkedThread,
   onSlashCommandSelect,
   onStop,
+  onClearThreadGoal,
+  onSetThreadGoalObjective,
+  onSetThreadGoalStatus,
   providerResource,
 }: CommandWorkspaceProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -527,6 +601,9 @@ export function CommandWorkspace({
   const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
   const [model, setModel] = useState(fallbackCommandModelOptions[0].value);
   const [modelSelectionTouched, setModelSelectionTouched] = useState(false);
+  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<
+    string | null
+  >(null);
   const [executionTarget, setExecutionTarget] = useState("crewon");
   const [cloudAgentTargetError, setCloudAgentTargetError] = useState<
     string | null
@@ -542,6 +619,14 @@ export function CommandWorkspace({
     useState<CommandComposerPermission>("approve-for-me");
   const [executionIntent, setExecutionIntent] =
     useState<CommandExecutionIntent>("none");
+
+  useEffect(() => {
+    if (committedExecutionIntent !== null) {
+      setExecutionIntent((current) =>
+        executionIntentAfterCommit(current, committedExecutionIntent.intent),
+      );
+    }
+  }, [committedExecutionIntent]);
   const [openPalette, setOpenPalette] = useState<
     "add" | "context" | "provider" | "slash" | null
   >(null);
@@ -585,6 +670,10 @@ export function CommandWorkspace({
     null,
   );
   const [workflowCreateBusy, setWorkflowCreateBusy] = useState(false);
+  const [workflows, setWorkflows] = useState<CrewonWorkflowRecord[]>([]);
+  const [workflowsStatus, setWorkflowsStatus] = useState<
+    "loading" | "ready" | "unavailable"
+  >("loading");
   const [fallbackExpertWorkspaceKey, setFallbackExpertWorkspaceKey] = useState<
     string | null
   >(null);
@@ -693,11 +782,7 @@ export function CommandWorkspace({
 
   useEffect(() => {
     let cancelled = false;
-    if (
-      !executionTargetClient ||
-      !cwd ||
-      connectionState !== "connected"
-    ) {
+    if (!executionTargetClient || !cwd || connectionState !== "connected") {
       setTeamCatalog({
         agents: [],
         offices: [],
@@ -745,12 +830,7 @@ export function CommandWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [
-    connectionState,
-    executionTargetClient,
-    teamRefreshNonce,
-    cwd,
-  ]);
+  }, [connectionState, executionTargetClient, teamRefreshNonce, cwd]);
 
   useCommandOfficeCatalogAutoReconnect({
     active: activeView === "team" && teamMode === "office",
@@ -824,12 +904,7 @@ export function CommandWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [
-    connectionState,
-    cwd,
-    executionTargetClient,
-    providerExpertWorkspaceKey,
-  ]);
+  }, [connectionState, cwd, executionTargetClient, providerExpertWorkspaceKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -868,6 +943,61 @@ export function CommandWorkspace({
     expertWorkspaceKey,
     teamRefreshNonce,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (
+      connectionState !== "connected" ||
+      !cwd ||
+      !executionTargetClient?.listWorkflowConfigs
+    ) {
+      setWorkflows([]);
+      setWorkflowsStatus(
+        connectionState === "connecting" ? "loading" : "unavailable",
+      );
+      return;
+    }
+    setWorkflowsStatus("loading");
+    executionTargetClient
+      .listWorkflowConfigs(cwd)
+      .then((response) => {
+        if (!cancelled) {
+          setWorkflows(response.data);
+          setWorkflowsStatus("ready");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWorkflows([]);
+          setWorkflowsStatus("unavailable");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionState, cwd, executionTargetClient, teamRefreshNonce]);
+
+  useEffect(() => {
+    if (!cwd || !executionTargetClient?.subscribeWorkflowRunUpdates) {
+      return;
+    }
+    return executionTargetClient.subscribeWorkflowRunUpdates((notification) => {
+      if (notification.cwd !== cwd) {
+        return;
+      }
+      const config = crewonWorkflowConfigFromValue(notification.config);
+      if (!config) {
+        return;
+      }
+      setWorkflows((current) =>
+        workflowRecordsWithRuntimeUpdate(current, {
+          filePath: notification.filePath,
+          config,
+        }),
+      );
+      setWorkflowsStatus("ready");
+    });
+  }, [cwd, executionTargetClient]);
 
   useEffect(() => {
     let cancelled = false;
@@ -951,6 +1081,15 @@ export function CommandWorkspace({
       setModel(defaultModel);
     }
   }, [effectiveModelOptions, model, modelSelectionTouched]);
+
+  // Derived rather than synced through an effect: an unsupported effort after a
+  // model swap resolves to that model's catalog default on the same render, so
+  // the trigger label is never briefly wrong.
+  const effectiveReasoningEffort = resolveReasoningEffort(
+    effectiveModelOptions,
+    model,
+    selectedReasoningEffort,
+  );
 
   const slots = useMemo(
     () => selectCommandHomeSlots(platformSnapshot),
@@ -1163,6 +1302,12 @@ export function CommandWorkspace({
             label: "操作前确认",
             value: "request-approval",
           },
+          {
+            detail: "跳过沙箱与审批，可读写工作区外的文件并联网",
+            label: "完全访问",
+            tone: "warning",
+            value: "full-access",
+          },
         ]
       : [
           {
@@ -1174,6 +1319,13 @@ export function CommandWorkspace({
             detail: "Ask before operations that require approval",
             label: "Ask before actions",
             value: "request-approval",
+          },
+          {
+            detail:
+              "Skip the sandbox and approvals; can read and write outside the workspace and reach the network",
+            label: "Full access",
+            tone: "warning",
+            value: "full-access",
           },
         ];
   const workspaceOptions = useMemo<CommandComposerSelectOption[]>(() => {
@@ -1300,6 +1452,23 @@ export function CommandWorkspace({
     }
   }
 
+  async function reloadWorkflowDefinitions() {
+    if (!executionTargetClient?.listWorkflowConfigs || !cwd) {
+      setWorkflows([]);
+      setWorkflowsStatus("unavailable");
+      return;
+    }
+    setWorkflowsStatus("loading");
+    try {
+      const response = await executionTargetClient.listWorkflowConfigs(cwd);
+      setWorkflows(response.data);
+      setWorkflowsStatus("ready");
+    } catch {
+      setWorkflows([]);
+      setWorkflowsStatus("unavailable");
+    }
+  }
+
   function switchView(view: CommandShellView) {
     setOpenPalette(null);
     setPaletteQuery("");
@@ -1404,6 +1573,9 @@ export function CommandWorkspace({
         executionTarget,
         model,
         permission,
+        ...(effectiveReasoningEffort
+          ? { reasoningEffort: effectiveReasoningEffort }
+          : {}),
         scene,
         sceneMode,
         executionIntent,
@@ -1413,7 +1585,6 @@ export function CommandWorkspace({
     });
     setCommandImages([]);
     setNewTaskDraft(false);
-    setExecutionIntent("none");
   }
 
   function sendAssistantComposerValue(submittedValue = assistantComposerValue) {
@@ -1426,6 +1597,9 @@ export function CommandWorkspace({
       executionTarget: "crewon",
       model,
       permission,
+      ...(effectiveReasoningEffort
+        ? { reasoningEffort: effectiveReasoningEffort }
+        : {}),
       executionIntent: "none",
     });
     const images = assistantImages.map(({ detail, url }) => ({ detail, url }));
@@ -1759,27 +1933,40 @@ export function CommandWorkspace({
   async function createWorkflowDefinition(
     input: CommandTeamCapabilityCreateInput,
   ) {
-    if (input.kind !== "workflow") {
+    if (
+      input.kind !== "workflow" ||
+      !cwd ||
+      !executionTargetClient?.createWorkflowConfig
+    ) {
       return;
     }
     setWorkflowCreateBusy(true);
     setWorkflowCreateError(null);
     try {
-      const graph = buildAgentPlatformWorkflowGraph(input.nodes);
-      const workflow = await createAgentPlatformWorkflow({
+      await executionTargetClient.createWorkflowConfig(cwd, {
         description: input.goal,
-        edges: graph.edges,
         lead: input.lead,
         name: input.title,
-        nodes: graph.nodes,
+        nodes: input.nodes.map((node) =>
+          node.type === "humanGate"
+            ? {
+                type: "humanGate" as const,
+                instruction: node.instruction,
+                title: node.title,
+              }
+            : {
+                type: "agent" as const,
+                agentId: node.agentId,
+                agentName:
+                  teamCatalog.agents.find(
+                    (record) => record.config.agentId === node.agentId,
+                  )?.config.name ?? node.title,
+                instruction: node.instruction,
+                title: node.title,
+              },
+        ),
       });
-      setPlatformSnapshot((current) => ({
-        ...current,
-        workflows: [
-          workflow,
-          ...current.workflows.filter((item) => item.id !== workflow.id),
-        ],
-      }));
+      await reloadWorkflowDefinitions();
       setWorkflowCreateOpen(false);
     } catch (error) {
       setWorkflowCreateError(
@@ -1806,6 +1993,12 @@ export function CommandWorkspace({
     expertWorkspaceKey &&
       executionTargetClient?.createExpertTeam &&
       connectionState === "connected",
+  );
+  const canCreateWorkflow = Boolean(
+    cwd &&
+      connectionState === "connected" &&
+      executionTargetClient?.createWorkflowConfig &&
+      workflowsStatus !== "unavailable",
   );
   const officeRuntime = officeRoomAdapter
     ? {
@@ -1893,6 +2086,40 @@ export function CommandWorkspace({
             ? "草稿未发送"
             : "Draft not sent"
           : null;
+  const threadProgress = threadProgressSummary(
+    showCommandThread ? selectedThread : null,
+  );
+  const showProgressPill = hasThreadProgress(threadProgress);
+  const goalBar = showCommandThread
+    ? composerGoalBarState(threadGoal, locale)
+    : null;
+  const goalThreadId = selectedThread?.id ?? null;
+  const reasoningEffortOptions = commandReasoningEffortOptions(
+    effectiveModelOptions,
+    model,
+    locale,
+  );
+  const modelTriggerLabel = commandModelEffortLabel({
+    effort: reasoningEffortOptions.length > 0 ? effectiveReasoningEffort : null,
+    locale,
+    modelLabel:
+      effectiveModelOptions.find((option) => option.value === model)?.label ??
+      model,
+  });
+  const modelEffortOptions = modelEffortMenuOptions({
+    effortOptions: reasoningEffortOptions,
+    modelOptions: effectiveModelOptions,
+  });
+
+  function selectModelOrEffort(nextValue: string) {
+    const nextEffort = effortFromOptionValue(nextValue);
+    if (nextEffort) {
+      setSelectedReasoningEffort(nextEffort);
+      return;
+    }
+    setModelSelectionTouched(true);
+    setModel(nextValue);
+  }
   const composerSendLabel = commandThreadRunning
     ? locale === "zh"
       ? "发送补充指令"
@@ -1987,6 +2214,28 @@ export function CommandWorkspace({
             data-has-thread={showCommandThread ? "true" : "false"}
             hidden={activeView !== "command"}
           >
+            {/*
+             * The task bar is a sibling of the centered work column, not a child
+             * of it, so it can span the canvas and start flush left instead of
+             * beginning mid-screen above the messages.
+             */}
+            {showCommandThread && selectedThread ? (
+              <div className="command-thread-toolbar">
+                <div className="command-thread-identity">
+                  <strong
+                    title={sidebarThreadTitle(
+                      selectedThread,
+                      locale === "zh" ? "未命名会话" : "Untitled thread",
+                    )}
+                  >
+                    {sidebarThreadTitle(
+                      selectedThread,
+                      locale === "zh" ? "未命名会话" : "Untitled thread",
+                    )}
+                  </strong>
+                </div>
+              </div>
+            ) : null}
             <section
               className={classNames(
                 "hero-center",
@@ -2030,19 +2279,52 @@ export function CommandWorkspace({
                       onChange={selectExecutionTarget}
                     />
                     <CommandComposerSelect
-                      ariaLabel={locale === "zh" ? "模型选择" : "Model"}
+                      activeValues={[
+                        model,
+                        ...(effectiveReasoningEffort
+                          ? [effortOptionValue(effectiveReasoningEffort)]
+                          : []),
+                      ]}
+                      ariaLabel={
+                        locale === "zh" ? "模型与推理档位" : "Model and effort"
+                      }
                       className="model-dropdown"
-                      options={effectiveModelOptions}
+                      groups={modelEffortGroups(locale)}
+                      options={modelEffortOptions}
+                      triggerLabel={modelTriggerLabel}
                       value={model}
-                      onChange={(nextModel) => {
-                        setModelSelectionTouched(true);
-                        setModel(nextModel);
-                      }}
+                      onChange={selectModelOrEffort}
                     />
                   </>
                 }
                 beforeTextarea={
                   <>
+                    {showProgressPill ? (
+                      <ComposerProgressPill
+                        locale={locale}
+                        running={commandThreadRunning}
+                        summary={threadProgress}
+                      />
+                    ) : null}
+                    {goalBar && goalThreadId ? (
+                      <ComposerGoalBar
+                        busy={threadGoalBusy}
+                        goal={goalBar}
+                        locale={locale}
+                        onClear={() => onClearThreadGoal?.(goalThreadId)}
+                        onEdit={(objective: string) =>
+                          onSetThreadGoalObjective?.(goalThreadId, objective)
+                        }
+                        onTogglePause={() =>
+                          onSetThreadGoalStatus?.(
+                            goalThreadId,
+                            goalPauseToggleStatus(
+                              threadGoal?.status ?? "active",
+                            ),
+                          )
+                        }
+                      />
+                    ) : null}
                     <ComposerResourceTags
                       resources={[
                         ...pendingComposerResources,
@@ -2293,14 +2575,21 @@ export function CommandWorkspace({
               <CommandComposer
                 actions={
                   <CommandComposerSelect
-                    ariaLabel={locale === "zh" ? "模型选择" : "Model"}
+                    activeValues={[
+                      model,
+                      ...(effectiveReasoningEffort
+                        ? [effortOptionValue(effectiveReasoningEffort)]
+                        : []),
+                    ]}
+                    ariaLabel={
+                      locale === "zh" ? "模型与推理档位" : "Model and effort"
+                    }
                     className="model-dropdown"
-                    options={effectiveModelOptions}
+                    groups={modelEffortGroups(locale)}
+                    options={modelEffortOptions}
+                    triggerLabel={modelTriggerLabel}
                     value={model}
-                    onChange={(nextModel) => {
-                      setModelSelectionTouched(true);
-                      setModel(nextModel);
-                    }}
+                    onChange={selectModelOrEffort}
                   />
                 }
                 beforeTextarea={
@@ -2513,6 +2802,13 @@ export function CommandWorkspace({
           <ProjectsView
             active={activeView === "projects"}
             resourceStatus={resourceStatus}
+            onNewTask={() => {
+              setActiveLinkedThreadId(null);
+              setNewTaskDraft(true);
+              onChangeComposerValue("");
+              switchView("command");
+              textareaRef.current?.focus();
+            }}
           />
           <AgentsView
             active={activeView === "agents"}
@@ -2552,7 +2848,8 @@ export function CommandWorkspace({
             officeRuntime={officeRuntime}
             officeRoomId={officeRoomId}
             teamMode={teamMode}
-            workflows={platformSnapshot.workflows}
+            workflows={workflows}
+            workflowStatus={workflowsStatus}
             expertTeams={expertTeams}
             expertTeamsStatus={expertTeamsStatus}
             onCreateOffice={
@@ -2564,7 +2861,7 @@ export function CommandWorkspace({
                 : undefined
             }
             onCreateWorkflow={
-              platformState === "ready"
+              canCreateWorkflow
                 ? () => {
                     setWorkflowCreateError(null);
                     setWorkflowCreateOpen(true);
@@ -2580,33 +2877,45 @@ export function CommandWorkspace({
                   }
                 : undefined
             }
-            onReloadWorkflows={reloadPlatformResources}
+            onReloadWorkflows={reloadWorkflowDefinitions}
             onRunWorkflow={async (workflow, input) => {
-              const accessToken = await getAgentPlatformAccessToken();
-              if (!accessToken) {
-                throw new Error("Agent Platform 登录已失效，请重新登录");
-              }
-              if (!executionTargetClient?.executeAgentPlatformWorkflow) {
+              if (!cwd || !executionTargetClient?.runWorkflowConfig) {
                 throw new Error("App Server 尚未提供协作流执行能力");
               }
-              const execution =
-                await executionTargetClient.executeAgentPlatformWorkflow(
-                  accessToken,
-                  String(workflow.id),
-                  input,
-                );
-              return {
-                id: execution.executionId,
-                workflow_id: execution.workflowId,
-                status: execution.status,
-                output_data: execution.outputs as
-                  | Record<string, unknown>
-                  | string
-                  | null,
-                executed_nodes: execution.executedNodes,
-                node_results: execution.nodeResults as Record<string, unknown>,
-                error_message: execution.error,
-              };
+              return executionTargetClient.runWorkflowConfig(
+                cwd,
+                workflow.config.workflowId,
+                input,
+              );
+            }}
+            onCancelWorkflow={async (workflow, executionId) => {
+              if (!cwd || !executionTargetClient?.cancelWorkflowRun) {
+                throw new Error("App Server 尚未提供协作流取消能力");
+              }
+              return executionTargetClient.cancelWorkflowRun(
+                cwd,
+                workflow.config.workflowId,
+                executionId,
+              );
+            }}
+            onResolveWorkflowGate={async (
+              workflow,
+              executionId,
+              nodeId,
+              decision,
+              comment,
+            ) => {
+              if (!cwd || !executionTargetClient?.resolveWorkflowGate) {
+                throw new Error("App Server 尚未提供 Human Gate 处理能力");
+              }
+              return executionTargetClient.resolveWorkflowGate(
+                cwd,
+                workflow.config.workflowId,
+                executionId,
+                nodeId,
+                decision,
+                comment,
+              );
             }}
             onSelectExpert={openExpertTeam}
             onTeamModeChange={(mode) => {
@@ -2637,7 +2946,7 @@ export function CommandWorkspace({
               busy={expertCreateBusy}
               error={expertCreateError}
               workspaceCwd={cwd}
-                onClose={() => {
+              onClose={() => {
                 if (!expertCreateBusy) {
                   setExpertCreateOpen(false);
                   setExpertCreateError(null);
@@ -2651,19 +2960,20 @@ export function CommandWorkspace({
               kind="workflow"
               busy={workflowCreateBusy}
               error={workflowCreateError}
-              workflowAgents={platformSnapshot.agents.map((agent) => ({
-                apiEnabled: Boolean(agent.api_enabled),
-                description: agent.description || "",
-                id: agent.id,
-                modelName:
-                  agent.model_info?.model_name ||
-                  agent.model_info?.name ||
-                  "qwen-plus",
-                modelProvider: agent.model_info?.provider || "openai",
-                name: agent.name,
-                systemPrompt: agent.system_prompt || "",
-              }))}
-              workspaceCwd=""
+              workflowAgents={teamCatalog.agents.flatMap(({ config }) =>
+                config.agentId
+                  ? [
+                      {
+                        description: config.role,
+                        id: config.agentId,
+                        modelName: config.model,
+                        name: config.name,
+                        systemPrompt: config.systemPrompt,
+                      },
+                    ]
+                  : [],
+              )}
+              workspaceCwd={cwd}
               onClose={() => {
                 if (!workflowCreateBusy) {
                   setWorkflowCreateOpen(false);

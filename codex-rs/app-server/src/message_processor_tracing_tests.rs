@@ -611,11 +611,22 @@ fn run_current_thread_test_with_stack<F>(name: &str, future: F) -> Result<()>
 where
     F: Future<Output = Result<()>> + Send + 'static,
 {
-    const TEST_STACK_SIZE_BYTES: usize = 4 * 1024 * 1024;
+    /*
+     * Matches the repo-wide `RUST_MIN_STACK` used by `just test`. A hardcoded
+     * smaller value silently opts out of that setting, and an unoptimized build
+     * of this request path overflows it.
+     */
+    const DEFAULT_TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+
+    let stack_size = std::env::var("RUST_MIN_STACK")
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|size| *size >= DEFAULT_TEST_STACK_SIZE_BYTES)
+        .unwrap_or(DEFAULT_TEST_STACK_SIZE_BYTES);
 
     let handle = std::thread::Builder::new()
         .name(name.to_string())
-        .stack_size(TEST_STACK_SIZE_BYTES)
+        .stack_size(stack_size)
         .spawn(move || -> Result<()> {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()

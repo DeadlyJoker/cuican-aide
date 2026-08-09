@@ -130,6 +130,9 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 
 /* Command workspace keeps the CrewON conversation beside a Codex-style workbench. */
 .command-shell-route {
+  /* Anchors the collapsed capability trigger, which floats rather than
+   * occupying a grid column. */
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   width: 100vw;
@@ -141,7 +144,7 @@ exports[`command workspace conversation style > snapshots resource tags and the 
 }
 
 .command-shell-route[data-capability-sidebar-open="true"] {
-  grid-template-columns: minmax(820px, 0.86fr) minmax(560px, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .command-shell-route > .screen-shell.command-screen {
@@ -200,28 +203,14 @@ exports[`command workspace conversation style > snapshots resource tags and the 
   transform: scaleX(-1);
 }
 
+/*
+ * Collapsed means gone, not narrow. Reserving a 44px column left a permanent
+ * strip beside the canvas that read as an unfinished panel rather than a
+ * closed one, so the column collapses and the trigger floats over the canvas
+ * instead of occupying layout.
+ */
 .command-shell-route[data-capability-sidebar-open="false"] {
-  grid-template-columns: minmax(0, 1fr) 44px;
-}
-
-.command-capability-sidebar-trigger {
-  position: relative;
-  z-index: 45;
-  align-self: start;
-  justify-self: center;
-  margin-top: 10px;
-  width: 34px;
-  height: 32px;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-
-.command-capability-sidebar-trigger svg {
-  width: 18px;
-  height: 18px;
-  transform: scaleX(-1) rotate(180deg);
+  grid-template-columns: minmax(0, 1fr) 0;
 }
 
 .command-capability-sidebar .capability-dock {
@@ -676,20 +665,27 @@ exports[`command workspace conversation style > snapshots the assistant and home
   border-radius: var(--radius-xl);
   box-shadow: none;
 }
+/* 720px, matching the thread composer and transcript column. */
 .assistant-composer-zone {
   display: grid;
   justify-self: center;
-  width: min(780px, 100%);
+  width: min(720px, 100%);
   gap: 0;
 }
+
+/*
+ * The home composer is the same control as the thread composer, so it carries
+ * the same edge treatment: hairline border, soft outer shadow, and a radius
+ * past the shared \`xl\` container token.
+ */
 .assistant-home-composer {
   width: 100%;
   margin: 0;
+  border-width: 0.5px;
   border-color: var(--n-300);
-  border-radius: var(--radius-xl);
+  border-radius: 18px;
   background: var(--n-0);
-  /* Matches the command composer: one rung off the canvas, no drop. */
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--shadow-composer);
 }
 .assistant-home-composer textarea {
   height: 80px;
@@ -757,6 +753,17 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 }
 
 /*
+ * The task bar occupies the first 40px of the canvas, so the conversation column
+ * starts below it instead of underneath it.
+ */
+.screen-shell.command-screen
+  .command-home-view.has-command-thread
+  .hero-center.has-command-thread {
+  top: 40px;
+  height: calc(100% - 54px);
+}
+
+/*
  * Below 860px the shell drops the hero out of absolute positioning, so the
  * translateX(-50%) that centres it against \`left: 50%\` no longer has a matching
  * offset to cancel and instead shoves the composer off the left edge. app.css
@@ -788,18 +795,21 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 
 .screen-shell.command-screen .command-input.thread-command-input,
 .assistant-single-conversation .command-input {
-  width: min(780px, 100%);
+  width: min(720px, 100%);
 }
 
+/*
+ * The top bar spans the full canvas and holds only the task name, flush left.
+ * It is deliberately not part of the centered 780px transcript column: when it
+ * was, the bar started mid-canvas and its trailing content sat on top of the
+ * message flow.
+ */
 .screen-shell.command-screen .command-thread-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 16px;
-  width: min(780px, 100%);
-  min-height: 36px;
-  padding: 8px 2px 11px;
-  border-bottom: 1px solid var(--n-alpha-08);
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 0 7px;
   color: var(--n-650);
 }
 
@@ -814,7 +824,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   min-width: 0;
   overflow: hidden;
   color: var(--n-850);
-  font-size: calc(13px + var(--user-ui-font-delta));
+  font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
   line-height: 1.3;
   letter-spacing: 0;
@@ -829,7 +839,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border-radius: 0;
   background: transparent;
   color: var(--n-600);
-  font-size: calc(12px + var(--user-ui-font-delta));
+  font-size: calc(11px + var(--user-ui-font-delta));
   font-style: normal;
   font-weight: 500;
 }
@@ -875,7 +885,6 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 }
 
 :root[data-theme="dark"] .screen-shell.command-screen .command-thread-toolbar {
-  border-bottom-color: rgba(255, 255, 255, 0.08);
   color: #a1a1aa;
 }
 
@@ -923,8 +932,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .screen-shell.command-screen .command-thread-room .message-list > .message,
 .assistant-thread-room .turn-group,
 .assistant-thread-room .message-list > .message {
-  width: min(780px, 100%);
-  max-width: 780px;
+  width: min(720px, 100%);
+  max-width: 720px;
 }
 
 .screen-shell.command-screen .command-thread-room .turn-group,
@@ -968,7 +977,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   .markdown-content,
 .assistant-thread-room .message[data-kind="agentMessage"] .markdown-content,
 .assistant-thread-room .message[data-kind="plan"] .markdown-content {
-  max-width: 720px;
+  /* Kept under the 720px column so body text is not flush with its edges. */
+  max-width: 680px;
   gap: 0;
   /* Theme colors are set by data-theme rules below. */
   color: inherit;
@@ -1802,7 +1812,12 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
     .space-title button,
     .conversation-item,
     .sidebar-account summary
-  ):hover,
+  ):hover {
+  background: var(--command-sidebar-hover);
+  color: #f5f5f5;
+}
+
+/* Selection is a step brighter than hover; see the light counterpart. */
 :root[data-theme="dark"]
   .screen-shell.command-screen
   .sidebar-nav
@@ -1810,7 +1825,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 :root[data-theme="dark"]
   .screen-shell.command-screen
   .conversation-item.active {
-  background: var(--command-sidebar-hover);
+  background: var(--command-sidebar-active);
   color: #f5f5f5;
 }
 
@@ -1833,6 +1848,33 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border-color: #3c3c3c;
   background: #1d1d1d;
   color: #ededed;
+}
+
+:root:not([data-theme="light"]) .workspace-remove-dialog {
+  border-color: #393939;
+  background: #242424;
+}
+
+:root:not([data-theme="light"]) .workspace-remove-dialog strong {
+  color: #f1f1f1;
+}
+
+:root:not([data-theme="light"]) .workspace-remove-dialog code {
+  background: #1d1d1d;
+  color: #d6d6d6;
+}
+
+:root:not([data-theme="light"]) .workspace-remove-dialog p {
+  color: #a1a1aa;
+}
+
+:root:not([data-theme="light"]) .workspace-remove-dialog footer button {
+  border-color: #3c3c3c;
+  color: #ededed;
+}
+
+:root:not([data-theme="light"]) .workspace-remove-dialog footer button:hover {
+  background: #303030;
 }
 
 :root[data-theme="dark"]
@@ -1888,10 +1930,6 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border-color: #505050;
   background: #303030;
   color: #fff;
-}
-
-:root[data-theme="dark"] .screen-shell.command-screen .command-thread-toolbar {
-  border-color: rgba(255, 255, 255, 0.08);
 }
 
 :root[data-theme="dark"] .screen-shell.command-screen .command-thread-cwd {
@@ -2122,23 +2160,111 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   border-color: #404040;
 }
 
-/* The command tools are a peer workbench, not a narrow inspector sidebar. */
+/* Codex-parity tool workbench: real browser, terminal, file and review surfaces. */
 .command-workbench {
+  --workbench-bg: #171717;
+  --workbench-surface: #1d1d1d;
+  --workbench-raised: #242424;
+  --workbench-hover: #303030;
+  --workbench-active: #383838;
+  --workbench-border: #303030;
+  --workbench-text: #ededed;
+  --workbench-muted: #9b9b9b;
+  --workbench-faint: #707070;
+  --workbench-page: #111;
+  --workbench-syntax-blue: #61afef;
+  --workbench-syntax-cyan: #56b6c2;
+  --workbench-syntax-green: #98c379;
+  --workbench-syntax-orange: #d19a66;
+  --workbench-syntax-purple: #c678dd;
+  --workbench-syntax-red: #e06c75;
   position: relative;
   z-index: 30;
   display: grid;
+  width: 640px;
   min-width: 0;
-  height: 100vh;
-  height: 100dvh;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+  grid-template-rows: 42px minmax(0, 1fr);
   overflow: hidden;
-  border-left: 1px solid oklch(30% 0 0);
-  background: oklch(18% 0 0);
-  color: oklch(94.5% 0 0);
+  border-left: 1px solid var(--workbench-border);
+  background: var(--workbench-bg);
+  color: var(--workbench-text);
+  container-name: command-workbench;
+  container-type: inline-size;
+}
+
+.command-workbench[hidden] {
+  display: none !important;
+}
+
+:root[data-theme="light"] .command-workbench {
+  --workbench-bg: #fff;
+  --workbench-surface: #fff;
+  --workbench-raised: #f6f6f6;
+  --workbench-hover: #eeeeee;
+  --workbench-active: #e9e9e9;
+  --workbench-border: #e5e5e5;
+  --workbench-text: #202020;
+  --workbench-muted: #737373;
+  --workbench-faint: #a4a4a4;
+  --workbench-page: #fff;
+  --workbench-syntax-blue: #2563c8;
+  --workbench-syntax-cyan: #137a85;
+  --workbench-syntax-green: #4d7c0f;
+  --workbench-syntax-orange: #a64b00;
+  --workbench-syntax-purple: #7c3aed;
+  --workbench-syntax-red: #c2414b;
 }
 
 .command-workbench[data-empty="true"] {
   grid-template-rows: minmax(0, 1fr);
+}
+
+.command-workbench[data-maximized="true"] {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  width: 100vw;
+  border-left: 0;
+  box-shadow: none;
+}
+
+/*
+ * Straddles the workbench edge instead of sitting inside it. A 9px strip that
+ * lived entirely on top of the page iframe was both hard to hit and easy for the
+ * child document to claim; 14px centred on the border keeps the grab target
+ * comfortable while the visible rule below stays 1px.
+ */
+.command-workbench-resize-handle {
+  position: absolute;
+  z-index: 8;
+  inset: 0 auto 0 -7px;
+  width: 14px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* Stays on the workbench edge itself now that the hit area extends past it. */
+.command-workbench-resize-handle::before {
+  position: absolute;
+  inset: 0 auto 0 7px;
+  width: 1px;
+  background: var(--workbench-border);
+  content: "";
+  transition:
+    width 120ms ease,
+    background 120ms ease;
+}
+
+.command-workbench-resize-handle:hover::before,
+.command-workbench-resize-handle:focus-visible::before,
+.command-workbench[data-resizing="true"]
+  .command-workbench-resize-handle::before {
+  width: 3px;
+  background: color-mix(in oklch, var(--accent), var(--workbench-border) 35%);
 }
 
 .command-workbench-tabbar {
@@ -2150,37 +2276,42 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   justify-content: space-between;
   gap: 10px;
   padding: 4px 8px 4px 10px;
-  border-bottom: 1px solid oklch(30% 0 0);
-  background: oklch(18% 0 0);
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--workbench-surface);
 }
 
-.command-workbench-tabs {
+.command-workbench-tabs,
+.command-workbench-window-actions {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 4px;
+}
+
+.command-workbench-tabs {
   overflow-x: auto;
   scrollbar-width: none;
 }
 
 .command-workbench-tab {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 26px;
-  min-width: 112px;
-  max-width: 210px;
+  /* Second column holds the 28px close button; a narrower track clipped it. */
+  grid-template-columns: minmax(0, 1fr) 30px;
+  min-width: 128px;
+  max-width: 220px;
   height: 32px;
   align-items: center;
   overflow: hidden;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: oklch(24% 0 0);
-  color: oklch(80% 0 0);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--workbench-muted);
 }
 
 .command-workbench-tab[data-active="true"] {
-  border-color: oklch(30% 0 0);
-  background: oklch(30% 0 0);
-  color: oklch(97% 0 0);
+  border-color: transparent;
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
 }
 
 .command-workbench-tab > button:first-child {
@@ -2205,37 +2336,52 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   white-space: nowrap;
 }
 
+/*
+ * One glyph size across the top row: the workbench controls match the sidebar
+ * tools at 15px so no icon on that line reads as larger than its neighbours.
+ */
 .command-workbench-tab svg,
 .command-workbench-add svg,
-.command-workbench-close svg {
-  width: 16px;
-  height: 16px;
+.command-workbench-close svg,
+.command-workbench-maximize svg {
+  width: 15px;
+  height: 15px;
   flex: 0 0 auto;
   stroke-width: 1.7;
 }
 
 .command-workbench-tab-close,
 .command-workbench-add,
-.command-workbench-close {
+.command-workbench-close,
+.command-workbench-maximize {
   display: grid;
   place-items: center;
   border: 0;
+  border-radius: 8px;
   background: transparent;
-  color: oklch(70% 0 0);
+  color: var(--workbench-muted);
   cursor: pointer;
+  /* The rest of the shell settles its hover; these snapped. */
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
 }
 
+/*
+ * 24px was below a comfortable pointer target and made closing a tab a
+ * precision exercise. The tab's own grid column widened to match.
+ */
 .command-workbench-tab-close {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
 }
 
 .command-workbench-tab-close:hover,
 .command-workbench-add:hover,
-.command-workbench-close:hover {
-  background: oklch(30% 0 0);
-  color: oklch(100% 0 0);
+.command-workbench-close:hover,
+.command-workbench-maximize:hover {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
 }
 
 .command-workbench-launcher-anchor {
@@ -2246,22 +2392,40 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .command-workbench-add {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
-  color: oklch(91% 0 0);
 }
 
-.command-workbench-close {
-  width: 30px;
-  height: 30px;
+/*
+ * Matches the \`+\` button on the same row. At 26px these two sat below a
+ * comfortable target and read as visually lighter than their neighbour.
+ */
+.command-workbench-close,
+.command-workbench-maximize {
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
-  border-radius: var(--radius-md);
 }
 
+/*
+ * The workbench collapse control mirrors the sidebar collapse control, so it
+ * carries the same box as the tab strip's \`+\` rather than a wider one of its own.
+ * Its glyph stays on the 15px top-row size set above: an 18px override made this
+ * one icon read as larger than every neighbour on the same line.
+ */
+.command-workbench .command-workbench-close {
+  width: 32px;
+  height: 32px;
+}
+
+.command-workbench .command-workbench-close svg {
+  transform: scaleX(-1);
+}
+
+/* Shares the top row's centre line (y=27) with the sidebar tools. */
 .command-workbench-close.is-floating {
   position: absolute;
   z-index: 5;
-  top: 8px;
-  right: 8px;
+  top: 11px;
+  right: 10px;
 }
 
 .command-workbench-launcher-menu {
@@ -2271,9 +2435,9 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   left: 0;
   width: 284px;
   padding: 5px;
-  border: 1px solid oklch(36% 0 0);
-  border-radius: var(--radius-lg);
-  background: oklch(30% 0 0);
+  border: 1px solid var(--workbench-border);
+  border-radius: 12px;
+  background: var(--workbench-raised);
   box-shadow: var(--shadow-modal);
 }
 
@@ -2281,6 +2445,17 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  background: var(--workbench-bg);
+}
+
+.command-workbench-panel {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.command-workbench-panel[hidden] {
+  display: none;
 }
 
 .command-workbench[data-empty="true"] .command-workbench-content {
@@ -2307,12 +2482,16 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   gap: 16px;
   padding: 0 10px;
   border: 0;
-  border-radius: var(--radius-md);
-  background: oklch(24% 0 0);
-  color: oklch(93% 0 0);
+  border-radius: 8px;
+  background: var(--workbench-raised);
+  color: var(--workbench-text);
   cursor: pointer;
   font: inherit;
   text-align: left;
+  /* The rest of the shell settles its hover; these snapped. */
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
 }
 
 .command-workbench-launcher-menu .command-workbench-launcher > button {
@@ -2321,8 +2500,8 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 
 .command-workbench-launcher > button:hover,
 .command-workbench-launcher > button:focus-visible {
-  background: oklch(36% 0 0);
-  color: oklch(100% 0 0);
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
   outline: 0;
 }
 
@@ -2344,330 +2523,991 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-  color: oklch(80% 0 0);
+  color: var(--workbench-muted);
   stroke-width: 1.65;
 }
 
 .command-workbench-launcher > button kbd {
-  color: oklch(70% 0 0);
+  color: var(--workbench-muted);
   font-family: inherit;
   font-size: calc(11px + var(--user-ui-font-delta));
 }
 
-.command-workbench-context-bar {
-  min-width: 0;
-  min-height: 34px;
-  overflow: hidden;
-  padding: 9px 14px 7px;
-  border-bottom: 1px solid oklch(30% 0 0);
-  color: oklch(80% 0 0);
-  font-family: var(--font-mono);
-  font-size: calc(11px + var(--user-ui-font-delta));
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.command-workbench-error {
+  margin: 16px;
+  color: #c44747;
+  font-size: calc(12px + var(--user-ui-font-delta));
 }
 
-.command-workbench-files {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 250px;
+/* Generic panel surface */
+.command-workbench-generic-surface {
   width: 100%;
   height: 100%;
   min-height: 0;
-}
-
-.command-workbench-file-preview {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
   overflow: auto;
-  background: oklch(18% 0 0);
+  padding: 14px;
+  background: var(--workbench-bg);
 }
 
-.command-workbench-file-preview > section {
-  min-width: 0;
-  min-height: 100%;
+.command-workbench-generic-surface .capability-result {
+  max-height: none;
+  border-color: var(--workbench-border);
+  background: var(--workbench-raised);
+  color: var(--workbench-text);
 }
 
-.command-workbench-file-preview pre {
-  min-height: 100%;
-  margin: 0;
-  padding: 18px 20px 40px;
-  overflow: auto;
-  color: oklch(89% 0 0);
-  font-family: var(--font-mono);
-  font-size: calc(12px + var(--user-ui-font-delta));
-  line-height: 1.55;
-  tab-size: 2;
-  white-space: pre-wrap;
-}
-
-.command-workbench-file-empty,
-.command-workbench-tool-empty {
+/* Browser */
+.command-browser {
   display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 6px;
-  color: oklch(62% 0 0);
-  text-align: center;
-}
-
-.command-workbench-file-empty svg,
-.command-workbench-tool-empty svg {
-  width: 26px;
-  height: 26px;
-  margin-bottom: 4px;
-  stroke-width: 1.5;
-}
-
-.command-workbench-file-empty strong,
-.command-workbench-tool-empty strong {
-  color: oklch(91% 0 0);
-  font-size: calc(13px + var(--user-ui-font-delta));
-  font-weight: 500;
-}
-
-.command-workbench-file-empty span {
-  font-size: calc(11px + var(--user-ui-font-delta));
-}
-
-.command-workbench-file-explorer {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-  border-left: 1px solid oklch(30% 0 0);
-  background: oklch(24% 0 0);
-}
-
-.command-workbench-file-search {
-  display: grid;
-  gap: 7px;
-  padding: 8px 8px 5px;
-}
-
-.command-workbench-file-search label {
-  display: grid;
-  gap: 4px;
-}
-
-.command-workbench-file-search label > span {
-  display: none;
-}
-
-.command-workbench-file-search input,
-.command-workbench-file-search select {
   width: 100%;
-  height: 27px;
-  min-width: 0;
-  padding: 0 8px;
-  border: 1px solid oklch(30% 0 0);
-  border-radius: var(--radius-md);
-  outline: 0;
-  background: oklch(24% 0 0);
-  color: oklch(89% 0 0);
-  font: inherit;
-  font-size: calc(11px + var(--user-ui-font-delta));
-}
-
-.command-workbench-file-search input:focus,
-.command-workbench-file-search select:focus {
-  border-color: oklch(42% 0 0);
-}
-
-.command-workbench-file-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 0 8px 6px;
-}
-
-.command-workbench-file-actions button {
-  height: 25px;
-  padding: 0 7px;
-  border: 1px solid oklch(30% 0 0);
-  border-radius: var(--radius-sm);
-  background: oklch(24% 0 0);
-  color: oklch(80% 0 0);
-  cursor: pointer;
-  font: inherit;
-  font-size: calc(11px + var(--user-ui-font-delta));
-}
-
-.command-workbench-file-actions button:hover {
-  background: oklch(30% 0 0);
-  color: oklch(100% 0 0);
-}
-
-.command-workbench-file-tree {
+  height: 100%;
   min-height: 0;
-  flex: 1 1 auto;
-  overflow: auto;
-  padding: 2px 5px 12px;
-  scrollbar-width: thin;
+  grid-template-rows: 54px minmax(0, 1fr);
+  background: var(--workbench-surface);
 }
 
-.command-workbench-file-row {
+.command-browser-toolbar {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  width: 100%;
-  min-height: 27px;
+  grid-template-columns: auto minmax(180px, 880px) 32px;
   align-items: center;
-  gap: 5px;
-  padding: 2px 5px;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.command-browser-nav {
+  display: flex;
+  gap: 2px;
+}
+
+.command-browser-menu-anchor {
+  position: relative;
+}
+
+.command-browser-nav button,
+.command-browser-more,
+.command-browser-address button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   background: transparent;
-  color: oklch(84% 0 0);
+  color: var(--workbench-muted);
+  cursor: pointer;
+}
+
+.command-browser-nav button:hover:not(:disabled),
+.command-browser-more:hover,
+.command-browser-address button:hover {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}
+
+.command-browser-nav button:disabled {
+  cursor: default;
+  opacity: 0.34;
+}
+
+.command-browser-nav svg,
+.command-browser-more svg,
+.command-browser-address svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.65;
+}
+
+.command-browser-address {
+  position: relative;
+  display: grid;
+  width: min(880px, 100%);
+  grid-template-columns: minmax(0, 1fr) 32px;
+  justify-self: center;
+  border: 1px solid var(--workbench-border);
+  border-radius: 10px;
+  background: var(--workbench-surface);
+}
+
+.command-browser-address:focus-within {
+  border-color: color-mix(in oklch, var(--accent), var(--workbench-border) 48%);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 14%, transparent);
+}
+
+.command-browser-address input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--workbench-text);
+  font: inherit;
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+
+.command-browser-address > span {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 8px;
+  z-index: 2;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #8f2f2f;
+  color: #fff;
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.command-browser-menu {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 5px);
+  right: 0;
+  display: grid;
+  width: 180px;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 10px;
+  background: var(--workbench-raised);
+  box-shadow: var(--shadow-modal);
+}
+
+.command-browser-menu button {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--workbench-text);
   cursor: pointer;
   font: inherit;
   font-size: calc(12px + var(--user-ui-font-delta));
   text-align: left;
 }
 
-.command-workbench-file-row:hover,
-.command-workbench-file-row:focus-visible {
-  background: oklch(30% 0 0);
-  color: oklch(100% 0 0);
+.command-browser-menu button:hover:not(:disabled) {
+  background: var(--workbench-hover);
+}
+
+.command-browser-menu button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.command-browser-empty,
+.command-browser-error,
+.command-browser-loading {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--workbench-muted);
+  text-align: center;
+}
+
+.command-browser-empty svg,
+.command-browser-error svg {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 4px;
+  stroke-width: 1.45;
+}
+
+.command-browser-empty strong,
+.command-browser-error strong {
+  color: var(--workbench-text);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  font-weight: 500;
+}
+
+.command-browser-empty span,
+.command-browser-error span,
+.command-browser-loading {
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+
+.command-browser-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--workbench-page);
+}
+
+.command-browser-viewport iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--workbench-page);
+}
+
+/*
+ * A page iframe is its own event target, so during a width drag it captures the
+ * pointer the moment it crosses the 9px handle and the resize dies halfway.
+ * Pointer capture on the handle is the primary fix; this makes the child
+ * document inert for the duration so no engine quirk can steal the drag back.
+ */
+.command-workbench[data-resizing="true"] .command-browser-viewport iframe {
+  pointer-events: none;
+}
+
+/* Files */
+.command-file-workbench {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: 44px minmax(0, 1fr);
+}
+
+.command-file-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.command-file-breadcrumbs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+  color: var(--workbench-muted);
+}
+
+.command-file-toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+}
+
+.command-file-toolbar-actions button {
+  display: flex;
+  min-width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--workbench-raised);
+  color: var(--workbench-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.command-file-toolbar-actions button:hover:not(:disabled) {
+  background: var(--workbench-active);
+}
+
+.command-file-toolbar-actions button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.command-file-toolbar-actions svg {
+  width: 14px;
+  height: 14px;
+}
+
+.command-file-breadcrumbs > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.command-file-breadcrumbs svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.command-file-breadcrumbs button {
+  min-width: 0;
+  overflow: hidden;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-file-breadcrumbs button:hover:not(:disabled) {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}
+
+.command-file-breadcrumbs button:disabled {
+  color: var(--workbench-text);
+  cursor: default;
+}
+
+.command-file-layout {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+
+.command-file-preview {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--workbench-bg);
+}
+
+.command-file-empty {
+  display: grid;
+  min-height: 100%;
+  align-content: center;
+  justify-items: center;
+  gap: 7px;
+  color: var(--workbench-muted);
+  text-align: center;
+}
+
+.command-file-empty svg {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 3px;
+  stroke-width: 1.45;
+}
+
+.command-file-empty strong {
+  color: var(--workbench-text);
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 500;
+}
+
+.command-file-empty span {
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.command-file-code {
+  display: grid;
+  min-width: max-content;
+  grid-template-columns: 48px minmax(max-content, 1fr);
+  padding: 8px 0 36px;
+  font-family: var(--font-mono);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.command-file-line-numbers,
+.command-file-highlighted-code {
+  margin: 0;
+  font: inherit;
+  line-height: inherit;
+}
+
+.command-file-line-numbers {
+  display: grid;
+  align-content: start;
+  padding-right: 12px;
+  color: var(--workbench-faint);
+  text-align: right;
+  user-select: none;
+}
+
+.command-file-line-numbers span {
+  min-height: 20px;
+}
+
+.command-file-highlighted-code {
+  padding-right: 24px;
+  color: var(--workbench-text);
+  white-space: pre;
+}
+
+.command-file-highlighted-code code {
+  font: inherit;
+}
+
+.command-file-highlighted-code .hljs-comment,
+.command-file-highlighted-code .hljs-quote {
+  color: var(--workbench-faint);
+  font-style: italic;
+}
+
+.command-file-highlighted-code .hljs-keyword,
+.command-file-highlighted-code .hljs-selector-tag,
+.command-file-highlighted-code .hljs-literal,
+.command-file-highlighted-code .hljs-section,
+.command-file-highlighted-code .hljs-link {
+  color: var(--workbench-syntax-purple);
+}
+
+.command-file-highlighted-code .hljs-string,
+.command-file-highlighted-code .hljs-regexp,
+.command-file-highlighted-code .hljs-addition,
+.command-file-highlighted-code .hljs-attribute {
+  color: var(--workbench-syntax-green);
+}
+
+.command-file-highlighted-code .hljs-title,
+.command-file-highlighted-code .hljs-title.class_,
+.command-file-highlighted-code .hljs-title.function_,
+.command-file-highlighted-code .hljs-function,
+.command-file-highlighted-code .hljs-built_in {
+  color: var(--workbench-syntax-blue);
+}
+
+.command-file-highlighted-code .hljs-number,
+.command-file-highlighted-code .hljs-symbol,
+.command-file-highlighted-code .hljs-bullet,
+.command-file-highlighted-code .hljs-meta {
+  color: var(--workbench-syntax-orange);
+}
+
+.command-file-highlighted-code .hljs-type,
+.command-file-highlighted-code .hljs-variable,
+.command-file-highlighted-code .hljs-template-variable,
+.command-file-highlighted-code .hljs-params {
+  color: var(--workbench-syntax-cyan);
+}
+
+.command-file-highlighted-code .hljs-deletion,
+.command-file-highlighted-code .hljs-tag,
+.command-file-highlighted-code .hljs-name {
+  color: var(--workbench-syntax-red);
+}
+
+.command-file-explorer {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border-left: 1px solid var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.command-file-filter {
+  display: grid;
+  height: 34px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  margin: 8px 8px 5px;
+  padding: 0 8px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 9px;
+  background: var(--workbench-surface);
+  color: var(--workbench-muted);
+}
+
+.command-file-filter:focus-within {
+  border-color: color-mix(in oklch, var(--accent), var(--workbench-border) 48%);
+}
+
+.command-file-filter svg {
+  width: 15px;
+  height: 15px;
+}
+
+.command-file-filter input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--workbench-text);
+  font: inherit;
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+
+.command-file-root {
+  display: grid;
+  min-height: 30px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--workbench-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.command-file-root svg {
+  width: 14px;
+  height: 14px;
+}
+
+.command-file-root strong {
+  overflow: hidden;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-file-tree {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 5px 12px;
+  scrollbar-width: thin;
+}
+
+.command-file-row {
+  display: grid;
+  width: 100%;
+  min-height: 27px;
+  grid-template-columns: 14px 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--workbench-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  text-align: left;
+}
+
+.command-file-row:hover,
+.command-file-row:focus-visible {
+  background: var(--workbench-hover);
   outline: 0;
 }
 
-.command-workbench-file-row:disabled {
-  cursor: default;
-  opacity: 0.55;
+.command-file-row.is-active {
+  background: var(--workbench-active);
 }
 
-.command-workbench-file-row svg {
+.command-file-row:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.command-file-row svg {
   width: 14px;
   height: 14px;
-  color: oklch(74% 0 0);
+  color: var(--workbench-muted);
   stroke-width: 1.55;
 }
 
-.command-workbench-file-row span {
+.command-file-row-spacer {
+  width: 14px;
+}
+
+.command-file-row span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.command-workbench-error {
-  margin: 16px;
-  color: #ef9b9b;
-  font-size: calc(12px + var(--user-ui-font-delta));
-}
-
-.command-workbench-generic-surface {
+/* Terminal */
+.command-terminal-workbench {
+  display: flex;
   width: 100%;
   height: 100%;
   min-height: 0;
-  overflow: auto;
-  background: oklch(18% 0 0);
+  flex-direction: column;
+  background: #151515;
+  color: #e8e8e8;
 }
 
-.command-workbench-generic-surface .capability-result {
+.command-terminal-header {
   display: grid;
-  min-height: 100%;
-  align-content: start;
+  min-height: 40px;
+  grid-template-columns: auto minmax(0, 1fr) auto 28px;
+  align-items: center;
   gap: 12px;
-  margin: 0;
-  padding: 14px 16px 32px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: oklch(89% 0 0);
+  padding: 0 12px;
+  border-bottom: 1px solid #303030;
+  background: #1b1b1b;
 }
 
-.command-workbench-generic-surface .capability-result-header {
-  display: none;
-}
-
-.command-workbench-generic-surface .capability-command-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.command-terminal-header > span,
+.command-terminal-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
   gap: 6px;
 }
 
-.command-workbench-generic-surface
-  :is(
-    .capability-command-form input,
-    .capability-field-list input,
-    .capability-field-list select
-  ) {
-  border-color: oklch(36% 0 0);
-  background: oklch(24% 0 0);
-  color: oklch(91% 0 0);
+.command-terminal-header svg {
+  width: 15px;
+  height: 15px;
 }
 
-.command-workbench-generic-surface
-  :is(.capability-command-form button, .capability-result-actions button) {
-  border-color: oklch(36% 0 0);
-  background: oklch(30% 0 0);
-  color: oklch(89% 0 0);
+.command-terminal-header strong,
+.command-terminal-cwd,
+.command-terminal-status {
+  font-size: calc(11px + var(--user-ui-font-delta));
 }
 
-.command-workbench-generic-surface .capability-result-output {
-  max-height: calc(100dvh - 150px);
-  margin: 0;
+.command-terminal-header strong {
+  font-weight: 500;
+}
+
+.command-terminal-cwd {
+  overflow: hidden;
+  color: #8e8e8e;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-terminal-status {
+  color: #8e8e8e;
+}
+
+.command-terminal-status svg {
+  width: 7px;
+  height: 7px;
+  fill: #737373;
+  color: #737373;
+}
+
+.command-terminal-status[data-running="true"] svg {
+  fill: #62a66c;
+  color: #62a66c;
+}
+
+.command-terminal-header > button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
   padding: 0;
-  overflow: auto;
   border: 0;
-  border-radius: 0;
+  border-radius: 7px;
   background: transparent;
-  color: oklch(89% 0 0);
+  color: #a7a7a7;
+  cursor: pointer;
+}
+
+.command-terminal-header > button:hover:not(:disabled) {
+  background: #303030;
+  color: #ededed;
+}
+
+.command-terminal-header > button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.command-terminal-xterm {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 10px 12px 12px;
+  background: #111;
+}
+
+.command-terminal-xterm .xterm,
+.command-terminal-xterm .xterm-screen,
+.command-terminal-xterm .xterm-viewport {
+  height: 100%;
+}
+
+.command-terminal-xterm .xterm-viewport {
+  scrollbar-width: thin;
+}
+
+/* Review */
+.command-review-workbench {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: 44px minmax(0, 1fr);
+}
+
+.command-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px 0 13px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.command-review-header > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.command-review-header svg,
+.command-review-files svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.command-review-header strong {
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
+}
+
+.command-review-header em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--workbench-muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-review-header button {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--workbench-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.command-review-header button:hover:not(:disabled) {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}
+
+.command-review-layout {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 240px minmax(0, 1fr);
+}
+
+.command-review-files {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 5px 16px;
+  border-right: 1px solid var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.command-review-files > strong {
+  display: block;
+  padding: 4px 8px 7px;
+  color: var(--workbench-muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.command-review-files button {
+  display: grid;
+  width: 100%;
+  min-height: 29px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--workbench-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  text-align: left;
+}
+
+.command-review-files button:hover,
+.command-review-files button[data-active="true"] {
+  background: var(--workbench-hover);
+}
+
+.command-review-files button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-review-diff {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--workbench-bg);
+}
+
+.command-review-diff > p {
+  margin: 16px;
+  color: #c44747;
+}
+
+.command-review-code {
+  min-width: max-content;
+  padding: 8px 0 32px;
+  font-family: var(--font-mono);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.55;
 }
 
-.command-workbench-generic-surface[data-tool-id="terminal"]
-  .capability-result-output {
-  color: oklch(89% 0 0);
+.command-review-code > div {
+  display: grid;
+  min-height: 20px;
+  grid-template-columns: 48px minmax(max-content, 1fr);
 }
 
-.command-workbench-trigger {
-  position: relative;
+.command-review-code > div > span {
+  padding-right: 12px;
+  color: var(--workbench-faint);
+  text-align: right;
+  user-select: none;
+}
+
+.command-review-code code {
+  padding-right: 20px;
+  color: var(--workbench-text);
+  font: inherit;
+  white-space: pre;
+}
+
+.command-review-code [data-kind="added"] {
+  background: color-mix(in srgb, #2f9d50 16%, transparent);
+}
+
+.command-review-code [data-kind="removed"] {
+  background: color-mix(in srgb, #d14d4d 14%, transparent);
+}
+
+.command-review-code [data-kind="hunk"] {
+  background: color-mix(in srgb, #5a7fc0 13%, transparent);
+  color: #6d8ec7;
+}
+
+.command-review-code [data-kind="meta"] code {
+  color: var(--workbench-muted);
+}
+
+.command-review-empty {
+  display: grid;
+  min-height: 100%;
+  align-content: center;
+  justify-items: center;
+  gap: 7px;
+  padding: 24px;
+  color: var(--workbench-muted);
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.command-review-empty svg {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 3px;
+  stroke-width: 1.45;
+}
+
+.command-review-empty strong {
+  color: var(--workbench-text);
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 500;
+}
+
+.command-review-empty span {
+  max-width: 640px;
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+/*
+ * Floats over the canvas rather than sitting in a reserved column: a closed
+ * workbench should leave no strip behind.
+ *
+ * Sizing is stated outright rather than inherited from \`.sidebar-tool\`. This
+ * button lives under \`.command-shell-route\`, outside \`.screen-shell\`, so the
+ * command-screen sizing never applied to it and the box ended up smaller than
+ * the glyph it contains -- clicks beside the icon missed the button entirely.
+ * \`display: grid\` + \`place-items: center\` makes the whole box the target.
+ */
+.command-shell-route .command-workbench-trigger {
+  position: absolute;
+  top: 10px;
+  right: 10px;
   z-index: 45;
-  align-self: start;
-  justify-self: center;
+  display: grid;
   width: 34px;
   height: 32px;
-  margin-top: 8px;
-  border: 0;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: oklch(74% 0 0);
+  color: var(--n-700);
   box-shadow: none;
+  cursor: pointer;
 }
 
-.command-workbench-trigger:hover {
-  background: oklch(30% 0 0);
-  color: oklch(100% 0 0);
+.command-shell-route .command-workbench-trigger:hover,
+.command-shell-route .command-workbench-trigger:focus-visible {
+  background: var(--n-150);
+  color: var(--n-950);
+  outline: 0;
 }
 
-.command-workbench-trigger svg {
+/* Matches the sidebar collapse glyph, so the two rails read as a pair. */
+.command-shell-route .command-workbench-trigger svg {
   width: 18px;
   height: 18px;
+  stroke-width: 1.75;
 }
 
 @media (max-width: 1379px) {
   .command-shell-route[data-capability-sidebar-open="true"] {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+@container command-workbench (max-width: 560px) {
+  .command-file-layout {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(170px, 38%);
   }
 
-  .command-workbench {
-    position: fixed;
-    inset: 0 0 0 auto;
-    width: min(760px, calc(100vw - 80px));
-    box-shadow: var(--shadow-drawer-left);
+  .command-file-explorer {
+    border-top: 1px solid var(--workbench-border);
+    border-left: 0;
+  }
+
+  .command-review-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(128px, 30%) minmax(0, 1fr);
+  }
+
+  .command-review-files {
+    border-right: 0;
+    border-bottom: 1px solid var(--workbench-border);
   }
 }
 
 @media (max-width: 760px) {
-  .command-workbench {
-    width: 100vw;
-  }
-
-  .command-workbench-files {
-    grid-template-columns: minmax(0, 1fr) minmax(210px, 38%);
+  .command-browser-toolbar {
+    gap: 5px;
   }
 }
 
@@ -2775,6 +3615,157 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   color: var(--text-danger, #b42318);
   font-size: 12px;
   margin: 6px 16px 0;
+}
+
+/*
+ * Composer status stack: the progress pill and goal bar sit above the input
+ * card, centered on it, so the card keeps one visual weight and the two rows
+ * read as reporting on the run rather than as controls inside the composer.
+ */
+.screen-shell.command-screen .composer-progress-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-self: center;
+  gap: 6px;
+  min-height: 26px;
+  margin: 0 auto 10px;
+  padding: 0 12px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-pill);
+  background: var(--n-0);
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .composer-progress-spinner {
+  width: 13px;
+  height: 13px;
+  color: var(--n-550);
+}
+
+.screen-shell.command-screen .composer-progress-step {
+  color: var(--n-850);
+  font-weight: 500;
+}
+
+.screen-shell.command-screen .composer-progress-separator,
+.screen-shell.command-screen .composer-goal-separator {
+  color: var(--n-450);
+}
+
+.screen-shell.command-screen .composer-progress-diff {
+  display: inline-flex;
+  gap: 5px;
+  font-weight: 500;
+}
+
+.screen-shell.command-screen .composer-progress-diff [data-tone="added"] {
+  color: var(--ok, #067647);
+}
+
+.screen-shell.command-screen .composer-progress-diff [data-tone="removed"] {
+  color: var(--text-danger, #b42318);
+}
+
+/*
+ * The goal bar is a full-width row directly above the input card, one line
+ * high, with the objective allowed to truncate so the timer and the three
+ * controls stay on the same baseline at every width.
+ */
+.screen-shell.command-screen .composer-goal-bar {
+  display: grid;
+  grid-template-columns: 15px auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin: 0 0 4px;
+  padding: 0 6px 0 12px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  font-size: calc(13px + var(--user-ui-font-delta));
+}
+
+.screen-shell.command-screen .composer-goal-icon {
+  width: 15px;
+  height: 15px;
+  color: var(--n-550);
+  stroke-width: 1.7;
+}
+
+.screen-shell.command-screen .composer-goal-status {
+  color: var(--n-950);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .composer-goal-objective {
+  overflow: hidden;
+  color: var(--n-750);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .composer-goal-input {
+  min-width: 0;
+  height: 24px;
+  border: 1px solid var(--n-400);
+  border-radius: var(--radius-sm);
+  background: var(--n-0);
+  padding: 0 6px;
+  color: var(--n-950);
+  font: inherit;
+}
+
+.screen-shell.command-screen .composer-goal-elapsed {
+  color: var(--n-600);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .composer-goal-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.screen-shell.command-screen .composer-goal-action {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  color: var(--n-600);
+}
+
+.screen-shell.command-screen .composer-goal-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.screen-shell.command-screen
+  .permission-dropdown
+  .select-option[data-tone="warning"] {
+  color: var(--warning);
+}
+
+/*
+ * The canvas, not the viewport, is what the composer has to fit into: the
+ * workbench claims up to 840px of a window that stays wide, so viewport
+ * breakpoints never fired and the control row was clipped at its right edge.
+ * The query lives here because this file loads last; in app.css the later
+ * single-line \`.input-tools\` rule won on order.
+ */
+@container command-canvas (max-width: 520px) {
+  .screen-shell.command-screen .input-tools {
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 4px;
+    padding-bottom: 8px;
+  }
+
+  .screen-shell.command-screen .composer-actions {
+    justify-self: end;
+  }
 }"
 `;
 
@@ -2800,4 +3791,119 @@ exports[`command workspace conversation style > snapshots the markdown table siz
   box-shadow: inset 0 0 0 1px var(--n-250);
 }",
 }
+`;
+
+exports[`command workspace conversation style > snapshots the resizable workbench right-pane contract 1`] = `
+".command-shell-route {
+  /* Anchors the collapsed capability trigger, which floats rather than
+   * occupying a grid column. */
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--n-25);
+  transition: grid-template-columns 180ms ease;
+}
+
+.command-shell-route[data-capability-sidebar-open="true"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+
+.command-workbench {
+  --workbench-bg: #171717;
+  --workbench-surface: #1d1d1d;
+  --workbench-raised: #242424;
+  --workbench-hover: #303030;
+  --workbench-active: #383838;
+  --workbench-border: #303030;
+  --workbench-text: #ededed;
+  --workbench-muted: #9b9b9b;
+  --workbench-faint: #707070;
+  --workbench-page: #111;
+  --workbench-syntax-blue: #61afef;
+  --workbench-syntax-cyan: #56b6c2;
+  --workbench-syntax-green: #98c379;
+  --workbench-syntax-orange: #d19a66;
+  --workbench-syntax-purple: #c678dd;
+  --workbench-syntax-red: #e06c75;
+  position: relative;
+  z-index: 30;
+  display: grid;
+  width: 640px;
+  min-width: 0;
+  height: 100%;
+  grid-template-rows: 42px minmax(0, 1fr);
+  overflow: hidden;
+  border-left: 1px solid var(--workbench-border);
+  background: var(--workbench-bg);
+  color: var(--workbench-text);
+  container-name: command-workbench;
+  container-type: inline-size;
+}
+
+
+.command-workbench-resize-handle {
+  position: absolute;
+  z-index: 8;
+  inset: 0 auto 0 -7px;
+  width: 14px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* Stays on the workbench edge itself now that the hit area extends past it. */
+.command-workbench-resize-handle::before {
+  position: absolute;
+  inset: 0 auto 0 7px;
+  width: 1px;
+  background: var(--workbench-border);
+  content: "";
+  transition:
+    width 120ms ease,
+    background 120ms ease;
+}
+
+.command-workbench-resize-handle:hover::before,
+.command-workbench-resize-handle:focus-visible::before,
+.command-workbench[data-resizing="true"]
+  .command-workbench-resize-handle::before {
+  width: 3px;
+  background: color-mix(in oklch, var(--accent), var(--workbench-border) 35%);
+}
+
+
+@media (max-width: 1379px) {
+  .command-shell-route[data-capability-sidebar-open="true"] {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+@container command-workbench (max-width: 560px) {
+  .command-file-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(170px, 38%);
+  }
+
+  .command-file-explorer {
+    border-top: 1px solid var(--workbench-border);
+    border-left: 0;
+  }
+
+  .command-review-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(128px, 30%) minmax(0, 1fr);
+  }
+
+  .command-review-files {
+    border-right: 0;
+    border-bottom: 1px solid var(--workbench-border);
+  }
+}"
 `;

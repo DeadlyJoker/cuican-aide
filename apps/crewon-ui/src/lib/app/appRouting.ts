@@ -77,6 +77,7 @@ export function settingsSectionFromSearch(search: string): SettingsSection {
     case "hooks":
     case "keyboard":
     case "mcp-servers":
+    case "model-providers":
     case "personalization":
     case "worktrees":
       return section;

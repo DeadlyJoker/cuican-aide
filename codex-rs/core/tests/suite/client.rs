@@ -1881,6 +1881,14 @@ async fn configured_reasoning_summary_is_sent() -> anyhow::Result<()> {
 async fn responses_lite_sets_all_turns_context_and_disables_parallel_tool_calls()
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/responses-lite-request.reference.json"
+    )
+    .expect("resolve AR-007 Responses Lite fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-007 Responses Lite fixture"),
+    )
+    .expect("parse AR-007 Responses Lite fixture");
     let server = MockServer::start().await;
 
     let resp_mock = mount_sse_once(
@@ -1913,14 +1921,13 @@ async fn responses_lite_sets_all_turns_context_and_disables_parallel_tool_calls(
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let request_body = resp_mock.single_request().body_json();
-    pretty_assertions::assert_eq!(
-        request_body
+    let candidate = json!({
+        "reasoningContext": request_body
             .get("reasoning")
-            .and_then(|reasoning| reasoning.get("context"))
-            .and_then(|value| value.as_str()),
-        Some("all_turns")
-    );
-    pretty_assertions::assert_eq!(request_body.get("parallel_tool_calls"), Some(&json!(false)));
+            .and_then(|reasoning| reasoning.get("context")),
+        "parallelToolCalls": request_body.get("parallel_tool_calls"),
+    });
+    pretty_assertions::assert_eq!(candidate, reference["expected"]);
 
     Ok(())
 }
@@ -2658,6 +2665,14 @@ async fn token_count_includes_rate_limits_snapshot() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/usage-limit-reached.reference.json"
+    )
+    .expect("resolve AR-008 usage-limit fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-008 usage-limit fixture"),
+    )
+    .expect("parse AR-008 usage-limit fixture");
     let server = MockServer::start().await;
 
     let response = ResponseTemplate::new(429)
@@ -2686,25 +2701,6 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
     let codex_fixture = builder.build(&server).await?;
     let codex = codex_fixture.crewon.clone();
 
-    let expected_limits = json!({
-        "limit_id": "codex",
-        "limit_name": null,
-        "primary": {
-            "used_percent": 100.0,
-            "window_minutes": 15,
-            "resets_at": null
-        },
-        "secondary": {
-            "used_percent": 87.5,
-            "window_minutes": 60,
-            "resets_at": null
-        },
-        "credits": null,
-        "individual_limit": null,
-        "plan_type": null,
-        "rate_limit_reached_type": null
-    });
-
     let submission_id = codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
@@ -2719,30 +2715,109 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
         .await
         .expect("submission should succeed while emitting usage limit error events");
 
-    let token_event = wait_for_event(&codex, |msg| matches!(msg, EventMsg::TokenCount(_))).await;
-    let EventMsg::TokenCount(event) = token_event else {
-        unreachable!();
-    };
+    let mut rate_limits = None;
+    let mut failure_code = None;
+    let mut sampling_retries = 0;
+    let mut assistant_message_committed = false;
+    wait_for_event(&codex, |event| match event {
+        EventMsg::TokenCount(event) => {
+            rate_limits = event.rate_limits.clone();
+            false
+        }
+        EventMsg::StreamError(_) => {
+            sampling_retries += 1;
+            false
+        }
+        EventMsg::AgentMessage(_) => {
+            assistant_message_committed = true;
+            false
+        }
+        EventMsg::Error(error) => {
+            assert!(
+                error.message.to_lowercase().contains("usage limit"),
+                "unexpected error message for submission {submission_id}: {}",
+                error.message
+            );
+            failure_code = Some("responses_usage_limit_reached");
+            false
+        }
+        EventMsg::TurnComplete(_) => true,
+        _ => false,
+    })
+    .await;
 
-    let event_json = serde_json::to_value(&event).expect("serialize token count event");
-    pretty_assertions::assert_eq!(
-        event_json,
-        json!({
-            "info": null,
-            "rate_limits": expected_limits
-        })
-    );
-
-    let error_event = wait_for_event(&codex, |msg| matches!(msg, EventMsg::Error(_))).await;
-    let EventMsg::Error(error_event) = error_event else {
-        unreachable!();
-    };
-    assert!(
-        error_event.message.to_lowercase().contains("usage limit"),
-        "unexpected error message for submission {submission_id}: {}",
-        error_event.message
-    );
-
+    let limits = serde_json::to_value(rate_limits.expect("missing usage-limit snapshot"))
+        .expect("serialize usage-limit snapshot");
+    let snapshot = json!({
+        "limitId": limits["limit_id"],
+        "limitName": limits["limit_name"],
+        "primary": limits["primary"].as_object().map(|window| json!({
+            "usedPercent": window["used_percent"],
+            "windowMinutes": window["window_minutes"],
+            "resetsAt": window["resets_at"]
+        })),
+        "secondary": limits["secondary"].as_object().map(|window| json!({
+            "usedPercent": window["used_percent"],
+            "windowMinutes": window["window_minutes"],
+            "resetsAt": window["resets_at"]
+        })),
+        "credits": limits["credits"].as_object().map(|credits| json!({
+            "hasCredits": credits["has_credits"],
+            "unlimited": credits["unlimited"],
+            "balance": credits["balance"]
+        })),
+        "individualLimit": limits["individual_limit"].as_object().map(|limit| json!({
+            "limit": limit["limit"],
+            "used": limit["used"],
+            "remainingPercent": limit["remaining_percent"],
+            "resetsAt": limit["resets_at"]
+        })),
+        "planType": limits["plan_type"],
+        "rateLimitReachedType": limits["rate_limit_reached_type"]
+    });
+    let request_count = server
+        .received_requests()
+        .await
+        .expect("record usage-limit requests")
+        .len();
+    let candidate = json!({
+        "schemaVersion": "crewon.trace.v0",
+        "caseId": "AR-008-usage-limit-reached",
+        "events": [
+            {
+                "schemaVersion": "crewon.turn-event.v0",
+                "sequence": 1,
+                "type": "rate_limit.updated",
+                "identity": { "turnSlot": "first" },
+                "data": { "snapshot": snapshot }
+            },
+            {
+                "schemaVersion": "crewon.turn-event.v0",
+                "sequence": 2,
+                "type": "turn.failed",
+                "identity": { "turnSlot": "first" },
+                "data": {
+                    "code": failure_code.expect("missing usage-limit failure"),
+                    "retryable": false
+                }
+            },
+            {
+                "schemaVersion": "crewon.turn-event.v0",
+                "sequence": 3,
+                "type": "turn.released",
+                "identity": { "turnSlot": "first" },
+                "data": { "workItemSettled": true }
+            }
+        ],
+        "finalState": {
+            "status": "failed",
+            "requestCount": request_count,
+            "samplingRetries": sampling_retries,
+            "assistantMessageCommitted": assistant_message_committed,
+            "pendingWorkItems": 0
+        }
+    });
+    assert_eq!(candidate, reference);
     Ok(())
 }
 
@@ -2854,6 +2929,14 @@ async fn context_window_error_sets_total_tokens_to_model_window() -> anyhow::Res
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn incomplete_response_emits_content_filter_error_message() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/content-filter-incomplete.reference.json"
+    )
+    .expect("resolve AR-009 content-filter fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-009 content-filter fixture"),
+    )
+    .expect("parse AR-009 content-filter fixture");
     let server = MockServer::start().await;
 
     let incomplete_response = sse(vec![
@@ -2895,20 +2978,68 @@ async fn incomplete_response_emits_content_filter_error_message() -> anyhow::Res
         })
         .await?;
 
-    let error_event = wait_for_event(&codex, |ev| matches!(ev, EventMsg::Error(_))).await;
-    assert!(
-        matches!(
-            error_event,
-            EventMsg::Error(ref err)
-                if err.message
-                    == "stream disconnected before completion: Incomplete response returned, reason: content_filter"
-        ),
-        "expected incomplete content filter error; got {error_event:?}"
-    );
+    let mut deltas = Vec::new();
+    let mut failure_code = None;
+    let mut assistant_message_committed = false;
+    wait_for_event(&codex, |event| match event {
+        EventMsg::AgentMessageContentDelta(event) => {
+            deltas.push(event.delta.clone());
+            false
+        }
+        EventMsg::AgentMessage(_) => {
+            assistant_message_committed = true;
+            false
+        }
+        EventMsg::Error(error) => {
+            assert_eq!(
+                error.message,
+                "stream disconnected before completion: Incomplete response returned, reason: content_filter"
+            );
+            failure_code = Some("responses_incomplete_content_filter");
+            false
+        }
+        EventMsg::TurnComplete(_) => true,
+        _ => false,
+    })
+    .await;
 
-    assert_eq!(responses_mock.requests().len(), 1);
-
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    let candidate = json!({
+        "schemaVersion": "crewon.trace.v0",
+        "caseId": "AR-009-content-filter-incomplete",
+        "events": [
+            {
+                "schemaVersion": "crewon.turn-event.v0",
+                "sequence": 1,
+                "type": "model.output.delta",
+                "identity": { "turnSlot": "first" },
+                "data": { "delta": deltas.concat() }
+            },
+            {
+                "schemaVersion": "crewon.turn-event.v0",
+                "sequence": 2,
+                "type": "turn.failed",
+                "identity": { "turnSlot": "first" },
+                "data": {
+                    "code": failure_code.expect("missing content-filter failure"),
+                    "retryable": false
+                }
+            },
+            {
+                "schemaVersion": "crewon.turn-event.v0",
+                "sequence": 3,
+                "type": "turn.released",
+                "identity": { "turnSlot": "first" },
+                "data": { "workItemSettled": true }
+            }
+        ],
+        "finalState": {
+            "status": "failed",
+            "requestCount": responses_mock.requests().len(),
+            "assistantMessageCommitted": assistant_message_committed,
+            "pendingWorkItems": 0
+        }
+    });
+    assert_eq!(candidate, reference);
     Ok(())
 }
 
@@ -3111,8 +3242,14 @@ fn create_dummy_codex_auth() -> CrewonAuth {
 /// We assert that the `input` sent on each turn contains the expected conversation history
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn history_dedupes_streamed_and_final_messages_across_turns() {
-    // Skip under Crewon sandbox network restrictions (mirrors other tests).
-    skip_if_no_network!();
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/canonical-history-dedupe.reference.json"
+    )
+    .expect("resolve AR-010 canonical history fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-010 canonical history fixture"),
+    )
+    .expect("parse AR-010 canonical history fixture");
 
     // Mock server that will receive three sequential requests and return the same SSE stream
     // each time: a few deltas, then a final assistant message, then completed.
@@ -3142,7 +3279,7 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
     codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
-                text: "U1".into(),
+                text: "hello".into(),
                 text_elements: Vec::new(),
             }],
             final_output_json_schema: None,
@@ -3158,7 +3295,7 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
     codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
-                text: "U2".into(),
+                text: "second turn".into(),
                 text_elements: Vec::new(),
             }],
             final_output_json_schema: None,
@@ -3174,7 +3311,7 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
     codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
-                text: "U3".into(),
+                text: "third turn".into(),
                 text_elements: Vec::new(),
             }],
             final_output_json_schema: None,
@@ -3193,34 +3330,27 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
         assert_eq!(request.path(), "/v1/responses");
     }
 
-    // Replace full-array compare with tail-only raw JSON compare using a single hard-coded value.
-    let r3_tail_expected = json!([
-        {
-            "type": "message",
-            "role": "user",
-            "content": [{"type":"input_text","text":"U1"}]
-        },
-        {
-            "type": "message",
-            "role": "assistant",
-            "content": [{"type":"output_text","text":"Hey there!\n"}]
-        },
-        {
-            "type": "message",
-            "role": "user",
-            "content": [{"type":"input_text","text":"U2"}]
-        },
-        {
-            "type": "message",
-            "role": "assistant",
-            "content": [{"type":"output_text","text":"Hey there!\n"}]
-        },
-        {
-            "type": "message",
-            "role": "user",
-            "content": [{"type":"input_text","text":"U3"}]
-        }
-    ]);
+    let r3_tail_expected = serde_json::Value::Array(
+        reference["items"]
+            .as_array()
+            .expect("AR-010 fixture items")
+            .iter()
+            .map(|item| {
+                let role = item["role"].as_str().expect("AR-010 fixture role");
+                let text = item["content"].as_str().expect("AR-010 fixture content");
+                let content_type = if role == "assistant" {
+                    "output_text"
+                } else {
+                    "input_text"
+                };
+                json!({
+                    "type": "message",
+                    "role": role,
+                    "content": [{"type": content_type, "text": text}]
+                })
+            })
+            .collect(),
+    );
 
     let r3_input_array = requests[2]
         .body_json()

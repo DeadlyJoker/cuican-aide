@@ -53,6 +53,7 @@ function createParams(
   overrides: Partial<AppWorkspaceCapabilityHandlersParams> = {},
 ): AppWorkspaceCapabilityHandlersParams {
   return {
+    appendTerminalOutputLine: () => {},
     busyToolId: null,
     client: client(),
     getTerminalProcessId: () => "process-1",

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "crewon.prompt-cache-parity.v0",
+  "caseId": "AR-012-prompt-tool-stability",
+  "expected": {
+    "requestCount": 2,
+    "instructionsStable": true,
+    "toolDefinitionsStable": true,
+    "toolOrderStable": true
+  }
+}

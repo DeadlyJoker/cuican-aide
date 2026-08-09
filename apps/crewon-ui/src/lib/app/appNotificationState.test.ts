@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import {
   activeTurnByThreadAfterTurn,
   activeTurnByThreadAfterTurnId,
   appendFileChangesToPanel,
-  appendTerminalChunkToPanel,
   appendThreadText,
   clearPendingRequestById,
   clearThreadText,
@@ -14,23 +12,6 @@ import {
 } from "./appNotificationState";
 
 describe("app notification state helpers", () => {
-  it("appends terminal chunks only to command panels", () => {
-    const panel: CapabilityPanel = {
-      title: "Terminal",
-      body: "Running...",
-      commandInput: true,
-    };
-
-    expect(appendTerminalChunkToPanel(panel, "done", "en")).toEqual({
-      title: "Terminal",
-      body: "done",
-      commandInput: true,
-    });
-    expect(
-      appendTerminalChunkToPanel({ title: "Files" }, "done", "en"),
-    ).toEqual({ title: "Files" });
-  });
-
   it("appends file changes only to the files panel", () => {
     expect(
       appendFileChangesToPanel(

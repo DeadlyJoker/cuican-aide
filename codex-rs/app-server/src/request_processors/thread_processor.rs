@@ -27,7 +27,16 @@ struct ThreadListFilters {
 
 pub(crate) struct OfficeMemberRuntimeThreadStart {
     pub(crate) cwd: String,
+    pub(crate) model: Option<String>,
+    pub(crate) permissions: Option<String>,
     pub(crate) base_instructions: Option<String>,
+    pub(crate) developer_instructions: Option<String>,
+}
+
+pub(crate) struct WorkflowAgentRuntimeThreadStart {
+    pub(crate) cwd: String,
+    pub(crate) model: Option<String>,
+    pub(crate) permissions: Option<String>,
     pub(crate) developer_instructions: Option<String>,
 }
 
@@ -54,6 +63,8 @@ pub(crate) struct OfficeAutomationRuntimeRepair {
 
 struct OfficeRuntimeThreadStart {
     cwd: String,
+    model: Option<String>,
+    permissions: Option<String>,
     base_instructions: Option<String>,
     developer_instructions: Option<String>,
     thread_source: &'static str,
@@ -2762,6 +2773,8 @@ impl ThreadRequestProcessor {
         self.start_office_runtime_thread(
             OfficeRuntimeThreadStart {
                 cwd: params.cwd,
+                model: params.model,
+                permissions: params.permissions,
                 base_instructions: params.base_instructions,
                 developer_instructions: params.developer_instructions,
                 thread_source: "office_member_runtime",
@@ -2782,12 +2795,36 @@ impl ThreadRequestProcessor {
         self.start_office_runtime_thread(
             OfficeRuntimeThreadStart {
                 cwd: params.cwd,
+                model: None,
+                permissions: None,
                 base_instructions: None,
                 developer_instructions: None,
                 thread_source: crate::office_runtime_contract::OFFICE_MANAGER_RUNTIME_THREAD_SOURCE,
                 metrics_service_name: "app-server-office-manager-runtime",
                 listener_label: "office manager runtime thread",
                 error_context: "office manager runtime thread",
+            },
+            connection_id,
+        )
+        .await
+    }
+
+    pub(crate) async fn start_workflow_agent_runtime_thread(
+        &self,
+        params: WorkflowAgentRuntimeThreadStart,
+        connection_id: ConnectionId,
+    ) -> Result<Thread, JSONRPCErrorError> {
+        self.start_office_runtime_thread(
+            OfficeRuntimeThreadStart {
+                cwd: params.cwd,
+                model: params.model,
+                permissions: params.permissions,
+                base_instructions: None,
+                developer_instructions: params.developer_instructions,
+                thread_source: "workflow_agent_runtime",
+                metrics_service_name: "app-server-workflow-agent-runtime",
+                listener_label: "workflow agent runtime thread",
+                error_context: "workflow agent runtime thread",
             },
             connection_id,
         )
@@ -2802,6 +2839,8 @@ impl ThreadRequestProcessor {
         self.start_office_runtime_thread(
             OfficeRuntimeThreadStart {
                 cwd: params.cwd,
+                model: None,
+                permissions: None,
                 base_instructions: params.base_instructions,
                 developer_instructions: params.developer_instructions,
                 thread_source: "office_automation_runtime",
@@ -2820,7 +2859,7 @@ impl ThreadRequestProcessor {
         connection_id: ConnectionId,
     ) -> Result<Thread, JSONRPCErrorError> {
         let mut typesafe_overrides = self.build_thread_config_overrides(
-            /*model*/ None,
+            params.model,
             /*model_provider*/ None,
             /*service_tier*/ None,
             Some(params.cwd),
@@ -2828,7 +2867,7 @@ impl ThreadRequestProcessor {
             /*approval_policy*/ None,
             /*approvals_reviewer*/ None,
             /*sandbox*/ None,
-            /*permissions*/ None,
+            params.permissions,
             params.base_instructions,
             params.developer_instructions,
             /*personality*/ None,
@@ -3372,6 +3411,31 @@ impl ThreadRequestProcessor {
                 connection_id,
             );
         }
+    }
+
+    pub(crate) async fn dispatch_workflow_node(
+        &self,
+        prepared: &PreparedWorkflowNodeDispatch,
+        request_id: ConnectionRequestId,
+        app_server_client_name: Option<String>,
+        client_version: Option<String>,
+        notification_reason: &str,
+        connection_id: ConnectionId,
+    ) -> Result<WorkflowRunUpdate, JSONRPCErrorError> {
+        let context = self
+            .office_auto_dispatch
+            .as_ref()
+            .ok_or_else(|| internal_error("Workflow dispatch runtime is unavailable"))?;
+        context
+            .dispatch_prepared_workflow_node(
+                prepared,
+                request_id,
+                app_server_client_name,
+                client_version,
+                notification_reason,
+                connection_id,
+            )
+            .await
     }
 
     async fn ensure_office_auto_verification_runtime_threads(

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
+import type { CommandExecutionIntent } from "../thread/threadRuntimeSettings";
 import type { WorkMode } from "../workMode";
 
 export function useAppComposerState() {
@@ -16,11 +17,16 @@ export function useAppComposerState() {
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [isSending, setIsSending] = useState(false);
   const [slashCommandRefreshKey, setSlashCommandRefreshKey] = useState(0);
-  const officeAttachmentConsumerRef = useRef<
-    ((path: string) => void) | null
-  >(null);
+  const [committedExecutionIntent, setCommittedExecutionIntent] = useState<{
+    intent: Exclude<CommandExecutionIntent, "none">;
+    sequence: number;
+  } | null>(null);
+  const officeAttachmentConsumerRef = useRef<((path: string) => void) | null>(
+    null,
+  );
 
   return {
+    committedExecutionIntent,
     composerFocusSignal,
     composerValue,
     isSending,
@@ -30,6 +36,7 @@ export function useAppComposerState() {
     setSlashCommandRefreshKey,
     setComposerFocusSignal,
     setComposerValue,
+    setCommittedExecutionIntent,
     setIsSending,
     setPendingComposerMentions,
     setPendingContextFile,

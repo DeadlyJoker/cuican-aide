@@ -201,6 +201,11 @@ async fn tool_call_output_exceeds_limit_truncated_chars_limit() -> Result<()> {
 async fn tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/tool-output-truncation.reference.json"
+    )?;
+    let reference: Value = serde_json::from_str(&std::fs::read_to_string(fixture_path)?)?;
+
     let server = start_mock_server().await;
 
     // Use a model that exposes the shell_command tool.
@@ -272,6 +277,22 @@ Output:
 100000
 $"#;
     assert_regex_match(truncated_pattern, &output);
+    let candidate = serde_json::json!({
+        "plainText": serde_json::from_str::<Value>(&output).is_err(),
+        "containsTruncationMarker": output.contains("truncated"),
+        "preservesHead": output.contains("\n1\n2\n3\n"),
+        "preservesTail": output.ends_with("99999\n100000\n"),
+        "modelVisibleBytesAtMost": reference["expectations"]["modelVisibleBytesAtMost"]
+    });
+    assert!(
+        output.len()
+            <= reference["expectations"]["modelVisibleBytesAtMost"]
+                .as_u64()
+                .context("AR-016 max model-visible bytes")? as usize,
+        "AR-016 model-visible output was {} bytes",
+        output.len()
+    );
+    assert_eq!(candidate, reference["expectations"]);
 
     Ok(())
 }

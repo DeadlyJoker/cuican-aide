@@ -2,6 +2,11 @@
 
 更新时间：2026-07-19
 
+> [!IMPORTANT]
+> 本文的“当前”部分仍用于记录 2026-07-19 的实现基线；“未来”部分已被
+> `ARCHITECTURE_FINAL.md` 取代。后续目标架构、技术选型和完成 Gate 以最终态文档及
+> `artifacts/architecture-next/` 下的 ADR 为准，本文不再作为新增功能的目标设计依据。
+
 Wave、SDD 产物、Harness 和任务提示词见 <code>artifacts/crewon-platform-wave-sdd-execution-guide.md</code>。
 
 本文以当前仓库真实代码为基线，分别描述：

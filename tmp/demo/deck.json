@@ -1,0 +1,75 @@
+{
+  "aspect": "16:9",
+  "theme": "midnight",
+  "slides": [
+    {
+      "layout": "cover",
+      "title": "三场景能力落地",
+      "subtitle": "office / code / design 工具链交付评审",
+      "meta": "CrewON 平台组 · 2026-08-06"
+    },
+    {
+      "layout": "bullets",
+      "title": "改造前的真实缺口",
+      "bullets": [
+        "场景契约完整，但 office / design 只有提示词差异",
+        "design 宣称 Vision / Figma / Image Generation，三项均未接线",
+        "office 宣称 Calendar，未接线",
+        "只改标签与快捷 prompt，不构成场景功能完成"
+      ]
+    },
+    {
+      "layout": "cards",
+      "title": "三套 skill 的职责边界",
+      "cards": [
+        { "title": "office-suite", "body": "docx / pptx / xlsx 生成、读回、交付前校验。纯 Python，依赖自举独立 venv" },
+        { "title": "code-craft", "body": "读真实 manifest 报告可用命令；交付前自检规模、敏感路径、调试残留" },
+        { "title": "design-studio", "body": "HTML 转 PNG / PDF，四断点批量；WCAG 对比度与无障碍走查" }
+      ]
+    },
+    {
+      "layout": "metrics",
+      "title": "验证结果",
+      "metrics": [
+        { "value": "1548", "label": "前端测试全通过" },
+        { "value": "18", "label": "Rust 测试全通过" },
+        { "value": "9", "label": "交付脚本" },
+        { "value": "0", "label": "审计 error" }
+      ]
+    },
+    {
+      "layout": "table",
+      "title": "本轮 demo 中发现并修复的工具缺陷",
+      "header": ["缺陷", "根因"],
+      "rows": [
+        ["对比度审计 8 个假阳性", "半透明背景按不透明处理，未做 alpha 合成"],
+        ["合成后仍需精确", "probe 遇首个非透明层即返回，不向上取图层栈"]
+      ]
+    },
+    {
+      "layout": "twoColumn",
+      "title": "修复前后",
+      "left": { "heading": "修复前", "body": "tag.done 报 1.4:1，判定 FAIL。按字面把 rgb(76 183 130 / .14) 当成不透明中绿色" },
+      "right": { "heading": "修复后", "body": "与 surface #101113 合成得 (24,40,35)，真实对比度 8.61:1，判定 AAA" }
+    },
+    {
+      "layout": "section",
+      "title": "遗留项",
+      "subtitle": "需要下一轮决策"
+    },
+    {
+      "layout": "bullets",
+      "title": "三项遗留",
+      "bullets": [
+        "场景能力条经评审移除：信息重复且挤压输入框",
+        "前端未调用 scene/list，前后端 preset 是两份独立定义，无版本校验",
+        "scenePreset.modes 定义 15 个模式，无 UI 消费方"
+      ]
+    },
+    {
+      "layout": "closing",
+      "title": "工具链已可用",
+      "subtitle": "本页 PPT 与配套 Word / Excel 均由 office-suite 生成"
+    }
+  ]
+}

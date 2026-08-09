@@ -166,6 +166,15 @@ export function CapabilityResultPanel({
                     </option>
                   ))}
                 </select>
+              ) : field.multiline ? (
+                <textarea
+                  placeholder={field.placeholder}
+                  rows={field.rows ?? 4}
+                  value={field.value}
+                  onChange={(event) =>
+                    onPanelFieldChange?.(field.id, event.target.value)
+                  }
+                />
               ) : (
                 <input
                   type={field.secret ? "password" : "text"}

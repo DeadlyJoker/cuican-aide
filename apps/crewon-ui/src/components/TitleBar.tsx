@@ -1,8 +1,4 @@
-import {
-  ChevronLeft,
-  ChevronRight,
-  PanelLeft,
-} from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import type { Locale } from "../lib/i18n";
 import type { PlatformKind } from "../lib/platform";
 import type { Theme } from "../lib/theme";
@@ -65,14 +61,6 @@ export function TitleBar({
       >
         <PanelLeft size={17} />
       </button>
-      <div className="titlebar-history" aria-hidden="true">
-        <button className="icon-button" type="button" tabIndex={-1}>
-          <ChevronLeft size={15} />
-        </button>
-        <button className="icon-button" type="button" tabIndex={-1}>
-          <ChevronRight size={15} />
-        </button>
-      </div>
       <div className="titlebar-title">
         <strong>{title}</strong>
       </div>

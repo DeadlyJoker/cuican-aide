@@ -1,5 +1,6 @@
 packages:
-  - apps/crewon-ui
+  - apps/*
+  - packages/*
 
 ignoredBuiltDependencies:
   - esbuild

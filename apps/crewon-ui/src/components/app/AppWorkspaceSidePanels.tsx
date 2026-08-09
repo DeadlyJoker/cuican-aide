@@ -1,6 +1,6 @@
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 
 import { CapabilityDock } from "../CapabilityDock";
 import { Inspector } from "../Inspector";
@@ -30,7 +30,7 @@ type AppWorkspaceSidePanelsProps = {
   serverUrl: string;
   terminalCommand: string;
   thread: Thread | null;
-  threadGoal: ThreadGoal | null;
+  threadGoal: ThreadGoalView | null;
   onCommandChange: (value: string) => void;
   onCommandSubmit: () => void;
   onFiles: () => void;

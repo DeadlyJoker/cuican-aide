@@ -5,6 +5,7 @@ import type { ThreadExecutionContext } from "@crewon-platform-protocol/v2/Thread
 import { describe, expect, it, vi } from "vitest";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
+import type { ComposerImageInput } from "../shared/composerImages";
 import type { NoticeState } from "../shared/noticeState";
 import type { ThreadRuntimeSettings } from "./threadRuntimeSettings";
 import {
@@ -691,28 +692,114 @@ describe("thread message actions", () => {
     ]);
   });
 
-  it("sets a persistent goal before starting a goal turn", async () => {
-    const state = threadState();
-    const calls: string[] = [];
+  it.each(["goal", "plan"] as const)(
+    "submits %s only through atomic startTurn and acknowledges its visible reset",
+    async (executionIntent) => {
+      const state = threadState();
+      const calls: Array<{
+        images: ComposerImageInput[];
+        mentions: PendingComposerMention[];
+        settings?: ThreadRuntimeSettings;
+        text: string;
+        threadId: string;
+      }> = [];
+      const legacySetGoal = vi.fn(async () => undefined);
+      const legacyClearGoal = vi.fn(async () => undefined);
+      const committedIntents: Array<"goal" | "plan"> = [];
+      const settings: ThreadRuntimeSettings = {
+        executionIntent,
+        model: "gpt-5.6-sol",
+      };
+      const images: ComposerImageInput[] = [
+        { detail: "high", url: "data:image/png;base64,AA==" },
+      ];
+      const client = {
+        clearThreadGoal: legacyClearGoal,
+        async resumeThread(threadId: string) {
+          return thread({ id: threadId });
+        },
+        setThreadGoal: legacySetGoal,
+        async startTurn(
+          threadId: string,
+          text: string,
+          mentions: PendingComposerMention[] = [],
+          turnSettings?: ThreadRuntimeSettings,
+          turnImages: ComposerImageInput[] = [],
+        ) {
+          calls.push({
+            images: turnImages,
+            mentions,
+            settings: turnSettings,
+            text,
+            threadId,
+          });
+          return turnStartResponse({ turn: turn({ id: "turn-started" }) });
+        },
+        async steerTurn() {
+          throw new Error("should not steer");
+        },
+      };
 
-    await sendMessageAction(
+      await sendMessageAction(
+        baseSendParams({
+          client,
+          images,
+          onExecutionIntentCommitted: (intent) => {
+            committedIntents.push(intent);
+          },
+          setActiveTurnByThread: state.setActiveTurnByThread,
+          setIsSending: state.setIsSending,
+          setPendingComposerMentions: state.setPendingComposerMentions,
+          setThreads: state.setThreads,
+          threadSettings: settings,
+        }),
+      );
+
+      expect(legacySetGoal).not.toHaveBeenCalled();
+      expect(legacyClearGoal).not.toHaveBeenCalled();
+      expect(calls).toEqual([
+        {
+          images,
+          mentions: [{ name: "Files", path: "app://files" }],
+          settings,
+          text: "Hello",
+          threadId: "thread-1",
+        },
+      ]);
+      expect(committedIntents).toEqual([executionIntent]);
+      expect(state.threads[0]?.turns.map((item) => item.id)).toEqual([
+        "turn-started",
+      ]);
+    },
+  );
+
+  it("waits for the atomic startTurn response before acknowledging Goal", async () => {
+    const state = threadState();
+    const committed = vi.fn();
+    let releaseStart!: (response: TurnStartResponse) => void;
+    let markStartReached!: () => void;
+    const startReached = new Promise<void>((resolve) => {
+      markStartReached = resolve;
+    });
+    const startResponse = new Promise<TurnStartResponse>((resolve) => {
+      releaseStart = resolve;
+    });
+
+    const sending = sendMessageAction(
       baseSendParams({
         client: {
           async resumeThread(threadId) {
             return thread({ id: threadId });
           },
-          async setThreadGoal(threadId, objective, tokenBudget) {
-            calls.push(`goal:${threadId}:${objective}:${tokenBudget}`);
-          },
-          async startTurn(threadId) {
-            calls.push(`start:${threadId}`);
-            return turnStartResponse({ turn: turn({ id: "turn-started" }) });
+          async startTurn() {
+            markStartReached();
+            return startResponse;
           },
           async steerTurn() {
             throw new Error("should not steer");
           },
-          async updateThreadSettings() {},
         },
+        onExecutionIntentCommitted: committed,
         setActiveTurnByThread: state.setActiveTurnByThread,
         setIsSending: state.setIsSending,
         setPendingComposerMentions: state.setPendingComposerMentions,
@@ -721,40 +808,59 @@ describe("thread message actions", () => {
       }),
     );
 
-    expect(calls).toEqual(["goal:thread-1:Hello:null", "start:thread-1"]);
+    await startReached;
+    expect(committed).not.toHaveBeenCalled();
+    releaseStart(turnStartResponse({ turn: turn({ id: "turn-started" }) }));
+    await sending;
+    expect(committed).toHaveBeenCalledTimes(1);
+    expect(committed).toHaveBeenCalledWith("goal");
   });
 
-  it("clears an existing goal before starting a plan turn", async () => {
+  it("does not acknowledge a visible Goal reset when atomic startTurn fails", async () => {
     const state = threadState();
-    const calls: string[] = [];
+    const legacySetGoal = vi.fn(async () => undefined);
+    const legacyClearGoal = vi.fn(async () => undefined);
+    const committedIntents: Array<"goal" | "plan"> = [];
+    const client = {
+      clearThreadGoal: legacyClearGoal,
+      async resumeThread(threadId: string) {
+        return thread({ id: threadId });
+      },
+      setThreadGoal: legacySetGoal,
+      async startTurn() {
+        throw new Error("atomic Goal start failed");
+      },
+      async steerTurn() {
+        throw new Error("should not steer");
+      },
+    };
 
     await sendMessageAction(
       baseSendParams({
-        client: {
-          async clearThreadGoal(threadId) {
-            calls.push(`clear:${threadId}`);
-          },
-          async resumeThread(threadId) {
-            return thread({ id: threadId });
-          },
-          async startTurn(threadId) {
-            calls.push(`start:${threadId}`);
-            return turnStartResponse({ turn: turn({ id: "turn-started" }) });
-          },
-          async steerTurn() {
-            throw new Error("should not steer");
-          },
-          async updateThreadSettings() {},
+        client,
+        onExecutionIntentCommitted: (intent) => {
+          committedIntents.push(intent);
         },
-        setActiveTurnByThread: state.setActiveTurnByThread,
+        setComposerFocusSignal: state.setComposerFocusSignal,
+        setComposerValue: state.setComposerValue,
         setIsSending: state.setIsSending,
+        setNotice: state.setNotice,
         setPendingComposerMentions: state.setPendingComposerMentions,
         setThreads: state.setThreads,
-        threadSettings: { executionIntent: "plan" },
+        text: "Keep Goal selected",
+        threadSettings: { executionIntent: "goal" },
       }),
     );
 
-    expect(calls).toEqual(["clear:thread-1", "start:thread-1"]);
+    expect(legacySetGoal).not.toHaveBeenCalled();
+    expect(legacyClearGoal).not.toHaveBeenCalled();
+    expect(committedIntents).toEqual([]);
+    expect(state.composerValue).toBe("Keep Goal selected");
+    expect(state.notice).toEqual({
+      text: "atomic Goal start failed",
+      tone: "warning",
+    });
+    expect(state.threads[0]?.turns[0]).toMatchObject({ status: "failed" });
   });
 
   it("filters removed slash mentions before starting a turn", async () => {

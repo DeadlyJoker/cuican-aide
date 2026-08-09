@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CrewON 三场景落地看板</title>
+<style>
+  :root {
+    --bg:#08090a; --surface:#101113; --surface-2:#17181a;
+    --border:#23252a; --ink:#f7f8f8; --muted:#8a8f98;
+    --accent:#5e6ad2; --success:#4cb782; --warning:#f2994a; --danger:#eb5757;
+    --radius:6px;
+    --font:"Inter",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);
+       font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.25;letter-spacing:-.01em;margin:0}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  .shell{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:100vh}
+  .nav{border-right:1px solid var(--border);background:var(--surface);padding:20px 0}
+  .nav-brand{display:flex;align-items:center;gap:8px;padding:0 18px 18px;
+             font-weight:600;font-size:13px;letter-spacing:.02em}
+  .nav-brand svg{width:16px;height:16px;color:var(--accent)}
+  .nav a{display:flex;align-items:center;gap:9px;height:34px;padding:0 18px;
+         color:var(--muted);text-decoration:none;font-size:13px}
+  .nav a[aria-current="page"]{background:var(--surface-2);color:var(--ink);
+         box-shadow:inset 2px 0 0 var(--accent)}
+  .nav a svg{width:15px;height:15px}
+
+  .main{padding:24px 28px;min-width:0}
+  .topbar{display:flex;align-items:baseline;justify-content:space-between;
+          gap:16px;margin-bottom:22px}
+  .topbar h1{font-size:20px}
+  .topbar p{margin:4px 0 0;color:var(--muted);font-size:13px}
+  .stamp{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+           gap:12px;margin-bottom:22px}
+  .metric{border:1px solid var(--border);border-radius:var(--radius);
+          background:var(--surface);padding:14px 16px}
+  .metric dt{margin:0;color:var(--muted);font-size:12px}
+  .metric dd{margin:6px 0 0;font-size:22px;font-weight:600;
+             font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .metric dd small{font-size:12px;font-weight:400;color:var(--muted);margin-left:5px}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  caption{text-align:left;font-weight:600;font-size:14px;padding-bottom:10px}
+  th,td{padding:9px 12px;border-bottom:1px solid var(--border);text-align:left}
+  th{color:var(--muted);font-weight:500;font-size:12px;
+     background:var(--surface);position:sticky;top:0}
+  tbody tr:hover{background:var(--surface-2)}
+  td.num{font-variant-numeric:tabular-nums;text-align:right}
+
+  .tag{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;
+       border-radius:999px;font-size:11px;font-weight:500}
+  .tag::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+  .tag.done{background:rgb(76 183 130 / .14);color:#7fd3a6}
+  .tag.open{background:rgb(242 153 74 / .14);color:#f0b070}
+  .tag.gone{background:rgb(138 143 152 / .14);color:#a3a8b1}
+
+  .panel{border:1px solid var(--border);border-radius:var(--radius);
+         background:var(--surface);overflow:hidden;margin-bottom:22px}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;
+              padding:13px 16px;border-bottom:1px solid var(--border)}
+  .panel-head h2{font-size:14px}
+  .panel-body{padding:16px}
+
+  .chart{display:block;width:100%;height:auto}
+  .empty{display:grid;place-items:center;gap:8px;padding:34px 16px;text-align:center}
+  .empty svg{width:26px;height:26px;color:var(--muted)}
+  .empty p{margin:0;color:var(--muted);font-size:13px}
+  .empty button{border:1px solid var(--border);border-radius:var(--radius);
+                background:var(--surface-2);color:var(--ink);
+                padding:6px 13px;font-size:13px;font-family:inherit;cursor:pointer}
+  .truncate{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  @media (max-width:860px){
+    .shell{grid-template-columns:minmax(0,1fr)}
+    .nav{display:none}
+    .main{padding:18px 16px}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav aria-label="主导航" class="nav">
+    <div class="nav-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+      CrewON 平台组
+    </div>
+    <a aria-current="page" href="#overview">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+      落地看板
+    </a>
+    <a href="#defects">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/></svg>
+      缺陷记录
+    </a>
+    <a href="#pending">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      遗留项
+    </a>
+  </nav>
+
+  <main class="main" id="overview">
+    <div class="topbar">
+      <div>
+        <h1>三场景能力落地看板</h1>
+        <p>办公 / 生码 / 设计的工具链交付与验证状态</p>
+      </div>
+      <span class="stamp">更新于 2026-08-06 05:26</span>
+    </div>
+
+    <dl class="metrics">
+      <div class="metric"><dt>交付脚本</dt><dd>9 <small>个</small></dd></div>
+      <div class="metric"><dt>前端测试</dt><dd>1548 <small>全通过</small></dd></div>
+      <div class="metric"><dt>Rust 测试</dt><dd>18 <small>全通过</small></dd></div>
+      <div class="metric"><dt>修复缺陷</dt><dd>4 <small>个</small></dd></div>
+    </dl>
+
+    <section class="panel">
+      <div class="panel-head"><h2>验证矩阵</h2><span class="stamp">5 项</span></div>
+      <div class="panel-body" style="padding:0">
+        <table>
+          <caption class="sr-only" style="padding:13px 16px 0">各场景验证命令与结果</caption>
+          <thead>
+            <tr><th scope="col">验证项</th><th scope="col">命令</th>
+                <th scope="col">结果</th><th scope="col" class="num">耗时</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Rust 测试</td>
+                <td class="truncate" title="just test -p crewon-skills -p crewon-scene-runtime">just test -p crewon-skills -p crewon-scene-runtime</td>
+                <td><span class="tag done">18/18</span></td><td class="num">1.8s</td></tr>
+            <tr><td>前端测试</td><td class="truncate">pnpm --filter @crewon/ui test</td>
+                <td><span class="tag done">1548/1548</span></td><td class="num">15.2s</td></tr>
+            <tr><td>类型检查</td><td class="truncate">tsc -b --noEmit</td>
+                <td><span class="tag done">通过</span></td><td class="num">3.1s</td></tr>
+            <tr><td>构建</td><td class="truncate">pnpm --filter @crewon/ui build</td>
+                <td><span class="tag done">通过</span></td><td class="num">5.9s</td></tr>
+            <tr><td>设计审计</td><td class="truncate">audit_design.py（浅色 / 暗色）</td>
+                <td><span class="tag done">0 error</span></td><td class="num">2.9s</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="defects">
+      <div class="panel-head"><h2>缺陷修复趋势</h2><span class="stamp">按轮次</span></div>
+      <div class="panel-body">
+        <svg class="chart" viewBox="0 0 640 150" role="img"
+             aria-label="缺陷修复趋势：第 1 轮 0 个，第 2 轮 2 个，第 3 轮 3 个，第 4 轮 4 个">
+          <line x1="0" y1="130" x2="640" y2="130" stroke="#23252a" stroke-width="1"/>
+          <line x1="0" y1="85" x2="640" y2="85" stroke="#23252a" stroke-width="1" stroke-dasharray="3 4"/>
+          <line x1="0" y1="40" x2="640" y2="40" stroke="#23252a" stroke-width="1" stroke-dasharray="3 4"/>
+          <polyline fill="none" stroke="#5e6ad2" stroke-width="2"
+                    points="40,130 200,85 360,62 520,40"/>
+          <circle cx="40" cy="130" r="3.5" fill="#5e6ad2"/>
+          <circle cx="200" cy="85" r="3.5" fill="#5e6ad2"/>
+          <circle cx="360" cy="62" r="3.5" fill="#5e6ad2"/>
+          <circle cx="520" cy="40" r="3.5" fill="#5e6ad2"/>
+          <text x="40" y="146" fill="#8a8f98" font-size="11" text-anchor="middle">工具落地</text>
+          <text x="200" y="146" fill="#8a8f98" font-size="11" text-anchor="middle">渲染修复</text>
+          <text x="360" y="146" fill="#8a8f98" font-size="11" text-anchor="middle">UI 接线</text>
+          <text x="520" y="146" fill="#8a8f98" font-size="11" text-anchor="middle">真机验证</text>
+        </svg>
+      </div>
+    </section>
+
+    <section class="panel" id="pending">
+      <div class="panel-head"><h2>遗留项</h2><span class="stamp">3 项</span></div>
+      <div class="panel-body" style="padding:0">
+        <table>
+          <thead><tr><th scope="col">项</th><th scope="col">状态</th><th scope="col">说明</th></tr></thead>
+          <tbody>
+            <tr><td>场景能力条</td><td><span class="tag gone">已移除</span></td>
+                <td>评审判定信息重复且挤压输入框</td></tr>
+            <tr><td>scene/list 握手</td><td><span class="tag open">待办</span></td>
+                <td>前后端 preset 仍是两份独立定义</td></tr>
+            <tr><td>交互模式 UI</td><td><span class="tag open">待办</span></td>
+                <td>15 个模式已定义但无消费方</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>本轮告警</h2></div>
+      <div class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <p>没有未处理告警</p>
+        <button type="button">查看历史记录</button>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

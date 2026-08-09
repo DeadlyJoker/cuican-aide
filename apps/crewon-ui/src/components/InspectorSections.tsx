@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 
 import type { inspectorPresentation } from "./InspectorPresentation";
 
@@ -143,7 +143,7 @@ export function InspectorGoalSection({
   threadGoal,
 }: {
   presentation: InspectorPresentationData;
-  threadGoal: ThreadGoal | null;
+  threadGoal: ThreadGoalView | null;
 }) {
   const { copy, taskGoalLabel } = presentation;
 

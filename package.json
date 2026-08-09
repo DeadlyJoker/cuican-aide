@@ -11,6 +11,12 @@
     "release:publish": "node scripts/release-local.mjs",
     "crewon:dev": "bash scripts/crewon-dev.sh",
     "crewon:app-server": "bash scripts/crewon-app-server.sh",
+    "control-api:start": "pnpm --filter @crewon/control-api start",
+    "control-api:test": "pnpm --filter @crewon/control-api test",
+    "runtime-worker:start": "pnpm --filter @crewon/runtime-worker start",
+    "runtime-worker:test": "pnpm --filter @crewon/runtime-worker test",
+    "device-gateway:start": "pnpm --filter @crewon/device-gateway start",
+    "device-gateway:test": "pnpm --filter @crewon/device-gateway test",
     "format": "prettier --check *.json *.md docs/*.md .github/workflows/*.yml **/*.js",
     "format:fix": "prettier --write *.json *.md docs/*.md .github/workflows/*.yml **/*.js",
     "write-hooks-schema": "cargo run --manifest-path ./codex-rs/Cargo.toml -p crewon-hooks --bin write_hooks_schema_fixtures"
@@ -37,7 +43,7 @@
     "punycode": "^2.3.1"
   },
   "engines": {
-    "node": ">=22",
+    "node": ">=24 <25",
     "pnpm": ">=10.33.0"
   },
   "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"

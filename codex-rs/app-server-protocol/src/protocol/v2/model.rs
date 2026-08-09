@@ -37,6 +37,60 @@ pub struct ModelProviderCapabilitiesReadResponse {
     pub web_search: bool,
 }
 
+/// Outcome of a provider reachability check.
+///
+/// The model catalog falls back to a bundled list when a provider cannot be
+/// reached, so `model/list` succeeding says nothing about whether the
+/// configured provider actually works. These variants let a client tell a
+/// wrong key apart from a wrong address instead of reporting one generic
+/// failure.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub enum ModelProviderProbeStatus {
+    /// The provider answered and returned a usable model catalog.
+    Ok,
+    /// The provider answered, but rejected the credential.
+    Unauthorized,
+    /// The provider answered with an error status.
+    HttpError,
+    /// The provider could not be reached at all (DNS, TLS, refused, timeout).
+    Unreachable,
+    /// The provider answered, but the body was not a model catalog.
+    InvalidResponse,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ModelProviderProbeParams {
+    /// Key under `model_providers` in config to probe. When omitted, the
+    /// currently selected `model_provider` is probed.
+    #[ts(optional = nullable)]
+    pub provider_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ModelProviderProbeResponse {
+    /// Provider that was probed, so a client can tell which entry answered.
+    pub provider_id: String,
+    /// Endpoint the probe requested, for surfacing a wrong base URL.
+    pub endpoint: String,
+    pub status: ModelProviderProbeStatus,
+    /// HTTP status returned by the provider, when it answered at all.
+    pub http_status: Option<u16>,
+    /// Models the provider advertised, when the catalog parsed.
+    pub model_count: Option<u32>,
+    /// Whether a credential was attached, so "works without auth" is visible.
+    pub authenticated: bool,
+    /// Failure detail from the provider or transport.
+    pub message: Option<String>,
+    pub latency_ms: u64,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]

@@ -1,0 +1,921 @@
+import type { components, operations, paths } from "./generated/control-api.ts";
+
+import { ContractValidationError } from "./contract-validation-error.ts";
+
+export type ControlApiPaths = paths;
+export type ControlApiOperations = operations;
+export type CreateThreadRequest = components["schemas"]["CreateThreadRequest"];
+export type AppendThreadMessageRequest =
+  components["schemas"]["AppendThreadMessageRequest"];
+export type ForkThreadRequest = components["schemas"]["ForkThreadRequest"];
+export type RollbackThreadRequest =
+  components["schemas"]["RollbackThreadRequest"];
+export type ArchiveThreadRequest =
+  components["schemas"]["ArchiveThreadRequest"];
+export type UnarchiveThreadRequest =
+  components["schemas"]["UnarchiveThreadRequest"];
+export type RenameThreadRequest = components["schemas"]["RenameThreadRequest"];
+export type DeleteThreadRequest = components["schemas"]["DeleteThreadRequest"];
+export type ThreadView = components["schemas"]["ThreadView"];
+export type ThreadEventView = components["schemas"]["ThreadEventView"];
+export type MessageView = components["schemas"]["MessageView"];
+export type ProposedPlanView = components["schemas"]["ProposedPlanView"];
+export type ThreadMutationResponse =
+  components["schemas"]["ThreadMutationResponse"];
+export type AppendThreadMessageResponse =
+  components["schemas"]["AppendThreadMessageResponse"];
+export type GetThreadResponse = components["schemas"]["GetThreadResponse"];
+export type ThreadGoalView = components["schemas"]["ThreadGoalView"];
+export type GetThreadGoalResponse =
+  components["schemas"]["GetThreadGoalResponse"];
+export type SetThreadGoalRequest =
+  components["schemas"]["SetThreadGoalRequest"];
+export type ClearThreadGoalRequest =
+  components["schemas"]["ClearThreadGoalRequest"];
+export type ThreadGoalMutationResponse =
+  components["schemas"]["ThreadGoalMutationResponse"];
+export type ThreadGoalEventView = components["schemas"]["ThreadGoalEventView"];
+export type ListThreadsResponse = components["schemas"]["ListThreadsResponse"];
+export type ListThreadMessagesResponse =
+  components["schemas"]["ListThreadMessagesResponse"];
+export type CreateRunRequest = components["schemas"]["CreateRunRequest"];
+export type StartTurnRequest = components["schemas"]["StartTurnRequest"];
+export type CompactThreadRequest =
+  components["schemas"]["CompactThreadRequest"];
+export type StartTurnResponse = components["schemas"]["StartTurnResponse"];
+export type CancelRunRequest = components["schemas"]["CancelRunRequest"];
+export type RunView = components["schemas"]["RunView"];
+export type RunMutationResponse = components["schemas"]["RunMutationResponse"];
+export type GetRunResponse = components["schemas"]["GetRunResponse"];
+export type ListThreadRunsResponse =
+  components["schemas"]["ListThreadRunsResponse"];
+export type RunEventView = components["schemas"]["RunEventView"];
+export type DecideToolApprovalRequest =
+  components["schemas"]["DecideToolApprovalRequest"];
+export type ToolApprovalView = components["schemas"]["ToolApprovalView"];
+export type GetToolApprovalResponse =
+  components["schemas"]["GetToolApprovalResponse"];
+export type ToolApprovalMutationResponse =
+  components["schemas"]["ToolApprovalMutationResponse"];
+export type PublishAgentVersionRequest =
+  components["schemas"]["PublishAgentVersionRequest"];
+export type AgentVersionView = components["schemas"]["AgentVersionView"];
+export type AgentVersionMutationResponse =
+  components["schemas"]["AgentVersionMutationResponse"];
+export type GetAgentVersionResponse =
+  components["schemas"]["GetAgentVersionResponse"];
+export type ListAgentVersionsResponse =
+  components["schemas"]["ListAgentVersionsResponse"];
+export type ActiveAgentVersionCatalogResponse =
+  components["schemas"]["ActiveAgentVersionCatalogResponse"];
+export type ArtifactView = components["schemas"]["ArtifactView"];
+export type GetArtifactResponse = components["schemas"]["GetArtifactResponse"];
+export type ErrorCategory = components["schemas"]["ErrorCategory"];
+export type ErrorEnvelope = components["schemas"]["ErrorEnvelope"];
+export type RunEventViewMode = "client" | "audit";
+export type ThreadHistoryViewMode = "standard" | "audit";
+
+const MAX_RESOURCE_ID_LENGTH = 128;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
+const MAX_THREAD_TITLE_LENGTH = 256;
+const MAX_MESSAGE_BYTES = 32 * 1024;
+const MAX_THREAD_GOAL_OBJECTIVE_CHARS = 4_000;
+const MAX_ROLLBACK_TURNS = 0xffff_ffff;
+const MAX_MESSAGE_PAGE_SIZE = 100;
+const MESSAGE_CURSOR_PREFIX = "crewon.message.cursor.v1:";
+const AGENT_VERSION_CURSOR_PREFIX = "crewon.agent-version.cursor.v1:";
+const THREAD_CURSOR_PREFIX = "crewon.thread.cursor.v1:";
+const THREAD_RUN_CURSOR_PREFIX = "crewon.thread-run.cursor.v1:";
+
+export type MessageListQuery = Readonly<{
+  afterSequence: number;
+  limit: number;
+  view: ThreadHistoryViewMode;
+}>;
+
+export type AgentVersionListQuery = Readonly<{
+  afterAgentVersionId: string | null;
+  limit: number;
+}>;
+
+export type ResourceListCursor = Readonly<{
+  updatedAt: string;
+  resourceId: string;
+}>;
+
+export type ResourceListQuery = Readonly<{
+  before: ResourceListCursor | null;
+  limit: number;
+}>;
+
+export function parseCreateThreadRequest(input: unknown): CreateThreadRequest {
+  if (!hasExactKeys(input, ["title"])) {
+    throw new ContractValidationError("create_thread_fields_invalid");
+  }
+  if (input.title === null) {
+    return { title: null };
+  }
+  return {
+    title: requireBoundedString(
+      input.title,
+      MAX_THREAD_TITLE_LENGTH,
+      "thread_title_invalid",
+    ),
+  };
+}
+
+export function parseAppendThreadMessageRequest(
+  input: unknown,
+): AppendThreadMessageRequest {
+  if (!hasExactKeys(input, ["content", "expectedRevision"])) {
+    throw new ContractValidationError("append_message_fields_invalid");
+  }
+  if (
+    !Number.isSafeInteger(input.expectedRevision) ||
+    Number(input.expectedRevision) < 1
+  ) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  const content = requireBoundedString(
+    input.content,
+    MAX_MESSAGE_BYTES,
+    "message_content_invalid",
+  );
+  if (new TextEncoder().encode(content).byteLength > MAX_MESSAGE_BYTES) {
+    throw new ContractValidationError("message_content_too_large");
+  }
+  return { expectedRevision: Number(input.expectedRevision), content };
+}
+
+export function parseSetThreadGoalRequest(
+  input: unknown,
+): SetThreadGoalRequest {
+  if (
+    !hasExactKeys(input, [
+      "expectedRevision",
+      "objective",
+      "status",
+      "tokenBudget",
+    ])
+  ) {
+    throw new ContractValidationError("set_thread_goal_fields_invalid");
+  }
+  const expectedRevision = parseNullableExpectedRevision(
+    input.expectedRevision,
+  );
+  const objective =
+    input.objective === null
+      ? null
+      : requireThreadGoalObjective(input.objective);
+  const status = parseNullableThreadGoalStatus(input.status);
+  const tokenBudget = parseThreadGoalTokenBudgetUpdate(input.tokenBudget);
+  return { expectedRevision, objective, status, tokenBudget };
+}
+
+export function parseClearThreadGoalRequest(
+  input: unknown,
+): ClearThreadGoalRequest {
+  if (!hasExactKeys(input, ["expectedRevision"])) {
+    throw new ContractValidationError("clear_thread_goal_fields_invalid");
+  }
+  if (
+    !Number.isSafeInteger(input.expectedRevision) ||
+    Number(input.expectedRevision) < 1
+  ) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  return { expectedRevision: Number(input.expectedRevision) };
+}
+
+export function parseForkThreadRequest(input: unknown): ForkThreadRequest {
+  if (!hasExactKeys(input, ["expectedRevision", "throughHistorySequence"])) {
+    throw new ContractValidationError("fork_thread_fields_invalid");
+  }
+  if (
+    !Number.isSafeInteger(input.expectedRevision) ||
+    Number(input.expectedRevision) < 1 ||
+    (input.throughHistorySequence !== null &&
+      (!Number.isSafeInteger(input.throughHistorySequence) ||
+        Number(input.throughHistorySequence) < 0))
+  ) {
+    throw new ContractValidationError("fork_thread_boundary_invalid");
+  }
+  return {
+    expectedRevision: Number(input.expectedRevision),
+    throughHistorySequence:
+      input.throughHistorySequence === null
+        ? null
+        : Number(input.throughHistorySequence),
+  };
+}
+
+export function parseRollbackThreadRequest(
+  input: unknown,
+): RollbackThreadRequest {
+  if (!hasExactKeys(input, ["expectedRevision", "numTurns"])) {
+    throw new ContractValidationError("rollback_thread_fields_invalid");
+  }
+  const expectedRevision = requireExpectedRevision(input.expectedRevision);
+  if (
+    !Number.isSafeInteger(input.numTurns) ||
+    Number(input.numTurns) < 1 ||
+    Number(input.numTurns) > MAX_ROLLBACK_TURNS
+  ) {
+    throw new ContractValidationError("rollback_num_turns_invalid");
+  }
+  return { expectedRevision, numTurns: Number(input.numTurns) };
+}
+
+export function parseArchiveThreadRequest(
+  input: unknown,
+): ArchiveThreadRequest {
+  if (!hasExactKeys(input, ["expectedRevision"])) {
+    throw new ContractValidationError("archive_thread_fields_invalid");
+  }
+  if (
+    !Number.isSafeInteger(input.expectedRevision) ||
+    Number(input.expectedRevision) < 1
+  ) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  return { expectedRevision: Number(input.expectedRevision) };
+}
+
+export function parseUnarchiveThreadRequest(
+  input: unknown,
+): UnarchiveThreadRequest {
+  return parseExpectedThreadRevisionRequest(
+    input,
+    "unarchive_thread_fields_invalid",
+  );
+}
+
+export function parseRenameThreadRequest(input: unknown): RenameThreadRequest {
+  if (!hasExactKeys(input, ["expectedRevision", "title"])) {
+    throw new ContractValidationError("rename_thread_fields_invalid");
+  }
+  const expectedRevision = requireExpectedRevision(input.expectedRevision);
+  const title =
+    input.title === null
+      ? null
+      : requireBoundedString(
+          input.title,
+          MAX_THREAD_TITLE_LENGTH,
+          "thread_title_invalid",
+        );
+  return { expectedRevision, title };
+}
+
+export function parseDeleteThreadRequest(input: unknown): DeleteThreadRequest {
+  return parseExpectedThreadRevisionRequest(
+    input,
+    "delete_thread_fields_invalid",
+  );
+}
+
+export function parseThreadHistoryView(input: unknown): ThreadHistoryViewMode {
+  if (input === undefined || input === "standard") return "standard";
+  if (input === "audit") return "audit";
+  throw new ContractValidationError("thread_history_view_invalid");
+}
+
+function parseExpectedThreadRevisionRequest(
+  input: unknown,
+  fieldsCode: string,
+): { expectedRevision: number } {
+  if (!hasExactKeys(input, ["expectedRevision"])) {
+    throw new ContractValidationError(fieldsCode);
+  }
+  return { expectedRevision: requireExpectedRevision(input.expectedRevision) };
+}
+
+function requireExpectedRevision(input: unknown): number {
+  if (!Number.isSafeInteger(input) || Number(input) < 1) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  return Number(input);
+}
+
+export function parseThreadId(input: unknown): string {
+  return requireBoundedString(
+    input,
+    MAX_RESOURCE_ID_LENGTH,
+    "thread_id_invalid",
+  );
+}
+
+export function parseThreadListQuery(input: unknown): ResourceListQuery {
+  return parseResourceListQuery(
+    input,
+    THREAD_CURSOR_PREFIX,
+    "thread_cursor_invalid",
+  );
+}
+
+export function formatThreadCursor(input: {
+  updatedAt: string;
+  threadId: string;
+}): string {
+  return formatResourceCursor(
+    { updatedAt: input.updatedAt, resourceId: parseThreadId(input.threadId) },
+    THREAD_CURSOR_PREFIX,
+    "thread_cursor_invalid",
+  );
+}
+
+export function parseMessageListQuery(input: unknown): MessageListQuery {
+  if (!isPlainObject(input)) {
+    throw new ContractValidationError("message_list_query_invalid");
+  }
+  const keys = Object.keys(input);
+  if (
+    keys.some((key) => key !== "cursor" && key !== "limit" && key !== "view")
+  ) {
+    throw new ContractValidationError("message_list_query_invalid");
+  }
+  return {
+    afterSequence: parseMessageCursor(input.cursor),
+    limit: parseUnsignedQueryInteger(
+      input.limit,
+      100,
+      MAX_MESSAGE_PAGE_SIZE,
+      "page_limit_invalid",
+      1,
+    ),
+    view: parseThreadHistoryView(input.view),
+  };
+}
+
+export function formatMessageCursor(sequence: number): string {
+  if (!Number.isSafeInteger(sequence) || sequence < 1) {
+    throw new ContractValidationError("message_cursor_invalid");
+  }
+  return base64UrlEncode(`${MESSAGE_CURSOR_PREFIX}${sequence}`);
+}
+
+export function parseCreateRunRequest(input: unknown): CreateRunRequest {
+  if (
+    !isPlainObject(input) ||
+    !hasOnlyKeys(input, ["agentVersionId", "threadId"]) ||
+    !Object.hasOwn(input, "threadId")
+  ) {
+    throw new ContractValidationError("create_run_fields_invalid");
+  }
+  const threadId = requireBoundedString(
+    input.threadId,
+    MAX_RESOURCE_ID_LENGTH,
+    "thread_id_invalid",
+  );
+  if (!Object.hasOwn(input, "agentVersionId")) {
+    return { threadId };
+  }
+  return {
+    threadId,
+    agentVersionId:
+      input.agentVersionId === null
+        ? null
+        : parseAgentVersionId(input.agentVersionId),
+  };
+}
+
+export function parseStartTurnRequest(input: unknown): StartTurnRequest {
+  if (
+    !hasExactKeys(input, [
+      "agentVersionId",
+      "content",
+      "executionIntent",
+      "expectedRevision",
+    ])
+  ) {
+    throw new ContractValidationError("start_turn_fields_invalid");
+  }
+  if (
+    !Number.isSafeInteger(input.expectedRevision) ||
+    Number(input.expectedRevision) < 1
+  ) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  const content = requireBoundedString(
+    input.content,
+    MAX_MESSAGE_BYTES,
+    "message_content_invalid",
+  );
+  if (new TextEncoder().encode(content).byteLength > MAX_MESSAGE_BYTES) {
+    throw new ContractValidationError("message_content_too_large");
+  }
+  if (
+    input.executionIntent !== "none" &&
+    input.executionIntent !== "goal" &&
+    input.executionIntent !== "plan"
+  ) {
+    throw new ContractValidationError("execution_intent_invalid");
+  }
+  return {
+    expectedRevision: Number(input.expectedRevision),
+    content,
+    agentVersionId:
+      input.agentVersionId === null
+        ? null
+        : parseAgentVersionId(input.agentVersionId),
+    executionIntent: input.executionIntent,
+  };
+}
+
+export function parseCompactThreadRequest(
+  input: unknown,
+): CompactThreadRequest {
+  if (!hasExactKeys(input, ["agentVersionId", "expectedRevision"])) {
+    throw new ContractValidationError("compact_thread_fields_invalid");
+  }
+  if (
+    !Number.isSafeInteger(input.expectedRevision) ||
+    Number(input.expectedRevision) < 1
+  ) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  return {
+    expectedRevision: Number(input.expectedRevision),
+    agentVersionId:
+      input.agentVersionId === null
+        ? null
+        : parseAgentVersionId(input.agentVersionId),
+  };
+}
+
+export function parsePublishAgentVersionRequest(
+  input: unknown,
+): PublishAgentVersionRequest {
+  if (
+    !hasExactKeys(input, [
+      "agentVersionId",
+      "execution",
+      "instructions",
+      "model",
+      "policySnapshotId",
+      "resources",
+      "runtimeGeneration",
+      "schemaVersion",
+      "tools",
+    ])
+  ) {
+    throw new ContractValidationError("agent_version_fields_invalid");
+  }
+  return structuredClone(input) as PublishAgentVersionRequest;
+}
+
+export function parseAgentVersionId(input: unknown): string {
+  return requireBoundedString(input, 512, "agent_version_id_invalid");
+}
+
+export function parseAgentVersionListQuery(
+  input: unknown,
+): AgentVersionListQuery {
+  if (!isPlainObject(input)) {
+    throw new ContractValidationError("agent_version_list_query_invalid");
+  }
+  const keys = Object.keys(input);
+  if (keys.some((key) => key !== "cursor" && key !== "limit")) {
+    throw new ContractValidationError("agent_version_list_query_invalid");
+  }
+  return {
+    afterAgentVersionId: parseAgentVersionCursor(input.cursor),
+    limit: parseUnsignedQueryInteger(
+      input.limit,
+      100,
+      100,
+      "page_limit_invalid",
+      1,
+    ),
+  };
+}
+
+export function formatAgentVersionCursor(agentVersionId: string): string {
+  const id = parseAgentVersionId(agentVersionId);
+  return base64UrlEncode(`${AGENT_VERSION_CURSOR_PREFIX}${id}`);
+}
+
+export function parseCancelRunRequest(input: unknown): CancelRunRequest {
+  if (!hasExactKeys(input, ["expectedRevision"])) {
+    throw new ContractValidationError("cancel_run_fields_invalid");
+  }
+  if (
+    !Number.isSafeInteger(input.expectedRevision) ||
+    Number(input.expectedRevision) < 1
+  ) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  return { expectedRevision: Number(input.expectedRevision) };
+}
+
+export function parseRunId(input: unknown): string {
+  return requireBoundedString(input, MAX_RESOURCE_ID_LENGTH, "run_id_invalid");
+}
+
+export function parseThreadRunListQuery(input: unknown): ResourceListQuery {
+  return parseResourceListQuery(
+    input,
+    THREAD_RUN_CURSOR_PREFIX,
+    "run_cursor_invalid",
+  );
+}
+
+export function formatThreadRunCursor(input: {
+  updatedAt: string;
+  runId: string;
+}): string {
+  return formatResourceCursor(
+    { updatedAt: input.updatedAt, resourceId: parseRunId(input.runId) },
+    THREAD_RUN_CURSOR_PREFIX,
+    "run_cursor_invalid",
+  );
+}
+
+export function parseApprovalId(input: unknown): string {
+  return requireBoundedString(
+    input,
+    MAX_RESOURCE_ID_LENGTH,
+    "approval_id_invalid",
+  );
+}
+
+export function parseArtifactId(input: unknown): string {
+  const artifactId = requireBoundedString(input, 512, "artifact_id_invalid");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/u.test(artifactId)) {
+    throw new ContractValidationError("artifact_id_invalid");
+  }
+  return artifactId;
+}
+
+export function parseDecideToolApprovalRequest(
+  input: unknown,
+): DecideToolApprovalRequest {
+  if (!hasExactKeys(input, ["comment", "decision", "expectedRevision"])) {
+    throw new ContractValidationError("approval_decision_fields_invalid");
+  }
+  if (
+    !Number.isSafeInteger(input.expectedRevision) ||
+    Number(input.expectedRevision) < 1
+  ) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  if (input.decision !== "approved" && input.decision !== "rejected") {
+    throw new ContractValidationError("approval_decision_invalid");
+  }
+  if (
+    input.comment !== null &&
+    (typeof input.comment !== "string" ||
+      input.comment.trim().length === 0 ||
+      new TextEncoder().encode(input.comment).byteLength > 2_048)
+  ) {
+    throw new ContractValidationError("approval_comment_invalid");
+  }
+  return {
+    expectedRevision: Number(input.expectedRevision),
+    decision: input.decision,
+    comment: input.comment,
+  };
+}
+
+export function parseIdempotencyKey(input: unknown): string {
+  return requireBoundedString(
+    input,
+    MAX_IDEMPOTENCY_KEY_LENGTH,
+    "idempotency_key_invalid",
+  );
+}
+
+export function parseLastEventSequence(input: unknown): number {
+  if (input === undefined) {
+    return 0;
+  }
+  if (typeof input !== "string" || !/^(0|[1-9][0-9]*)$/.test(input)) {
+    throw new ContractValidationError("last_event_id_invalid");
+  }
+  const sequence = Number(input);
+  if (!Number.isSafeInteger(sequence) || sequence < 0) {
+    throw new ContractValidationError("last_event_id_invalid");
+  }
+  return sequence;
+}
+
+export function parseRunEventViewMode(input: unknown): RunEventViewMode {
+  if (input === undefined || input === "client") {
+    return "client";
+  }
+  if (input === "audit") {
+    return "audit";
+  }
+  throw new ContractValidationError("run_event_view_invalid");
+}
+
+function parseUnsignedQueryInteger(
+  input: unknown,
+  defaultValue: number,
+  maximum: number,
+  code: string,
+  minimum = 0,
+): number {
+  if (input === undefined) {
+    return defaultValue;
+  }
+  if (typeof input !== "string" || !/^(0|[1-9][0-9]*)$/.test(input)) {
+    throw new ContractValidationError(code);
+  }
+  const value = Number(input);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new ContractValidationError(code);
+  }
+  return value;
+}
+
+function parseMessageCursor(input: unknown): number {
+  if (input === undefined) {
+    return 0;
+  }
+  if (
+    typeof input !== "string" ||
+    input.length === 0 ||
+    input.length > 128 ||
+    !/^[A-Za-z0-9_-]+$/.test(input)
+  ) {
+    throw new ContractValidationError("message_cursor_invalid");
+  }
+  let decoded: string;
+  try {
+    decoded = base64UrlDecode(input);
+  } catch {
+    throw new ContractValidationError("message_cursor_invalid");
+  }
+  if (!decoded.startsWith(MESSAGE_CURSOR_PREFIX)) {
+    throw new ContractValidationError("message_cursor_invalid");
+  }
+  const encodedSequence = decoded.slice(MESSAGE_CURSOR_PREFIX.length);
+  if (!/^[1-9][0-9]*$/.test(encodedSequence)) {
+    throw new ContractValidationError("message_cursor_invalid");
+  }
+  const sequence = Number(encodedSequence);
+  if (
+    !Number.isSafeInteger(sequence) ||
+    formatMessageCursor(sequence) !== input
+  ) {
+    throw new ContractValidationError("message_cursor_invalid");
+  }
+  return sequence;
+}
+
+function parseAgentVersionCursor(input: unknown): string | null {
+  if (input === undefined) {
+    return null;
+  }
+  if (
+    typeof input !== "string" ||
+    input.length === 0 ||
+    input.length > 768 ||
+    !/^[A-Za-z0-9_-]+$/u.test(input)
+  ) {
+    throw new ContractValidationError("agent_version_cursor_invalid");
+  }
+  let decoded: string;
+  try {
+    decoded = base64UrlDecode(input);
+  } catch {
+    throw new ContractValidationError("agent_version_cursor_invalid");
+  }
+  if (!decoded.startsWith(AGENT_VERSION_CURSOR_PREFIX)) {
+    throw new ContractValidationError("agent_version_cursor_invalid");
+  }
+  let agentVersionId: string;
+  try {
+    agentVersionId = parseAgentVersionId(
+      decoded.slice(AGENT_VERSION_CURSOR_PREFIX.length),
+    );
+  } catch {
+    throw new ContractValidationError("agent_version_cursor_invalid");
+  }
+  if (formatAgentVersionCursor(agentVersionId) !== input) {
+    throw new ContractValidationError("agent_version_cursor_invalid");
+  }
+  return agentVersionId;
+}
+
+function parseResourceListQuery(
+  input: unknown,
+  prefix: string,
+  cursorCode: string,
+): ResourceListQuery {
+  if (!isPlainObject(input)) {
+    throw new ContractValidationError("resource_list_query_invalid");
+  }
+  const keys = Object.keys(input);
+  if (keys.some((key) => key !== "cursor" && key !== "limit")) {
+    throw new ContractValidationError("resource_list_query_invalid");
+  }
+  return {
+    before: parseResourceCursor(input.cursor, prefix, cursorCode),
+    limit: parseUnsignedQueryInteger(
+      input.limit,
+      100,
+      100,
+      "page_limit_invalid",
+      1,
+    ),
+  };
+}
+
+function formatResourceCursor(
+  input: ResourceListCursor,
+  prefix: string,
+  code: string,
+): string {
+  if (!isRfc3339Utc(input.updatedAt)) {
+    throw new ContractValidationError(code);
+  }
+  const resourceId = requireBoundedString(input.resourceId, 128, code);
+  return base64UrlEncode(
+    `${prefix}${JSON.stringify([input.updatedAt, resourceId])}`,
+  );
+}
+
+function parseResourceCursor(
+  input: unknown,
+  prefix: string,
+  code: string,
+): ResourceListCursor | null {
+  if (input === undefined) {
+    return null;
+  }
+  if (
+    typeof input !== "string" ||
+    input.length === 0 ||
+    input.length > 512 ||
+    !/^[A-Za-z0-9_-]+$/u.test(input)
+  ) {
+    throw new ContractValidationError(code);
+  }
+  try {
+    const decoded = base64UrlDecode(input);
+    if (!decoded.startsWith(prefix)) {
+      throw new Error(code);
+    }
+    const value: unknown = JSON.parse(decoded.slice(prefix.length));
+    if (
+      !Array.isArray(value) ||
+      value.length !== 2 ||
+      !isRfc3339Utc(value[0]) ||
+      typeof value[1] !== "string"
+    ) {
+      throw new Error(code);
+    }
+    const cursor = { updatedAt: value[0], resourceId: value[1] };
+    if (formatResourceCursor(cursor, prefix, code) !== input) {
+      throw new Error(code);
+    }
+    return cursor;
+  } catch {
+    throw new ContractValidationError(code);
+  }
+}
+
+function isRfc3339Utc(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  );
+}
+
+function base64UrlEncode(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
+}
+
+function base64UrlDecode(value: string): string {
+  const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  const binary = atob(padded);
+  return new TextDecoder(undefined, { fatal: true }).decode(
+    Uint8Array.from(binary, (character) => character.charCodeAt(0)),
+  );
+}
+
+function requireBoundedString(
+  input: unknown,
+  maxLength: number,
+  code: string,
+): string {
+  if (
+    typeof input !== "string" ||
+    input.trim().length === 0 ||
+    input.length > maxLength
+  ) {
+    throw new ContractValidationError(code);
+  }
+  return input;
+}
+
+function parseNullableExpectedRevision(input: unknown): number | null {
+  if (input === null) return null;
+  if (!Number.isSafeInteger(input) || Number(input) < 1) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  return Number(input);
+}
+
+function parseNullableThreadGoalStatus(
+  input: unknown,
+): SetThreadGoalRequest["status"] {
+  switch (input) {
+    case null:
+    case "active":
+    case "paused":
+    case "blocked":
+    case "usageLimited":
+    case "budgetLimited":
+    case "complete":
+      return input;
+    default:
+      throw new ContractValidationError("goal_status_invalid");
+  }
+}
+
+function parseThreadGoalTokenBudgetUpdate(
+  input: unknown,
+): SetThreadGoalRequest["tokenBudget"] {
+  if (!isPlainObject(input)) {
+    throw new ContractValidationError("goal_token_budget_invalid");
+  }
+  if (input.kind === "keep" && hasExactKeys(input, ["kind"])) {
+    return { kind: "keep" };
+  }
+  if (input.kind === "set" && hasExactKeys(input, ["kind", "value"])) {
+    if (
+      input.value !== null &&
+      (!Number.isSafeInteger(input.value) || Number(input.value) < 1)
+    ) {
+      throw new ContractValidationError("goal_token_budget_invalid");
+    }
+    return {
+      kind: "set",
+      value: input.value === null ? null : Number(input.value),
+    };
+  }
+  throw new ContractValidationError("goal_token_budget_invalid");
+}
+
+function requireThreadGoalObjective(input: unknown): string {
+  if (typeof input !== "string" || input.trim().length === 0) {
+    throw new ContractValidationError("goal_objective_invalid");
+  }
+  let characters = 0;
+  for (const character of input) {
+    const codePoint = character.codePointAt(0);
+    if (
+      codePoint === undefined ||
+      (character.length === 1 && codePoint >= 0xd800 && codePoint <= 0xdfff)
+    ) {
+      throw new ContractValidationError("goal_objective_invalid");
+    }
+    characters += 1;
+    if (characters > MAX_THREAD_GOAL_OBJECTIVE_CHARS) {
+      throw new ContractValidationError("goal_objective_invalid");
+    }
+  }
+  return input;
+}
+
+function hasExactKeys(
+  input: unknown,
+  expectedKeys: readonly string[],
+): input is Record<string, unknown> {
+  if (!isPlainObject(input)) {
+    return false;
+  }
+  const actualKeys = Object.keys(input).sort();
+  const expected = [...expectedKeys].sort();
+  return (
+    actualKeys.length === expected.length &&
+    actualKeys.every((value, index) => value === expected[index])
+  );
+}
+
+function hasOnlyKeys(
+  input: Readonly<Record<string, unknown>>,
+  allowedKeys: readonly string[],
+): boolean {
+  return Object.keys(input).every((key) => allowedKeys.includes(key));
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}

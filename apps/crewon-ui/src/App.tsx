@@ -7,6 +7,7 @@ import {
   AppWorkspaceSidePanels,
   createAppCommandOfficeRoomAdapter,
 } from "./components/app";
+import type { ControlApiClient } from "@crewon/control-client";
 import { CommandSettingsLazyRoute } from "./components/app/CommandSettingsLazyRoute";
 import {
   isMissingThreadError,
@@ -72,6 +73,7 @@ import { persistLocale, translate } from "./lib/i18n";
 import { persistTheme } from "./lib/theme";
 import { commitSettingsField } from "./lib/settings/settingsFieldCommitHandler";
 import { isSingleConversationThread } from "./lib/thread/threadSourceFilters";
+import { createThreadGoalComposerHandlers } from "./lib/thread/threadGoalComposerActions";
 import {
   assistantThreadRuntimeSettings,
   latestAssistantThread,
@@ -79,8 +81,14 @@ import {
 import { officeRecordKey } from "./lib/office/officePanelFromRecord";
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
+import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
+import { selectThreadRuntimeAuthority } from "./lib/control-runtime/threadRuntimeAuthority";
 
-export function App() {
+export function App({
+  controlClient = null,
+}: {
+  controlClient?: ControlApiClient | null;
+}) {
   const { isDemoPreview, platform, principalSessionEnabled, serverUrl } =
     useAppEnvironment();
   // Who you are in CrewON. The model account below is a separate credential.
@@ -156,19 +164,42 @@ export function App() {
     conversationSummary,
     gitRemoteDiff,
     threadGoal,
+    threadGoalBusy,
   } = workspaceStatus;
   const { automationRunByTurnRef, officeRunByTurnRef } =
     useAppRunTrackingRefs();
+  const { connected: controlRuntimeConnected, runtime: controlThreadRuntime } =
+    useControlThreadRuntime({
+      appendStreamingTextDelta: threadState.appendStreamingTextDelta,
+      client: controlClient,
+      selectedThreadId,
+      selectedThreadIdRef,
+      setActiveTurnByThread: threadState.setActiveTurnByThread,
+      setSelectedThreadId,
+      setStreamingTextByThread: threadState.setStreamingTextByThread,
+      setThreadGoal: workspaceStatus.setThreadGoal,
+      setThreads: threadState.setThreads,
+      showArchivedThreadsRef,
+    });
   /*
    * Pending server requests are only ever forwarded to coordinators, never read
    * here, so the group is kept intact and spread at each callsite. Destructuring
    * it would name ten values twice: once to unpack, once to pass along.
    */
   const pendingRequests = useAppPendingServerRequests();
-  const { setTerminalCommand, terminalCommand, terminalProcessIdRef } =
-    useAppTerminalState();
+  const {
+    appendTerminalOutputDelta,
+    appendTerminalOutputLine,
+    setTerminalCommand,
+    setTerminalProcessId,
+    terminalCommand,
+    terminalOutput,
+    terminalProcessId,
+    terminalProcessIdRef,
+  } = useAppTerminalState();
   const composerState = useAppComposerState();
   const {
+    committedExecutionIntent,
     composerFocusSignal,
     composerValue,
     isSending,
@@ -176,6 +207,7 @@ export function App() {
     pendingComposerMentions,
     pendingContextFile,
     setComposerFocusSignal,
+    setCommittedExecutionIntent,
     setComposerValue,
     setPendingComposerMentions,
     setPendingContextFile,
@@ -206,6 +238,17 @@ export function App() {
     newDraftThreadLabel: t.newDraftThread,
     untitledThreadLabel: t.untitledThread,
   });
+  const threadAuthority = selectThreadRuntimeAuthority({
+    controlClientConfigured: controlClient !== null,
+    controlConnected: controlRuntimeConnected,
+    controlRuntime: controlThreadRuntime,
+    legacyConnected: isConnected,
+    legacyConnectionState: connectionState,
+    legacyRuntime: clientRef.current,
+  });
+  const threadRuntimeClient = threadAuthority.client;
+  const threadRuntimeConnected = threadAuthority.connected;
+  const threadConnectionState = threadAuthority.connectionState;
   const commandModelOptions = useAppCommandModelOptions({
     client: clientRef.current,
     connectionAttempt,
@@ -285,10 +328,10 @@ export function App() {
   });
 
   useAppThreadListEffects({
-    client: clientRef.current,
+    client: threadRuntimeClient,
     emptySelectionBehavior:
       draftWorkspaceCwd === undefined ? "selectFirst" : "preserve",
-    isConnected,
+    isConnected: threadRuntimeConnected,
     isDemoPreview,
     localeRef,
     searchTerm: threadSearchTerm,
@@ -326,8 +369,8 @@ export function App() {
 
   useAppModelResponseTimeoutEffect({
     activeTurnId,
-    client: clientRef.current,
-    isConnected,
+    client: threadRuntimeClient,
+    isConnected: threadRuntimeConnected,
     locale,
     selectedThread,
     ...threadState,
@@ -502,10 +545,12 @@ export function App() {
 
   const { handleNotification, handleServerRequest } =
     useAppServerEventHandlerSet({
+      appendTerminalOutputDelta,
       appViewRef,
       automationRunByTurnRef,
       capabilityPanelRef,
       clientRef,
+      controlThreadAuthority: controlClient !== null,
       libraryPanelRef,
       localeRef,
       officeRunByTurnRef,
@@ -541,6 +586,7 @@ export function App() {
     isDemo,
     isDemoPreview,
     locale,
+    manageThreads: threadAuthority.legacyManagesThreads,
     preserveThreadsAfterConnectionLoss,
     principalSessionEnabled,
     selectedThread,
@@ -577,15 +623,21 @@ export function App() {
     ...threadState,
     activeTurnId,
     ...workspaceStatus,
-    client: clientRef.current,
+    client: threadRuntimeClient,
     confirm: requestConfirm,
     demoResponse: t.demoResponse,
     getShowArchivedThreads: () => showArchivedThreadsRef.current,
-    isConnected,
+    isConnected: threadRuntimeConnected,
     isDemo,
     isDemoPreview,
     ...composerState,
     locale,
+    onExecutionIntentCommitted: (intent) => {
+      setCommittedExecutionIntent((current) => ({
+        intent,
+        sequence: (current?.sequence ?? 0) + 1,
+      }));
+    },
     newDraftPreview: t.newDraftPreview,
     newDraftThread: t.newDraftThread,
     preserveThreadsAfterConnectionLoss,
@@ -626,9 +678,14 @@ export function App() {
     loadBrowserApps,
     readWorkspaceDiff,
     readWorkspaceFiles,
+    resizeWorkbenchTerminal,
     runTerminalStatus,
+    startWorkbenchTerminal,
+    stopWorkbenchTerminal,
+    writeWorkbenchTerminalInput,
   } = createAppWorkspaceCapabilityHandlers({
     ...workspaceStatus,
+    appendTerminalOutputLine,
     client: clientRef.current,
     getTerminalProcessId: () => terminalProcessIdRef.current,
     isConnected,
@@ -639,9 +696,7 @@ export function App() {
     ...threadState,
     ...chromeState,
     setCapabilityPanel,
-    setTerminalProcessId: (processId) => {
-      terminalProcessIdRef.current = processId;
-    },
+    setTerminalProcessId,
     terminalCommand,
   });
 
@@ -676,6 +731,7 @@ export function App() {
     persistLocale,
     persistTheme,
     theme,
+    threadGoal: null,
   });
 
   const {
@@ -723,6 +779,9 @@ export function App() {
     ...workspaceStatus,
     capabilityPanel,
     client: clientRef.current,
+    threadLifecycleClient: threadRuntimeClient,
+    threadLifecycleConnected: threadRuntimeConnected,
+    threadLifecycleControlConfigured: controlClient !== null,
     confirm: requestConfirm,
     createThread,
     cwd,
@@ -745,11 +804,21 @@ export function App() {
     ...threadState,
     setCapabilityPanel,
     setLibraryPanel,
+    setThreadGoal: () => undefined,
     setNotice,
     settingsRefreshHandlers,
     settingsSaveHandlers,
     terminalCommand,
     terminalProcessId: terminalProcessIdRef.current,
+  });
+  const goalComposerHandlers = createThreadGoalComposerHandlers({
+    client: controlRuntimeConnected ? controlThreadRuntime : null,
+    isConnected: controlRuntimeConnected,
+    locale,
+    setBusy: workspaceStatus.setThreadGoalBusy,
+    setNotice,
+    setThreadGoal: workspaceStatus.setThreadGoal,
+    threadGoal,
   });
   const handleSettingsFieldCommit = (fieldId: string, value: string) =>
     commitSettingsField({
@@ -853,6 +922,7 @@ export function App() {
         locale={locale}
         notice={notice}
         panel={capabilityPanel}
+        platform={platform}
         onBack={closeSettings}
         onDismissNotice={() => setNotice(null)}
         onPanelAction={handleCapabilityPanelAction}
@@ -869,8 +939,9 @@ export function App() {
         assistantActiveTurnId={assistantRuntime.activeTurnId}
         assistantStreamingText={assistantRuntime.streamingText}
         assistantThread={assistantThread}
+        committedExecutionIntent={committedExecutionIntent}
         composerValue={composerValue}
-        connectionState={connectionState}
+        connectionState={threadConnectionState}
         cwd={cwd}
         isSending={isSending}
         linkedThreads={conversationThreads}
@@ -880,6 +951,8 @@ export function App() {
         selectedThreadId={commandShellRuntime.selectedThreadId}
         slashCommands={slashCommands}
         streamingText={commandShellRuntime.streamingText}
+        threadGoal={threadGoal}
+        threadGoalBusy={threadGoalBusy}
         workMode={workMode}
         modelOptions={commandModelOptions}
         executionTargetClient={clientRef.current}
@@ -902,6 +975,13 @@ export function App() {
           onReview: readWorkspaceDiff,
           onSideChat: startSideChat,
           onTerminal: runTerminalStatus,
+          onTerminalResize: resizeWorkbenchTerminal,
+          onTerminalStart: startWorkbenchTerminal,
+          onTerminalStop: stopWorkbenchTerminal,
+          onTerminalWrite: writeWorkbenchTerminalInput,
+          terminalCwd: cwd || null,
+          terminalOutput,
+          terminalProcessId,
           onWeb: loadBrowserApps,
         }}
         officeRoomAdapter={commandOfficeRoomAdapter}
@@ -976,6 +1056,9 @@ export function App() {
         onSendNewThread={sendCommandShellMessage}
         onSlashCommandSelect={handleComposerSlashCommand}
         onStop={interruptActiveTurn}
+        onClearThreadGoal={goalComposerHandlers.clearThreadGoal}
+        onSetThreadGoalObjective={goalComposerHandlers.setThreadGoalObjective}
+        onSetThreadGoalStatus={goalComposerHandlers.setThreadGoalStatus}
       />
     );
   return (

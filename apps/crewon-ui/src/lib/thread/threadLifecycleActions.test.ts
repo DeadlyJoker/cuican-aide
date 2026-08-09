@@ -86,7 +86,9 @@ function baseParams(
 describe("thread lifecycle actions", () => {
   it("maps thread lifecycle action ids", () => {
     expect(threadLifecycleActionForActionId("compact-thread")).toBe("compact");
-    expect(threadLifecycleActionForActionId("rollback-thread")).toBe("rollback");
+    expect(threadLifecycleActionForActionId("rollback-thread")).toBe(
+      "rollback",
+    );
     expect(threadLifecycleActionForActionId("enable-thread-memory")).toBe(
       "memoryEnabled",
     );

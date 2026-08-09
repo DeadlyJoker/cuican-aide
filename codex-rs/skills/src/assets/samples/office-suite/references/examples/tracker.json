@@ -1,0 +1,32 @@
+{
+  "theme": { "headerFill": "#2F6FED" },
+  "sheets": [
+    {
+      "name": "预算模型",
+      "title": "2026 H2 预算模型",
+      "header": ["科目", "Q3", "Q4", "合计"],
+      "rows": [
+        ["人力", 1200000, 1350000, "=B4+C4"],
+        ["云资源", 240000, 310000, "=B5+C5"],
+        ["外采", 90000, 60000, "=B6+C6"],
+        ["合计", "=SUM(B4:B6)", "=SUM(C4:C6)", "=SUM(D4:D6)"]
+      ],
+      "numberFormats": { "B": "#,##0", "C": "#,##0", "D": "#,##0" },
+      "asTable": false,
+      "conditional": [{ "range": "B4:C6", "kind": "colorScale" }],
+      "charts": [
+        { "kind": "bar", "title": "季度对比", "dataMinCol": 2, "dataMaxCol": 3, "dataMaxRow": 6, "anchor": "G3" }
+      ]
+    },
+    {
+      "name": "里程碑",
+      "header": ["里程碑", "负责人", "截止", "状态"],
+      "rows": [
+        ["办公工具链", "王启辰", "2026-08-15", "进行中"],
+        ["设计渲染", "设计组", "2026-08-30", "未开始"]
+      ],
+      "asTable": true,
+      "tableName": "Milestones"
+    }
+  ]
+}

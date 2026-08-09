@@ -25,7 +25,9 @@ type BootstrapConnectionClient = AppServerConnection & {
 
 type ConnectionStateSetter = (state: ConnectionState) => void;
 type NoticeSetter = (notice: NoticeState | null) => void;
-type StreamingTextSetter = (streamingTextByThread: Record<string, string>) => void;
+type StreamingTextSetter = (
+  streamingTextByThread: Record<string, string>,
+) => void;
 type ThreadListSetter = (threads: Thread[]) => void;
 type SelectedThreadSetter = (threadId: string | null) => void;
 
@@ -74,6 +76,7 @@ export function runConnectionBootstrapEffectAction<
   currentClient: () => Client | null | undefined;
   emptySelectionBehavior: EmptyThreadSelectionBehavior;
   isDemoPreview: boolean;
+  manageThreads?: boolean;
   preserveThreadsAfterConnectionLoss: (showConnectionNotice?: boolean) => void;
   restoreThread?: (client: Client, thread: Thread) => Promise<Thread>;
   setAccountStatus: (accountStatus: AccountStatus) => void;
@@ -113,7 +116,7 @@ export function runConnectionBootstrapEffectAction<
       params.setNotice(null);
       if (params.isDemoPreview) {
         params.showDemoThreads();
-      } else {
+      } else if (params.manageThreads !== false) {
         void client
           .listThreads(params.showArchivedThreads)
           .then((serverThreads) => {
@@ -259,7 +262,7 @@ export function switchToDemoThreadsAction(params: {
 }): void {
   params.setConnectionState("demo");
   params.setNotice(
-    params.showConnectionNotice ?? true
+    (params.showConnectionNotice ?? true)
       ? connectionLostNotice(params.connectionLostMessage)
       : null,
   );
@@ -275,7 +278,7 @@ export function preserveThreadsAfterConnectionLossAction(params: {
 }): void {
   params.setConnectionState("disconnected");
   params.setNotice(
-    params.showConnectionNotice ?? true
+    (params.showConnectionNotice ?? true)
       ? connectionLostNotice(params.connectionLostMessage)
       : null,
   );

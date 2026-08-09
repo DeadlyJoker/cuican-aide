@@ -1,0 +1,158 @@
+import {
+  ExecutionLifecycleError,
+  finishRunAttempt,
+  startRunAttempt,
+  type RunAttemptState,
+  type RunStepState,
+} from "@crewon/domain";
+import {
+  RunStoreError,
+  type BeginRunAttemptInput,
+  type BeginRunAttemptResult,
+  type RunAttemptLocator,
+  type RunAttemptTerminalMutation,
+  type RunAttemptTransitionResult,
+  type RunStepLocator,
+} from "@crewon/application";
+
+export class InMemoryExecutionAuthority {
+  readonly #steps = new Map<string, RunStepState>();
+  readonly #attempts = new Map<string, RunAttemptState>();
+
+  loadStep(locator: RunStepLocator): RunStepState | null {
+    const step = this.#steps.get(locator.stepId) ?? null;
+    return step?.tenantId === locator.tenantId && step.runId === locator.runId
+      ? clone(step)
+      : null;
+  }
+
+  loadAttempt(locator: RunAttemptLocator): RunAttemptState | null {
+    const attempt = this.#attempts.get(locator.attemptId) ?? null;
+    return attempt?.tenantId === locator.tenantId &&
+      attempt.runId === locator.runId &&
+      attempt.stepId === locator.stepId
+      ? clone(attempt)
+      : null;
+  }
+
+  listAttempts(
+    locator: RunStepLocator,
+    afterAttemptNumber: number,
+    limit: number,
+  ): readonly RunAttemptState[] {
+    return [...this.#attempts.values()]
+      .filter(
+        (attempt) =>
+          attempt.tenantId === locator.tenantId &&
+          attempt.runId === locator.runId &&
+          attempt.stepId === locator.stepId &&
+          attempt.attemptNumber > afterAttemptNumber,
+      )
+      .sort((left, right) => left.attemptNumber - right.attemptNumber)
+      .slice(0, limit)
+      .map(clone);
+  }
+
+  begin(input: BeginRunAttemptInput): BeginRunAttemptResult {
+    if (this.#attempts.has(input.attemptId)) {
+      throw new RunStoreError("attempt_id_conflict");
+    }
+    const currentStep = this.#steps.get(input.stepId) ?? null;
+    const currentAttempt =
+      currentStep?.currentAttemptId === null || currentStep === null
+        ? null
+        : (this.#attempts.get(currentStep.currentAttemptId) ?? null);
+    if (currentStep !== null && currentAttempt === null) {
+      throw new RunStoreError("stored_run_attempt_invalid");
+    }
+    let started: BeginRunAttemptResult;
+    try {
+      started = startRunAttempt(currentStep, currentAttempt, {
+        tenantId: input.tenantId,
+        runId: input.runId,
+        stepId: input.stepId,
+        kind: input.kind,
+        attemptId: input.attemptId,
+        workItemId: input.lease.workItemId,
+        leaseEpoch: input.lease.leaseEpoch,
+        startedAt: input.startedAt,
+      });
+    } catch (error) {
+      throw normalizeExecutionLifecycleError(error);
+    }
+    if (started.abandonedAttempt !== null) {
+      this.#attempts.set(
+        started.abandonedAttempt.attemptId,
+        clone(started.abandonedAttempt),
+      );
+    }
+    this.#steps.set(started.step.stepId, clone(started.step));
+    this.#attempts.set(started.attempt.attemptId, clone(started.attempt));
+    return clone(started);
+  }
+
+  finish(
+    tenantId: string,
+    runId: string,
+    workItemId: string,
+    leaseEpoch: number,
+    mutation: RunAttemptTerminalMutation,
+  ): RunAttemptTransitionResult {
+    const step = this.#steps.get(mutation.stepId) ?? null;
+    const attempt = this.#attempts.get(mutation.attemptId) ?? null;
+    if (
+      step?.tenantId !== tenantId ||
+      step.runId !== runId ||
+      attempt?.tenantId !== tenantId ||
+      attempt.runId !== runId ||
+      attempt.stepId !== step.stepId
+    ) {
+      throw new RunStoreError("run_attempt_not_found");
+    }
+    if (
+      attempt.leaseEpoch !== leaseEpoch ||
+      attempt.workItemId !== workItemId
+    ) {
+      throw new RunStoreError("stale_attempt_epoch");
+    }
+    try {
+      return finishRunAttempt(step, attempt, terminalInput(mutation));
+    } catch (error) {
+      throw normalizeExecutionLifecycleError(error);
+    }
+  }
+
+  apply(result: RunAttemptTransitionResult): void {
+    this.#steps.set(result.step.stepId, clone(result.step));
+    this.#attempts.set(result.attempt.attemptId, clone(result.attempt));
+  }
+}
+
+function terminalInput(
+  input: RunAttemptTerminalMutation,
+): Parameters<typeof finishRunAttempt>[2] {
+  return input.status === "failed"
+    ? {
+        status: input.status,
+        finishedAt: input.finishedAt,
+        checkpointDigest: input.checkpointDigest,
+        failure: input.failure,
+      }
+    : {
+        status: input.status,
+        finishedAt: input.finishedAt,
+        checkpointDigest: input.checkpointDigest,
+      };
+}
+
+function normalizeExecutionLifecycleError(error: unknown): Error {
+  return error instanceof ExecutionLifecycleError
+    ? new RunStoreError(error.code, { cause: error })
+    : error instanceof Error
+      ? error
+      : new RunStoreError("execution_lifecycle_error", { cause: error });
+}
+
+function clone<T>(value: T): T {
+  return structuredClone(value);
+}

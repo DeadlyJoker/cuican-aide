@@ -1,0 +1,117 @@
+export type ActorContext = Readonly<{
+  principalId: string;
+  actorId: string;
+  tenantId: string;
+  spaceId: string;
+}>;
+
+export type RunAuthorizationAction =
+  | "run:create"
+  | "run:read"
+  | "run:execute"
+  | "run:cancel";
+
+export type RunAuthorizationResource = Readonly<{
+  kind: "run";
+  tenantId: string;
+  spaceId: string;
+  threadId: string;
+  runId: string | null;
+}>;
+
+export type ThreadAuthorizationAction =
+  | "thread:create"
+  | "thread:read"
+  | "thread:message:append"
+  | "thread:goal:read"
+  | "thread:goal:write"
+  | "thread:fork"
+  | "thread:archive"
+  | "thread:unarchive"
+  | "thread:rename"
+  | "thread:delete"
+  | "thread:compact"
+  | "thread:rollback"
+  | "thread:audit:read";
+
+export type ThreadAuthorizationResource = Readonly<{
+  kind: "thread";
+  tenantId: string;
+  spaceId: string;
+  threadId: string | null;
+}>;
+
+export type ToolApprovalAuthorizationAction =
+  | "toolApproval:read"
+  | "toolApproval:decide";
+
+export type ToolApprovalAuthorizationResource = Readonly<{
+  kind: "toolApproval";
+  tenantId: string;
+  spaceId: string;
+  runId: string;
+  approvalId: string;
+}>;
+
+export type AgentVersionAuthorizationAction =
+  | "agentVersion:publish"
+  | "agentVersion:deploy"
+  | "agentVersion:read"
+  | "agentVersion:list";
+
+export type AgentVersionAuthorizationResource = Readonly<{
+  kind: "agentVersion";
+  tenantId: string;
+  spaceId: string;
+  agentVersionId: string | null;
+}>;
+
+export type ArtifactAuthorizationAction = "artifact:read";
+
+export type ArtifactAuthorizationResource = Readonly<{
+  kind: "artifact";
+  tenantId: string;
+  spaceId: string;
+  artifactId: string;
+  ownerActorId: string;
+  runId: string;
+}>;
+
+export type ModelProviderSettingsAuthorizationAction =
+  | "modelProviderSettings:read"
+  | "modelProviderSettings:write"
+  | "modelProviderSettings:probe";
+
+export type ModelProviderSettingsAuthorizationResource = Readonly<{
+  kind: "modelProviderSettings";
+  tenantId: string;
+  spaceId: string;
+}>;
+
+export type AuthorizationAction =
+  | RunAuthorizationAction
+  | ThreadAuthorizationAction
+  | ToolApprovalAuthorizationAction
+  | AgentVersionAuthorizationAction
+  | ArtifactAuthorizationAction
+  | ModelProviderSettingsAuthorizationAction;
+
+export type AuthorizationResource =
+  | RunAuthorizationResource
+  | ThreadAuthorizationResource
+  | ToolApprovalAuthorizationResource
+  | AgentVersionAuthorizationResource
+  | ArtifactAuthorizationResource
+  | ModelProviderSettingsAuthorizationResource;
+
+export type AuthorizationDecision =
+  | Readonly<{ outcome: "allow" }>
+  | Readonly<{ outcome: "deny"; reasonCode: string }>;
+
+export interface AuthorizationPort {
+  authorize(request: {
+    actor: ActorContext;
+    action: AuthorizationAction;
+    resource: AuthorizationResource;
+  }): Promise<AuthorizationDecision>;
+}

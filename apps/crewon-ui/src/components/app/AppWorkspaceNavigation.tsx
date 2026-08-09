@@ -5,6 +5,7 @@ import { SettingsNavigation } from "../settings/SettingsNavigation";
 import type { AppView } from "../../lib/shared/appView";
 import type { LibraryKind } from "../../lib/domain/crewonDomain";
 import type { Locale } from "../../lib/i18n";
+import type { PlatformKind } from "../../lib/platform";
 import type { SettingsSection } from "../../lib/settings/settingsCatalog";
 
 type AppWorkspaceNavigationProps = {
@@ -21,6 +22,7 @@ type AppWorkspaceNavigationProps = {
   newThreadLabel: string;
   newThreadShortcutLabel: string;
   noThreadsFoundLabel: string;
+  platform: PlatformKind;
   renameThreadLabel: string;
   searchPlaceholder: string;
   searchShortcutLabel: string;
@@ -60,6 +62,7 @@ export function AppWorkspaceNavigation({
   newThreadLabel,
   newThreadShortcutLabel,
   noThreadsFoundLabel,
+  platform,
   renameThreadLabel,
   searchPlaceholder,
   searchShortcutLabel,

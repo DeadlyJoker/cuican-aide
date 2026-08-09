@@ -10,6 +10,7 @@ import {
   getAgentPlatformBffUserSnapshot,
   storeAgentPlatformSession,
 } from "./agentPlatformClient";
+import { clearPimLaunchToken, isPimLaunchSession } from "./pimLaunchBridge";
 
 export type AgentPlatformUser = {
   id: number;
@@ -58,14 +59,17 @@ async function responseError(
 }
 
 export async function readAgentPlatformCurrentUser(): Promise<AgentPlatformUser | null> {
+  // When launched from PIM, the launch token IS the credential — don't
+  // require a locally stored access token.
   if (
+    !isPimLaunchSession() &&
     !crewonUnifiedSsoEnabled() &&
     !localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY) &&
     !localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)
   ) {
     return null;
   }
-  if (crewonUnifiedSsoEnabled()) {
+  if (!isPimLaunchSession() && crewonUnifiedSsoEnabled()) {
     const token = await getAgentPlatformAccessToken();
     if (!token) return null;
     const snapshot = getAgentPlatformBffUserSnapshot();

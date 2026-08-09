@@ -565,6 +565,46 @@ describe("Transcript", () => {
     expect(markup).toContain("Streaming");
   });
 
+  it("snapshots a dedicated durable Plan item outside the collapsible process group", () => {
+    const planThread = {
+      id: "thread-plan",
+      name: "Migration Plan",
+      turns: [
+        {
+          id: "run-plan",
+          status: "completed",
+          items: [
+            {
+              id: "message-plan-user",
+              type: "userMessage",
+              content: [{ type: "text", text: "制定迁移计划" }],
+            },
+            {
+              id: "plan-authoritative-1",
+              type: "plan",
+              text: "- [pending] 审计\n- [pending] 迁移\n- [pending] 验证",
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="zh"
+        mode="code"
+        streamingText=""
+        thread={planThread}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('data-kind="plan"');
+    expect(markup).not.toContain("turn-process-details");
+    expect(markup).toMatchSnapshot();
+  });
+
   it("renders Skill and MCP selections as distinct tags in the user message", () => {
     const resourceThread = {
       id: "thread-resource-tags",
@@ -652,9 +692,9 @@ describe("Transcript", () => {
     expect(markup.indexOf("rg App apps/crewon-ui/src")).toBeLessThan(
       markup.indexOf("I will verify the app state flow next."),
     );
-    expect(markup.indexOf("I will verify the app state flow next.")).toBeLessThan(
-      markup.indexOf("Final architecture summary."),
-    );
+    expect(
+      markup.indexOf("I will verify the app state flow next."),
+    ).toBeLessThan(markup.indexOf("Final architecture summary."));
     expect(
       markup.match(
         /data-kind="agentMessage"[^>]*data-transcript-variant="message"/g,
@@ -679,9 +719,9 @@ describe("Transcript", () => {
     expect(markup).toContain("25m 54s");
     expect(markup).toContain("Ran multiple commands");
     expect(markup).toContain('class="process-action-group"');
-    expect(markup.indexOf("I will restart the existing local services")).toBeLessThan(
-      markup.indexOf("Ran multiple commands"),
-    );
+    expect(
+      markup.indexOf("I will restart the existing local services"),
+    ).toBeLessThan(markup.indexOf("Ran multiple commands"));
     expect(markup.indexOf("Ran multiple commands")).toBeLessThan(
       markup.indexOf("The services are starting"),
     );
@@ -740,7 +780,11 @@ describe("Transcript", () => {
               id: "item-web-search",
               type: "webSearch",
               query: "crewon architecture",
-              action: { type: "search", query: "crewon architecture", queries: null },
+              action: {
+                type: "search",
+                query: "crewon architecture",
+                queries: null,
+              },
             },
             {
               id: "item-agent-web-search",
@@ -1110,9 +1154,7 @@ See [runbook](https://example.com/runbook) and ~~legacy parser~~.`}
   });
 
   it("keeps the copy affordance on code blocks without a language", () => {
-    const markup = renderToStaticMarkup(
-      renderMarkdown("```\nplain text\n```"),
-    );
+    const markup = renderToStaticMarkup(renderMarkdown("```\nplain text\n```"));
 
     expect(markup).toContain('class="markdown-code-block"');
     expect(markup).toContain("<figcaption>");

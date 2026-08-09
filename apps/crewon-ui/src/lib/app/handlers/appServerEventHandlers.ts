@@ -1,5 +1,5 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { ThreadGoalView } from "@crewon/contracts";
 
 import type {
   AppServerClient,
@@ -39,7 +39,6 @@ import {
 } from "../appTurnCompletionActions";
 import {
   refreshAccountFromClientAction,
-  refreshSelectedThreadGoalFromClientAction,
   refreshThreadFromClientAction,
   refreshVisibleLibraryAction,
   refreshVisibleSettingsAction,
@@ -59,8 +58,10 @@ export type AppServerEventHandlers = {
 
 export type AppServerEventHandlersParams = {
   appendStreamingTextDelta: (threadId: string, delta: string) => void;
+  appendTerminalOutputDelta: (processId: string, chunk: string) => void;
   automationRunsByTurn: () => Record<string, AutomationRunTurnRecord>;
   capabilityPanel: () => CapabilityPanel | null;
+  controlThreadAuthority?: boolean;
   client: () => AppServerClient | null;
   currentAppView: () => AppView;
   currentSettingsSection: () => SettingsSection;
@@ -88,7 +89,7 @@ export type AppServerEventHandlersParams = {
   setPendingUserInputRequest: StateSetter<PendingUserInputRequest | null>;
   setSelectedThreadId: StateSetter<string | null>;
   setStreamingTextByThread: StateSetter<Record<string, string>>;
-  setThreadGoal: (goal: ThreadGoal | null) => void;
+  setThreadGoal: (goal: ThreadGoalView | null) => void;
   setThreads: StateSetter<Thread[]>;
   showArchivedThreads: () => boolean;
   syncAutomationRun: (
@@ -118,8 +119,27 @@ export function createAppServerEventHandlers(
       }
 
       if (
+        params.controlThreadAuthority === true &&
+        (notification.method.startsWith("thread/") ||
+          notification.method.startsWith("turn/"))
+      ) {
+        return;
+      }
+
+      // Goal authority has moved to Control API snapshot + durable Goal SSE.
+      // Consuming the legacy app-server notifications here would reintroduce a
+      // second ordering source and could overwrite a newer Goal generation.
+      if (
+        notification.method === "thread/goal/updated" ||
+        notification.method === "thread/goal/cleared"
+      ) {
+        return;
+      }
+
+      if (
         handleLocalAppNotification({
           appendStreamingTextDelta: params.appendStreamingTextDelta,
+          appendTerminalOutputDelta: params.appendTerminalOutputDelta,
           locale,
           notification,
           selectedThreadId,
@@ -184,11 +204,9 @@ export function createAppServerEventHandlers(
             void params.openThreadSettingsPanel();
           },
           refreshSelectedThreadGoal: (threadId) => {
-            refreshSelectedThreadGoalFromClientAction({
-              client,
-              setThreadGoal: params.setThreadGoal,
-              threadId,
-            });
+            if (threadId === selectedThreadId) {
+              params.setThreadGoal(null);
+            }
           },
           refreshThread: (threadId) => {
             refreshThreadFromClientAction({

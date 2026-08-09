@@ -3272,16 +3272,13 @@ async fn office_run_sync_persists_and_drains_auto_dispatch_intent() -> Result<()
         .join(".crewon")
         .join("office-runs")
         .join("scheduler.json");
-    let scheduler_json: serde_json::Value =
-        serde_json::from_slice(&tokio::fs::read(&scheduler_path).await?)?;
-    let dispatched_intent = scheduler_json["intents"]
-        .as_array()
-        .expect("scheduler intents")
-        .iter()
-        .find(|intent| intent["sourceTurnId"] == manager_turn.turn.id)
-        .expect("dispatched scheduler intent");
-    assert_eq!(dispatched_intent["status"], "dispatched");
 
+    /*
+     * The intent reaches `dispatched` on the dispatch task, not in the
+     * `office/run/sync` response, so reading the queue here races it and
+     * observes the intermediate `dispatching`. The same assertion is made below
+     * once `autoDispatchStarted` has confirmed the dispatch landed.
+     */
     let auto_started: OfficeRunUpdatedNotification = serde_json::from_value(
         timeout(
             DEFAULT_TIMEOUT,

@@ -29,6 +29,153 @@ fn office_auto_verification_start_failure_can_retry(message: &str) -> bool {
 }
 
 impl OfficeAutoDispatchContext {
+    pub(crate) async fn dispatch_workflow_after_terminal_turn(
+        &self,
+        cwd: &str,
+        source_thread_id: &str,
+        turn: Turn,
+        connection_id: ConnectionId,
+    ) {
+        if matches!(turn.status, TurnStatus::InProgress) {
+            return;
+        }
+        let turn = match ThreadId::from_string(source_thread_id) {
+            Ok(thread_id) => match self.thread_manager.get_thread(thread_id).await {
+                Ok(conversation) => {
+                    let history_turn =
+                        office_turn_from_thread_history(&conversation, &turn.id).await;
+                    let status = conversation.agent_status().await;
+                    workflow_terminal_turn_from_sources(turn, history_turn, &status)
+                }
+                Err(_) => turn,
+            },
+            Err(_) => turn,
+        };
+        let transitions = match self
+            .domain_processor
+            .workflow_sync_terminal_turn(cwd, source_thread_id, &turn)
+            .await
+        {
+            Ok(transitions) => transitions,
+            Err(error) => {
+                warn!(
+                    thread_id = %source_thread_id,
+                    turn_id = %turn.id,
+                    error = %error.message,
+                    "failed to sync local workflow run"
+                );
+                return;
+            }
+        };
+        for transition in transitions {
+            self.outgoing
+                .send_server_notification(workflow_run_updated_notification(
+                    cwd,
+                    &transition.file_path,
+                    &transition.config,
+                    "terminalTurnSynced",
+                    Some(source_thread_id),
+                    Some(&turn.id),
+                ))
+                .await;
+            let Some(next) = transition.next else {
+                info!(
+                    file_path = %transition.file_path,
+                    source_thread_id,
+                    source_turn_id = %turn.id,
+                    "local workflow run reached a terminal state"
+                );
+                continue;
+            };
+            let request_id = ConnectionRequestId {
+                connection_id,
+                request_id: RequestId::String(format!("workflow-node-dispatch-{}", Uuid::new_v4())),
+            };
+            let turn_response = match self
+                .turn_processor
+                .turn_start_response(
+                    request_id,
+                    TurnStartParams {
+                        thread_id: next.thread_id.clone(),
+                        input: vec![V2UserInput::Text {
+                            text: next.prompt.clone(),
+                            text_elements: Vec::new(),
+                        }],
+                        cwd: Some(PathBuf::from(&next.cwd)),
+                        ..TurnStartParams::default()
+                    },
+                    Some("app-server-workflow-dispatch".to_string()),
+                    /*app_server_client_version*/ None,
+                )
+                .await
+            {
+                Ok(response) => response,
+                Err(error) => {
+                    match self
+                        .domain_processor
+                        .workflow_run_mark_failed(&next, &error.message)
+                        .await
+                    {
+                        Ok(config) => {
+                            self.outgoing
+                                .send_server_notification(workflow_run_updated_notification(
+                                    &next.cwd,
+                                    &next.file_path,
+                                    &config,
+                                    "nodeDispatchFailed",
+                                    Some(&next.thread_id),
+                                    /*source_turn_id*/ None,
+                                ))
+                                .await;
+                        }
+                        Err(mark_error) => {
+                            warn!(
+                                run_id = %next.run_id,
+                                node_id = %next.node_id,
+                                error = %mark_error.message,
+                                "failed to mark local workflow node dispatch as failed"
+                            );
+                        }
+                    }
+                    continue;
+                }
+            };
+            match self
+                .domain_processor
+                .workflow_run_mark_started(&next, &turn_response.turn.id)
+                .await
+            {
+                Ok(update) => {
+                    self.outgoing
+                        .send_server_notification(workflow_run_updated_notification(
+                            &next.cwd,
+                            &next.file_path,
+                            &update.config,
+                            "nodeStarted",
+                            Some(&next.thread_id),
+                            Some(&turn_response.turn.id),
+                        ))
+                        .await;
+                    self.spawn_completion_monitor(
+                        next.cwd.clone(),
+                        next.thread_id.clone(),
+                        turn_response.turn.id.clone(),
+                        connection_id,
+                    );
+                }
+                Err(error) => {
+                    warn!(
+                        run_id = %next.run_id,
+                        node_id = %next.node_id,
+                        turn_id = %turn_response.turn.id,
+                        error = %error.message,
+                        "failed to mark local workflow node as started"
+                    );
+                }
+            }
+        }
+    }
+
     pub(crate) async fn dispatch_after_terminal_turn(
         &self,
         cwd: &str,
@@ -1025,6 +1172,9 @@ impl OfficeAutoDispatchContext {
             tokio::time::sleep(OFFICE_AUTO_DISPATCH_COMPLETION_POLL_INTERVAL).await;
         };
 
+        self.dispatch_workflow_after_terminal_turn(&cwd, &thread_id, turn.clone(), connection_id)
+            .await;
+
         match self
             .domain_processor
             .sync_office_run_updates_for_thread_turn(&cwd, &thread_id, &turn)
@@ -1154,6 +1304,25 @@ fn office_turn_from_agent_status(turn_id: &str, status: &AgentStatus) -> Turn {
         started_at: None,
         completed_at: None,
         duration_ms: None,
+    }
+}
+
+fn workflow_terminal_turn_from_sources(
+    event_turn: Turn,
+    history_turn: Option<Turn>,
+    agent_status: &AgentStatus,
+) -> Turn {
+    if !matches!(event_turn.status, TurnStatus::Completed) {
+        return event_turn;
+    }
+    match agent_status {
+        AgentStatus::Errored(_)
+        | AgentStatus::Interrupted
+        | AgentStatus::Shutdown
+        | AgentStatus::NotFound => office_turn_from_agent_status(&event_turn.id, agent_status),
+        AgentStatus::PendingInit | AgentStatus::Running | AgentStatus::Completed(_) => {
+            history_turn.unwrap_or(event_turn)
+        }
     }
 }
 

@@ -375,8 +375,24 @@ pub(super) async fn ensure_listener_task_running(
                             .as_path()
                             .to_string_lossy()
                             .into_owned();
+                        /*
+                         * Office dispatch runs first because it owns the
+                         * delegation state a terminal turn is expected to
+                         * advance. Workflow sync reads its own store, which is
+                         * absent in workspaces that only use Office, so letting
+                         * it go first delays the delegation behind an await that
+                         * has nothing to do with it.
+                         */
                         let _ = office_auto_dispatch
                             .dispatch_after_terminal_turn(
+                                &office_sync_cwd,
+                                &conversation_id.to_string(),
+                                turn.clone(),
+                                auto_dispatch_connection_id,
+                            )
+                            .await;
+                        office_auto_dispatch
+                            .dispatch_workflow_after_terminal_turn(
                                 &office_sync_cwd,
                                 &conversation_id.to_string(),
                                 turn,
