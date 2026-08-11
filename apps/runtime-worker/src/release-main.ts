@@ -9,6 +9,7 @@ import {
   createConfiguredToolRuntime,
   createModelTransport,
   environmentOr,
+  parseNativeWorkspaceReadCatalog,
   parseNonNegativeInteger,
   parsePositiveInteger,
   requiredEnvironment,
@@ -43,7 +44,7 @@ try {
       runtimeGeneration: environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
       agentVersionId: environmentOr(
         "CREWON_AGENT_VERSION_ID",
-        "default-agent-v0",
+        "default-agent-v1",
       ),
       policySnapshotId: environmentOr(
         "CREWON_POLICY_SNAPSHOT_ID",
@@ -112,16 +113,4 @@ try {
   );
 } finally {
   await Promise.allSettled([toolRuntime?.close?.(), transport.close?.()]);
-}
-
-function parseNativeWorkspaceReadCatalog(
-  value: string | undefined,
-): "disabled" | "enabled" {
-  if (value === undefined || value === "0") {
-    return "disabled";
-  }
-  if (value === "1") {
-    return "enabled";
-  }
-  throw new Error("CREWON_NATIVE_WORKSPACE_READ_ENABLED_invalid");
 }

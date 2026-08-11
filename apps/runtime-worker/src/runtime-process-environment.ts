@@ -213,3 +213,16 @@ export function parseNonNegativeInteger(value: string, code: string): number {
   }
   return parsed;
 }
+
+/** Parses the explicit server-owned switch shared by Release and Worker. */
+export function parseNativeWorkspaceReadCatalog(
+  value: string | undefined,
+): "disabled" | "enabled" {
+  if (value === undefined || value === "0") {
+    return "disabled";
+  }
+  if (value === "1") {
+    return "enabled";
+  }
+  throw new Error("CREWON_NATIVE_WORKSPACE_READ_ENABLED_invalid");
+}

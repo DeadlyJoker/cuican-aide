@@ -15,13 +15,18 @@ import {
   type ModelProviderSettingsStore,
   type RunRoute,
 } from "@crewon/application";
-import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
+import {
+  PostgresDomainStore,
+  PostgresWorkspaceReadFileStore,
+  SqliteRunStore,
+  SqliteWorkspaceReadFileStore,
+} from "@crewon/store";
 import type { GovernedContextBundle } from "@crewon/context";
 import type {
   DeviceWorkspaceListCommandSignerPort,
   DeviceWorkspaceListDispatchClientPort,
 } from "@crewon/device-dispatch";
-import { InMemoryToolBroker, type ToolRuntimePort } from "@crewon/tool-broker";
+import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
@@ -31,6 +36,7 @@ import {
   type AgentVersionRuntime,
 } from "./agent-version-runtime.ts";
 import type { AgentVersionRuntimeFactoryPort } from "./durable-agent-version-runtime-loader.ts";
+import { scopeToolRuntimeToAgentVersion } from "./agent-version-tool-runtime.ts";
 import type { PriorModelCompactionResolverPort } from "./model-switch-compaction.ts";
 import {
   NodeSha256ContentDigester,
@@ -65,6 +71,12 @@ import {
   type RuntimeWorkspacePrivateServer,
 } from "./runtime-workspace-private-server.ts";
 import type { RuntimeWorkspaceExecutionIdGeneratorPort } from "./runtime-workspace-freeze-service.ts";
+import {
+  createRuntimeWorkspaceReadToolRuntime,
+  validateRuntimeWorkspaceReadComposition,
+  type NativeWorkspaceReadCatalog,
+  type RuntimeWorkspaceReadFileConfig,
+} from "./runtime-workspace-read-composition.ts";
 
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 
@@ -120,6 +132,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
     gateway: DeviceWorkspaceListDispatchClientPort;
     deadlineMs?: number;
   }>;
+  workspaceReadFile?: RuntimeWorkspaceReadFileConfig;
+  nativeWorkspaceReadCatalog?: NativeWorkspaceReadCatalog;
 }>;
 
 export type StandaloneRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
@@ -146,18 +160,36 @@ export async function createStandaloneRuntimeWorker(
   config: StandaloneRuntimeWorkerConfig,
 ): Promise<StandaloneRuntimeWorker> {
   let releasePlan: RuntimeAgentVersionReleasePlan;
-  let store: SqliteRunStore;
+  let store: SqliteRunStore | undefined;
+  let workspaceReadStore: SqliteWorkspaceReadFileStore | undefined;
   try {
     releasePlan = compileRuntimeAgentVersionRelease(config);
     store = new SqliteRunStore(config.databasePath);
+    workspaceReadStore =
+      config.workspaceReadFile === undefined
+        ? undefined
+        : SqliteWorkspaceReadFileStore.open(config.databasePath);
   } catch (error) {
-    await closeStartupResources(config);
+    await Promise.allSettled([
+      workspaceReadStore?.close() ?? Promise.resolve(),
+      store?.close() ?? Promise.resolve(),
+      closeStartupResources(config),
+    ]);
     throw error;
   }
   try {
-    return await composeRuntimeWorker(store, config, releasePlan);
+    return await composeRuntimeWorker(
+      store,
+      workspaceReadStore,
+      config,
+      releasePlan,
+    );
   } catch (error) {
-    await Promise.allSettled([store.close(), closeStartupResources(config)]);
+    await Promise.allSettled([
+      workspaceReadStore?.close() ?? Promise.resolve(),
+      store.close(),
+      closeStartupResources(config),
+    ]);
     throw error;
   }
 }
@@ -166,7 +198,8 @@ export async function createPostgresRuntimeWorker(
   config: PostgresRuntimeWorkerConfig,
 ): Promise<StandaloneRuntimeWorker> {
   let releasePlan: RuntimeAgentVersionReleasePlan;
-  let store: PostgresDomainStore;
+  let store: PostgresDomainStore | undefined;
+  let workspaceReadStore: PostgresWorkspaceReadFileStore | undefined;
   try {
     releasePlan = compileRuntimeAgentVersionRelease(config);
     store = await PostgresDomainStore.open({
@@ -175,20 +208,44 @@ export async function createPostgresRuntimeWorker(
       maxPoolSize: config.maxPoolSize,
       statementTimeoutMs: config.statementTimeoutMs,
     });
+    workspaceReadStore =
+      config.workspaceReadFile === undefined
+        ? undefined
+        : await PostgresWorkspaceReadFileStore.open(
+            config.connectionString,
+            { schema: config.schema },
+          );
   } catch (error) {
-    await closeStartupResources(config);
+    await Promise.allSettled([
+      workspaceReadStore?.close() ?? Promise.resolve(),
+      store?.close() ?? Promise.resolve(),
+      closeStartupResources(config),
+    ]);
     throw error;
   }
   try {
-    return await composeRuntimeWorker(store, config, releasePlan);
+    return await composeRuntimeWorker(
+      store,
+      workspaceReadStore,
+      config,
+      releasePlan,
+    );
   } catch (error) {
-    await Promise.allSettled([store.close(), closeStartupResources(config)]);
+    await Promise.allSettled([
+      workspaceReadStore?.close() ?? Promise.resolve(),
+      store.close(),
+      closeStartupResources(config),
+    ]);
     throw error;
   }
 }
 
 async function composeRuntimeWorker(
   store: DomainStore & ModelProviderSettingsStore,
+  workspaceReadStore:
+    | SqliteWorkspaceReadFileStore
+    | PostgresWorkspaceReadFileStore
+    | undefined,
   config: RuntimeWorkerCompositionConfig,
   releasePlan: RuntimeAgentVersionReleasePlan,
 ): Promise<StandaloneRuntimeWorker> {
@@ -209,12 +266,32 @@ async function composeRuntimeWorker(
     throw new Error("runtime_artifact_configuration_incomplete");
   }
   validateWorkspaceDeployment(config);
-  await verifyRuntimeAgentVersionRelease({
-    tenantId: config.runtimeTenantId,
+  const toolRuntime = createRuntimeWorkspaceReadToolRuntime({
     store,
-    plan: releasePlan,
+    workspaceReadStore,
+    readFile: config.workspaceReadFile,
+    deployment: config.workspacePrivate?.authority,
     digester,
+    configuredRuntime: config.toolRuntime,
   });
+  if (
+    JSON.stringify(toolRuntime.definitions()) !==
+    JSON.stringify(releasePlan.bootstrapVersion.tools)
+  ) {
+    await toolRuntime.close?.();
+    throw new Error("runtime_release_tool_catalog_mismatch");
+  }
+  try {
+    await verifyRuntimeAgentVersionRelease({
+      tenantId: config.runtimeTenantId,
+      store,
+      plan: releasePlan,
+      digester,
+    });
+  } catch (error) {
+    await toolRuntime.close?.();
+    throw error;
+  }
   const artifacts =
     artifactStore === undefined
       ? undefined
@@ -234,8 +311,6 @@ async function composeRuntimeWorker(
   const registry = new InMemoryAgentVersionRegistry();
   registry.register(releasePlan.bootstrapVersion);
   const agentVersion = registry.require(config.route.agentVersionId);
-  const toolRuntime: ToolRuntimePort =
-    config.toolRuntime ?? new InMemoryToolBroker();
   const kernel = new CrewONAgentKernel({
     transport: config.transport,
     instructions: agentVersion.instructions,
@@ -394,8 +469,10 @@ async function composeRuntimeWorker(
       results.push(
         ...(await Promise.allSettled([
           workspaceDispatchService?.close() ?? Promise.resolve(),
+          config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
           agentVersionRegistry.close(),
           artifactStore?.close() ?? Promise.resolve(),
+          workspaceReadStore?.close() ?? Promise.resolve(),
           store.close(),
         ])),
       );
@@ -413,15 +490,20 @@ function validateWorkspaceDeployment(
   config: RuntimeWorkerCompositionConfig,
 ): void {
   const authority = config.workspacePrivate?.authority;
-  if (authority === undefined) return;
   if (
-    authority.tenantId !== config.runtimeTenantId ||
-    authority.workspaceBindingId !== config.route.workspaceBindingId ||
-    authority.runtimeBindingId !== config.route.runtimeGeneration ||
-    authority.policySnapshotId !== config.route.policySnapshotId
+    authority !== undefined &&
+    (authority.tenantId !== config.runtimeTenantId ||
+      authority.workspaceBindingId !== config.route.workspaceBindingId ||
+      authority.runtimeBindingId !== config.route.runtimeGeneration ||
+      authority.policySnapshotId !== config.route.policySnapshotId)
   ) {
     throw new Error("runtime_workspace_deployment_mismatch");
   }
+  validateRuntimeWorkspaceReadComposition({
+    catalog: config.nativeWorkspaceReadCatalog,
+    readFile: config.workspaceReadFile,
+    deployment: authority,
+  });
 }
 
 async function closeStartupResources(
@@ -429,6 +511,7 @@ async function closeStartupResources(
 ): Promise<void> {
   await Promise.allSettled([
     config.workspacePrivate?.gateway.close() ?? Promise.resolve(),
+    config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
     config.artifactStore?.close() ?? Promise.resolve(),
   ]);
 }
@@ -462,6 +545,10 @@ function staticAgentVersionRuntimeFactory(
         toolCatalog: { definitions: () => version.tools },
         streamMaxRetries: version.execution.streamMaxRetries,
       });
+      const versionToolRuntime = scopeToolRuntimeToAgentVersion(
+        toolRuntime,
+        version.tools,
+      );
       return {
         version,
         kernel,
@@ -471,7 +558,7 @@ function staticAgentVersionRuntimeFactory(
           agentVersionId: version.agentVersionId,
           policySnapshotId: version.policySnapshotId,
         }),
-        toolRuntime,
+        toolRuntime: versionToolRuntime,
         contextCompactor: new KernelContextCompactor(kernel),
         ...(config.governedContext === undefined
           ? {}

@@ -13,6 +13,7 @@ import {
   createConfiguredToolRuntime,
   createModelTransport,
   environmentOr,
+  parseNativeWorkspaceReadCatalog,
   parseNonNegativeInteger,
   parsePositiveInteger,
   requiredEnvironment,
@@ -32,6 +33,16 @@ const agentVersionRuntimeFactory = agentVersionRuntimeBindingsPath
   : undefined;
 
 const nativeBootstrap = takeRuntimeNativeBootstrap();
+const nativeWorkspaceReadCatalog = parseNativeWorkspaceReadCatalog(
+  process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
+);
+if (
+  nativeWorkspaceReadCatalog === "enabled" !==
+  (nativeBootstrap?.workspace !== null &&
+    nativeBootstrap?.workspace !== undefined)
+) {
+  throw new Error("runtime_workspace_read_bootstrap_mismatch");
+}
 const runtimeTenantId =
   nativeBootstrap?.workspace?.authority.tenantId ??
   environmentOr("CREWON_TENANT_ID", "standalone-tenant");
@@ -40,7 +51,7 @@ const route = {
   runtimeGeneration:
     nativeBootstrap?.workspace?.authority.runtimeBindingId ??
     environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
-  agentVersionId: environmentOr("CREWON_AGENT_VERSION_ID", "default-agent-v0"),
+  agentVersionId: environmentOr("CREWON_AGENT_VERSION_ID", "default-agent-v1"),
   policySnapshotId:
     nativeBootstrap?.workspace?.authority.policySnapshotId ??
     environmentOr("CREWON_POLICY_SNAPSHOT_ID", "standalone-policy-v0"),
@@ -122,6 +133,7 @@ try {
     ),
     expectedAgentVersionDigest:
       process.env.CREWON_AGENT_VERSION_CONTENT_DIGEST?.trim() || null,
+    nativeWorkspaceReadCatalog,
     ...(agentVersionRuntimeFactory === undefined
       ? {}
       : {
@@ -151,7 +163,10 @@ try {
         }),
     ...(nativeWorkspaceResources === undefined
       ? {}
-      : { workspacePrivate: nativeWorkspaceResources.config }),
+      : {
+          workspacePrivate: nativeWorkspaceResources.config,
+          workspaceReadFile: nativeWorkspaceResources.readFile,
+        }),
   };
   const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
   runtime = connectionString
@@ -167,7 +182,10 @@ try {
         databasePath: requiredEnvironment("CREWON_CONTROL_DB_PATH"),
       });
 } catch (error) {
-  await nativeWorkspaceResources?.gateway.close();
+  await Promise.allSettled([
+    nativeWorkspaceResources?.gateway.close(),
+    nativeWorkspaceResources?.readGateway.close(),
+  ]);
   await artifactAuthority?.store.close();
   await toolRuntime?.close?.();
   await transport.close?.();
