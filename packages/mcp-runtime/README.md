@@ -5,9 +5,19 @@ the only adapter boundary that imports the official MIT-licensed Model Context P
 with a complete production transitive-license gate.
 
 The generic adapter intentionally exposes only tools with an explicit trusted policy and only supports readOnly plus replaySafe.
-MCP has no standard durable mutation receipt/reconcile operation, so enabling a generic MCP mutation would make crash recovery
-unsafe. A future mutation adapter must supply a server-specific durable receipt implementation before it can satisfy the Tool
-Runtime Port.
+MCP SDK 1.26.0 has no standard durable mutation receipt/reconcile operation, so enabling a generic MCP mutation would make crash
+recovery unsafe. `CrewonRemoteMcpMutationProvider` is an explicit CrewON server-specific protocol adapter; its versioned wire is
+not a general MCP extension. It binds each execute/reconcile/cancel request and response to the phase, Worker-owned execution ID,
+original MCP tool name, and complete validated `ToolExecutionCommand`. A stable request-derived idempotency key and bounded durable
+receipt/result response let a replacement Worker reconcile a possibly-sent execute without replaying it. `StdioMcpClient` remains
+read-only/replay-safe and has no server opt-in mutation path or in-process receipt store.
+
+Production mode requires HTTPS, mandatory bounded bearer authentication, and an injected `CrewonRemoteMcpMutationHttpPort`.
+That port is a security boundary: production composition must validate every DNS answer, reject forbidden address ranges, pin the
+validated address to the socket while preserving TLS SNI/hostname verification, reject redirects, and enforce bounded response
+streaming. The repository does not yet provide or compose that pinned production port, so remote mutation remains gated off in
+production. The built-in fetch transport exists only under explicit `standaloneLoopback` mode and accepts only raw IPv4
+`127.0.0.0/8` HTTP endpoints for real loopback tests and standalone development.
 
 Local servers run as child processes over stdio. The command and optional working directory must be absolute, the environment is
 an explicit map rather than ambient process inheritance, and stderr is drained without entering logs or model context. Tool
