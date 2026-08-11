@@ -794,6 +794,12 @@ export class RuntimeWorker {
       agentVersionId: run.agentVersionId,
       ...runtime.kernel.modelIdentity,
     };
+    const recoveryCheckpoint =
+      await this.#execution.loadPredecessorProviderCheckpoint(
+        claim,
+        attemptResult,
+        modelIdentity,
+      );
     const storedContinuation = await this.#execution.loadThreadContinuation(
       claim,
       modelIdentity,
@@ -858,12 +864,10 @@ export class RuntimeWorker {
                     continuation.newHistoryStartIndex,
                 }
               : continuation,
-          ...(attemptResult.abandonedAttempt?.providerCheckpoint === null ||
-          attemptResult.abandonedAttempt?.providerCheckpoint === undefined
+          ...(recoveryCheckpoint === null
             ? {}
             : {
-                reconcileCheckpoint:
-                  attemptResult.abandonedAttempt.providerCheckpoint,
+                reconcileCheckpoint: recoveryCheckpoint,
               }),
           budget: { maxOutputBytes: 32 * 1024 },
         },

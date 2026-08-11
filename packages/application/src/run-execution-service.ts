@@ -1527,11 +1527,48 @@ export class RunExecutionService {
         runId: state.runId,
         attempt,
         checkpoint: parsed,
+        checkpointDigest: this.#digest(canonicalJson(parsed)),
         checkpointedAt: this.#now(),
       });
     } catch (error) {
       throw mapExecutionError(error);
     }
+  }
+
+  async loadPredecessorProviderCheckpoint(
+    claim: WorkItemClaim,
+    started: BeginRunAttemptResult,
+    identity: Omit<ThreadContinuationLocator, "tenantId" | "threadId">,
+  ): Promise<import("@crewon/contracts").ProviderCheckpoint | null> {
+    const predecessorId = started.attempt.retryOfAttemptId;
+    if (predecessorId === null) return null;
+    const state = await this.loadRun(claim);
+    const predecessor = await this.#store.loadRunAttempt({
+      tenantId: state.tenantId,
+      runId: state.runId,
+      stepId: started.attempt.stepId,
+      attemptId: predecessorId,
+    });
+    const recoverable =
+      predecessor?.status === "abandoned" ||
+      (predecessor?.status === "failed" &&
+        predecessor.failure?.retryable === true);
+    if (!recoverable || predecessor?.providerCheckpoint === null) return null;
+    const checkpoint = parseProviderCheckpoint(predecessor.providerCheckpoint);
+    if (
+      predecessor.attemptId !== predecessorId ||
+      predecessor.checkpointDigest !==
+        this.#digest(canonicalJson(checkpoint)) ||
+      checkpoint.adapterName !== identity.adapterName ||
+      checkpoint.adapterVersion !== identity.adapterVersion ||
+      checkpoint.modelId !== identity.modelId
+    ) {
+      throw new ApplicationError(
+        "conflict",
+        "provider_response_recovery_authority_mismatch",
+      );
+    }
+    return checkpoint;
   }
 
   async loadThreadContinuation(

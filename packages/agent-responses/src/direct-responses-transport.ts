@@ -261,21 +261,60 @@ export class DirectResponsesTransport implements ModelTransportPort {
       `${this.#endpoint.pathname.replace(/\/$/, "")}/${encodeURIComponent(responseId)}`,
       this.#endpoint,
     );
-    const response = await this.#fetch(url, {
-      method: "GET",
-      headers: responsesHeaders(this.#apiKey, "application/json"),
-      signal,
-    });
-    if (!response.ok) {
-      await cancelBody(response.body);
-      throw httpError(response.status, response.headers.get("retry-after"));
+    const idle = new IdleWatch(this.#idleTimeoutMs, this.#scheduler, signal);
+    try {
+      const response = await this.#fetch(url, {
+        method: "GET",
+        headers: responsesHeaders(this.#apiKey, "application/json"),
+        signal: idle.signal,
+      });
+      idle.touch();
+      if (!response.ok) {
+        await cancelBody(response.body);
+        throw httpError(response.status, response.headers.get("retry-after"));
+      }
+      const value = await readBoundedJson(response, 512 * 1024, () =>
+        idle.touch(),
+      );
+      const projected = projectRetrievedResponse(value, responseId, checkpoint);
+      if (projected.status === "pending") {
+        throw transportError(
+          "unavailable",
+          "responses_reconcile_pending",
+          true,
+        );
+      }
+      yield* projected.events;
+    } catch (error) {
+      if (signal.aborted) {
+        throw transportError(
+          "canceled",
+          "segment_canceled",
+          false,
+          undefined,
+          signal.reason,
+        );
+      }
+      if (idle.expired) {
+        throw transportError(
+          "timeout",
+          "responses_idle_timeout",
+          true,
+          undefined,
+          error,
+        );
+      }
+      if (error instanceof ModelTransportError) throw error;
+      throw transportError(
+        "unavailable",
+        "responses_transport_unavailable",
+        true,
+        undefined,
+        error,
+      );
+    } finally {
+      idle.close();
     }
-    const value = await readBoundedJson(response, 512 * 1024);
-    const projected = projectRetrievedResponse(value, responseId, checkpoint);
-    if (projected.status === "pending") {
-      throw transportError("unavailable", "responses_reconcile_pending", true);
-    }
-    yield* projected.events;
   }
 
   modelIdentity(): Readonly<{
@@ -842,6 +881,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 async function readBoundedJson(
   response: Response,
   maxBytes: number,
+  onActivity: () => void,
 ): Promise<unknown> {
   if (response.body === null)
     throw protocolError("responses_retrieve_body_missing");
@@ -852,6 +892,7 @@ async function readBoundedJson(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      onActivity();
       size += value.byteLength;
       if (size > maxBytes)
         throw protocolError("responses_retrieve_body_too_large");

@@ -92,11 +92,13 @@ export function registerRunExecutionStoreConformance(
           attemptId: started.attempt.attemptId,
         },
         checkpoint,
+        checkpointDigest: `sha256:${"a".repeat(64)}`,
         checkpointedAt: "2026-08-08T00:01:02Z",
       };
       assert.deepEqual(await fixture.store.checkpointRunAttempt(input), {
         ...started.attempt,
         providerCheckpoint: checkpoint,
+        checkpointDigest: input.checkpointDigest,
         updatedAt: input.checkpointedAt,
       });
       await assert.rejects(

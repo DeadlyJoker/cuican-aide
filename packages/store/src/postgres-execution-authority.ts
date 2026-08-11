@@ -285,6 +285,7 @@ export async function checkpointPostgresRunAttempt(
   workItemId: string,
   leaseEpoch: number,
   checkpoint: RunAttemptState["providerCheckpoint"],
+  checkpointDigest: string,
   checkpointedAt: string,
 ): Promise<RunAttemptState> {
   const attempt = await loadPostgresRunAttempt(client, schema, locator, true);
@@ -300,6 +301,7 @@ export async function checkpointPostgresRunAttempt(
   const next = {
     ...attempt,
     providerCheckpoint: checkpoint,
+    checkpointDigest,
     updatedAt: checkpointedAt,
   };
   await updateRunAttempt(client, schema, next);

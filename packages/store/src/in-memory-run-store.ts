@@ -2227,6 +2227,7 @@ export class InMemoryRunStore implements DomainStore {
       input.lease.workItemId,
       input.lease.leaseEpoch,
       input.checkpoint,
+      input.checkpointDigest,
       input.checkpointedAt,
     );
   }

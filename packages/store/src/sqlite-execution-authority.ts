@@ -323,6 +323,7 @@ export function checkpointSqliteRunAttempt(
   workItemId: string,
   leaseEpoch: number,
   checkpoint: RunAttemptState["providerCheckpoint"],
+  checkpointDigest: string,
   checkpointedAt: string,
 ): RunAttemptState {
   const attempt = loadSqliteRunAttempt(database, locator);
@@ -338,6 +339,7 @@ export function checkpointSqliteRunAttempt(
   const next = {
     ...attempt,
     providerCheckpoint: checkpoint,
+    checkpointDigest,
     updatedAt: checkpointedAt,
   };
   updateRunAttempt(database, next);

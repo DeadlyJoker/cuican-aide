@@ -829,6 +829,45 @@ test("classifies an idle stream deterministically without sleep", async () => {
   );
 });
 
+test("applies the idle timeout to a blocked retrieve body without sleep", async () => {
+  const scheduler = new ManualScheduler();
+  let bodyStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    bodyStarted = resolve;
+  });
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+      storeResponses: true,
+      idleTimeoutMs: 10,
+    },
+    {
+      scheduler,
+      fetch: async (_input, init) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              init?.signal?.addEventListener(
+                "abort",
+                () => controller.error(init.signal?.reason),
+                { once: true },
+              );
+              bodyStarted?.();
+            },
+          }),
+        ),
+    },
+  );
+  const pending = retrieveWith(transport);
+  await started;
+  scheduler.fire();
+  await assert.rejects(
+    pending,
+    hasTransportError("timeout", "responses_idle_timeout", true),
+  );
+});
+
 test("fails closed on non-monotonic SSE sequence and unsupported tool events", async () => {
   const duplicateSequence = createTransport([
     createdEvent(0),

@@ -70,6 +70,7 @@ export type CheckpointRunAttemptInput = Readonly<{
   runId: string;
   attempt: RunAttemptIdentity;
   checkpoint: ProviderCheckpoint;
+  checkpointDigest: string;
   checkpointedAt: string;
 }>;
 

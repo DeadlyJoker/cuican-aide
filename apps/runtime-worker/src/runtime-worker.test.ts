@@ -4959,7 +4959,7 @@ test("rolls back terminal Run state when assistant Message persistence fails", a
   await recovered.close();
 });
 
-test("replays a changed provider response ID after terminal rollback without idempotency conflict", async (context) => {
+test("retrieves the same provider response after terminal rollback", async (context) => {
   const directory = mkdtempSync(
     join(tmpdir(), "crewon-worker-checkpoint-rollback-"),
   );
@@ -4979,7 +4979,7 @@ test("replays a changed provider response ID after terminal rollback without ide
     END;
   `);
   database.close();
-  const responseIds = ["resp-rolled-back", "resp-committed"];
+  const methods: string[] = [];
   const transport = new DirectResponsesTransport(
     {
       endpoint: "https://provider.example/v1/responses",
@@ -4987,12 +4987,24 @@ test("replays a changed provider response ID after terminal rollback without ide
       storeResponses: true,
     },
     {
-      fetch: async () => {
-        const responseId = responseIds.shift();
-        assert.ok(responseId !== undefined);
-        return new Response(responsesEventStream(responseId, "done"), {
-          headers: { "content-type": "text/event-stream" },
-        });
+      fetch: async (_input, init) => {
+        methods.push(init?.method ?? "GET");
+        return init?.method === "POST"
+          ? new Response(responsesEventStream("resp-rolled-back", "done"), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          : Response.json({
+              id: "resp-rolled-back",
+              status: "completed",
+              output: [
+                {
+                  type: "message",
+                  role: "assistant",
+                  content: [{ type: "output_text", text: "done" }],
+                },
+              ],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            });
       },
     },
   );
@@ -5050,7 +5062,7 @@ test("replays a changed provider response ID after terminal rollback without ide
   });
   assert.deepEqual(
     checkpoint?.checkpoint,
-    directProviderCheckpoint("resp-committed"),
+    directProviderCheckpoint("resp-rolled-back"),
   );
   assert.deepEqual(
     (await fixture.events()).map((event) => event.type),
@@ -5071,10 +5083,11 @@ test("replays a changed provider response ID after terminal rollback without ide
   );
   const committedAttempts = await fixture.attempts();
   assert.equal(committedAttempts[1]?.status, "completed");
-  assert.notEqual(
+  assert.equal(
     committedAttempts[0]?.checkpointDigest,
     committedAttempts[1]?.checkpointDigest,
   );
+  assert.deepEqual(methods, ["POST", "GET"]);
   await recovered.close();
 });
 registerRuntimeWorkerConformance(
@@ -6979,6 +6992,101 @@ function registerRuntimeWorkerConformance(
         },
       ]);
       await recovered.close();
+    });
+
+    test("continues retrieve from a retryable failed predecessor without another POST", async (context) => {
+      const fixture = await createFixture(context, createStore);
+      const checkpoint = {
+        schemaVersion: "crewon.provider-checkpoint.v0",
+        adapterName: "pending-retrieve",
+        adapterVersion: "1",
+        modelId: "pending-model",
+        opaquePayload: { responseId: "resp-pending" },
+      } as const;
+      let posts = 0;
+      let gets = 0;
+      const transport: ModelTransportPort = {
+        adapterName: checkpoint.adapterName,
+        adapterVersion: checkpoint.adapterVersion,
+        modelId: checkpoint.modelId,
+        supportsResponseRetrieve: true,
+        async *stream(request) {
+          if (request.reconcileCheckpoint === undefined) {
+            posts += 1;
+            yield { type: "response.created", checkpoint };
+            throw new ModelTransportError({
+              category: "unavailable",
+              code: "stream_lost",
+              retryable: true,
+            });
+          }
+          gets += 1;
+          assert.deepEqual(request.reconcileCheckpoint, checkpoint);
+          if (gets === 1) {
+            throw new ModelTransportError({
+              category: "unavailable",
+              code: "responses_reconcile_pending",
+              retryable: true,
+            });
+          }
+          yield { type: "response.created", checkpoint };
+          yield { type: "output.delta", delta: "done" };
+          yield {
+            type: "output.item.completed",
+            item: { type: "message", role: "assistant", content: "done" },
+          };
+          yield {
+            type: "usage",
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+          };
+          yield { type: "completed", checkpoint };
+        },
+      };
+      const first = fixture.worker({
+        transport,
+        streamMaxRetries: 1,
+        retryAfterMs: 0,
+        retryScheduler: { wait: async () => undefined },
+      });
+      assert.deepEqual(await first.wake(), {
+        kind: "retried",
+        runId: fixture.runId,
+        code: "responses_reconcile_pending",
+      });
+      await first.close();
+      const second = fixture.worker({ transport });
+      assert.deepEqual(await second.wake(), {
+        kind: "completed",
+        runId: fixture.runId,
+      });
+      assert.deepEqual({ posts, gets }, { posts: 1, gets: 2 });
+      assert.deepEqual(
+        (await fixture.messages()).map(({ role, content }) => ({
+          role,
+          content,
+        })),
+        [
+          { role: "user", content: "hello" },
+          { role: "assistant", content: "done" },
+        ],
+      );
+      assert.deepEqual((await fixture.attempts()).map(attemptSummary), [
+        {
+          attemptNumber: 1,
+          retryOfAttemptId: null,
+          status: "failed",
+          failure: { code: "responses_reconcile_pending", retryable: true },
+        },
+        {
+          attemptNumber: 2,
+          retryOfAttemptId: "attempt-1",
+          status: "completed",
+          failure: null,
+        },
+      ]);
+      await second.close();
     });
   });
 }

@@ -384,6 +384,9 @@ export class CrewONAgentKernel implements AgentKernelPort {
             return;
           }
           if (retries >= this.#streamMaxRetries) {
+            if (createdCheckpoint !== null) {
+              throw kernelError;
+            }
             throw exhaustedSamplingError(kernelError);
           }
           retries += 1;

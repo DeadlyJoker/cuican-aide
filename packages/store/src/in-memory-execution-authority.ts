@@ -132,6 +132,7 @@ export class InMemoryExecutionAuthority {
     workItemId: string,
     leaseEpoch: number,
     checkpoint: RunAttemptState["providerCheckpoint"],
+    checkpointDigest: string,
     checkpointedAt: string,
   ): RunAttemptState {
     const attempt = this.#attempts.get(locator.attemptId);
@@ -155,6 +156,7 @@ export class InMemoryExecutionAuthority {
     const next = {
       ...attempt,
       providerCheckpoint: clone(checkpoint),
+      checkpointDigest,
       updatedAt: checkpointedAt,
     };
     this.#attempts.set(next.attemptId, clone(next));

@@ -242,6 +242,7 @@ export class PostgresAttemptStore extends PostgresRunStore {
         input.lease.workItemId,
         input.lease.leaseEpoch,
         input.checkpoint,
+        input.checkpointDigest,
         input.checkpointedAt,
       );
       await this.validateExecutionLeaseWithin(
