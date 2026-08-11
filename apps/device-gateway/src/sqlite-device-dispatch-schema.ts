@@ -89,18 +89,26 @@ function executionKindsSql(): string {
 }
 
 function migrateVersionTwo(database: DatabaseSync): void {
+  database.exec("PRAGMA foreign_keys = OFF");
   database.exec("PRAGMA legacy_alter_table = ON");
-  transaction(database, () => {
-    database.exec(`
-      ALTER TABLE device_execution_kinds RENAME TO device_execution_kinds_v2;
-      ${executionKindsSql()}
-      INSERT INTO device_execution_kinds SELECT * FROM device_execution_kinds_v2;
-      DROP TABLE device_execution_kinds_v2;
-      ${workspaceReadTableSql()}
-      PRAGMA user_version = 3;
-    `);
-  });
-  database.exec("PRAGMA legacy_alter_table = OFF");
+  try {
+    transaction(database, () => {
+      database.exec(`
+        ALTER TABLE device_execution_kinds RENAME TO device_execution_kinds_v2;
+        ${executionKindsSql()}
+        INSERT INTO device_execution_kinds SELECT * FROM device_execution_kinds_v2;
+        DROP TABLE device_execution_kinds_v2;
+        ${workspaceReadTableSql()}
+      `);
+      if (database.prepare("PRAGMA foreign_key_check").all().length > 0) {
+        throw new DeviceGatewayError("device_dispatch_schema_invalid");
+      }
+      database.exec("PRAGMA user_version = 3");
+    });
+  } finally {
+    database.exec("PRAGMA legacy_alter_table = OFF");
+    database.exec("PRAGMA foreign_keys = ON");
+  }
 }
 
 function workspaceReadTableSql(): string {
