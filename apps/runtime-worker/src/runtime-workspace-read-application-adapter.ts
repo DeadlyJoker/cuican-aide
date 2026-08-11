@@ -73,11 +73,7 @@ export class RuntimeWorkspaceReadApplicationAdapter
       probe,
       {
         resolve: (intent, authoritySignal) =>
-          this.#resolveExecuteAuthority(
-            command,
-            intent,
-            authoritySignal,
-          ),
+          this.#resolveExecuteAuthority(command, intent, authoritySignal),
       },
       signal,
     );
@@ -116,11 +112,7 @@ export class RuntimeWorkspaceReadApplicationAdapter
     this.#validateCommand(command);
     return {
       ...this.#locator(command),
-      idempotency: this.#idempotency(
-        phase,
-        command,
-        relativePathSegments,
-      ),
+      idempotency: this.#idempotency(phase, command, relativePathSegments),
       relativePathSegments: [...relativePathSegments],
     };
   }
@@ -133,11 +125,7 @@ export class RuntimeWorkspaceReadApplicationAdapter
     this.#validateCommand(command);
     return {
       ...this.#locator(command),
-      idempotency: this.#idempotency(
-        phase,
-        command,
-        relativePathSegments,
-      ),
+      idempotency: this.#idempotency(phase, command, relativePathSegments),
     };
   }
 
@@ -200,8 +188,7 @@ export class RuntimeWorkspaceReadApplicationAdapter
       intent.workspaceBindingId !== this.#deployment.workspaceBindingId ||
       intent.resourceBindingId !== this.#deployment.workspaceBindingId ||
       intent.executionTarget.kind !== "device" ||
-      intent.executionTarget.bindingId !==
-        this.#deployment.deviceBindingId ||
+      intent.executionTarget.bindingId !== this.#deployment.deviceBindingId ||
       intent.policySnapshotId !== this.#deployment.policySnapshotId ||
       intent.capability !== "workspace.read_file.v0"
     ) {

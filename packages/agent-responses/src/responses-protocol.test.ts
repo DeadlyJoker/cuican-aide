@@ -47,9 +47,8 @@ for (const sequencePolicy of ["required", "whenPresent"] as const) {
         {
           terminal: decoder.terminal,
           usageEvents: events.filter((event) => event.type === "usage").length,
-          completionEvents: events.filter(
-            (event) => event.type === "completed",
-          ).length,
+          completionEvents: events.filter((event) => event.type === "completed")
+            .length,
           errorCategory: null,
           retryable: null,
         },
