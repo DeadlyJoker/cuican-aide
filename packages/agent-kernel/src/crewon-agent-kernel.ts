@@ -345,7 +345,26 @@ export class CrewONAgentKernel implements AgentKernelPort {
             throw new AgentKernelError("model_stream_incomplete", true);
           }
           if (providerRequestsContinuation) {
-            if (output.length > 0 || completedItems.length > 0 || toolCalls.length > 0) {
+            const completedAssistantOutput = completedItems
+              .filter(
+                (item): item is Extract<ModelInputItem, { type: "message" }> =>
+                  item.type === "message",
+              )
+              .map((item) => item.content)
+              .join("");
+            if (
+              output.length > 0 &&
+              completedAssistantOutput !== output
+            ) {
+              throw new AgentKernelError(
+                "model_end_turn_false_output_unsupported",
+                false,
+              );
+            }
+            if (
+              toolCalls.length === 0 &&
+              (output.length > 0 || completedItems.length > 0)
+            ) {
               throw new AgentKernelError(
                 "model_end_turn_false_output_unsupported",
                 false,
@@ -364,6 +383,19 @@ export class CrewONAgentKernel implements AgentKernelPort {
             completedCheckpoint = null;
             createdCheckpoint = null;
             retries = 0;
+            if (toolCalls.length > 0) {
+              completedOutput = output;
+              completedToolCalls = toolCalls;
+              completedAssistantItems = completedItems
+                .filter(
+                  (
+                    item,
+                  ): item is Extract<ModelInputItem, { type: "message" }> =>
+                    item.type === "message",
+                )
+                .map((item) => item.content);
+              break;
+            }
             continue;
           }
           completedOutput = output;

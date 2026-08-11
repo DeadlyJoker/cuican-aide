@@ -228,6 +228,39 @@ test("fails closed on end_turn=false stored-response recovery", async () => {
   assert.equal(requests, 1);
 });
 
+test("fails closed on end_turn=false assistant-only output", async () => {
+  const transport: ModelTransportPort = {
+    adapterName: "end-turn-output",
+    adapterVersion: "1",
+    modelId: "end-turn-output-model",
+    async *stream() {
+      yield { type: "output.delta", delta: "still working" };
+      yield {
+        type: "output.item.completed",
+        item: {
+          type: "message",
+          role: "assistant",
+          content: "still working",
+        },
+      };
+      yield { type: "completed", checkpoint: null, endTurn: false };
+    },
+  };
+
+  await assert.rejects(
+    collect(
+      new CrewONAgentKernel({ transport }).runSegment(
+        segmentContract(),
+        new AbortController().signal,
+      ),
+    ),
+    (error) =>
+      error instanceof AgentKernelError &&
+      error.code === "model_end_turn_false_output_unsupported" &&
+      !error.retryable,
+  );
+});
+
 test("returns control at the Tool boundary without executing or resampling", async () => {
   const requests: import("./model-transport-port.ts").ModelRequest[] = [];
   const checkpoint = {
@@ -749,6 +782,7 @@ test("preserves completed assistant output before a Tool boundary", async () => 
         type: "output.item.completed",
         item: reference.toolCall,
       };
+      yield { type: "completed", checkpoint: null, endTurn: false };
     },
   };
 

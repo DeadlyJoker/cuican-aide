@@ -4779,12 +4779,19 @@ test("deep-equals the Rust mixed completed assistant and Tool response trace", a
   const reference = JSON.parse(
     readFileSync(
       new URL(
-        "../../../packages/test-contracts/fixtures/mixed-assistant-tool-response.reference.json",
+        "../../../packages/test-contracts/fixtures/provider-end-turn-mixed-tool-continuation.reference.json",
         import.meta.url,
       ),
       "utf8",
     ),
   ) as Readonly<{
+    providerEndTurn: false;
+    firstUsage: Readonly<{
+      inputTokens: number;
+      cachedInputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    }>;
     completedAssistantItems: readonly Extract<
       ModelInputItem,
       { type: "message" }
@@ -4835,11 +4842,18 @@ test("deep-equals the Rust mixed completed assistant and Tool response trace", a
           item: completedAssistantItem,
         };
         yield { type: "output.item.completed", item: reference.toolCall };
-        yield { type: "completed", checkpoint: null };
+        yield { type: "usage", ...reference.firstUsage };
+        yield { type: "completed", checkpoint: null, endTurn: false };
         return;
       }
       yield { type: "output.delta", delta: reference.finalState.finalOutput };
-      yield { type: "usage", ...reference.finalState.usage };
+      yield {
+        type: "usage",
+        inputTokens: 4,
+        cachedInputTokens: 0,
+        outputTokens: 1,
+        totalTokens: 5,
+      };
       yield { type: "completed", checkpoint: null };
     },
   };
@@ -4909,7 +4923,9 @@ test("deep-equals the Rust mixed completed assistant and Tool response trace", a
   assert.ok(secondRequest);
   const candidate = {
     schemaVersion: "crewon.trace.v0",
-    caseId: "AR-031-mixed-assistant-tool-response",
+    caseId: "AR-031-end-turn-false-mixed-assistant-tool",
+    providerEndTurn: false,
+    firstUsage: reference.firstUsage,
     completedAssistantItems: reference.completedAssistantItems,
     toolCall: reference.toolCall,
     toolResult: reference.toolResult,
@@ -4918,6 +4934,7 @@ test("deep-equals the Rust mixed completed assistant and Tool response trace", a
     ),
     stableEventTypes: [
       "model.output.delta",
+      "usage.recorded",
       "assistant.completed",
       "tool.requested",
       "tool.completed",

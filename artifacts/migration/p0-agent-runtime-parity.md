@@ -75,7 +75,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-028 | `context_manager/history_tests.rs::normalize_removes_orphan_function_call_output`                     | orphan Tool output fail-safe normalization                             | PARITY       | Rust+TS shared normalization fixture  |
 | AR-029 | `governed_context.rs::governed_context_reaches_responses_with_roles_bounds_and_incremental_stability` | context role、bounds、增量稳定性                                       | PARITY       | shared role/bounds/stability fixture  |
 | AR-030 | `safety_check_downgrade.rs::cyber_policy_response_emits_typed_error_without_retry`                    | typed policy failure 不进入 retry loop                                 | PARITY       | Rust+TS typed policy fixture          |
-| AR-031 | `provider_end_turn.rs::end_turn_false_empty_response_continues_same_turn`                            | Provider `end_turn=false` 的空 completed response 在同 Turn 继续 sampling | PARTIAL      | 空响应 shared differential 已 PARITY；带输出/Tool 分支 fail closed |
+| AR-031 | `provider_end_turn.rs` + `stream_no_completed.rs::end_turn_false_completed_assistant_and_tool_continue_same_turn` | Provider `end_turn=false` 的 completed response 在同 Turn 继续 sampling | PARTIAL      | manual 空响应与 mixed completed assistant→Tool 分支已 PARITY；assistant-only/store chain 仍缺 shared durable evidence |
 
 ## 已有证据映射
 
@@ -148,9 +148,13 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
   `end_turn: Some(false)` 与 TS Responses `end_turn=false` 都会让无输出、无 Tool 的 completed response 在同一 Turn/Segment 发起第二次
   sampling；该 `PARITY` 子边界明确限于 manual / `storeResponses=false`。两次 request history 保持相同 user prefix，第一次 usage 不丢失，第二次才产生唯一 terminal assistant output，且该 continuation
   不计入 sampling retry。Rust integration 与 TS Kernel candidate 对 fixture 的 request、稳定事件、terminal 和累计 usage 自动 deep-equal。
-  广义 AR-031 仍标 `PARTIAL`：Rust 也允许 `end_turn=false` response 同时携带 completed assistant/Tool items；TS 当前对此明确
-  `model_end_turn_false_output_unsupported` fail closed，尚未宣称 durable history/副作用 parity。stored-response / crash-recovery
-  checkpoint chain 也未实现；已有或新建 Provider checkpoint 遇到该 directive 会以非 retryable
+  AR-031 的 manual / `storeResponses=false` mixed completed assistant→Tool 分支现也有独立 shared evidence：Rust 与 TS 都先保留 completed
+  assistant item，再在 durable Worker Segment boundary 对 Tool 生成一次 request/result receipt，第二次 sampling 的 history suffix
+  精确包含 assistant/call/result；这不是 sampling retry，首个 response 的 usage 与最终 response usage累计，唯一 terminal Message
+  仍来自 follow-up。原 normal completed mixed-response fixture 保持不变并继续回归。只有 partial delta、没有对应 completed
+  assistant item 的 response 继续 fail closed，避免把未完成文本写入 history。assistant-only output continuation 没有 Rust shared +
+  durable Worker 差分，TS Kernel 仍以 `model_end_turn_false_output_unsupported` fail closed，因此不外推为 parity。
+  广义 AR-031 仍标 `PARTIAL`：stored-response / crash-recovery checkpoint chain 尚未实现；已有或新建 Provider checkpoint 遇到该 directive 会以非 retryable
   `model_end_turn_false_stored_response_unsupported` fail closed，禁止重复 retrieve 同一 response 的无界循环。
 
 ## Goal runtime focused parity gate（2026-08-09）

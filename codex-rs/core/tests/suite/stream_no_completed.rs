@@ -440,14 +440,49 @@ async fn completed_tool_item_is_preserved_in_retry_request() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn completed_assistant_item_before_tool_is_preserved_for_follow_up() {
+    assert_completed_assistant_item_before_tool_is_preserved_for_follow_up(
+        "mixed-assistant-tool-response.reference.json",
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn end_turn_false_completed_assistant_and_tool_continue_same_turn() {
+    assert_completed_assistant_item_before_tool_is_preserved_for_follow_up(
+        "provider-end-turn-mixed-tool-continuation.reference.json",
+    )
+    .await;
+}
+
+async fn assert_completed_assistant_item_before_tool_is_preserved_for_follow_up(
+    fixture_name: &str,
+) {
     skip_if_no_network!();
-    let reference = load_reference("mixed-assistant-tool-response.reference.json");
+    let reference = load_reference(fixture_name);
     let commentary = reference_string(&reference, "/completedAssistantItems/0/content");
     let call_id = reference_string(&reference, "/toolCall/callId");
     let tool_name = reference_string(&reference, "/toolCall/name");
     let tool_input = reference_string(&reference, "/toolCall/input");
     let tool_output = reference_string(&reference, "/toolResult/output");
 
+    let first_completed = if reference["providerEndTurn"] == false {
+        json!({
+            "type": "response.completed",
+            "response": {
+                "id": "resp_mixed",
+                "end_turn": false,
+                "usage": {
+                    "input_tokens": reference["firstUsage"]["inputTokens"],
+                    "input_tokens_details": {"cached_tokens": reference["firstUsage"]["cachedInputTokens"]},
+                    "output_tokens": reference["firstUsage"]["outputTokens"],
+                    "output_tokens_details": null,
+                    "total_tokens": reference["firstUsage"]["totalTokens"]
+                }
+            }
+        })
+    } else {
+        responses::ev_completed("resp_mixed")
+    };
     let first_sse = responses::sse(vec![
         responses::ev_response_created("resp_mixed"),
         responses::ev_message_item_added("msg_commentary", ""),
@@ -463,7 +498,7 @@ async fn completed_assistant_item_before_tool_is_preserved_for_follow_up() {
             }
         }),
         responses::ev_custom_tool_call(&call_id, &tool_name, &tool_input),
-        responses::ev_completed("resp_mixed"),
+        first_completed,
     ]);
     let second_sse = responses::sse(vec![
         responses::ev_response_created("resp_final"),
