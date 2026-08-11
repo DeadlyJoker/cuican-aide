@@ -125,7 +125,11 @@ export class ResponsesProtocolDecoder {
           "responses_output_item_invalid",
         );
         if (outputItem.type === "message") {
-          return [];
+          const content = completedAssistantMessageContent(outputItem);
+          if (content !== this.#output) {
+            throw protocolError("responses_final_output_mismatch");
+          }
+          return [{ type: "output.item.completed", content }];
         }
         if (
           outputItem.type !== "function_call" &&
@@ -184,6 +188,23 @@ export class ResponsesProtocolDecoder {
       throw transportError("unavailable", "responses_stream_incomplete", true);
     }
   }
+}
+
+function completedAssistantMessageContent(
+  item: Readonly<Record<string, unknown>>,
+): string {
+  if (item.role !== "assistant" || !Array.isArray(item.content)) {
+    throw protocolError("responses_output_message_invalid");
+  }
+  return item.content
+    .map((part) => {
+      const content = requireObject(part, "responses_output_message_invalid");
+      if (content.type !== "output_text") {
+        throw protocolError("responses_output_message_invalid");
+      }
+      return requireString(content.text, "responses_output_message_invalid");
+    })
+    .join("");
 }
 
 export async function* responsesProtocolEvents(

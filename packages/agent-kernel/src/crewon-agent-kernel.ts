@@ -108,7 +108,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
         .map((item) => item.callId),
     );
     {
-      const request: ModelRequest = {
+      let request: ModelRequest = {
         schemaVersion: "crewon.model-request.v0",
         runId: contract.runId,
         segmentId: contract.segmentId,
@@ -129,6 +129,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
         let output = "";
         let usageSeen = false;
         let terminalSeen = false;
+        let completedOutputItem: string | null = null;
         const toolCalls: ObservedToolCall[] = [];
         try {
           for await (const event of this.#transport.stream(request, signal)) {
@@ -150,6 +151,15 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 yield canonicalEvent(contract, sequence, "model.output.delta", {
                   delta: event.delta,
                 });
+                break;
+              case "output.item.completed":
+                if (completedOutputItem !== null || event.content !== output) {
+                  throw new AgentKernelError(
+                    "model_output_item_completed_invalid",
+                    false,
+                  );
+                }
+                completedOutputItem = event.content;
                 break;
               case "usage":
                 if (usageSeen) {
@@ -257,12 +267,18 @@ export class CrewONAgentKernel implements AgentKernelPort {
             throw exhaustedSamplingError(kernelError);
           }
           retries += 1;
+          if (completedOutputItem !== null) {
+            request = appendCompletedAssistantItem(
+              request,
+              completedOutputItem,
+            );
+          }
           sequence += 1;
           yield canonicalEvent(contract, sequence, "model.sampling.retry", {
             samplingAttempt: retries,
             maxRetries: this.#streamMaxRetries,
             code: kernelError.code,
-            discardedOutput: output.length > 0,
+            discardedOutput: output.length > 0 && completedOutputItem === null,
           });
           try {
             await this.#retryScheduler.wait(
@@ -314,6 +330,18 @@ export class CrewONAgentKernel implements AgentKernelPort {
       return;
     }
   }
+}
+
+function appendCompletedAssistantItem(
+  request: ModelRequest,
+  content: string,
+): ModelRequest {
+  const item: ModelInputItem = { type: "message", role: "assistant", content };
+  const input = request.input;
+  return {
+    ...request,
+    input: { ...input, items: [...input.items, item] },
+  };
 }
 
 function optionalBoundedInstructions(

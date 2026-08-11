@@ -500,6 +500,49 @@ test("bounds same-Turn retries", async () => {
   assert.equal(requests, 2);
 });
 
+test("carries a completed assistant item into an incomplete-stream retry", async () => {
+  const requests: import("./model-transport-port.ts").ModelRequest[] = [];
+  let requestCount = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "completed-item-adapter",
+    adapterVersion: "1",
+    modelId: "completed-item-model",
+    async *stream(request) {
+      requests.push(structuredClone(request));
+      requestCount += 1;
+      if (requestCount === 1) {
+        yield { type: "output.delta", delta: "first" };
+        yield { type: "output.item.completed", content: "first" };
+        return;
+      }
+      yield { type: "output.delta", delta: "done" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+
+  const events = await collect(
+    new CrewONAgentKernel({
+      transport,
+      streamMaxRetries: 1,
+      retryScheduler: { wait: async () => undefined },
+    }).runSegment(segmentContract(), new AbortController().signal),
+  );
+
+  assert.deepEqual(requests[1]?.input.items, [
+    ...segmentContract().history,
+    { type: "message", role: "assistant", content: "first" },
+  ]);
+  assert.deepEqual(
+    events.find((event) => event.type === "model.sampling.retry")?.data,
+    {
+      samplingAttempt: 1,
+      maxRetries: 1,
+      code: "model_stream_incomplete",
+      discardedOutput: false,
+    },
+  );
+});
+
 test("discards partial output and matches the Rust retry reference", async () => {
   const reference = fixture<CanonicalTrace>(
     "stream-partial-close-retry.reference.json",

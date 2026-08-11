@@ -672,6 +672,50 @@ test("fails closed on non-monotonic SSE sequence and unsupported tool events", a
   );
 });
 
+test("exposes a completed assistant item before the response terminal", async () => {
+  const transport = createTransport([
+    createdEvent(0),
+    { type: "response.output_text.delta", sequence_number: 1, delta: "done" },
+    {
+      type: "response.output_item.done",
+      sequence_number: 2,
+      item: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "done" }],
+      },
+    },
+    {
+      type: "response.completed",
+      sequence_number: 3,
+      response: {
+        id: "resp-1",
+        status: "completed",
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "done" }],
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      },
+    },
+  ]);
+
+  assert.deepEqual(await collect(transport.stream(manualRequest(), signal())), [
+    { type: "output.delta", delta: "done" },
+    { type: "output.item.completed", content: "done" },
+    {
+      type: "usage",
+      inputTokens: 1,
+      cachedInputTokens: 0,
+      outputTokens: 1,
+      totalTokens: 2,
+    },
+    { type: "completed", checkpoint: null },
+  ]);
+});
+
 test("defaults missing cached usage to zero and rejects cached input above total input", async () => {
   const compatible = createTransport([
     createdEvent(0),

@@ -29,6 +29,7 @@ export type ModelRequest = Readonly<{
 
 export type ModelTransportEvent =
   | Readonly<{ type: "output.delta"; delta: string }>
+  | Readonly<{ type: "output.item.completed"; content: string }>
   | Readonly<{
       type: "usage";
       inputTokens: number;
