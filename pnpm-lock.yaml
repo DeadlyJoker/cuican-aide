@@ -475,6 +475,9 @@ importers:
       '@crewon/application':
         specifier: workspace:*
         version: link:../application
+      '@crewon/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@crewon/domain':
         specifier: workspace:*
         version: link:../domain

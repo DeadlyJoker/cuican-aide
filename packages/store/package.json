@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@crewon/application": "workspace:*",
+    "@crewon/contracts": "workspace:*",
     "@crewon/domain": "workspace:*",
     "pg": "8.22.0"
   },
