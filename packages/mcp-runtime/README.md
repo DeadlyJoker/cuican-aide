@@ -12,6 +12,13 @@ original MCP tool name, and complete validated `ToolExecutionCommand`. A stable 
 receipt/result response let a replacement Worker reconcile a possibly-sent execute without replaying it. `StdioMcpClient` remains
 read-only/replay-safe and has no server opt-in mutation path or in-process receipt store.
 
+`ConfiguredRemoteMcpClient` is the matching non-standard, server-specific client boundary for a configuration-authoritative static
+tool catalog. It never performs discovery or reads environment, files, credentials, or the network: the caller injects immutable
+`McpToolDescriptor` values and an `McpMutationProviderPort`, while `McpToolRuntime` remains responsible for reviewed per-server
+policies and exposed names. The client deliberately rejects generic/read-only `callTool`; remote configured tools can execute only
+through the injected durable mutation port. Refreshing a runtime re-reads the same isolated catalog. This does not change the
+generic `StdioMcpClient`, which continues to discover and invoke replay-safe read-only tools over stdio.
+
 Production mode requires HTTPS, mandatory bounded bearer authentication, and an injected `CrewonRemoteMcpMutationHttpPort`.
 That port is a security boundary: production composition must validate every DNS answer, reject forbidden address ranges, pin the
 validated address to the socket while preserving TLS SNI/hostname verification, reject redirects, and enforce bounded response

@@ -1,4 +1,5 @@
 export * from "./mcp-client-port.ts";
+export * from "./configured-remote-mcp-client.ts";
 export * from "./mcp-runtime-group.ts";
 export * from "./crewon-remote-mutation-provider.ts";
 export * from "./mcp-stdio-config.ts";
