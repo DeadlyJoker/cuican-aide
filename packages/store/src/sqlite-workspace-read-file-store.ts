@@ -90,14 +90,13 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
       );
       if (receipt !== null) {
         fingerprint(receipt, input.idempotency);
-        return result(
-          "replayed",
-          this.#required(
-            locator.tenantId,
-            locator.spaceId,
-            receipt.execution_id,
-          ),
+        const operation = this.#required(
+          locator.tenantId,
+          locator.spaceId,
+          receipt.execution_id,
         );
+        requireWorkspaceReadFileLocator(operation, locator);
+        return result("replayed", operation);
       }
       const frozen = validateFrozenWorkspaceReadFileDispatch(input.frozen);
       const existing = this.#load(

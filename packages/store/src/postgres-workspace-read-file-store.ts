@@ -41,14 +41,24 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
     this.#owned = owned;
   }
 
-  static open(connectionString: string, schema: string) {
+  static async open(
+    connectionString: string,
+    options: Readonly<{ schema?: string }> = {},
+  ) {
     if (typeof connectionString !== "string" || connectionString.length < 1)
       throw new RunStoreError("postgres_connection_string_invalid");
-    return new PostgresWorkspaceReadFileStore(
+    const store = new PostgresWorkspaceReadFileStore(
       new Pool({ connectionString }),
-      schema,
+      options.schema ?? "crewon",
       true,
     );
+    try {
+      await store.initialize();
+      return store;
+    } catch (error) {
+      await store.close();
+      throw error;
+    }
   }
 
   async close() {
@@ -111,16 +121,15 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
       );
       if (receipt !== null) {
         fingerprint(receipt, input.idempotency);
-        return result(
-          "replayed",
-          await this.#required(
-            client,
-            locator.tenantId,
-            locator.spaceId,
-            receipt.execution_id,
-            true,
-          ),
+        const operation = await this.#required(
+          client,
+          locator.tenantId,
+          locator.spaceId,
+          receipt.execution_id,
+          true,
         );
+        requireWorkspaceReadFileLocator(operation, locator);
+        return result("replayed", operation);
       }
       const frozen = validateFrozenWorkspaceReadFileDispatch(input.frozen);
       const existing = await this.#load(
@@ -419,9 +428,13 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
     phase: string,
     idempotency: IdempotencyDescriptor,
   ) {
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
-      `${this.#schema}:${locator.tenantId}:${locator.spaceId}:${locator.executionId}:${phase}:${idempotency.scope}:${idempotency.key}`,
-    ]);
+    const locks = [
+      `${this.#schema}:${locator.tenantId}:${locator.spaceId}:execution:${locator.executionId}`,
+      `${this.#schema}:${locator.tenantId}:${locator.spaceId}:receipt:${phase}:${idempotency.scope}:${idempotency.key}`,
+    ].sort();
+    for (const lock of locks) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [lock]);
+    }
   }
 
   #assertOpen() {

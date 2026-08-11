@@ -99,6 +99,25 @@ test(
           frozen: conflictingFrozen(),
         }),
       );
+      const sharedReceipt = idempotency("shared-receipt-different-execution");
+      const firstCollision = executionAuthority("execution-collision-1");
+      const secondCollision = executionAuthority("execution-collision-2");
+      const receiptCollision = await Promise.allSettled([
+        first.prepareWorkspaceReadFile({
+          ...firstCollision.locator,
+          idempotency: sharedReceipt,
+          frozen: firstCollision.frozen,
+        }),
+        second.prepareWorkspaceReadFile({
+          ...secondCollision.locator,
+          idempotency: sharedReceipt,
+          frozen: secondCollision.frozen,
+        }),
+      ]);
+      assert.deepEqual(receiptCollision.map((value) => value.status).sort(), [
+        "fulfilled",
+        "rejected",
+      ]);
       const fenced = await first.markWorkspaceReadFilePossiblySent({
         ...locator,
         expectedRevision: preparations[0]!.operation.revision,
@@ -264,6 +283,26 @@ function conflictingFrozen(): FrozenWorkspaceReadFileDispatch {
         conflictingCommand,
         (input) => `sha256:${createHash("sha256").update(input).digest("hex")}`,
       ),
+    },
+  };
+}
+function executionAuthority(executionId: string) {
+  const value = frozen();
+  const executionCommand = { ...value.command, executionId };
+  return {
+    locator: { ...locator, executionId },
+    frozen: {
+      ...value,
+      command: executionCommand,
+      reference: {
+        ...value.reference,
+        executionId,
+        commandDigest: canonicalDeviceFilesystemReadCommandDigest(
+          executionCommand,
+          (input) =>
+            `sha256:${createHash("sha256").update(input).digest("hex")}`,
+        ),
+      },
     },
   };
 }

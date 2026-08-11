@@ -49,7 +49,9 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
     const receipt = this.#receipts.get(rKey);
     if (receipt !== undefined) {
       requireFingerprint(receipt, input.idempotency);
-      return result("replayed", this.#required(receipt.executionKey));
+      const operation = this.#required(receipt.executionKey);
+      requireWorkspaceReadFileLocator(operation, locator);
+      return result("replayed", operation);
     }
     const frozen = validateFrozenWorkspaceReadFileDispatch(input.frozen);
     const existing = this.#operations.get(key);
