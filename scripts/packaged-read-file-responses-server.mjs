@@ -67,18 +67,18 @@ async function handle(request, response) {
     });
     persistTranscript();
     writeSse(response, [
-      createdEvent("packaged-read-response-1", 0),
+      createdEvent(`${options.callId}-response-1`, 0),
       {
         type: "response.output_item.done",
         sequence_number: 1,
         item: {
           type: "function_call",
-          call_id: "packaged-read-call-1",
+          call_id: options.callId,
           name: "read_file",
           arguments: JSON.stringify({ path: options.relativePath }),
         },
       },
-      completedEvent("packaged-read-response-1", 2, 1, 1),
+      completedEvent(`${options.callId}-response-1`, 2, 1, 1),
     ]);
     return;
   }
@@ -93,7 +93,7 @@ async function handle(request, response) {
     persistTranscript();
     const message = "Packaged read_file completed.";
     writeSse(response, [
-      createdEvent("packaged-read-response-2", 0),
+      createdEvent(`${options.callId}-response-2`, 0),
       {
         type: "response.output_text.delta",
         sequence_number: 1,
@@ -108,7 +108,7 @@ async function handle(request, response) {
           content: [{ type: "output_text", text: message }],
         },
       },
-      completedEvent("packaged-read-response-2", 3, 2, 2, message),
+      completedEvent(`${options.callId}-response-2`, 3, 2, 2, message),
     ]);
     return;
   }
@@ -118,46 +118,104 @@ async function handle(request, response) {
 function validateInitialRequest(body) {
   requireResponsesBody(body);
   validateReadToolCatalog(body.tools);
-  if (
-    !Array.isArray(body.input) ||
-    body.input.some(
-      (item) =>
-        item?.type === "function_call" ||
-        item?.type === "function_call_output",
-    )
-  ) {
+  if (!validHistoricalToolHistory(body.input, options.callId)) {
     throw new Error("smoke_initial_history_invalid");
   }
 }
 
+function validHistoricalToolHistory(input, currentCallId) {
+  if (!Array.isArray(input)) return false;
+  const calls = new Map();
+  const outputs = new Set();
+  for (const item of input) {
+    if (item?.type === "function_call") {
+      if (
+        typeof item.call_id !== "string" ||
+        item.call_id === currentCallId ||
+        calls.has(item.call_id) ||
+        item.name !== "read_file" ||
+        item.arguments !== JSON.stringify({ path: options.relativePath })
+      ) {
+        return false;
+      }
+      calls.set(item.call_id, item);
+    } else if (item?.type === "function_call_output") {
+      if (
+        typeof item.call_id !== "string" ||
+        item.call_id === currentCallId ||
+        outputs.has(item.call_id) ||
+        !calls.has(item.call_id) ||
+        typeof item.output !== "string" ||
+        Buffer.byteLength(item.output, "utf8") > 64 * 1024
+      ) {
+        return false;
+      }
+      outputs.add(item.call_id);
+    }
+  }
+  return [...calls.keys()].every((callId) => outputs.has(callId));
+}
+
 function validateReadToolCatalog(tools) {
-  if (tools.length !== 1) {
+  if (tools.length !== 3) {
     throw new Error("smoke_read_file_catalog_invalid");
   }
-  const readTool = tools[0];
-  if (
-    readTool === null ||
-    typeof readTool !== "object" ||
-    JSON.stringify(Object.keys(readTool).sort()) !==
-      JSON.stringify(["description", "name", "parameters", "type"]) ||
-    readTool.type !== "function" ||
-    readTool.name !== "read_file" ||
-    readTool.description !== "Read one bounded file." ||
-    readTool.parameters?.type !== "object" ||
-    readTool.parameters?.additionalProperties !== false ||
-    JSON.stringify(Object.keys(readTool.parameters).sort()) !==
-      JSON.stringify([
-        "additionalProperties",
-        "properties",
-        "required",
-        "type",
-      ]) ||
-    JSON.stringify(readTool.parameters?.properties) !==
-      JSON.stringify({ path: { type: "string" } }) ||
-    JSON.stringify(readTool.parameters?.required) !== JSON.stringify(["path"])
-  ) {
+  const expectedTools = [
+    {
+      type: "function",
+      name: "read_file",
+      description: "Read one bounded file.",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+        additionalProperties: false,
+      },
+    },
+    {
+      type: "function",
+      name: "get_goal",
+      description:
+        "Get the current goal for this thread, including status, budgets, token and elapsed-time usage, and remaining token budget.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+    {
+      type: "function",
+      name: "create_goal",
+      description: `Create a goal only when explicitly requested by the user or system/developer instructions; do not infer goals from ordinary tasks.
+Set token_budget only when an explicit token budget is requested. Fails if an unfinished goal exists; use update_goal only for status.`,
+      parameters: {
+        type: "object",
+        properties: {
+          objective: { type: "string" },
+          token_budget: { type: "integer", minimum: 1 },
+        },
+        required: ["objective"],
+        additionalProperties: false,
+      },
+    },
+  ];
+  if (canonicalJson(tools) !== canonicalJson(expectedTools)) {
     throw new Error("smoke_read_file_catalog_invalid");
   }
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function validateFollowUpRequest(body, expectedContent) {
@@ -166,13 +224,13 @@ function validateFollowUpRequest(body, expectedContent) {
   const call = body.input.find(
     (item) =>
       item?.type === "function_call" &&
-      item.call_id === "packaged-read-call-1" &&
+      item.call_id === options.callId &&
       item.name === "read_file",
   );
   const output = body.input.find(
     (item) =>
       item?.type === "function_call_output" &&
-      item.call_id === "packaged-read-call-1",
+      item.call_id === options.callId,
   );
   if (
     call?.arguments !== JSON.stringify({ path: options.relativePath }) ||
@@ -279,14 +337,17 @@ function parseArguments(arguments_) {
   }
   const expectedContentFile = values.get("expected-content-file");
   const relativePath = values.get("relative-path");
+  const callId = values.get("call-id");
   const transcriptPath = values.get("transcript");
   const port = Number(values.get("port") ?? "0");
   if (
     expectedContentFile === undefined ||
     relativePath === undefined ||
+    callId === undefined ||
     transcriptPath === undefined ||
     relativePath.length === 0 ||
     relativePath.startsWith("/") ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(callId) ||
     !Number.isSafeInteger(port) ||
     port < 0 ||
     port > 65_535
@@ -296,6 +357,7 @@ function parseArguments(arguments_) {
   return {
     expectedContentFile,
     relativePath,
+    callId,
     transcript: transcriptPath,
     port,
   };
