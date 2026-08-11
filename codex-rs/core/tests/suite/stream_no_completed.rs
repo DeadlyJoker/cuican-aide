@@ -93,6 +93,13 @@ fn reference_discarded_output(reference: &Value) -> bool {
         .expect("reference retry discard flag should be a boolean")
 }
 
+fn request_input(request: &[u8]) -> Vec<Value> {
+    serde_json::from_slice::<Value>(request).expect("parse Responses request body")["input"]
+        .as_array()
+        .expect("Responses request input array")
+        .clone()
+}
+
 fn provider(base_url: String, stream_max_retries: u64) -> ModelProviderInfo {
     ModelProviderInfo {
         name: "openai".into(),
@@ -282,6 +289,137 @@ async fn retries_after_partial_output_without_committing_the_abandoned_item() {
     assert_eq!(
         observed.discarded_output(),
         reference_discarded_output(&reference)
+    );
+
+    server.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn completed_assistant_item_is_preserved_in_retry_request() {
+    skip_if_no_network!();
+    let reference = load_reference("stream-completed-assistant-close-retry.reference.json");
+    let completed_content = reference_string(&reference, "/completedItem/content");
+
+    let first_sse = responses::sse(vec![
+        responses::ev_response_created("resp_first"),
+        responses::ev_message_item_added("msg_first", ""),
+        responses::ev_output_text_delta(&completed_content),
+        responses::ev_assistant_message("msg_first", &completed_content),
+    ]);
+    let second_sse = responses::sse(vec![
+        responses::ev_response_created("resp_final"),
+        responses::ev_message_item_added("msg_final", ""),
+        responses::ev_output_text_delta("done"),
+        responses::ev_assistant_message("msg_final", "done"),
+        responses::ev_completed("resp_final"),
+    ]);
+    let (server, _) = start_streaming_sse_server(vec![
+        vec![StreamingSseChunk {
+            gate: None,
+            body: first_sse,
+        }],
+        vec![StreamingSseChunk {
+            gate: None,
+            body: second_sse,
+        }],
+    ])
+    .await;
+
+    let TestCrewon { crewon, .. } = build_crewon(
+        &server,
+        reference_u64(&reference, "/finalState/samplingRetries"),
+    )
+    .await;
+    submit_hello(&crewon).await;
+    let observed = observe_retry_trace(&crewon).await;
+
+    let requests = server.requests().await;
+    assert_eq!(
+        requests.len() as u64,
+        reference_u64(&reference, "/finalState/requestCount")
+    );
+    let assistant_texts = request_input(&requests[1])
+        .into_iter()
+        .filter(|item| item["type"] == "message" && item["role"] == "assistant")
+        .flat_map(|item| item["content"].as_array().cloned().unwrap_or_default())
+        .filter_map(|content| content["text"].as_str().map(str::to_string))
+        .collect::<Vec<_>>();
+    assert_eq!(assistant_texts, vec![completed_content]);
+    assert_eq!(
+        observed.completed_outputs,
+        reference["finalState"]["completedAssistantOutputs"]
+            .as_array()
+            .expect("completed outputs array")
+            .iter()
+            .map(|value| value.as_str().expect("completed output string").to_string())
+            .collect::<Vec<_>>()
+    );
+
+    server.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn completed_tool_item_is_preserved_in_retry_request() {
+    skip_if_no_network!();
+    let reference = load_reference("stream-completed-tool-close-retry.reference.json");
+
+    let call_id = reference_string(&reference, "/completedItem/callId");
+    let tool_name = reference_string(&reference, "/completedItem/name");
+    let tool_input = reference_string(&reference, "/completedItem/input");
+    let first_sse = responses::sse(vec![
+        responses::ev_response_created("resp_first"),
+        responses::ev_function_call(&call_id, &tool_name, &tool_input),
+    ]);
+    let second_sse = responses::sse(vec![
+        responses::ev_response_created("resp_final"),
+        responses::ev_assistant_message("msg_final", "done"),
+        responses::ev_completed("resp_final"),
+    ]);
+    let (server, _) = start_streaming_sse_server(vec![
+        vec![StreamingSseChunk {
+            gate: None,
+            body: first_sse,
+        }],
+        vec![StreamingSseChunk {
+            gate: None,
+            body: second_sse,
+        }],
+    ])
+    .await;
+
+    let TestCrewon { crewon, .. } = build_crewon(&server, 1).await;
+    submit_hello(&crewon).await;
+    let observed = observe_retry_trace(&crewon).await;
+
+    let requests = server.requests().await;
+    assert_eq!(
+        requests.len() as u64,
+        reference_u64(&reference, "/finalState/requestCount")
+    );
+    let second_input = request_input(&requests[1]);
+    assert_eq!(
+        second_input
+            .iter()
+            .filter(|item| item["type"] == "function_call")
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![serde_json::json!({
+            "type": "function_call",
+            "name": &tool_name,
+            "arguments": &tool_input,
+            "call_id": &call_id,
+        })]
+    );
+    assert_eq!(
+        second_input
+            .iter()
+            .find(|item| { item["type"] == "function_call_output" && item["call_id"] == call_id })
+            .expect("function call output in retry request")["output"],
+        reference_string(&reference, "/expectedSecondRequestItems/1/output")
+    );
+    assert_eq!(
+        observed.completed_outputs,
+        vec![reference_string(&reference, "/finalState/finalOutput")]
     );
 
     server.shutdown().await;

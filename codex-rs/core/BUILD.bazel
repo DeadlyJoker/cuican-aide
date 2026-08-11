@@ -37,6 +37,8 @@ crewon_rust_crate(
         "//:packages/test-contracts/fixtures/responses-lite-request.reference.json",
         "//:packages/test-contracts/fixtures/shell-tool-output.reference.json",
         "//:packages/test-contracts/fixtures/stream-early-close-retry.reference.json",
+        "//:packages/test-contracts/fixtures/stream-completed-assistant-close-retry.reference.json",
+        "//:packages/test-contracts/fixtures/stream-completed-tool-close-retry.reference.json",
         "//:packages/test-contracts/fixtures/stream-partial-close-retry.reference.json",
         "//:packages/test-contracts/fixtures/tool-cancel.reference.json",
         "//:packages/test-contracts/fixtures/tool-output-truncation.reference.json",
