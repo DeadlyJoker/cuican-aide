@@ -66,6 +66,7 @@ export class KernelContextCompactor implements ContextCompactorPort {
         case "segment.started":
         case "rate_limit.updated":
         case "segment.checkpointed":
+        case "segment.provider_response_created":
           break;
         case "model.sampling.retry":
           if (event.data.discardedOutput) {

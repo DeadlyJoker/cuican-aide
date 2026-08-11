@@ -25,9 +25,11 @@ export type ModelRequest = Readonly<{
   input: ModelInput;
   tools: readonly ToolDefinition[];
   maxOutputBytes: number;
+  reconcileCheckpoint?: ProviderCheckpoint;
 }>;
 
 export type ModelTransportEvent =
+  | Readonly<{ type: "response.created"; checkpoint: ProviderCheckpoint }>
   | Readonly<{ type: "output.delta"; delta: string }>
   | Readonly<{ type: "output.item.completed"; item: ModelInputItem }>
   | Readonly<{
@@ -64,6 +66,7 @@ export interface ModelTransportPort {
   readonly adapterName: string;
   readonly adapterVersion: string;
   readonly modelId: string;
+  readonly supportsResponseRetrieve?: boolean;
   prewarm?(signal: AbortSignal): Promise<void>;
   stream(
     request: ModelRequest,

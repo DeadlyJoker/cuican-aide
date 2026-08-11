@@ -230,6 +230,184 @@ test("rejects previous_response_id when provider storage is disabled", async () 
     ),
   );
   assert.equal(fetchCalled, false);
+  await assert.rejects(
+    collect(
+      transport.stream(
+        {
+          ...manualRequest(),
+          reconcileCheckpoint: directCheckpoint("resp-lost"),
+        },
+        signal(),
+      ),
+    ),
+    hasTransportError(
+      "invalidRequest",
+      "responses_retrieve_requires_storage",
+      false,
+    ),
+  );
+  assert.equal(transport.supportsResponseRetrieve, false);
+});
+
+test("retrieves a completed response without resampling and rebuilds ordered text and Tool output", async () => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../test-contracts/fixtures/provider-response-reconcile.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as {
+    checkpoint: ReturnType<typeof directCheckpoint>;
+    completed: Record<string, unknown>;
+  };
+  let request:
+    | Readonly<{ url: string; method: string | undefined }>
+    | undefined;
+  const transport = retrievingTransport(async (input, init) => {
+    request = { url: String(input), method: init?.method };
+    return Response.json(reference.completed);
+  });
+  const checkpoint = reference.checkpoint;
+  const events = await collect(
+    transport.stream(
+      { ...manualRequest(), reconcileCheckpoint: checkpoint },
+      signal(),
+    ),
+  );
+  assert.deepEqual(request, {
+    url: "https://provider.example/v1/responses/resp-lost",
+    method: "GET",
+  });
+  assert.deepEqual(events, [
+    { type: "response.created", checkpoint },
+    { type: "output.delta", delta: "checking" },
+    {
+      type: "output.item.completed",
+      item: { type: "message", role: "assistant", content: "checking" },
+    },
+    {
+      type: "output.item.completed",
+      item: {
+        type: "tool_call",
+        kind: "function",
+        callId: "call-1",
+        name: "lookup",
+        input: '{"q":1}',
+      },
+    },
+    {
+      type: "usage",
+      inputTokens: 5,
+      cachedInputTokens: 1,
+      outputTokens: 3,
+      totalTokens: 8,
+    },
+    { type: "completed", checkpoint },
+  ]);
+});
+
+test("keeps pending retrieve non-terminal and projects failed and incomplete terminals", async () => {
+  for (const status of ["queued", "in_progress"] as const) {
+    await assert.rejects(
+      retrieveJson({ id: "resp-lost", status }),
+      hasTransportError("unavailable", "responses_reconcile_pending", true),
+    );
+  }
+  const cases = [
+    [
+      { id: "resp-lost", status: "failed", error: { code: "provider_failed" } },
+      "responses_provider_provider_failed",
+    ],
+    [
+      {
+        id: "resp-lost",
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+      },
+      "responses_incomplete_max_output_tokens",
+    ],
+  ] as const;
+  for (const [body, code] of cases) {
+    assert.deepEqual(await retrieveJson(body), [
+      { type: "response.created", checkpoint: directCheckpoint("resp-lost") },
+      { type: "failed", code, retryable: false },
+    ]);
+  }
+});
+
+test("fails closed on retrieved response identity drift and oversized bodies", async () => {
+  await assert.rejects(
+    retrieveJson({
+      id: "other",
+      status: "completed",
+      output: [],
+      usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+    }),
+    hasTransportCode("responses_response_id_mismatch"),
+  );
+  const oversized = retrievingTransport(
+    async () =>
+      new Response("x".repeat(512 * 1024 + 1), {
+        headers: { "content-type": "application/json" },
+      }),
+  );
+  await assert.rejects(
+    retrieveWith(oversized),
+    hasTransportCode("responses_retrieve_body_too_large"),
+  );
+});
+
+test("switches create EOF to retrieval and never issues a second POST", async () => {
+  const methods: string[] = [];
+  const transport = retrievingTransport(async (_input, init) => {
+    methods.push(init?.method ?? "GET");
+    if (init?.method === "POST") {
+      return responseStream([createdEvent(0)]);
+    }
+    return Response.json({
+      id: "resp-1",
+      status: "completed",
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "done" }],
+        },
+      ],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    });
+  });
+  const events = await collect(
+    new CrewONAgentKernel({
+      transport,
+      retryScheduler: { wait: async () => undefined },
+    }).runSegment(
+      {
+        schemaVersion: "crewon.agent-segment.v0",
+        purpose: "agent",
+        runId: "run-1",
+        segmentId: "segment-1",
+        attempt: 1,
+        agentVersionId: "agent-1",
+        policySnapshotId: "policy-1",
+        collaborationMode: "default",
+        allowedTools: null,
+        history: [{ type: "message", role: "user", content: "hello" }],
+        continuation: { kind: "manual" },
+        budget: { maxOutputBytes: 32 * 1024 },
+      },
+      signal(),
+    ),
+  );
+  assert.deepEqual(methods, ["POST", "GET"]);
+  assert.equal(
+    events.filter((event) => event.type === "segment.provider_response_created")
+      .length,
+    1,
+  );
+  assert.equal(events.at(-1)?.type, "segment.completed");
 });
 
 test("serializes Tool definitions and exact call outputs for follow-up sampling", async () => {
@@ -943,6 +1121,33 @@ function directCheckpoint(responseId: string) {
     modelId: "provider-model",
     opaquePayload: { responseId },
   } as const;
+}
+
+function retrievingTransport(fetch: typeof globalThis.fetch) {
+  return new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+      storeResponses: true,
+    },
+    { fetch },
+  );
+}
+
+function retrieveJson(body: unknown) {
+  return retrieveWith(retrievingTransport(async () => Response.json(body)));
+}
+
+function retrieveWith(transport: DirectResponsesTransport) {
+  return collect(
+    transport.stream(
+      {
+        ...manualRequest(),
+        reconcileCheckpoint: directCheckpoint("resp-lost"),
+      },
+      signal(),
+    ),
+  );
 }
 
 function officialEvents(): readonly unknown[] {

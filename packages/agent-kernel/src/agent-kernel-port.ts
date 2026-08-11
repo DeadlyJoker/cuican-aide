@@ -51,6 +51,7 @@ export type AgentSegmentContract = Readonly<{
   runtimeTools?: readonly ToolDefinition[];
   history: readonly AgentHistoryItem[];
   continuation: AgentContinuation;
+  reconcileCheckpoint?: ProviderCheckpoint;
   budget: Readonly<{
     maxOutputBytes: number;
   }>;
@@ -59,6 +60,10 @@ export type AgentSegmentContract = Readonly<{
 type KernelEventBase = Omit<CanonicalAgentEvent, "type" | "data">;
 
 export type KernelAgentEvent =
+  | (KernelEventBase & {
+      type: "segment.provider_response_created";
+      data: Readonly<{ checkpoint: ProviderCheckpoint }>;
+    })
   | (KernelEventBase & {
       type: "segment.started";
       data: Readonly<{ attempt: number; model: string }>;

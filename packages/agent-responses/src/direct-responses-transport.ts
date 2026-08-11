@@ -26,6 +26,7 @@ import {
   parseResponsesRateLimitHeaders,
   readBoundedErrorBody,
 } from "./responses-rate-limits.ts";
+import { projectRetrievedResponse } from "./responses-retrieve.ts";
 
 export type { ResponsesSequencePolicy } from "./responses-protocol.ts";
 
@@ -62,6 +63,9 @@ export type ResponsesTransportIdentity = Readonly<{
 }>;
 
 export class DirectResponsesTransport implements ModelTransportPort {
+  get supportsResponseRetrieve(): boolean {
+    return this.#storeResponses;
+  }
   readonly adapterName: string;
   readonly adapterVersion: string;
   readonly modelId: string;
@@ -129,6 +133,17 @@ export class DirectResponsesTransport implements ModelTransportPort {
     signal: AbortSignal,
   ): AsyncIterable<ModelTransportEvent> {
     validateResponsesRequest(request);
+    if (request.reconcileCheckpoint !== undefined) {
+      if (!this.#storeResponses) {
+        throw transportError(
+          "invalidRequest",
+          "responses_retrieve_requires_storage",
+          false,
+        );
+      }
+      yield* this.#retrieve(request.reconcileCheckpoint, signal);
+      return;
+    }
     const previousResponseId =
       request.input.strategy === "providerCheckpoint"
         ? responseIdFromResponsesCheckpoint(
@@ -195,6 +210,10 @@ export class DirectResponsesTransport implements ModelTransportPort {
           this.#storeResponses
             ? responsesCheckpoint(responseId, this.modelIdentity())
             : null,
+        createdCheckpoint: (responseId) =>
+          this.#storeResponses
+            ? responsesCheckpoint(responseId, this.modelIdentity())
+            : null,
       });
     } catch (error) {
       if (signal.aborted) {
@@ -228,6 +247,35 @@ export class DirectResponsesTransport implements ModelTransportPort {
     } finally {
       idle.close();
     }
+  }
+
+  async *#retrieve(
+    checkpoint: ProviderCheckpoint,
+    signal: AbortSignal,
+  ): AsyncIterable<ModelTransportEvent> {
+    const responseId = responseIdFromResponsesCheckpoint(
+      checkpoint,
+      this.modelIdentity(),
+    );
+    const url = new URL(
+      `${this.#endpoint.pathname.replace(/\/$/, "")}/${encodeURIComponent(responseId)}`,
+      this.#endpoint,
+    );
+    const response = await this.#fetch(url, {
+      method: "GET",
+      headers: responsesHeaders(this.#apiKey, "application/json"),
+      signal,
+    });
+    if (!response.ok) {
+      await cancelBody(response.body);
+      throw httpError(response.status, response.headers.get("retry-after"));
+    }
+    const value = await readBoundedJson(response, 512 * 1024);
+    const projected = projectRetrievedResponse(value, responseId, checkpoint);
+    if (projected.status === "pending") {
+      throw transportError("unavailable", "responses_reconcile_pending", true);
+    }
+    yield* projected.events;
   }
 
   modelIdentity(): Readonly<{
@@ -296,9 +344,15 @@ export function validateResponsesRequest(request: ModelRequest): void {
       "schemaVersion",
       "segmentId",
       "tools",
+      ...(request.reconcileCheckpoint === undefined
+        ? []
+        : ["reconcileCheckpoint"]),
     ])
   ) {
     throw protocolError("responses_request_invalid");
+  }
+  if (request.reconcileCheckpoint !== undefined) {
+    parseProviderCheckpoint(request.reconcileCheckpoint);
   }
   boundedNonEmpty(request.runId, 512, "responses_run_id_invalid");
   boundedNonEmpty(request.segmentId, 512, "responses_segment_id_invalid");
@@ -783,4 +837,38 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   }
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+async function readBoundedJson(
+  response: Response,
+  maxBytes: number,
+): Promise<unknown> {
+  if (response.body === null)
+    throw protocolError("responses_retrieve_body_missing");
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes)
+        throw protocolError("responses_retrieve_body_too_large");
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch (error) {
+    throw protocolError("responses_retrieve_body_invalid", error);
+  }
 }

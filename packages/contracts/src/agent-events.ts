@@ -1,5 +1,6 @@
 export const CANONICAL_AGENT_EVENT_TYPES = [
   "segment.started",
+  "segment.provider_response_created",
   "model.sampling.retry",
   "model.transport.fallback",
   "model.output.delta",

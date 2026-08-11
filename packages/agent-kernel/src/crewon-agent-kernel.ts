@@ -93,6 +93,15 @@ export class CrewONAgentKernel implements AgentKernelPort {
     signal: AbortSignal,
   ): AsyncIterable<KernelAgentEvent> {
     validateContract(contract);
+    if (
+      contract.reconcileCheckpoint !== undefined &&
+      this.#transport.supportsResponseRetrieve !== true
+    ) {
+      throw new AgentKernelError(
+        "provider_response_retrieve_unsupported",
+        false,
+      );
+    }
     throwIfAborted(signal);
     let sequence = 1;
     yield canonicalEvent(contract, sequence, "segment.started", {
@@ -120,11 +129,15 @@ export class CrewONAgentKernel implements AgentKernelPort {
         input,
         tools,
         maxOutputBytes: contract.budget.maxOutputBytes,
+        ...(contract.reconcileCheckpoint === undefined
+          ? {}
+          : { reconcileCheckpoint: contract.reconcileCheckpoint }),
       };
       let completedOutput = "";
       let completedCheckpoint: ProviderCheckpoint | null = null;
       let completedToolCalls: ObservedToolCall[] = [];
       let completedAssistantItems: string[] = [];
+      let createdCheckpoint: ProviderCheckpoint | null = null;
       let retries = 0;
       while (true) {
         let output = "";
@@ -139,6 +152,29 @@ export class CrewONAgentKernel implements AgentKernelPort {
               throw new AgentKernelError("model_event_after_terminal", false);
             }
             switch (event.type) {
+              case "response.created":
+                validateCheckpoint(event.checkpoint, this.modelIdentity);
+                if (createdCheckpoint !== null) {
+                  if (
+                    JSON.stringify(createdCheckpoint) !==
+                    JSON.stringify(event.checkpoint)
+                  ) {
+                    throw new AgentKernelError(
+                      "provider_response_checkpoint_mismatch",
+                      false,
+                    );
+                  }
+                  break;
+                }
+                createdCheckpoint = event.checkpoint;
+                sequence += 1;
+                yield canonicalEvent(
+                  contract,
+                  sequence,
+                  "segment.provider_response_created",
+                  { checkpoint: event.checkpoint },
+                );
+                break;
               case "output.delta":
                 validateDelta(event.delta);
                 output += event.delta;
@@ -351,6 +387,12 @@ export class CrewONAgentKernel implements AgentKernelPort {
             throw exhaustedSamplingError(kernelError);
           }
           retries += 1;
+          if (createdCheckpoint !== null) {
+            request = {
+              ...request,
+              reconcileCheckpoint: createdCheckpoint,
+            };
+          }
           if (completedItems.length > 0) {
             request = appendCompletedItems(request, completedItems);
           }

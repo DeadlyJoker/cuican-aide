@@ -11,6 +11,7 @@ export type ResponsesSequencePolicy = "required" | "whenPresent";
 export type ResponsesProtocolOptions = Readonly<{
   sequencePolicy: ResponsesSequencePolicy;
   completedCheckpoint: (responseId: string) => ProviderCheckpoint | null;
+  createdCheckpoint?: (responseId: string) => ProviderCheckpoint | null;
 }>;
 
 /** Decodes one Responses event stream independently of its HTTP or WebSocket framing. */
@@ -55,7 +56,11 @@ export class ResponsesProtocolDecoder {
           throw protocolError("responses_created_duplicate");
         }
         this.#responseId = responseIdentity(event);
-        return [];
+        const checkpoint =
+          this.#options.createdCheckpoint?.(this.#responseId) ?? null;
+        return checkpoint === null
+          ? []
+          : [{ type: "response.created", checkpoint }];
       }
       case "response.output_text.delta": {
         requireCreated(this.#responseId);
@@ -223,6 +228,7 @@ export async function* responsesProtocolEvents(
     sequencePolicy: ResponsesSequencePolicy;
     onActivity: () => void;
     completedCheckpoint: (responseId: string) => ProviderCheckpoint | null;
+    createdCheckpoint?: (responseId: string) => ProviderCheckpoint | null;
   },
 ): AsyncIterable<ModelTransportEvent> {
   const decoder = new ResponsesProtocolDecoder(options);

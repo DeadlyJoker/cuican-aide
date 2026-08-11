@@ -201,6 +201,11 @@ export function mapAgentEvent(
         },
       };
     }
+    case "segment.provider_response_created":
+      throw new ApplicationError(
+        "validation",
+        "provider_response_receipt_internal_only",
+      );
     case "segment.completed":
       return { ...envelope, type: event.type, data: segment };
     case "segment.failed":
