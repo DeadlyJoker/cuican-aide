@@ -37,6 +37,75 @@ test("executes once and a fresh adapter reconciles the durable result", async (t
   assert.equal(harness.executeCount(), 1);
   assertExactWire(harness.requests, execution.command);
 });
+test("canonical idempotency keys survive nested key reordering", async () => {
+  const keys: string[] = [];
+  const post: CrewonRemoteMcpMutationHttpPort["post"] = async (request) => {
+    keys.push(request.headers["idempotency-key"] ?? "");
+    const wire = JSON.parse(new TextDecoder().decode(request.body));
+    return jsonResponse(
+      responseEnvelope(wire.phase, {
+        status: "unknownOutcome",
+        providerReceiptId: null,
+      }),
+    );
+  };
+  const execution = mutationExecution();
+  const reordered = reverseKeyOrder(execution) as typeof execution;
+  await productionProvider(post).execute(execution, signal());
+  await productionProvider(post).execute(reordered, signal());
+  await productionProvider(post).reconcile(reordered, signal());
+  assert.equal(keys[0], keys[1]);
+  assert.notEqual(keys[1], keys[2]);
+});
+test("rejects command authority extras and normalizes preflight failures", async () => {
+  let calls = 0;
+  const adapter = productionProvider(async () => {
+    calls += 1;
+    throw new Error("unexpected_send");
+  });
+  const execution = mutationExecution();
+  const invalid = [
+    { ...execution, command: { ...execution.command, authority: "forged" } },
+    {
+      ...execution,
+      command: {
+        ...execution.command,
+        executionLease: {
+          ...execution.command.executionLease,
+          authority: "forged",
+        },
+      },
+    },
+    {
+      ...execution,
+      command: {
+        ...execution.command,
+        approvalProof: {
+          schemaVersion: "crewon.tool-approval-proof.v0",
+          authority: "forged",
+        },
+      },
+    },
+  ];
+  for (const candidate of invalid) {
+    await assert.rejects(
+      adapter.execute(candidate as typeof execution, signal()),
+      isNotSent("remote_mcp_mutation_command_shape_invalid"),
+    );
+  }
+  const brokerInvalid = {
+    ...execution,
+    command: {
+      ...execution.command,
+      actionDigest: "not-a-digest",
+    },
+  };
+  await assert.rejects(
+    adapter.execute(brokerInvalid, signal()),
+    isNotSent("remote_mcp_mutation_preflight_invalid"),
+  );
+  assert.equal(calls, 0);
+});
 test("possibly-sent timeout is recovered only through reconcile", async (t) => {
   const harness = await durableHarness({ hangExecuteResponse: true });
   t.after(harness.close);
@@ -184,6 +253,30 @@ test("strictly rejects redirects, non-JSON, oversized and drifted responses", as
     await assert.rejects(adapter.execute(execution, signal()), hasCode(code));
   }
 });
+test("redacts secrets from response stream errors", async () => {
+  const secret = "stream-secret";
+  let idempotencyKey = "";
+  const adapter = productionProvider(async (request) => {
+    idempotencyKey = request.headers["idempotency-key"] ?? "";
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error(`${secret} ${idempotencyKey}`));
+        },
+      }),
+      { headers: { "content-type": "application/json" } },
+    );
+  }, secret);
+  let caught: unknown;
+  try {
+    await adapter.execute(mutationExecution(), signal());
+  } catch (error) {
+    caught = error;
+  }
+  assert(caught instanceof CrewonRemoteMcpMutationError);
+  assert.equal(inspect(caught).includes(secret), false);
+  assert.equal(inspect(caught).includes(idempotencyKey), false);
+});
 
 function productionProvider(
   post: CrewonRemoteMcpMutationHttpPort["post"],
@@ -323,6 +416,21 @@ function signal(): AbortSignal {
 function hasCode(code: string) {
   return (error: unknown) =>
     error instanceof CrewonRemoteMcpMutationError && error.code === code;
+}
+function isNotSent(code: string) {
+  return (error: unknown) =>
+    error instanceof CrewonRemoteMcpMutationError &&
+    error.code === code &&
+    error.certainty === "notSent";
+}
+function reverseKeyOrder(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(reverseKeyOrder);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .reverse()
+      .map(([key, nested]) => [key, reverseKeyOrder(nested)]),
+  );
 }
 
 function mutationExecution() {

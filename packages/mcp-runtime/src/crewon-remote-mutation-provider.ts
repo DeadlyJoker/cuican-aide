@@ -13,6 +13,37 @@ const SCHEMA_VERSION = "crewon.remote-mcp-mutation.v1";
 const MAX_RESPONSE_BYTES = 256 * 1024;
 const RECEIPT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/u;
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/u;
+const COMMAND_KEYS = [
+  "schemaVersion",
+  "executionId",
+  "executionLease",
+  "actionDigest",
+  "actionIntent",
+  "approvalProof",
+  "idempotencyKey",
+  "runId",
+  "segmentId",
+  "callId",
+  "kind",
+  "name",
+  "input",
+] as const;
+const LEASE_KEYS = [
+  "workItemId",
+  "stepId",
+  "attemptId",
+  "leaseId",
+  "leaseEpoch",
+  "expiresAt",
+] as const;
+const APPROVAL_KEYS = [
+  "schemaVersion",
+  "approvalId",
+  "actionDigest",
+  "policySnapshotId",
+  "approvalRevision",
+  "decidedAt",
+] as const;
 
 type Phase = "execute" | "reconcile" | "cancel";
 
@@ -92,16 +123,22 @@ export class CrewonRemoteMcpMutationProvider
     execution: McpMutationExecution,
     signal: AbortSignal,
   ): Promise<McpMutationResolution> {
-    validateExecution(execution);
     if (signal.aborted) throw failure("remote_mcp_mutation_aborted", "notSent");
-    const request = {
-      schemaVersion: SCHEMA_VERSION,
-      phase,
-      providerExecutionId: execution.providerExecutionId,
-      toolName: execution.toolName,
-      command: structuredClone(execution.command),
-    };
-    const body = JSON.stringify(request);
+    let body: string;
+    try {
+      validateExecution(execution);
+      body = canonicalJson({
+        schemaVersion: SCHEMA_VERSION,
+        phase,
+        providerExecutionId: execution.providerExecutionId,
+        toolName: execution.toolName,
+        command: execution.command,
+      });
+    } catch (error) {
+      throw error instanceof CrewonRemoteMcpMutationError
+        ? error
+        : failure("remote_mcp_mutation_preflight_invalid", "notSent");
+    }
     const headers: Record<string, string> = {
       "accept": "application/json",
       "content-type": "application/json; charset=utf-8",
@@ -149,14 +186,14 @@ export class CrewonRemoteMcpMutationProvider
         decoded = JSON.parse(
           new TextDecoder("utf-8", { fatal: true }).decode(bytes),
         );
-      } catch (error) {
-        throw failure(
-          "remote_mcp_mutation_invalid_json",
-          "possiblySent",
-          error,
-        );
+      } catch {
+        throw failure("remote_mcp_mutation_invalid_json", "possiblySent");
       }
       return parseResponse(decoded, phase, execution);
+    } catch (error) {
+      throw error instanceof CrewonRemoteMcpMutationError
+        ? error
+        : failure("remote_mcp_mutation_response_failed", "possiblySent");
     } finally {
       abortRace.cleanup();
     }
@@ -226,6 +263,17 @@ function validateExecution(execution: McpMutationExecution): void {
     !exactKeys(execution, ["providerExecutionId", "toolName", "command"])
   ) {
     throw failure("remote_mcp_mutation_execution_invalid", "notSent");
+  }
+  if (
+    !isObject(execution.command) ||
+    !exactKeys(execution.command, COMMAND_KEYS) ||
+    !isObject(execution.command.executionLease) ||
+    !exactKeys(execution.command.executionLease, LEASE_KEYS) ||
+    (execution.command.approvalProof !== null &&
+      (!isObject(execution.command.approvalProof) ||
+        !exactKeys(execution.command.approvalProof, APPROVAL_KEYS)))
+  ) {
+    throw failure("remote_mcp_mutation_command_shape_invalid", "notSent");
   }
   validateToolExecutionCommand(execution.command);
   if (
@@ -338,7 +386,7 @@ async function readBounded(
       throw failure("remote_mcp_mutation_aborted", "possiblySent");
     if (deadline.aborted)
       throw failure("remote_mcp_mutation_deadline_exceeded", "possiblySent");
-    throw failure("remote_mcp_mutation_response_failed", "possiblySent", error);
+    throw failure("remote_mcp_mutation_response_failed", "possiblySent");
   }
   const combined = new Uint8Array(size);
   let offset = 0;
@@ -386,15 +434,45 @@ function exactKeys(value: object, keys: readonly string[]): boolean {
 function onlyKeys(value: object, keys: readonly string[]): boolean {
   return Object.keys(value).every((key) => keys.includes(key));
 }
+function canonicalJson(value: unknown): string {
+  const ancestors = new Set<object>();
+  const visit = (current: unknown, depth: number): string => {
+    if (depth > 64) throw new TypeError("canonical_json_too_deep");
+    if (
+      current === null ||
+      typeof current === "boolean" ||
+      typeof current === "string"
+    ) {
+      return JSON.stringify(current);
+    }
+    if (typeof current === "number") {
+      if (!Number.isFinite(current))
+        throw new TypeError("canonical_json_number_invalid");
+      return JSON.stringify(current);
+    }
+    if (!Array.isArray(current) && !isObject(current)) {
+      throw new TypeError("canonical_json_value_invalid");
+    }
+    if (ancestors.has(current)) throw new TypeError("canonical_json_cycle");
+    ancestors.add(current);
+    const serialized = Array.isArray(current)
+      ? `[${current.map((item) => visit(item, depth + 1)).join(",")}]`
+      : `{${Object.keys(current)
+          .sort()
+          .map(
+            (key) => `${JSON.stringify(key)}:${visit(current[key], depth + 1)}`,
+          )
+          .join(",")}}`;
+    ancestors.delete(current);
+    return serialized;
+  };
+  return visit(value, 0);
+}
 function boundedInteger(value: number, min: number, max: number): number {
   if (!Number.isSafeInteger(value) || value < min || value > max)
     throw failure("remote_mcp_mutation_deadline_invalid", "notSent");
   return value;
 }
-function failure(
-  code: string,
-  certainty: "notSent" | "possiblySent",
-  cause?: unknown,
-) {
-  return new CrewonRemoteMcpMutationError(code, certainty, { cause });
+function failure(code: string, certainty: "notSent" | "possiblySent") {
+  return new CrewonRemoteMcpMutationError(code, certainty);
 }
