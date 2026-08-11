@@ -425,7 +425,8 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
   }
 
   #assertOpen() {
-    if (this.#closed) throw new RunStoreError("workspace_read_file_store_closed");
+    if (this.#closed)
+      throw new RunStoreError("workspace_read_file_store_closed");
   }
 }
 

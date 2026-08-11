@@ -66,9 +66,7 @@ test(
   "PostgreSQL two pools converge prepare and terminal while rejecting frozen conflict",
   {
     skip:
-      url === undefined
-        ? "CREWON_TEST_POSTGRES_URL is not configured"
-        : false,
+      url === undefined ? "CREWON_TEST_POSTGRES_URL is not configured" : false,
   },
   async () => {
     const firstPool = new Pool({ connectionString: url, max: 2 });
@@ -90,10 +88,10 @@ test(
           frozen: frozen(),
         }),
       ]);
-      assert.deepEqual(
-        preparations.map((value) => value.disposition).sort(),
-        ["committed", "replayed"],
-      );
+      assert.deepEqual(preparations.map((value) => value.disposition).sort(), [
+        "committed",
+        "replayed",
+      ]);
       await assert.rejects(() =>
         second.prepareWorkspaceReadFile({
           ...locator,
@@ -121,10 +119,10 @@ test(
           resolution: completed(),
         }),
       ]);
-      assert.deepEqual(
-        terminals.map((value) => value.disposition).sort(),
-        ["committed", "replayed"],
-      );
+      assert.deepEqual(terminals.map((value) => value.disposition).sort(), [
+        "committed",
+        "replayed",
+      ]);
     } finally {
       await firstPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await Promise.all([firstPool.end(), secondPool.end()]);
@@ -264,8 +262,7 @@ function conflictingFrozen(): FrozenWorkspaceReadFileDispatch {
       actionDigest: conflictingCommand.actionDigest,
       commandDigest: canonicalDeviceFilesystemReadCommandDigest(
         conflictingCommand,
-        (input) =>
-          `sha256:${createHash("sha256").update(input).digest("hex")}`,
+        (input) => `sha256:${createHash("sha256").update(input).digest("hex")}`,
       ),
     },
   };

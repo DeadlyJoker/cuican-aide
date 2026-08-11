@@ -247,8 +247,10 @@ test("SQLite fails closed when persisted terminal correlation drifts", async () 
     resolution: completed(),
   });
   database
-    .prepare(`UPDATE workspace_read_file_operations
-      SET record_json = json_set(record_json, '$.resolution.executionId', 'execution-drift')`)
+    .prepare(
+      `UPDATE workspace_read_file_operations
+      SET record_json = json_set(record_json, '$.resolution.executionId', 'execution-drift')`,
+    )
     .run();
   await assert.rejects(() =>
     store.loadWorkspaceReadFileReceipt({

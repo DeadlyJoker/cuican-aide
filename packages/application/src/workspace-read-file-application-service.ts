@@ -30,8 +30,9 @@ export type WorkspaceReadFileExecuteIntent = WorkspaceReadFileLocator &
   }>;
 export type WorkspaceReadFileRecoveryIntent = WorkspaceReadFileLocator &
   Readonly<{ idempotency: IdempotencyDescriptor }>;
-export type WorkspaceReadFileExecuteProbeIntent = WorkspaceReadFileRecoveryIntent &
-  Readonly<{ relativePathSegments: readonly string[] }>;
+export type WorkspaceReadFileExecuteProbeIntent =
+  WorkspaceReadFileRecoveryIntent &
+    Readonly<{ relativePathSegments: readonly string[] }>;
 
 export interface WorkspaceReadFileExecuteAuthorityResolverPort {
   resolve(
@@ -262,7 +263,8 @@ function sameProbe(
     probe.stepId === resolved.stepId &&
     probe.attemptId === resolved.attemptId &&
     probe.executionId === resolved.executionId &&
-    JSON.stringify(probe.idempotency) === JSON.stringify(resolved.idempotency) &&
+    JSON.stringify(probe.idempotency) ===
+      JSON.stringify(resolved.idempotency) &&
     JSON.stringify(probe.relativePathSegments) ===
       JSON.stringify(resolved.relativePathSegments)
   );
