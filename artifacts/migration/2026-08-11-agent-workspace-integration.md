@@ -208,12 +208,18 @@ Gate 报告为通过。
   provider checkpoint object/digest、Thread continuation、model state 与 `segment.provider_continuation` marker 在单一 Store transaction
   提交。真实文件 SQLite 在 commit 后模拟 crash、关闭并重开 Store；恢复 Worker 只发第二个 POST，携带
   `previous_response_id` 与空 `input=[]`，没有 GET、旧 response 重采样、sampling retry、重复 usage/history/marker 或 phantom Message。
-  stored mixed assistant→Tool 尚未具备同等级原子语义，继续以非 retryable
-  `model_end_turn_false_stored_mixed_response_unsupported` fail closed，因此广义 AR-031 仍标为 `PARTIAL`。
+  `23b92761c` 进一步关闭 stored mixed assistant→Tool：Kernel 生成单一 durable continuation boundary，Application/Store 在同一事务中
+  按 assistant→tool_call 顺序提交 history、首段 usage、Provider checkpoint object/digest、Attempt、Thread continuation、model state、
+  Tool request 与 `segment.provider_continuation` marker；Tool result receipt 沿既有 execution authority exactly-once 结算。commit 前 crash
+  不留下 partial authority；commit 后的真实文件 SQLite close/reopen 只执行一次 Tool，并只发送第二个带 `previous_response_id` 的 POST，
+  input 为精确 Tool result suffix，无 GET、旧 response 重采样、sampling retry 或重复 terminal Message。广义 AR-031 现标为 `PARITY`。
 - Agent Runtime AR-032：`dd22823f3` 增加 Rust/TS 共用的 malformed Provider usage fixture。Rust `crewon-api` 的 HTTP/SSE 与 WebSocket
   复用同一 decoder，在 usage 进入 Session/Goal/budget/compaction 记账前拒绝负 token、负 cached token、`cached > input`、
   `total != input + output` 与加法溢出；TS Direct Responses 对同一组 case 返回 non-retryable protocol failure。fixture 已接入 Bazel
   runfiles，Cargo/Bazel lock 均通过一致性检查。
+- Agent Runtime AR-033：`731e43a89` 对齐 Rust 的 optional usage 终态。合法 `response.completed` 在 usage 缺失或显式 `null` 时仍成功完成，
+  TS 不再误报 protocol failure，也不伪造零 usage；HTTP/SSE 与 WebSocket 继续复用同一 decoder。Rust/TS shared fixture 同时覆盖两种
+  framing policy，Rust `crewon-api` 124/124、TS Agent Responses 38/38 通过。
 - Runtime Worker read command / client：`78d6bbeec`、`5dc2472a8` 生成并签名 `workspace.read_file.v0`，canonical action digest
   绑定 tenant/space/thread、Run/Step/Attempt/execution、lease、Workspace/Device/Runtime、policy、路径和固定 limits。`8564a679b`、
   `ff96099c9` 增加 strict private Gateway execute/reconcile/cancel client：共享 parser 深校验请求、错误与 terminal receipt，HTTPS/mTLS
@@ -253,10 +259,15 @@ Gate 报告为通过。
 - AR-031 并行 worktree 已阶段集成为 `9906618be`、`b112e22e6`、`d6efadb14`。Control 的
   `segment.provider_continuation` public projection 只暴露 `segmentId`、`sampleIndex`、`throughHistorySequence`，client/audit 两种 view
   一致且不泄漏内部 `segmentSequence`。
-- 当前合并态验证：Agent Kernel `24/24`、Agent Responses `36/36`、Context `17/17`、Application `116/116`、Contracts `77/77`、
-  Control API `90 pass + 3 PostgreSQL-unconfigured skip`、Store `288 pass + 50 environment-conditional skip`、Runtime Worker
-  `214 pass + 1 PostgreSQL-unconfigured skip`、Device Gateway `109 pass + 7 PostgreSQL-unconfigured skip`、Rust `crewon-api 123/123`、
-  Rust Device `27/27`、Tauri `100/100`。相关 6 个 TS package typecheck 与 `just bazel-lock-check` 通过；所有 skip 继续按未验证处理。
+- 当前 clean committed-tree 验证（`e2ac35b10`）：Agent Kernel `25/25`、Agent Responses `38/38`、Context `16/16`、
+  Application `112/112`、Store `290 pass + 49 PostgreSQL-unconfigured skip`、Runtime Worker
+  `213 pass + 1 PostgreSQL-unconfigured skip`、Rust `crewon-api 124/124`，六个 TS package typecheck 全部通过，worktree initial/final
+  均 clean 且 HEAD 未变化。此前 Contracts `77/77`、Control API `90 pass + 3 PostgreSQL-unconfigured skip`、Device Gateway
+  `109 pass + 7 PostgreSQL-unconfigured skip`、Rust Device `27/27`、Tauri `100/100`。相关 6 个 TS package typecheck 与
+  `just bazel-lock-check` 通过；所有 skip 继续按未验证处理。
+- 同一 committed HEAD 叠加共享根工作树既有 Automation/space-scoped Store 草稿后，Context `17/17`、Application `116/116`、Store
+  `290 pass + 50 PostgreSQL-unconfigured skip`、Runtime Worker `218 pass + 1 PostgreSQL-unconfigured skip`，六个相关 typecheck 仍全部通过；
+  集成 AR-031 前后的未提交补丁 patch-id 均为 `ec6ab79d807909163c317460c0b9169505a7f3de`，证明本阶段没有改写该草稿。
 
 ## 尚未关闭的完整迁移 Gate
 
