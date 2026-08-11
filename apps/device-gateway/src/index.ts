@@ -13,6 +13,8 @@ export * from "./device-gateway-peer-api.ts";
 export * from "./device-gateway-workspace-peer-api.ts";
 export * from "./https-device-gateway-peer-client.ts";
 export * from "./https-device-gateway-workspace-peer-client.ts";
+export * from "./device-gateway-workspace-read-api.ts";
+export * from "./device-gateway-workspace-read-router.ts";
 export * from "./device-dispatch-identity.ts";
 export * from "./device-dispatch-store.ts";
 export * from "./device-execution-kind-authority.ts";

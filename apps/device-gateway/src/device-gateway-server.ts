@@ -22,6 +22,16 @@ import {
 } from "./device-gateway-workspace-dispatch-router.ts";
 import { DeviceGatewayWorkspacePeerApi } from "./device-gateway-workspace-peer-api.ts";
 import { DeviceGatewayWorkspaceWorkerApi } from "./device-gateway-workspace-worker-api.ts";
+import { DeviceGatewayWorkspaceReadService } from "./device-gateway-workspace-read-service.ts";
+import {
+  DeviceGatewayWorkspaceReadRouter,
+  type DeviceGatewayWorkspaceReadPeerDispatchPort,
+} from "./device-gateway-workspace-read-router.ts";
+import {
+  DeviceGatewayWorkspaceReadPeerApi,
+  DeviceGatewayWorkspaceReadWorkerApi,
+} from "./device-gateway-workspace-read-api.ts";
+import { workspaceReadApiDispatch } from "./device-gateway-workspace-read-composition.ts";
 import type { DeviceDispatchStorePort } from "./device-dispatch-store.ts";
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 import { DeviceGatewayPeerApi } from "./device-gateway-peer-api.ts";
@@ -31,6 +41,7 @@ import type { GatewayIdentityVerifierPort } from "./gateway-identity.ts";
 import type { WorkerIdentityVerifierPort } from "./worker-identity.ts";
 import type { WorkspaceCommandAuthorizationVerifierPort } from "./workspace-command-authorization-verifier.ts";
 import type { WorkspaceDispatchStorePort } from "./workspace-dispatch-store.ts";
+import type { WorkspaceReadDispatchStorePort } from "./workspace-read-dispatch-store.ts";
 import type { WorkspaceWorkerRuntimeAuthorizerPort } from "./workspace-worker-runtime-authorizer.ts";
 
 const DEVICE_PATH = "/device/v1";
@@ -51,6 +62,11 @@ export class DeviceGatewayServer {
   readonly #workspaceWorkerApi: DeviceGatewayWorkspaceWorkerApi | null;
   readonly #workspacePeerApi: DeviceGatewayWorkspacePeerApi | null;
   readonly #workspacePeerDispatch: DeviceGatewayWorkspacePeerDispatchPort | null;
+  readonly #workspaceRead: DeviceGatewayWorkspaceReadService | null;
+  readonly #workspaceReadStore: WorkspaceReadDispatchStorePort | null;
+  readonly #workspaceReadWorkerApi: DeviceGatewayWorkspaceReadWorkerApi | null;
+  readonly #workspaceReadPeerApi: DeviceGatewayWorkspaceReadPeerApi | null;
+  readonly #workspaceReadPeerDispatch: DeviceGatewayWorkspaceReadPeerDispatchPort | null;
   readonly #peerApi: DeviceGatewayPeerApi | null;
   readonly #peerDispatch: DeviceGatewayPeerDispatchPort | null;
   readonly #server: HttpsServer;
@@ -69,6 +85,8 @@ export class DeviceGatewayServer {
     workspaceWorkerAuthorizer?: WorkspaceWorkerRuntimeAuthorizerPort;
     workspacePeerDispatch?: DeviceGatewayWorkspacePeerDispatchPort;
     workspaceRouteTopology?: "standalone" | "team";
+    workspaceReadDispatchStore?: WorkspaceReadDispatchStorePort;
+    workspaceReadPeerDispatch?: DeviceGatewayWorkspaceReadPeerDispatchPort;
     connectionRoutes?: DeviceGatewayConnectionRouteConfig;
     peerDispatch?: DeviceGatewayPeerDispatchPort;
     gatewayIdentityVerifier?: GatewayIdentityVerifierPort;
@@ -176,6 +194,67 @@ export class DeviceGatewayServer {
             dispatch: this.#workspaceDispatch!,
           });
     this.#workspacePeerDispatch = config.workspacePeerDispatch ?? null;
+    this.#workspaceReadStore = config.workspaceReadDispatchStore ?? null;
+    this.#workspaceRead =
+      this.#workspaceReadStore === null
+        ? null
+        : new DeviceGatewayWorkspaceReadService({
+            sessions: this.#gateway,
+            workers:
+              config.workspaceWorkerAuthorizer as WorkspaceWorkerRuntimeAuthorizerPort,
+            verifier: config.authorizationVerifier,
+            store: this.#workspaceReadStore,
+            now: config.now,
+          });
+    if (
+      this.#workspaceRead !== null &&
+      (config.connectionRoutes === undefined ||
+        config.workspaceWorkerAuthorizer === undefined)
+    )
+      throw new DeviceGatewayError("workspace_read_config_invalid");
+    const readLocal =
+      this.#workspaceRead === null
+        ? null
+        : workspaceReadApiDispatch(this.#gateway, this.#workspaceRead);
+    const readRouter =
+      readLocal === null ||
+      config.connectionRoutes === undefined ||
+      workspaceRouteTopology === "standalone"
+        ? null
+        : new DeviceGatewayWorkspaceReadRouter({
+            gatewayId: config.connectionRoutes.gatewayId,
+            routes: config.connectionRoutes.store,
+            local: this.#workspaceRead!,
+            peers:
+              config.workspaceReadPeerDispatch ??
+              unavailableWorkspaceReadPeerDispatch,
+          });
+    if (
+      readRouter !== null &&
+      (config.workspaceReadPeerDispatch === undefined ||
+        config.gatewayIdentityVerifier === undefined)
+    )
+      throw new DeviceGatewayError("workspace_read_peer_config_invalid");
+    this.#workspaceReadWorkerApi =
+      readLocal === null
+        ? null
+        : new DeviceGatewayWorkspaceReadWorkerApi({
+            identityVerifier: config.workerIdentityVerifier,
+            dispatch: readRouter ?? readLocal,
+          });
+    this.#workspaceReadPeerApi =
+      readLocal === null || readRouter === null
+        ? null
+        : new DeviceGatewayWorkspaceReadPeerApi({
+            gatewayId: config.connectionRoutes!.gatewayId,
+            identityVerifier: config.gatewayIdentityVerifier!,
+            routes: config.connectionRoutes!.store,
+            sessions: this.#gateway,
+            workerAuthorizer: config.workspaceWorkerAuthorizer!,
+            dispatch: readLocal,
+            now: config.now,
+          });
+    this.#workspaceReadPeerDispatch = config.workspaceReadPeerDispatch ?? null;
     this.#peerApi =
       router === null || config.gatewayIdentityVerifier === undefined
         ? null
@@ -208,6 +287,16 @@ export class DeviceGatewayServer {
             handled || this.#workspacePeerApi === null
               ? handled
               : this.#workspacePeerApi.handle(request, response),
+          )
+          .then((handled) =>
+            handled || this.#workspaceReadWorkerApi === null
+              ? handled
+              : this.#workspaceReadWorkerApi.handle(request, response),
+          )
+          .then((handled) =>
+            handled || this.#workspaceReadPeerApi === null
+              ? handled
+              : this.#workspaceReadPeerApi.handle(request, response),
           )
           .then((handled) => {
             if (!handled && !response.headersSent) {
@@ -274,6 +363,7 @@ export class DeviceGatewayServer {
     await Promise.all([
       this.#dispatchStore.ready(),
       this.#workspaceStore?.ready(),
+      this.#workspaceReadStore?.ready(),
     ]);
     await new Promise<void>((resolve, reject) => {
       const onError = (error: Error) => {
@@ -303,6 +393,7 @@ export class DeviceGatewayServer {
     this.#closed = true;
     const dispatchClosed = this.#dispatch.close();
     const workspaceDispatchClosed = this.#workspaceDispatch?.close();
+    const workspaceReadClosed = this.#workspaceRead?.close();
     const gatewayClosed = this.#gateway.close();
     for (const client of this.#webSocketServer.clients) {
       client.terminate();
@@ -326,6 +417,7 @@ export class DeviceGatewayServer {
     const shutdown = await Promise.allSettled([
       dispatchClosed,
       workspaceDispatchClosed,
+      workspaceReadClosed,
       gatewayClosed,
       webSocketClosed,
       serverClosed,
@@ -333,10 +425,12 @@ export class DeviceGatewayServer {
     const storeClosed = await Promise.allSettled([
       this.#dispatchStore.close(),
       this.#workspaceStore?.close(),
+      this.#workspaceReadStore?.close(),
     ]);
     const peerClosed = await Promise.allSettled([
       Promise.resolve(this.#peerDispatch?.close?.()),
       Promise.resolve(this.#workspacePeerDispatch?.close?.()),
+      Promise.resolve(this.#workspaceReadPeerDispatch?.close?.()),
     ]);
     this.#listening = false;
     const failure = [...shutdown, ...storeClosed, ...peerClosed].find(
@@ -358,6 +452,13 @@ const unavailableWorkspacePeerDispatch: DeviceGatewayWorkspacePeerDispatchPort =
   {
     async dispatch() {
       throw new DeviceGatewayError("workspace_dispatch_route_unavailable");
+    },
+  };
+
+const unavailableWorkspaceReadPeerDispatch: DeviceGatewayWorkspaceReadPeerDispatchPort =
+  {
+    async dispatchRead() {
+      throw new DeviceGatewayError("workspace_read_route_unavailable");
     },
   };
 
