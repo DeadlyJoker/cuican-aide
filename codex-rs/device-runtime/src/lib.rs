@@ -1,4 +1,5 @@
 mod bootstrap;
+mod diagnostics;
 mod dispatch;
 mod runtime;
 mod session;

@@ -24,6 +24,7 @@ use url::Url;
 use crate::DeviceRuntimeBootstrap;
 use crate::DeviceRuntimeError;
 use crate::bootstrap::read_bootstrap;
+use crate::diagnostics::DiagnosticReporter;
 use crate::session::run_socket_with_ready;
 use crate::tls::build_client_config;
 
@@ -152,11 +153,18 @@ impl DeviceRuntime {
         on_ready: impl Fn(DeviceRuntimeReady) + Send + Sync,
     ) -> Result<(), DeviceRuntimeError> {
         let mut retry_delay = Duration::from_millis(250);
+        let diagnostics_started_at = std::time::Instant::now();
+        let mut diagnostics =
+            DiagnosticReporter::new(std::io::stderr(), move || diagnostics_started_at.elapsed());
         loop {
-            if let Ok(socket) = self.connect_socket().await {
-                retry_delay = Duration::from_millis(250);
-                let _ = run_socket_with_ready(Arc::clone(&self.state), socket, &on_ready).await;
-            }
+            let result = match self.connect_socket().await {
+                Ok(socket) => {
+                    retry_delay = Duration::from_millis(250);
+                    run_socket_with_ready(Arc::clone(&self.state), socket, &on_ready).await
+                }
+                Err(error) => Err(error),
+            };
+            diagnostics.observe(&result);
             tokio::time::sleep(retry_delay).await;
             retry_delay = retry_delay.saturating_mul(2).min(Duration::from_secs(5));
         }
