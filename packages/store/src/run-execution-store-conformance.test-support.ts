@@ -388,8 +388,20 @@ export function registerRunExecutionStoreConformance(
         }),
         input.modelState,
       );
+      assert.deepEqual(
+        await fixture.store.loadThreadContinuation(continuationLocator()),
+        input.continuation,
+      );
       assert.equal(committed.step.status, "completed");
       assert.equal(committed.attempt.status, "completed");
+      assert.equal(
+        committed.attempt.checkpointDigest,
+        input.attempt.checkpointDigest,
+      );
+      assert.deepEqual(
+        committed.attempt.providerCheckpoint,
+        input.continuation?.checkpoint,
+      );
     });
 
     test("atomically persists, replays and rolls back a proposed Plan with its terminal Message", async (context) => {
@@ -2531,6 +2543,14 @@ function assistantSampleContinuationInput(
 ): CommitAssistantSampleContinuationInput {
   const occurredAt = "2026-08-08T00:01:02Z";
   const contentDigest = `sha256:${"f".repeat(64)}`;
+  const checkpointDigest = `sha256:${"c".repeat(64)}`;
+  const checkpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "text-adapter",
+    adapterVersion: "1",
+    modelId: "text-model",
+    opaquePayload: { responseId: "resp-assistant-sample" },
+  } as const;
   const events = [
     {
       schemaVersion: "crewon.run-event.v0",
@@ -2622,10 +2642,18 @@ function assistantSampleContinuationInput(
       latestUsage: { inputTokens: 4, outputTokens: 1, totalTokens: 5 },
       updatedAt: occurredAt,
     },
+    continuation: {
+      ...continuationLocator(),
+      throughHistorySequence: 1,
+      contextRevision: "canonical",
+      checkpoint,
+      updatedAt: occurredAt,
+    },
     attempt: {
       stepId: "text-step-1",
       attemptId: "text-attempt-1",
       finishedAt: occurredAt,
+      checkpointDigest,
     },
     sampleIndex: 1,
   };

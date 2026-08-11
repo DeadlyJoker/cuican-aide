@@ -140,6 +140,7 @@ export type KernelAgentEvent =
       data: Readonly<{
         output: string;
         completedAssistantItems: string[];
+        checkpoint: ProviderCheckpoint | null;
       }>;
     })
   | (KernelEventBase & {

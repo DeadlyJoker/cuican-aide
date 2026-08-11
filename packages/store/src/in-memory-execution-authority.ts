@@ -122,6 +122,51 @@ export class InMemoryExecutionAuthority {
     }
   }
 
+  finishWithCheckpoint(
+    tenantId: string,
+    runId: string,
+    workItemId: string,
+    leaseEpoch: number,
+    mutation: RunAttemptTerminalMutation,
+    checkpoint: RunAttemptState["providerCheckpoint"],
+  ): RunAttemptTransitionResult {
+    const step = this.#steps.get(mutation.stepId) ?? null;
+    const attempt = this.#attempts.get(mutation.attemptId) ?? null;
+    if (
+      step?.tenantId !== tenantId ||
+      step.runId !== runId ||
+      attempt?.tenantId !== tenantId ||
+      attempt.runId !== runId ||
+      attempt.stepId !== step.stepId
+    ) {
+      throw new RunStoreError("run_attempt_not_found");
+    }
+    if (
+      attempt.leaseEpoch !== leaseEpoch ||
+      attempt.workItemId !== workItemId ||
+      (attempt.providerCheckpoint !== null &&
+        (attempt.checkpointDigest !== mutation.checkpointDigest ||
+          JSON.stringify(attempt.providerCheckpoint) !==
+            JSON.stringify(checkpoint)))
+    ) {
+      throw new RunStoreError("attempt_provider_checkpoint_conflict");
+    }
+    try {
+      return finishRunAttempt(
+        step,
+        {
+          ...attempt,
+          providerCheckpoint: clone(checkpoint),
+          checkpointDigest: mutation.checkpointDigest,
+          updatedAt: mutation.finishedAt,
+        },
+        terminalInput(mutation),
+      );
+    } catch (error) {
+      throw normalizeExecutionLifecycleError(error);
+    }
+  }
+
   apply(result: RunAttemptTransitionResult): void {
     this.#steps.set(result.step.stepId, clone(result.step));
     this.#attempts.set(result.attempt.attemptId, clone(result.attempt));

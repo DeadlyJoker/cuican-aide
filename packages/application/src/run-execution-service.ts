@@ -1724,11 +1724,27 @@ export class RunExecutionService {
         autoCompactAtTokens: number | null;
       }>;
       latestUsage: ThreadModelState["latestUsage"];
+      checkpoint: import("@crewon/contracts").ProviderCheckpoint | null;
     }>,
   ): Promise<CommitAssistantSampleContinuationResult> {
     requirePositiveInteger(input.sampleIndex, "assistant_sample_index_invalid");
     requireBoundedContent(input.output);
     validateModelIdentity(input.identity);
+    const checkpoint =
+      input.checkpoint === null
+        ? null
+        : parseProviderCheckpoint(input.checkpoint);
+    if (
+      checkpoint !== null &&
+      (checkpoint.adapterName !== input.identity.adapterName ||
+        checkpoint.adapterVersion !== input.identity.adapterVersion ||
+        checkpoint.modelId !== input.identity.modelId)
+    ) {
+      throw new ApplicationError(
+        "validation",
+        "provider_checkpoint_identity_mismatch",
+      );
+    }
     const state = await this.loadRun(claim);
     if (state.status !== "running" || state.cancelRequested) {
       throw new ApplicationError("conflict", "run_not_running");
@@ -1793,6 +1809,18 @@ export class RunExecutionService {
       latestUsage: input.latestUsage,
       updatedAt: occurredAt,
     };
+    const continuation: ThreadContinuationCheckpoint | null =
+      checkpoint === null
+        ? null
+        : {
+            tenantId: state.tenantId,
+            threadId: state.threadId,
+            ...input.identity,
+            throughHistorySequence: historyItems.at(-1)!.sequence,
+            contextRevision: input.contextRevision,
+            checkpoint,
+            updatedAt: occurredAt,
+          };
     try {
       return await this.#store.commitAssistantSampleContinuation({
         lease: leaseInput(claim),
@@ -1821,7 +1849,15 @@ export class RunExecutionService {
         },
         history: { expectedLastSequence: head.lastSequence, items: historyItems },
         modelState,
-        attempt: { ...attempt, finishedAt: occurredAt },
+        continuation,
+        attempt: {
+          ...attempt,
+          finishedAt: occurredAt,
+          checkpointDigest:
+            checkpoint === null
+              ? null
+              : this.#digest(canonicalJson(checkpoint)),
+        },
         sampleIndex: input.sampleIndex,
       });
     } catch (error) {

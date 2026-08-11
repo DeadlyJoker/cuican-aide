@@ -352,10 +352,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
               )
               .map((item) => item.content)
               .join("");
-            if (
-              output.length > 0 &&
-              completedAssistantOutput !== output
-            ) {
+            if (output.length > 0 && completedAssistantOutput !== output) {
               throw new AgentKernelError(
                 "model_end_turn_false_output_unsupported",
                 false,
@@ -363,15 +360,6 @@ export class CrewONAgentKernel implements AgentKernelPort {
             }
             const continuationCheckpoint =
               completedCheckpoint ?? createdCheckpoint;
-            if (
-              continuationCheckpoint !== null &&
-              (output.length > 0 || completedAssistantOutput.length > 0)
-            ) {
-              throw new AgentKernelError(
-                "model_end_turn_false_stored_response_unsupported",
-                false,
-              );
-            }
             retries = 0;
             const assistantItems = completedItems
               .filter(
@@ -379,6 +367,16 @@ export class CrewONAgentKernel implements AgentKernelPort {
                   item.type === "message",
               )
               .map((item) => item.content);
+            if (
+              continuationCheckpoint !== null &&
+              toolCalls.length > 0 &&
+              assistantItems.length > 0
+            ) {
+              throw new AgentKernelError(
+                "model_end_turn_false_stored_mixed_response_unsupported",
+                false,
+              );
+            }
             if (toolCalls.length > 0) {
               completedOutput = output;
               completedToolCalls = toolCalls;
@@ -393,7 +391,11 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 segmentId: contract.segmentId,
                 sequence,
                 type: "segment.continuation_requested",
-                data: { output, completedAssistantItems: assistantItems },
+                data: {
+                  output,
+                  completedAssistantItems: assistantItems,
+                  checkpoint: continuationCheckpoint,
+                },
               };
               return;
             }
@@ -746,7 +748,7 @@ function validateContract(contract: AgentSegmentContract): void {
   if (
     !Number.isSafeInteger(contract.continuation.newHistoryStartIndex) ||
     contract.continuation.newHistoryStartIndex < 0 ||
-    contract.continuation.newHistoryStartIndex >= contract.history.length
+    contract.continuation.newHistoryStartIndex > contract.history.length
   ) {
     throw new AgentKernelError("new_message_start_index_invalid", false);
   }

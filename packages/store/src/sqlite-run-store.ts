@@ -3563,7 +3563,10 @@ export class SqliteRunStore implements DomainStore {
           throw new RunStoreError("idempotency_conflict");
         }
         const storedRun = normalizeStoredRunResult(
-          parseStoredJson<CommitRunResult>(prior.result_json, "idempotency_receipt_invalid"),
+          parseStoredJson<CommitRunResult>(
+            prior.result_json,
+            "idempotency_receipt_invalid",
+          ),
         );
         const step = loadSqliteRunStep(this.#database, {
           tenantId: input.commit.tenantId,
@@ -3586,26 +3589,90 @@ export class SqliteRunStore implements DomainStore {
         });
       }
       const now = readLeaseClock(this.#clock);
-      this.#validateExecutionLease(input.commit.tenantId, runId, input.lease, now);
+      this.#validateExecutionLease(
+        input.commit.tenantId,
+        runId,
+        input.lease,
+        now,
+      );
+      if (input.continuation !== null) {
+        const storedAttempt = loadSqliteRunAttempt(this.#database, {
+          tenantId: input.commit.tenantId,
+          runId,
+          ...input.attempt,
+        });
+        if (storedAttempt?.providerCheckpoint === null) {
+          checkpointSqliteRunAttempt(
+            this.#database,
+            { tenantId: input.commit.tenantId, runId, ...input.attempt },
+            input.lease.workItemId,
+            input.lease.leaseEpoch,
+            input.continuation.checkpoint,
+            input.attempt.checkpointDigest!,
+            input.attempt.finishedAt,
+          );
+        } else if (
+          storedAttempt === null ||
+          storedAttempt.checkpointDigest !== input.attempt.checkpointDigest ||
+          stableJson(storedAttempt.providerCheckpoint) !==
+            stableJson(input.continuation.checkpoint)
+        ) {
+          throw new RunStoreError("attempt_provider_checkpoint_conflict");
+        }
+      }
       const execution = finishSqliteRunAttempt(this.#database, {
         tenantId: input.commit.tenantId,
         runId,
         workItemId: input.lease.workItemId,
         leaseEpoch: input.lease.leaseEpoch,
-        attempt: { ...input.attempt, status: "completed", checkpointDigest: null },
+        attempt: { ...input.attempt, status: "completed" },
       });
-      const run = this.#commitRun(input.commit, input.lease, input.history, true);
-      this.#database.prepare(
-        `INSERT INTO thread_model_states (tenant_id, thread_id, state_json, updated_at)
+      const run = this.#commitRun(
+        input.commit,
+        input.lease,
+        input.history,
+        true,
+      );
+      this.#database
+        .prepare(
+          `INSERT INTO thread_model_states (tenant_id, thread_id, state_json, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT (tenant_id, thread_id) DO UPDATE SET
            state_json = excluded.state_json, updated_at = excluded.updated_at`,
-      ).run(
-        input.modelState.tenantId,
-        input.modelState.threadId,
-        stableJson(input.modelState),
-        input.modelState.updatedAt,
-      );
+        )
+        .run(
+          input.modelState.tenantId,
+          input.modelState.threadId,
+          stableJson(input.modelState),
+          input.modelState.updatedAt,
+        );
+      if (input.continuation !== null) {
+        this.#database
+          .prepare(
+            `INSERT INTO thread_continuations (
+             tenant_id, thread_id, agent_version_id, adapter_name,
+             adapter_version, model_id, through_history_sequence,
+             context_revision, checkpoint_json, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (tenant_id, thread_id, agent_version_id, adapter_name, adapter_version, model_id)
+           DO UPDATE SET through_history_sequence = excluded.through_history_sequence,
+             context_revision = excluded.context_revision,
+             checkpoint_json = excluded.checkpoint_json,
+             updated_at = excluded.updated_at`,
+          )
+          .run(
+            input.continuation.tenantId,
+            input.continuation.threadId,
+            input.continuation.agentVersionId,
+            input.continuation.adapterName,
+            input.continuation.adapterVersion,
+            input.continuation.modelId,
+            input.continuation.throughHistorySequence,
+            input.continuation.contextRevision,
+            stableJson(input.continuation.checkpoint),
+            input.continuation.updatedAt,
+          );
+      }
       this.#database.exec("COMMIT");
       return clone({
         run,

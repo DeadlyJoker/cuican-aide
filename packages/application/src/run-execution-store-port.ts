@@ -176,7 +176,9 @@ export type CommitAssistantSampleContinuationInput = Readonly<{
   commit: CommitRunInput;
   history: ModelHistoryAppend;
   modelState: ThreadModelState;
-  attempt: RunAttemptIdentity & Readonly<{ finishedAt: string }>;
+  continuation: ThreadContinuationCheckpoint | null;
+  attempt: RunAttemptIdentity &
+    Readonly<{ finishedAt: string; checkpointDigest: string | null }>;
   sampleIndex: number;
 }>;
 

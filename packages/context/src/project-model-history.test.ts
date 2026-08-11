@@ -89,6 +89,20 @@ test("keeps canonical history cache-stable before the first compaction", () => {
     }),
     2,
   );
+  assert.equal(
+    projectedContinuationStart(projection, {
+      contextRevision: "canonical",
+      throughHistorySequence: 3,
+    }),
+    null,
+  );
+  assert.equal(
+    projectedContinuationStart(projectModelHistory(history.slice(0, 2)), {
+      contextRevision: "canonical",
+      throughHistorySequence: 2,
+    }),
+    2,
+  );
 });
 
 test("projects a compacted prefix without dropping the incoming user suffix", () => {

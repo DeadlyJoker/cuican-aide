@@ -612,7 +612,11 @@ export class PostgresAttemptStore extends PostgresRunStore {
         const step = await loadPostgresRunStep(
           client,
           this.schemaSql(),
-          { tenantId: input.commit.tenantId, runId, stepId: input.attempt.stepId },
+          {
+            tenantId: input.commit.tenantId,
+            runId,
+            stepId: input.attempt.stepId,
+          },
           true,
         );
         const attempt = await loadPostgresRunAttempt(
@@ -638,18 +642,81 @@ export class PostgresAttemptStore extends PostgresRunStore {
         runId,
         input.lease,
       );
-      const execution = await finishPostgresRunAttempt(client, this.schemaSql(), {
-        tenantId: input.commit.tenantId,
-        runId,
-        workItemId: input.lease.workItemId,
-        leaseEpoch: input.lease.leaseEpoch,
-        attempt: { ...input.attempt, status: "completed", checkpointDigest: null },
-      });
+      if (input.continuation !== null) {
+        const storedAttempt = await loadPostgresRunAttempt(
+          client,
+          this.schemaSql(),
+          { tenantId: input.commit.tenantId, runId, ...input.attempt },
+          true,
+        );
+        if (storedAttempt?.providerCheckpoint === null) {
+          await checkpointPostgresRunAttempt(
+            client,
+            this.schemaSql(),
+            { tenantId: input.commit.tenantId, runId, ...input.attempt },
+            input.lease.workItemId,
+            input.lease.leaseEpoch,
+            input.continuation.checkpoint,
+            input.attempt.checkpointDigest!,
+            input.attempt.finishedAt,
+          );
+        } else if (
+          storedAttempt === null ||
+          storedAttempt.checkpointDigest !== input.attempt.checkpointDigest ||
+          stableJson(storedAttempt.providerCheckpoint) !==
+            stableJson(input.continuation.checkpoint)
+        ) {
+          throw new RunStoreError("attempt_provider_checkpoint_conflict");
+        }
+      }
+      const execution = await finishPostgresRunAttempt(
+        client,
+        this.schemaSql(),
+        {
+          tenantId: input.commit.tenantId,
+          runId,
+          workItemId: input.lease.workItemId,
+          leaseEpoch: input.lease.leaseEpoch,
+          attempt: { ...input.attempt, status: "completed" },
+        },
+      );
       const run = await this.commitRunWithin(client, input.commit, {
         executionLease: input.lease,
         history: input.history,
       });
-      await writePostgresThreadModelState(client, this.schemaSql(), input.modelState);
+      await writePostgresThreadModelState(
+        client,
+        this.schemaSql(),
+        input.modelState,
+      );
+      if (input.continuation !== null) {
+        await client.query(
+          `INSERT INTO ${this.schemaSql()}.thread_continuations
+             (tenant_id, thread_id, agent_version_id, adapter_name,
+              adapter_version, model_id, through_history_sequence,
+              context_revision, checkpoint_json, continuation_json, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+           ON CONFLICT (tenant_id, thread_id, agent_version_id, adapter_name, adapter_version, model_id)
+           DO UPDATE SET through_history_sequence=EXCLUDED.through_history_sequence,
+             context_revision=EXCLUDED.context_revision,
+             checkpoint_json=EXCLUDED.checkpoint_json,
+             continuation_json=EXCLUDED.continuation_json,
+             updated_at=EXCLUDED.updated_at`,
+          [
+            input.continuation.tenantId,
+            input.continuation.threadId,
+            input.continuation.agentVersionId,
+            input.continuation.adapterName,
+            input.continuation.adapterVersion,
+            input.continuation.modelId,
+            input.continuation.throughHistorySequence,
+            input.continuation.contextRevision,
+            input.continuation.checkpoint,
+            input.continuation,
+            input.continuation.updatedAt,
+          ],
+        );
+      }
       await client.query("COMMIT");
       return structuredClone({
         run,

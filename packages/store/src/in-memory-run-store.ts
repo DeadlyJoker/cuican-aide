@@ -3253,20 +3253,41 @@ export class InMemoryRunStore implements DomainStore {
       });
     }
     const now = readLeaseClock(this.#clock);
-    this.#validateExecutionLease(input.commit.tenantId, runId, input.lease, now);
-    const execution = this.#executionAuthority.finish(
+    this.#validateExecutionLease(
       input.commit.tenantId,
       runId,
-      input.lease.workItemId,
-      input.lease.leaseEpoch,
-      { ...input.attempt, status: "completed", checkpointDigest: null },
+      input.lease,
+      now,
     );
+    const execution =
+      input.continuation === null
+        ? this.#executionAuthority.finish(
+            input.commit.tenantId,
+            runId,
+            input.lease.workItemId,
+            input.lease.leaseEpoch,
+            { ...input.attempt, status: "completed" },
+          )
+        : this.#executionAuthority.finishWithCheckpoint(
+            input.commit.tenantId,
+            runId,
+            input.lease.workItemId,
+            input.lease.leaseEpoch,
+            { ...input.attempt, status: "completed" },
+            input.continuation.checkpoint,
+          );
     const run = this.#commitRun(input.commit, input.history);
     this.#executionAuthority.apply(execution);
     this.#threadModelStates.set(
       stableJson([input.modelState.tenantId, input.modelState.threadId]),
       clone(input.modelState),
     );
+    if (input.continuation !== null) {
+      this.#threadContinuations.set(
+        continuationKey(input.continuation),
+        clone(input.continuation),
+      );
+    }
     return clone({
       run,
       step: execution.step,

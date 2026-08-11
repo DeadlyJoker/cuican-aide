@@ -1001,6 +1001,7 @@ export class RuntimeWorker {
               autoCompactAtTokens: runtime.autoCompactAtTokens,
             },
             latestUsage,
+            checkpoint: assistantContinuation.data.checkpoint,
           },
         );
         await this.#afterAssistantSampleCommitted?.();

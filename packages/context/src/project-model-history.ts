@@ -118,9 +118,7 @@ export function projectedContinuationStart(
   }
   const boundary = projection.items[boundaryIndex];
   const start = boundaryIndex + 1;
-  return boundary?.type === "message" &&
-    boundary.role === "assistant" &&
-    start < projection.items.length
+  return boundary?.type === "message" && boundary.role === "assistant"
     ? start
     : null;
 }

@@ -715,7 +715,11 @@ export function validateAssistantSampleContinuationInput(
   input: CommitAssistantSampleContinuationInput,
 ): string {
   const runId = validateCommitInput(input.commit);
-  validateQueueLease(input.lease, input.lease.workItemId, "work_item_id_invalid");
+  validateQueueLease(
+    input.lease,
+    input.lease.workItemId,
+    "work_item_id_invalid",
+  );
   if (!Number.isSafeInteger(input.sampleIndex) || input.sampleIndex < 1) {
     throw new RunStoreError("assistant_sample_index_invalid");
   }
@@ -756,10 +760,23 @@ export function validateAssistantSampleContinuationInput(
     throw new RunStoreError("assistant_sample_continuation_mismatch");
   }
   validateThreadModelState(input.modelState);
+  if (
+    input.continuation !== null &&
+    (input.continuation.tenantId !== input.commit.tenantId ||
+      input.continuation.threadId !== history.threadId ||
+      input.continuation.agentVersionId !== input.modelState.agentVersionId ||
+      input.continuation.adapterName !== input.modelState.adapterName ||
+      input.continuation.adapterVersion !== input.modelState.adapterVersion ||
+      input.continuation.modelId !== input.modelState.modelId ||
+      input.continuation.throughHistorySequence !== lastHistory?.sequence ||
+      input.continuation.contextRevision !== input.modelState.contextRevision ||
+      input.continuation.updatedAt !== input.attempt.finishedAt)
+  ) {
+    throw new RunStoreError("assistant_sample_continuation_mismatch");
+  }
   validateRunAttemptMutation(input.commit.tenantId, runId, input.lease, {
     ...input.attempt,
     status: "completed",
-    checkpointDigest: null,
   });
   return runId;
 }

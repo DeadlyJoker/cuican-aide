@@ -16,6 +16,15 @@
     ]
   ],
   "finalOutput": "done",
+  "storedCandidate": {
+    "checkpointResponseId": "resp-stored-working",
+    "continuationMethod": "POST",
+    "continuationInput": [],
+    "providerCallCount": 2,
+    "retrieveCount": 0,
+    "completedAssistantHistoryCount": 1,
+    "providerContinuationMarkerCount": 1
+  },
   "finalState": {
     "requestCount": 3,
     "samplingRetries": 0,

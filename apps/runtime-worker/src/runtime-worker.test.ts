@@ -267,6 +267,209 @@ test("durably continues AR-031 assistant output without a phantom Message", asyn
   await worker.close();
 });
 
+test("atomically continues stored AR-031 assistant output after a committed crash", async (context) => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../packages/test-contracts/fixtures/provider-end-turn-assistant-continuation.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as {
+    completedAssistantOutput: string;
+    finalOutput: string;
+    storedCandidate: {
+      checkpointResponseId: string;
+      continuationMethod: string;
+      continuationInput: unknown[];
+      providerCallCount: number;
+      retrieveCount: number;
+      completedAssistantHistoryCount: number;
+      providerContinuationMarkerCount: number;
+    };
+  };
+  const directory = mkdtempSync(join(tmpdir(), "crewon-ar031-stored-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const fixture = await createFixture(
+    context,
+    (clock) => new SqliteRunStore(databasePath, { clock }),
+  );
+  const checkpoint = directProviderCheckpoint(
+    reference.storedCandidate.checkpointResponseId,
+  );
+  const providerCalls: Array<{
+    method: string;
+    url: string;
+    body: Record<string, unknown>;
+  }> = [];
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: checkpoint.modelId,
+      storeResponses: true,
+    },
+    {
+      fetch: async (input, init) => {
+        providerCalls.push({
+          method: init?.method ?? "GET",
+          url: String(input),
+          body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+        });
+        const first = providerCalls.length === 1;
+        return new Response(
+          responsesEventStream(
+            first
+              ? reference.storedCandidate.checkpointResponseId
+              : "resp-done",
+            first ? reference.completedAssistantOutput : reference.finalOutput,
+            first ? false : undefined,
+            first
+              ? { input_tokens: 4, output_tokens: 1, total_tokens: 5 }
+              : {
+                  input_tokens: 2,
+                  input_tokens_details: { cached_tokens: 1 },
+                  output_tokens: 1,
+                  total_tokens: 3,
+                },
+          ),
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        );
+      },
+    },
+  );
+  const crashed = fixture.worker({
+    transport,
+    retryAfterMs: 0,
+    afterAssistantSampleCommitted: async () => {
+      throw new Error("crash_after_stored_assistant_sample_commit");
+    },
+  });
+
+  assert.deepEqual(await crashed.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "crash_after_stored_assistant_sample_commit",
+  });
+  await crashed.close();
+  assert.deepEqual(
+    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    [{ role: "user", content: "hello" }],
+  );
+  const committedContinuation = await fixture.store.loadThreadContinuation({
+    tenantId: actor().tenantId,
+    threadId: fixture.threadId,
+    agentVersionId: ROUTE.agentVersionId,
+    adapterName: checkpoint.adapterName,
+    adapterVersion: checkpoint.adapterVersion,
+    modelId: checkpoint.modelId,
+  });
+  assert.deepEqual(committedContinuation, {
+    tenantId: actor().tenantId,
+    threadId: fixture.threadId,
+    agentVersionId: ROUTE.agentVersionId,
+    adapterName: checkpoint.adapterName,
+    adapterVersion: checkpoint.adapterVersion,
+    modelId: checkpoint.modelId,
+    throughHistorySequence: 2,
+    contextRevision: "canonical",
+    checkpoint,
+    updatedAt: committedContinuation?.updatedAt,
+  });
+
+  await fixture.store.close();
+  const reopenedStore = new SqliteRunStore(databasePath, {
+    clock: fixture.leaseClock,
+  });
+  context.after(() => reopenedStore.close());
+
+  const worker = fixture.worker({ transport, store: reopenedStore });
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  assert.equal(
+    providerCalls.length,
+    reference.storedCandidate.providerCallCount,
+  );
+  assert.deepEqual(
+    providerCalls.map(({ method }) => method),
+    ["POST", reference.storedCandidate.continuationMethod],
+  );
+  assert.deepEqual(
+    providerCalls.map(({ url }) => url),
+    [
+      "https://provider.example/v1/responses",
+      "https://provider.example/v1/responses",
+    ],
+  );
+  assert.deepEqual(providerCalls[1]?.body, {
+    ...providerCalls[1]?.body,
+    previous_response_id: reference.storedCandidate.checkpointResponseId,
+    input: reference.storedCandidate.continuationInput,
+  });
+  const recoveredRun = await reopenedStore.loadRun({
+    tenantId: actor().tenantId,
+    runId: fixture.runId,
+  });
+  assert.deepEqual(recoveredRun?.usage, {
+    inputTokens: 6,
+    cachedInputTokens: 1,
+    outputTokens: 2,
+    totalTokens: 8,
+  });
+  assert.deepEqual(
+    (
+      await reopenedStore.listMessages(
+        { tenantId: actor().tenantId, threadId: fixture.threadId },
+        0,
+        100,
+      )
+    ).map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: reference.finalOutput },
+    ],
+  );
+  assert.equal(
+    (
+      await reopenedStore.listRunEvents(
+        { tenantId: actor().tenantId, runId: fixture.runId },
+        0,
+        100,
+      )
+    ).filter((event) => event.type === "model.sampling.retry").length,
+    0,
+  );
+  const recoveredHistory = await reopenedStore.listModelHistoryItems(
+    { tenantId: actor().tenantId, threadId: fixture.threadId },
+    0,
+    100,
+  );
+  assert.equal(
+    recoveredHistory.filter(
+      (item) => item.type === "message" && item.content === "working",
+    ).length,
+    reference.storedCandidate.completedAssistantHistoryCount,
+  );
+  assert.equal(
+    (
+      await reopenedStore.listRunEvents(
+        { tenantId: actor().tenantId, runId: fixture.runId },
+        0,
+        100,
+      )
+    ).filter((event) => event.type === "segment.provider_continuation").length,
+    reference.storedCandidate.providerContinuationMarkerCount,
+  );
+  assert.equal(
+    providerCalls.filter(({ method }) => method === "GET").length,
+    reference.storedCandidate.retrieveCount,
+  );
+  await worker.close();
+});
+
 test("executes Plan mode with server instructions and stores only the proposed Plan body", async (context) => {
   const fixture = await createFixture(
     context,
@@ -7547,6 +7750,7 @@ async function createFixture(
       afterToolProviderResolved?: RuntimeWorkerConfig["afterToolProviderResolved"];
       afterToolReceiptCommitted?: RuntimeWorkerConfig["afterToolReceiptCommitted"];
       afterGoalToolExecuted?: RuntimeWorkerConfig["afterGoalToolExecuted"];
+      store?: DomainStore;
       cancellationScheduler?: RuntimeWorkerScheduler;
       maxContextItems?: number;
       autoCompactAtContextItems?: number | null;
@@ -7554,11 +7758,21 @@ async function createFixture(
       autoCompactAtContextBytes?: number | null;
       autoCompactAtTokens?: number | null;
       modelContextWindowTokens?: number;
-    }) =>
-      new RuntimeWorker(
+    }) => {
+      const workerStore = options.store ?? store;
+      const workerExecution =
+        options.store === undefined
+          ? execution
+          : new RunExecutionService({
+              store: workerStore,
+              clock,
+              ids,
+              digester: new Sha256Digester(),
+            });
+      return new RuntimeWorker(
         {
-          store,
-          execution,
+          store: workerStore,
+          execution: workerExecution,
           kernel: new CrewONAgentKernel({
             transport: options.transport,
             streamMaxRetries: options.streamMaxRetries ?? 0,
@@ -7591,14 +7805,16 @@ async function createFixture(
           afterAttemptStarted: options.afterAttemptStarted,
           afterProviderResponseCheckpointed:
             options.afterProviderResponseCheckpointed,
-          beforeAssistantSampleCommitted: options.beforeAssistantSampleCommitted,
+          beforeAssistantSampleCommitted:
+            options.beforeAssistantSampleCommitted,
           afterAssistantSampleCommitted: options.afterAssistantSampleCommitted,
           afterToolDispatched: options.afterToolDispatched,
           afterToolProviderResolved: options.afterToolProviderResolved,
           afterToolReceiptCommitted: options.afterToolReceiptCommitted,
           afterGoalToolExecuted: options.afterGoalToolExecuted,
         },
-      ),
+      );
+    },
     loadRun: async () => {
       const state = await store.loadRun({ tenantId: actor().tenantId, runId });
       assert.ok(state !== null);
@@ -7791,6 +8007,12 @@ function governedContextBundle(fragmentCount: number): GovernedContextBundle {
 function responsesEventStream(
   responseId = "resp-worker-1",
   output = "done",
+  endTurn?: boolean,
+  usage: Record<string, unknown> = {
+    input_tokens: 4,
+    output_tokens: 1,
+    total_tokens: 5,
+  },
 ): ReadableStream<Uint8Array> {
   const events = [
     {
@@ -7804,18 +8026,29 @@ function responsesEventStream(
       delta: output,
     },
     {
-      type: "response.completed",
+      type: "response.output_item.done",
       sequence_number: 2,
+      item: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: output }],
+      },
+    },
+    {
+      type: "response.completed",
+      sequence_number: 3,
       response: {
         id: responseId,
         status: "completed",
+        ...(endTurn === undefined ? {} : { end_turn: endTurn }),
         output: [
           {
             type: "message",
+            role: "assistant",
             content: [{ type: "output_text", text: output }],
           },
         ],
-        usage: { input_tokens: 4, output_tokens: 1, total_tokens: 5 },
+        usage,
       },
     },
   ];

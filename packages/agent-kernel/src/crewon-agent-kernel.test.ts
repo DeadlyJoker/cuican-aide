@@ -176,7 +176,11 @@ test("matches AR-031 Provider end_turn=false empty continuation", async () => {
       output: "done",
       usage: stableEvents
         .filter((event) => event.type === "usage.recorded")
-        .reduce<{ inputTokens: number; outputTokens: number; totalTokens: number }>(
+        .reduce<{
+          inputTokens: number;
+          outputTokens: number;
+          totalTokens: number;
+        }>(
           (usage, event) => ({
             inputTokens: usage.inputTokens + Number(event.inputTokens),
             outputTokens: usage.outputTokens + Number(event.outputTokens),
@@ -240,7 +244,7 @@ test("continues an empty end_turn=false stored response from its checkpoint", as
   );
 });
 
-test("fails closed on stored end_turn=false assistant output", async () => {
+test("returns a durable boundary for stored end_turn=false assistant output", async () => {
   const checkpoint = {
     schemaVersion: "crewon.provider-checkpoint.v0",
     adapterName: "stored-output",
@@ -262,18 +266,24 @@ test("fails closed on stored end_turn=false assistant output", async () => {
     },
   };
 
-  await assert.rejects(
-    collect(
-      new CrewONAgentKernel({ transport }).runSegment(
-        segmentContract(),
-        new AbortController().signal,
-      ),
+  const events = await collect(
+    new CrewONAgentKernel({ transport }).runSegment(
+      segmentContract(),
+      new AbortController().signal,
     ),
-    (error) =>
-      error instanceof AgentKernelError &&
-      error.code === "model_end_turn_false_stored_response_unsupported" &&
-      !error.retryable,
   );
+  assert.deepEqual(events.at(-1), {
+    schemaVersion: "crewon.agent-event.v0",
+    runId: "run-1",
+    segmentId: "segment-1",
+    sequence: 3,
+    type: "segment.continuation_requested",
+    data: {
+      output: "working",
+      completedAssistantItems: ["working"],
+      checkpoint,
+    },
+  });
 });
 
 test("returns a durable boundary for end_turn=false assistant-only output", async () => {
@@ -310,6 +320,7 @@ test("returns a durable boundary for end_turn=false assistant-only output", asyn
     data: {
       output: "still working",
       completedAssistantItems: ["still working"],
+      checkpoint: null,
     },
   });
 });
