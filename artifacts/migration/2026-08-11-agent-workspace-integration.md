@@ -72,6 +72,52 @@ Workspace UI 另在只含 committed `HEAD` 的独立 `git archive` 中验证：9
 - clean UI worktree 的 legacy cutover focused 8 / 8、lint、production build 通过。其意外触发的 full UI suite 仍有一条既存
   `CommandWorkspaceConversationStyle` CSS snapshot mismatch；本切片未把该无关视觉漂移静默接受为新基线。
 
+## Agent Runtime recovery 与 Store authority 续切
+
+本节记录同日追加的、只存在于 committed tree 的纵切。主工作目录仍包含其他并行迁移改动，因此所有最终计数均来自新的隔离
+Codex worktree，不以主目录的 dirty state 作为通过依据。
+
+- Provider response recovery：`7f4391a00`、`f57d47902`、`124405ffa` 增加严格的 stored response retrieve projector、Attempt
+  lease-fenced provider checkpoint 和 retry lineage。已知 provider response ID 时，pending/reclaim/retry 继续 GET 同一 response，
+  不重复 POST；digest、model、Attempt lease 和 terminal projection 均 fail closed。这个 durable recovery authority 当前只落在 TS
+  Worker/Store 路径；Rust reference 仍没有等价的跨进程 response retrieve authority，因此这里不声明 Rust/TS 完全 parity。
+- Tool Approval replacement：`45923ab33`、`ebfdeebf5` 增加跨 Action 的原子 supersede、旧 approval `action_replaced` 终态、
+  新 approval/work item/outbox/event 同事务提交，以及 expiry 的有限数值预校验。InMemory、SQLite、PostgreSQL conformance 已覆盖；
+  当前仍是 Application/Store 内部 authority，尚未接入 production Worker caller 或新增公共 API。
+- Native filesystem read staging：`4aad924c0` 增加 canonical relative components、共享 TS/Rust fixture 和 Unix `openat` +
+  `O_NOFOLLOW` stable-handle 的 UTF-8 bounded read primitive，同时约束 byte/envelope 上限并复核 Workspace incarnation。该 capability
+  在 Windows 明确 unavailable，且尚未由 Device Hello advertise、Native connection dispatcher、Gateway 或 Worker 路由；它不是已开放的
+  产品能力，也没有让 epoch permit 跨 blocking I/O 持有。
+- Automation authority：`72619f1b3..9ade2fe36` 提交 tenant/space-scoped Application port、InMemory/SQLite/PostgreSQL
+  authority、schema、receipt 与 conformance。生产逻辑已从 4k/6k 行聚合 Store 抽离：InMemory 366 行；SQLite 480/117/44 行；
+  PostgreSQL 483/405/256/11 行，均低于 500 行。Automation 仍保持 manual-only；scheduler、Control/UI production admission
+  不是本纵切的完成项。
+- Workspace Store composition：`bbeef7a17` 建立 `DomainStore` 的强制 `WorkspaceOperationStore` 与 space-scoped Thread port；
+  `5f8f730da`、`faa78c5b9`、`1f15a5436` 将已有独立 Workspace authority 以薄转发接入 InMemory、SQLite 和 PostgreSQL，
+  并提交 SQLite v21 → v23 migration 和 conformance 注册。没有把 Workspace 业务判断重新塞回聚合 Store。
+- clean-tree Gate 首轮据此找出 3 个真实回归：Automation Message rollback correlation 的 InMemory/SQLite 两处失败，以及一条仍把
+  SQLite schema 写死为 v20 的旧测试。`751e59f92` 将 `automation_invocation` 纳入 canonical message-backed / instruction-boundary
+  语义并校验 Message/history origin；`7c4ca001f` 改为跟随当前 schema 并验证 Provider/Automation tables 只迁移一次。
+
+最终 clean-tree 复验对象为 commit `7c4ca001fa0076cba2512742d2f75be587c81615`、tree
+`addcadd9b0fa3f1ae6cbeeaabf2eeeec7f993c93`。7 个 TypeScript package typecheck 全部通过；测试结果如下：
+
+| 包 | Tests | Pass | Fail | Skipped |
+| --- | ---: | ---: | ---: | ---: |
+| Contracts | 70 | 70 | 0 | 0 |
+| Domain | 80 | 80 | 0 | 0 |
+| Agent Kernel | 20 | 20 | 0 | 0 |
+| Agent Responses | 33 | 33 | 0 | 0 |
+| Application | 112 | 112 | 0 | 0 |
+| Store | 312 | 267 | 0 | 45 |
+| Runtime Worker | 169 | 168 | 0 | 1 |
+| **合计** | **796** | **750** | **0** | **46** |
+
+46 个 skip 全部来自未配置 `CREWON_TEST_POSTGRES_URL` 的条件测试，未计为通过。Rust focused 的
+`crewon-device-protocol`、`crewon-device`、`crewon-device-runtime` 三条 `just test -p` 命令均以 0 退出；未运行仓库级完整
+`just test`。隔离 worktree 初始/最终均 clean，`git diff --check` 通过，`pnpm install --frozen-lockfile` 前后 lockfile SHA-256
+均为 `934cc8f3ccf553b7e5f890818df3a42827e2d78de29a3380f50f3521f0298fa5`。
+
 ## 最终 macOS packaged smoke
 
 - Sidecar staging 使用官方 redistributable Node `v24.18.1`：
