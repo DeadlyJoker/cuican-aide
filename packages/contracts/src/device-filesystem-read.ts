@@ -31,8 +31,69 @@ export type DeviceFilesystemReadResult = Readonly<{
   byteLength: number;
 }>;
 
-export type DeviceFilesystemReadEvent = Readonly<Record<string, unknown>>;
-export type DeviceFilesystemReadAck = Readonly<Record<string, unknown>>;
+type DeviceFilesystemReadEventEnvelope = Readonly<{
+  schemaVersion: "crewon.device-filesystem-read-event.v0";
+  protocolVersion: 1;
+  commandKind: "workspaceRead";
+  deviceId: string;
+  executionId: string;
+  receiptId: string;
+  connectionEpoch: number;
+  workspaceBindingId: string;
+  incarnationId: string;
+  commandDigest: string;
+  sequence: 1 | 2;
+  observedAt: string;
+}>;
+export type DeviceFilesystemReadEvent = DeviceFilesystemReadEventEnvelope &
+  (
+    | Readonly<{
+        type: "workspace_read.accepted";
+        sequence: 1;
+        data: Readonly<{
+          leaseId: string;
+          leaseEpoch: number;
+          expiresAt: string;
+        }>;
+      }>
+    | Readonly<{
+        type: "workspace_read.completed";
+        sequence: 2;
+        data: Readonly<{
+          result: DeviceFilesystemReadResult &
+            Readonly<{ outputDigest: string }>;
+        }>;
+      }>
+    | Readonly<{
+        type: "workspace_read.failed";
+        sequence: 2;
+        data: Readonly<{ code: string; retryable: boolean }>;
+      }>
+    | Readonly<{
+        type: "workspace_read.canceled";
+        sequence: 2;
+        data: Readonly<{ reasonCode: string }>;
+      }>
+    | Readonly<{
+        type: "workspace_read.unknown_outcome";
+        sequence: 2;
+        data: Readonly<{ providerReceiptId: string | null }>;
+      }>
+  );
+export type DeviceFilesystemReadAck = Readonly<{
+  schemaVersion: "crewon.device-filesystem-read-ack.v0";
+  protocolVersion: 1;
+  commandKind: "workspaceRead";
+  deviceId: string;
+  executionId: string;
+  receiptId: string;
+  connectionEpoch: number;
+  workspaceBindingId: string;
+  incarnationId: string;
+  commandDigest: string;
+  throughSequence: 1 | 2;
+  acknowledgedAt: string;
+}>;
 
 const eventKeys = [
   "commandDigest",

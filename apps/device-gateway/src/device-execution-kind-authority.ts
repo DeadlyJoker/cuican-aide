@@ -1,6 +1,9 @@
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 
-export type DeviceExecutionCommandKind = "tool" | "workspaceList";
+export type DeviceExecutionCommandKind =
+  | "tool"
+  | "workspaceList"
+  | "workspaceRead";
 
 /**
  * In-memory prototype of the global execution-id namespace shared by all
