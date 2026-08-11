@@ -16,7 +16,9 @@
         "idleTimeoutMs": 60000,
         "sequencePolicy": "required"
       },
-      "mcpStdioConfigPath": null
+      "mcpStdioConfigPath": null,
+      "deviceToolConfigPath": null,
+      "remoteMcpConfigPath": null
     }
   ]
 }

@@ -22,6 +22,7 @@ import {
   type AgentVersionRuntimeBinding,
 } from "./configured-agent-version-runtime-factory.ts";
 import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
+import { loadRemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 
 const MAX_BINDINGS = 1_000;
 const MAX_CONFIG_BYTES = 1024 * 1024;
@@ -45,6 +46,7 @@ type RuntimeBindingConfig = Readonly<{
     }>;
     mcpStdioConfigPath: string | null;
     deviceToolConfigPath: string | null;
+    remoteMcpConfigPath: string | null;
   }>[];
 }>;
 
@@ -111,6 +113,7 @@ function parseBinding(
       "deviceToolConfigPath",
       "mcpStdioConfigPath",
       "provider",
+      "remoteMcpConfigPath",
       "tenantId",
       "workspaceBindingId",
     ])
@@ -136,6 +139,10 @@ function parseBinding(
       value.deviceToolConfigPath === null
         ? null
         : bounded(value.deviceToolConfigPath, 4096),
+    remoteMcpConfigPath:
+      value.remoteMcpConfigPath === null
+        ? null
+        : bounded(value.remoteMcpConfigPath, 4096),
   };
 }
 
@@ -237,6 +244,10 @@ function materializationDigest(
               512 * 1024,
               "agent_version_materialization_config_invalid",
             ),
+      remoteMcpConfig:
+        binding.remoteMcpConfigPath === null
+          ? null
+          : loadRemoteMcpRuntimeConfig(binding.remoteMcpConfigPath),
     }),
   );
 }
@@ -264,6 +275,9 @@ async function createBoundToolRuntime(
 ): Promise<ToolRuntimePort> {
   if (materializationDigest(binding) !== expectedMaterializationDigest) {
     throw new Error("agent_version_runtime_materialization_drift");
+  }
+  if (binding.remoteMcpConfigPath !== null) {
+    throw new Error("remote_mcp_runtime_not_composed");
   }
   const runtimes: ToolRuntimePort[] = [];
   try {

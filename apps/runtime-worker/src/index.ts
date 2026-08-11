@@ -6,6 +6,7 @@ export * from "./configured-agent-version-runtime-factory.ts";
 export * from "./agent-version-release.ts";
 export * from "./agent-version-release-composition.ts";
 export * from "./runtime-binding-config.ts";
+export * from "./remote-mcp-runtime-config.ts";
 export * from "./runtime-worker.ts";
 export * from "./standalone-adapters.ts";
 export * from "./standalone-composition.ts";

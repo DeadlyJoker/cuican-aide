@@ -112,6 +112,96 @@ test("rejects MCP materialization content drift after release compilation", asyn
   );
 });
 
+test("canonically digests every remote endpoint, descriptor, and policy field", (context) => {
+  const version = compileAgentVersion(source(), { sha256 });
+  const path = temporaryFile(context);
+  const remotePath = `${path}.remote.json`;
+  const manifest = config(version.contentDigest, null);
+  const remote = remoteConfig();
+  writeFileSync(remotePath, JSON.stringify(remote), "utf8");
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...manifest,
+      bindings: [{ ...manifest.bindings[0], remoteMcpConfigPath: remotePath }],
+    }),
+    "utf8",
+  );
+  const original = loadAgentVersionDeployments(path)[0]!.materializationDigest;
+
+  const reordered = {
+    servers: remote.servers.map((server) => ({
+      tools: server.tools.map((tool) => ({
+        policy: tool.policy,
+        descriptor: tool.descriptor,
+      })),
+      credentialBindingId: server.credentialBindingId,
+      endpoint: server.endpoint,
+      mode: server.mode,
+      serverBindingId: server.serverBindingId,
+      serverId: server.serverId,
+    })),
+    schemaVersion: remote.schemaVersion,
+  };
+  writeFileSync(remotePath, JSON.stringify(reordered), "utf8");
+  assert.equal(
+    loadAgentVersionDeployments(path)[0]!.materializationDigest,
+    original,
+  );
+
+  const mutations = [
+    { endpoint: "https://mcp.example:9443/mcp" },
+    { toolName: "update_record" },
+    { timeoutMs: 30_001 },
+  ];
+  for (const mutation of mutations) {
+    const changed = structuredClone(remote);
+    if (mutation.endpoint !== undefined)
+      changed.servers[0]!.endpoint = mutation.endpoint;
+    if (mutation.toolName !== undefined)
+      changed.servers[0]!.tools[0]!.descriptor.name = mutation.toolName;
+    if (mutation.timeoutMs !== undefined)
+      changed.servers[0]!.tools[0]!.policy.limits.timeoutMs =
+        mutation.timeoutMs;
+    writeFileSync(remotePath, JSON.stringify(changed), "utf8");
+    assert.notEqual(
+      loadAgentVersionDeployments(path)[0]!.materializationDigest,
+      original,
+    );
+  }
+});
+
+test("detects remote config drift and fails closed while composition is absent", async (context) => {
+  const version = compileAgentVersion(source(), { sha256 });
+  const path = temporaryFile(context);
+  const remotePath = `${path}.remote.json`;
+  const manifest = config(version.contentDigest, null);
+  const remote = remoteConfig();
+  writeFileSync(remotePath, JSON.stringify(remote), "utf8");
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...manifest,
+      bindings: [{ ...manifest.bindings[0], remoteMcpConfigPath: remotePath }],
+    }),
+    "utf8",
+  );
+  const factory = loadAgentVersionRuntimeFactory(path, {});
+  const changed = structuredClone(remote);
+  changed.servers[0]!.endpoint = "https://mcp.example:9443/mcp";
+  writeFileSync(remotePath, JSON.stringify(changed), "utf8");
+  await assert.rejects(
+    factory.create({ tenantId: "tenant-1", version }),
+    hasMessage("agent_version_runtime_materialization_drift"),
+  );
+
+  writeFileSync(remotePath, JSON.stringify(remote), "utf8");
+  await assert.rejects(
+    factory.create({ tenantId: "tenant-1", version }),
+    hasMessage("remote_mcp_runtime_not_composed"),
+  );
+});
+
 test("rejects injected fields and unsafe runtime manifests", () => {
   const version = compileAgentVersion(source(), { sha256 });
   const valid = config(version.contentDigest, null);
@@ -167,6 +257,7 @@ function config(contentDigest: string, apiKeyEnvironment: string | null) {
         },
         mcpStdioConfigPath: null,
         deviceToolConfigPath: null,
+        remoteMcpConfigPath: null,
       },
     ],
   };
@@ -192,6 +283,47 @@ function source() {
       governedContextDigest: null,
     },
     tools: [],
+  };
+}
+
+function remoteConfig() {
+  return {
+    schemaVersion: "crewon.remote-mcp-runtime.v0" as const,
+    servers: [
+      {
+        serverId: "reviewed-mcp",
+        serverBindingId: "remote-1",
+        mode: "production" as const,
+        endpoint: "https://mcp.example:8443/mcp",
+        credentialBindingId: "credential-1",
+        tools: [
+          {
+            descriptor: {
+              name: "create_record",
+              description: "Creates one record.",
+              inputSchema: { type: "object", additionalProperties: false },
+            },
+            policy: {
+              effect: "mutation" as const,
+              recovery: "reconcilable" as const,
+              resourceBindingId: null,
+              credentialBindingId: "credential-1",
+              executionTarget: {
+                kind: "remote" as const,
+                bindingId: "remote-1",
+              },
+              capability: "records.create",
+              approvalRequirement: "perAction" as const,
+              limits: {
+                timeoutMs: 30_000,
+                maxOutputBytes: 64_000,
+                maxArtifactBytes: 1_000_000,
+              },
+            },
+          },
+        ],
+      },
+    ],
   };
 }
 
