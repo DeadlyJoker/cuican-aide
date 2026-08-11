@@ -1,6 +1,7 @@
 export * from "@crewon/application";
 export * from "./in-memory-run-store.ts";
 export * from "./in-memory-workspace-read-file-store.ts";
+export * from "./sqlite-workspace-read-file-store.ts";
 export * from "./lease-clock.ts";
 export * from "./postgres-attempt-store.ts";
 export * from "./postgres-automation-schema.ts";

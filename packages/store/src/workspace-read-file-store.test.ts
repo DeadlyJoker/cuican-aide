@@ -13,6 +13,8 @@ import type {
 } from "@crewon/application";
 
 import { InMemoryWorkspaceReadFileStore } from "./in-memory-workspace-read-file-store.ts";
+import { DatabaseSync } from "node:sqlite";
+import { SqliteWorkspaceReadFileStore } from "./sqlite-workspace-read-file-store.ts";
 
 const fixture = JSON.parse(readFileSync(new URL(
   "../../test-contracts/fixtures/device-protocol.reference.json", import.meta.url,
@@ -93,6 +95,7 @@ function conformance(name: string, create: () => WorkspaceReadFileStore) {
 }
 
 conformance("in-memory workspace read authority", () => new InMemoryWorkspaceReadFileStore());
+conformance("SQLite workspace read authority", () => new SqliteWorkspaceReadFileStore(new DatabaseSync(":memory:")));
 
 function frozen(): FrozenWorkspaceReadFileDispatch {
   return {
