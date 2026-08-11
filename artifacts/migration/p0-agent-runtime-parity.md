@@ -83,6 +83,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-036 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | created 可省略 response id；后续 output 与 completed 的 late identity 仍需形成安全成功链路 | PARITY       | Rust+TS shared created-without-id fixture，覆盖 HTTP/SSE 与 WebSocket framing、success/failure 矩阵及 identity/status 负例      |
 | AR-037 | `crewon-api/src/sse/responses.rs::process_sse` + TS Responses protocol decoder                                  | 首个 failed/incomplete 是 terminal winner；后续 provider 事件全部不可见                   | PARITY       | shared poisoned post-terminal fixture 冻结 first-failure cutoff                                                                 |
 | AR-038 | `crewon-api/src/sse/responses.rs::process_sse` + TS Responses protocol decoder                                  | 顶层 `error` 是 terminal winner，并保留 provider retry 分类                                | PARITY       | shared poisoned top-level-error fixture 覆盖 retryable/non-retryable、无 output/history/usage/identity                         |
+| AR-040 | `crewon-api/src/sse/responses.rs::process_sse` + TS decoder + Runtime Worker                                    | 顶层 `error` 缺失/畸形 payload 与未来 provider code 使用同一 bounded terminal/retry 语义   | PARITY       | shared payload fixture 覆盖严格 cutoff、fatal denylist、默认 retryable 与 durable budget-exhausted 原子结算                    |
 
 ## 已有证据映射
 
@@ -327,3 +328,16 @@ budget 内重试，预算耗尽后 durable Attempt/Run 原子投影为同 code�
 经真实 `DirectResponsesTransport` 共同消费；冻结首个终态 cutoff、空 partial output/history/usage/checkpoint、分类、retryability 与 durable
 budget-exhausted projection。created identity 可继续作为本次流内校验基线，但 generic failure 不产生 completed checkpoint；终态后的 output、
 completed item、usage、identity 与 completed 均不可见。
+
+### AR-040 Responses top-level error payload normalization
+
+顶层 `type: "error"` 的诊断 payload 缺失、嵌套 `error` 非对象、嵌套/平铺 `code` 类型畸形时，TS decoder 与 Rust HTTP/SSE collector
+都降级为安全的 `responses_provider_failed` 语义；合法且满足 `[a-z0-9_]{1,96}` 的未来 provider code 保留为 bounded stable code，默认
+retryable。fatal denylist 明确冻结为 `context_length_exceeded`、`insufficient_quota`、`usage_not_included`、`invalid_prompt`、
+`cyber_policy`、`server_is_overloaded`、`slow_down`，不因未知 code 扩大。嵌套对象存在时优先于平铺字段，即使其内部畸形也不能借平铺字段
+绕过分类；provider message 不进入 TS durable failure，Rust 顶层 error 也只保留分类所需 code，不透传 provider message。
+
+`responses-top-level-error-payload.reference.json` 由真实 TS `ResponsesProtocolDecoder`、Rust `collect_events`/dispatch 与 Runtime Worker
+`DirectResponsesTransport` 共同消费。首个顶层 error 是严格 cutoff，后续 output/history/usage/identity/checkpoint 均不可见；retryable
+terminal 只允许 sampling budget 内重试，预算耗尽后 Attempt、Run 与 Step 原子结算为同一 stable code、`retryable: false`，Work Item 不再
+release。completed 路径的 created、identity、status、output 与 usage 校验保持原样。
