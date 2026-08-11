@@ -13,8 +13,10 @@ use super::OsProviderSecretStore;
 use super::ProviderCredentialKind;
 use super::ProviderCredentialManager;
 use super::ProviderCredentialMutationError;
+use super::ProviderCredentialRecoveryDisposition;
 use super::ProviderCredentialTargetRequest;
 use super::ProviderCredentialUpsertRequest;
+use super::ProviderRuntimeMutationFailure;
 use super::ProviderSecretStore;
 use super::SecretStoreError;
 
@@ -241,6 +243,10 @@ fn failed_runtime_reload_restores_old_catalog_and_keychain_secret() {
                     .and_then(|runtime| { runtime.secret.as_ref().map(|secret| secret.as_str()) }),
                 Some("new-secret"),
             );
+            assert_ne!(
+                previous.map(|runtime| runtime.binding.runtime_binding_id.as_str()),
+                candidate.map(|runtime| runtime.binding.runtime_binding_id.as_str()),
+            );
             Err("control_runtime_active_run")
         })
         .expect_err("reload must reject active run");
@@ -265,6 +271,109 @@ fn failed_runtime_reload_restores_old_catalog_and_keychain_secret() {
             .endpoint,
         "https://api.example.com/v1",
     );
+    assert!(!directory
+        .path()
+        .join("provider-credential-mutation.v1.json")
+        .exists());
+}
+
+#[test]
+fn post_finalize_failure_keeps_a_recoverable_candidate_journal() {
+    let directory = tempdir().expect("temporary directory");
+    let catalog_path = directory.path().join("provider-credentials.v1.json");
+    let secrets = Arc::new(MemorySecretStore::default());
+    let manager = ProviderCredentialManager::open(catalog_path.clone(), secrets.clone())
+        .expect("credential manager");
+    manager
+        .upsert(&keychain_request(Some("old-secret"), true))
+        .expect("initial binding");
+    let previous_binding = manager
+        .active_binding()
+        .expect("active binding")
+        .expect("active provider")
+        .runtime_binding_id;
+
+    let result =
+        manager.upsert_with_coordinator(&keychain_request(Some("new-secret"), false), |mutation| {
+            assert_ne!(mutation.runtime_binding_id, Some(previous_binding.as_str()));
+            Err(ProviderRuntimeMutationFailure::AfterCommit)
+        });
+    assert!(matches!(
+        result,
+        Err(ProviderCredentialMutationError::Rollback)
+    ));
+    assert!(directory
+        .path()
+        .join("provider-credential-mutation.v1.json")
+        .exists());
+
+    manager
+        .recover_with_coordinator(|recovery| {
+            assert!(recovery.operation_id.starts_with("provider-operation:"));
+            assert_eq!(
+                recovery
+                    .previous_runtime
+                    .and_then(|runtime| runtime.secret.as_deref())
+                    .map(String::as_str),
+                Some("old-secret"),
+            );
+            Ok(ProviderCredentialRecoveryDisposition::KeepCandidate)
+        })
+        .expect("keep finalized candidate");
+    assert_eq!(
+        secrets
+            .get("gateway-primary")
+            .expect("candidate secret")
+            .as_str(),
+        "new-secret",
+    );
+    assert!(!directory
+        .path()
+        .join("provider-credential-mutation.v1.json")
+        .exists());
+}
+
+#[test]
+fn crash_recovery_can_restore_the_previous_catalog_and_secret() {
+    let directory = tempdir().expect("temporary directory");
+    let catalog_path = directory.path().join("provider-credentials.v1.json");
+    let secrets = Arc::new(MemorySecretStore::default());
+    let manager = ProviderCredentialManager::open(catalog_path.clone(), secrets.clone())
+        .expect("credential manager");
+    manager
+        .upsert(&keychain_request(Some("old-secret"), true))
+        .expect("initial binding");
+    let old_binding = manager
+        .active_binding()
+        .expect("active binding")
+        .expect("active provider")
+        .runtime_binding_id;
+    assert!(matches!(
+        manager.upsert_with_coordinator(&keychain_request(Some("new-secret"), false), |_| Err(
+            ProviderRuntimeMutationFailure::AfterCommit
+        ),),
+        Err(ProviderCredentialMutationError::Rollback)
+    ));
+
+    manager
+        .recover_with_coordinator(|_| Ok(ProviderCredentialRecoveryDisposition::RestorePrevious))
+        .expect("restore previous authority");
+    let restored = manager
+        .active_binding()
+        .expect("active binding")
+        .expect("active provider");
+    assert_eq!(restored.runtime_binding_id, old_binding);
+    assert_eq!(
+        secrets
+            .get("gateway-primary")
+            .expect("restored secret")
+            .as_str(),
+        "old-secret",
+    );
+    assert!(!directory
+        .path()
+        .join("provider-credential-mutation.v1.json")
+        .exists());
 }
 
 #[test]
@@ -332,8 +441,7 @@ fn rollback_failure_invokes_the_fail_closed_supervisor_boundary() {
 
     let mutation =
         manager.upsert_with_reload(&keychain_request(Some("new-secret"), false), |_, _| {
-            fs::remove_file(&catalog_path).expect("remove catalog");
-            fs::remove_dir(directory.path()).expect("remove catalog directory");
+            fs::remove_dir_all(directory.path()).expect("remove catalog directory");
             Err("control_runtime_worker_not_ready")
         });
     let shutdown_called = std::cell::Cell::new(false);
