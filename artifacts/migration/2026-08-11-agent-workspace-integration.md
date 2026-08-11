@@ -224,6 +224,13 @@ Gate 报告为通过。
   `response.output`，同时保留 streamed delta、matching `response.output_item.done`、usage、response identity 与成功终态；字段存在时
   仍严格比较 streamed output，不一致继续返回 non-retryable protocol failure。共享 fixture 同时驱动 HTTP/SSE `required` 与
   WebSocket `whenPresent` framing，Rust `crewon-api` 125/125、TS Agent Responses 41/41 与 typecheck 通过。
+- Provider private probe foundation：`c4af42230` 提取 Control→Worker 的认证、有界 transport 与 process-local replay authority。
+  Worker 只监听 loopback，以 constant-time bearer 校验、byte-level token/request cap、64 KiB response cap 和 peer-disconnect abort
+  保护 secret lease；Control client 限制 loopback HTTP / HTTPS、总 deadline、caller abort、bounded JSON，并核对 Provider、catalog
+  revision 与 runtime generation。幂等 coordinator 按完整 actor scope + request fingerprint 合并同 key；in-flight / `possiblySent`
+  条目不因 TTL 或容量被淘汰，容量全被不可安全淘汰条目占用时 fail closed，不重复 dispatch。它明确只服务非变更型 probe，不能替代
+  跨进程 mutation receipt。独立 worktree focused evidence 为 Runtime Worker `21/21`、Control `15/15`；共享根覆盖层为 Runtime Worker
+  `218 passed + 1 PostgreSQL-unconfigured skip`、Control `95 passed + 3 PostgreSQL-unconfigured skip`，两者 typecheck 均通过。
 - Runtime Worker read command / client：`78d6bbeec`、`5dc2472a8` 生成并签名 `workspace.read_file.v0`，canonical action digest
   绑定 tenant/space/thread、Run/Step/Attempt/execution、lease、Workspace/Device/Runtime、policy、路径和固定 limits。`8564a679b`、
   `ff96099c9` 增加 strict private Gateway execute/reconcile/cancel client：共享 parser 深校验请求、错误与 terminal receipt，HTTPS/mTLS
