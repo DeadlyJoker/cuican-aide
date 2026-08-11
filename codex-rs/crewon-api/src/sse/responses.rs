@@ -115,9 +115,11 @@ struct ResponseCompletedUsage {
     total_tokens: i64,
 }
 
-impl From<ResponseCompletedUsage> for TokenUsage {
-    fn from(val: ResponseCompletedUsage) -> Self {
-        TokenUsage {
+impl TryFrom<ResponseCompletedUsage> for TokenUsage {
+    type Error = &'static str;
+
+    fn try_from(val: ResponseCompletedUsage) -> Result<Self, Self::Error> {
+        let usage = TokenUsage {
             input_tokens: val.input_tokens,
             cached_input_tokens: val
                 .input_tokens_details
@@ -129,7 +131,21 @@ impl From<ResponseCompletedUsage> for TokenUsage {
                 .map(|d| d.reasoning_tokens)
                 .unwrap_or(0),
             total_tokens: val.total_tokens,
+        };
+        if usage.input_tokens < 0
+            || usage.cached_input_tokens < 0
+            || usage.output_tokens < 0
+            || usage.total_tokens < 0
+        {
+            return Err("response.completed usage contains a negative token count");
         }
+        if usage.cached_input_tokens > usage.input_tokens {
+            return Err("response.completed cached input tokens exceed input tokens");
+        }
+        if usage.input_tokens.checked_add(usage.output_tokens) != Some(usage.total_tokens) {
+            return Err("response.completed total tokens do not equal input plus output tokens");
+        }
+        Ok(usage)
     }
 }
 
@@ -372,9 +388,17 @@ pub fn process_responses_event(
             if let Some(resp_val) = event.response {
                 match serde_json::from_value::<ResponseCompleted>(resp_val) {
                     Ok(resp) => {
+                        let token_usage =
+                            resp.usage.map(TokenUsage::try_from).transpose().map_err(
+                                |message| {
+                                    ResponsesEventError::Api(ApiError::InvalidRequest {
+                                        message: message.to_string(),
+                                    })
+                                },
+                            )?;
                         return Ok(Some(ResponseEvent::Completed {
                             response_id: resp.id,
-                            token_usage: resp.usage.map(Into::into),
+                            token_usage,
                             end_turn: resp.end_turn,
                         }));
                     }
@@ -590,6 +614,7 @@ mod tests {
     use http::HeaderValue;
     use http::StatusCode;
     use pretty_assertions::assert_eq;
+    use serde::Deserialize;
     use serde_json::json;
     use tokio::sync::mpsc;
     use tokio_test::io::Builder as IoBuilder;
@@ -617,6 +642,51 @@ mod tests {
             events.push(ev);
         }
         events
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ProviderUsageValidationFixture {
+        cases: Vec<ProviderUsageValidationCase>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ProviderUsageValidationCase {
+        case_id: String,
+        usage: Value,
+        expected: String,
+    }
+
+    #[test]
+    fn rejects_malformed_provider_usage_from_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/provider-usage-validation.reference.json"
+        )
+        .expect("provider usage fixture must exist");
+        let fixture: ProviderUsageValidationFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("provider usage fixture must be readable"),
+        )
+        .expect("provider usage fixture must parse");
+
+        for case in fixture.cases {
+            assert_eq!(case.expected, "rejected", "fixture {}", case.case_id);
+            let event: ResponsesStreamEvent = serde_json::from_value(json!({
+                "type": "response.completed",
+                "response": {
+                    "id": "response-id",
+                    "usage": case.usage
+                }
+            }))
+            .expect("fixture event must deserialize");
+
+            assert_matches!(
+                process_responses_event(event),
+                Err(ResponsesEventError::Api(ApiError::InvalidRequest { .. })),
+                "fixture {}",
+                case.case_id
+            );
+        }
     }
 
     async fn run_sse(events: Vec<serde_json::Value>) -> Vec<ResponseEvent> {

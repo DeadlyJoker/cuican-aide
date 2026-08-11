@@ -76,6 +76,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-029 | `governed_context.rs::governed_context_reaches_responses_with_roles_bounds_and_incremental_stability` | context role、bounds、增量稳定性                                       | PARITY       | shared role/bounds/stability fixture  |
 | AR-030 | `safety_check_downgrade.rs::cyber_policy_response_emits_typed_error_without_retry`                    | typed policy failure 不进入 retry loop                                 | PARITY       | Rust+TS typed policy fixture          |
 | AR-031 | `provider_end_turn.rs` + `stream_no_completed.rs::end_turn_false_completed_assistant_and_tool_continue_same_turn` | Provider `end_turn=false` 的 completed response 在同 Turn 继续 sampling | PARTIAL      | manual assistant-only durable continuation、mixed assistant→Tool、stored empty checkpoint chain 与 stored Tool boundary 已有 evidence；stored assistant output 仍 fail closed |
+| AR-032 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder              | Provider usage 必须非负、cached≤input 且 total=input+output；异常计量 fail closed | PARITY       | Rust+TS shared malformed-usage fixture |
 
 ## 已有证据映射
 
@@ -121,6 +122,9 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
   426 立即切换、connection-limit reconnect、binary fail closed、abort/idle timeout 证据。
 - AR-006 没有删除审计事实：fixture 同时冻结 Rust debug `[1,2]` 与 release `[2]`；TS durable audit 和 Control API
   `view=audit` 保留 `[1,2]`，默认 `view=client` 只投影 `[2]`，显式 fallback 始终可见。可见性不再依赖 build mode。
+- `provider-usage-validation.reference.json` 冻结 provider usage 的语义校验：任一 token count 为负、cached input 超过 input、
+  或 total 不等于 input+output 时，两侧都在 completed/usage 进入 Agent 记账前 fail closed。Rust 的 HTTP/SSE 与 WebSocket
+  共用 `process_responses_event`，因此同一校验覆盖两种 transport；TS Direct Responses decoder 消费同一组 malformed cases。
 - `typed-policy-failure.reference.json` 同时驱动 Rust cyber policy integration、Direct Responses 与 Runtime Worker；HTTP 400
   `cyber_policy` 映射为安全稳定 `responses_provider_cyber_policy`，只有一次 request、0 sampling retry、无 assistant Message，
   并原子释放 Work Item。

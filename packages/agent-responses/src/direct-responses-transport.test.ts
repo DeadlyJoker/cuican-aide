@@ -1081,6 +1081,39 @@ test("defaults missing cached usage to zero and rejects cached input above total
   );
 });
 
+test("rejects every malformed provider usage case in the shared Rust parity fixture", async () => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../test-contracts/fixtures/provider-usage-validation.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as Readonly<{
+    cases: readonly Readonly<{
+      caseId: string;
+      usage: Readonly<Record<string, unknown>>;
+      expected: "rejected";
+    }>[];
+  }>;
+
+  for (const fixture of reference.cases) {
+    const transport = createTransport([
+      createdEvent(0),
+      completedEvent(fixture.usage),
+    ]);
+    await assert.rejects(
+      collect(transport.stream(manualRequest(), signal())),
+      (error) =>
+        error instanceof ModelTransportError &&
+        error.category === "protocol" &&
+        error.retryable === false,
+      fixture.caseId,
+    );
+  }
+});
+
 test("maps streamed failure and incomplete terminal states", async () => {
   const failed = createTransport([
     createdEvent(0),

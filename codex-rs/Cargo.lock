@@ -2158,6 +2158,7 @@ dependencies = [
  "chrono",
  "crewon-client",
  "crewon-protocol",
+ "crewon-utils-cargo-bin",
  "crewon-utils-rustls-provider",
  "eventsource-stream",
  "futures",
