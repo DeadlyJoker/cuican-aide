@@ -59,6 +59,15 @@ test("parses durable read events and cumulative ACK from the shared fixture", ()
   const badTime = structuredClone(fixture.valid.filesystemReadEvents[0]) as any;
   badTime.observedAt = "not-a-timestamp";
   assert.throws(() => parseDeviceFilesystemReadEvent(badTime, digestUtf8));
+  for (const nonCanonicalTime of ["2026-08-08", "2026-08-08T08:00:03+08:00"]) {
+    const nonCanonical = structuredClone(
+      fixture.valid.filesystemReadEvents[0],
+    ) as any;
+    nonCanonical.observedAt = nonCanonicalTime;
+    assert.throws(() =>
+      parseDeviceFilesystemReadEvent(nonCanonical, digestUtf8),
+    );
+  }
   const digestDrift = structuredClone(
     fixture.valid.filesystemReadEvents[1],
   ) as any;

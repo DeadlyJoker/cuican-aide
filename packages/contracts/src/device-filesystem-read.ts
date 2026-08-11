@@ -193,7 +193,12 @@ function positive(value: unknown): void {
   if (!Number.isSafeInteger(value) || Number(value) < 1) invalid();
 }
 function timestamp(value: unknown): void {
-  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) invalid();
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value) ||
+    Number.isNaN(Date.parse(value))
+  )
+    invalid();
 }
 function code(value: unknown): void {
   if (typeof value !== "string" || !/^[a-z][a-z0-9_]{0,127}$/.test(value))
