@@ -152,9 +152,10 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
   assistant item，再在 durable Worker Segment boundary 对 Tool 生成一次 request/result receipt，第二次 sampling 的 history suffix
   精确包含 assistant/call/result；这不是 sampling retry，首个 response 的 usage 与最终 response usage累计，唯一 terminal Message
   仍来自 follow-up。原 normal completed mixed-response fixture 保持不变并继续回归。只有 partial delta、没有对应 completed
-  assistant item 的 response 继续 fail closed，避免把未完成文本写入 history。assistant-only output continuation 没有 Rust shared +
-  durable Worker 差分，TS Kernel 仍以 `model_end_turn_false_output_unsupported` fail closed，因此不外推为 parity。
-  广义 AR-031 仍标 `PARTIAL`：stored-response / crash-recovery checkpoint chain 尚未实现；已有或新建 Provider checkpoint 遇到该 directive 会以非 retryable
+  assistant item 的 response 继续 fail closed，避免把未完成文本写入 history。manual / `storeResponses=false` assistant-only output
+  现由 Rust+TS shared fixture 冻结 exact completed-item history；durable Worker 以显式 provider-continuation sample marker 原子提交 usage、
+  Model History 与 model state，并覆盖 commit 后 crash、恢复后 exact suffix 和唯一 terminal Message。
+  广义 AR-031 仍标 `PARTIAL`：stored-response / checkpoint crash-recovery chain 尚未实现；已有或新建 Provider checkpoint 遇到该 directive 会以非 retryable
   `model_end_turn_false_stored_response_unsupported` fail closed，禁止重复 retrieve 同一 response 的无界循环。
 
 ## Goal runtime focused parity gate（2026-08-09）

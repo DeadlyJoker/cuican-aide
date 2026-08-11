@@ -130,7 +130,12 @@ test("durably continues AR-031 assistant output without a phantom Message", asyn
     ),
   ) as {
     expectedRequests: ModelInputItem[][];
-    finalState: { usage: Record<string, number> };
+    finalState: {
+      requestCount: number;
+      samplingRetries: number;
+      terminalMessages: number;
+      usage: Record<string, number>;
+    };
   };
   const fixture = await createFixture(
     context,
@@ -220,6 +225,7 @@ test("durably continues AR-031 assistant output without a phantom Message", asyn
     requests.map((request) => request.input.items),
     reference.expectedRequests,
   );
+  assert.equal(requests.length, reference.finalState.requestCount);
   assert.deepEqual((await fixture.loadRun()).usage, {
     inputTokens: reference.finalState.usage.inputTokens,
     cachedInputTokens: 0,
@@ -235,12 +241,28 @@ test("durably continues AR-031 assistant output without a phantom Message", asyn
     )?.latestUsage,
     { inputTokens: 5, cachedInputTokens: 0, outputTokens: 1, totalTokens: 6 },
   );
+  const messages = await fixture.messages();
   assert.deepEqual(
-    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    messages.map(({ role, content }) => ({ role, content })),
     [
       { role: "user", content: "hello" },
       { role: "assistant", content: "done" },
     ],
+  );
+  assert.equal(
+    messages.filter((message) => message.role === "assistant").length,
+    reference.finalState.terminalMessages,
+  );
+  const events = await fixture.events();
+  assert.equal(
+    events.filter((event) => event.type === "model.sampling.retry").length,
+    reference.finalState.samplingRetries,
+  );
+  assert.deepEqual(
+    events
+      .filter((event) => event.type === "segment.provider_continuation")
+      .map((event) => event.data.sampleIndex),
+    [1, 2],
   );
   await worker.close();
 });

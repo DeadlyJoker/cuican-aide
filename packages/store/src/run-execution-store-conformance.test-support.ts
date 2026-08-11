@@ -7,6 +7,7 @@ import {
   type BeginRunAttemptInput,
   type CommitRunInput,
   type CommitContextCompactionInput,
+  type CommitAssistantSampleContinuationInput,
   type CommitTextRunCompletionInput,
   type CommitToolExecutionCompletionInput,
   type CommitToolExecutionUnknownOutcomeInput,
@@ -342,6 +343,53 @@ export function registerRunExecutionStoreConformance(
         ),
         [],
       );
+    });
+
+    test("atomically commits and replays an assistant sample continuation after lease expiry", async (context) => {
+      const fixture = await executionFixture(context, createStore);
+      const claim = await claimWork(
+        fixture.store,
+        "worker-assistant-sample",
+        "lease-assistant-sample",
+      );
+      await prepareTextCompletion(fixture.store, claim);
+      const input = assistantSampleContinuationInput(claim);
+
+      const committed =
+        await fixture.store.commitAssistantSampleContinuation(input);
+      await expireWorkItem(fixture, options);
+      const replayed =
+        await fixture.store.commitAssistantSampleContinuation(input);
+
+      assert.deepEqual(replayed, {
+        ...committed,
+        run: { ...committed.run, disposition: "replayed" },
+      });
+      assert.deepEqual(
+        await fixture.store.listRunEvents(
+          { tenantId: "tenant-1", runId: "run-store-1" },
+          3,
+          10,
+        ),
+        input.commit.events,
+      );
+      assert.deepEqual(
+        await fixture.store.listModelHistoryItems(
+          { tenantId: "tenant-1", threadId: "thread-1" },
+          0,
+          10,
+        ),
+        input.history.items,
+      );
+      assert.deepEqual(
+        await fixture.store.loadThreadModelState({
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+        }),
+        input.modelState,
+      );
+      assert.equal(committed.step.status, "completed");
+      assert.equal(committed.attempt.status, "completed");
     });
 
     test("atomically persists, replays and rolls back a proposed Plan with its terminal Message", async (context) => {
@@ -2476,6 +2524,111 @@ export async function prepareTextCompletion(
     attemptId: "text-attempt-1",
     startedAt: "2026-08-08T00:01:01Z",
   });
+}
+
+function assistantSampleContinuationInput(
+  claim: WorkItemClaim,
+): CommitAssistantSampleContinuationInput {
+  const occurredAt = "2026-08-08T00:01:02Z";
+  const contentDigest = `sha256:${"f".repeat(64)}`;
+  const events = [
+    {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: "run-store-1" },
+      eventId: "event-assistant-sample-delta",
+      sequence: 4,
+      occurredAt,
+      type: "model.output.delta",
+      data: {
+        segmentId: "text-segment-1",
+        segmentSequence: 2,
+        delta: "working",
+      },
+    },
+    {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: "run-store-1" },
+      eventId: "event-assistant-sample-usage",
+      sequence: 5,
+      occurredAt,
+      type: "usage.recorded",
+      data: {
+        segmentId: "text-segment-1",
+        segmentSequence: 3,
+        inputTokens: 4,
+        cachedInputTokens: 0,
+        outputTokens: 1,
+        totalTokens: 5,
+      },
+    },
+    {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: "run-store-1" },
+      eventId: "event-assistant-sample-continuation",
+      sequence: 6,
+      occurredAt,
+      type: "segment.provider_continuation",
+      data: {
+        segmentId: "text-segment-1",
+        segmentSequence: 4,
+        sampleIndex: 1,
+        throughHistorySequence: 1,
+      },
+    },
+  ] as const;
+  return {
+    lease: leaseFor(claim),
+    commit: {
+      tenantId: "tenant-1",
+      idempotency: {
+        scope: "execution-assistant-sample-scope",
+        key: "assistant-sample-1",
+        requestFingerprint: "execution-assistant-sample-fingerprint",
+      },
+      expectedRevision: 3,
+      events,
+      outbox: events.map((event, index) =>
+        toolOutbox(`outbox-assistant-sample-${index + 1}`, event),
+      ),
+      workItems: [],
+    },
+    history: {
+      expectedLastSequence: 0,
+      items: [
+        {
+          schemaVersion: "crewon.model-history-item.v0",
+          itemId: "history-assistant-sample-1",
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+          sequence: 1,
+          runId: "run-store-1",
+          segmentId: "text-segment-1",
+          createdAt: occurredAt,
+          type: "message",
+          role: "assistant",
+          source: "assistant_completion",
+          content: "working",
+          contentDigest,
+        },
+      ],
+    },
+    modelState: {
+      schemaVersion: "crewon.thread-model-state.v0",
+      ...continuationLocator(),
+      contextWindowTokens: 273_000,
+      autoCompactAtTokens: 200_000,
+      throughHistorySequence: 1,
+      contextRevision: "canonical",
+      latestUsage: { inputTokens: 4, outputTokens: 1, totalTokens: 5 },
+      updatedAt: occurredAt,
+    },
+    attempt: {
+      stepId: "text-step-1",
+      attemptId: "text-attempt-1",
+      finishedAt: occurredAt,
+    },
+    sampleIndex: 1,
+  };
 }
 
 export function textRunCompletionInput(

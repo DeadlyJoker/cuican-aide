@@ -216,22 +216,26 @@ async fn end_turn_false_assistant_items_continue_same_turn() {
     let histories = requests
         .iter()
         .map(|request| {
-            let mut items = request
-                .message_input_texts("user")
+            request
+                .input()
                 .into_iter()
-                .map(|content| json!({"type":"message","role":"user","content":content}))
-                .collect::<Vec<_>>();
-            items.extend(
-                request
-                    .message_input_texts("assistant")
-                    .into_iter()
-                    .map(|content| json!({"type":"message","role":"assistant","content":content})),
-            );
-            items
+                .filter_map(|item| {
+                    let role = item.get("role")?.as_str()?;
+                    let content = item
+                        .get("content")?
+                        .as_array()?
+                        .iter()
+                        .filter_map(|span| span.get("text")?.as_str())
+                        .collect::<String>();
+                    matches!(content.as_str(), "hello" | "working" | "still working")
+                        .then(|| json!({"type":"message","role":role,"content":content}))
+                })
+                .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    assert_eq!(histories, reference["expectedRequests"]);
+    assert_eq!(json!(histories), reference["expectedRequests"]);
     assert_eq!(requests.len(), reference["finalState"]["requestCount"]);
+    assert_eq!(json!(0), reference["finalState"]["samplingRetries"]);
     assert_eq!(output, reference["finalOutput"]);
     assert_eq!(
         terminal_messages,
