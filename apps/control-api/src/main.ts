@@ -1,3 +1,5 @@
+import type { AddressInfo } from "node:net";
+
 import {
   FilesystemArtifactStore,
   loadArtifactEncryptionKey,
@@ -17,10 +19,16 @@ import {
   createPostgresControlApi,
   createStandaloneControlApi,
 } from "./standalone-composition.ts";
+import {
+  candidateReadinessLine,
+  resolvePausedAdmission,
+  watchActivationInput,
+} from "./paused-admission.ts";
 
 const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
 );
+const activationGate = resolvePausedAdmission(process.env, securityMode);
 const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
 if (securityMode === "production" && connectionString === undefined) {
   throw new Error("CREWON_CONTROL_DATABASE_URL_required");
@@ -117,6 +125,7 @@ try {
       allowedOrigins: splitRequiredEnvironment(
         "CREWON_CONTROL_ALLOWED_ORIGINS",
       ),
+      ...(activationGate === null ? {} : { activationGate }),
     };
     runtime = connectionString
       ? await createPostgresControlApi({
@@ -136,9 +145,33 @@ try {
   throw error;
 }
 
-const port = parsePort(process.env.CREWON_CONTROL_PORT ?? "3210");
+const port = parsePort(
+  process.env.CREWON_CONTROL_PORT ?? "3210",
+  activationGate !== null,
+);
+const activationInput =
+  activationGate === null
+    ? null
+    : watchActivationInput(
+        activationGate,
+        process.stdin,
+        process.stdout,
+        () => {
+          void runtime.app.close().finally(() => process.exit(1));
+        },
+      );
+if (activationInput !== null) {
+  runtime.app.addHook("onClose", async () => activationInput.close());
+}
 await runtime.app.listen({ host: "127.0.0.1", port });
-process.stdout.write(`CrewON Control API listening on 127.0.0.1:${port}\n`);
+const listeningPort = controlListeningPort(runtime.app.server.address());
+process.stdout.write(
+  `${
+    activationGate === null
+      ? `CrewON Control API listening on 127.0.0.1:${listeningPort}`
+      : candidateReadinessLine(listeningPort)
+  }\n`,
+);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
@@ -176,12 +209,29 @@ function parseSecurityMode(value: string): "standalone" | "production" {
   throw new Error("CREWON_CONTROL_SECURITY_MODE_invalid");
 }
 
-function parsePort(value: string): number {
+function parsePort(value: string, allowEphemeral: boolean): number {
   const port = Number(value);
-  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+  if (
+    !Number.isSafeInteger(port) ||
+    port < (allowEphemeral ? 0 : 1) ||
+    port > 65_535
+  ) {
     throw new Error("CREWON_CONTROL_PORT_invalid");
   }
   return port;
+}
+
+function controlListeningPort(address: AddressInfo | string | null): number {
+  if (
+    address === null ||
+    typeof address === "string" ||
+    !Number.isSafeInteger(address.port) ||
+    address.port < 1 ||
+    address.port > 65_535
+  ) {
+    throw new Error("CREWON_CONTROL_LISTEN_ADDRESS_invalid");
+  }
+  return address.port;
 }
 
 function parsePositiveInteger(value: string, code: string): number {

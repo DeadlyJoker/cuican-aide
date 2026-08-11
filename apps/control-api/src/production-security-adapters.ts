@@ -2,9 +2,14 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 import {
   type ActorContext,
+  type AutomationAuthorizationPort,
   type AuthorizationDecision,
   type AuthorizationPort,
 } from "@crewon/application";
+
+export type ControlAuthorizationRequest =
+  | Parameters<AuthorizationPort["authorize"]>[0]
+  | Parameters<AutomationAuthorizationPort["authorize"]>[0];
 
 import {
   ControlApiIdentityError,
@@ -51,12 +56,11 @@ export interface ControlTokenVerifierPort {
 
 /** Evaluates a single authorization request against the production policy authority. */
 export interface PolicyDecisionPort {
-  decide(input: {
-    actor: ActorContext;
-    action: Parameters<AuthorizationPort["authorize"]>[0]["action"];
-    resource: Parameters<AuthorizationPort["authorize"]>[0]["resource"];
-    signal: AbortSignal;
-  }): Promise<unknown>;
+  decide(
+    input: ControlAuthorizationRequest & {
+      signal: AbortSignal;
+    },
+  ): Promise<unknown>;
 }
 
 /** Provides a bounded cancellation deadline for external security authorities. */
@@ -313,7 +317,9 @@ export class ProductionControlApiIdentity implements ControlApiIdentityPort {
   }
 }
 
-export class DynamicPolicyAuthorization implements AuthorizationPort {
+export class DynamicPolicyAuthorization
+  implements AuthorizationPort, AutomationAuthorizationPort
+{
   readonly #policy: PolicyDecisionPort;
   readonly #deadline: SecurityDeadlinePort;
   readonly #timeoutMs: number;
@@ -336,7 +342,7 @@ export class DynamicPolicyAuthorization implements AuthorizationPort {
   }
 
   async authorize(
-    request: Parameters<AuthorizationPort["authorize"]>[0],
+    request: ControlAuthorizationRequest,
   ): Promise<AuthorizationDecision> {
     validateActor(request.actor);
     validatePolicyRequest(request);
@@ -479,9 +485,7 @@ function validateActor(actor: ActorContext): void {
   requireBounded(actor.spaceId, MAX_IDENTIFIER_LENGTH, "actor_invalid");
 }
 
-function validatePolicyRequest(
-  request: Parameters<AuthorizationPort["authorize"]>[0],
-): void {
+function validatePolicyRequest(request: ControlAuthorizationRequest): void {
   requireBounded(request.action, 128, "policy_request_invalid");
   for (const value of Object.values(request.resource)) {
     if (typeof value === "string") {

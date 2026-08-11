@@ -2,6 +2,8 @@ import type {
   AgentVersionApplicationService,
   AgentVersionCatalogApplicationService,
   ArtifactApplicationService,
+  AutomationApplicationService,
+  ModelProviderSettingsApplicationService,
   ApplicationClock,
   ContentDigester,
   RunApplicationService,
@@ -25,6 +27,7 @@ import {
 import {
   ContractValidationError,
   formatAgentVersionCursor,
+  formatAutomationCursor,
   formatMessageCursor,
   formatThreadCursor,
   formatThreadRunCursor,
@@ -34,10 +37,13 @@ import {
   parseAppendThreadMessageRequest,
   parseApprovalId,
   parseArtifactId,
+  parseAutomationId,
+  parseAutomationListQuery,
   parseCancelRunRequest,
   parseCompactThreadRequest,
   parseClearThreadGoalRequest,
   parseCreateRunRequest,
+  parseCreateAutomationRequest,
   parseCreateThreadRequest,
   parseDecideToolApprovalRequest,
   parseDeleteThreadRequest,
@@ -45,11 +51,13 @@ import {
   parseIdempotencyKey,
   parseLastEventSequence,
   parseMessageListQuery,
+  parseProbeModelProviderRequest,
   parseRenameThreadRequest,
   parseRollbackThreadRequest,
   parsePublishAgentVersionRequest,
   parseRunId,
   parseRunEventViewMode,
+  parseRunAutomationNowRequest,
   parseSetThreadGoalRequest,
   parseStartTurnRequest,
   parseThreadId,
@@ -65,8 +73,11 @@ import {
   type AgentVersionMutationResponse,
   type ActiveAgentVersionCatalogResponse,
   type AppendThreadMessageResponse,
+  type AutomationMutationResponse,
   type GetAgentVersionResponse,
   type GetArtifactResponse,
+  type GetAutomationResponse,
+  type GetModelProviderSettingsResponse,
   type GetRunResponse,
   type GetThreadResponse,
   type GetThreadGoalResponse,
@@ -75,7 +86,10 @@ import {
   type ListThreadsResponse,
   type ListThreadMessagesResponse,
   type ListAgentVersionsResponse,
+  type ListAutomationsResponse,
+  type ProbeModelProviderResponse,
   type RunMutationResponse,
+  type RunAutomationNowResponse,
   type StartTurnResponse,
   type ThreadMutationResponse,
   type ToolApprovalMutationResponse,
@@ -111,6 +125,11 @@ import {
 } from "./thread-goal-event-stream.ts";
 import { projectAgentVersion } from "./agent-version-projection.ts";
 import { projectArtifact } from "./artifact-projection.ts";
+import {
+  projectAutomation,
+  projectAutomationInvocation,
+  projectAutomationMutation,
+} from "./automation-projection.ts";
 import { projectRun } from "./run-projection.ts";
 import {
   projectMessage,
@@ -119,6 +138,17 @@ import {
   projectThreadGoalMutation,
 } from "./thread-projection.ts";
 import { projectToolApproval } from "./tool-approval-projection.ts";
+import {
+  pausedAdmissionResponse,
+  type ProcessLocalActivationGate,
+} from "./paused-admission.ts";
+import { ProviderProbeIdempotencyCoordinator } from "./provider-probe-idempotency.ts";
+import type { ControlProviderProbeService } from "./provider-probe-worker-client.ts";
+import {
+  projectModelProviderProbe,
+  projectModelProviderSettings,
+  type ProviderRuntimeRouteAvailability,
+} from "./provider-settings-projection.ts";
 import {
   projectWorkspaceOperationList,
   projectWorkspaceOperationMutation,
@@ -141,6 +171,10 @@ export type ControlApiDependencies = Readonly<{
   agentVersions: AgentVersionApplicationService;
   agentVersionCatalogs: AgentVersionCatalogApplicationService;
   artifacts: ArtifactApplicationService;
+  automations: AutomationApplicationService;
+  providerSettings: Pick<ModelProviderSettingsApplicationService, "get">;
+  providerProbes: Pick<ControlProviderProbeService, "probe">;
+  providerRuntimeAvailability: ProviderRuntimeRouteAvailability;
   workspaceQueries: WorkspaceOperationQueryService;
   workspaceLists: WorkspaceListApplicationService | null;
   agentVersionDigester: ContentDigester;
@@ -154,12 +188,22 @@ export type ControlApiDependencies = Readonly<{
   threadEventPoller?: ThreadEventPoller;
   workspaceOperationEventPoller?: WorkspaceOperationEventPoller;
   heartbeatIntervalMs?: number | null;
+  activationGate?: ProcessLocalActivationGate;
 }>;
 
 export interface OutboxWakeupPort {
   /** Best-effort non-rejecting wake-up; durable scanning remains authoritative. */
   wake(): Promise<void>;
 }
+
+const MANUAL_ONLY_AUTOMATION_SCHEDULE = {
+  scheduleType: "once",
+  nextRunAt: "9999-12-31T23:59:59Z",
+  intervalSeconds: 0,
+  time: "00:00",
+  weekday: 0,
+  timezone: "UTC",
+} as const;
 
 export function buildControlApi(
   dependencies: ControlApiDependencies,
@@ -172,11 +216,26 @@ export function buildControlApi(
   const workspaceOperationEventPoller =
     dependencies.workspaceOperationEventPoller ??
     new IntervalWorkspaceOperationEventPoller();
+  const providerProbeIdempotency = new ProviderProbeIdempotencyCoordinator(
+    dependencies.providerProbes,
+  );
   const app = Fastify({
     bodyLimit: 64 * 1024,
     logger: false,
     trustProxy: false,
   });
+
+  const activationGate = dependencies.activationGate;
+  if (activationGate !== undefined) {
+    app.addHook("onRequest", async (request, reply) => {
+      if (!activationGate.admitRequest(request.method, request.url)) {
+        return reply
+          .code(503)
+          .type("application/json; charset=utf-8")
+          .send(pausedAdmissionResponse(request.id));
+      }
+    });
+  }
 
   app.addHook("onSend", async (request, reply, payload) => {
     reply.header("x-content-type-options", "nosniff");
@@ -208,6 +267,151 @@ export function buildControlApi(
       return reply.code(mapped.statusCode).send(mapped.body);
     }
   });
+
+  app.get<{ Querystring: Record<string, unknown> }>(
+    "/api/v1/automations",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const query = parseAutomationListQuery({ ...request.query });
+      const definitions = await dependencies.automations.listAutomations(
+        actor,
+        {
+          before:
+            query.before === null
+              ? null
+              : {
+                  updatedAt: query.before.updatedAt,
+                  automationId: query.before.resourceId,
+                },
+          limit: query.limit,
+        },
+      );
+      const data = definitions.map(projectAutomation);
+      const last = data.at(-1);
+      const response: ListAutomationsResponse = {
+        data,
+        nextCursor:
+          data.length === query.limit && last !== undefined
+            ? formatAutomationCursor({
+                updatedAt: last.updatedAt,
+                automationId: last.automationId,
+              })
+            : null,
+      };
+      return response;
+    },
+  );
+
+  app.get("/api/v1/model-provider-settings", async (request) => {
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    const view = await dependencies.providerSettings.get(actor);
+    const response: GetModelProviderSettingsResponse = {
+      settings: projectModelProviderSettings(
+        view,
+        dependencies.providerRuntimeAvailability,
+      ),
+    };
+    return response;
+  });
+
+  app.post<{ Body: unknown }>(
+    "/api/v1/model-provider-settings/probe",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const probeRequest = parseProbeModelProviderRequest(request.body);
+      const idempotencyKey = parseIdempotencyKey(
+        request.headers["idempotency-key"],
+      );
+      const requestAbort = requestAbortSignal(request.raw);
+      try {
+        const result = await providerProbeIdempotency.probe(
+          actor,
+          {
+            key: idempotencyKey,
+            fingerprint: `model-provider-probe.v1:${JSON.stringify(probeRequest)}`,
+          },
+          requestAbort.signal,
+        );
+        const response: ProbeModelProviderResponse = projectModelProviderProbe(
+          result.result,
+          result.disposition,
+        );
+        return response;
+      } finally {
+        requestAbort.dispose();
+      }
+    },
+  );
+
+  app.post<{ Body: unknown }>("/api/v1/automations", async (request, reply) => {
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    const body = parseCreateAutomationRequest(request.body);
+    const result = await dependencies.automations.createAutomation(actor, {
+      kind: "automation.create",
+      idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
+      threadId: body.threadId,
+      expectedThreadRevision: body.expectedThreadRevision,
+      title: body.title,
+      prompt: body.prompt,
+      requestedAgentVersionId: body.agentVersionId,
+      schedule: MANUAL_ONLY_AUTOMATION_SCHEDULE,
+    });
+    const response: AutomationMutationResponse = projectAutomationMutation({
+      disposition: result.disposition,
+      definition: result.record.definition,
+    });
+    return reply
+      .code(result.disposition === "committed" ? 201 : 200)
+      .send(response);
+  });
+
+  app.get<{ Params: { automationId: string } }>(
+    "/api/v1/automations/:automationId",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const definition = await dependencies.automations.getAutomation(
+        actor,
+        parseAutomationId(request.params.automationId),
+      );
+      const response: GetAutomationResponse = {
+        automation: projectAutomation(definition),
+      };
+      return response;
+    },
+  );
+
+  app.post<{ Params: { automationId: string }; Body: unknown }>(
+    "/api/v1/automations/:automationId([^:]+)::run-now",
+    async (request, reply) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const body = parseRunAutomationNowRequest(request.body);
+      const result = await dependencies.automations.runAutomationNow(actor, {
+        kind: "automation.runNow",
+        idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
+        automationId: parseAutomationId(request.params.automationId),
+        expectedAutomationRevision: body.expectedAutomationRevision,
+        expectedThreadRevision: body.expectedThreadRevision,
+      });
+      wakeOutbox(dependencies.outboxWakeup);
+      const response: RunAutomationNowResponse =
+        projectAutomationInvocation(result);
+      return reply
+        .code(result.disposition === "committed" ? 201 : 200)
+        .send(response);
+    },
+  );
 
   app.post<{ Body: unknown }>("/api/v1/threads", async (request, reply) => {
     const actor = await dependencies.identity.resolveActor(

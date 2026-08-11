@@ -9,6 +9,9 @@ import {
   AgentVersionApplicationService,
   ApplicationError,
   type ActorContext,
+  type AutomationApplicationIdGenerator,
+  type AutomationApplicationIdKind,
+  type AutomationAuthorizationPort,
   type ApplicationClock,
   type ApplicationIdGenerator,
   type ApplicationIdKind,
@@ -85,7 +88,9 @@ export class StandaloneIdentity implements ControlApiIdentityPort {
   }
 }
 
-export class StandaloneAuthorization implements AuthorizationPort {
+export class StandaloneAuthorization
+  implements AuthorizationPort, AutomationAuthorizationPort
+{
   readonly #actor: ActorContext;
 
   constructor(actor: ActorContext) {
@@ -93,7 +98,9 @@ export class StandaloneAuthorization implements AuthorizationPort {
   }
 
   async authorize(
-    request: Parameters<AuthorizationPort["authorize"]>[0],
+    request:
+      | Parameters<AuthorizationPort["authorize"]>[0]
+      | Parameters<AutomationAuthorizationPort["authorize"]>[0],
   ): Promise<AuthorizationDecision> {
     if (
       request.actor.principalId !== this.#actor.principalId ||
@@ -245,8 +252,10 @@ export class NodeSha256ContentDigester implements ContentDigester {
   }
 }
 
-export class UuidV7ApplicationIdGenerator implements ApplicationIdGenerator {
-  nextId(_kind: ApplicationIdKind): string {
+export class UuidV7ApplicationIdGenerator
+  implements ApplicationIdGenerator, AutomationApplicationIdGenerator
+{
+  nextId(_kind: ApplicationIdKind | AutomationApplicationIdKind): string {
     return uuidv7();
   }
 }

@@ -1,6 +1,5 @@
-import type { AuthorizationPort } from "@crewon/application";
-
 import type {
+  ControlAuthorizationRequest,
   ControlTokenVerifierPort,
   PolicyDecisionPort,
 } from "./production-security-adapters.ts";
@@ -63,17 +62,18 @@ export class HttpPolicyDecisionPort implements PolicyDecisionPort {
   async decide(
     input: Parameters<PolicyDecisionPort["decide"]>[0],
   ): Promise<unknown> {
-    const request: Parameters<AuthorizationPort["authorize"]>[0] = {
-      actor: input.actor,
-      action: input.action,
-      resource: input.resource,
-    };
+    const {
+      signal,
+      ...request
+    }: ControlAuthorizationRequest & {
+      signal: AbortSignal;
+    } = input;
     return postJson(
       this.#fetch,
       this.#url,
       this.#serviceToken,
       request,
-      input.signal,
+      signal,
       "policy_authority_unavailable",
     );
   }

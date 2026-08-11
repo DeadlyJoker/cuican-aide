@@ -74,6 +74,42 @@ test("policy port sends the complete actor/action/resource tuple", async () => {
   });
 });
 
+test("policy port preserves the complete Automation authorization tuple", async () => {
+  let body: unknown;
+  const policy = new HttpPolicyDecisionPort({
+    url: "https://policy.example/v1/authorize",
+    serviceToken: SERVICE_TOKEN,
+    fetch: async (_input, init = {}) => {
+      body = JSON.parse(String(init.body));
+      return Response.json({ outcome: "allow" });
+    },
+  });
+  const input = {
+    actor: {
+      principalId: "principal-1",
+      actorId: "actor-1",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+    },
+    action: "automation:create" as const,
+    resource: {
+      kind: "automation" as const,
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      automationId: null,
+      threadId: "thread-1",
+    },
+    signal: new AbortController().signal,
+  };
+
+  assert.deepEqual(await policy.decide(input), { outcome: "allow" });
+  assert.deepEqual(body, {
+    actor: input.actor,
+    action: input.action,
+    resource: input.resource,
+  });
+});
+
 test("security HTTP ports require HTTPS and bounded JSON responses", async () => {
   assert.throws(
     () =>

@@ -12,6 +12,8 @@ import {
   AgentVersionCatalogApplicationService,
   ApplicationError,
   ArtifactApplicationService,
+  AutomationApplicationService,
+  ModelProviderSettingsApplicationService,
   compileAgentVersionReleaseBundle,
   RunApplicationService,
   RunExecutionService,
@@ -21,25 +23,34 @@ import {
   ToolApprovalApplicationService,
   TurnApplicationService,
   ThreadCompactionApplicationService,
+  WorkspaceOperationQueryService,
   type ActorContext,
   type ApplicationClock,
   type ApplicationIdGenerator,
   type ApplicationIdKind,
+  type AutomationApplicationIdGenerator,
+  type AutomationApplicationIdKind,
 } from "@crewon/application";
 import { InMemoryArtifactStore } from "@crewon/artifacts";
 import type {
   ActiveAgentVersionCatalogResponse,
   AgentVersionMutationResponse,
   AppendThreadMessageResponse,
+  AutomationMutationResponse,
   ErrorEnvelope,
   GetAgentVersionResponse,
+  GetAutomationResponse,
+  GetModelProviderSettingsResponse,
   GetThreadGoalResponse,
   ListThreadMessagesResponse,
   ListAgentVersionsResponse,
+  ListAutomationsResponse,
+  ProbeModelProviderResponse,
   GetToolApprovalResponse,
   ListThreadRunsResponse,
   ListThreadsResponse,
   RunMutationResponse,
+  RunAutomationNowResponse,
   StartTurnResponse,
   ThreadEventView,
   ThreadGoalEventView,
@@ -57,6 +68,7 @@ import { InMemoryRunStore } from "@crewon/store";
 import type { FastifyInstance } from "fastify";
 
 import { buildControlApi } from "./control-api.ts";
+import { ProcessLocalActivationGate } from "./paused-admission.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
 import { RunEventHub } from "./run-event-hub.ts";
 import type { ThreadEventPoller } from "./thread-event-stream.ts";
@@ -75,6 +87,253 @@ import {
 const SESSION_TOKEN = "session-token-32-bytes-minimum-0001";
 const CSRF_TOKEN = "csrf-token-32-bytes-minimum-value-1";
 const ORIGIN = "http://127.0.0.1:5175";
+
+test("creates, reads, lists and invokes one redacted manual-only Automation", async (context) => {
+  const runtime = await testRuntime(context);
+  const threadResponse = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: jsonMutationHeaders("automation-thread-create"),
+    payload: { title: "Automation thread" },
+  });
+  assert.equal(threadResponse.statusCode, 201, threadResponse.body);
+  const thread = threadResponse.json<ThreadMutationResponse>().thread;
+  const request = {
+    threadId: thread.threadId,
+    expectedThreadRevision: thread.revision,
+    title: "Review changes",
+    prompt: "Review the current changes and summarize risks.",
+    agentVersionId: null,
+  };
+  const createdResponse = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/automations",
+    headers: jsonMutationHeaders("automation-create-1"),
+    payload: request,
+  });
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = createdResponse.json<AutomationMutationResponse>();
+  assert.deepEqual(created, {
+    disposition: "committed",
+    automation: {
+      automationId: "automation-1",
+      threadId: thread.threadId,
+      title: request.title,
+      prompt: request.prompt,
+      agentVersionId: "agent-version-1",
+      executionMode: "manualOnly",
+      automaticScheduling: false,
+      revision: 1,
+      createdAt: created.automation.createdAt,
+      updatedAt: created.automation.createdAt,
+    },
+  });
+  for (const privateField of [
+    "tenantId",
+    "spaceId",
+    "createdByActorId",
+    "definitionDigest",
+    "instructionDigest",
+    "routeDigest",
+    "schedule",
+  ]) {
+    assert.equal(createdResponse.body.includes(privateField), false);
+  }
+  const replay = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/automations",
+    headers: jsonMutationHeaders("automation-create-1"),
+    payload: request,
+  });
+  assert.equal(replay.statusCode, 200, replay.body);
+  assert.equal(
+    replay.json<AutomationMutationResponse>().disposition,
+    "replayed",
+  );
+  const get = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/automations/${created.automation.automationId}`,
+    headers: readHeaders(),
+  });
+  assert.deepEqual(get.json<GetAutomationResponse>(), {
+    automation: created.automation,
+  });
+  const list = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/automations?limit=25",
+    headers: readHeaders(),
+  });
+  assert.deepEqual(list.json<ListAutomationsResponse>(), {
+    data: [created.automation],
+    nextCursor: null,
+  });
+  const run = await runtime.app.inject({
+    method: "POST",
+    url: `/api/v1/automations/${created.automation.automationId}:run-now`,
+    headers: jsonMutationHeaders("automation-run-1"),
+    payload: {
+      expectedAutomationRevision: created.automation.revision,
+      expectedThreadRevision: thread.revision,
+    },
+  });
+  assert.equal(run.statusCode, 201, run.body);
+  const invocation = run.json<RunAutomationNowResponse>();
+  assert.deepEqual(invocation.automation, created.automation);
+  assert.deepEqual(invocation.invocation, {
+    automationId: created.automation.automationId,
+    runId: invocation.run.runId,
+  });
+  assert.equal(invocation.run.threadId, thread.threadId);
+  assert.equal(invocation.run.purpose, "turn");
+  assert.equal(run.body.includes("origin"), false);
+  assert.equal(runtime.outboxWakeups(), 1);
+});
+
+test("fenced Control admission exposes only exact health activation surfaces", async (context) => {
+  const runtime = await testRuntime(context);
+  const gate = new ProcessLocalActivationGate();
+  const app = buildControlApi({
+    ...runtime.dependencies,
+    activationGate: gate,
+  });
+  context.after(() => app.close());
+  for (const url of ["/api/v1/health/live", "/api/v1/health/ready"]) {
+    const response = await app.inject({ method: "GET", url });
+    assert.equal(response.statusCode, 200, response.body);
+  }
+  for (const request of [
+    { method: "POST", url: "/api/v1/health/live" },
+    { method: "GET", url: "/api/v1/health/live?probe=1" },
+    { method: "GET", url: "/api/v1/threads" },
+  ] as const) {
+    const response = await app.inject(request);
+    assert.equal(response.statusCode, 503, response.body);
+    assert.equal(
+      response.json<ErrorEnvelope>().error.code,
+      "control_activation_pending",
+    );
+  }
+  assert.equal(gate.activate(), true);
+  const activated = await app.inject({
+    method: "GET",
+    url: "/api/v1/threads",
+    headers: readHeaders(),
+  });
+  assert.equal(activated.statusCode, 200, activated.body);
+});
+
+test("exposes a safe Provider snapshot and replays one bounded probe", async (context) => {
+  const runtime = await testRuntime(context);
+  const snapshotResponse = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/model-provider-settings",
+    headers: readHeaders(),
+  });
+  assert.equal(snapshotResponse.statusCode, 200, snapshotResponse.body);
+  assert.deepEqual(snapshotResponse.json<GetModelProviderSettingsResponse>(), {
+    settings: {
+      revision: 0,
+      activeProviderId: null,
+      providers: [],
+      runtimeAvailability: "unconfigured",
+      updatedAt: null,
+    },
+  });
+  for (const privateField of [
+    "runtimeBindingId",
+    "coordinatorBinding",
+    "operationId",
+    "tenantId",
+    "secret",
+  ]) {
+    assert.equal(snapshotResponse.body.includes(privateField), false);
+  }
+
+  let probes = 0;
+  const app = buildControlApi({
+    ...runtime.dependencies,
+    providerProbes: {
+      probe: async () => {
+        probes += 1;
+        return {
+          providerId: "gateway",
+          catalogRevision: 1,
+          runtimeBindingId: "private-runtime-binding",
+          status: "ok",
+          models: [{ id: "model-1", displayName: "Model One" }],
+          modelCount: 1,
+          latencyMs: 7,
+          retryable: false,
+          retryAfterMs: null,
+        };
+      },
+    },
+  });
+  context.after(() => app.close());
+  const request = () =>
+    app.inject({
+      method: "POST",
+      url: "/api/v1/model-provider-settings/probe",
+      headers: mutationHeaders("provider-probe-one-action"),
+      payload: {},
+    });
+  const first = await request();
+  const replay = await request();
+  assert.equal(first.statusCode, 200, first.body);
+  assert.equal(replay.statusCode, 200, replay.body);
+  assert.deepEqual(first.json<ProbeModelProviderResponse>(), {
+    disposition: "completed",
+    providerId: "gateway",
+    catalogRevision: 1,
+    status: "ok",
+    models: [{ id: "model-1", displayName: "Model One" }],
+    modelCount: 1,
+    latencyMs: 7,
+    retryable: false,
+    retryAfterMs: null,
+  });
+  assert.deepEqual(replay.json(), {
+    ...first.json<ProbeModelProviderResponse>(),
+    disposition: "replayed",
+  });
+  assert.equal(probes, 1);
+  assert.equal(first.body.includes("runtimeBindingId"), false);
+
+  const missingIdempotency = await app.inject({
+    method: "POST",
+    url: "/api/v1/model-provider-settings/probe",
+    headers: {
+      "authorization": `Bearer ${SESSION_TOKEN}`,
+      "origin": ORIGIN,
+      "x-csrf-token": CSRF_TOKEN,
+    },
+    payload: {},
+  });
+  assertError(missingIdempotency, 400, "validation", "idempotency_key_invalid");
+  const missingCsrf = await app.inject({
+    method: "POST",
+    url: "/api/v1/model-provider-settings/probe",
+    headers: {
+      "authorization": `Bearer ${SESSION_TOKEN}`,
+      "origin": ORIGIN,
+      "idempotency-key": "provider-probe-no-csrf",
+    },
+    payload: {},
+  });
+  assertError(missingCsrf, 403, "authorization", "csrf_invalid");
+  const injected = await app.inject({
+    method: "POST",
+    url: "/api/v1/model-provider-settings/probe",
+    headers: mutationHeaders("provider-probe-injected"),
+    payload: { endpoint: "http://169.254.169.254" },
+  });
+  assertError(
+    injected,
+    400,
+    "validation",
+    "model_provider_probe_fields_invalid",
+  );
+});
 
 test("atomically starts one Goal Turn and replays the original durable result", async (context) => {
   const runtime = await testRuntime(context);
@@ -2242,6 +2501,32 @@ async function testRuntime(
     digester,
     admission: new StoreBackedAgentVersionAdmission(store),
   });
+  const automations = new AutomationApplicationService({
+    store,
+    authorization,
+    clock,
+    ids,
+    digester,
+    routeResolver,
+  });
+  const providerSettings = new ModelProviderSettingsApplicationService({
+    store,
+    authorization,
+    digester,
+  });
+  const providerProbes = {
+    probe: async () => ({
+      providerId: "gateway",
+      catalogRevision: 1,
+      runtimeBindingId: "desktop-supervisor:generation-test",
+      status: "unreachable" as const,
+      models: null,
+      modelCount: null,
+      latencyMs: 0,
+      retryable: true,
+      retryAfterMs: null,
+    }),
+  };
   const goals = new ThreadGoalApplicationService({
     store,
     authorization,
@@ -2259,6 +2544,10 @@ async function testRuntime(
     },
   );
   let outboxWakeups = 0;
+  const workspaceQueries = new WorkspaceOperationQueryService({
+    store,
+    authorization,
+  });
   const dependencies = {
     application,
     threads,
@@ -2270,6 +2559,12 @@ async function testRuntime(
     agentVersions,
     agentVersionCatalogs,
     artifacts,
+    automations,
+    providerSettings,
+    providerProbes,
+    providerRuntimeAvailability: "available" as const,
+    workspaceLists: null,
+    workspaceQueries,
     agentVersionDigester: digester,
     clock,
     identity: new StandaloneIdentity({
@@ -2556,10 +2851,15 @@ function serverBaseUrl(app: FastifyInstance): string {
   return `http://127.0.0.1:${address.port}`;
 }
 
-class IncrementingIds implements ApplicationIdGenerator {
-  readonly #counters = new Map<ApplicationIdKind, number>();
+class IncrementingIds
+  implements ApplicationIdGenerator, AutomationApplicationIdGenerator
+{
+  readonly #counters = new Map<
+    ApplicationIdKind | AutomationApplicationIdKind,
+    number
+  >();
 
-  nextId(kind: ApplicationIdKind): string {
+  nextId(kind: ApplicationIdKind | AutomationApplicationIdKind): string {
     const next = (this.#counters.get(kind) ?? 0) + 1;
     this.#counters.set(kind, next);
     return `${kind}-${next}`;
