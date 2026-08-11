@@ -4,11 +4,17 @@ import {
   DEVICE_FILESYSTEM_READ_MAX_BYTES,
   DEVICE_FILESYSTEM_READ_MAX_TIMEOUT_MS,
   DEVICE_PROTOCOL_VERSION,
+  canonicalDeviceFilesystemReadCommandDigest,
   parseDeviceFilesystemReadCommand,
   type DeviceFilesystemReadCommand,
   type DeviceExecutionCommand,
 } from "@crewon/contracts";
 import type { DeviceCommandSignerPort } from "@crewon/device-dispatch";
+import type {
+  FrozenWorkspaceReadFileDispatch,
+  WorkspaceReadFileCommandFactoryPort,
+  WorkspaceReadFileExecuteIntent,
+} from "@crewon/application";
 
 import {
   validateRuntimeWorkspaceBindingSnapshot,
@@ -84,7 +90,7 @@ export interface RuntimeWorkspaceReadFileCommandPort {
 
 /** Revalidates Thread/deployment authority, freezes the read, and signs it. */
 export class RuntimeWorkspaceReadFileCommandService
-  implements RuntimeWorkspaceReadFileCommandPort
+  implements RuntimeWorkspaceReadFileCommandPort, WorkspaceReadFileCommandFactoryPort
 {
   readonly #bindings: RuntimeWorkspaceBindingResolverPort;
   readonly #signer: DeviceCommandSignerPort;
@@ -104,6 +110,40 @@ export class RuntimeWorkspaceReadFileCommandService
     intent: RuntimeWorkspaceReadFileIntent,
     signal: AbortSignal,
   ): Promise<DeviceFilesystemReadCommand> {
+    return (await this.#produceFrozen(intent, signal)).command;
+  }
+
+  create(
+    intent: WorkspaceReadFileExecuteIntent,
+    signal: AbortSignal,
+  ): Promise<FrozenWorkspaceReadFileDispatch> {
+    return this.#produceFrozen(
+      {
+        authority: {
+          tenantId: intent.tenantId,
+          spaceId: intent.spaceId,
+          threadId: intent.threadId,
+          expectedThreadRevision: intent.expectedThreadRevision,
+          principalId: intent.principalId,
+          actorId: intent.actorId,
+          runId: intent.runId,
+          stepId: intent.stepId,
+          attemptId: intent.attemptId,
+          executionId: intent.executionId,
+          leaseId: intent.leaseId,
+          leaseEpoch: intent.leaseEpoch,
+          expiresAt: intent.expiresAt,
+        },
+        relativePathSegments: intent.relativePathSegments,
+      },
+      signal,
+    );
+  }
+
+  async #produceFrozen(
+    intent: RuntimeWorkspaceReadFileIntent,
+    signal: AbortSignal,
+  ): Promise<FrozenWorkspaceReadFileDispatch> {
     const authority = validateAuthority(intent.authority);
     const relativePathSegments = validatePathSegments(
       intent.relativePathSegments,
@@ -193,7 +233,30 @@ export class RuntimeWorkspaceReadFileCommandService
       );
     }
     requireNotAborted(signal);
-    return signed;
+    const commandDigest = canonicalDeviceFilesystemReadCommandDigest(
+      signed,
+      (value) => this.#digester.sha256(value),
+    );
+    return {
+      command: signed,
+      routeIntent: {
+        deviceBindingId: binding.deviceBindingId,
+        runtimeBindingId: binding.runtimeBindingId,
+      },
+      reference: {
+        deviceId: binding.deviceId,
+        executionId: authority.executionId,
+        workspaceBindingId: binding.workspaceBindingId,
+        incarnationId: binding.incarnationId,
+        deviceBindingId: binding.deviceBindingId,
+        runtimeBindingId: binding.runtimeBindingId,
+        actionDigest,
+        commandDigest,
+        leaseId: authority.leaseId,
+        leaseEpoch: authority.leaseEpoch,
+        receiptId: null,
+      },
+    };
   }
 }
 
