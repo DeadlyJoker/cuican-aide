@@ -41,7 +41,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
    follow-up 的 terminal assistant Message。只有 partial delta、没有 completed assistant item 的混合输出仍以
    `model_tool_call_with_text_unsupported` fail closed。
 
-## 首批 30 个 Rust reference cases
+## 基础 Rust reference cases
 
 | ID     | Rust integration source                                                                               | 要冻结的稳定语义                                                       | 当前 TS 状态 | 下一证据                              |
 | ------ | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------ | ------------------------------------- |
@@ -75,6 +75,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-028 | `context_manager/history_tests.rs::normalize_removes_orphan_function_call_output`                     | orphan Tool output fail-safe normalization                             | PARITY       | Rust+TS shared normalization fixture  |
 | AR-029 | `governed_context.rs::governed_context_reaches_responses_with_roles_bounds_and_incremental_stability` | context role、bounds、增量稳定性                                       | PARITY       | shared role/bounds/stability fixture  |
 | AR-030 | `safety_check_downgrade.rs::cyber_policy_response_emits_typed_error_without_retry`                    | typed policy failure 不进入 retry loop                                 | PARITY       | Rust+TS typed policy fixture          |
+| AR-031 | `provider_end_turn.rs::end_turn_false_empty_response_continues_same_turn`                            | Provider `end_turn=false` 的空 completed response 在同 Turn 继续 sampling | PARTIAL      | 空响应 shared differential 已 PARITY；带输出/Tool 分支 fail closed |
 
 ## 已有证据映射
 
@@ -143,6 +144,14 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 - `mixed-assistant-tool-response.reference.json` 冻结同一 completed response 的 commentary→Tool 顺序、第二请求的
   assistant/call/result 后缀、一次 Tool 副作用、follow-up sampling、terminal usage/error 和唯一 terminal Message。TS 把 completed
   assistant items 与首个 Tool request 原子追加到 durable Model History；Kernel/Worker 继续拒绝无法证明 completed item 的 partial text。
+- `provider-end-turn-continuation.reference.json` 关闭 AR-031 的最高风险最小分支：Rust `ResponseEvent::Completed` 的
+  `end_turn: Some(false)` 与 TS Responses `end_turn=false` 都会让无输出、无 Tool 的 completed response 在同一 Turn/Segment 发起第二次
+  sampling；该 `PARITY` 子边界明确限于 manual / `storeResponses=false`。两次 request history 保持相同 user prefix，第一次 usage 不丢失，第二次才产生唯一 terminal assistant output，且该 continuation
+  不计入 sampling retry。Rust integration 与 TS Kernel candidate 对 fixture 的 request、稳定事件、terminal 和累计 usage 自动 deep-equal。
+  广义 AR-031 仍标 `PARTIAL`：Rust 也允许 `end_turn=false` response 同时携带 completed assistant/Tool items；TS 当前对此明确
+  `model_end_turn_false_output_unsupported` fail closed，尚未宣称 durable history/副作用 parity。stored-response / crash-recovery
+  checkpoint chain 也未实现；已有或新建 Provider checkpoint 遇到该 directive 会以非 retryable
+  `model_end_turn_false_stored_response_unsupported` fail closed，禁止重复 retrieve 同一 response 的无界循环。
 
 ## Goal runtime focused parity gate（2026-08-09）
 
