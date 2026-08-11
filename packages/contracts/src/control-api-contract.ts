@@ -4,6 +4,16 @@ import { ContractValidationError } from "./contract-validation-error.ts";
 
 export type ControlApiPaths = paths;
 export type ControlApiOperations = operations;
+export type ModelProviderBindingView =
+  components["schemas"]["ModelProviderBindingView"];
+export type ModelProviderSettingsSnapshot =
+  components["schemas"]["ModelProviderSettingsSnapshot"];
+export type GetModelProviderSettingsResponse =
+  components["schemas"]["GetModelProviderSettingsResponse"];
+export type ProbeModelProviderRequest =
+  components["schemas"]["ProbeModelProviderRequest"];
+export type ProbeModelProviderResponse =
+  components["schemas"]["ProbeModelProviderResponse"];
 export type CreateAutomationRequest =
   components["schemas"]["CreateAutomationRequest"];
 export type RunAutomationNowRequest =
@@ -147,6 +157,15 @@ export function parseCreateThreadRequest(input: unknown): CreateThreadRequest {
       "thread_title_invalid",
     ),
   };
+}
+
+export function parseProbeModelProviderRequest(
+  input: unknown,
+): ProbeModelProviderRequest {
+  if (!hasExactKeys(input, [])) {
+    throw new ContractValidationError("model_provider_probe_fields_invalid");
+  }
+  return {};
 }
 
 export function parseCreateAutomationRequest(

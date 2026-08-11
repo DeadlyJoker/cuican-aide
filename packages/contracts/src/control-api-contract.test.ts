@@ -29,6 +29,7 @@ import {
   parseIdempotencyKey,
   parseLastEventSequence,
   parseMessageListQuery,
+  parseProbeModelProviderRequest,
   parsePublishAgentVersionRequest,
   parseRunId,
   parseRunEventViewMode,
@@ -70,6 +71,8 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/automations/{automationId}:run-now",
     "/api/v1/health/live",
     "/api/v1/health/ready",
+    "/api/v1/model-provider-settings",
+    "/api/v1/model-provider-settings/probe",
     "/api/v1/runs",
     "/api/v1/runs/{runId}",
     "/api/v1/runs/{runId}/events",
@@ -264,6 +267,124 @@ test("freezes strict manual-only Automation commands and pagination", () => {
     "invocationId",
     "providerSettings",
     "workspaceBinding",
+  ]) {
+    assert.equal(publicContract.includes(forbidden), false, forbidden);
+  }
+});
+
+test("freezes a redacted Provider snapshot and strict bounded probe", () => {
+  assert.deepEqual(parseProbeModelProviderRequest({}), {});
+  for (const input of [
+    null,
+    [],
+    { providerId: "attacker" },
+    { endpoint: "https://attacker.invalid" },
+  ]) {
+    assert.throws(() => parseProbeModelProviderRequest(input), isContractError);
+  }
+
+  const binding = openApi.components.schemas.ModelProviderBindingView as {
+    required: string[];
+    properties: Record<string, unknown>;
+  };
+  assert.deepEqual(binding.required, [
+    "providerId",
+    "displayName",
+    "endpoint",
+    "credentialKind",
+    "environmentVariable",
+    "isActive",
+  ]);
+  assert.deepEqual(Object.keys(binding.properties), binding.required);
+
+  const snapshot = openApi.components.schemas.ModelProviderSettingsSnapshot as {
+    required: string[];
+    properties: {
+      activeProviderId: { type: string[] };
+      updatedAt: { type: string[] };
+      providers: { maxItems: number; items: { $ref: string } };
+      runtimeAvailability: { $ref: string };
+    };
+  };
+  assert.deepEqual(snapshot.required, [
+    "revision",
+    "activeProviderId",
+    "providers",
+    "runtimeAvailability",
+    "updatedAt",
+  ]);
+  assert.deepEqual(snapshot.properties.activeProviderId.type, [
+    "string",
+    "null",
+  ]);
+  assert.deepEqual(snapshot.properties.updatedAt.type, ["string", "null"]);
+  assert.equal(snapshot.properties.providers.maxItems, 128);
+  assert.equal(
+    snapshot.properties.providers.items.$ref,
+    "#/components/schemas/ModelProviderBindingView",
+  );
+
+  const probeStatus = openApi.components.schemas.ModelProviderProbeStatus as {
+    enum: string[];
+  };
+  assert.deepEqual(probeStatus.enum, [
+    "ok",
+    "credentialMissing",
+    "authenticationFailed",
+    "rateLimited",
+    "providerError",
+    "unreachable",
+    "invalidResponse",
+    "bindingMismatch",
+  ]);
+  const probe = openApi.components.schemas.ProbeModelProviderResponse as {
+    required: string[];
+    properties: {
+      models: { oneOf: [{ maxItems: number }, { type: string }] };
+      modelCount: { type: string[]; maximum: number };
+      retryAfterMs: { type: string[]; maximum: number };
+    };
+  };
+  assert.deepEqual(probe.required, [
+    "disposition",
+    "providerId",
+    "catalogRevision",
+    "status",
+    "models",
+    "modelCount",
+    "latencyMs",
+    "retryable",
+    "retryAfterMs",
+  ]);
+  assert.equal(probe.properties.models.oneOf[0].maxItems, 100);
+  assert.equal(probe.properties.models.oneOf[1].type, "null");
+  assert.deepEqual(probe.properties.modelCount.type, ["integer", "null"]);
+  assert.deepEqual(probe.properties.retryAfterMs.type, ["integer", "null"]);
+
+  const publicContract = JSON.stringify({
+    paths: {
+      settings: openApi.paths["/api/v1/model-provider-settings"],
+      probe: openApi.paths["/api/v1/model-provider-settings/probe"],
+    },
+    schemas: {
+      binding,
+      snapshot,
+      response: openApi.components.schemas.GetModelProviderSettingsResponse,
+      probe,
+    },
+  });
+  for (const forbidden of [
+    "runtimeBindingId",
+    "coordinatorBinding",
+    "pendingOperation",
+    "operationProof",
+    "tenantId",
+    "spaceId",
+    "actorId",
+    "apiKey",
+    "accessToken",
+    "clientSecret",
+    "credentialValue",
   ]) {
     assert.equal(publicContract.includes(forbidden), false, forbidden);
   }
