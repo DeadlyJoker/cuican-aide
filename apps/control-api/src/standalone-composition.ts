@@ -2,6 +2,7 @@ import {
   AgentVersionApplicationService,
   AgentVersionCatalogApplicationService,
   ArtifactApplicationService,
+  AutomationApplicationService,
   RunApplicationService,
   ThreadApplicationService,
   ThreadGoalApplicationService,
@@ -10,8 +11,11 @@ import {
   TurnApplicationService,
   ThreadCompactionApplicationService,
   ModelProviderSettingsApplicationService,
+  WorkspaceListApplicationService,
+  WorkspaceOperationQueryService,
   type ActorContext,
   type ArtifactStorePort,
+  type AutomationStore,
   type DomainStore,
   type ModelProviderSettingsStore,
 } from "@crewon/application";
@@ -37,6 +41,8 @@ import {
   UnavailableTenantProviderProbeWorkerRegistry,
   type TenantProviderProbeWorkerRegistry,
 } from "./provider-probe-worker-client.ts";
+import { LoopbackRuntimeWorkspaceWorkerClient } from "./workspace-runtime-worker-client.ts";
+import type { ProcessLocalActivationGate } from "./paused-admission.ts";
 
 type ControlApiCompositionConfig = Readonly<{
   actor: ActorContext;
@@ -49,6 +55,12 @@ type ControlApiCompositionConfig = Readonly<{
   artifactStore: ArtifactStorePort;
   artifactEncryptionKeyId: string;
   providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
+  activationGate?: ProcessLocalActivationGate;
+  workspaceWorker?: Readonly<{
+    origin: string;
+    token: string;
+    deadlineMs?: number;
+  }>;
 }>;
 
 export type StandaloneControlApiConfig = ControlApiCompositionConfig &
@@ -67,6 +79,8 @@ export type StandaloneControlApiRuntime = Readonly<{
   eventHub: RunEventHub;
   outboxDispatcher: OutboxDispatcher;
   providerProbes: ControlProviderProbeService;
+  workspaceLists: WorkspaceListApplicationService | null;
+  workspaceQueries: WorkspaceOperationQueryService;
 }>;
 
 export function createStandaloneControlApi(
@@ -94,7 +108,7 @@ export async function createPostgresControlApi(
 }
 
 function composeControlApi(
-  store: DomainStore & ModelProviderSettingsStore,
+  store: DomainStore & ModelProviderSettingsStore & AutomationStore,
   config: ControlApiCompositionConfig,
 ): StandaloneControlApiRuntime {
   const eventHub = new RunEventHub();
@@ -107,6 +121,7 @@ function composeControlApi(
       scanIntervalMs: config.outboxScanIntervalMs,
     },
   );
+  let workspaceWorker: LoopbackRuntimeWorkspaceWorkerClient | null = null;
   try {
     const authorization = new StandaloneAuthorization(config.actor);
     const clock = new SystemApplicationClock();
@@ -160,6 +175,14 @@ function composeControlApi(
       digester,
       admission: new StoreBackedAgentVersionAdmission(store),
     });
+    const automations = new AutomationApplicationService({
+      store,
+      authorization,
+      clock,
+      ids,
+      digester,
+      routeResolver,
+    });
     const goals = new ThreadGoalApplicationService({
       store,
       authorization,
@@ -192,6 +215,29 @@ function composeControlApi(
           new UnavailableTenantProviderProbeWorkerRegistry(),
       ),
     });
+    workspaceWorker =
+      config.workspaceWorker === undefined
+        ? null
+        : new LoopbackRuntimeWorkspaceWorkerClient(config.workspaceWorker);
+    const workspaceLists =
+      workspaceWorker === null
+        ? null
+        : new WorkspaceListApplicationService({
+            store,
+            authorization,
+            digester,
+            commands: workspaceWorker,
+            dispatcher: workspaceWorker,
+            deliveryOwnerId: `workspace-delivery:${ids.nextId("outboxLease")}`,
+            deliveryLeaseDurationMs: Math.max(
+              35_000,
+              (config.workspaceWorker?.deadlineMs ?? 40_000) + 5_000,
+            ),
+          });
+    const workspaceQueries = new WorkspaceOperationQueryService({
+      store,
+      authorization,
+    });
     const app = buildControlApi({
       application,
       threads,
@@ -203,6 +249,13 @@ function composeControlApi(
       agentVersions,
       agentVersionCatalogs,
       artifacts,
+      automations,
+      workspaceLists,
+      workspaceQueries,
+      providerSettings,
+      providerProbes,
+      providerRuntimeAvailability:
+        config.providerProbeWorkers === undefined ? "unavailable" : "available",
       agentVersionDigester: digester,
       clock,
       identity: new StandaloneIdentity({
@@ -219,18 +272,28 @@ function composeControlApi(
       eventHub,
       outboxWakeup: outboxDispatcher,
       heartbeatIntervalMs: config.heartbeatIntervalMs,
+      activationGate: config.activationGate,
     });
     outboxDispatcher.start();
     app.addHook("onClose", async () => {
       await outboxDispatcher.close();
       eventHub.close();
+      await workspaceWorker?.close();
       await config.artifactStore.close();
       await store.close();
     });
-    return { app, eventHub, outboxDispatcher, providerProbes };
+    return {
+      app,
+      eventHub,
+      outboxDispatcher,
+      providerProbes,
+      workspaceLists,
+      workspaceQueries,
+    };
   } catch (error) {
     void outboxDispatcher.close();
     eventHub.close();
+    void workspaceWorker?.close();
     void config.artifactStore.close();
     void store.close();
     throw error;

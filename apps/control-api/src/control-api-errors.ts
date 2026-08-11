@@ -6,11 +6,21 @@ import {
 } from "@crewon/contracts";
 
 import { ControlApiIdentityError } from "./control-api-ports.ts";
+import { ProviderProbeWorkerError } from "./provider-probe-worker-client.ts";
 
 export type ErrorResponse = Readonly<{
   statusCode: number;
   body: ErrorEnvelope;
 }>;
+
+export class WorkspaceControlUnavailableError extends Error {
+  readonly code = "workspace_command_factory_unavailable";
+
+  constructor() {
+    super("workspace_command_factory_unavailable");
+    this.name = "WorkspaceControlUnavailableError";
+  }
+}
 
 export function errorResponse(
   error: unknown,
@@ -27,12 +37,29 @@ export function errorResponse(
   if (error instanceof ContractValidationError) {
     return response("validation", error.code, requestId, 400);
   }
+  if (error instanceof ProviderProbeWorkerError) {
+    if (error.code === "provider_probe_worker_unavailable") {
+      return response("providerUnavailable", error.code, requestId, 503);
+    }
+    return response("internal", "provider_probe_failed", requestId, 500);
+  }
   if (error instanceof ApplicationError) {
+    if (error.code === "workspace_command_factory_unavailable") {
+      return response("deviceUnavailable", error.code, requestId, 503);
+    }
     return response(
       error.category,
       error.code,
       requestId,
       applicationStatusCode(error.category),
+    );
+  }
+  if (error instanceof WorkspaceControlUnavailableError) {
+    return response(
+      "deviceUnavailable",
+      "workspace_command_factory_unavailable",
+      requestId,
+      503,
     );
   }
   if (isFastifyBadRequest(error)) {

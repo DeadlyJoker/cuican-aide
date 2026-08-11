@@ -2,15 +2,19 @@ import {
   AgentVersionApplicationService,
   AgentVersionCatalogApplicationService,
   ArtifactApplicationService,
+  AutomationApplicationService,
   RunApplicationService,
   ThreadApplicationService,
   ThreadGoalApplicationService,
+  WorkspaceOperationQueryService,
   ThreadRollbackApplicationService,
   ToolApprovalApplicationService,
   TurnApplicationService,
   ThreadCompactionApplicationService,
   ModelProviderSettingsApplicationService,
   type ArtifactStorePort,
+  type AutomationAuthorizationPort,
+  type AutomationStore,
   type AuthorizationPort,
   type DomainStore,
   type ModelProviderSettingsStore,
@@ -45,7 +49,7 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   maxPoolSize?: number;
   statementTimeoutMs?: number;
   identity: ControlApiIdentityPort;
-  authorization: AuthorizationPort;
+  authorization: AuthorizationPort & AutomationAuthorizationPort;
   heartbeatIntervalMs?: number | null;
   outboxScanIntervalMs?: number | null;
   artifactStore: ArtifactStorePort;
@@ -76,7 +80,7 @@ export async function createProductionPostgresControlApi(
 }
 
 function composeProductionControlApi(
-  store: DomainStore & ModelProviderSettingsStore,
+  store: DomainStore & ModelProviderSettingsStore & AutomationStore,
   config: ProductionPostgresControlApiConfig,
 ): StandaloneControlApiRuntime {
   const eventHub = new RunEventHub();
@@ -140,6 +144,14 @@ function composeProductionControlApi(
       digester,
       admission: new StoreBackedAgentVersionAdmission(store),
     });
+    const automations = new AutomationApplicationService({
+      store,
+      authorization: config.authorization,
+      clock,
+      ids,
+      digester,
+      routeResolver,
+    });
     const goals = new ThreadGoalApplicationService({
       store,
       authorization: config.authorization,
@@ -168,9 +180,16 @@ function composeProductionControlApi(
     const providerProbes = new ControlProviderProbeService({
       settings: providerSettings,
       workers: new TenantRoutedProviderProbeWorker(
-        config.providerProbeWorkers ??
-          new UnavailableTenantProviderProbeWorkerRegistry(),
+        // The tenant registry remains a private vertical foundation. Public
+        // Team probing stays unavailable until the production coordinator,
+        // approved tenant egress policy, and authenticated Worker transport
+        // are deployed as one authority boundary.
+        new UnavailableTenantProviderProbeWorkerRegistry(),
       ),
+    });
+    const workspaceQueries = new WorkspaceOperationQueryService({
+      store,
+      authorization: config.authorization,
     });
     const app = buildControlApi({
       application,
@@ -183,6 +202,14 @@ function composeProductionControlApi(
       agentVersions,
       agentVersionCatalogs,
       artifacts,
+      automations,
+      workspaceLists: null,
+      workspaceQueries,
+      providerSettings,
+      providerProbes,
+      // Team remains fail closed until its coordinator, tenant egress policy,
+      // and authenticated Worker transport are deployed together.
+      providerRuntimeAvailability: "unavailable",
       agentVersionDigester: digester,
       clock,
       identity: config.identity,
@@ -199,7 +226,14 @@ function composeProductionControlApi(
       await config.artifactStore.close();
       await store.close();
     });
-    return { app, eventHub, outboxDispatcher, providerProbes };
+    return {
+      app,
+      eventHub,
+      outboxDispatcher,
+      providerProbes,
+      workspaceLists: null,
+      workspaceQueries,
+    };
   } catch (error) {
     void outboxDispatcher.close();
     eventHub.close();

@@ -12,3 +12,4 @@ export * from "./run-event-hub.ts";
 export * from "./run-projection.ts";
 export * from "./standalone-adapters.ts";
 export * from "./standalone-composition.ts";
+export * from "./workspace-runtime-worker-client.ts";
