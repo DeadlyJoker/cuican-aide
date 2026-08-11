@@ -16,7 +16,9 @@ import type {
 import { createRuntimeNativeRemoteMcpOwner } from "./runtime-native-remote-mcp.ts";
 
 test("production execute and reconcile acquire isolated leases that release their copies", async () => {
-  const fixture = credentials([{ credentialBindingId: "credential-1", bearerToken: "secret-1" }]);
+  const fixture = credentials([
+    { credentialBindingId: "credential-1", bearerToken: "secret-1" },
+  ]);
   const owner = createRuntimeNativeRemoteMcpOwner({
     credentials: fixture.owner,
     expectedAuthority: authority(),
@@ -25,11 +27,16 @@ test("production execute and reconcile acquire isolated leases that release thei
   const dependencies = production(owner.dependencies);
   const port = dependencies.credentialLeaseFactory(identity());
   const observed: string[] = [];
-  const sink: CrewonRemoteMcpBearerSink = { applyBearer: (token) => observed.push(token) };
+  const sink: CrewonRemoteMcpBearerSink = {
+    applyBearer: (token) => observed.push(token),
+  };
   const execute = await port.acquire(acquire("execute"));
   await execute.apply(sink);
   await execute.release();
-  assert.throws(() => execute.apply(sink), /runtime_native_remote_mcp_invalid/u);
+  assert.throws(
+    () => execute.apply(sink),
+    /runtime_native_remote_mcp_invalid/u,
+  );
   const reconcile = await port.acquire(acquire("reconcile"));
   await reconcile.apply(sink);
   await reconcile.release();
@@ -37,11 +44,16 @@ test("production execute and reconcile acquire isolated leases that release thei
   assert.deepEqual(observed, ["secret-1", "secret-1"]);
   assert.equal(fixture.consumeCount, 1);
   owner.destroy();
-  await assert.rejects(Promise.resolve().then(() => port.acquire(acquire("cancel"))), /runtime_native_remote_mcp_invalid/u);
+  await assert.rejects(
+    Promise.resolve().then(() => port.acquire(acquire("cancel"))),
+    /runtime_native_remote_mcp_invalid/u,
+  );
 });
 
 test("aborted acquisition and owner destruction fail closed without inspecting secrets", async () => {
-  const fixture = credentials([{ credentialBindingId: "credential-1", bearerToken: "secret-sentinel" }]);
+  const fixture = credentials([
+    { credentialBindingId: "credential-1", bearerToken: "secret-sentinel" },
+  ]);
   const owner = createRuntimeNativeRemoteMcpOwner({
     credentials: fixture.owner,
     expectedAuthority: authority(),
@@ -50,23 +62,39 @@ test("aborted acquisition and owner destruction fail closed without inspecting s
   assert.equal(inspect(owner), "RuntimeNativeRemoteMcpOwner([REDACTED])");
   const controller = new AbortController();
   controller.abort();
-  const port = production(owner.dependencies).credentialLeaseFactory(identity());
-  await assert.rejects(Promise.resolve().then(() => port.acquire(acquire("execute", controller.signal))), /runtime_native_remote_mcp_invalid/u);
+  const port = production(owner.dependencies).credentialLeaseFactory(
+    identity(),
+  );
+  await assert.rejects(
+    Promise.resolve().then(() =>
+      port.acquire(acquire("execute", controller.signal)),
+    ),
+    /runtime_native_remote_mcp_invalid/u,
+  );
   owner.destroy();
   owner.destroy();
-  await assert.rejects(Promise.resolve().then(() => port.acquire(acquire("execute"))), /runtime_native_remote_mcp_invalid/u);
+  await assert.rejects(
+    Promise.resolve().then(() => port.acquire(acquire("execute"))),
+    /runtime_native_remote_mcp_invalid/u,
+  );
 });
 
 test("rejects authority mismatch and missing or extra manifest credentials", () => {
   for (const input of [
     {
-      credentials: credentials([{ credentialBindingId: "credential-1", bearerToken: "secret" }], {
-        ...authority(), tenantId: "other-tenant",
-      }).owner,
+      credentials: credentials(
+        [{ credentialBindingId: "credential-1", bearerToken: "secret" }],
+        {
+          ...authority(),
+          tenantId: "other-tenant",
+        },
+      ).owner,
       manifestBindings: [identity()],
     },
     {
-      credentials: credentials([{ credentialBindingId: "missing", bearerToken: "secret" }]).owner,
+      credentials: credentials([
+        { credentialBindingId: "missing", bearerToken: "secret" },
+      ]).owner,
       manifestBindings: [identity()],
     },
     {
@@ -78,7 +106,11 @@ test("rejects authority mismatch and missing or extra manifest credentials", () 
     },
   ]) {
     assert.throws(
-      () => createRuntimeNativeRemoteMcpOwner({ ...input, expectedAuthority: authority() }),
+      () =>
+        createRuntimeNativeRemoteMcpOwner({
+          ...input,
+          expectedAuthority: authority(),
+        }),
       /runtime_native_remote_mcp_invalid/u,
     );
   }
@@ -95,13 +127,18 @@ test("two production servers may share one selected credential while history sta
     agentVersionId: "historical-version",
     credentialBindingId: "historical-credential",
   };
+  const otherWorkspace = {
+    ...identity(),
+    workspaceBindingId: "workspace-2",
+    credentialBindingId: "other-workspace-credential",
+  };
   const fixture = credentials([
     { credentialBindingId: "credential-1", bearerToken: "shared-secret" },
   ]);
   const owner = createRuntimeNativeRemoteMcpOwner({
     credentials: fixture.owner,
     expectedAuthority: authority(),
-    manifestBindings: [identity(), second, historical],
+    manifestBindings: [identity(), second, historical, otherWorkspace],
   });
   const dependencies = production(owner.dependencies);
   const observed: string[] = [];
@@ -117,6 +154,10 @@ test("two production servers may share one selected credential while history sta
     () => dependencies.credentialLeaseFactory(historical),
     /runtime_native_remote_mcp_invalid/u,
   );
+  assert.throws(
+    () => dependencies.credentialLeaseFactory(otherWorkspace),
+    /runtime_native_remote_mcp_invalid/u,
+  );
   owner.destroy();
 });
 
@@ -127,43 +168,55 @@ test("rejects cross tenant, version, runtime shape, endpoint, and server policy 
     { ...identity(), mode: "standaloneLoopback" as const },
   ]) {
     assert.throws(
-      () => createRuntimeNativeRemoteMcpOwner({
-        credentials: credentials([{ credentialBindingId: "credential-1", bearerToken: "secret" }]).owner,
-        expectedAuthority: authority(),
-        manifestBindings: [manifest],
-      }),
+      () =>
+        createRuntimeNativeRemoteMcpOwner({
+          credentials: credentials([
+            { credentialBindingId: "credential-1", bearerToken: "secret" },
+          ]).owner,
+          expectedAuthority: authority(),
+          manifestBindings: [manifest],
+        }),
       /runtime_native_remote_mcp_invalid/u,
     );
   }
 
   const owner = createRuntimeNativeRemoteMcpOwner({
-    credentials: credentials([{ credentialBindingId: "credential-1", bearerToken: "secret" }]).owner,
+    credentials: credentials([
+      { credentialBindingId: "credential-1", bearerToken: "secret" },
+    ]).owner,
     expectedAuthority: authority(),
     manifestBindings: [identity()],
   });
-  const policy = production(owner.dependencies).tenantEgressFactory(identity()).policy;
+  const policy = production(owner.dependencies).tenantEgressFactory(
+    identity(),
+  ).policy;
   for (const changed of [
     { tenantId: "other-tenant" },
     { scopeId: "other-server" },
     { endpoint: new URL("https://other.example/mutations") },
   ]) {
     await assert.rejects(
-      Promise.resolve().then(() => policy.authorize({
-        tenantId: "tenant-1",
-        scopeId: "server-1",
-        endpoint: new URL(identity().endpoint),
-        addresses: [{ address: "8.8.8.8", family: 4 }],
-        ...changed,
-      })),
+      Promise.resolve().then(() =>
+        policy.authorize({
+          tenantId: "tenant-1",
+          scopeId: "server-1",
+          endpoint: new URL(identity().endpoint),
+          addresses: [{ address: "8.8.8.8", family: 4 }],
+          ...changed,
+        }),
+      ),
       /remote_mcp_network_binding_mismatch/u,
     );
   }
-  assert.deepEqual(await policy.authorize({
-    tenantId: "tenant-1",
-    scopeId: "server-1",
-    endpoint: new URL(identity().endpoint),
-    addresses: [{ address: "127.0.0.1", family: 4 }],
-  }), { approvedAddresses: ["127.0.0.1"] });
+  assert.deepEqual(
+    await policy.authorize({
+      tenantId: "tenant-1",
+      scopeId: "server-1",
+      endpoint: new URL(identity().endpoint),
+      addresses: [{ address: "127.0.0.1", family: 4 }],
+    }),
+    { approvedAddresses: ["127.0.0.1"] },
+  );
   owner.destroy();
 });
 
@@ -174,18 +227,25 @@ function credentials(
   let consumeCount = 0;
   let available = true;
   return {
-    get consumeCount() { return consumeCount; },
+    get consumeCount() {
+      return consumeCount;
+    },
     owner: {
       authority: actualAuthority,
       consume(expected, consumer) {
-        if (!available || JSON.stringify(expected) !== JSON.stringify(actualAuthority)) {
+        if (
+          !available ||
+          JSON.stringify(expected) !== JSON.stringify(actualAuthority)
+        ) {
           throw new Error("runtime_native_bootstrap_invalid");
         }
         available = false;
         consumeCount += 1;
         consumer(bindings);
       },
-      destroy() { available = false; },
+      destroy() {
+        available = false;
+      },
     } satisfies RuntimeNativeCredentialBindings,
   };
 }
@@ -203,6 +263,7 @@ function identity(): RemoteMcpBindingIdentity {
   return {
     mode: "production",
     tenantId: "tenant-1",
+    workspaceBindingId: "workspace-1",
     agentVersionId: "agent-version-1",
     contentDigest: `sha256:${"a".repeat(64)}`,
     materializationDigest: `sha256:${"b".repeat(64)}`,
@@ -212,8 +273,16 @@ function identity(): RemoteMcpBindingIdentity {
   };
 }
 
-function acquire(phase: "execute" | "reconcile" | "cancel", signal = new AbortController().signal) {
-  return { phase, providerExecutionId: "execution-1", toolName: "tool-1", signal };
+function acquire(
+  phase: "execute" | "reconcile" | "cancel",
+  signal = new AbortController().signal,
+) {
+  return {
+    phase,
+    providerExecutionId: "execution-1",
+    toolName: "tool-1",
+    signal,
+  };
 }
 
 function production(dependencies: RemoteMcpCompositionDependencies) {

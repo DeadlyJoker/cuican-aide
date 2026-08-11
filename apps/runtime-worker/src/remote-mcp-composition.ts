@@ -20,6 +20,7 @@ import type {
 export type RemoteMcpBindingIdentity = Readonly<{
   mode: RemoteMcpServerConfig["mode"];
   tenantId: string;
+  workspaceBindingId: string | null;
   agentVersionId: string;
   contentDigest: string;
   materializationDigest: string;
@@ -48,6 +49,7 @@ export type RemoteMcpCompositionDependencies =
 
 type ReleaseBinding = Readonly<{
   tenantId: string;
+  workspaceBindingId: string | null;
   agentVersionId: string;
   contentDigest: string;
   materializationDigest: string;

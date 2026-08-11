@@ -30,9 +30,7 @@ test("composes a real standalone 127/8 server with a static bearer", async (t) =
 
   assert.deepEqual(runtime.definitions(), [definition()]);
   assert.deepEqual(await runtime.execute(command(), signal()), completed());
-  assert.deepEqual(identities, [
-    identity("standaloneLoopback", endpoint),
-  ]);
+  assert.deepEqual(identities, [identity("standaloneLoopback", endpoint)]);
   assert.deepEqual(
     requests.map(({ authorization }) => authorization),
     ["Bearer standalone-secret"],
@@ -299,6 +297,7 @@ function policy() {
 function release() {
   return {
     tenantId: "tenant-1",
+    workspaceBindingId: null,
     agentVersionId: "agent-version-1",
     contentDigest: `sha256:${"a".repeat(64)}`,
     materializationDigest: `sha256:${"b".repeat(64)}`,

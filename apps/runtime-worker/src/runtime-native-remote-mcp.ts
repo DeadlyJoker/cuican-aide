@@ -25,37 +25,44 @@ export interface RuntimeNativeRemoteMcpOwner {
 }
 
 /** Consumes native credentials once and binds them to the pinned production manifest. */
-export function createRuntimeNativeRemoteMcpOwner(input: Readonly<{
-  credentials: RuntimeNativeCredentialBindings;
-  expectedAuthority: RuntimeNativeCredentialBindingAuthority;
-  manifestBindings: readonly RemoteMcpBindingIdentity[];
-}>): RuntimeNativeRemoteMcpOwner {
+export function createRuntimeNativeRemoteMcpOwner(
+  input: Readonly<{
+    credentials: RuntimeNativeCredentialBindings;
+    expectedAuthority: RuntimeNativeCredentialBindingAuthority;
+    manifestBindings: readonly RemoteMcpBindingIdentity[];
+  }>,
+): RuntimeNativeRemoteMcpOwner {
   const expected = input.expectedAuthority;
   const manifests = new Map<string, RemoteMcpBindingIdentity>();
   const credentialIds = new Set<string>();
   for (const identity of input.manifestBindings) {
     if (
       identity.tenantId !== expected.tenantId ||
-      identity.agentVersionId !== expected.agentVersionId
-    ) continue;
+      identity.agentVersionId !== expected.agentVersionId ||
+      identity.workspaceBindingId !== expected.workspaceBindingId
+    )
+      continue;
     const key = identityKey(identity);
     if (identity.mode !== "production" || manifests.has(key)) {
       throw invalid();
     }
-    manifests.set(key, identity);
+    const pinnedIdentity = Object.freeze({ ...identity });
+    manifests.set(key, pinnedIdentity);
     credentialIds.add(identity.credentialBindingId);
   }
   const secrets = new Map<string, SecretSlot>();
   try {
     input.credentials.consume(expected, (bindings) => {
       for (const binding of bindings) {
-        if (!credentialIds.has(binding.credentialBindingId) || secrets.has(binding.credentialBindingId)) {
+        if (
+          !credentialIds.has(binding.credentialBindingId) ||
+          secrets.has(binding.credentialBindingId)
+        ) {
           throw invalid();
         }
-        secrets.set(
-          binding.credentialBindingId,
-          { master: Buffer.from(binding.bearerToken, "utf8") },
-        );
+        secrets.set(binding.credentialBindingId, {
+          master: Buffer.from(binding.bearerToken, "utf8"),
+        });
       }
       if (secrets.size !== credentialIds.size) throw invalid();
     });
@@ -69,7 +76,11 @@ export function createRuntimeNativeRemoteMcpOwner(input: Readonly<{
       mode: "production",
       credentialLeaseFactory: (identity) => {
         const manifest = manifests.get(identityKey(identity));
-        if (destroyed || manifest === undefined || !sameIdentity(identity, manifest)) {
+        if (
+          destroyed ||
+          manifest === undefined ||
+          !sameIdentity(identity, manifest)
+        ) {
           throw invalid();
         }
         const slot = secrets.get(identity.credentialBindingId);
@@ -78,7 +89,11 @@ export function createRuntimeNativeRemoteMcpOwner(input: Readonly<{
       },
       tenantEgressFactory: (identity) => {
         const manifest = manifests.get(identityKey(identity));
-        if (destroyed || manifest === undefined || !sameIdentity(identity, manifest)) {
+        if (
+          destroyed ||
+          manifest === undefined ||
+          !sameIdentity(identity, manifest)
+        ) {
           throw invalid();
         }
         return { policy: boundProductionPolicy(manifest) };
@@ -96,7 +111,9 @@ export function createRuntimeNativeRemoteMcpOwner(input: Readonly<{
 
 type SecretSlot = { master: Buffer | null };
 
-function credentialLeasePort(slot: SecretSlot): CrewonRemoteMcpCredentialLeasePort {
+function credentialLeasePort(
+  slot: SecretSlot,
+): CrewonRemoteMcpCredentialLeasePort {
   return {
     acquire: ({ signal }) => {
       if (signal.aborted || slot.master === null) throw invalid();
@@ -129,7 +146,9 @@ function boundProductionPolicy(
       ) {
         throw new NetworkEgressError("remote_mcp_network_binding_mismatch");
       }
-      return { approvedAddresses: input.addresses.map(({ address }) => address) };
+      return {
+        approvedAddresses: input.addresses.map(({ address }) => address),
+      };
     },
   };
 }
@@ -138,6 +157,7 @@ function identityKey(identity: RemoteMcpBindingIdentity): string {
   return JSON.stringify([
     identity.mode,
     identity.tenantId,
+    identity.workspaceBindingId,
     identity.agentVersionId,
     identity.contentDigest,
     identity.materializationDigest,
@@ -153,6 +173,7 @@ function sameIdentity(
 ): boolean {
   return (
     left.tenantId === right.tenantId &&
+    left.workspaceBindingId === right.workspaceBindingId &&
     left.mode === right.mode &&
     left.agentVersionId === right.agentVersionId &&
     left.contentDigest === right.contentDigest &&

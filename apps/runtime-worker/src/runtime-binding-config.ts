@@ -95,18 +95,17 @@ export function loadRemoteMcpManifestBindings(
     const materializationDigestValue = materializationDigest(binding, {
       remoteMcpConfig,
     });
-    return remoteMcpConfig.servers.map(
-      (server) => ({
-        mode: server.mode,
-        tenantId: binding.tenantId,
-        agentVersionId: binding.agentVersionId,
-        contentDigest: binding.contentDigest,
-        materializationDigest: materializationDigestValue,
-        serverBindingId: server.serverBindingId,
-        credentialBindingId: server.credentialBindingId,
-        endpoint: server.endpoint,
-      }),
-    );
+    return remoteMcpConfig.servers.map((server) => ({
+      mode: server.mode,
+      tenantId: binding.tenantId,
+      workspaceBindingId: binding.workspaceBindingId,
+      agentVersionId: binding.agentVersionId,
+      contentDigest: binding.contentDigest,
+      materializationDigest: materializationDigestValue,
+      serverBindingId: server.serverBindingId,
+      credentialBindingId: server.credentialBindingId,
+      endpoint: server.endpoint,
+    }));
   });
 }
 
@@ -358,6 +357,7 @@ async function createBoundToolRuntime(
           remoteMcpConfig!,
           {
             tenantId: binding.tenantId,
+            workspaceBindingId: binding.workspaceBindingId,
             agentVersionId: binding.agentVersionId,
             contentDigest: binding.contentDigest,
             materializationDigest: expectedMaterializationDigest,

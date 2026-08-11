@@ -8,7 +8,10 @@ import {
   createStandaloneRuntimeWorker,
   type StandaloneRuntimeWorker,
 } from "./standalone-composition.ts";
-import { loadAgentVersionRuntimeFactory } from "./runtime-binding-config.ts";
+import {
+  loadAgentVersionRuntimeFactory,
+  loadRemoteMcpManifestBindings,
+} from "./runtime-binding-config.ts";
 import {
   createConfiguredToolRuntime,
   createModelTransport,
@@ -29,62 +32,136 @@ import {
   resolveRuntimeProviderProbeEnvironment,
 } from "./runtime-provider-probe-environment.ts";
 import { runtimeNativeReadinessLines } from "./runtime-native-readiness.ts";
+import {
+  createRuntimeNativeRemoteMcpOwner,
+  type RuntimeNativeRemoteMcpOwner,
+} from "./runtime-native-remote-mcp.ts";
 
 const agentVersionRuntimeBindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
-const agentVersionRuntimeFactory = agentVersionRuntimeBindingsPath
-  ? loadAgentVersionRuntimeFactory(agentVersionRuntimeBindingsPath)
-  : undefined;
-
 const nativeBootstrap = takeRuntimeNativeBootstrap();
-const securityMode = parseRuntimeWorkerSecurityMode(
-  process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
-);
-const ambientProviderProbe = resolveRuntimeProviderProbeEnvironment(
-  process.env,
-  securityMode,
-  new DesktopProviderProbeEgressPolicy(),
-);
-if (
-  nativeBootstrap?.provider !== null &&
-  nativeBootstrap?.provider !== undefined &&
-  ambientProviderProbe !== undefined
-) {
-  throw new Error("runtime_provider_probe_bootstrap_conflict");
-}
-const nativeWorkspaceReadCatalog = parseNativeWorkspaceReadCatalog(
-  process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
-);
-if (
-  (nativeWorkspaceReadCatalog === "enabled") !==
-  (nativeBootstrap?.workspace !== null &&
-    nativeBootstrap?.workspace !== undefined)
-) {
-  throw new Error("runtime_workspace_read_bootstrap_mismatch");
-}
-const runtimeTenantId =
-  nativeBootstrap?.workspace?.authority.tenantId ??
-  environmentOr("CREWON_TENANT_ID", "standalone-tenant");
-const route = {
-  authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
-  runtimeGeneration:
-    nativeBootstrap?.workspace?.authority.runtimeBindingId ??
-    environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
-  agentVersionId: environmentOr("CREWON_AGENT_VERSION_ID", "default-agent-v1"),
-  policySnapshotId:
-    nativeBootstrap?.workspace?.authority.policySnapshotId ??
-    environmentOr("CREWON_POLICY_SNAPSHOT_ID", "standalone-policy-v0"),
-  workspaceBindingId:
-    nativeBootstrap?.workspace?.authority.workspaceBindingId ??
-    process.env.CREWON_WORKSPACE_BINDING_ID?.trim() ??
-    null,
-};
-const transport = createModelTransport(
-  environmentOr("CREWON_MODEL_ADAPTER", "responses"),
-  { apiKey: nativeBootstrap?.apiKey },
-);
-const toolRuntime = await createConfiguredToolRuntime();
-const artifactAuthority = createConfiguredArtifactAuthority();
+const initialized = await (async () => {
+  let remoteMcpOwner: RuntimeNativeRemoteMcpOwner | undefined;
+  let transport: ReturnType<typeof createModelTransport> | undefined;
+  let toolRuntime: Awaited<ReturnType<typeof createConfiguredToolRuntime>>;
+  let artifactAuthority: ReturnType<typeof createConfiguredArtifactAuthority>;
+  try {
+    const securityMode = parseRuntimeWorkerSecurityMode(
+      process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
+    );
+    const ambientProviderProbe = resolveRuntimeProviderProbeEnvironment(
+      process.env,
+      securityMode,
+      new DesktopProviderProbeEgressPolicy(),
+    );
+    if (
+      nativeBootstrap?.provider !== null &&
+      nativeBootstrap?.provider !== undefined &&
+      ambientProviderProbe !== undefined
+    ) {
+      throw new Error("runtime_provider_probe_bootstrap_conflict");
+    }
+    const nativeWorkspaceReadCatalog = parseNativeWorkspaceReadCatalog(
+      process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
+    );
+    if (
+      (nativeWorkspaceReadCatalog === "enabled") !==
+      (nativeBootstrap?.workspace !== null &&
+        nativeBootstrap?.workspace !== undefined)
+    ) {
+      throw new Error("runtime_workspace_read_bootstrap_mismatch");
+    }
+    const runtimeTenantId =
+      nativeBootstrap?.workspace?.authority.tenantId ??
+      environmentOr("CREWON_TENANT_ID", "standalone-tenant");
+    const route = {
+      authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
+      runtimeGeneration:
+        nativeBootstrap?.workspace?.authority.runtimeBindingId ??
+        environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
+      agentVersionId: environmentOr(
+        "CREWON_AGENT_VERSION_ID",
+        "default-agent-v1",
+      ),
+      policySnapshotId:
+        nativeBootstrap?.workspace?.authority.policySnapshotId ??
+        environmentOr("CREWON_POLICY_SNAPSHOT_ID", "standalone-policy-v0"),
+      workspaceBindingId:
+        nativeBootstrap?.workspace?.authority.workspaceBindingId ??
+        process.env.CREWON_WORKSPACE_BINDING_ID?.trim() ??
+        null,
+    };
+    if (
+      nativeBootstrap?.credentialBindings !== null &&
+      nativeBootstrap?.credentialBindings !== undefined
+    ) {
+      if (
+        agentVersionRuntimeBindingsPath === undefined ||
+        nativeBootstrap.workspace === null ||
+        route.workspaceBindingId === null
+      ) {
+        throw new Error("runtime_native_remote_mcp_invalid");
+      }
+      remoteMcpOwner = createRuntimeNativeRemoteMcpOwner({
+        credentials: nativeBootstrap.credentialBindings,
+        expectedAuthority: {
+          tenantId: runtimeTenantId,
+          workspaceBindingId: route.workspaceBindingId,
+          runtimeBindingId: route.runtimeGeneration,
+          agentVersionId: route.agentVersionId,
+        },
+        manifestBindings: loadRemoteMcpManifestBindings(
+          agentVersionRuntimeBindingsPath,
+        ),
+      });
+    }
+    const agentVersionRuntimeFactory = agentVersionRuntimeBindingsPath
+      ? loadAgentVersionRuntimeFactory(
+          agentVersionRuntimeBindingsPath,
+          process.env,
+          remoteMcpOwner?.dependencies,
+        )
+      : undefined;
+    transport = createModelTransport(
+      environmentOr("CREWON_MODEL_ADAPTER", "responses"),
+      { apiKey: nativeBootstrap?.apiKey },
+    );
+    toolRuntime = await createConfiguredToolRuntime();
+    artifactAuthority = createConfiguredArtifactAuthority();
+    return {
+      agentVersionRuntimeFactory,
+      ambientProviderProbe,
+      artifactAuthority,
+      nativeWorkspaceReadCatalog,
+      remoteMcpOwner,
+      route,
+      runtimeTenantId,
+      securityMode,
+      toolRuntime,
+      transport,
+    };
+  } catch (error) {
+    await Promise.allSettled([
+      artifactAuthority?.store.close(),
+      toolRuntime?.close?.(),
+      transport?.close?.(),
+    ]);
+    nativeBootstrap?.credentialBindings?.destroy();
+    remoteMcpOwner?.destroy();
+    throw error;
+  }
+})();
+const {
+  agentVersionRuntimeFactory,
+  ambientProviderProbe,
+  artifactAuthority,
+  nativeWorkspaceReadCatalog,
+  remoteMcpOwner,
+  route,
+  runtimeTenantId,
+  toolRuntime,
+  transport,
+} = initialized;
 
 let runtime: StandaloneRuntimeWorker;
 let nativeWorkspaceResources: RuntimeNativeWorkspaceResources | undefined;
@@ -210,6 +287,7 @@ try {
   await artifactAuthority?.store.close();
   await toolRuntime?.close?.();
   await transport.close?.();
+  remoteMcpOwner?.destroy();
   throw error;
 }
 
@@ -247,13 +325,18 @@ try {
   await transport.prewarm?.(new AbortController().signal);
 } catch (error) {
   await runtime.close();
+  remoteMcpOwner?.destroy();
   throw error;
 }
 
 if (process.env.CREWON_WORKER_ONCE === "1") {
-  const outcome = await runtime.worker.wake();
-  process.stdout.write(`${JSON.stringify(outcome)}\n`);
-  await runtime.close();
+  try {
+    const outcome = await runtime.worker.wake();
+    process.stdout.write(`${JSON.stringify(outcome)}\n`);
+  } finally {
+    await runtime.close();
+    remoteMcpOwner?.destroy();
+  }
 } else {
   runtime.worker.start();
   process.stdout.write("CrewON Runtime Worker started\n");
@@ -268,7 +351,10 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
   }
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => {
-      void runtime.close().finally(() => process.exit(0));
+      void runtime.close().finally(() => {
+        remoteMcpOwner?.destroy();
+        process.exit(0);
+      });
     });
   }
 }

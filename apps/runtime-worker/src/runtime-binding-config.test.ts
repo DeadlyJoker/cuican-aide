@@ -272,6 +272,7 @@ test("createBoundToolRuntime composes remote MCP only with explicit exact depend
   assert.deepEqual(identities, [
     {
       tenantId: "tenant-1",
+      workspaceBindingId: null,
       agentVersionId: "agent-version-1",
       contentDigest: version.contentDigest,
       materializationDigest:
@@ -345,10 +346,14 @@ test("extracts remote identities from exactly one manifest snapshot", (context) 
   const remotePath = `${path}.remote.json`;
   const manifest = config(version.contentDigest, null);
   writeFileSync(remotePath, JSON.stringify(remoteConfig()), "utf8");
-  writeFileSync(path, JSON.stringify({
-    ...manifest,
-    bindings: [{ ...manifest.bindings[0], remoteMcpConfigPath: remotePath }],
-  }), "utf8");
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...manifest,
+      bindings: [{ ...manifest.bindings[0], remoteMcpConfigPath: remotePath }],
+    }),
+    "utf8",
+  );
   const mutableFs = createRequire(import.meta.url)("node:fs") as {
     readFileSync: typeof import("node:fs").readFileSync;
   };

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -119,6 +119,158 @@ test("packaged entry rejects malformed stdin without echoing secret bytes", asyn
     new RegExp(secret, "u"),
   );
 });
+
+test("packaged v3 entry redacts credentials when startup fails after composition", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-packaged-v3-failure-"));
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const remotePath = join(directory, "remote.json");
+  const bindingsPath = join(directory, "bindings.json");
+  writeFileSync(remotePath, JSON.stringify(remoteMcpConfig()), "utf8");
+  writeFileSync(
+    bindingsPath,
+    JSON.stringify(runtimeBindings(remotePath)),
+    "utf8",
+  );
+  const entry = fileURLToPath(
+    new URL(
+      "../../crewon-ui/src-tauri/sidecars/runtime-worker-entry.mjs",
+      import.meta.url,
+    ),
+  );
+  const child = spawn(process.execPath, ["--experimental-strip-types", entry], {
+    env: {
+      ...process.env,
+      CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH: bindingsPath,
+      CREWON_AGENT_VERSION_ID: "agent-version-1",
+      CREWON_MODEL_ADAPTER: "invalid-after-native-owner",
+      CREWON_NATIVE_WORKSPACE_READ_ENABLED: "1",
+    },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const secret = "V3_STARTUP_FAILURE_SECRET_SENTINEL";
+  child.stdin.end(`${JSON.stringify(v3Bootstrap(secret))}\n`);
+  const output = await collectExit(child);
+  assert.notEqual(output.code, 0);
+  assert.doesNotMatch(
+    `${output.stdout}\n${output.stderr}`,
+    new RegExp(secret, "u"),
+  );
+  assert.match(output.stderr, /CREWON_MODEL_ADAPTER_unsupported/u);
+});
+
+function runtimeBindings(remoteMcpConfigPath: string) {
+  return {
+    schemaVersion: "crewon.agent-version-runtime-bindings.v0",
+    bindings: [
+      {
+        tenantId: "tenant-1",
+        agentVersionId: "agent-version-1",
+        contentDigest: `sha256:${"a".repeat(64)}`,
+        authorityId: "authority-1",
+        workspaceBindingId: "workspace-1",
+        provider: {
+          kind: "directResponses",
+          endpoint: "https://provider.example/v1/responses",
+          apiKeyEnvironment: null,
+          storeResponses: false,
+          requestProfile: "standard",
+          idleTimeoutMs: 60_000,
+          sequencePolicy: "required",
+        },
+        mcpStdioConfigPath: null,
+        deviceToolConfigPath: null,
+        remoteMcpConfigPath,
+      },
+    ],
+  };
+}
+
+function remoteMcpConfig() {
+  return {
+    schemaVersion: "crewon.remote-mcp-runtime.v0",
+    servers: [
+      {
+        serverId: "remote",
+        serverBindingId: "server-1",
+        mode: "production",
+        endpoint: "https://mcp.example:8443/mutations",
+        credentialBindingId: "credential-1",
+        tools: [
+          {
+            descriptor: {
+              name: "create_record",
+              description: "Creates one record.",
+              inputSchema: { type: "object", additionalProperties: false },
+            },
+            policy: {
+              effect: "mutation",
+              recovery: "reconcilable",
+              resourceBindingId: null,
+              credentialBindingId: "credential-1",
+              executionTarget: { kind: "remote", bindingId: "server-1" },
+              capability: "records.create",
+              approvalRequirement: "perAction",
+              limits: {
+                timeoutMs: 30_000,
+                maxOutputBytes: 64_000,
+                maxArtifactBytes: 1_000_000,
+              },
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function v3Bootstrap(bearerToken: string) {
+  const privateKeyPem = generateKeyPairSync("ed25519")
+    .privateKey.export({ type: "pkcs8", format: "pem" })
+    .toString();
+  return {
+    schemaVersion: "crewon.worker-native-bootstrap.v3",
+    provider: null,
+    apiKey: null,
+    probe: { port: 3211, token: "unused-provider-probe-token" },
+    workspace: {
+      privateServer: {
+        port: 0,
+        token: "packaged-workspace-private-token-at-least-32-bytes",
+      },
+      authority: {
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        workspaceBindingId: "workspace-1",
+        incarnationId: "incarnation-1",
+        deviceBindingId: "device-binding-1",
+        deviceId: "device-1",
+        runtimeBindingId: "runtime-generation-1",
+        policySnapshotId: "policy-1",
+      },
+      signing: { keyId: "workspace-key-1", privateKeyPem },
+      gateway: {
+        endpoint: "https://127.0.0.1:1",
+        deadlineMs: 35_000,
+        tls: {
+          keyPem: TEST_WORKER_KEY,
+          certificatePem: TEST_WORKER_CERT,
+          caCertificatePem: TEST_CA_CERT,
+          servername: "localhost",
+        },
+      },
+    },
+    credentialBindings: {
+      schemaVersion: "crewon.remote-mcp-private-credentials.v1",
+      authority: {
+        tenantId: "tenant-1",
+        workspaceBindingId: "workspace-1",
+        runtimeBindingId: "runtime-generation-1",
+        agentVersionId: "agent-version-1",
+      },
+      bindings: [{ credentialBindingId: "credential-1", bearerToken }],
+    },
+  };
+}
 
 function waitForWorkspaceReady(child: ReturnType<typeof spawn>): Promise<{
   stdout: string;
