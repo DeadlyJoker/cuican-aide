@@ -10,7 +10,8 @@ use crewon_device_journal::DeviceJournalError;
 use crewon_device_journal::DeviceWorkspaceJournal;
 use crewon_device_journal::FilesystemReadJournalExecution;
 use crewon_device_journal::FilesystemReadJournalListQuery;
-use crewon_device_journal::PrepareFilesystemReadOutcome;
+use crewon_device_journal::PrepareFilesystemReadWithAdmissionError;
+use crewon_device_journal::PrepareFilesystemReadWithAdmissionOutcome;
 use crewon_device_journal::RecordFilesystemReadTerminalOutcome;
 use crewon_device_protocol::DeviceFilesystemReadAck;
 use crewon_device_protocol::DeviceFilesystemReadEvent;
@@ -86,25 +87,26 @@ impl NativeFilesystemReadOrchestrator {
                 .map_err(|_| NativeDeviceAdmissionError::new("device_filesystem_read_command_invalid"))?,
         )
         .map_err(NativeDeviceAdmissionError::from_protocol)?;
-        if let Some(existing) = self.journal.get_filesystem_read(&command.command.execution_id).await.map_err(from_journal)? {
-            if existing.command != command {
-                return Err(NativeDeviceAdmissionError::new("device_journal_filesystem_read_command_conflict"));
+        let prepared = self.journal.prepare_filesystem_read_with_admission(&command, || {
+            let now = (self.now)();
+            let verified = connection.verify_filesystem_read_command(command_frame, now)?;
+            let admitted = connection.admit_filesystem_read_metadata(verified, now, registry)?;
+            if admitted != command {
+                return Err(NativeDeviceAdmissionError::new("device_workspace_command_authority_mismatch"));
             }
-            return self.replay_or_recover(existing).await;
-        }
-        let now = (self.now)();
-        let verified = connection.verify_filesystem_read_command(command_frame, now)?;
-        let admitted = connection.admit_filesystem_read_metadata(verified, now, registry)?;
-        if admitted != command {
-            return Err(NativeDeviceAdmissionError::new("device_workspace_command_authority_mismatch"));
-        }
-        let accepted = accepted_event(&command, connection.accepted_connection().connection_epoch, now)?;
-        let prepared = self.journal.prepare_filesystem_read(&command, &accepted).await.map_err(from_journal)?;
+            let running = Running::reserve(&command.command.execution_id)?;
+            let accepted = accepted_event(&command, connection.accepted_connection().connection_epoch, now)?;
+            Ok((accepted, (admitted, running)))
+        }).await;
+        let prepared = match prepared {
+            Ok(prepared) => prepared,
+            Err(PrepareFilesystemReadWithAdmissionError::Admission(error)) => return Err(error),
+            Err(PrepareFilesystemReadWithAdmissionError::Journal(error)) => return Err(from_journal(error)),
+        };
         match prepared {
-            PrepareFilesystemReadOutcome::AcceptedReplay(execution) => self.replay_or_recover(execution).await,
-            PrepareFilesystemReadOutcome::TerminalReplay(execution) => terminal_replay(execution),
-            PrepareFilesystemReadOutcome::New(execution) => {
-                let running = Running::reserve(&command.command.execution_id)?;
+            PrepareFilesystemReadWithAdmissionOutcome::AcceptedReplay(execution) => self.replay_or_recover(execution).await,
+            PrepareFilesystemReadWithAdmissionOutcome::TerminalReplay(execution) => terminal_replay(execution),
+            PrepareFilesystemReadWithAdmissionOutcome::New { execution, admitted: (command, running) } => {
                 observer(&execution.accepted);
                 let lease = connection.acquire_filesystem_read_for_durable_dispatch(
                     &command, (self.now)(), registry, cancellation,

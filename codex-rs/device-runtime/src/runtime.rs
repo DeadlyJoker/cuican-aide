@@ -9,6 +9,7 @@ use chrono::Duration as ChronoDuration;
 use crewon_device::ConnectionEpochFence;
 use crewon_device::DeviceCommandAuthorizer;
 use crewon_device::NativeDeviceRuntimeBinding;
+use crewon_device::NativeFilesystemReadOrchestrator;
 use crewon_device::NativeWorkspaceListOrchestrator;
 use crewon_device::WorkspaceDirectoryRegistry;
 use crewon_device::WorkspaceListCancellation;
@@ -32,6 +33,7 @@ pub(crate) const MAX_ACKNOWLEDGED_EXECUTIONS: usize = 256;
 pub(crate) const MAX_UNACKNOWLEDGED_EXECUTIONS: usize = 64;
 pub(crate) const MAX_SOCKET_MESSAGE_BYTES: usize = 128 * 1024;
 pub(crate) const WORKSPACE_LIST_CAPABILITY: &str = "workspace.list_top_level.v0";
+pub(crate) const WORKSPACE_READ_CAPABILITY: &str = "workspace.read_file.v0";
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct DeviceRuntime {
@@ -62,13 +64,20 @@ pub(crate) struct DeviceRuntimeState {
     pub runtime_binding: NativeDeviceRuntimeBinding,
     pub journal: DeviceWorkspaceJournal,
     pub orchestrator: NativeWorkspaceListOrchestrator,
+    pub read_orchestrator: NativeFilesystemReadOrchestrator,
     pub registry: Arc<WorkspaceDirectoryRegistry>,
     pub fence: Arc<ConnectionEpochFence>,
     pub authorizer: Arc<DeviceCommandAuthorizer>,
     pub tls: Arc<ClientConfig>,
     pub generation: AtomicU64,
-    pub events: tokio::sync::broadcast::Sender<crewon_device_protocol::DeviceWorkspaceListEvent>,
+    pub events: tokio::sync::broadcast::Sender<RuntimeEvent>,
     pub cancellations: Mutex<HashMap<String, ActiveCancellation>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum RuntimeEvent {
+    WorkspaceList(crewon_device_protocol::DeviceWorkspaceListEvent),
+    FilesystemRead(crewon_device_protocol::DeviceFilesystemReadEvent),
 }
 
 #[derive(Clone)]
@@ -124,6 +133,7 @@ impl DeviceRuntime {
             DeviceRuntimeError::with_source("device_runtime_epoch_authority_unavailable", error)
         })?;
         let orchestrator = NativeWorkspaceListOrchestrator::new(journal.clone());
+        let read_orchestrator = NativeFilesystemReadOrchestrator::new(journal.clone());
         let (events, _) = tokio::sync::broadcast::channel(256);
         Ok(Self {
             state: Arc::new(DeviceRuntimeState {
@@ -132,6 +142,7 @@ impl DeviceRuntime {
                 runtime_binding,
                 journal,
                 orchestrator,
+                read_orchestrator,
                 registry,
                 fence: Arc::new(fence),
                 authorizer: Arc::new(authorizer),

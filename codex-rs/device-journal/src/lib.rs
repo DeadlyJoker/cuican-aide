@@ -6,6 +6,7 @@
 
 mod codec;
 mod filesystem_read;
+mod filesystem_read_admission;
 mod filesystem_read_codec;
 mod filesystem_read_listing;
 mod journal;
@@ -20,6 +21,8 @@ use thiserror::Error;
 pub use filesystem_read::AcknowledgeFilesystemReadOutcome;
 pub use filesystem_read::FilesystemReadJournalExecution;
 pub use filesystem_read::PrepareFilesystemReadOutcome;
+pub use filesystem_read_admission::PrepareFilesystemReadWithAdmissionError;
+pub use filesystem_read_admission::PrepareFilesystemReadWithAdmissionOutcome;
 pub use filesystem_read::RecordFilesystemReadTerminalOutcome;
 pub use filesystem_read_listing::FilesystemReadJournalListQuery;
 pub use filesystem_read_listing::FilesystemReadJournalPage;

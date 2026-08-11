@@ -9,7 +9,60 @@ use serde_json::Value;
 use crate::AcknowledgeFilesystemReadOutcome;
 use crate::DeviceWorkspaceJournal;
 use crate::PrepareFilesystemReadOutcome;
+use crate::PrepareFilesystemReadWithAdmissionOutcome;
 use crate::RecordFilesystemReadTerminalOutcome;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_fresh_prepare_runs_admission_only_for_transaction_winner() {
+    let directory = tempfile::tempdir().expect("temporary journal directory");
+    let journal = std::sync::Arc::new(
+        DeviceWorkspaceJournal::open(directory.path().join("device.sqlite"))
+            .await
+            .expect("open journal"),
+    );
+    let (command, accepted, _, _) = fixture();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let admissions = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let first_journal = std::sync::Arc::clone(&journal);
+    let first_command = command.clone();
+    let first_accepted = accepted.clone();
+    let first_barrier = std::sync::Arc::clone(&barrier);
+    let first_admissions = std::sync::Arc::clone(&admissions);
+    let first = tokio::spawn(async move {
+        first_journal
+            .prepare_filesystem_read_with_admission(&first_command, || {
+                first_admissions.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                first_barrier.wait();
+                Ok::<_, ()>((first_accepted, "winner"))
+            })
+            .await
+    });
+    while admissions.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+        tokio::task::yield_now().await;
+    }
+    let second_journal = std::sync::Arc::clone(&journal);
+    let second_command = command;
+    let second_accepted = accepted;
+    let second_admissions = std::sync::Arc::clone(&admissions);
+    let second = tokio::spawn(async move {
+        second_journal
+            .prepare_filesystem_read_with_admission(&second_command, || {
+                second_admissions.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok::<_, ()>((second_accepted, "loser"))
+            })
+            .await
+    });
+    barrier.wait();
+    assert!(matches!(
+        first.await.expect("winner task").expect("winner prepare"),
+        PrepareFilesystemReadWithAdmissionOutcome::New { admitted: "winner", .. }
+    ));
+    assert!(matches!(
+        second.await.expect("replay task").expect("replay prepare"),
+        PrepareFilesystemReadWithAdmissionOutcome::AcceptedReplay(_)
+    ));
+    assert_eq!(admissions.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
 
 #[tokio::test]
 async fn persists_read_accept_terminal_and_cumulative_ack_across_restart() {

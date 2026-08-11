@@ -8,6 +8,13 @@ use chrono::SecondsFormat;
 use chrono::Utc;
 use crewon_device::TrustedDeviceCommandKey;
 use crewon_device_protocol::DeviceGatewayWelcome;
+use crewon_device_protocol::DeviceFilesystemReadCommand;
+use crewon_device_protocol::DeviceFilesystemReadAcceptedData;
+use crewon_device_protocol::DeviceFilesystemReadCompletedData;
+use crewon_device_protocol::DeviceFilesystemReadEvent;
+use crewon_device_protocol::DeviceFilesystemReadEventEnvelope;
+use crewon_device_protocol::DeviceFilesystemReadResult;
+use crewon_device_protocol::canonical_device_filesystem_read_command_digest;
 use crewon_device_protocol::DeviceHello;
 use crewon_device_protocol::DeviceWorkspaceListAcceptedData;
 use crewon_device_protocol::DeviceWorkspaceListAck;
@@ -17,6 +24,8 @@ use crewon_device_protocol::DeviceWorkspaceListEvent;
 use crewon_device_protocol::DeviceWorkspaceListEventEnvelope;
 use crewon_device_protocol::DeviceWorkspaceListResult;
 use crewon_device_protocol::canonical_device_workspace_list_command_signing_payload;
+use crewon_device_protocol::canonical_device_command_signing_payload;
+use crewon_device_protocol::parse_device_filesystem_read_command;
 use crewon_device_protocol::parse_device_workspace_list_command;
 use ed25519_dalek::Signer as _;
 use ed25519_dalek::SigningKey;
@@ -72,6 +81,95 @@ struct Reference {
 #[serde(rename_all = "camelCase")]
 struct ValidReference {
     workspace_command: Value,
+    filesystem_read_command: Value,
+}
+
+pub(crate) fn signed_read_command(
+    fixture: &RuntimeFixture,
+    suffix: u16,
+) -> DeviceFilesystemReadCommand {
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/device-protocol.reference.json"
+    )
+    .expect("resolve protocol fixture");
+    let reference: Reference = serde_json::from_str(
+        &fs::read_to_string(fixture_path).expect("read protocol fixture"),
+    )
+    .expect("parse protocol fixture");
+    let mut command = parse_device_filesystem_read_command(reference.valid.filesystem_read_command)
+        .expect("parse read command");
+    let now = Utc::now();
+    command.command.device_id = "device-1".to_string();
+    command.command.execution_id = format!("read-execution-{suffix}");
+    command.command.lease_id = format!("read-lease-{suffix}");
+    command.command.workspace_binding_id = fixture.workspace_binding_id.clone();
+    command.arguments.workspace_incarnation_id = fixture.incarnation_id.clone();
+    command.arguments.relative_path_segments = vec!["alpha.txt".to_string()];
+    command.command.arguments = Some(
+        serde_json::to_value(&command.arguments).expect("serialize read arguments"),
+    );
+    command.command.idempotency_key = format!("read-key-{suffix}");
+    command.command.expires_at = timestamp(now + Duration::minutes(5));
+    command.command.authorization.key_id = "control-key-1".to_string();
+    command.command.authorization.issued_at = timestamp(now - Duration::seconds(5));
+    command.command.authorization.expires_at = timestamp(now + Duration::minutes(5));
+    command.command.authorization.signature = "A".repeat(86);
+    command.command.authorization.signature = URL_SAFE_NO_PAD.encode(
+        fixture.signing_key.sign(
+            canonical_device_command_signing_payload(&command.command)
+                .expect("canonical read signing payload")
+                .as_bytes(),
+        ).to_bytes(),
+    );
+    command
+}
+
+pub(crate) fn read_accepted_event(command: &DeviceFilesystemReadCommand, epoch: u64) -> DeviceFilesystemReadEvent {
+    DeviceFilesystemReadEvent::Accepted {
+        envelope: read_envelope(command, format!("read-receipt-{}", command.command.execution_id), epoch, 1),
+        data: DeviceFilesystemReadAcceptedData {
+            lease_id: command.command.lease_id.clone(),
+            lease_epoch: command.command.lease_epoch,
+            expires_at: command.command.expires_at.clone(),
+        },
+    }
+}
+
+pub(crate) fn read_completed_event(
+    command: &DeviceFilesystemReadCommand,
+    accepted: &DeviceFilesystemReadEvent,
+    content: &str,
+) -> DeviceFilesystemReadEvent {
+    let DeviceFilesystemReadEvent::Accepted { envelope, .. } = accepted else { panic!("accepted required"); };
+    DeviceFilesystemReadEvent::Completed {
+        envelope: read_envelope(command, envelope.receipt_id.clone(), envelope.connection_epoch, 2),
+        data: DeviceFilesystemReadCompletedData {
+            result: DeviceFilesystemReadResult {
+                schema_version: "crewon.workspace-file-read-result.v0".to_string(),
+                encoding: "utf8".to_string(),
+                content: content.to_string(),
+                byte_length: content.len() as u64,
+                output_digest: format!("sha256:{:x}", Sha256::digest(content.as_bytes())),
+            },
+        },
+    }
+}
+
+fn read_envelope(command: &DeviceFilesystemReadCommand, receipt_id: String, connection_epoch: u64, sequence: u64) -> DeviceFilesystemReadEventEnvelope {
+    DeviceFilesystemReadEventEnvelope {
+        schema_version: "crewon.device-filesystem-read-event.v0".to_string(),
+        protocol_version: 1,
+        command_kind: "workspaceRead".to_string(),
+        device_id: command.command.device_id.clone(),
+        execution_id: command.command.execution_id.clone(),
+        receipt_id,
+        connection_epoch,
+        workspace_binding_id: command.command.workspace_binding_id.clone(),
+        incarnation_id: command.arguments.workspace_incarnation_id.clone(),
+        command_digest: canonical_device_filesystem_read_command_digest(command).expect("read digest"),
+        sequence,
+        observed_at: timestamp(Utc::now()),
+    }
 }
 
 pub(crate) async fn runtime_fixture(gateway_url: Url, server_pin: ServerPin) -> RuntimeFixture {

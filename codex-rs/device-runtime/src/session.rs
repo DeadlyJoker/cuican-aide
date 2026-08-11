@@ -5,11 +5,13 @@ use chrono::SecondsFormat;
 use chrono::Utc;
 use crewon_device::NativeDeviceConnection;
 use crewon_device_journal::WorkspaceJournalListQuery;
+use crewon_device_journal::FilesystemReadJournalListQuery;
 use crewon_device_protocol::DEVICE_PROTOCOL_VERSION;
 use crewon_device_protocol::DeviceAcknowledgedExecution;
 use crewon_device_protocol::DeviceHello;
 use crewon_device_protocol::DeviceWorkspaceListAck;
-use crewon_device_protocol::DeviceWorkspaceListEvent;
+use crewon_device_protocol::DeviceFilesystemReadAck;
+use crewon_device_protocol::parse_device_filesystem_read_ack;
 use crewon_device_protocol::parse_device_execution_cancel;
 use crewon_device_protocol::parse_device_gateway_welcome;
 use crewon_device_protocol::parse_device_workspace_list_ack;
@@ -28,6 +30,7 @@ use crate::DeviceRuntimeError;
 use crate::dispatch::DispatchRequest;
 use crate::dispatch::apply_cancel;
 use crate::dispatch::enqueue_command;
+use crate::dispatch::enqueue_filesystem_read;
 use crate::dispatch::run_dispatch_scheduler;
 use crate::runtime::DeviceRuntimeReady;
 use crate::runtime::DeviceRuntimeState;
@@ -35,13 +38,15 @@ use crate::runtime::MAX_ACKNOWLEDGED_EXECUTIONS;
 use crate::runtime::MAX_SOCKET_MESSAGE_BYTES;
 use crate::runtime::MAX_UNACKNOWLEDGED_EXECUTIONS;
 use crate::runtime::WORKSPACE_LIST_CAPABILITY;
+use crate::runtime::WORKSPACE_READ_CAPABILITY;
+use crate::runtime::RuntimeEvent;
 
 const OUTBOUND_CAPACITY: usize = 256;
 const DISPATCH_QUEUE_CAPACITY: usize = 32;
 const WELCOME_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 pub(crate) enum Outbound {
-    Event(Box<DeviceWorkspaceListEvent>),
+    Event(Box<RuntimeEvent>),
     Pong(Vec<u8>),
 }
 
@@ -94,15 +99,16 @@ where
     let writer_task = tokio::spawn(async move {
         while let Some(outbound) = outbound_rx.recv().await {
             let message = match outbound {
-                Outbound::Event(event) => match serde_json::to_string(&event) {
-                    Ok(event) => Message::text(event),
-                    Err(_) => {
-                        let _ = writer_fatal.send(true);
-                        return;
-                    }
-                },
-                Outbound::Pong(payload) => Message::Pong(payload.into()),
+                Outbound::Event(event) => match event.as_ref() {
+                    RuntimeEvent::WorkspaceList(event) => serde_json::to_string(event),
+                    RuntimeEvent::FilesystemRead(event) => serde_json::to_string(event),
+                }.map_or_else(|_| {
+                    let _ = writer_fatal.send(true);
+                    None
+                }, |event| Some(Message::text(event))),
+                Outbound::Pong(payload) => Some(Message::Pong(payload.into())),
             };
+            let Some(message) = message else { return; };
             if writer.send(message).await.is_err() {
                 let _ = writer_fatal.send(true);
                 return;
@@ -226,12 +232,31 @@ async fn build_hello(
         };
         cursor = Some(next_cursor);
     }
+    let mut cursor = None;
+    loop {
+        let page = state.journal.list_filesystem_read_acknowledgements(&FilesystemReadJournalListQuery {
+            after_execution_id: cursor,
+            limit: 100,
+        }).await.map_err(|error| DeviceRuntimeError::with_source("device_runtime_journal_invalid", error))?;
+        if last_acknowledged.len() + page.acknowledgements.len() > MAX_ACKNOWLEDGED_EXECUTIONS {
+            return Err(DeviceRuntimeError::new("device_runtime_acknowledgement_capacity_exceeded"));
+        }
+        last_acknowledged.extend(page.acknowledgements.into_iter().map(|acknowledgement| DeviceAcknowledgedExecution {
+            execution_id: acknowledgement.execution_id,
+            sequence: acknowledgement.through_sequence,
+        }));
+        let Some(next_cursor) = page.next_cursor else { break; };
+        cursor = Some(next_cursor);
+    }
     Ok(DeviceHello {
         schema_version: "crewon.device-hello.v0".to_string(),
         supported_protocol_versions: vec![DEVICE_PROTOCOL_VERSION],
         device_id: state.device_id.clone(),
         connection_id: connection_id.to_string(),
-        capabilities: vec![WORKSPACE_LIST_CAPABILITY.to_string()],
+        capabilities: vec![
+            WORKSPACE_LIST_CAPABILITY.to_string(),
+            WORKSPACE_READ_CAPABILITY.to_string(),
+        ],
         last_acknowledged,
         sent_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
     })
@@ -239,7 +264,7 @@ async fn build_hello(
 
 async fn collect_replay_events(
     state: &DeviceRuntimeState,
-) -> Result<Vec<DeviceWorkspaceListEvent>, DeviceRuntimeError> {
+) -> Result<Vec<RuntimeEvent>, DeviceRuntimeError> {
     let mut events = Vec::new();
     let mut execution_count = 0_usize;
     let mut cursor = None;
@@ -261,11 +286,27 @@ async fn collect_replay_events(
             ));
         }
         for item in page.items {
-            events.extend(item.events);
+            events.extend(item.events.into_iter().map(RuntimeEvent::WorkspaceList));
         }
         let Some(next_cursor) = page.next_cursor else {
             break;
         };
+        cursor = Some(next_cursor);
+    }
+    let mut cursor = None;
+    loop {
+        let page = state.read_orchestrator.reconnect_page(&FilesystemReadJournalListQuery {
+            after_execution_id: cursor,
+            limit: 100,
+        }).await.map_err(|error| DeviceRuntimeError::with_source("device_runtime_journal_invalid", error))?;
+        execution_count += page.items.len();
+        if execution_count > MAX_UNACKNOWLEDGED_EXECUTIONS {
+            return Err(DeviceRuntimeError::new("device_runtime_replay_capacity_exceeded"));
+        }
+        for item in page.items {
+            events.extend(item.events.into_iter().map(RuntimeEvent::FilesystemRead));
+        }
+        let Some(next_cursor) = page.next_cursor else { break; };
         cursor = Some(next_cursor);
     }
     Ok(events)
@@ -273,7 +314,7 @@ async fn collect_replay_events(
 
 async fn enqueue_replay_events(
     outbound: &mpsc::Sender<Outbound>,
-    replay_events: &[DeviceWorkspaceListEvent],
+    replay_events: &[RuntimeEvent],
 ) -> Result<(), DeviceRuntimeError> {
     for event in replay_events {
         outbound
@@ -298,6 +339,7 @@ async fn handle_text_frame(
         "crewon.device-workspace-list-command.v0" => {
             enqueue_command(state, frame, value, dispatch_tx)
         }
+        "crewon.device-command.v0" => enqueue_filesystem_read(state, frame, value, dispatch_tx),
         "crewon.device-workspace-list-ack.v0" => {
             let ack = parse_device_workspace_list_ack(value).map_err(|error| {
                 DeviceRuntimeError::with_source("device_runtime_ack_invalid", error)
@@ -312,6 +354,16 @@ async fn handle_text_frame(
                 })?;
             Ok(())
         }
+        "crewon.device-filesystem-read-ack.v0" => {
+            let ack = parse_device_filesystem_read_ack(value).map_err(|error| {
+                DeviceRuntimeError::with_source("device_runtime_ack_invalid", error)
+            })?;
+            validate_read_ack_device(state, &ack)?;
+            state.read_orchestrator.acknowledge(&ack).await.map_err(|error| {
+                DeviceRuntimeError::with_source("device_runtime_ack_rejected", error)
+            })?;
+            Ok(())
+        }
         "crewon.device-cancel.v0" => {
             let cancel = parse_device_execution_cancel(value).map_err(|error| {
                 DeviceRuntimeError::with_source("device_runtime_cancel_invalid", error)
@@ -320,6 +372,13 @@ async fn handle_text_frame(
         }
         _ => Err(DeviceRuntimeError::new("device_runtime_frame_unsupported")),
     }
+}
+
+fn validate_read_ack_device(state: &DeviceRuntimeState, ack: &DeviceFilesystemReadAck) -> Result<(), DeviceRuntimeError> {
+    if ack.device_id != state.device_id {
+        return Err(DeviceRuntimeError::new("device_runtime_ack_invalid"));
+    }
+    Ok(())
 }
 
 fn validate_ack_device(

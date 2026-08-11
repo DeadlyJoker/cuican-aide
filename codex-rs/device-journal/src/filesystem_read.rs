@@ -309,7 +309,7 @@ pub(super) async fn load(
     Ok(Some(execution))
 }
 
-async fn insert_event(
+pub(super) async fn insert_event(
     connection: &mut sqlx::SqliteConnection,
     envelope: &crewon_device_protocol::DeviceFilesystemReadEventEnvelope,
     event_type: &str,
@@ -323,7 +323,7 @@ async fn insert_event(
     Ok(())
 }
 
-fn validate_acceptance(
+pub(super) fn validate_acceptance(
     command: &DeviceFilesystemReadCommand,
     event: &DeviceFilesystemReadEvent,
     envelope: &crewon_device_protocol::DeviceFilesystemReadEventEnvelope,
@@ -471,7 +471,7 @@ fn validate_event_time(
     Ok(())
 }
 
-fn envelope(
+pub(super) fn envelope(
     event: &DeviceFilesystemReadEvent,
 ) -> (
     &crewon_device_protocol::DeviceFilesystemReadEventEnvelope,
