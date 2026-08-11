@@ -1,0 +1,277 @@
+{
+  "apiVersion": 1,
+  "paths": {
+    "freezeCommand": "/internal/v1/workspace-list/freeze-command",
+    "dispatch": "/internal/v1/workspace-list/dispatch"
+  },
+  "freeze": {
+    "request": {
+      "schemaVersion": "crewon.runtime-worker-workspace-freeze-request.v0",
+      "apiVersion": 1,
+      "tenantId": "tenant-1",
+      "spaceId": "space-1",
+      "actor": {
+        "principalId": "principal-1",
+        "actorId": "actor-1"
+      },
+      "threadFence": {
+        "threadId": "thread-1",
+        "expectedRevision": 1
+      },
+      "idempotencyKey": "workspace-idempotency-1",
+      "maxEntries": 5
+    },
+    "response": {
+      "schemaVersion": "crewon.runtime-worker-workspace-freeze-response.v0",
+      "apiVersion": 1,
+      "command": {
+        "executionId": "workspace-execution-1",
+        "workspaceBindingId": "workspace-1",
+        "incarnationId": "incarnation-1",
+        "deviceBindingId": "device-binding-1",
+        "deviceId": "device-1",
+        "runtimeBindingId": "runtime-binding-1",
+        "policySnapshotId": "policy-1",
+        "actionDigest": "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+        "commandDigest": "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+        "limits": {
+          "depth": 0,
+          "maxEntries": 5,
+          "maxNameBytes": 255,
+          "maxOutputBytes": 65536,
+          "maxScannedEntries": 10000,
+          "maxScannedNameBytes": 1048576,
+          "timeoutMs": 30000
+        }
+      }
+    },
+    "error": {
+      "schemaVersion": "crewon.runtime-worker-workspace-freeze-error.v0",
+      "apiVersion": 1,
+      "code": "workspace_binding_unavailable",
+      "retryable": true,
+      "certainty": "notSent"
+    }
+  },
+  "dispatch": {
+    "execute": {
+      "request": {
+        "schemaVersion": "crewon.runtime-worker-workspace-dispatch-request.v0",
+        "apiVersion": 1,
+        "phase": "execute",
+        "operation": {
+          "schemaVersion": "crewon.workspace-operation.v0",
+          "tenantId": "tenant-1",
+          "spaceId": "space-1",
+          "threadId": "thread-1",
+          "expectedThreadRevision": 1,
+          "principalId": "principal-1",
+          "actorId": "actor-1",
+          "idempotencyKey": "workspace-idempotency-1",
+          "executionId": "workspace-execution-1",
+          "revision": 1,
+          "status": "prepared",
+          "command": {
+            "executionId": "workspace-execution-1",
+            "workspaceBindingId": "workspace-1",
+            "incarnationId": "incarnation-1",
+            "deviceBindingId": "device-binding-1",
+            "deviceId": "device-1",
+            "runtimeBindingId": "runtime-binding-1",
+            "policySnapshotId": "policy-1",
+            "actionDigest": "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+            "commandDigest": "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+            "limits": {
+              "depth": 0,
+              "maxEntries": 5,
+              "maxNameBytes": 255,
+              "maxOutputBytes": 65536,
+              "maxScannedEntries": 10000,
+              "maxScannedNameBytes": 1048576,
+              "timeoutMs": 30000
+            }
+          },
+          "resolution": null
+        },
+        "deliveryLease": {
+          "schemaVersion": "crewon.workspace-delivery-lease.v0",
+          "executionId": "workspace-execution-1",
+          "attemptNumber": 1,
+          "phase": "execute",
+          "ownerId": "runtime-worker-1",
+          "leaseId": "workspace-lease-1",
+          "epoch": 1,
+          "leasedAt": "2026-08-10T00:00:00.000Z",
+          "expiresAt": "2026-08-10T00:01:00.000Z"
+        }
+      },
+      "response": {
+        "schemaVersion": "crewon.runtime-worker-workspace-dispatch-response.v0",
+        "apiVersion": 1,
+        "phase": "execute",
+        "resolution": {
+          "status": "unknownOutcome",
+          "executionId": "workspace-execution-1",
+          "actionDigest": "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+          "commandDigest": "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+          "providerReceiptId": null
+        }
+      }
+    },
+    "reconcile": {
+      "request": {
+        "schemaVersion": "crewon.runtime-worker-workspace-dispatch-request.v0",
+        "apiVersion": 1,
+        "phase": "reconcile",
+        "operation": {
+          "schemaVersion": "crewon.workspace-operation.v0",
+          "tenantId": "tenant-1",
+          "spaceId": "space-1",
+          "threadId": "thread-1",
+          "expectedThreadRevision": 1,
+          "principalId": "principal-1",
+          "actorId": "actor-1",
+          "idempotencyKey": "workspace-idempotency-1",
+          "executionId": "workspace-execution-1",
+          "revision": 2,
+          "status": "unknownOutcome",
+          "command": {
+            "executionId": "workspace-execution-1",
+            "workspaceBindingId": "workspace-1",
+            "incarnationId": "incarnation-1",
+            "deviceBindingId": "device-binding-1",
+            "deviceId": "device-1",
+            "runtimeBindingId": "runtime-binding-1",
+            "policySnapshotId": "policy-1",
+            "actionDigest": "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+            "commandDigest": "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+            "limits": {
+              "depth": 0,
+              "maxEntries": 5,
+              "maxNameBytes": 255,
+              "maxOutputBytes": 65536,
+              "maxScannedEntries": 10000,
+              "maxScannedNameBytes": 1048576,
+              "timeoutMs": 30000
+            }
+          },
+          "resolution": {
+            "status": "unknownOutcome",
+            "executionId": "workspace-execution-1",
+            "actionDigest": "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+            "commandDigest": "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+            "providerReceiptId": null
+          }
+        },
+        "deliveryLease": {
+          "schemaVersion": "crewon.workspace-delivery-lease.v0",
+          "executionId": "workspace-execution-1",
+          "attemptNumber": 2,
+          "phase": "reconcile",
+          "ownerId": "runtime-worker-1",
+          "leaseId": "workspace-lease-2",
+          "epoch": 1,
+          "leasedAt": "2026-08-10T00:01:00.000Z",
+          "expiresAt": "2026-08-10T00:02:00.000Z"
+        }
+      },
+      "response": {
+        "schemaVersion": "crewon.runtime-worker-workspace-dispatch-response.v0",
+        "apiVersion": 1,
+        "phase": "reconcile",
+        "resolution": {
+          "status": "completed",
+          "executionId": "workspace-execution-1",
+          "actionDigest": "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+          "commandDigest": "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+          "providerReceiptId": "gateway-receipt-1",
+          "entries": [
+            {
+              "name": "README.md",
+              "kind": "file"
+            }
+          ],
+          "truncated": false
+        }
+      }
+    },
+    "cancel": {
+      "request": {
+        "schemaVersion": "crewon.runtime-worker-workspace-dispatch-request.v0",
+        "apiVersion": 1,
+        "phase": "cancel",
+        "operation": {
+          "schemaVersion": "crewon.workspace-operation.v0",
+          "tenantId": "tenant-1",
+          "spaceId": "space-1",
+          "threadId": "thread-1",
+          "expectedThreadRevision": 1,
+          "principalId": "principal-1",
+          "actorId": "actor-1",
+          "idempotencyKey": "workspace-idempotency-1",
+          "executionId": "workspace-execution-1",
+          "revision": 2,
+          "status": "unknownOutcome",
+          "command": {
+            "executionId": "workspace-execution-1",
+            "workspaceBindingId": "workspace-1",
+            "incarnationId": "incarnation-1",
+            "deviceBindingId": "device-binding-1",
+            "deviceId": "device-1",
+            "runtimeBindingId": "runtime-binding-1",
+            "policySnapshotId": "policy-1",
+            "actionDigest": "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+            "commandDigest": "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+            "limits": {
+              "depth": 0,
+              "maxEntries": 5,
+              "maxNameBytes": 255,
+              "maxOutputBytes": 65536,
+              "maxScannedEntries": 10000,
+              "maxScannedNameBytes": 1048576,
+              "timeoutMs": 30000
+            }
+          },
+          "resolution": {
+            "status": "unknownOutcome",
+            "executionId": "workspace-execution-1",
+            "actionDigest": "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+            "commandDigest": "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+            "providerReceiptId": null
+          }
+        },
+        "deliveryLease": {
+          "schemaVersion": "crewon.workspace-delivery-lease.v0",
+          "executionId": "workspace-execution-1",
+          "attemptNumber": 3,
+          "phase": "cancel",
+          "ownerId": "runtime-worker-1",
+          "leaseId": "workspace-lease-3",
+          "epoch": 1,
+          "leasedAt": "2026-08-10T00:01:00.000Z",
+          "expiresAt": "2026-08-10T00:02:00.000Z"
+        }
+      },
+      "response": {
+        "schemaVersion": "crewon.runtime-worker-workspace-dispatch-response.v0",
+        "apiVersion": 1,
+        "phase": "cancel",
+        "resolution": {
+          "status": "canceled",
+          "executionId": "workspace-execution-1",
+          "actionDigest": "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+          "commandDigest": "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+          "providerReceiptId": "gateway-receipt-2"
+        }
+      }
+    }
+  },
+  "error": {
+    "schemaVersion": "crewon.runtime-worker-workspace-dispatch-error.v0",
+    "apiVersion": 1,
+    "phase": "execute",
+    "code": "workspace_gateway_unavailable",
+    "retryable": true,
+    "certainty": "possiblySent"
+  }
+}
