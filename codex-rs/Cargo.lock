@@ -2906,6 +2906,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crewon-device-journal"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "crewon-device-protocol",
+ "pretty_assertions",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "crewon-device-protocol"
 version = "0.0.0"
 dependencies = [
