@@ -296,9 +296,7 @@ function optionalResponseIdentity(
   );
 }
 
-function requireCreated(
-  created: boolean,
-): asserts created is true {
+function requireCreated(created: boolean): asserts created is true {
   if (!created) {
     throw protocolError("responses_created_missing");
   }

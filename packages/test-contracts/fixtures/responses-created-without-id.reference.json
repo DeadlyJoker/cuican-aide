@@ -3,11 +3,35 @@
   "caseId": "AR-036-responses-created-without-id",
   "rustAcceptanceAudit": [
     { "name": "created-empty-response", "eventIndex": 0, "outcome": "created" },
-    { "name": "text-delta-after-empty-id", "eventIndex": 1, "outcome": "output.delta" },
-    { "name": "completed-item-after-empty-id", "eventIndex": 2, "outcome": "output.item.completed" },
-    { "name": "completed-with-later-id-and-status", "eventIndex": 3, "outcome": "completed" },
-    { "name": "failed-without-later-id-status", "case": "failed", "eventIndex": 1, "outcome": "terminal.error", "terminalCategory": "provider" },
-    { "name": "incomplete-with-later-id-status", "case": "incomplete", "eventIndex": 1, "outcome": "terminal.error", "terminalCategory": "incomplete" }
+    {
+      "name": "text-delta-after-empty-id",
+      "eventIndex": 1,
+      "outcome": "output.delta"
+    },
+    {
+      "name": "completed-item-after-empty-id",
+      "eventIndex": 2,
+      "outcome": "output.item.completed"
+    },
+    {
+      "name": "completed-with-later-id-and-status",
+      "eventIndex": 3,
+      "outcome": "completed"
+    },
+    {
+      "name": "failed-without-later-id-status",
+      "case": "failed",
+      "eventIndex": 1,
+      "outcome": "terminal.error",
+      "terminalCategory": "provider"
+    },
+    {
+      "name": "incomplete-with-later-id-status",
+      "case": "incomplete",
+      "eventIndex": 1,
+      "outcome": "terminal.error",
+      "terminalCategory": "incomplete"
+    }
   ],
   "cases": [
     {
@@ -38,11 +62,13 @@
           "response": {
             "id": "resp-late-identity",
             "status": "completed",
-            "output": [{
-              "type": "message",
-              "role": "assistant",
-              "content": [{ "type": "output_text", "text": "done" }]
-            }]
+            "output": [
+              {
+                "type": "message",
+                "role": "assistant",
+                "content": [{ "type": "output_text", "text": "done" }]
+              }
+            ]
           }
         }
       ],
