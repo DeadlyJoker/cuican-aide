@@ -229,6 +229,12 @@ Gate 报告为通过。
   执行 bounded identity、已有 created identity match 与 exact status 校验，`response.completed` 的 created/id/status 严格性不变。
   shared fixture 从实际事件与 decoder 状态比较 category/retryability、history、usage 与 response identity；TS Agent Responses
   `45/45`、typecheck 与 Rust `crewon-api 126/126` 通过。完全缺失 response/error/details 的 generic failure 和其 retry 决策仍未外推。
+- Agent Runtime AR-036：审计复现 Rust 接受 `response.created` 的空 `response` object，而 TS 以
+  `responses_response_id_invalid` 拒绝。进一步的确定性 Rust fixture 证明其后 text delta、completed item、携带 late id/status/output 的
+  completed success，以及 failed/incomplete（覆盖 later id/status 缺失和存在）均可到达对应终态。TS HTTP/SSE `required`、WebSocket
+  `whenPresent` framing 现在复现完整矩阵；late completed id 建立唯一 completion checkpoint identity。created/terminal identity 一旦出现
+  仍严格 bounded/match，completed status 与 final output 仍严格，duplicate created 继续拒绝，因此不形成 identity/checkpoint/status 旁路。
+  Focused evidence：TS Agent Responses `49/49`、typecheck、Rust `crewon-api 127/127`、scoped fix 与最终 fmt 均通过。
 - Provider private probe foundation：`c4af42230` 提取 Control→Worker 的认证、有界 transport 与 process-local replay authority。
   Worker 只监听 loopback，以 constant-time bearer 校验、byte-level token/request cap、64 KiB response cap 和 peer-disconnect abort
   保护 secret lease；Control client 限制 loopback HTTP / HTTPS、总 deadline、caller abort、bounded JSON，并核对 Provider、catalog
