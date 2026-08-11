@@ -81,6 +81,8 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-034 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | completed response 可缺省冗余 final output snapshot；已有 output 仍严格一致                | PARITY       | Rust+TS shared completed-without-output fixture，覆盖 completed item、usage、HTTP/SSE 与 WebSocket framing                      |
 | AR-035 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | failed/incomplete 可作为首个 terminal，省略 created/id/status；存在的 id/status 仍严格校验 | PARITY       | Rust+TS shared terminal-without-created fixture，覆盖 error category/retryable、无 phantom history/usage 与两种 sequence policy |
 | AR-036 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | created 可省略 response id；后续 output 与 completed 的 late identity 仍需形成安全成功链路 | PARITY       | Rust+TS shared created-without-id fixture，覆盖 HTTP/SSE 与 WebSocket framing、success/failure 矩阵及 identity/status 负例      |
+| AR-037 | `crewon-api/src/sse/responses.rs::process_sse` + TS Responses protocol decoder                                  | 首个 failed/incomplete 是 terminal winner；后续 provider 事件全部不可见                   | PARITY       | shared poisoned post-terminal fixture 冻结 first-failure cutoff                                                                 |
+| AR-038 | `crewon-api/src/sse/responses.rs::process_sse` + TS Responses protocol decoder                                  | 顶层 `error` 是 terminal winner，并保留 provider retry 分类                                | PARITY       | shared poisoned top-level-error fixture 覆盖 retryable/non-retryable、无 output/history/usage/identity                         |
 
 ## 已有证据映射
 
@@ -299,6 +301,15 @@ Rust HTTP/SSE 与 Responses WebSocket 统一以首个 `response.failed` 或 `res
 继续接受后续 completed；首个错误的 retry/category 保持不变，cutoff 后的第二个 failure、output、usage、metadata、identity 与 checkpoint
 均不可见。依赖 legacy failure→completed 成功行为的异常 provider stream 会从“成功”变为首个分类错误；正常 provider stream 与既有
 WebSocket/TS 行为不变。`AR-037-responses-post-terminal` shared fixture 冻结该兼容边界。
+
+### AR-038 Responses top-level error terminal
+
+此前 TS shared decoder 与 Rust Responses WebSocket 会把顶层 `type: "error"` 当作 provider terminal，但 Rust HTTP/SSE dispatcher
+忽略该事件并继续读流，最终可能把同一 provider 失败改写为缺失 `response.completed`，或接受后续 poisoned success。Rust HTTP/SSE
+现在与两条既有路径一致：顶层 error 立即分类并终止，`server_error` 保持 retryable，`invalid_prompt` 保持 non-retryable；后续
+created、text、completed item、usage 与 completed checkpoint 均不可见。`AR-038-responses-top-level-error` 的两个完整 poisoned stream
+由 Rust `collect_events` 和 TS decoder 共同消费，并对稳定事件、terminal、retry category、partial output、completed history、usage 与
+response identity 整对象 deep-equal。
 
 每完成一个 case，必须同时留下 Rust source pointer、shared fixture、TS candidate test 和差分结果；只新增 TS snapshot 或只引用
 Rust 测试名称都不能把状态改成 `PARITY`。
