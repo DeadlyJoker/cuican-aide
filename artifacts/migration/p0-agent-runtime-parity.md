@@ -75,7 +75,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-028 | `context_manager/history_tests.rs::normalize_removes_orphan_function_call_output`                     | orphan Tool output fail-safe normalization                             | PARITY       | Rust+TS shared normalization fixture  |
 | AR-029 | `governed_context.rs::governed_context_reaches_responses_with_roles_bounds_and_incremental_stability` | context role、bounds、增量稳定性                                       | PARITY       | shared role/bounds/stability fixture  |
 | AR-030 | `safety_check_downgrade.rs::cyber_policy_response_emits_typed_error_without_retry`                    | typed policy failure 不进入 retry loop                                 | PARITY       | Rust+TS typed policy fixture          |
-| AR-031 | `provider_end_turn.rs` + `stream_no_completed.rs::end_turn_false_completed_assistant_and_tool_continue_same_turn` | Provider `end_turn=false` 的 completed response 在同 Turn 继续 sampling | PARTIAL      | manual assistant-only durable continuation 与 mixed assistant→Tool 已有 shared evidence；stored-response/checkpoint 仍 fail closed |
+| AR-031 | `provider_end_turn.rs` + `stream_no_completed.rs::end_turn_false_completed_assistant_and_tool_continue_same_turn` | Provider `end_turn=false` 的 completed response 在同 Turn 继续 sampling | PARTIAL      | manual assistant-only durable continuation、mixed assistant→Tool、stored empty checkpoint chain 与 stored Tool boundary 已有 evidence；stored assistant output 仍 fail closed |
 
 ## 已有证据映射
 
@@ -155,8 +155,11 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
   assistant item 的 response 继续 fail closed，避免把未完成文本写入 history。manual / `storeResponses=false` assistant-only output
   现由 Rust+TS shared fixture 冻结 exact completed-item history；durable Worker 以显式 provider-continuation sample marker 原子提交 usage、
   Model History 与 model state，并覆盖 commit 后 crash、恢复后 exact suffix 和唯一 terminal Message。
-  广义 AR-031 仍标 `PARTIAL`：stored-response / checkpoint crash-recovery chain 尚未实现；已有或新建 Provider checkpoint 遇到该 directive 会以非 retryable
-  `model_end_turn_false_stored_response_unsupported` fail closed，禁止重复 retrieve 同一 response 的无界循环。
+  stored-response 的 empty 分支现会从 completed checkpoint 发起新的 `previous_response_id` POST，且发送空增量 input；不会 GET/retrieve
+  同一个 completed response，也不消耗 sampling retry budget。stored Tool 分支会先返回 Tool boundary 与 completed checkpoint，沿用现有
+  durable Tool receipt/continuation authority。广义 AR-031 仍标 `PARTIAL`：stored assistant output 尚缺把 completed assistant items、usage、
+  checkpoint 与 provider-continuation marker 原子提交的 Store transaction，因此继续以非 retryable
+  `model_end_turn_false_stored_response_unsupported` fail closed；stored mixed assistant→Tool 也受同一限制。
 
 ## Goal runtime focused parity gate（2026-08-09）
 
