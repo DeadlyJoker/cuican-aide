@@ -198,15 +198,14 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
       );
       if (receipt !== null) {
         fingerprint(receipt, input.idempotency);
-        return result(
-          "replayed",
-          await this.#required(
-            client,
-            locator.tenantId,
-            locator.spaceId,
-            receipt.execution_id,
-          ),
+        const receiptOperation = await this.#required(
+          client,
+          locator.tenantId,
+          locator.spaceId,
+          receipt.execution_id,
         );
+        requireWorkspaceReadFileLocator(receiptOperation, locator);
+        return result("replayed", receiptOperation);
       }
       await this.#insertReceipt(
         client,
@@ -274,7 +273,19 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
         input.phase,
         input.idempotency,
       );
-      if (receipt !== null) fingerprint(receipt, input.idempotency);
+      if (receipt !== null) {
+        fingerprint(receipt, input.idempotency);
+        if (receipt.execution_id !== input.executionId) conflict();
+        requireWorkspaceReadFileLocator(
+          await this.#required(
+            client,
+            input.tenantId,
+            input.spaceId,
+            receipt.execution_id,
+          ),
+          input,
+        );
+      }
       if (current.resolution !== null) {
         if (receipt === null) conflict();
         const parsed = exactResolution(current, input.phase, input.resolution);

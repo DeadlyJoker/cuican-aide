@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import {
+  canonicalDeviceFilesystemReadCommandDigest,
   type DeviceFilesystemReadCommand,
   type DeviceFilesystemReadEvent,
 } from "@crewon/contracts";
@@ -213,6 +215,43 @@ function conformance(name: string, create: () => WorkspaceReadFileStore) {
           key: "key",
           requestFingerprint: "not-a-digest",
         },
+      }),
+    );
+  });
+
+  test(`${name}: recovery receipt cannot replay or commit another execution`, async () => {
+    const store = create();
+    await store.prepareWorkspaceReadFile({
+      ...locator,
+      idempotency: executeIdempotency,
+      frozen: frozen(),
+    });
+    const second = executionAuthority("execution-filesystem-2");
+    const secondPrepared = await store.prepareWorkspaceReadFile({
+      ...second.locator,
+      idempotency: idempotency("execute-key-2"),
+      frozen: second.frozen,
+    });
+    const recovery = idempotency("shared-recovery-key");
+    await store.prepareWorkspaceReadFileAction({
+      ...locator,
+      phase: "reconcile",
+      idempotency: recovery,
+    });
+    await assert.rejects(() =>
+      store.prepareWorkspaceReadFileAction({
+        ...second.locator,
+        phase: "reconcile",
+        idempotency: recovery,
+      }),
+    );
+    await assert.rejects(() =>
+      store.commitWorkspaceReadFileResolution({
+        ...second.locator,
+        phase: "reconcile",
+        idempotency: recovery,
+        expectedRevision: secondPrepared.operation.revision,
+        resolution: completed(),
       }),
     );
   });
@@ -439,6 +478,26 @@ function frozen(): FrozenWorkspaceReadFileDispatch {
       leaseId: command.leaseId,
       leaseEpoch: command.leaseEpoch,
       receiptId: null,
+    },
+  };
+}
+function executionAuthority(executionId: string) {
+  const value = frozen();
+  const executionCommand = { ...value.command, executionId };
+  return {
+    locator: { ...locator, executionId },
+    frozen: {
+      ...value,
+      command: executionCommand,
+      reference: {
+        ...value.reference,
+        executionId,
+        commandDigest: canonicalDeviceFilesystemReadCommandDigest(
+          executionCommand,
+          (input) =>
+            `sha256:${createHash("sha256").update(input).digest("hex")}`,
+        ),
+      },
     },
   };
 }

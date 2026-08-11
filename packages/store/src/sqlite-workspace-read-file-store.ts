@@ -155,14 +155,13 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
       );
       if (receipt !== null) {
         fingerprint(receipt, input.idempotency);
-        return result(
-          "replayed",
-          this.#required(
-            locator.tenantId,
-            locator.spaceId,
-            receipt.execution_id,
-          ),
+        const receiptOperation = this.#required(
+          locator.tenantId,
+          locator.spaceId,
+          receipt.execution_id,
         );
+        requireWorkspaceReadFileLocator(receiptOperation, locator);
+        return result("replayed", receiptOperation);
       }
       this.#insertReceipt(locator, input.phase, input.idempotency);
       return result("committed", operation);
@@ -222,7 +221,14 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
         input.phase,
         input.idempotency,
       );
-      if (receipt !== null) fingerprint(receipt, input.idempotency);
+      if (receipt !== null) {
+        fingerprint(receipt, input.idempotency);
+        if (receipt.execution_id !== input.executionId) conflict();
+        requireWorkspaceReadFileLocator(
+          this.#required(input.tenantId, input.spaceId, receipt.execution_id),
+          input,
+        );
+      }
       if (current.resolution !== null) {
         if (receipt === null) conflict();
         const parsed = exactResolution(current, input.phase, input.resolution);

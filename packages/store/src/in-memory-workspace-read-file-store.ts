@@ -98,7 +98,9 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
     const receipt = this.#receipts.get(rKey);
     if (receipt !== undefined) {
       requireFingerprint(receipt, input.idempotency);
-      return result("replayed", this.#required(receipt.executionKey));
+      const receiptOperation = this.#required(receipt.executionKey);
+      requireWorkspaceReadFileLocator(receiptOperation, locator);
+      return result("replayed", receiptOperation);
     }
     this.#receipts.set(rKey, {
       fingerprint: input.idempotency.requestFingerprint,
@@ -153,7 +155,14 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
       input.idempotency,
     );
     const receipt = this.#receipts.get(rKey);
-    if (receipt !== undefined) requireFingerprint(receipt, input.idempotency);
+    if (receipt !== undefined) {
+      requireFingerprint(receipt, input.idempotency);
+      if (receipt.executionKey !== key) conflict();
+      requireWorkspaceReadFileLocator(
+        this.#required(receipt.executionKey),
+        input,
+      );
+    }
     if (current.resolution !== null) {
       if (receipt === undefined) conflict();
       const parsed = exactResolution(current, input.phase, input.resolution);
