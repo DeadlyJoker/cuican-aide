@@ -17,38 +17,60 @@ import {
   parsePositiveInteger,
   requiredEnvironment,
 } from "./runtime-process-environment.ts";
+import { takeRuntimeNativeBootstrap } from "./runtime-native-bootstrap.ts";
+import {
+  createRuntimeNativeWorkspaceResources,
+  type RuntimeNativeWorkspaceResources,
+} from "./runtime-native-workspace.ts";
+import { DesktopProviderProbeEgressPolicy } from "./provider-probe-egress.ts";
+import { runtimeNativeReadinessLines } from "./runtime-native-readiness.ts";
 
-const runtimeTenantId = environmentOr("CREWON_TENANT_ID", "standalone-tenant");
 const agentVersionRuntimeBindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
 const agentVersionRuntimeFactory = agentVersionRuntimeBindingsPath
   ? loadAgentVersionRuntimeFactory(agentVersionRuntimeBindingsPath)
   : undefined;
 
+const nativeBootstrap = takeRuntimeNativeBootstrap();
+const runtimeTenantId =
+  nativeBootstrap?.workspace?.authority.tenantId ??
+  environmentOr("CREWON_TENANT_ID", "standalone-tenant");
+const route = {
+  authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
+  runtimeGeneration:
+    nativeBootstrap?.workspace?.authority.runtimeBindingId ??
+    environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
+  agentVersionId: environmentOr("CREWON_AGENT_VERSION_ID", "default-agent-v0"),
+  policySnapshotId:
+    nativeBootstrap?.workspace?.authority.policySnapshotId ??
+    environmentOr("CREWON_POLICY_SNAPSHOT_ID", "standalone-policy-v0"),
+  workspaceBindingId:
+    nativeBootstrap?.workspace?.authority.workspaceBindingId ??
+    process.env.CREWON_WORKSPACE_BINDING_ID?.trim() ??
+    null,
+};
 const transport = createModelTransport(
   environmentOr("CREWON_MODEL_ADAPTER", "responses"),
+  { apiKey: nativeBootstrap?.apiKey },
 );
 const toolRuntime = await createConfiguredToolRuntime();
 const artifactAuthority = createConfiguredArtifactAuthority();
 
 let runtime: StandaloneRuntimeWorker;
+let nativeWorkspaceResources: RuntimeNativeWorkspaceResources | undefined;
 try {
+  nativeWorkspaceResources =
+    nativeBootstrap?.workspace === null ||
+    nativeBootstrap?.workspace === undefined
+      ? undefined
+      : createRuntimeNativeWorkspaceResources({
+          bootstrap: nativeBootstrap.workspace,
+          runtimeTenantId,
+          route,
+        });
   const config = {
     runtimeTenantId,
-    route: {
-      authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
-      runtimeGeneration: environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
-      agentVersionId: environmentOr(
-        "CREWON_AGENT_VERSION_ID",
-        "default-agent-v0",
-      ),
-      policySnapshotId: environmentOr(
-        "CREWON_POLICY_SNAPSHOT_ID",
-        "standalone-policy-v0",
-      ),
-      workspaceBindingId:
-        process.env.CREWON_WORKSPACE_BINDING_ID?.trim() || null,
-    },
+    route,
     transport,
     agentInstructions: process.env.CREWON_AGENT_INSTRUCTIONS?.trim() || null,
     toolRuntime,
@@ -107,6 +129,29 @@ try {
           agentVersionDeployments:
             agentVersionRuntimeFactory.deploymentBindings(runtimeTenantId),
         }),
+    ...(nativeBootstrap?.provider === null ||
+    nativeBootstrap?.provider === undefined
+      ? {}
+      : {
+          providerProbe: {
+            port: nativeBootstrap.probe.port,
+            token: nativeBootstrap.probe.token,
+            runtimeBinding: nativeBootstrap.provider,
+            secrets: {
+              resolve: () =>
+                nativeBootstrap.apiKey === null
+                  ? null
+                  : {
+                      value: nativeBootstrap.apiKey,
+                      release: () => {},
+                    },
+            },
+            egressPolicy: new DesktopProviderProbeEgressPolicy(),
+          },
+        }),
+    ...(nativeWorkspaceResources === undefined
+      ? {}
+      : { workspacePrivate: nativeWorkspaceResources.config }),
   };
   const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
   runtime = connectionString
@@ -122,6 +167,7 @@ try {
         databasePath: requiredEnvironment("CREWON_CONTROL_DB_PATH"),
       });
 } catch (error) {
+  await nativeWorkspaceResources?.gateway.close();
   await artifactAuthority?.store.close();
   await toolRuntime?.close?.();
   await transport.close?.();
@@ -172,6 +218,15 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
 } else {
   runtime.worker.start();
   process.stdout.write("CrewON Runtime Worker started\n");
+  for (const line of runtimeNativeReadinessLines({
+    providerRuntimeBindingId:
+      nativeBootstrap?.provider?.runtimeBindingId ?? null,
+    workspacePrivateOrigin: runtime.workspacePrivateOrigin,
+    workspaceRuntimeBindingId:
+      nativeBootstrap?.workspace?.authority.runtimeBindingId ?? null,
+  })) {
+    process.stdout.write(`${line}\n`);
+  }
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => {
       void runtime.close().finally(() => process.exit(0));

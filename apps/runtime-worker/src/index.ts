@@ -13,3 +13,8 @@ export * from "./provider-connectivity-probe.ts";
 export * from "./provider-probe-egress.ts";
 export * from "./provider-probe-server.ts";
 export * from "./provider-probe-service.ts";
+export * from "./runtime-workspace-binding-resolver.ts";
+export * from "./runtime-workspace-dispatch-service.ts";
+export * from "./runtime-workspace-error.ts";
+export * from "./runtime-workspace-freeze-service.ts";
+export * from "./runtime-workspace-private-server.ts";

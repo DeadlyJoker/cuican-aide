@@ -17,6 +17,10 @@ import {
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import type { GovernedContextBundle } from "@crewon/context";
+import type {
+  DeviceWorkspaceListCommandSignerPort,
+  DeviceWorkspaceListDispatchClientPort,
+} from "@crewon/device-dispatch";
 import { InMemoryToolBroker, type ToolRuntimePort } from "@crewon/tool-broker";
 
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
@@ -50,6 +54,17 @@ import {
   startRuntimeProviderProbeServer,
   type RuntimeProviderProbeServer,
 } from "./provider-probe-server.ts";
+import {
+  StoreBackedRuntimeWorkspaceAuthority,
+  type RuntimeWorkspaceDispatchAuthority,
+} from "./runtime-workspace-binding-resolver.ts";
+import { RuntimeWorkspaceDispatchService } from "./runtime-workspace-dispatch-service.ts";
+import { RuntimeWorkspaceFreezeService } from "./runtime-workspace-freeze-service.ts";
+import {
+  startRuntimeWorkspacePrivateServer,
+  type RuntimeWorkspacePrivateServer,
+} from "./runtime-workspace-private-server.ts";
+import type { RuntimeWorkspaceExecutionIdGeneratorPort } from "./runtime-workspace-freeze-service.ts";
 
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 
@@ -96,6 +111,15 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
     rateWindowMs?: number;
     concurrencyLimit?: number;
   }>;
+  workspacePrivate?: Readonly<{
+    port: number;
+    token: string;
+    authority: RuntimeWorkspaceDispatchAuthority;
+    ids: RuntimeWorkspaceExecutionIdGeneratorPort;
+    signer: DeviceWorkspaceListCommandSignerPort;
+    gateway: DeviceWorkspaceListDispatchClientPort;
+    deadlineMs?: number;
+  }>;
 }>;
 
 export type StandaloneRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
@@ -114,24 +138,26 @@ export type StandaloneRuntimeWorker = Readonly<{
   agentVersion: CompiledAgentVersion;
   agentVersionRegistry: InMemoryAgentVersionRuntimeRegistry;
   providerProbeOrigin: string | null;
+  workspacePrivateOrigin: string | null;
   close(): Promise<void>;
 }>;
 
 export async function createStandaloneRuntimeWorker(
   config: StandaloneRuntimeWorkerConfig,
 ): Promise<StandaloneRuntimeWorker> {
-  const releasePlan = compileRuntimeAgentVersionRelease(config);
+  let releasePlan: RuntimeAgentVersionReleasePlan;
   let store: SqliteRunStore;
   try {
+    releasePlan = compileRuntimeAgentVersionRelease(config);
     store = new SqliteRunStore(config.databasePath);
   } catch (error) {
-    await config.artifactStore?.close();
+    await closeStartupResources(config);
     throw error;
   }
   try {
     return await composeRuntimeWorker(store, config, releasePlan);
   } catch (error) {
-    await Promise.allSettled([store.close(), config.artifactStore?.close()]);
+    await Promise.allSettled([store.close(), closeStartupResources(config)]);
     throw error;
   }
 }
@@ -139,9 +165,10 @@ export async function createStandaloneRuntimeWorker(
 export async function createPostgresRuntimeWorker(
   config: PostgresRuntimeWorkerConfig,
 ): Promise<StandaloneRuntimeWorker> {
-  const releasePlan = compileRuntimeAgentVersionRelease(config);
+  let releasePlan: RuntimeAgentVersionReleasePlan;
   let store: PostgresDomainStore;
   try {
+    releasePlan = compileRuntimeAgentVersionRelease(config);
     store = await PostgresDomainStore.open({
       connectionString: config.connectionString,
       schema: config.schema,
@@ -149,13 +176,13 @@ export async function createPostgresRuntimeWorker(
       statementTimeoutMs: config.statementTimeoutMs,
     });
   } catch (error) {
-    await config.artifactStore?.close();
+    await closeStartupResources(config);
     throw error;
   }
   try {
     return await composeRuntimeWorker(store, config, releasePlan);
   } catch (error) {
-    await Promise.allSettled([store.close(), config.artifactStore?.close()]);
+    await Promise.allSettled([store.close(), closeStartupResources(config)]);
     throw error;
   }
 }
@@ -181,6 +208,7 @@ async function composeRuntimeWorker(
   ) {
     throw new Error("runtime_artifact_configuration_incomplete");
   }
+  validateWorkspaceDeployment(config);
   await verifyRuntimeAgentVersionRelease({
     tenantId: config.runtimeTenantId,
     store,
@@ -287,6 +315,8 @@ async function composeRuntimeWorker(
     },
   );
   let providerProbeServer: RuntimeProviderProbeServer | null = null;
+  let workspacePrivateServer: RuntimeWorkspacePrivateServer | null = null;
+  let workspaceDispatchService: RuntimeWorkspaceDispatchService | null = null;
   try {
     if (config.providerProbe !== undefined) {
       providerProbeServer = await startRuntimeProviderProbeServer({
@@ -308,12 +338,39 @@ async function composeRuntimeWorker(
         ),
       });
     }
+    if (config.workspacePrivate !== undefined) {
+      const workspaceAuthority = new StoreBackedRuntimeWorkspaceAuthority({
+        store,
+        authority: config.workspacePrivate.authority,
+      });
+      const freeze = new RuntimeWorkspaceFreezeService({
+        bindings: workspaceAuthority,
+        ids: config.workspacePrivate.ids,
+        digester,
+      });
+      workspaceDispatchService = new RuntimeWorkspaceDispatchService({
+        authority: workspaceAuthority,
+        digester,
+        signer: config.workspacePrivate.signer,
+        gateway: config.workspacePrivate.gateway,
+      });
+      workspacePrivateServer = await startRuntimeWorkspacePrivateServer({
+        port: config.workspacePrivate.port,
+        authentication: {
+          kind: "loopbackToken",
+          token: config.workspacePrivate.token,
+        },
+        freeze,
+        dispatch: workspaceDispatchService,
+        deadlineMs: config.workspacePrivate.deadlineMs,
+      });
+    }
   } catch (error) {
     await Promise.allSettled([
+      workspacePrivateServer?.close() ?? Promise.resolve(),
+      providerProbeServer?.close() ?? Promise.resolve(),
       worker.close(),
       agentVersionRegistry.close(),
-      artifactStore?.close() ?? Promise.resolve(),
-      store.close(),
     ]);
     throw error;
   }
@@ -323,18 +380,25 @@ async function composeRuntimeWorker(
     agentVersion,
     agentVersionRegistry,
     providerProbeOrigin: providerProbeServer?.origin ?? null,
+    workspacePrivateOrigin: workspacePrivateServer?.origin ?? null,
     close: async () => {
       if (closed) {
         return;
       }
       closed = true;
-      await providerProbeServer?.close();
-      await worker.close();
       const results = await Promise.allSettled([
-        agentVersionRegistry.close(),
-        artifactStore?.close() ?? Promise.resolve(),
-        store.close(),
+        workspacePrivateServer?.close() ?? Promise.resolve(),
+        providerProbeServer?.close() ?? Promise.resolve(),
       ]);
+      results.push(...(await Promise.allSettled([worker.close()])));
+      results.push(
+        ...(await Promise.allSettled([
+          workspaceDispatchService?.close() ?? Promise.resolve(),
+          agentVersionRegistry.close(),
+          artifactStore?.close() ?? Promise.resolve(),
+          store.close(),
+        ])),
+      );
       const failures = results.flatMap((result) =>
         result.status === "rejected" ? [result.reason] : [],
       );
@@ -343,6 +407,30 @@ async function composeRuntimeWorker(
       }
     },
   };
+}
+
+function validateWorkspaceDeployment(
+  config: RuntimeWorkerCompositionConfig,
+): void {
+  const authority = config.workspacePrivate?.authority;
+  if (authority === undefined) return;
+  if (
+    authority.tenantId !== config.runtimeTenantId ||
+    authority.workspaceBindingId !== config.route.workspaceBindingId ||
+    authority.runtimeBindingId !== config.route.runtimeGeneration ||
+    authority.policySnapshotId !== config.route.policySnapshotId
+  ) {
+    throw new Error("runtime_workspace_deployment_mismatch");
+  }
+}
+
+async function closeStartupResources(
+  config: RuntimeWorkerCompositionConfig,
+): Promise<void> {
+  await Promise.allSettled([
+    config.workspacePrivate?.gateway.close() ?? Promise.resolve(),
+    config.artifactStore?.close() ?? Promise.resolve(),
+  ]);
 }
 
 function staticAgentVersionRuntimeFactory(

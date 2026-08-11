@@ -33,14 +33,18 @@ export function environmentOr(name: string, fallback: string): string {
   return process.env[name]?.trim() || fallback;
 }
 
-export function createModelTransport(adapter: string): ModelTransportPort {
+export function createModelTransport(
+  adapter: string,
+  native: { apiKey?: string | null } = {},
+): ModelTransportPort {
   if (adapter === "responses") {
     const config: DirectResponsesTransportConfig = {
       endpoint: environmentOr(
         "CREWON_RESPONSES_ENDPOINT",
         "https://api.openai.com/v1/responses",
       ),
-      apiKey: process.env.CREWON_MODEL_API_KEY?.trim() || null,
+      apiKey:
+        native.apiKey ?? (process.env.CREWON_MODEL_API_KEY?.trim() || null),
       model: requiredEnvironment("CREWON_MODEL_ID"),
       storeResponses: parseBoolean(
         process.env.CREWON_RESPONSES_STORE ?? "false",
