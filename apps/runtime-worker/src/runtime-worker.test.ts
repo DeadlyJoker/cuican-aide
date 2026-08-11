@@ -4687,6 +4687,163 @@ test("executes a completed Tool item from a missing-terminal stream exactly once
   await worker.close();
 });
 
+test("deep-equals the Rust mixed completed assistant and Tool response trace", async (context) => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../packages/test-contracts/fixtures/mixed-assistant-tool-response.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as Readonly<{
+    completedAssistantItems: readonly Extract<
+      ModelInputItem,
+      { type: "message" }
+    >[];
+    toolCall: Extract<ModelInputItem, { type: "tool_call" }>;
+    toolResult: Extract<ModelInputItem, { type: "tool_result" }>;
+    expectedSecondRequestSuffix: readonly ModelInputItem[];
+    stableEventTypes: readonly string[];
+    finalState: {
+      status: string;
+      requestCount: number;
+      toolInvocationCount: number;
+      toolRequestedEventCount: number;
+      toolCompletedEventCount: number;
+      completedAssistantOutputs: readonly string[];
+      terminalMessageCount: number;
+      finalOutput: string;
+      usage: Readonly<{
+        inputTokens: number;
+        cachedInputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+      }>;
+      error: null;
+    };
+  }>;
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const requests: ModelRequest[] = [];
+  const transport: ModelTransportPort = {
+    adapterName: "mixed-response-adapter",
+    adapterVersion: "1",
+    modelId: "mixed-response-model",
+    async *stream(request) {
+      requests.push(structuredClone(request));
+      if (requests.length === 1) {
+        yield {
+          type: "output.delta",
+          delta: reference.completedAssistantItems[0]!.content,
+        };
+        yield {
+          type: "output.item.completed",
+          item: reference.completedAssistantItems[0]!,
+        };
+        yield { type: "output.item.completed", item: reference.toolCall };
+        yield { type: "completed", checkpoint: null };
+        return;
+      }
+      yield { type: "output.delta", delta: reference.finalState.finalOutput };
+      yield { type: "usage", ...reference.finalState.usage };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  let toolInvocations = 0;
+  const toolRuntime = new InMemoryToolBroker(
+    [
+      {
+        schemaVersion: "crewon.tool-definition.v0",
+        kind: reference.toolCall.kind,
+        name: reference.toolCall.name,
+        description: "Returns the mixed-response fixture output.",
+        execution: "serial",
+        inputFormat: "text",
+      },
+    ],
+    new Map([
+      [
+        `${reference.toolCall.kind}:${reference.toolCall.name}`,
+        async () => {
+          toolInvocations += 1;
+          return { output: reference.toolResult.output };
+        },
+      ],
+    ]),
+    new Map([
+      [
+        `${reference.toolCall.kind}:${reference.toolCall.name}`,
+        toolPolicy("readOnly", "replaySafe"),
+      ],
+    ]),
+  );
+  const worker = fixture.worker({ transport, toolRuntime });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  const events = await fixture.events();
+  const history = await fixture.store.listModelHistoryItems(
+    { tenantId: actor().tenantId, threadId: fixture.threadId },
+    0,
+    100,
+  );
+  const messages = await fixture.messages();
+  const candidate = {
+    schemaVersion: "crewon.trace.v0",
+    caseId: "AR-031-mixed-assistant-tool-response",
+    completedAssistantItems: reference.completedAssistantItems,
+    toolCall: reference.toolCall,
+    toolResult: reference.toolResult,
+    expectedSecondRequestSuffix: requests[1]!.input.items.slice(
+      -reference.expectedSecondRequestSuffix.length,
+    ),
+    stableEventTypes: [
+      "model.output.delta",
+      "assistant.completed",
+      "tool.requested",
+      "tool.completed",
+      "model.output.delta",
+      "usage.recorded",
+      "turn.completed",
+    ],
+    finalState: {
+      status: (await fixture.loadRun()).status,
+      requestCount: requests.length,
+      toolInvocationCount: toolInvocations,
+      toolRequestedEventCount: events.filter(
+        (event) => event.type === "tool.requested",
+      ).length,
+      toolCompletedEventCount: events.filter(
+        (event) => event.type === "tool.completed",
+      ).length,
+      completedAssistantOutputs: [
+        ...history
+          .filter(
+            (item) =>
+              item.type === "message" &&
+              item.role === "assistant" &&
+              item.source === "assistant_completion",
+          )
+          .map((item) => item.content),
+      ],
+      terminalMessageCount: messages.filter(
+        (message) => message.role === "assistant",
+      ).length,
+      finalOutput: messages.find((message) => message.role === "assistant")!
+        .content,
+      usage: (await fixture.loadRun()).usage,
+      error: null,
+    },
+  };
+  assert.deepEqual(candidate, reference);
+  await worker.close();
+});
+
 test("rolls back terminal Run state when assistant Message persistence fails", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "crewon-worker-atomic-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));

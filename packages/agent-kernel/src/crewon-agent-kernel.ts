@@ -124,6 +124,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
       let completedOutput = "";
       let completedCheckpoint: ProviderCheckpoint | null = null;
       let completedToolCalls: ObservedToolCall[] = [];
+      let completedAssistantItems: string[] = [];
       let retries = 0;
       while (true) {
         let output = "";
@@ -154,10 +155,18 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 break;
               case "output.item.completed":
                 if (event.item.type === "message") {
+                  const completedAssistantOutput = completedItems
+                    .filter(
+                      (
+                        item,
+                      ): item is Extract<ModelInputItem, { type: "message" }> =>
+                        item.type === "message",
+                    )
+                    .map((item) => item.content)
+                    .join("");
                   if (
                     event.item.role !== "assistant" ||
-                    completedItems.some((item) => item.type === "message") ||
-                    event.item.content !== output
+                    completedAssistantOutput + event.item.content !== output
                   ) {
                     throw new AgentKernelError(
                       "model_output_item_completed_invalid",
@@ -299,6 +308,12 @@ export class CrewONAgentKernel implements AgentKernelPort {
           }
           completedOutput = output;
           completedToolCalls = toolCalls;
+          completedAssistantItems = completedItems
+            .filter(
+              (item): item is Extract<ModelInputItem, { type: "message" }> =>
+                item.type === "message",
+            )
+            .map((item) => item.content);
           break;
         } catch (error) {
           const kernelError = normalizeSamplingError(error, signal);
@@ -310,12 +325,12 @@ export class CrewONAgentKernel implements AgentKernelPort {
               item.type === "tool_call",
           );
           if (completedToolCalls.length > 0) {
-            if (completedItems.some((item) => item.type === "message")) {
-              throw new AgentKernelError(
-                "model_tool_call_with_text_unsupported",
-                false,
-              );
-            }
+            const completedAssistantItems = completedItems
+              .filter(
+                (item): item is Extract<ModelInputItem, { type: "message" }> =>
+                  item.type === "message",
+              )
+              .map((item) => item.content);
             for (const call of completedToolCalls) {
               observedCallIds.add(call.callId);
               sequence += 1;
@@ -324,7 +339,11 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 kind: call.kind,
                 name: call.name,
                 input: call.input,
+                ...(completedAssistantItems.length > 0
+                  ? { completedAssistantItems: [...completedAssistantItems] }
+                  : {}),
               });
+              completedAssistantItems.length = 0;
             }
             return;
           }
@@ -367,7 +386,10 @@ export class CrewONAgentKernel implements AgentKernelPort {
         });
         return;
       }
-      if (completedOutput.length > 0) {
+      if (
+        completedOutput.length > 0 &&
+        completedAssistantItems.join("") !== completedOutput
+      ) {
         throw new AgentKernelError(
           "model_tool_call_with_text_unsupported",
           false,
@@ -381,7 +403,11 @@ export class CrewONAgentKernel implements AgentKernelPort {
           kind: call.kind,
           name: call.name,
           input: call.input,
+          ...(completedAssistantItems.length > 0
+            ? { completedAssistantItems: [...completedAssistantItems] }
+            : {}),
         });
+        completedAssistantItems.length = 0;
       }
       if (completedCheckpoint !== null) {
         sequence += 1;

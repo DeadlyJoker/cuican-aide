@@ -951,7 +951,12 @@ export class RunExecutionService {
       occurredAt,
       (checkpoint) => this.#digest(canonicalJson(checkpoint)),
     );
-    const history = await this.#historyForAgentEvent(state, event, occurredAt);
+    const history = await this.#historyForAgentEvent(
+      state,
+      event,
+      occurredAt,
+      canonicalEvent,
+    );
     if (history === null) {
       throw new ApplicationError("internal", "tool_history_missing");
     }
@@ -1423,7 +1428,12 @@ export class RunExecutionService {
       occurredAt,
       (checkpoint) => this.#digest(canonicalJson(checkpoint)),
     );
-    const history = await this.#historyForAgentEvent(state, event, occurredAt);
+    const history = await this.#historyForAgentEvent(
+      state,
+      event,
+      occurredAt,
+      canonicalEvent,
+    );
     return this.#commitLeasedEvent(
       claim,
       state,
@@ -1989,6 +1999,7 @@ export class RunExecutionService {
     state: RunState,
     event: RunLifecycleEvent,
     occurredAt: string,
+    canonicalEvent?: CanonicalAgentEvent,
   ): Promise<ModelHistoryAppend | null> {
     if (event.type !== "tool.requested" && event.type !== "tool.completed") {
       return null;
@@ -2023,7 +2034,34 @@ export class RunExecutionService {
             isError: event.data.isError,
             status: "completed",
           };
-    return { expectedLastSequence: head.lastSequence, items: [item] };
+    const completedAssistantItems =
+      canonicalEvent?.type === "tool.requested" &&
+      Array.isArray(canonicalEvent.data.completedAssistantItems)
+        ? canonicalEvent.data.completedAssistantItems
+        : [];
+    const items: ModelHistoryItem[] = completedAssistantItems.map(
+      (content, index) => {
+        if (typeof content !== "string") {
+          throw new ApplicationError(
+            "validation",
+            "model_completed_assistant_item_invalid",
+          );
+        }
+        requireBoundedContent(content);
+        return {
+          ...base,
+          itemId: this.#nextId("modelHistoryItem"),
+          sequence: head.lastSequence + index + 1,
+          type: "message",
+          role: "assistant",
+          source: "assistant_completion",
+          content,
+          contentDigest: this.#digest(content),
+        };
+      },
+    );
+    items.push({ ...item, sequence: head.lastSequence + items.length + 1 });
+    return { expectedLastSequence: head.lastSequence, items };
   }
 
   async #cancellationHistory(

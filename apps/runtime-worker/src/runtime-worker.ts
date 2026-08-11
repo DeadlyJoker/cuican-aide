@@ -920,7 +920,10 @@ export class RuntimeWorker {
         }
       }
       if (!completed && requestedTools.length > 0) {
-        if (output.length > 0) {
+        const completedAssistantOutput = requestedTools
+          .flatMap((event) => event.data.completedAssistantItems ?? [])
+          .join("");
+        if (output.length > 0 && completedAssistantOutput !== output) {
           throw new AgentKernelError(
             "model_tool_call_with_text_unsupported",
             false,

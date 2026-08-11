@@ -596,7 +596,14 @@ test("turns a completed Tool item without a terminal into one durable Tool bound
   );
 });
 
-test("fails closed before executing a completed Tool mixed with assistant output", async () => {
+test("preserves completed assistant output before a Tool boundary", async () => {
+  const reference = fixture<{
+    completedAssistantItems: readonly Extract<
+      ModelInputItem,
+      { type: "message" }
+    >[];
+    toolCall: Extract<ModelInputItem, { type: "tool_call" }>;
+  }>("mixed-assistant-tool-response.reference.json");
   let requests = 0;
   const transport: ModelTransportPort = {
     adapterName: "mixed-completed-item-adapter",
@@ -604,38 +611,40 @@ test("fails closed before executing a completed Tool mixed with assistant output
     modelId: "mixed-completed-item-model",
     async *stream() {
       requests += 1;
-      yield { type: "output.delta", delta: "commentary" };
       yield {
-        type: "output.item.completed",
-        item: { type: "message", role: "assistant", content: "commentary" },
+        type: "output.delta",
+        delta: reference.completedAssistantItems[0]!.content,
       };
       yield {
         type: "output.item.completed",
-        item: {
-          type: "tool_call",
-          kind: "function",
-          callId: "mixed-call",
-          name: "fixture_tool",
-          input: "{}",
-        },
+        item: reference.completedAssistantItems[0]!,
+      };
+      yield {
+        type: "output.item.completed",
+        item: reference.toolCall,
       };
     },
   };
 
   const events: KernelAgentEvent[] = [];
-  await assert.rejects(async () => {
-    for await (const event of new CrewONAgentKernel({
-      transport,
-      streamMaxRetries: 1,
-    }).runSegment(segmentContract(), new AbortController().signal)) {
-      events.push(event);
-    }
-  }, hasKernelCode("model_tool_call_with_text_unsupported"));
+  for await (const event of new CrewONAgentKernel({
+    transport,
+    streamMaxRetries: 1,
+  }).runSegment(segmentContract(), new AbortController().signal)) {
+    events.push(event);
+  }
   assert.equal(requests, 1);
-  assert.equal(
-    events.some((event) => event.type === "tool.requested"),
-    false,
-  );
+  const requested = events.find((event) => event.type === "tool.requested");
+  assert.ok(requested?.type === "tool.requested");
+  assert.deepEqual(requested.data, {
+    callId: reference.toolCall.callId,
+    kind: reference.toolCall.kind,
+    name: reference.toolCall.name,
+    input: reference.toolCall.input,
+    completedAssistantItems: reference.completedAssistantItems.map(
+      (item) => item.content,
+    ),
+  });
 });
 
 test("discards partial output and matches the Rust retry reference", async () => {

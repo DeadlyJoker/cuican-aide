@@ -92,6 +92,8 @@ export type KernelAgentEvent =
         kind: ToolCallKind;
         name: string;
         input: string;
+        /** Completed assistant items that precede this Tool boundary. */
+        completedAssistantItems?: string[];
       }>;
     })
   | (KernelEventBase & {
