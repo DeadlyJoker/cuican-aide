@@ -352,6 +352,50 @@ Gate 报告为通过。
   plugin/skill composition 与跨网络 crash/timeout/partition 验收仍未实现，不能据此宣称 remote mutation 已对用户开放。AR-037 WebSocket
   证据由 shared dispatcher 与既有 `run_websocket_response_stream` 的 `Err => return` 组合构成，尚未新增完整异常 Provider socket harness。
 
+## Native Remote MCP、AR-038..040 与最终组合 packaged smoke
+
+- Stage F 以 `31982c5f7`、`3d4916774` 将 native Remote MCP credential binding 和 released manifest composition 接入
+  Runtime Worker 启动路径。Worker 只接受 release materialization 已冻结的 exact runtime/Workspace/AgentVersion authority，并在 catalog
+  collision、credential envelope 不完整或 released manifest drift 时 fail closed。对应主分支回归为 Runtime Worker
+  `264 passed + 1 PostgreSQL-unconfigured skip`，后续 AR-039/040 合入后的最终数字见下文。
+- AR-038 `f158c9432`、`1ba615014` 首先统一顶层 terminal error 分类。AR-039 `e896c3c56`、`509b9e82a`、
+  `3619e29a3` 继续覆盖 generic terminal、整个 response envelope 缺失和未知合法 Provider code：fatal denylist 保持不可重试，未知合法
+  `[a-z0-9_]{1,96}` code、缺失或畸形 generic error 采用稳定可重试语义；first terminal 后的 poisoned tail 对历史、usage、identity 和
+  checkpoint 均不可见。Worker 在 retry budget 耗尽后原子结算 Attempt/Run/Step failure，不能再次 claim。
+- AR-040 `7bda5cbc9`、`9093e4024`、`323fde6db` 以同一 shared fixture 冻结 TS HTTP/SSE、WebSocket framing、Rust
+  `crewon-api` 和 durable Worker 的 top-level `type=error` 语义。显式 fatal denylist 为 `context_length_exceeded`、
+  `insufficient_quota`、`usage_not_included`、`invalid_prompt`、`cyber_policy`、`server_is_overloaded`、`slow_down`；未知合法 code
+  可重试，缺失/畸形 code 归一到 `responses_provider_failed`。嵌套 error object 一旦存在就优先于扁平字段，即使嵌套 code 缺失或非法也
+  不能回退读取 flat code；Provider message 不跨 Rust 边界传播。
+- Stage G `677f1bd92`、`f122517b6` 将 Remote MCP bearer 的生产来源收敛到 macOS keyring，service 为
+  `ai.crewon.desktop.remote-mcp`，account key 绑定 tenant、Workspace、runtime、AgentVersion 与 credential binding。secret 使用
+  `Zeroizing<String>` 和 redacted `Debug`，只经 v3 stdin envelope 发送，不进入环境变量、CLI、manifest、digest 或日志。初次启动、provider
+  reload 与 Workspace switch 都在停止旧 runtime/foundation detach 前一次性预解析 old/candidate credential envelope，并在 candidate、
+  commit、rollback/recovery 复用同一快照，关闭 secret-store reload TOCTOU。主工作树 Tauri 完整套件 `105/105` 通过，包含真实 guardian
+  process tests；没有 controlled HTTPS Remote MCP endpoint 和预置 keyring secret，因此本节不宣称完成真实远端调用或动态轮换。
+- 最新主分支组合门禁使用官方 Node 24：Agent Responses typecheck 与 `58/58` tests 通过；Runtime Worker typecheck 与
+  `266 passed + 1 PostgreSQL-unconfigured skip` 通过；Rust `crewon-api 132/132` 通过。此前悬挂的两个 TS runner 已确认是持续三天、
+  `PPID=1` 且零 CPU 的孤立进程，只定点终止对应 PID 后从头取得上述退出码；没有沿用截断控制台输出作为通过证据。
+- 2026-08-12 07:48 +0800 重建的 `Crewon.app` 包含最新 Stage G/AR-040 代码。app-server、Device、guardian、Node 的 bundle
+  SHA-256 分别为 `955429e90f2b0ac17165709eda38ed1135c3bd4c01c34e00c0802943c06fba57`、
+  `f05f704aa00bec970515c1dd11a97c412faeeb4515ad55220d16c522dd0d8b79`、
+  `83fc5ab3741117383ff98ed172ab8284e7311ca31bf40b5a6f96d70aa74ac884`、
+  `f480e325ee0ca9cb9eef00b5ca6057a2a104807a1b073f1bc373a55c67facff5`，均与 staged input 逐字节一致。五个 runtime
+  bundle 的 staged/bundled SHA-256 也分别一致：Control `69c8c4de...98f75`、Worker `116d9125...c8d4`、Release
+  `d812ed64...3a98`、Provider coordinator `90d99992...7812`、Gateway `9a0c8967...106d`。前端 production build、Tauri release
+  binary、`.app` 和 updater tarball 均生成；命令只在 bundle 完成后因缺少 `TAURI_SIGNING_PRIVATE_KEY` 返回 1，签名 Gate 没有被绕过。
+- 最终真实运行继续复用隔离 HOME `/private/tmp/crewon-packaged-smoke.LxwDwe`。首轮 route 从 persisted epoch 14 精确推进到 15，
+  connection 为 `native-connection-65bd084b-e4d1-417a-9973-ecc05673fc70`；跨过首次 30 秒 lease 后 connection/epoch 不变，heartbeat
+  只将 expiry 向后续租。idempotency key `packaged-stage-g-ar040-workspace-list-v1` 返回 `201`、`status=completed`，结果为 UTF-8 byte
+  order 的 `README.md`、`alpha`、`beta`，`truncated=false`。Gateway accepted/terminal/resolution 均为 completed；Device journal 保存
+  sequence 1/2、ACK 1/2，`acknowledged_through=2`。累计计数推进到 Gateway 7、Device execution/event/ACK `6/12/12`，命令后 route
+  仍为 epoch 15。
+- 对 epoch 15 GUI 根进程发送 `SIGKILL` 后，全部 guardian 与 app-server/Gateway/Device/Worker/Control 子进程退出，端口 3210/6176
+  释放。同一 HOME 重启后 route 精确推进到 epoch 16 且使用新 connection；idempotency key
+  `packaged-stage-g-ar040-crash-recovery-v1` 再次 `201 completed`。Gateway 为 accepted + completed，Device journal 为 sequence 1/2、
+  ACK 1/2、`acknowledged_through=2`，累计计数为 Gateway 8、Device `7/14/14`，route 保持 epoch 16。最终正常 SIGTERM 后进程树和端口
+  再次全部清理。
+
 ## 尚未关闭的完整迁移 Gate
 
 - Windows real-host：stable directory handle / UTF-16 / reparse rejection、Job Object 全树清理、NSIS 与 packaged smoke。
