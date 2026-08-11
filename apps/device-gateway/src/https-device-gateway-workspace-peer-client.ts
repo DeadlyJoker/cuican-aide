@@ -1,8 +1,23 @@
+import { createHash } from "node:crypto";
 import { Agent, request as httpsRequest } from "node:https";
 import type { TLSSocket } from "node:tls";
 
 import {
   DEVICE_GATEWAY_PEER_WORKSPACE_LIST_DISPATCH_PATH,
+  DEVICE_GATEWAY_PEER_FILESYSTEM_READ_DISPATCH_PATH,
+  DEVICE_FILESYSTEM_READ_DISPATCH_API_VERSION,
+  DEVICE_FILESYSTEM_READ_DISPATCH_MAX_REQUEST_BYTES,
+  DEVICE_FILESYSTEM_READ_DISPATCH_MAX_RESPONSE_BYTES,
+  DEVICE_FILESYSTEM_READ_DISPATCH_MAX_ERROR_BYTES,
+  parseDeviceFilesystemReadDispatchError,
+  parseDeviceFilesystemReadPeerDispatchRequest,
+  parseDeviceFilesystemReadPeerDispatchResponse,
+  type DeviceFilesystemReadCommand,
+  type DeviceFilesystemReadDispatchOperation,
+  type DeviceFilesystemReadDispatchReference,
+  type DeviceFilesystemReadDispatchResolution,
+  type DeviceFilesystemReadPeerRoute,
+  type DeviceFilesystemReadPeerSourceWorker,
   DEVICE_WORKSPACE_LIST_DISPATCH_API_VERSION,
   DEVICE_WORKSPACE_LIST_DISPATCH_MAX_ERROR_BYTES,
   DEVICE_WORKSPACE_LIST_DISPATCH_MAX_REQUEST_BYTES,
@@ -20,6 +35,7 @@ import {
 
 import type { GatewayRegistration } from "./device-registry-config.ts";
 import type { DeviceGatewayWorkspacePeerDispatchPort } from "./device-gateway-workspace-dispatch-router.ts";
+import type { DeviceGatewayWorkspaceReadPeerDispatchPort } from "./device-gateway-workspace-read-router.ts";
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 
 type WorkspaceDispatchInput =
@@ -33,7 +49,9 @@ type WorkspacePeerEndpoint = Readonly<{
 
 /** Sends one bounded, route-fenced Workspace operation over Gateway mTLS. */
 export class HttpsDeviceGatewayWorkspacePeerClient
-  implements DeviceGatewayWorkspacePeerDispatchPort
+  implements
+    DeviceGatewayWorkspacePeerDispatchPort,
+    DeviceGatewayWorkspaceReadPeerDispatchPort
 {
   readonly #sourceGatewayId: string;
   readonly #peers: ReadonlyMap<string, WorkspacePeerEndpoint>;
@@ -120,7 +138,13 @@ export class HttpsDeviceGatewayWorkspacePeerClient
     if (body.byteLength > DEVICE_WORKSPACE_LIST_DISPATCH_MAX_REQUEST_BYTES) {
       throw new DeviceGatewayError("device_workspace_peer_request_too_large");
     }
-    const response = await this.#post(peer, body, signal);
+    const response = await this.#post(
+      peer,
+      DEVICE_GATEWAY_PEER_WORKSPACE_LIST_DISPATCH_PATH,
+      body,
+      signal,
+      "workspaceList",
+    );
     requireJsonResponse(response);
     const decoded = parseJson(response.body);
     if (response.statusCode !== 200) {
@@ -150,6 +174,74 @@ export class HttpsDeviceGatewayWorkspacePeerClient
     }
   }
 
+  async dispatchRead(
+    route: DeviceFilesystemReadPeerRoute,
+    operation: DeviceFilesystemReadDispatchOperation,
+    input: DeviceFilesystemReadCommand | DeviceFilesystemReadDispatchReference,
+    sourceWorker: DeviceFilesystemReadPeerSourceWorker,
+    signal: AbortSignal,
+  ): Promise<DeviceFilesystemReadDispatchResolution> {
+    if (this.#closed)
+      throw new DeviceGatewayError("workspace_read_peer_client_closed");
+    if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
+    if (route.gatewayId === this.#sourceGatewayId)
+      throw new DeviceGatewayError("workspace_read_peer_self_route");
+    const peer = this.#peers.get(route.gatewayId);
+    if (peer === undefined)
+      throw new DeviceGatewayError("workspace_read_route_unavailable");
+    const envelope = parseDeviceFilesystemReadPeerDispatchRequest({
+      schemaVersion: "crewon.device-filesystem-read-peer-dispatch-request.v0",
+      apiVersion: DEVICE_FILESYSTEM_READ_DISPATCH_API_VERSION,
+      sourceGatewayId: this.#sourceGatewayId,
+      sourceWorker,
+      route,
+      operation,
+      ...(operation === "execute" ? { command: input } : { reference: input }),
+    });
+    const body = Buffer.from(JSON.stringify(envelope));
+    if (body.length > DEVICE_FILESYSTEM_READ_DISPATCH_MAX_REQUEST_BYTES)
+      throw new DeviceGatewayError("device_filesystem_read_dispatch_too_large");
+    const response = await this.#post(
+      peer,
+      DEVICE_GATEWAY_PEER_FILESYSTEM_READ_DISPATCH_PATH,
+      body,
+      signal,
+      "workspaceRead",
+    );
+    requireJsonResponse(
+      response,
+      DEVICE_FILESYSTEM_READ_DISPATCH_MAX_RESPONSE_BYTES,
+      DEVICE_FILESYSTEM_READ_DISPATCH_MAX_ERROR_BYTES,
+    );
+    const decoded = parseJson(response.body);
+    if (response.statusCode !== 200) {
+      try {
+        const remote = parseDeviceFilesystemReadDispatchError(decoded);
+        throw new DeviceGatewayError(
+          remote.certainty === "possiblySent"
+            ? "workspace_read_possibly_sent"
+            : remote.code,
+        );
+      } catch (error) {
+        if (error instanceof DeviceGatewayError) throw error;
+        throw new DeviceGatewayError("workspace_read_peer_response_invalid", {
+          cause: error,
+        });
+      }
+    }
+    try {
+      return parseDeviceFilesystemReadPeerDispatchResponse(
+        decoded,
+        envelope,
+        digestUtf8,
+      ).resolution;
+    } catch (error) {
+      throw new DeviceGatewayError("workspace_read_peer_response_invalid", {
+        cause: error,
+      });
+    }
+  }
+
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
@@ -158,8 +250,10 @@ export class HttpsDeviceGatewayWorkspacePeerClient
 
   #post(
     peer: WorkspacePeerEndpoint,
+    path: string,
     body: Buffer,
     signal: AbortSignal,
+    kind: "workspaceList" | "workspaceRead",
   ): Promise<
     Readonly<{ statusCode: number; contentType: string | null; body: Buffer }>
   > {
@@ -177,9 +271,7 @@ export class HttpsDeviceGatewayWorkspacePeerClient
           error instanceof DeviceGatewayError
             ? error
             : new DeviceGatewayError(
-                sent
-                  ? "workspace_dispatch_possibly_sent"
-                  : "workspace_dispatch_not_sent",
+                sent ? possiblySentCode(kind) : notSentCode(kind),
                 { cause: error },
               );
         finish(reject, projected);
@@ -189,7 +281,7 @@ export class HttpsDeviceGatewayWorkspacePeerClient
         {
           agent: this.#agent,
           method: "POST",
-          path: DEVICE_GATEWAY_PEER_WORKSPACE_LIST_DISPATCH_PATH,
+          path,
           headers: {
             "accept": "application/json",
             "content-length": String(body.byteLength),
@@ -209,7 +301,11 @@ export class HttpsDeviceGatewayWorkspacePeerClient
           let bytes = 0;
           response.on("data", (chunk: Buffer) => {
             bytes += chunk.byteLength;
-            if (bytes > DEVICE_WORKSPACE_LIST_DISPATCH_MAX_RESPONSE_BYTES) {
+            const maximum =
+              kind === "workspaceRead"
+                ? DEVICE_FILESYSTEM_READ_DISPATCH_MAX_RESPONSE_BYTES
+                : DEVICE_WORKSPACE_LIST_DISPATCH_MAX_RESPONSE_BYTES;
+            if (bytes > maximum) {
               response.destroy(
                 new DeviceGatewayError("workspace_peer_response_too_large"),
               );
@@ -233,18 +329,14 @@ export class HttpsDeviceGatewayWorkspacePeerClient
       const abort = () => {
         request.destroy(
           new DeviceGatewayError(
-            sent
-              ? "workspace_dispatch_possibly_sent"
-              : "workspace_dispatch_not_sent",
+            sent ? possiblySentCode(kind) : notSentCode(kind),
           ),
         );
       };
       const timer = setTimeout(() => {
         request.destroy(
           new DeviceGatewayError(
-            sent
-              ? "workspace_dispatch_possibly_sent"
-              : "workspace_dispatch_not_sent",
+            sent ? possiblySentCode(kind) : notSentCode(kind),
           ),
         );
       }, this.#requestTimeoutMs);
@@ -259,6 +351,10 @@ export class HttpsDeviceGatewayWorkspacePeerClient
       request.end(body);
     });
   }
+}
+
+function digestUtf8(value: string) {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
 
 function gatewayEndpoints(
@@ -311,11 +407,10 @@ function requireJsonResponse(
     contentType: string | null;
     body: Buffer;
   }>,
+  successMaximum = DEVICE_WORKSPACE_LIST_DISPATCH_MAX_RESPONSE_BYTES,
+  errorMaximum = DEVICE_WORKSPACE_LIST_DISPATCH_MAX_ERROR_BYTES,
 ): void {
-  const maximum =
-    response.statusCode === 200
-      ? DEVICE_WORKSPACE_LIST_DISPATCH_MAX_RESPONSE_BYTES
-      : DEVICE_WORKSPACE_LIST_DISPATCH_MAX_ERROR_BYTES;
+  const maximum = response.statusCode === 200 ? successMaximum : errorMaximum;
   if (
     !Number.isSafeInteger(response.statusCode) ||
     response.statusCode < 100 ||
@@ -329,6 +424,18 @@ function requireJsonResponse(
   ) {
     throw new DeviceGatewayError("workspace_peer_response_invalid");
   }
+}
+
+function notSentCode(kind: "workspaceList" | "workspaceRead") {
+  return kind === "workspaceRead"
+    ? "workspace_read_not_sent"
+    : "workspace_dispatch_not_sent";
+}
+
+function possiblySentCode(kind: "workspaceList" | "workspaceRead") {
+  return kind === "workspaceRead"
+    ? "workspace_read_possibly_sent"
+    : "workspace_dispatch_possibly_sent";
 }
 
 function parseJson(body: Buffer): unknown {
