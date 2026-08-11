@@ -3448,6 +3448,35 @@
           }
         ]
       },
+      "SegmentProviderContinuationEventView": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RunEventEnvelope" },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": { "const": "segment.provider_continuation" },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "segmentId",
+                  "sampleIndex",
+                  "throughHistorySequence"
+                ],
+                "properties": {
+                  "segmentId": { "type": "string" },
+                  "sampleIndex": { "type": "integer", "minimum": 1 },
+                  "throughHistorySequence": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
       "SegmentFailedEventView": {
         "allOf": [
           { "$ref": "#/components/schemas/RunEventEnvelope" },
@@ -3564,6 +3593,9 @@
           },
           { "$ref": "#/components/schemas/SegmentCheckpointedEventView" },
           { "$ref": "#/components/schemas/SegmentCompletedEventView" },
+          {
+            "$ref": "#/components/schemas/SegmentProviderContinuationEventView"
+          },
           { "$ref": "#/components/schemas/SegmentFailedEventView" },
           { "$ref": "#/components/schemas/PlanProposedEventView" },
           { "$ref": "#/components/schemas/MessageCompletedEventView" }

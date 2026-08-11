@@ -1344,6 +1344,15 @@ export interface components {
         segmentId: string;
       };
     };
+    SegmentProviderContinuationEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "segment.provider_continuation";
+      data: {
+        segmentId: string;
+        sampleIndex: number;
+        throughHistorySequence: number;
+      };
+    };
     SegmentFailedEventView: components["schemas"]["RunEventEnvelope"] & {
       /** @constant */
       type: "segment.failed";
@@ -1404,6 +1413,7 @@ export interface components {
       | components["schemas"]["RunGoalSteeringConsumedEventView"]
       | components["schemas"]["SegmentCheckpointedEventView"]
       | components["schemas"]["SegmentCompletedEventView"]
+      | components["schemas"]["SegmentProviderContinuationEventView"]
       | components["schemas"]["SegmentFailedEventView"]
       | components["schemas"]["PlanProposedEventView"]
       | components["schemas"]["MessageCompletedEventView"];

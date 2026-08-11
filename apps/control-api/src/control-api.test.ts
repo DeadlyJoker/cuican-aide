@@ -2079,6 +2079,41 @@ test("matches AR-006 client visibility while retaining the full durable audit", 
   assert.deepEqual(client, reference.fallback.releaseVisibleRetryAttempts);
 });
 
+test("projects provider continuation metadata in client and audit views", () => {
+  const event: Extract<
+    RunLifecycleEvent,
+    { type: "segment.provider_continuation" }
+  > = {
+    schemaVersion: "crewon.run-event.v0",
+    identity: { runId: "run-continuation" },
+    eventId: "event-continuation-1",
+    sequence: 7,
+    occurredAt: "2026-08-08T00:00:07Z",
+    type: "segment.provider_continuation",
+    data: {
+      segmentId: "segment-1",
+      segmentSequence: 3,
+      sampleIndex: 2,
+      throughHistorySequence: 11,
+    },
+  };
+  const expected = {
+    eventId: "event-continuation-1",
+    runId: "run-continuation",
+    sequence: 7,
+    occurredAt: "2026-08-08T00:00:07Z",
+    type: "segment.provider_continuation",
+    data: {
+      segmentId: "segment-1",
+      sampleIndex: 2,
+      throughHistorySequence: 11,
+    },
+  };
+
+  assert.deepEqual(projectRunEventForView(event, "client"), expected);
+  assert.deepEqual(projectRunEventForView(event, "audit"), expected);
+});
+
 async function testRuntime(
   context: TestContext,
   options: Readonly<{

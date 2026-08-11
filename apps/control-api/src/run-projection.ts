@@ -194,6 +194,16 @@ export function projectRunEvent(event: RunLifecycleEvent): RunEventView {
         type: event.type,
         data: { segmentId: event.data.segmentId },
       };
+    case "segment.provider_continuation":
+      return {
+        ...envelope,
+        type: event.type,
+        data: {
+          segmentId: event.data.segmentId,
+          sampleIndex: event.data.sampleIndex,
+          throughHistorySequence: event.data.throughHistorySequence,
+        },
+      };
     case "segment.failed":
       return {
         ...envelope,

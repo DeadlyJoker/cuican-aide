@@ -149,7 +149,9 @@ CSRF; Control does not accept a browser Actor header or substitute the BFF servi
   create/get/cancel, Tool Approval query/decision, live SSE and sequence catch-up without sleeps.
 - SSE uses the decimal Run sequence as its `id`; a reconnect sends that value in `Last-Event-ID`. The default `view=client`
   suppresses only bounded pre-budget WebSocket retry noise; `view=audit` exposes every durable Run event. Hidden client events
-  still advance the server cursor and are never deleted from Store authority.
+  still advance the server cursor and are never deleted from Store authority. Provider-continuation events appear in both views
+  with only bounded coordination metadata (`segmentId`, `sampleIndex` and `throughHistorySequence`); internal segment sequence
+  bookkeeping is omitted.
 - `GET /api/v1/threads/{threadId}/goal/events` uses the independent decimal Thread Goal event sequence as its SSE `id` and
   accepts that sequence in `Last-Event-ID`. It first catches up from the authorized tenant/thread database log, then polls that
   log periodically; it does not depend on the Run Outbox or in-process Run event hub. A `goal.cleared` event is not terminal, so

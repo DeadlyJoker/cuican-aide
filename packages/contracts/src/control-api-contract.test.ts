@@ -705,7 +705,7 @@ test("defines sequence-based SSE resume and a bounded safe event projection", ()
   assert.deepEqual(Object.keys(operation.responses["200"].content), [
     "text/event-stream",
   ]);
-  assert.equal(openApi.components.schemas.RunEventView.oneOf.length, 26);
+  assert.equal(openApi.components.schemas.RunEventView.oneOf.length, 27);
   assert.deepEqual(
     openApi.components.schemas.RunGoalAccountingUpdatedEventView.allOf[1]
       .properties.data.required,
@@ -728,6 +728,11 @@ test("defines sequence-based SSE resume and a bounded safe event projection", ()
   ]) {
     assert.equal(fallbackProjection.includes(required), true);
   }
+  assert.deepEqual(
+    openApi.components.schemas.SegmentProviderContinuationEventView.allOf[1]
+      .properties.data.required,
+    ["segmentId", "sampleIndex", "throughHistorySequence"],
+  );
   const checkpointProjection = JSON.stringify(
     openApi.components.schemas.SegmentCheckpointedEventView,
   );
@@ -1024,6 +1029,12 @@ type OpenApiDocument = Readonly<{
       ArtifactView: unknown;
       RunEventView: { oneOf: unknown[] };
       ModelSamplingRetryEventView: {
+        allOf: readonly [
+          unknown,
+          { properties: { data: { required: string[] } } },
+        ];
+      };
+      SegmentProviderContinuationEventView: {
         allOf: readonly [
           unknown,
           { properties: { data: { required: string[] } } },
