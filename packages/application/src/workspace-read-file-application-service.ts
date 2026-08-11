@@ -87,13 +87,26 @@ export class WorkspaceReadFileApplicationService {
     const replay = await this.#receipt(intent, "execute");
     if (replay !== null) {
       return replay.operation.status === "prepared"
-        ? this.#dispatch(replay.operation, "execute", intent.idempotency, signal)
+        ? this.#dispatch(
+            replay.operation,
+            "execute",
+            intent.idempotency,
+            signal,
+          )
         : replay;
     }
     const frozen = await this.#commands.create(intent, signal);
-    const prepared = await this.#store.prepareWorkspaceReadFile({ ...intent, frozen });
+    const prepared = await this.#store.prepareWorkspaceReadFile({
+      ...intent,
+      frozen,
+    });
     if (prepared.operation.status !== "prepared") return prepared;
-    return this.#dispatch(prepared.operation, "execute", intent.idempotency, signal);
+    return this.#dispatch(
+      prepared.operation,
+      "execute",
+      intent.idempotency,
+      signal,
+    );
   }
 
   reconcile(intent: WorkspaceReadFileRecoveryIntent, signal: AbortSignal) {
@@ -115,12 +128,23 @@ export class WorkspaceReadFileApplicationService {
         ? this.#dispatch(replay.operation, phase, intent.idempotency, signal)
         : replay;
     }
-    const prepared = await this.#store.prepareWorkspaceReadFileAction({ ...intent, phase });
+    const prepared = await this.#store.prepareWorkspaceReadFileAction({
+      ...intent,
+      phase,
+    });
     if (prepared.operation.resolution !== null) return prepared;
-    return this.#dispatch(prepared.operation, phase, intent.idempotency, signal);
+    return this.#dispatch(
+      prepared.operation,
+      phase,
+      intent.idempotency,
+      signal,
+    );
   }
 
-  #receipt(intent: WorkspaceReadFileRecoveryIntent, phase: WorkspaceReadFilePhase) {
+  #receipt(
+    intent: WorkspaceReadFileRecoveryIntent,
+    phase: WorkspaceReadFilePhase,
+  ) {
     return this.#store.loadWorkspaceReadFileReceipt({
       tenantId: intent.tenantId,
       spaceId: intent.spaceId,
@@ -135,11 +159,13 @@ export class WorkspaceReadFileApplicationService {
     idempotency: IdempotencyDescriptor,
     signal: AbortSignal,
   ): Promise<WorkspaceReadFileMutationResult> {
-    const dispatchOperation = phase === "execute"
-      ? await this.#store.markWorkspaceReadFilePossiblySent({
-          ...locator(operation), expectedRevision: operation.revision,
-        })
-      : operation;
+    const dispatchOperation =
+      phase === "execute"
+        ? await this.#store.markWorkspaceReadFilePossiblySent({
+            ...locator(operation),
+            expectedRevision: operation.revision,
+          })
+        : operation;
     const { routeIntent, command, reference } = dispatchOperation.frozen;
     let resolution: DeviceFilesystemReadDispatchResolution;
     try {
@@ -185,6 +211,7 @@ function dispatchCertainty(error: unknown): "notSent" | "possiblySent" {
     error !== null &&
     "certainty" in error &&
     (error.certainty === "notSent" || error.certainty === "possiblySent")
-  ) return error.certainty;
+  )
+    return error.certainty;
   return "possiblySent";
 }

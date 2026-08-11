@@ -90,7 +90,9 @@ export interface RuntimeWorkspaceReadFileCommandPort {
 
 /** Revalidates Thread/deployment authority, freezes the read, and signs it. */
 export class RuntimeWorkspaceReadFileCommandService
-  implements RuntimeWorkspaceReadFileCommandPort, WorkspaceReadFileCommandFactoryPort
+  implements
+    RuntimeWorkspaceReadFileCommandPort,
+    WorkspaceReadFileCommandFactoryPort
 {
   readonly #bindings: RuntimeWorkspaceBindingResolverPort;
   readonly #signer: DeviceCommandSignerPort;

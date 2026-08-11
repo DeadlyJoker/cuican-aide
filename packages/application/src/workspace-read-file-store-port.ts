@@ -24,7 +24,10 @@ export type WorkspaceReadFileRecord = Readonly<{
   attemptId: string;
   executionId: string;
   revision: number;
-  status: "prepared" | "possiblySent" | DeviceFilesystemReadDispatchResolution["status"];
+  status:
+    | "prepared"
+    | "possiblySent"
+    | DeviceFilesystemReadDispatchResolution["status"];
   frozen: FrozenWorkspaceReadFileDispatch;
   resolution: DeviceFilesystemReadDispatchResolution | null;
 }>;
@@ -89,4 +92,3 @@ export interface WorkspaceReadFileStore {
       }>,
   ): Promise<WorkspaceReadFileMutationResult>;
 }
-
