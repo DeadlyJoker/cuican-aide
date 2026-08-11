@@ -141,14 +141,133 @@ test("fails closed on unreviewed and mutation MCP tools", async () => {
   }
   assert.ok(mutationError instanceof McpRuntimeError);
   assert.equal(mutationError.code, "mcp_mutation_reconciliation_unsupported");
+});
+
+test("admits a serial mutation only with a reconcile-capable provider", async () => {
+  const operations: string[] = [];
+  const commandIdentities: string[] = [];
+  let malformedResolution = false;
+  const client = Object.assign(
+    new FakeMcpClient([
+      {
+        tools: [
+          {
+            name: "writer",
+            description: "Writes exactly once under a provider execution ID.",
+            inputSchema: { type: "object" },
+          },
+        ],
+      },
+    ]),
+    {
+      mutationProvider: {
+        async execute(execution) {
+          operations.push(`execute:${execution.toolName}`);
+          commandIdentities.push(
+            `${execution.command.executionId}:${execution.command.actionDigest}`,
+          );
+          if (malformedResolution) {
+            return {
+              status: "unknownOutcome",
+              providerReceiptId: "receipt-1",
+              extra: true,
+            };
+          }
+          return { status: "unknownOutcome", providerReceiptId: "receipt-1" };
+        },
+        async reconcile(execution) {
+          operations.push(`reconcile:${execution.toolName}`);
+          commandIdentities.push(
+            `${execution.command.executionId}:${execution.command.actionDigest}`,
+          );
+          return {
+            status: "completed",
+            providerReceiptId: "receipt-1",
+            result: { content: [{ type: "text", text: "written" }] },
+          };
+        },
+        async cancel(_execution) {
+          operations.push("cancel");
+          return { status: "canceled", providerReceiptId: "receipt-1" };
+        },
+      } satisfies NonNullable<McpClientPort["mutationProvider"]>,
+    },
+  );
+  const policy = mutationPolicy();
+  assert.throws(
+    () =>
+      new McpToolRuntime({
+        serverId: "invalid",
+        client: new FakeMcpClient([]),
+        policies: new Map([
+          ["writer", { ...policy, limits: { ...policy.limits, timeoutMs: 0 } }],
+        ]),
+      }),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message === "tool_execution_policy_invalid",
+  );
+  const runtime = new McpToolRuntime({
+    serverId: "fixture",
+    client,
+    policies: new Map([["writer", policy]]),
+  });
+  (policy as { capability: string }).capability = "attacker.changed";
+  await runtime.connect(new AbortController().signal);
+
   assert.deepEqual(
     {
-      admission: "unavailable",
-      execution: null,
-      decision: mutationError.code,
+      admission: "available",
+      execution: runtime.definitions()[0]?.execution ?? null,
+      decision: "mutation-receipt-gated",
     },
     targetMcpScheduling("AR-019-server-opt-in-mutation-tool"),
   );
+  const returnedPolicy = runtime.executionPolicy(
+    "function",
+    "mcp__fixture__writer",
+  );
+  assert.ok(returnedPolicy !== null);
+  (returnedPolicy as { capability: string }).capability = "attacker.returned";
+  assert.equal(
+    runtime.executionPolicy("function", "mcp__fixture__writer")?.capability,
+    "mcp.tool.mutate",
+  );
+  const command = executionCommand(mutationPolicy(), "writer");
+  await assert.rejects(
+    runtime.execute(
+      { ...command, actionDigest: "invalid" },
+      new AbortController().signal,
+    ),
+    (error: unknown) =>
+      error instanceof Error && error.message === "tool_action_digest_invalid",
+  );
+  await assert.rejects(
+    runtime.execute(
+      executionCommand(readOnlyPolicy(), "writer"),
+      new AbortController().signal,
+    ),
+    (error: unknown) =>
+      error instanceof Error && error.message === "tool_action_policy_mismatch",
+  );
+  malformedResolution = true;
+  await assert.rejects(
+    runtime.execute(command, new AbortController().signal),
+    hasCode("mcp_mutation_resolution_invalid"),
+  );
+  malformedResolution = false;
+  assert.equal(
+    (await runtime.execute(command, new AbortController().signal)).status,
+    "unknownOutcome",
+  );
+  await runtime.reconcile(command, new AbortController().signal);
+  assert.deepEqual(operations, [
+    "execute:writer",
+    "execute:writer",
+    "reconcile:writer",
+  ]);
+  assert.equal(commandIdentities[1], commandIdentities[2]);
+  await runtime.close();
 });
 
 test("fails closed on cyclic MCP pagination", async () => {
@@ -206,9 +325,12 @@ test("parses strict explicit stdio configuration without ambient authority field
   );
 });
 
-function executionCommand(): ToolExecutionCommand {
+function executionCommand(
+  policy = readOnlyPolicy(),
+  originalName = "echo",
+): ToolExecutionCommand {
   const input = '{"value":"hello"}';
-  const policy = readOnlyPolicy();
+  const name = `mcp__fixture__${originalName}`;
   const actionIntent = {
     schemaVersion: "crewon.action-intent.v0" as const,
     runId: "run-1",
@@ -216,7 +338,7 @@ function executionCommand(): ToolExecutionCommand {
     callId: "call-1",
     tool: {
       kind: "function" as const,
-      name: "mcp__fixture__echo",
+      name,
       inputDigest: sha256(input),
     },
     effect: policy.effect,
@@ -249,8 +371,18 @@ function executionCommand(): ToolExecutionCommand {
     segmentId: "segment-1",
     callId: "call-1",
     kind: "function",
-    name: "mcp__fixture__echo",
+    name,
     input,
+  };
+}
+
+function mutationPolicy(): ToolExecutionPolicy {
+  return {
+    ...readOnlyPolicy(),
+    effect: "mutation",
+    recovery: "reconcilable",
+    capability: "mcp.tool.mutate",
+    approvalRequirement: "none",
   };
 }
 

@@ -37,9 +37,9 @@
         "decision": "server-opt-in"
       },
       "target": {
-        "admission": "unavailable",
-        "execution": null,
-        "decision": "mcp_mutation_reconciliation_unsupported"
+        "admission": "available",
+        "execution": "serial",
+        "decision": "mutation-receipt-gated"
       },
       "disposition": "redesign"
     }

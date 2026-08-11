@@ -4712,6 +4712,156 @@ test("matches AR-018 with reviewed read-only MCP calls through the durable Worke
   await toolRuntime.close();
 });
 
+test("recovers an admitted MCP mutation by provider identity without executing it twice", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-mcp-mutation-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const fixture = await createFixture(
+    context,
+    (clock) => new SqliteRunStore(databasePath, { clock }),
+  );
+  const providerResults = new Map<string, string>();
+  const providerOperations: string[] = [];
+  let executeCount = 0;
+  const createRuntime = async () => {
+    const client: McpClientPort = {
+      mutationProvider: {
+        async execute(execution) {
+          providerOperations.push(
+            `execute:${execution.toolName}:${execution.providerExecutionId}`,
+          );
+          executeCount += 1;
+          providerResults.set(execution.providerExecutionId, "written once");
+          return {
+            status: "completed",
+            providerReceiptId: `receipt:${execution.providerExecutionId}`,
+            result: { content: [{ type: "text", text: "written once" }] },
+          };
+        },
+        async reconcile(execution) {
+          providerOperations.push(
+            `reconcile:${execution.toolName}:${execution.providerExecutionId}`,
+          );
+          const output = providerResults.get(execution.providerExecutionId);
+          return output === undefined
+            ? { status: "unknownOutcome", providerReceiptId: null }
+            : {
+                status: "completed",
+                providerReceiptId: `receipt:${execution.providerExecutionId}`,
+                result: { content: [{ type: "text", text: output }] },
+              };
+        },
+        async cancel(execution) {
+          providerOperations.push(`cancel:${execution.providerExecutionId}`);
+          return {
+            status: "canceled",
+            providerReceiptId: `receipt:${execution.providerExecutionId}`,
+          };
+        },
+      },
+      async connect() {},
+      async listTools() {
+        return {
+          tools: [
+            {
+              name: "writer",
+              description: "Durable remote mutation fixture.",
+              inputSchema: { type: "object" },
+            },
+          ],
+        };
+      },
+      async callTool() {
+        throw new Error("mutation_must_not_use_read_only_call_path");
+      },
+      async close() {},
+    };
+    const runtime = new McpToolRuntime({
+      serverId: "remote",
+      client,
+      policies: new Map([["writer", toolPolicy("mutation", "reconcilable")]]),
+    });
+    await runtime.connect(new AbortController().signal);
+    return runtime;
+  };
+  let modelRequests = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "mcp-mutation-recovery-adapter",
+    adapterVersion: "1",
+    modelId: "mcp-mutation-recovery-model",
+    async *stream() {
+      modelRequests += 1;
+      if (modelRequests === 1) {
+        yield {
+          type: "tool.call",
+          kind: "function",
+          callId: "remote-write-once",
+          name: "mcp__remote__writer",
+          input: '{"value":"once"}',
+        };
+        yield { type: "completed", checkpoint: null };
+        return;
+      }
+      yield { type: "output.delta", delta: "confirmed" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const firstRuntime = await createRuntime();
+  const crashed = fixture.worker({
+    transport,
+    toolRuntime: firstRuntime,
+    retryAfterMs: 0,
+    afterToolProviderResolved: async () => {
+      throw new Error("simulated_process_loss_after_remote_mutation");
+    },
+  });
+
+  assert.deepEqual(await crashed.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "simulated_process_loss_after_remote_mutation",
+  });
+  await crashed.close();
+  await firstRuntime.close();
+  await fixture.store.close();
+
+  const reopenedStore = new SqliteRunStore(databasePath, {
+    clock: fixture.leaseClock,
+  });
+  context.after(() => reopenedStore.close());
+  const recoveredRuntime = await createRuntime();
+  const recovered = fixture.worker({
+    transport,
+    toolRuntime: recoveredRuntime,
+    store: reopenedStore,
+  });
+  assert.deepEqual(await recovered.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  await recovered.close();
+  await recoveredRuntime.close();
+
+  assert.equal(executeCount, 1);
+  assert.match(providerOperations[0]!, /^execute:writer:toolExecution-/u);
+  assert.equal(
+    providerOperations[1],
+    providerOperations[0]!.replace("execute:", "reconcile:"),
+  );
+  assert.deepEqual(
+    (
+      await reopenedStore.listRunEvents(
+        { tenantId: actor().tenantId, runId: fixture.runId },
+        0,
+        100,
+      )
+    )
+      .filter((event) => event.type === "tool.completed")
+      .map((event) => event.data.callId),
+    ["remote-write-once"],
+  );
+});
+
 test("holds an unprovable mutation in reconciling until its original provider confirms the receipt", async (context) => {
   const fixture = await createFixture(
     context,

@@ -102,7 +102,7 @@ export class InMemoryToolBroker implements ToolRuntimePort {
     }
     const policy = this.#policies.get(key);
     if (policy !== undefined) {
-      validatePolicyMatchesIntent(policy, command.actionIntent);
+      validateToolExecutionPolicyMatchesIntent(policy, command.actionIntent);
     }
     const resolution = this.#execute(invocation, signal).then(
       (result) => ({
@@ -308,19 +308,24 @@ function validatePolicies(
     if (!definitions.has(key)) {
       throw new ToolBrokerError("tool_execution_policy_orphaned");
     }
-    if (
-      (policy.effect !== "readOnly" && policy.effect !== "mutation") ||
-      (policy.recovery !== "replaySafe" && policy.recovery !== "reconcilable")
-    ) {
-      throw new ToolBrokerError("tool_execution_policy_invalid");
-    }
-    if (policy.effect === "mutation" && policy.recovery !== "reconcilable") {
-      throw new ToolBrokerError("tool_mutation_not_reconcilable");
-    }
-    validatePolicyFields(policy);
+    validateToolExecutionPolicy(policy);
     validated.set(key, structuredClone(policy));
   }
   return validated;
+}
+
+/** Validates every field of a Tool execution policy. */
+export function validateToolExecutionPolicy(policy: ToolExecutionPolicy): void {
+  if (
+    (policy.effect !== "readOnly" && policy.effect !== "mutation") ||
+    (policy.recovery !== "replaySafe" && policy.recovery !== "reconcilable")
+  ) {
+    throw new ToolBrokerError("tool_execution_policy_invalid");
+  }
+  if (policy.effect === "mutation" && policy.recovery !== "reconcilable") {
+    throw new ToolBrokerError("tool_mutation_not_reconcilable");
+  }
+  validatePolicyFields(policy);
 }
 
 /** Validates the complete durable command before an execution adapter uses it. */
@@ -460,7 +465,8 @@ function validatePolicyFields(policy: ToolExecutionPolicy): void {
   }
 }
 
-function validatePolicyMatchesIntent(
+/** Binds a configured execution policy to the durable authorized intent. */
+export function validateToolExecutionPolicyMatchesIntent(
   policy: ToolExecutionPolicy,
   intent: ActionIntent,
 ): void {

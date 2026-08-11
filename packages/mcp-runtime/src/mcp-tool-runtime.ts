@@ -2,6 +2,9 @@ import {
   InMemoryToolBroker,
   modelVisibleToolOutput,
   ToolBrokerError,
+  validateToolExecutionCommand,
+  validateToolExecutionPolicy,
+  validateToolExecutionPolicyMatchesIntent,
   type ToolCallKind,
   type ToolDefinition,
   type ToolExecutionCommand,
@@ -13,6 +16,8 @@ import {
 
 import type {
   McpClientPort,
+  McpMutationExecution,
+  McpMutationProviderPort,
   McpToolCallResult,
   McpToolDescriptor,
 } from "./mcp-client-port.ts";
@@ -37,7 +42,7 @@ export class McpToolRuntime implements ToolRuntimePort {
   readonly #serverId: string;
   readonly #client: McpClientPort;
   readonly #configuredPolicies: ReadonlyMap<string, ToolExecutionPolicy>;
-  #broker = new InMemoryToolBroker();
+  #broker: ToolRuntimePort = new InMemoryToolBroker();
   #connected = false;
   #closed = false;
 
@@ -51,12 +56,20 @@ export class McpToolRuntime implements ToolRuntimePort {
     }
     this.#serverId = config.serverId;
     this.#client = config.client;
-    this.#configuredPolicies = new Map(config.policies);
-    for (const policy of this.#configuredPolicies.values()) {
-      if (policy.effect !== "readOnly" || policy.recovery !== "replaySafe") {
+    const policies = new Map<string, ToolExecutionPolicy>();
+    for (const [name, policy] of config.policies) {
+      validateToolExecutionPolicy(policy);
+      if (
+        (policy.effect === "readOnly" && policy.recovery !== "replaySafe") ||
+        (policy.effect === "mutation" &&
+          (policy.recovery !== "reconcilable" ||
+            config.client.mutationProvider === undefined))
+      ) {
         throw new McpRuntimeError("mcp_mutation_reconciliation_unsupported");
       }
+      policies.set(name, structuredClone(policy));
     }
+    this.#configuredPolicies = policies;
   }
 
   async connect(signal: AbortSignal): Promise<void> {
@@ -165,7 +178,7 @@ function buildBroker(
   discovered: readonly McpToolDescriptor[],
   configuredPolicies: ReadonlyMap<string, ToolExecutionPolicy>,
   client: McpClientPort,
-): InMemoryToolBroker {
+): ToolRuntimePort {
   const byName = new Map<string, McpToolDescriptor>();
   for (const tool of discovered) {
     validateDescriptor(tool);
@@ -184,6 +197,11 @@ function buildBroker(
   >();
   const policies = new Map<string, ToolExecutionPolicy>();
   const exposedNames = new Set<string>();
+  const mutationDefinitions: ToolDefinition[] = [];
+  const mutationRoutes = new Map<
+    string,
+    Readonly<{ originalName: string; policy: ToolExecutionPolicy }>
+  >();
   for (const [originalName, policy] of configuredPolicies) {
     const descriptor = byName.get(originalName);
     if (descriptor === undefined) {
@@ -194,17 +212,23 @@ function buildBroker(
       throw new McpRuntimeError("mcp_tool_name_collision");
     }
     exposedNames.add(exposedName);
-    definitions.push({
+    const definition = {
       schemaVersion: "crewon.tool-definition.v0",
       kind: "function",
       name: exposedName,
       description: descriptor.description ?? "MCP tool",
-      execution: "parallel",
+      execution: policy.effect === "readOnly" ? "parallel" : "serial",
       inputSchema: descriptor.inputSchema as Readonly<{
         [key: string]: ToolJsonValue;
       }>,
-    });
+    } as const;
     const key = "function:" + exposedName;
+    if (policy.effect === "mutation") {
+      mutationDefinitions.push(definition);
+      mutationRoutes.set(key, { originalName, policy });
+      continue;
+    }
+    definitions.push(definition);
     policies.set(key, policy);
     handlers.set(key, async (invocation, signal) => {
       const input = parseToolInput(invocation.input);
@@ -216,12 +240,163 @@ function buildBroker(
     });
   }
   try {
-    return new InMemoryToolBroker(definitions, handlers, policies);
+    const readOnlyRuntime = new InMemoryToolBroker(
+      definitions,
+      handlers,
+      policies,
+    );
+    return mutationDefinitions.length === 0
+      ? readOnlyRuntime
+      : new McpMutationRuntime(
+          readOnlyRuntime,
+          mutationDefinitions,
+          mutationRoutes,
+          client.mutationProvider!,
+        );
   } catch (error) {
     throw error instanceof ToolBrokerError
       ? new McpRuntimeError(error.code, { cause: error })
       : error;
   }
+}
+
+class McpMutationRuntime implements ToolRuntimePort {
+  readonly #definitions: readonly ToolDefinition[];
+  readonly #readOnlyRuntime: InMemoryToolBroker;
+  readonly #routes: ReadonlyMap<
+    string,
+    Readonly<{ originalName: string; policy: ToolExecutionPolicy }>
+  >;
+  readonly #provider: McpMutationProviderPort;
+
+  constructor(
+    readOnlyRuntime: InMemoryToolBroker,
+    mutationDefinitions: readonly ToolDefinition[],
+    routes: ReadonlyMap<
+      string,
+      Readonly<{ originalName: string; policy: ToolExecutionPolicy }>
+    >,
+    provider: McpMutationProviderPort,
+  ) {
+    this.#readOnlyRuntime = readOnlyRuntime;
+    this.#routes = routes;
+    this.#provider = provider;
+    this.#definitions = [
+      ...readOnlyRuntime.definitions(),
+      ...structuredClone(mutationDefinitions),
+    ];
+  }
+
+  definitions(): readonly ToolDefinition[] {
+    return structuredClone(this.#definitions);
+  }
+
+  executionPolicy(
+    kind: ToolCallKind,
+    name: string,
+  ): ToolExecutionPolicy | null {
+    return (
+      structuredClone(this.#routes.get(`${kind}:${name}`)?.policy) ??
+      this.#readOnlyRuntime.executionPolicy(kind, name)
+    );
+  }
+
+  execute(command: ToolExecutionCommand, signal: AbortSignal) {
+    return this.#resolve("execute", command, signal);
+  }
+
+  reconcile(command: ToolExecutionCommand, signal: AbortSignal) {
+    return this.#resolve("reconcile", command, signal);
+  }
+
+  cancel(command: ToolExecutionCommand, signal: AbortSignal) {
+    return this.#resolve("cancel", command, signal);
+  }
+
+  async #resolve(
+    operation: "execute" | "reconcile" | "cancel",
+    command: ToolExecutionCommand,
+    signal: AbortSignal,
+  ): Promise<ToolExecutionResolution> {
+    const route = this.#routes.get(`${command.kind}:${command.name}`);
+    if (route === undefined) {
+      return this.#readOnlyRuntime[operation](command, signal);
+    }
+    validateToolExecutionCommand(command);
+    validateToolExecutionPolicyMatchesIntent(
+      route.policy,
+      command.actionIntent,
+    );
+    const execution: McpMutationExecution = {
+      providerExecutionId: command.executionId,
+      toolName: route.originalName,
+      command: structuredClone(command),
+    };
+    const resolution = await this.#provider[operation](execution, signal);
+    validateMutationResolution(resolution);
+    if (resolution.status !== "completed") {
+      return { ...resolution, executionId: command.executionId };
+    }
+    const normalized = normalizeResult(
+      resolution.result,
+      route.policy.limits.maxOutputBytes,
+    );
+    return {
+      status: "completed",
+      executionId: command.executionId,
+      providerReceiptId: resolution.providerReceiptId,
+      result: {
+        schemaVersion: "crewon.tool-result.v0",
+        callId: command.callId,
+        output: normalized.output,
+        isError: normalized.isError,
+        artifactRef: null,
+      },
+    };
+  }
+}
+
+function validateMutationResolution(
+  resolution: import("./mcp-client-port.ts").McpMutationResolution,
+): void {
+  if (!isPlainObject(resolution)) {
+    throw new McpRuntimeError("mcp_mutation_resolution_invalid");
+  }
+  const terminal = resolution.status === "completed";
+  if (
+    (terminal
+      ? !hasExactKeys(resolution, ["providerReceiptId", "result", "status"])
+      : !hasExactKeys(resolution, ["providerReceiptId", "status"])) ||
+    (resolution.status !== "completed" &&
+      resolution.status !== "canceled" &&
+      resolution.status !== "unknownOutcome") ||
+    (resolution.providerReceiptId !== null &&
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/.test(
+        resolution.providerReceiptId,
+      )) ||
+    (terminal &&
+      (resolution.providerReceiptId === null ||
+        !isPlainObject(resolution.result) ||
+        !hasOnlyKeys(resolution.result, [
+          "content",
+          "isError",
+          "structuredContent",
+          "toolResult",
+        ]) ||
+        (resolution.result.isError !== undefined &&
+          typeof resolution.result.isError !== "boolean")))
+  ) {
+    throw new McpRuntimeError("mcp_mutation_resolution_invalid");
+  }
+}
+
+function hasOnlyKeys(value: object, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+
+function hasExactKeys(value: object, expected: readonly string[]): boolean {
+  const keys = Object.keys(value);
+  return keys.length === expected.length && hasOnlyKeys(value, expected);
 }
 
 function validateDescriptor(tool: McpToolDescriptor): void {
