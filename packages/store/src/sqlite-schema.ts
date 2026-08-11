@@ -1,8 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
 
 import { RunStoreError } from "@crewon/application";
+import {
+  migrateSqliteAutomationAuthority,
+  sqliteAutomationTablesSql,
+} from "./sqlite-automation-schema.ts";
 
-export const SQLITE_SCHEMA_VERSION = 20;
+export const SQLITE_SCHEMA_VERSION = 21;
 
 type LegacyRunRow = Readonly<{
   tenant_id: string;
@@ -107,6 +111,8 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
       // Version 18 has lifecycle tombstones but predates append-only rollback.
     } else if (version === 19) {
       // Version 19 has append-only rollback but predates Provider settings.
+    } else if (version === 20) {
+      // Version 20 has Provider settings but predates Automation authority.
     } else {
       throw new RunStoreError("sqlite_schema_version_unsupported");
     }
@@ -142,6 +148,9 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
     }
     if (version !== 0 && version <= 19) {
       migrateVersionNineteen(database);
+    }
+    if (version !== 0 && version <= 20) {
+      migrateVersionTwenty(database);
     }
     database.exec(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION}`);
     database.exec("COMMIT");
@@ -209,6 +218,8 @@ function createCurrentSchema(database: DatabaseSync): void {
     ${agentVersionReleaseTablesSql()}
 
     ${modelProviderSettingsTablesSql()}
+
+    ${sqliteAutomationTablesSql()}
 
     CREATE TABLE run_events (
       tenant_id TEXT NOT NULL,
@@ -1058,6 +1069,10 @@ function migrateVersionEighteen(database: DatabaseSync): void {
 
 function migrateVersionNineteen(database: DatabaseSync): void {
   database.exec(modelProviderSettingsTablesSql());
+}
+
+function migrateVersionTwenty(database: DatabaseSync): void {
+  migrateSqliteAutomationAuthority(database);
 }
 
 function modelProviderSettingsTablesSql(): string {
