@@ -556,37 +556,11 @@ export class RunExecutionService {
     if (state.status !== "running") {
       throw new ApplicationError("conflict", "run_not_running");
     }
-    validateToolExecutionCall(call);
-    const inputDigest = this.#digest(call.input);
-    let actionIntent: ActionIntent;
-    try {
-      actionIntent = parseActionIntent({
-        schemaVersion: "crewon.action-intent.v0",
-        runId: state.runId,
-        segmentId: call.segmentId,
-        callId: call.callId,
-        tool: {
-          kind: call.kind,
-          name: call.name,
-          inputDigest,
-        },
-        effect: policy.effect,
-        recovery: policy.recovery,
-        policySnapshotId: state.policySnapshotId,
-        workspaceBindingId: state.workspaceBindingId,
-        resourceBindingId: policy.resourceBindingId,
-        credentialBindingId: policy.credentialBindingId,
-        executionTarget: policy.executionTarget,
-        capability: policy.capability,
-        approvalRequirement: policy.approvalRequirement,
-        limits: policy.limits,
-      });
-    } catch (error) {
-      throw new ApplicationError("validation", "tool_action_intent_invalid", {
-        cause: error,
-      });
-    }
-    const actionDigest = this.#digest(canonicalActionIntent(actionIntent));
+    const { actionIntent, actionDigest, inputDigest } = this.#toolAction(
+      state,
+      call,
+      policy,
+    );
     try {
       const existing = await this.#store.loadToolExecutionReceiptByAction({
         tenantId: state.tenantId,
@@ -640,6 +614,56 @@ export class RunExecutionService {
     } catch (error) {
       throw mapExecutionError(error);
     }
+  }
+
+  /** Resolves an already prepared, different ActionIntent for approval replacement. */
+  async loadToolApprovalReplacementReceipt(
+    claim: WorkItemClaim,
+    current: ToolApprovalState,
+    call: ToolExecutionCall,
+    policy: ToolActionPolicy,
+  ): Promise<ToolExecutionReceiptState | null> {
+    const state = await this.loadRun(claim);
+    if (
+      state.status !== "waitingApproval" ||
+      state.waitingApproval?.approvalId !== current.approvalId ||
+      state.waitingApproval.actionDigest !== current.actionDigest ||
+      current.status !== "required" ||
+      current.tenantId !== state.tenantId ||
+      current.spaceId !== state.spaceId ||
+      current.runId !== state.runId ||
+      current.workItemId !== claim.workItem.workItemId
+    ) {
+      throw new ApplicationError("conflict", "tool_approval_not_current");
+    }
+    const { actionIntent, actionDigest } = this.#toolAction(
+      state,
+      call,
+      policy,
+    );
+    if (actionDigest === current.actionDigest) {
+      return null;
+    }
+    const receipt = await this.#store.loadToolExecutionReceiptByAction({
+      tenantId: state.tenantId,
+      runId: state.runId,
+      actionDigest,
+    });
+    if (receipt === null) {
+      return null;
+    }
+    this.#validateToolActionIntent(receipt, actionIntent);
+    if (
+      receipt.status !== "prepared" ||
+      receipt.workItemId !== claim.workItem.workItemId ||
+      receipt.actionIntent?.approvalRequirement !== "perAction"
+    ) {
+      throw new ApplicationError(
+        "conflict",
+        "tool_approval_replacement_receipt_invalid",
+      );
+    }
+    return receipt;
   }
 
   async transitionToolExecution(
@@ -1444,6 +1468,48 @@ export class RunExecutionService {
     ) {
       throw new ApplicationError("validation", "tool_action_intent_mismatch");
     }
+  }
+
+  #toolAction(
+    state: RunState,
+    call: ToolExecutionCall,
+    policy: ToolActionPolicy,
+  ): Readonly<{
+    actionIntent: ActionIntent;
+    actionDigest: string;
+    inputDigest: string;
+  }> {
+    validateToolExecutionCall(call);
+    const inputDigest = this.#digest(call.input);
+    let actionIntent: ActionIntent;
+    try {
+      actionIntent = parseActionIntent({
+        schemaVersion: "crewon.action-intent.v0",
+        runId: state.runId,
+        segmentId: call.segmentId,
+        callId: call.callId,
+        tool: { kind: call.kind, name: call.name, inputDigest },
+        effect: policy.effect,
+        recovery: policy.recovery,
+        policySnapshotId: state.policySnapshotId,
+        workspaceBindingId: state.workspaceBindingId,
+        resourceBindingId: policy.resourceBindingId,
+        credentialBindingId: policy.credentialBindingId,
+        executionTarget: policy.executionTarget,
+        capability: policy.capability,
+        approvalRequirement: policy.approvalRequirement,
+        limits: policy.limits,
+      });
+    } catch (error) {
+      throw new ApplicationError("validation", "tool_action_intent_invalid", {
+        cause: error,
+      });
+    }
+    return {
+      actionIntent,
+      actionDigest: this.#digest(canonicalActionIntent(actionIntent)),
+      inputDigest,
+    };
   }
 
   #validateToolActionIntent(

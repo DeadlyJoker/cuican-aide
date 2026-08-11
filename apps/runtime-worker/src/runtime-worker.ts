@@ -66,6 +66,7 @@ import type {
 } from "./agent-version-runtime.ts";
 import { PlanOutputError, parseProposedPlan } from "./plan-output.ts";
 import { goalToolsForRun, isGoalToolCall } from "./goal-tools.ts";
+import { replaceChangedToolApproval } from "./tool-approval-replacement.ts";
 
 export type { RuntimeWorkerScheduler } from "./runtime-worker-watchers.ts";
 
@@ -589,6 +590,29 @@ export class RuntimeWorker {
         null
       ) {
         return this.#executeClaim(claim);
+      }
+      const runtime = await this.#resolveAgentVersionRuntime(
+        run.tenantId,
+        run.agentVersionId,
+      );
+      if (runtime !== null) {
+        const pending = await this.#pendingToolEvents(run);
+        const replacement = await replaceChangedToolApproval({
+          execution: this.#execution,
+          claim,
+          current: storedApproval,
+          calls: pending.events,
+          toolRuntime: runtime.toolRuntime,
+          expiresAfterMs: this.#approvalTtlMs,
+          retryAfterMs: this.#approvalRecheckMs,
+        });
+        if (replacement !== null) {
+          return {
+            kind: "waitingApproval",
+            runId: run.runId,
+            approvalId: replacement.approvalId,
+          };
+        }
       }
       await this.#store.retryWorkItem({
         ...leaseInput(claim),
