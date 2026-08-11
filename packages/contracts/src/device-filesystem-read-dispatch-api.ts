@@ -1,5 +1,6 @@
 import { ContractValidationError } from "./contract-validation-error.ts";
 import {
+  canonicalDeviceFilesystemReadCommandDigest,
   parseDeviceFilesystemReadCommand,
   parseDeviceFilesystemReadEvent,
   type DeviceFilesystemReadCommand,
@@ -34,11 +35,27 @@ export type DeviceFilesystemReadDispatchReference = Readonly<{
   receiptId: string | null;
 }>;
 
-export type DeviceFilesystemReadDispatchResolution = Readonly<{
-  status: "completed" | "failed" | "canceled" | "unknownOutcome";
+export type DeviceFilesystemReadDispatchResolution =
+  | terminalResolution<"completed", "workspace_read.completed">
+  | terminalResolution<"failed", "workspace_read.failed">
+  | terminalResolution<"canceled", "workspace_read.canceled">
+  | Readonly<{
+      status: "unknownOutcome";
+      executionId: string;
+      receiptId: string | null;
+      terminal: Extract<
+        DeviceFilesystemReadEvent,
+        { type: "workspace_read.unknown_outcome" }
+      > | null;
+    }>;
+type terminalResolution<
+  S extends string,
+  E extends DeviceFilesystemReadEvent["type"],
+> = Readonly<{
+  status: S;
   executionId: string;
-  receiptId: string | null;
-  terminal: DeviceFilesystemReadEvent | null;
+  receiptId: string;
+  terminal: Extract<DeviceFilesystemReadEvent, { type: E }>;
 }>;
 
 type WorkerEnvelope = Readonly<{
@@ -313,7 +330,14 @@ export function parseDeviceFilesystemReadPeerDispatchResponse(
     apiVersion: 1 as const,
     operation: expected.operation,
     route,
-    resolution: resolutionOf(value.resolution, targetOf(expected), digestUtf8),
+    resolution: resolutionOf(
+      value.resolution,
+      targetOf(expected),
+      digestUtf8,
+      expected.operation === "execute"
+        ? expected.route.connectionEpoch
+        : undefined,
+    ),
   };
   bounded(result, DEVICE_FILESYSTEM_READ_DISPATCH_MAX_RESPONSE_BYTES);
   return result;
@@ -352,8 +376,9 @@ function targetOf(
 }
 function resolutionOf(
   input: unknown,
-  target: { deviceId: string; executionId: string },
+  target: DeviceFilesystemReadCommand | DeviceFilesystemReadDispatchReference,
   digestUtf8: (value: string) => string,
+  expectedConnectionEpoch?: number,
 ): DeviceFilesystemReadDispatchResolution {
   const value = object(input, "device_filesystem_read_resolution_invalid");
   exact(value, ["executionId", "receiptId", "status", "terminal"]);
@@ -373,6 +398,31 @@ function resolutionOf(
     (terminal.deviceId !== target.deviceId ||
       terminal.executionId !== target.executionId ||
       terminal.receiptId !== value.receiptId)
+  )
+    invalid("device_filesystem_read_resolution_invalid");
+  if (terminal !== null) {
+    const expectedWorkspaceBindingId = target.workspaceBindingId;
+    const expectedIncarnationId =
+      "arguments" in target
+        ? target.arguments.workspaceIncarnationId
+        : target.incarnationId;
+    const expectedCommandDigest =
+      "arguments" in target
+        ? canonicalDeviceFilesystemReadCommandDigest(target, digestUtf8)
+        : target.commandDigest;
+    if (
+      terminal.workspaceBindingId !== expectedWorkspaceBindingId ||
+      terminal.incarnationId !== expectedIncarnationId ||
+      terminal.commandDigest !== expectedCommandDigest ||
+      (expectedConnectionEpoch !== undefined &&
+        terminal.connectionEpoch !== expectedConnectionEpoch)
+    )
+      invalid("device_filesystem_read_resolution_invalid");
+  }
+  if (
+    !("arguments" in target) &&
+    target.receiptId !== null &&
+    value.receiptId !== target.receiptId
   )
     invalid("device_filesystem_read_resolution_invalid");
   const expectedType =
@@ -396,7 +446,7 @@ function resolutionOf(
     executionId: id(value.executionId),
     receiptId: value.receiptId === null ? null : id(value.receiptId),
     terminal,
-  };
+  } as DeviceFilesystemReadDispatchResolution;
 }
 function routeOf(input: unknown): DeviceFilesystemReadPeerRoute {
   const value = object(input, "device_filesystem_read_peer_route_invalid");

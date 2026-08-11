@@ -147,7 +147,9 @@ export class DeviceGatewayWorkspaceReadPeerApi {
         input.route.deviceId,
         intent,
       );
-      const now = (this.#config.now ?? (() => new Date()))().getTime();
+      const now = workspaceReadPeerNow(
+        (this.#config.now ?? (() => new Date()))(),
+      );
       if (
         current === null ||
         target === null ||
@@ -346,4 +348,11 @@ export function sameWorkspaceReadPeerRoute(
     left.capability === right.capability &&
     Date.parse(left.leaseExpiresAt) >= Date.parse(right.leaseExpiresAt)
   );
+}
+
+export function workspaceReadPeerNow(value: Date): number {
+  const now = value.getTime();
+  if (!Number.isFinite(now))
+    throw new DeviceGatewayError("workspace_read_clock_invalid");
+  return now;
 }

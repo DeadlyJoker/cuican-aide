@@ -5,7 +5,9 @@ import test from "node:test";
 
 import {
   parseDeviceFilesystemReadPeerDispatchRequest,
+  parseDeviceFilesystemReadPeerDispatchResponse,
   parseDeviceFilesystemReadWorkerDispatchRequest,
+  parseDeviceFilesystemReadWorkerDispatchResponse,
 } from "./device-filesystem-read-dispatch-api.ts";
 import { deviceFilesystemReadDispatchApiJsonSchemas } from "./device-filesystem-read-dispatch-api-schema.ts";
 import {
@@ -106,7 +108,8 @@ test("peer transport freezes complete route intent and rejects drift", () => {
 });
 
 test("parser branches and schemas expose the same exact top-level fields", () => {
-  const worker = deviceFilesystemReadDispatchApiJsonSchemas.workerRequest.oneOf!;
+  const worker =
+    deviceFilesystemReadDispatchApiJsonSchemas.workerRequest.oneOf!;
   const peer = deviceFilesystemReadDispatchApiJsonSchemas.peerRequest.oneOf!;
   assert.deepEqual(
     worker.map((branch) => [...branch.required].sort()),
@@ -133,6 +136,114 @@ test("parser branches and schemas expose the same exact top-level fields", () =>
     deviceFilesystemReadDispatchApiJsonSchemas.peerResponse
       .additionalProperties,
     false,
+  );
+  const commandSchema = worker[0].properties.command as {
+    allOf: readonly [unknown, { properties: unknown }];
+  };
+  const readOverlay = commandSchema.allOf[1].properties as {
+    capability: { const: string };
+    payloadRef: { type: string };
+    authorization: { properties: { approvalProof: { type: string } } };
+  };
+  assert.equal(readOverlay.capability.const, "workspace.read_file.v0");
+  assert.equal(readOverlay.payloadRef.type, "null");
+  assert.equal(readOverlay.authorization.properties.approvalProof.type, "null");
+  assert.throws(() =>
+    parseDeviceFilesystemReadWorkerDispatchRequest({
+      schemaVersion: "crewon.device-filesystem-read-dispatch-request.v0",
+      apiVersion: 1,
+      operation: "execute",
+      routeIntent: intent,
+      command: { ...command, capability: "workspace.list.v0" },
+    }),
+  );
+});
+
+test("terminal projection binds the full command/reference identity and peer epoch", () => {
+  const terminal = fixture.valid.filesystemReadEvents[1];
+  const execute = parseDeviceFilesystemReadWorkerDispatchRequest({
+    schemaVersion: "crewon.device-filesystem-read-dispatch-request.v0",
+    apiVersion: 1,
+    operation: "execute",
+    routeIntent: intent,
+    command,
+  });
+  const response = {
+    schemaVersion: "crewon.device-filesystem-read-dispatch-response.v0",
+    apiVersion: 1,
+    operation: "execute",
+    resolution: {
+      status: "completed",
+      executionId: command.executionId,
+      receiptId: terminal.receiptId,
+      terminal,
+    },
+  };
+  assert.doesNotThrow(() =>
+    parseDeviceFilesystemReadWorkerDispatchResponse(
+      response,
+      execute,
+      digestUtf8,
+    ),
+  );
+  assert.throws(() =>
+    parseDeviceFilesystemReadWorkerDispatchResponse(
+      {
+        ...response,
+        resolution: {
+          ...response.resolution,
+          terminal: { ...terminal, incarnationId: "forged" },
+        },
+      },
+      execute,
+      digestUtf8,
+    ),
+  );
+  const reconcile = parseDeviceFilesystemReadWorkerDispatchRequest({
+    schemaVersion: "crewon.device-filesystem-read-dispatch-request.v0",
+    apiVersion: 1,
+    operation: "reconcile",
+    routeIntent: intent,
+    reference: { ...reference, receiptId: "different-receipt" },
+  });
+  assert.throws(() =>
+    parseDeviceFilesystemReadWorkerDispatchResponse(
+      { ...response, operation: "reconcile" },
+      reconcile,
+      digestUtf8,
+    ),
+  );
+  const route = {
+    deviceId: command.deviceId,
+    gatewayId: "gateway-b",
+    connectionId: "connection-1",
+    connectionEpoch: 8,
+    ...intent,
+    capability: "workspace.read_file.v0",
+    leaseExpiresAt: "2026-08-08T00:01:00Z",
+  };
+  const peer = parseDeviceFilesystemReadPeerDispatchRequest({
+    schemaVersion: "crewon.device-filesystem-read-peer-dispatch-request.v0",
+    apiVersion: 1,
+    sourceGatewayId: "gateway-a",
+    sourceWorker: { workerId: "worker-1", credentialId: "credential-1" },
+    route,
+    operation: "execute",
+    command,
+  });
+  assert.throws(() =>
+    parseDeviceFilesystemReadPeerDispatchResponse(
+      {
+        schemaVersion:
+          "crewon.device-filesystem-read-peer-dispatch-response.v0",
+        apiVersion: 1,
+        route,
+        operation: "execute",
+        resolution: response.resolution,
+      },
+      peer,
+      digestUtf8,
+    ),
   );
 });
 

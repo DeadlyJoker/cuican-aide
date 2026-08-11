@@ -11,7 +11,10 @@ import {
 } from "@crewon/contracts";
 import type { DeviceGatewaySession } from "./device-gateway-session.ts";
 import { DeviceGatewayWorkspaceReadRouter } from "./device-gateway-workspace-read-router.ts";
-import { sameWorkspaceReadPeerRoute } from "./device-gateway-workspace-read-api.ts";
+import {
+  sameWorkspaceReadPeerRoute,
+  workspaceReadPeerNow,
+} from "./device-gateway-workspace-read-api.ts";
 import { DeviceGatewayWorkspaceReadService } from "./device-gateway-workspace-read-service.ts";
 import { InMemoryDeviceConnectionRouteStore } from "./device-connection-route-store.ts";
 import { DeviceGatewayError } from "./device-gateway-error.ts";
@@ -142,6 +145,13 @@ test("peer route accepts heartbeat lease extension without weakening its epoch f
   assert.equal(
     sameWorkspaceReadPeerRoute({ ...renewed, connectionId: "other" }, route),
     false,
+  );
+});
+
+test("peer route validation fails closed on an invalid Gateway clock", () => {
+  assert.throws(
+    () => workspaceReadPeerNow(new Date(Number.NaN)),
+    /workspace_read_clock_invalid/,
   );
 });
 

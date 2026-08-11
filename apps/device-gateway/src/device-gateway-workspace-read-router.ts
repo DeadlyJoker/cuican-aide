@@ -121,6 +121,7 @@ export class DeviceGatewayWorkspaceReadRouter {
     }
     if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
     const current = await this.#config.routes.loadConnection(input.deviceId);
+    if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
     if (current === null || current.gatewayId === this.#gatewayId)
       throw new DeviceGatewayError("workspace_read_route_unavailable");
     const route: DeviceFilesystemReadPeerRoute = {

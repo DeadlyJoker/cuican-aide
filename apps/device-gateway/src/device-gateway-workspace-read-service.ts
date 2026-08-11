@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
+
 import {
+  canonicalDeviceFilesystemReadCommandDigest,
   parseDeviceFilesystemReadCommand,
   parseDeviceFilesystemReadDispatchReference,
   type DeviceFilesystemReadDispatchReference,
@@ -131,6 +134,7 @@ export class DeviceGatewayWorkspaceReadService {
     const runtimeBindingId = intent.runtimeBindingId;
     this.#workers.authorize(worker, runtimeBindingId);
     const record = await this.#store.load(reference.executionId);
+    if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
     if (record === null)
       return unknown(reference.executionId, reference.receiptId);
     this.#requireReference(record, reference, runtimeBindingId);
@@ -150,6 +154,7 @@ export class DeviceGatewayWorkspaceReadService {
     this.#workers.authorize(worker, intent.runtimeBindingId);
     if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
     const record = await this.#store.load(reference.executionId);
+    if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
     if (record === null)
       return unknown(reference.executionId, reference.receiptId);
     this.#requireReference(record, reference, intent.runtimeBindingId);
@@ -318,8 +323,6 @@ function readIntent(
     : input;
 }
 
-import { canonicalDeviceFilesystemReadCommandDigest } from "@crewon/contracts";
-import { createHash } from "node:crypto";
 function digestUtf8(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }

@@ -63,6 +63,57 @@ const sourceWorker = object(["credentialId", "workerId"], {
   credentialId: id,
   workerId: id,
 });
+const readCommand = {
+  allOf: [
+    deviceExecutionCommandJsonSchema,
+    {
+      properties: {
+        capability: { const: "workspace.read_file.v0" },
+        payloadRef: { type: "null" },
+        arguments: object(
+          [
+            "encoding",
+            "relativePathSegments",
+            "schemaVersion",
+            "workspaceIncarnationId",
+          ],
+          {
+            schemaVersion: {
+              const: "crewon.device-filesystem-read-arguments.v0",
+            },
+            workspaceIncarnationId: id,
+            relativePathSegments: {
+              type: "array",
+              minItems: 1,
+              maxItems: 32,
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 255,
+                not: { enum: [".", ".."] },
+                pattern: "^[^/\\\\:\\u0000]+$",
+              },
+            },
+            encoding: { const: "utf8" },
+          },
+        ),
+        limits: {
+          properties: {
+            timeoutMs: { type: "integer", minimum: 1, maximum: 30_000 },
+            maxOutputBytes: {
+              type: "integer",
+              minimum: 1,
+              maximum: 65_536,
+            },
+          },
+        },
+        authorization: {
+          properties: { approvalProof: { type: "null" } },
+        },
+      },
+    },
+  ],
+} as const;
 const resolution = object(["executionId", "receiptId", "status", "terminal"], {
   executionId: id,
   receiptId: { oneOf: [id, { type: "null" }] },
@@ -122,8 +173,7 @@ function worker(operation: string, payload: "command" | "reference") {
     operation,
     {
       routeIntent: intent,
-      [payload]:
-        payload === "command" ? deviceExecutionCommandJsonSchema : reference,
+      [payload]: payload === "command" ? readCommand : reference,
     },
   );
 }
@@ -135,8 +185,7 @@ function peer(operation: string, payload: "command" | "reference") {
       route,
       sourceGatewayId: id,
       sourceWorker,
-      [payload]:
-        payload === "command" ? deviceExecutionCommandJsonSchema : reference,
+      [payload]: payload === "command" ? readCommand : reference,
     },
   );
 }

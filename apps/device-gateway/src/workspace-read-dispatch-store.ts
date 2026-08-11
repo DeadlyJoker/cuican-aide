@@ -7,17 +7,13 @@ import {
   type DeviceFilesystemReadCommand,
   type DeviceFilesystemReadEvent,
   type DeviceFilesystemReadAck,
+  type DeviceFilesystemReadDispatchResolution,
 } from "@crewon/contracts";
 
 import { InMemoryDeviceExecutionKindAuthority } from "./device-execution-kind-authority.ts";
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 
-export type WorkspaceReadResolution = Readonly<{
-  status: "completed" | "failed" | "canceled" | "unknownOutcome";
-  executionId: string;
-  receiptId: string | null;
-  terminal: DeviceFilesystemReadEvent | null;
-}>;
+export type WorkspaceReadResolution = DeviceFilesystemReadDispatchResolution;
 
 export type WorkspaceReadDispatchRecord = Readonly<{
   executionId: string;
@@ -426,20 +422,19 @@ function requireEventIdentity(
     conflict("workspace_read_event_identity_mismatch");
 }
 function resolution(event: DeviceFilesystemReadEvent): WorkspaceReadResolution {
-  const status =
-    event.type === "workspace_read.completed"
-      ? "completed"
-      : event.type === "workspace_read.failed"
-        ? "failed"
-        : event.type === "workspace_read.canceled"
-          ? "canceled"
-          : "unknownOutcome";
-  return {
-    status,
-    executionId: event.executionId,
-    receiptId: event.receiptId,
-    terminal: event,
-  };
+  const common = { executionId: event.executionId, receiptId: event.receiptId };
+  switch (event.type) {
+    case "workspace_read.completed":
+      return { ...common, status: "completed", terminal: event };
+    case "workspace_read.failed":
+      return { ...common, status: "failed", terminal: event };
+    case "workspace_read.canceled":
+      return { ...common, status: "canceled", terminal: event };
+    case "workspace_read.unknown_outcome":
+      return { ...common, status: "unknownOutcome", terminal: event };
+    case "workspace_read.accepted":
+      throw new DeviceGatewayError("workspace_read_terminal_invalid");
+  }
 }
 function result(
   outcome: "committed" | "replayed",
