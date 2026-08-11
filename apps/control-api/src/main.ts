@@ -24,11 +24,21 @@ import {
   resolvePausedAdmission,
   watchActivationInput,
 } from "./paused-admission.ts";
+import { resolveStandaloneProviderProbeWorkers } from "./standalone-provider-probe-environment.ts";
 
 const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
 );
 const activationGate = resolvePausedAdmission(process.env, securityMode);
+const standaloneTenantId = environmentOr(
+  "CREWON_TENANT_ID",
+  "standalone-tenant",
+);
+const providerProbeWorkers = resolveStandaloneProviderProbeWorkers(
+  process.env,
+  securityMode,
+  standaloneTenantId,
+);
 const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
 if (securityMode === "production" && connectionString === undefined) {
   throw new Error("CREWON_CONTROL_DATABASE_URL_required");
@@ -113,7 +123,7 @@ try {
           "standalone-principal",
         ),
         actorId: environmentOr("CREWON_ACTOR_ID", "standalone-actor"),
-        tenantId: environmentOr("CREWON_TENANT_ID", "standalone-tenant"),
+        tenantId: standaloneTenantId,
         spaceId: environmentOr("CREWON_SPACE_ID", "standalone-space"),
       },
       defaultAgentVersionId: environmentOr(
@@ -126,6 +136,7 @@ try {
         "CREWON_CONTROL_ALLOWED_ORIGINS",
       ),
       ...(activationGate === null ? {} : { activationGate }),
+      ...(providerProbeWorkers === undefined ? {} : { providerProbeWorkers }),
     };
     runtime = connectionString
       ? await createPostgresControlApi({

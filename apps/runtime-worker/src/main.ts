@@ -24,6 +24,10 @@ import {
   type RuntimeNativeWorkspaceResources,
 } from "./runtime-native-workspace.ts";
 import { DesktopProviderProbeEgressPolicy } from "./provider-probe-egress.ts";
+import {
+  parseRuntimeWorkerSecurityMode,
+  resolveRuntimeProviderProbeEnvironment,
+} from "./runtime-provider-probe-environment.ts";
 import { runtimeNativeReadinessLines } from "./runtime-native-readiness.ts";
 
 const agentVersionRuntimeBindingsPath =
@@ -33,11 +37,26 @@ const agentVersionRuntimeFactory = agentVersionRuntimeBindingsPath
   : undefined;
 
 const nativeBootstrap = takeRuntimeNativeBootstrap();
+const securityMode = parseRuntimeWorkerSecurityMode(
+  process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
+);
+const ambientProviderProbe = resolveRuntimeProviderProbeEnvironment(
+  process.env,
+  securityMode,
+  new DesktopProviderProbeEgressPolicy(),
+);
+if (
+  nativeBootstrap?.provider !== null &&
+  nativeBootstrap?.provider !== undefined &&
+  ambientProviderProbe !== undefined
+) {
+  throw new Error("runtime_provider_probe_bootstrap_conflict");
+}
 const nativeWorkspaceReadCatalog = parseNativeWorkspaceReadCatalog(
   process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
 );
 if (
-  nativeWorkspaceReadCatalog === "enabled" !==
+  (nativeWorkspaceReadCatalog === "enabled") !==
   (nativeBootstrap?.workspace !== null &&
     nativeBootstrap?.workspace !== undefined)
 ) {
@@ -143,7 +162,9 @@ try {
         }),
     ...(nativeBootstrap?.provider === null ||
     nativeBootstrap?.provider === undefined
-      ? {}
+      ? ambientProviderProbe === undefined
+        ? {}
+        : { providerProbe: ambientProviderProbe }
       : {
           providerProbe: {
             port: nativeBootstrap.probe.port,
