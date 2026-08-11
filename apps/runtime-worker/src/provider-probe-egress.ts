@@ -27,7 +27,9 @@ export interface ProviderProbeEgressPolicy {
 }
 
 export interface ProviderProbeDnsResolver {
-  resolveAll(hostname: string): Promise<readonly ProviderProbeResolvedAddress[]>;
+  resolveAll(
+    hostname: string,
+  ): Promise<readonly ProviderProbeResolvedAddress[]>;
 }
 
 export type PinnedProviderProbeEndpoint = Readonly<{
@@ -36,7 +38,9 @@ export type PinnedProviderProbeEndpoint = Readonly<{
   family: 4 | 6;
 }>;
 
-export class SystemProviderProbeDnsResolver implements ProviderProbeDnsResolver {
+export class SystemProviderProbeDnsResolver
+  implements ProviderProbeDnsResolver
+{
   async resolveAll(
     hostname: string,
   ): Promise<readonly ProviderProbeResolvedAddress[]> {
@@ -171,11 +175,7 @@ export function providerAddressKind(address: string): ProviderAddressKind {
   if (bytes[0] === 0xfe && (bytes[1]! & 0xc0) === 0x80) return "linkLocal";
   if ((bytes[0]! & 0xfe) === 0xfc) return "private";
   if (
-    matchesPrefix(
-      bytes,
-      [0x00, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0],
-      96,
-    )
+    matchesPrefix(bytes, [0x00, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0], 96)
   ) {
     return "transition";
   }
@@ -240,14 +240,18 @@ function validateDecision(
     !Array.isArray(decision.approvedAddresses) ||
     decision.approvedAddresses.length !== resolved.length
   ) {
-    throw new ProviderProbeEgressError("provider_probe_egress_decision_invalid");
+    throw new ProviderProbeEgressError(
+      "provider_probe_egress_decision_invalid",
+    );
   }
   const approved = new Set(decision.approvedAddresses);
   if (
     approved.size !== resolved.length ||
     resolved.some(({ address }) => !approved.has(address))
   ) {
-    throw new ProviderProbeEgressError("provider_probe_egress_decision_invalid");
+    throw new ProviderProbeEgressError(
+      "provider_probe_egress_decision_invalid",
+    );
   }
   return approved;
 }

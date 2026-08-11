@@ -1,7 +1,3 @@
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest, type RequestOptions } from "node:https";
-import { isIP } from "node:net";
-
 import type {
   ModelProviderProbeModel,
   ModelProviderProbeResult,
@@ -13,6 +9,10 @@ import {
   ProviderProbeEgressResolver,
   type PinnedProviderProbeEndpoint,
 } from "./provider-probe-egress.ts";
+import {
+  PinnedNodeHttpError,
+  PinnedNodeHttpTransport,
+} from "./pinned-node-http.ts";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MODELS = 100;
@@ -38,10 +38,10 @@ export interface ProviderProbeHttpPort {
 
 /** Node transport that pins the approved address and never follows redirects. */
 export class PinnedNodeProviderProbeHttp implements ProviderProbeHttpPort {
-  readonly #certificateAuthority: string | undefined;
+  readonly #transport: PinnedNodeHttpTransport;
 
   constructor(options: { certificateAuthority?: string } = {}) {
-    this.#certificateAuthority = options.certificateAuthority;
+    this.#transport = new PinnedNodeHttpTransport(options);
   }
 
   request(
@@ -51,99 +51,29 @@ export class PinnedNodeProviderProbeHttp implements ProviderProbeHttpPort {
     }>,
     signal: AbortSignal,
   ): Promise<ProviderProbeHttpResponse> {
-    return new Promise((resolve, reject) => {
-      const options: RequestOptions = {
-        method: "GET",
-        agent: false,
-        headers: {
-          accept: "application/json",
-          ...(input.authorization === null
-            ? {}
-            : { authorization: input.authorization }),
-        },
-        lookup: (_hostname, lookupOptions, callback) => {
-          if (lookupOptions.all === true) {
-            callback(null, [
-              {
-                address: input.target.address,
-                family: input.target.family,
-              },
-            ]);
-            return;
-          }
-          callback(null, input.target.address, input.target.family);
+    return this.#transport
+      .request(
+        {
+          method: "GET",
+          target: input.target,
+          headers: {
+            accept: "application/json",
+            ...(input.authorization === null
+              ? {}
+              : { authorization: input.authorization }),
+          },
+          maxRequestBytes: 0,
+          maxResponseBytes: MAX_BODY_BYTES,
         },
         signal,
-      };
-      if (input.target.endpoint.protocol === "https:") {
-        options.servername =
-          isIP(input.target.endpoint.hostname) === 0
-            ? input.target.endpoint.hostname
-            : undefined;
-        options.ca = this.#certificateAuthority;
-      }
-      const request = (input.target.endpoint.protocol === "https:"
-        ? httpsRequest
-        : httpRequest)(input.target.endpoint, options);
-      request.once("response", (response) => {
-        if (
-          !sameRemoteAddress(
-            response.socket.remoteAddress,
-            input.target.address,
-            input.target.family,
-          )
-        ) {
-          response.destroy(
-            new ProviderProbeProtocolError("remote_address_mismatch"),
-          );
-          return;
+      )
+      .catch((error: unknown) => {
+        if (error instanceof PinnedNodeHttpError) {
+          throw new ProviderProbeProtocolError(error.code);
         }
-        const declared = response.headers["content-length"];
-        if (
-          typeof declared === "string" &&
-          (!/^\d+$/u.test(declared) || Number(declared) > MAX_BODY_BYTES)
-        ) {
-          response.destroy(new ProviderProbeProtocolError("body_too_large"));
-          return;
-        }
-        const chunks: Buffer[] = [];
-        let total = 0;
-        response.on("data", (chunk: Buffer | string) => {
-          const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          total += bytes.byteLength;
-          if (total > MAX_BODY_BYTES) {
-            response.destroy(new ProviderProbeProtocolError("body_too_large"));
-            return;
-          }
-          chunks.push(bytes);
-        });
-        response.once("end", () => {
-          resolve({
-            status: response.statusCode ?? 0,
-            headers: {
-              "content-type": header(response.headers["content-type"]),
-              "retry-after": header(response.headers["retry-after"]),
-            },
-            body: Buffer.concat(chunks, total),
-          });
-        });
-        response.once("error", reject);
+        throw error;
       });
-      request.once("error", reject);
-      request.end();
-    });
   }
-}
-
-function sameRemoteAddress(
-  remoteAddress: string | undefined,
-  approvedAddress: string,
-  family: 4 | 6,
-): boolean {
-  if (remoteAddress === approvedAddress) return true;
-  return (
-    family === 4 && remoteAddress === `::ffff:${approvedAddress.toLowerCase()}`
-  );
 }
 
 /** Performs one bounded OpenAI-compatible `/models` request. */
@@ -177,7 +107,11 @@ export class ResponsesProviderConnectivityProbe {
       schedule?: (callback: () => void, delayMs: number) => () => void;
     },
   ) {
-    this.#tenantId = bounded(config.tenantId, 512, "provider_probe_tenant_invalid");
+    this.#tenantId = bounded(
+      config.tenantId,
+      512,
+      "provider_probe_tenant_invalid",
+    );
     this.#providerId = bounded(
       config.providerId,
       128,
@@ -498,7 +432,9 @@ function readNow(now: () => number): number {
   return value;
 }
 
-function header(value: string | readonly string[] | undefined): string | undefined {
+function header(
+  value: string | readonly string[] | undefined,
+): string | undefined {
   return typeof value === "string" ? value : value?.[0];
 }
 
