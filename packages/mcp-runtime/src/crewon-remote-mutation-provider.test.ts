@@ -285,7 +285,15 @@ function productionProvider(
 ): CrewonRemoteMcpMutationProvider {
   return new CrewonRemoteMcpMutationProvider({
     endpoint: "https://provider.example/mutate",
-    auth: { kind: "bearer", token },
+    auth: {
+      kind: "credentialLease",
+      port: {
+        acquire: () => ({
+          apply: (sink) => sink.applyBearer(token),
+          release: () => undefined,
+        }),
+      },
+    },
     deadlineMs,
     network: { mode: "production", http: { post } },
   });

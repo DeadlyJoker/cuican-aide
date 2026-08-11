@@ -1,13 +1,31 @@
 import { createHash } from "node:crypto";
-
 import { validateToolExecutionCommand } from "@crewon/tool-broker";
-
 import type {
   McpMutationExecution,
   McpMutationProviderPort,
   McpMutationResolution,
   McpToolCallResult,
 } from "./mcp-client-port.ts";
+import type {
+  CrewonRemoteMcpMutationPhase,
+  CrewonRemoteMcpMutationProviderConfig,
+} from "./remote-mcp-credential-lease.ts";
+import {
+  CredentialPreparationFailure,
+  credentialAuthorization,
+  prepareAuthorization,
+  validateProviderConfig,
+} from "./remote-mcp-credential-lease.ts";
+import type {
+  CredentialAuthorization,
+  CrewonRemoteMcpMutationHttpPort,
+  CrewonRemoteMcpMutationHttpRequest,
+} from "./remote-mcp-credential-lease.ts";
+
+export type {
+  CrewonRemoteMcpMutationHttpPort,
+  CrewonRemoteMcpMutationHttpRequest,
+} from "./remote-mcp-credential-lease.ts";
 
 const SCHEMA_VERSION = "crewon.remote-mcp-mutation.v1";
 const MAX_RESPONSE_BYTES = 256 * 1024;
@@ -45,19 +63,7 @@ const APPROVAL_KEYS = [
   "decidedAt",
 ] as const;
 
-type Phase = "execute" | "reconcile" | "cancel";
-
-export type CrewonRemoteMcpMutationHttpRequest = Readonly<{
-  endpoint: URL;
-  headers: Readonly<Record<string, string>>;
-  body: Uint8Array;
-  signal: AbortSignal;
-}>;
-
-/** Production implementations must validate every DNS answer and pin the socket. */
-export interface CrewonRemoteMcpMutationHttpPort {
-  post(request: CrewonRemoteMcpMutationHttpRequest): Promise<Response>;
-}
+type Phase = CrewonRemoteMcpMutationPhase;
 
 export class CrewonRemoteMcpMutationError extends Error {
   readonly code: string;
@@ -75,28 +81,31 @@ export class CrewonRemoteMcpMutationError extends Error {
   }
 }
 
-/** CrewON-owned HTTPS protocol; this is not a generic MCP transport. */
+/**
+ * CrewON-owned HTTPS protocol; this is not a generic MCP transport.
+ * HttpPort.post must synchronously capture request data and honor its signal;
+ * dynamic authorization is revoked after the returned promise settles.
+ */
 export class CrewonRemoteMcpMutationProvider
   implements McpMutationProviderPort
 {
   readonly #endpoint: URL;
-  readonly #authorization: string;
+  readonly #auth: CredentialAuthorization;
   readonly #deadlineMs: number;
   readonly #http: CrewonRemoteMcpMutationHttpPort;
 
-  constructor(config: {
-    endpoint: string | URL;
-    auth: Readonly<{ kind: "bearer"; token: string }>;
-    deadlineMs?: number;
-    network:
-      | Readonly<{ mode: "production"; http: CrewonRemoteMcpMutationHttpPort }>
-      | Readonly<{
-          mode: "standaloneLoopback";
-          fetch?: typeof globalThis.fetch;
-        }>;
-  }) {
+  constructor(config: CrewonRemoteMcpMutationProviderConfig) {
+    try {
+      validateProviderConfig(config);
+    } catch (error) {
+      throw credentialFailure(error);
+    }
     this.#endpoint = validateEndpoint(config.endpoint, config.network.mode);
-    this.#authorization = validateBearer(config.auth.token);
+    try {
+      this.#auth = credentialAuthorization(config);
+    } catch (error) {
+      throw credentialFailure(error);
+    }
     this.#deadlineMs = boundedInteger(config.deadlineMs ?? 30_000, 1, 60_000);
     this.#http =
       config.network.mode === "production"
@@ -143,10 +152,26 @@ export class CrewonRemoteMcpMutationProvider
       "accept": "application/json",
       "content-type": "application/json; charset=utf-8",
       "idempotency-key": `crewon-mcp-v1-${createHash("sha256").update(body).digest("hex")}`,
-      "authorization": this.#authorization,
     };
     const deadline = AbortSignal.timeout(this.#deadlineMs);
     const combined = AbortSignal.any([signal, deadline]);
+    let releaseCredential: () => void = () => undefined;
+    try {
+      releaseCredential = await prepareAuthorization(
+        this.#auth,
+        headers,
+        {
+          phase,
+          providerExecutionId: execution.providerExecutionId,
+          toolName: execution.toolName,
+        },
+        combined,
+        signal,
+        deadline,
+      );
+    } catch (error) {
+      throw credentialFailure(error);
+    }
     const abortRace = abortPromise(combined);
     let response: Response;
     try {
@@ -161,6 +186,7 @@ export class CrewonRemoteMcpMutationProvider
       ]);
     } catch (error) {
       abortRace.cleanup();
+      releaseCredential();
       throw failure(
         signal.aborted
           ? "remote_mcp_mutation_aborted"
@@ -196,8 +222,15 @@ export class CrewonRemoteMcpMutationProvider
         : failure("remote_mcp_mutation_response_failed", "possiblySent");
     } finally {
       abortRace.cleanup();
+      releaseCredential();
     }
   }
+}
+
+function credentialFailure(error: unknown): CrewonRemoteMcpMutationError {
+  return error instanceof CredentialPreparationFailure
+    ? failure(error.code, "notSent")
+    : failure("remote_mcp_mutation_credential_acquire_failed", "notSent");
 }
 
 class StandaloneLoopbackHttpPort implements CrewonRemoteMcpMutationHttpPort {
@@ -243,18 +276,6 @@ function validateEndpoint(
     throw failure("remote_mcp_mutation_endpoint_invalid", "notSent");
   }
   return new URL(endpoint.href);
-}
-
-function validateBearer(token: string): string {
-  if (
-    typeof token !== "string" ||
-    token.length < 1 ||
-    token.length > 4096 ||
-    !/^[\x21-\x7e]+$/u.test(token)
-  ) {
-    throw failure("remote_mcp_mutation_credential_invalid", "notSent");
-  }
-  return `Bearer ${token}`;
 }
 
 function validateExecution(execution: McpMutationExecution): void {
