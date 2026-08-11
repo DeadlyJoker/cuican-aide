@@ -485,7 +485,7 @@ test("SQLite v19 to v20 preserves rollback invalidations and receipt views", asy
   }
 });
 
-test("SQLite v18 chains rollback then Provider migrations once", (t) => {
+test("SQLite v18 chains rollback, Provider, and Automation migrations once", (t) => {
   const path = sqlitePath(t);
   const database = new DatabaseSync(path);
   configureAndMigrateSqlite(database);
@@ -496,14 +496,19 @@ test("SQLite v18 chains rollback then Provider migrations once", (t) => {
     PRAGMA user_version = 18;
   `);
   configureAndMigrateSqlite(database);
-  assert.equal(readUserVersion(database), 20);
-  const count = database
+  assert.equal(readUserVersion(database), SQLITE_SCHEMA_VERSION);
+  const rows = database
     .prepare(
-      `SELECT COUNT(*) AS count FROM sqlite_schema
-       WHERE type='table' AND name='model_provider_settings_operations'`,
+      `SELECT name FROM sqlite_schema
+       WHERE type='table'
+         AND name IN ('model_provider_settings_operations', 'automations')
+       ORDER BY name`,
     )
-    .get() as { count: number };
-  assert.equal(count.count, 1);
+    .all() as unknown as { name: string }[];
+  assert.deepEqual(
+    rows.map(({ name }) => name),
+    ["automations", "model_provider_settings_operations"],
+  );
   database.close();
 });
 
