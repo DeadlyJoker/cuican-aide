@@ -20,12 +20,16 @@ import {
   type DecideToolApprovalInput,
   type ExpireToolApprovalInput,
   type RequireToolApprovalInput,
+  type ReplaceToolApprovalInput,
   type RegisterAgentVersionResult,
   type SupersedeToolApprovalInput,
   type ToolApprovalActionLocator,
   type ToolApprovalCommitResult,
   type ToolApprovalLocator,
   type ToolApprovalRunLocator,
+  validateToolApprovalReplacement,
+  validateToolApprovalReplacementCommit,
+  validateToolApprovalReplacementReplay,
 } from "@crewon/application";
 import {
   ToolApprovalError,
@@ -723,6 +727,97 @@ export class PostgresDomainStore
     input: SupersedeToolApprovalInput,
   ): Promise<ToolApprovalCommitResult> {
     return this.#terminateApproval(input, "superseded");
+  }
+
+  async replaceToolApproval(
+    input: ReplaceToolApprovalInput,
+  ): Promise<ToolApprovalCommitResult> {
+    this.assertOpen();
+    validateRequiredApproval(input.replacement);
+    validateQueueRetry({
+      ...input.lease,
+      retryAfterMs: input.retryAfterMs,
+      reasonCode: "tool_approval_required",
+    });
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await lockPostgresRunCommit(client, input.commit);
+      const current = await loadPostgresToolApproval(
+        client,
+        this.schemaSql(),
+        input.current,
+        true,
+      );
+      if (current === null) {
+        throw new RunStoreError("tool_approval_not_found");
+      }
+      const existing = await loadPostgresToolApprovalByAction(
+        client,
+        this.schemaSql(),
+        input.replacement,
+      );
+      if (existing !== null) {
+        validateToolApprovalReplacementReplay(current, existing, input);
+        const run = await this.commitRunWithin(client, input.commit);
+        await client.query("COMMIT");
+        return structuredClone({ approval: existing, run });
+      }
+      await this.validateExecutionLeaseWithin(
+        client,
+        current.tenantId,
+        current.runId,
+        input.lease,
+      );
+      validateToolApprovalReplacement(current, input);
+      const receipt = await loadPostgresToolExecutionReceipt(
+        client,
+        this.schemaSql(),
+        input.replacement,
+        true,
+      );
+      validateApprovalReceiptBinding(input.replacement, receipt ?? undefined);
+      const superseded = terminateToolApproval(current, {
+        status: "superseded",
+        expectedRevision: input.current.expectedRevision,
+        reasonCode: "action_replaced",
+        occurredAt: input.occurredAt,
+      });
+      validateToolApprovalReplacementCommit(
+        superseded,
+        input.replacement,
+        input.commit,
+      );
+      const run = await this.commitRunWithin(client, input.commit, {
+        executionLease: input.lease,
+      });
+      await updatePostgresToolApproval(
+        client,
+        this.schemaSql(),
+        current,
+        superseded,
+      );
+      await insertPostgresToolApproval(
+        client,
+        this.schemaSql(),
+        input.replacement,
+      );
+      await this.retryWorkItemWithin(
+        client,
+        input.replacement.tenantId,
+        input.replacement.runId,
+        input.lease,
+        input.retryAfterMs,
+        "tool_approval_required",
+      );
+      await client.query("COMMIT");
+      return structuredClone({ approval: input.replacement, run });
+    } catch (error) {
+      await rollbackPostgres(client);
+      throw normalizePostgresError(error);
+    } finally {
+      client.release();
+    }
   }
 
   async #terminateApproval(

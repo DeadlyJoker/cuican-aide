@@ -43,6 +43,19 @@ export type ExpireToolApprovalInput = ToolApprovalLocator &
 
 export type SupersedeToolApprovalInput = ExpireToolApprovalInput;
 
+export type ReplaceToolApprovalInput = Readonly<{
+  lease: WorkItemLeaseInput;
+  current: ToolApprovalLocator &
+    Readonly<{
+      expectedRevision: number;
+      actionDigest: string;
+    }>;
+  replacement: ToolApprovalState;
+  occurredAt: string;
+  commit: CommitRunInput;
+  retryAfterMs: number;
+}>;
+
 export type ToolApprovalCommitResult = Readonly<{
   approval: ToolApprovalState;
   run: CommitRunResult;
@@ -70,5 +83,8 @@ export interface ToolApprovalStore {
   ): Promise<ToolApprovalCommitResult>;
   supersedeToolApproval(
     input: SupersedeToolApprovalInput,
+  ): Promise<ToolApprovalCommitResult>;
+  replaceToolApproval(
+    input: ReplaceToolApprovalInput,
   ): Promise<ToolApprovalCommitResult>;
 }

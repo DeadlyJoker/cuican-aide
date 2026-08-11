@@ -103,6 +103,7 @@ import {
   type DecideToolApprovalInput,
   type ExpireToolApprovalInput,
   type RequireToolApprovalInput,
+  type ReplaceToolApprovalInput,
   type SupersedeToolApprovalInput,
   type ToolApprovalActionLocator,
   type ToolApprovalCommitResult,
@@ -110,6 +111,9 @@ import {
   type ToolApprovalRunLocator,
   type ToolExecutionActionLocator,
   type ToolExecutionReceiptLocator,
+  validateToolApprovalReplacement,
+  validateToolApprovalReplacementCommit,
+  validateToolApprovalReplacementReplay,
   type TransitionToolExecutionInput,
   type TurnStartReceiptQuery,
   evaluateGoalToolCall,
@@ -2637,6 +2641,88 @@ export class SqliteRunStore implements DomainStore {
       updateSqliteToolApproval(this.#database, current, approval);
       this.#database.exec("COMMIT");
       return clone({ approval, run });
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async replaceToolApproval(
+    input: ReplaceToolApprovalInput,
+  ): Promise<ToolApprovalCommitResult> {
+    this.#assertOpen();
+    validateRequiredApproval(input.replacement);
+    validateQueueRetry({
+      ...input.lease,
+      retryAfterMs: input.retryAfterMs,
+      reasonCode: "tool_approval_required",
+    });
+    const now = readLeaseClock(this.#clock);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const current = loadSqliteToolApproval(this.#database, input.current);
+      if (current === null) {
+        throw new RunStoreError("tool_approval_not_found");
+      }
+      const existing = loadSqliteToolApprovalByAction(
+        this.#database,
+        input.replacement,
+      );
+      if (existing !== null) {
+        validateToolApprovalReplacementReplay(current, existing, input);
+        const run = this.#commitRun(input.commit, null, null, true);
+        this.#database.exec("COMMIT");
+        return clone({ approval: existing, run });
+      }
+      this.#validateExecutionLease(
+        current.tenantId,
+        current.runId,
+        input.lease,
+        now,
+      );
+      validateToolApprovalReplacement(current, input);
+      const receipt = loadSqliteToolExecutionReceipt(this.#database, {
+        tenantId: input.replacement.tenantId,
+        runId: input.replacement.runId,
+        receiptId: input.replacement.receiptId,
+      });
+      validateApprovalReceiptBinding(input.replacement, receipt ?? undefined);
+      if (
+        loadSqliteToolApproval(this.#database, input.replacement) !== null ||
+        loadSqliteToolApprovalByAction(this.#database, input.replacement) !==
+          null
+      ) {
+        throw new RunStoreError("tool_approval_conflict");
+      }
+      let superseded: ToolApprovalState;
+      try {
+        superseded = terminateToolApproval(current, {
+          status: "superseded",
+          expectedRevision: input.current.expectedRevision,
+          reasonCode: "action_replaced",
+          occurredAt: input.occurredAt,
+        });
+      } catch (error) {
+        throw normalizeToolApprovalError(error);
+      }
+      validateToolApprovalReplacementCommit(
+        superseded,
+        input.replacement,
+        input.commit,
+      );
+      const run = this.#commitRun(input.commit, input.lease, null, true);
+      updateSqliteToolApproval(this.#database, current, superseded);
+      insertSqliteToolApproval(this.#database, input.replacement);
+      this.#retryWorkItemWithinTransaction(
+        {
+          ...input.lease,
+          retryAfterMs: input.retryAfterMs,
+          reasonCode: "tool_approval_required",
+        },
+        now,
+      );
+      this.#database.exec("COMMIT");
+      return clone({ approval: input.replacement, run });
     } catch (error) {
       rollback(this.#database);
       throw normalizeSqliteError(error);

@@ -97,6 +97,7 @@ import {
   type DecideToolApprovalInput,
   type ExpireToolApprovalInput,
   type RequireToolApprovalInput,
+  type ReplaceToolApprovalInput,
   type SupersedeToolApprovalInput,
   type ToolApprovalActionLocator,
   type ToolApprovalCommitResult,
@@ -104,6 +105,9 @@ import {
   type ToolApprovalRunLocator,
   type ToolExecutionActionLocator,
   type ToolExecutionReceiptLocator,
+  validateToolApprovalReplacement,
+  validateToolApprovalReplacementCommit,
+  validateToolApprovalReplacementReplay,
   type TransitionToolExecutionInput,
   type TurnStartReceiptQuery,
   type TurnStartGoalMutation,
@@ -2401,6 +2405,86 @@ export class InMemoryRunStore implements DomainStore {
     const run = this.#commitRun(input.commit);
     this.#toolApprovals.set(approval.approvalId, clone(approval));
     return clone({ approval, run });
+  }
+
+  async replaceToolApproval(
+    input: ReplaceToolApprovalInput,
+  ): Promise<ToolApprovalCommitResult> {
+    validateRequiredApproval(input.replacement);
+    validateQueueRetry({
+      ...input.lease,
+      retryAfterMs: input.retryAfterMs,
+      reasonCode: "tool_approval_required",
+    });
+    const now = readLeaseClock(this.#clock);
+    const current = this.#toolApprovals.get(input.current.approvalId);
+    if (current?.tenantId !== input.current.tenantId) {
+      throw new RunStoreError("tool_approval_not_found");
+    }
+    const existingId = this.#toolApprovalActions.get(
+      toolApprovalActionKey(input.replacement),
+    );
+    if (existingId !== undefined) {
+      const existing = this.#toolApprovals.get(existingId)!;
+      validateToolApprovalReplacementReplay(current, existing, input);
+      const run = this.#commitRun(input.commit);
+      return clone({ approval: existing, run });
+    }
+    this.#validateExecutionLease(
+      current.tenantId,
+      current.runId,
+      input.lease,
+      now,
+    );
+    validateToolApprovalReplacement(current, input);
+    const receipt = this.#toolExecutionReceipts.get(
+      input.replacement.receiptId,
+    );
+    validateApprovalReceiptBinding(input.replacement, receipt);
+    if (
+      this.#toolApprovals.has(input.replacement.approvalId) ||
+      this.#toolApprovalActions.has(toolApprovalActionKey(input.replacement))
+    ) {
+      throw new RunStoreError("tool_approval_conflict");
+    }
+    let superseded: ToolApprovalState;
+    try {
+      superseded = terminateToolApproval(current, {
+        status: "superseded",
+        expectedRevision: input.current.expectedRevision,
+        reasonCode: "action_replaced",
+        occurredAt: input.occurredAt,
+      });
+    } catch (error) {
+      throw normalizeToolApprovalError(error);
+    }
+    validateToolApprovalReplacementCommit(
+      superseded,
+      input.replacement,
+      input.commit,
+    );
+    const record = requiredQueueRecord(
+      this.#workItems,
+      input.replacement.workItemId,
+    );
+    validateRecordLease(record, input.lease, now);
+    const run = this.#commitRun(input.commit);
+    this.#toolApprovals.set(current.approvalId, clone(superseded));
+    this.#toolApprovals.set(
+      input.replacement.approvalId,
+      clone(input.replacement),
+    );
+    this.#toolApprovalActions.set(
+      toolApprovalActionKey(input.replacement),
+      input.replacement.approvalId,
+    );
+    retry(
+      this.#workItems,
+      input.replacement.workItemId,
+      { ...input.lease, retryAfterMs: input.retryAfterMs },
+      now,
+    );
+    return clone({ approval: input.replacement, run });
   }
 
   async loadToolExecutionReceiptByAction(

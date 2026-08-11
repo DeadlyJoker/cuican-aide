@@ -899,6 +899,156 @@ export class RunExecutionService {
     }
   }
 
+  /** Atomically replaces the current approval without exposing a public mutation API. */
+  async replaceToolApproval(
+    claim: WorkItemClaim,
+    current: ToolApprovalState,
+    replacementReceipt: ToolExecutionReceiptState,
+    input: Readonly<{ expiresAfterMs: number | null; retryAfterMs: number }>,
+  ): Promise<ToolApprovalState> {
+    validateClaim(claim);
+    const replay = await this.#store.loadToolApprovalByAction({
+      tenantId: replacementReceipt.tenantId,
+      runId: replacementReceipt.runId,
+      actionDigest: replacementReceipt.actionDigest,
+    });
+    const state = await this.loadRun(claim);
+    if (replay !== null) {
+      const storedCurrent = await this.#store.loadToolApproval({
+        tenantId: current.tenantId,
+        approvalId: current.approvalId,
+      });
+      if (
+        storedCurrent?.status !== "superseded" ||
+        storedCurrent.terminalReasonCode !== "action_replaced" ||
+        storedCurrent.actionDigest !== current.actionDigest ||
+        replay.status !== "required" ||
+        replay.tenantId !== state.tenantId ||
+        replay.spaceId !== state.spaceId ||
+        replay.runId !== state.runId ||
+        replay.receiptId !== replacementReceipt.receiptId ||
+        replay.workItemId !== replacementReceipt.workItemId ||
+        replay.policySnapshotId !==
+          replacementReceipt.actionIntent?.policySnapshotId ||
+        state.status !== "waitingApproval" ||
+        state.waitingApproval?.approvalId !== replay.approvalId ||
+        state.waitingApproval.actionDigest !== replay.actionDigest
+      ) {
+        throw new ApplicationError(
+          "conflict",
+          "tool_approval_replacement_replay_invalid",
+        );
+      }
+      return replay;
+    }
+    if (
+      state.status !== "waitingApproval" ||
+      state.cancelRequested ||
+      state.waitingApproval?.approvalId !== current.approvalId ||
+      state.waitingApproval.actionDigest !== current.actionDigest ||
+      current.status !== "required" ||
+      current.tenantId !== state.tenantId ||
+      current.spaceId !== state.spaceId ||
+      current.runId !== state.runId ||
+      current.workItemId !== claim.workItem.workItemId ||
+      replacementReceipt.tenantId !== state.tenantId ||
+      replacementReceipt.runId !== state.runId ||
+      replacementReceipt.workItemId !== claim.workItem.workItemId ||
+      replacementReceipt.actionDigest === current.actionDigest ||
+      replacementReceipt.status !== "prepared" ||
+      replacementReceipt.actionIntent?.approvalRequirement !== "perAction"
+    ) {
+      throw new ApplicationError(
+        "conflict",
+        "tool_approval_replacement_invalid",
+      );
+    }
+    const occurredAt = this.#now();
+    const expiresAt =
+      input.expiresAfterMs === null
+        ? null
+        : new Date(Date.parse(occurredAt) + input.expiresAfterMs).toISOString();
+    let replacement: ToolApprovalState;
+    try {
+      replacement = createToolApproval({
+        approvalId: this.#nextId("approval"),
+        tenantId: state.tenantId,
+        spaceId: state.spaceId,
+        runId: state.runId,
+        receiptId: replacementReceipt.receiptId,
+        workItemId: replacementReceipt.workItemId,
+        actionDigest: replacementReceipt.actionDigest,
+        policySnapshotId: replacementReceipt.actionIntent.policySnapshotId,
+        requestedByActorId: state.createdByActorId,
+        requiredAt: occurredAt,
+        expiresAt,
+      });
+    } catch (error) {
+      throw new ApplicationError("validation", "tool_approval_invalid", {
+        cause: error,
+      });
+    }
+    const resumed: RunLifecycleEvent = {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: state.runId },
+      eventId: this.#nextId("runEvent"),
+      sequence: state.lastSequence + 1,
+      occurredAt,
+      type: "run.resumed",
+      data: { reasonCode: "tool_approval_superseded" },
+    };
+    const required: RunLifecycleEvent = {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: state.runId },
+      eventId: this.#nextId("runEvent"),
+      sequence: resumed.sequence + 1,
+      occurredAt,
+      type: "run.approval.required",
+      data: {
+        approvalId: replacement.approvalId,
+        actionDigest: replacement.actionDigest,
+      },
+    };
+    try {
+      const result = await this.#store.replaceToolApproval({
+        lease: leaseInput(claim),
+        current: {
+          tenantId: current.tenantId,
+          approvalId: current.approvalId,
+          expectedRevision: current.revision,
+          actionDigest: current.actionDigest,
+        },
+        replacement,
+        occurredAt,
+        retryAfterMs: input.retryAfterMs,
+        commit: {
+          tenantId: state.tenantId,
+          idempotency: executionIdempotency(
+            state,
+            claim.workItem,
+            `tool-approval-replace:${current.actionDigest}:${replacement.actionDigest}`,
+            {
+              kind: "tool.approval.replace",
+              currentApprovalId: current.approvalId,
+              currentActionDigest: current.actionDigest,
+              replacementApprovalId: replacement.approvalId,
+              replacementActionDigest: replacement.actionDigest,
+            },
+          ),
+          expectedRevision: state.revision,
+          events: [resumed, required],
+          outbox: [resumed, required].map((event) =>
+            this.#outbox(state.tenantId, event),
+          ),
+          workItems: [],
+        },
+      });
+      return result.approval;
+    } catch (error) {
+      throw mapExecutionError(error);
+    }
+  }
+
   async dispatchToolExecution(
     claim: WorkItemClaim,
     receipt: ToolExecutionReceiptState,

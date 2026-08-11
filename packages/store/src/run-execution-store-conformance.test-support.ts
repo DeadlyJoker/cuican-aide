@@ -1193,6 +1193,209 @@ export function registerRunExecutionStoreConformance(
       );
     });
 
+    test("atomically replaces the current Tool approval across Actions", async (context) => {
+      const fixture = await executionFixture(context, createStore);
+      const claim = await claimWork(
+        fixture.store,
+        "replacement-worker",
+        "replacement-lease",
+      );
+      const lease = leaseFor(claim);
+      for (const [stepId, attemptId] of [
+        ["tool-step-1", "tool-attempt-before-crash"],
+        ["tool-step-2", "tool-attempt-replacement"],
+      ] as const) {
+        await fixture.store.beginRunAttempt({
+          tenantId: "tenant-1",
+          lease,
+          runId: "run-store-1",
+          stepId,
+          kind: "tool",
+          attemptId,
+          startedAt: "2026-08-08T00:01:01Z",
+        });
+      }
+      const currentReceipt = toolReceipt(claim);
+      const replacementReceipt = replacementToolReceipt(claim);
+      await fixture.store.prepareToolExecution({
+        lease,
+        receipt: currentReceipt,
+      });
+      await fixture.store.prepareToolExecution({
+        lease,
+        receipt: replacementReceipt,
+      });
+      const current = createToolApproval({
+        approvalId: "approval-current",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        runId: "run-store-1",
+        receiptId: currentReceipt.receiptId,
+        workItemId: currentReceipt.workItemId,
+        actionDigest: currentReceipt.actionDigest,
+        policySnapshotId: "policy-1",
+        requestedByActorId: "actor-1",
+        requiredAt: "2026-08-08T00:01:02Z",
+        expiresAt: null,
+      });
+      const required = approvalEvent(current, 3, "event-approval-current");
+      await fixture.store.requireToolApproval({
+        lease,
+        approval: current,
+        retryAfterMs: 0,
+        commit: approvalCommit("approval-current", 2, required),
+      });
+      const reclaimed = await claimWork(
+        fixture.store,
+        "replacement-reclaimed-worker",
+        "replacement-reclaimed-lease",
+      );
+      const replacement = createToolApproval({
+        approvalId: "approval-replacement",
+        tenantId: current.tenantId,
+        spaceId: current.spaceId,
+        runId: current.runId,
+        receiptId: replacementReceipt.receiptId,
+        workItemId: replacementReceipt.workItemId,
+        actionDigest: replacementReceipt.actionDigest,
+        policySnapshotId: current.policySnapshotId,
+        requestedByActorId: current.requestedByActorId,
+        requiredAt: "2026-08-08T00:01:03Z",
+        expiresAt: null,
+      });
+      const resumed = {
+        schemaVersion: "crewon.run-event.v0" as const,
+        identity: { runId: current.runId },
+        eventId: "event-approval-replaced",
+        sequence: 4,
+        occurredAt: replacement.requiredAt,
+        type: "run.resumed" as const,
+        data: { reasonCode: "tool_approval_superseded" },
+      };
+      const replacementRequired = approvalEvent(
+        replacement,
+        5,
+        "event-approval-replacement",
+      );
+      const commit = approvalEventsCommit("approval-replace", 3, [
+        resumed,
+        replacementRequired,
+      ]);
+      const replaceInput = {
+        lease: leaseFor(reclaimed),
+        current: {
+          tenantId: current.tenantId,
+          approvalId: current.approvalId,
+          expectedRevision: current.revision,
+          actionDigest: current.actionDigest,
+        },
+        replacement,
+        occurredAt: replacement.requiredAt,
+        retryAfterMs: 60_000,
+        commit,
+      } as const;
+      const eventsBeforeFailure = await fixture.store.listRunEvents(
+        { tenantId: current.tenantId, runId: current.runId },
+        0,
+        10,
+      );
+      const outboxBeforeFailure = await fixture.store.listPendingOutbox(100);
+      await assert.rejects(
+        fixture.store.replaceToolApproval({
+          ...replaceInput,
+          commit: {
+            ...commit,
+            outbox: [
+              { ...commit.outbox[0]!, messageId: "approval-current-outbox" },
+              commit.outbox[1]!,
+            ],
+          },
+        }),
+        hasStoreCode("outbox_message_conflict"),
+      );
+      assert.equal(
+        (
+          await fixture.store.loadRun({
+            tenantId: current.tenantId,
+            runId: current.runId,
+          })
+        )?.revision,
+        3,
+      );
+      assert.equal(
+        (
+          await fixture.store.loadToolApproval({
+            tenantId: current.tenantId,
+            approvalId: current.approvalId,
+          })
+        )?.status,
+        "required",
+      );
+      assert.equal(
+        await fixture.store.loadToolApproval({
+          tenantId: current.tenantId,
+          approvalId: replacement.approvalId,
+        }),
+        null,
+      );
+      assert.deepEqual(
+        await fixture.store.listRunEvents(
+          { tenantId: current.tenantId, runId: current.runId },
+          0,
+          10,
+        ),
+        eventsBeforeFailure,
+      );
+      assert.deepEqual(
+        await fixture.store.listPendingOutbox(100),
+        outboxBeforeFailure,
+      );
+
+      const result = await fixture.store.replaceToolApproval(replaceInput);
+      const replay = await fixture.store.replaceToolApproval(replaceInput);
+
+      assert.equal(result.run.state.status, "waitingApproval");
+      assert.deepEqual(
+        result.run.state.waitingApproval,
+        replacementRequired.data,
+      );
+      assert.equal(result.approval.status, "required");
+      assert.equal(replay.run.disposition, "replayed");
+      assert.deepEqual(replay.approval, replacement);
+      assert.equal(
+        (
+          await fixture.store.loadToolApproval({
+            tenantId: current.tenantId,
+            approvalId: current.approvalId,
+          })
+        )?.terminalReasonCode,
+        "action_replaced",
+      );
+      assert.deepEqual(
+        await fixture.store.listRunEvents(
+          { tenantId: current.tenantId, runId: current.runId },
+          3,
+          10,
+        ),
+        [resumed, replacementRequired],
+      );
+      await assert.rejects(
+        fixture.store.decideToolApproval({
+          tenantId: current.tenantId,
+          approvalId: current.approvalId,
+          expectedRevision: current.revision,
+          decision: {
+            outcome: "approved",
+            actorId: "stale-reviewer",
+            comment: null,
+            decidedAt: "2026-08-08T00:01:04Z",
+          },
+          commit: approvalCommit("stale-decision", 5, resumed),
+        }),
+        hasStoreCode("approval_already_terminal"),
+      );
+    });
+
     test("atomically completes the Tool receipt, Run event, history and Attempt", async (context) => {
       const fixture = await executionFixture(context, createStore);
       const claim = await claimWork(
@@ -3051,6 +3254,81 @@ export function toolReceipt(claim: WorkItemClaim) {
     recovery: "reconcilable",
     preparedAt: "2026-08-08T00:01:01Z",
   });
+}
+
+function replacementToolReceipt(claim: WorkItemClaim) {
+  const current = toolReceipt(claim);
+  return prepareToolExecutionReceipt({
+    ...current,
+    receiptId: "tool-receipt-2",
+    stepId: "tool-step-2",
+    attemptId: "tool-attempt-replacement",
+    executionId: "tool-execution-2",
+    idempotencyKey: `${claim.workItem.runId}/tool/call-2`,
+    actionDigest: `sha256:${"b".repeat(64)}`,
+    actionIntent: {
+      ...current.actionIntent!,
+      callId: "call-2",
+      tool: {
+        ...current.actionIntent!.tool,
+        inputDigest: `sha256:${"d".repeat(64)}`,
+      },
+    },
+    call: {
+      ...current.call,
+      callId: "call-2",
+      inputDigest: `sha256:${"d".repeat(64)}`,
+    },
+  });
+}
+
+function approvalEvent(
+  approval: ReturnType<typeof createToolApproval>,
+  sequence: number,
+  eventId: string,
+): Extract<RunLifecycleEvent, { type: "run.approval.required" }> {
+  return {
+    schemaVersion: "crewon.run-event.v0",
+    identity: { runId: approval.runId },
+    eventId,
+    sequence,
+    occurredAt: approval.requiredAt,
+    type: "run.approval.required",
+    data: {
+      approvalId: approval.approvalId,
+      actionDigest: approval.actionDigest,
+    },
+  };
+}
+
+function approvalEventsCommit(
+  id: string,
+  expectedRevision: number,
+  events: readonly RunLifecycleEvent[],
+): CommitRunInput {
+  return {
+    tenantId: "tenant-1",
+    idempotency: {
+      scope: `${id}-scope`,
+      key: `${id}-key`,
+      requestFingerprint: `${id}-fingerprint`,
+    },
+    expectedRevision,
+    events,
+    outbox: events.map((event) => ({
+      messageId: `${id}-outbox-${event.sequence}`,
+      tenantId: "tenant-1",
+      runId: "run-store-1",
+      topic: "run.updated" as const,
+      payload: {
+        eventId: event.eventId,
+        eventType: event.type,
+        throughSequence: event.sequence,
+      },
+      createdAt: event.occurredAt,
+    })),
+    workItems: [],
+  };
 }
 
 function approvalCommit(

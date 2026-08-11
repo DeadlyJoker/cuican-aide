@@ -494,6 +494,13 @@ Work Item 长持有原子提交；decide 时 Approval、`run.resumed` 与同一 
 cancel 获胜。三条路径都验证 Provider 为 0 次调用。Tool Provider command 还必须携带绑定 action digest 与 policy snapshot
 的 Approval proof，绕过 Worker 直接调用 per-action Broker 会 fail closed。
 
+跨 Action 主动 replacement 的内部 authority 已落到 Application-owned Store Port 与 InMemory/SQLite/PostgreSQL adapter：只有
+tenant/space/run/Work Item、当前 Run revision、旧 approval revision/action digest 和新 receipt/action digest 全部匹配，才能在
+一个事务中 supersede 旧 approval、追加 resumed + required Event/Outbox、安装新 approval 并重新 hold 原 Work Item。稳定输入和
+Application action lookup 都支持 receipt-first crash replay；stale decision/lease/replacement fail closed，Outbox 冲突会全量回滚。
+本切片没有公开 Control API，也尚未把生产 Worker 的 Action 选择器接到该 authority；因此只证明可审计的内部 replacement 边界，
+不声称主动 replacement 已在生产链路可达。
+
 MCP focused evidence 使用官方 MIT TypeScript SDK 1.26.0 启动真实独立 stdio child process，完成 initialize、分页目录、
 Tool call、结构化结果与有序关闭；production transitive license Gate 覆盖 MIT/BSD/ISC。配置解析拒绝 authority 注入和非显式
 环境，目录只暴露可信配置中声明的只读 Tool。通用 MCP mutation 因无标准 durable receipt/reconcile 被构造期拒绝。
@@ -592,8 +599,8 @@ HTTP 创建 Run -> Worker 大 Tool 输出 -> 加密落盘 -> HTTP 读回完整�
   Artifact v0 当前只覆盖 Standalone Tool text output；Team/Cloud S3-compatible object authority、external KMS/HSM、key rotation、
   malware scanner、versioned backup/restore 和大于 1MiB 的 streaming upload 尚未完成。独立 Tool Approval 的
   required/approved/rejected/expired/superseded domain 已落地，当前生产链路
-  已接 required/approved/rejected/expired，deadline 到达后由重新 claim 的 Worker 原子恢复 Run 并 fail closed；主动 supersede
-  尚未接线。
+  已接 required/approved/rejected/expired，deadline 到达后由重新 claim 的 Worker 原子恢复 Run 并 fail closed；跨 Action
+  replacement authority 已落地，但生产 Worker caller 与公开 API 尚未接线。
 - PostgreSQL queue、Thread/Message/Model History、Run、Step/Attempt、text/tool/approval 组合事务已组成完整
   `PostgresDomainStore`，并通过数据库时间、双 Pool `SKIP LOCKED`、完整 Store/Worker conformance 与跨进程竞争/SIGKILL 恢复；
   LISTEN/NOTIFY、备份恢复、跨主机网络分区、staging chaos 与 production SLO 尚未落地。
