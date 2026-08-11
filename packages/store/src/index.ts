@@ -2,6 +2,8 @@ export * from "@crewon/application";
 export * from "./in-memory-run-store.ts";
 export * from "./lease-clock.ts";
 export * from "./postgres-attempt-store.ts";
+export * from "./postgres-automation-schema.ts";
+export * from "./postgres-automation-store.ts";
 export * from "./postgres-workspace-operation-schema.ts";
 export * from "./postgres-execution-store.ts";
 export * from "./postgres-domain-store.ts";

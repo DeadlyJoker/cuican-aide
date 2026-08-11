@@ -8,6 +8,14 @@ import {
   type AgentVersionReleaseBundle,
   type AbortModelProviderSettingsInput,
   type AbortModelProviderSettingsResult,
+  type AutomationCreateReceiptQuery,
+  type AutomationCreateResult,
+  type AutomationDefinitionRecord,
+  type AutomationInvocationContext,
+  type AutomationInvocationReceiptQuery,
+  type AutomationInvocationResult,
+  type AutomationListQuery,
+  type AutomationLocator,
   type FinalizeModelProviderSettingsInput,
   type FinalizeModelProviderSettingsResult,
   type ExpireModelProviderSettingsInput,
@@ -17,6 +25,8 @@ import {
   type PrepareModelProviderSettingsResult,
   type DomainStore,
   type CommitRunInput,
+  type CommitAutomationCreateInput,
+  type CommitAutomationInvocationInput,
   type DecideToolApprovalInput,
   type ExpireToolApprovalInput,
   type RequireToolApprovalInput,
@@ -74,6 +84,19 @@ import {
   preparePostgresModelProviderSettings,
 } from "./postgres-model-provider-settings-store.ts";
 import { type PostgresThreadStoreOptions } from "./postgres-thread-store.ts";
+import {
+  POSTGRES_AUTOMATION_SCHEMA_VERSION,
+  migratePostgresAutomationSchema,
+} from "./postgres-automation-schema.ts";
+import {
+  commitPostgresAutomationCreate,
+  commitPostgresAutomationInvocation,
+  listPostgresAutomations,
+  loadPostgresAutomation,
+  loadPostgresAutomationCreateReceipt,
+  loadPostgresAutomationInvocationContext,
+  loadPostgresAutomationInvocationReceipt,
+} from "./postgres-automation-store.ts";
 import { requireNonEmpty, validateQueueRetry } from "./store-invariants.ts";
 import {
   sameAgentVersionAsset,
@@ -155,6 +178,24 @@ export class PostgresDomainStore
       ) {
         throw new RunStoreError("postgres_schema_version_unsupported");
       }
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `crewon:${this.schema}:automation-authority`,
+      ]);
+      await migratePostgresAutomationSchema(
+        client,
+        this.schemaSql(),
+        this.schema,
+      );
+      const automationVersion = await client.query<{ version: number }>(
+        `SELECT version FROM ${this.schemaSql()}.schema_migrations
+         WHERE component = 'automation_authority'`,
+      );
+      if (
+        automationVersion.rows[0]?.version !==
+        POSTGRES_AUTOMATION_SCHEMA_VERSION
+      ) {
+        throw new RunStoreError("postgres_schema_version_unsupported");
+      }
       await client.query("COMMIT");
     } catch (error) {
       await rollbackPostgres(client);
@@ -162,6 +203,71 @@ export class PostgresDomainStore
     } finally {
       client.release();
     }
+  }
+
+  async loadAutomationCreateReceipt(
+    query: AutomationCreateReceiptQuery,
+  ): Promise<AutomationCreateResult | null> {
+    this.assertOpen();
+    return loadPostgresAutomationCreateReceipt(
+      this.pool,
+      this.schemaSql(),
+      query,
+    );
+  }
+
+  async commitAutomationCreate(
+    input: CommitAutomationCreateInput,
+  ): Promise<AutomationCreateResult> {
+    this.assertOpen();
+    return commitPostgresAutomationCreate(this.pool, this.schemaSql(), input);
+  }
+
+  async loadAutomation(
+    locator: AutomationLocator,
+  ): Promise<AutomationDefinitionRecord | null> {
+    this.assertOpen();
+    return loadPostgresAutomation(this.pool, this.schemaSql(), locator);
+  }
+
+  async listAutomations(
+    query: AutomationListQuery,
+  ): Promise<readonly AutomationDefinitionRecord[]> {
+    this.assertOpen();
+    return listPostgresAutomations(this.pool, this.schemaSql(), query);
+  }
+
+  async loadAutomationInvocationReceipt(
+    query: AutomationInvocationReceiptQuery,
+  ): Promise<AutomationInvocationResult | null> {
+    this.assertOpen();
+    return loadPostgresAutomationInvocationReceipt(
+      this.pool,
+      this.schemaSql(),
+      query,
+    );
+  }
+
+  async loadAutomationInvocationContext(
+    locator: AutomationLocator,
+  ): Promise<AutomationInvocationContext | null> {
+    this.assertOpen();
+    return loadPostgresAutomationInvocationContext(
+      this.pool,
+      this.schemaSql(),
+      locator,
+    );
+  }
+
+  async commitAutomationInvocation(
+    input: CommitAutomationInvocationInput,
+  ): Promise<AutomationInvocationResult> {
+    this.assertOpen();
+    return commitPostgresAutomationInvocation(
+      this.pool,
+      this.schemaSql(),
+      input,
+    );
   }
 
   async loadModelProviderSettingsState(input: {
