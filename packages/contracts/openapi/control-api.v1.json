@@ -878,6 +878,207 @@
         }
       }
     },
+    "/api/v1/threads/{threadId}/workspace-list": {
+      "post": {
+        "operationId": "createWorkspaceList",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkspaceListRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A committed or idempotently replayed Workspace list operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOperationMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "get": {
+        "operationId": "listWorkspaceOperations",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/WorkspaceAfterExecutionId" },
+          { "$ref": "#/components/parameters/WorkspaceOperationLimit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspace list operations ordered lexicographically by executionId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListWorkspaceOperationsResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/workspace-list/{executionId}": {
+      "get": {
+        "operationId": "getWorkspaceOperation",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/WorkspaceExecutionId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Atomic Workspace operation and event sequence snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetWorkspaceOperationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/workspace-list/{executionId}:reconcile": {
+      "post": {
+        "operationId": "reconcileWorkspaceOperation",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/WorkspaceExecutionId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceOperationActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or idempotently replayed Workspace reconciliation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOperationMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/workspace-list/{executionId}:cancel": {
+      "post": {
+        "operationId": "cancelWorkspaceOperation",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/WorkspaceExecutionId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceOperationActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or idempotently replayed Workspace cancellation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOperationMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/workspace-list/{executionId}/events": {
+      "get": {
+        "operationId": "streamWorkspaceOperationEvents",
+        "description": "Resume this independent durable stream with Last-Event-ID. The server may close the stream after delivering a terminal operation.",
+        "parameters": [
+          { "$ref": "#/components/parameters/ThreadId" },
+          { "$ref": "#/components/parameters/WorkspaceExecutionId" },
+          { "$ref": "#/components/parameters/LastEventId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable catch-up followed by live Workspace operation replacement events",
+            "headers": {
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "no-cache" }
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": { "type": "string" },
+                "x-crewon-event-schema": {
+                  "$ref": "#/components/schemas/WorkspaceOperationEventView"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/v1/agent-versions": {
       "post": {
         "operationId": "publishAgentVersion",
@@ -1101,6 +1302,38 @@
         "in": "path",
         "required": true,
         "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+      },
+      "WorkspaceExecutionId": {
+        "name": "executionId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "maxLength": 128
+        }
+      },
+      "WorkspaceAfterExecutionId": {
+        "name": "afterExecutionId",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "maxLength": 128,
+          "default": null
+        }
+      },
+      "WorkspaceOperationLimit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 100
+        }
       },
       "ApprovalId": {
         "name": "approvalId",
@@ -1803,6 +2036,201 @@
             "type": ["string", "null"],
             "pattern": "^[A-Za-z0-9_-]{1,128}$",
             "maxLength": 128
+          }
+        }
+      },
+      "CreateWorkspaceListRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedThreadRevision", "maxEntries"],
+        "properties": {
+          "expectedThreadRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "maxEntries": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        }
+      },
+      "WorkspaceOperationActionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedOperationRevision"],
+        "properties": {
+          "expectedOperationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "WorkspaceListEntryView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "kind"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "A redacted direct-child name of at most 255 UTF-8 bytes; never a path."
+          },
+          "kind": { "type": "string", "enum": ["file", "directory"] }
+        }
+      },
+      "WorkspaceCompletedResultView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "entries", "truncated"],
+        "properties": {
+          "status": { "const": "completed" },
+          "entries": {
+            "type": "array",
+            "maxItems": 200,
+            "description": "Entries in strict raw UTF-8 byte order.",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceListEntryView"
+            }
+          },
+          "truncated": { "type": "boolean" }
+        }
+      },
+      "WorkspaceFailedResultView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "code", "retryable"],
+        "properties": {
+          "status": { "const": "failed" },
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z0-9_.:-]{1,128}$",
+            "maxLength": 128
+          },
+          "retryable": { "type": "boolean" }
+        }
+      },
+      "WorkspaceOperationView": {
+        "description": "Redacted Workspace operation projection. No provider, device, binding, lease, path, principal, policy, or digest internals are exposed.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "properties": {
+              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "status": { "const": "pending" },
+              "result": { "type": "null" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "properties": {
+              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "status": { "const": "completed" },
+              "result": { "$ref": "#/components/schemas/WorkspaceCompletedResultView" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "properties": {
+              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "status": { "const": "failed" },
+              "result": { "$ref": "#/components/schemas/WorkspaceFailedResultView" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "properties": {
+              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "status": { "const": "canceled" },
+              "result": { "type": "null" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "properties": {
+              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "status": { "const": "unknownOutcome" },
+              "result": { "type": "null" }
+            }
+          }
+        ]
+      },
+      "WorkspaceOperationMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "eventSequence", "operation"],
+        "properties": {
+          "disposition": { "type": "string", "enum": ["committed", "replayed"] },
+          "eventSequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "Exactly equal to operation.revision." },
+          "operation": { "$ref": "#/components/schemas/WorkspaceOperationView" }
+        }
+      },
+      "GetWorkspaceOperationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "eventSequence"],
+        "properties": {
+          "operation": { "$ref": "#/components/schemas/WorkspaceOperationView" },
+          "eventSequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "Atomic cursor exactly equal to operation.revision." }
+        }
+      },
+      "ListWorkspaceOperationsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "nextAfterExecutionId"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "$ref": "#/components/schemas/WorkspaceOperationView" }
+          },
+          "nextAfterExecutionId": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "maxLength": 128
+          }
+        }
+      },
+      "WorkspaceOperationEventView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schemaVersion", "threadId", "executionId", "sequence", "type", "data"],
+        "properties": {
+          "schemaVersion": { "const": "crewon.workspace-operation-event.v0" },
+          "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
+          "sequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "Exactly equal to data.operation.revision." },
+          "type": { "const": "workspace.operation.replaced" },
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation"],
+            "properties": {
+              "operation": { "$ref": "#/components/schemas/WorkspaceOperationView" }
+            }
           }
         }
       },

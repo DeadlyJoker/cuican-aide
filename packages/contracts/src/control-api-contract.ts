@@ -70,6 +70,15 @@ export type ActiveAgentVersionCatalogResponse =
   components["schemas"]["ActiveAgentVersionCatalogResponse"];
 export type ArtifactView = components["schemas"]["ArtifactView"];
 export type GetArtifactResponse = components["schemas"]["GetArtifactResponse"];
+export type ControlApiWorkspaceOperations = Pick<
+  operations,
+  | "createWorkspaceList"
+  | "listWorkspaceOperations"
+  | "getWorkspaceOperation"
+  | "reconcileWorkspaceOperation"
+  | "cancelWorkspaceOperation"
+  | "streamWorkspaceOperationEvents"
+>;
 export type ErrorCategory = components["schemas"]["ErrorCategory"];
 export type ErrorEnvelope = components["schemas"]["ErrorEnvelope"];
 export type RunEventViewMode = "client" | "audit";
