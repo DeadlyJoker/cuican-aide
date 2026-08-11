@@ -37,7 +37,14 @@ import type {
   ThreadGoalMutationResponse,
   ToolApprovalMutationResponse,
   UnarchiveThreadRequest,
+  CreateWorkspaceListRequest,
+  GetWorkspaceOperationResponse,
+  ListWorkspaceOperationsResponse,
+  WorkspaceOperationActionRequest,
+  WorkspaceOperationMutationResponse,
 } from "@crewon/contracts";
+import { WorkspaceControlClient } from "./workspace-control-client.ts";
+import { readBoundedWorkspaceJson } from "./workspace-response-reader.ts";
 
 export type ControlApiClientConfig = Readonly<{
   baseUrl: string;
@@ -65,6 +72,7 @@ export class ControlApiClient {
   readonly #csrfToken: string | null;
   readonly #origin: string | null;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #workspace: WorkspaceControlClient;
 
   constructor(config: ControlApiClientConfig) {
     this.#baseUrl = parseBaseUrl(config.baseUrl);
@@ -102,14 +110,20 @@ export class ControlApiClient {
     });
   }
 
-  getThread(
+  async getThread(
     threadId: string,
     options: ControlApiRequestOptions = {},
   ): Promise<GetThreadResponse> {
-    return this.#json("GET", `/api/v1/threads/${resourceId(threadId)}`, null, {
-      ...options,
-      expectedStatuses: [200],
-    });
+    const response = await this.#json<unknown>(
+      "GET",
+      `/api/v1/threads/${resourceId(threadId)}`,
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+      },
+    );
+    return parseGetThreadResponse(response, threadId);
   }
 
   archiveThread(
@@ -275,6 +289,63 @@ export class ControlApiClient {
       `/api/v1/threads/${resourceId(threadId)}/messages`,
       body,
       { ...options, idempotencyKey, expectedStatuses: [200, 201] },
+    );
+  }
+
+  createWorkspaceListOperation(
+    threadId: string,
+    body: CreateWorkspaceListRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkspaceOperationMutationResponse> {
+    return this.#workspace.create(threadId, body, idempotencyKey, options);
+  }
+
+  listWorkspaceListOperations(
+    threadId: string,
+    query: { afterExecutionId?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<ListWorkspaceOperationsResponse> {
+    return this.#workspace.list(threadId, query, options);
+  }
+
+  getWorkspaceListOperation(
+    threadId: string,
+    executionId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetWorkspaceOperationResponse> {
+    return this.#workspace.get(threadId, executionId, options);
+  }
+
+  reconcileWorkspaceListOperation(
+    threadId: string,
+    executionId: string,
+    body: WorkspaceOperationActionRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkspaceOperationMutationResponse> {
+    return this.#workspace.reconcile(
+      threadId,
+      executionId,
+      body,
+      idempotencyKey,
+      options,
+    );
+  }
+
+  cancelWorkspaceListOperation(
+    threadId: string,
+    executionId: string,
+    body: WorkspaceOperationActionRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkspaceOperationMutationResponse> {
+    return this.#workspace.cancel(
+      threadId,
+      executionId,
+      body,
+      idempotencyKey,
+      options,
     );
   }
 
@@ -609,6 +680,7 @@ export class ControlApiClient {
       requireCsrf?: boolean;
       requireIdempotency?: boolean;
       expectedStatuses: readonly number[];
+      maximumResponseBytes?: number;
     },
   ): Promise<T> {
     const headers = this.#authenticatedHeaders("application/json");
@@ -640,9 +712,9 @@ export class ControlApiClient {
       ...(body === null ? {} : { body: JSON.stringify(body) }),
     });
     if (!options.expectedStatuses.includes(response.status)) {
-      throw await controlApiError(response);
+      throw await controlApiError(response, options.maximumResponseBytes);
     }
-    return (await responseJson(response)) as T;
+    return (await responseJson(response, options.maximumResponseBytes)) as T;
   }
 
   #authenticatedHeaders(accept: string): Headers {
@@ -701,9 +773,15 @@ const ERROR_CATEGORIES = new Set<ErrorCategory>([
   "internal",
 ]);
 
-async function controlApiError(response: Response): Promise<Error> {
+async function controlApiError(
+  response: Response,
+  maximumResponseBytes?: number,
+): Promise<Error> {
   try {
-    const value = (await responseJson(response)) as ErrorEnvelope;
+    const value = (await responseJson(
+      response,
+      maximumResponseBytes,
+    )) as ErrorEnvelope;
     if (
       isPlainObject(value) &&
       isPlainObject(value.error) &&
@@ -725,21 +803,34 @@ async function controlApiError(response: Response): Promise<Error> {
   return new ControlApiProtocolError("control_api_error_envelope_invalid");
 }
 
-async function responseJson(response: Response): Promise<unknown> {
+async function responseJson(
+  response: Response,
+  maximumResponseBytes?: number,
+): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
   if (!/^application\/json(?:;|$)/iu.test(contentType)) {
     throw new ControlApiProtocolError("control_api_content_type_invalid");
   }
-  let value: unknown;
-  try {
-    value = await response.json();
-  } catch {
-    throw new ControlApiProtocolError("control_api_json_invalid");
-  }
+  const value =
+    maximumResponseBytes === undefined
+      ? await unboundedResponseJson(response)
+      : await readBoundedWorkspaceJson(
+          response,
+          maximumResponseBytes,
+          (code) => new ControlApiProtocolError(code),
+        );
   if (!isPlainObject(value)) {
     throw new ControlApiProtocolError("control_api_response_invalid");
   }
   return value;
+}
+
+async function unboundedResponseJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw new ControlApiProtocolError("control_api_json_invalid");
+  }
 }
 
 function parseArtifactEtag(value: string | null): string {
