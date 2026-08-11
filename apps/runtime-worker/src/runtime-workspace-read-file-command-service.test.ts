@@ -67,6 +67,52 @@ test("freezes exact execution and current deployment authority into one signed r
   assert.equal("workspaceBindingId" in authority(), false);
 });
 
+test("adapts the signed read into a complete null-receipt durable reference", async () => {
+  const frozen = await commandService().create(
+    {
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      threadId: "thread-1",
+      expectedThreadRevision: 7,
+      principalId: "principal-1",
+      actorId: "actor-1",
+      runId: "run-frozen-1",
+      stepId: "step-frozen-1",
+      attemptId: "attempt-frozen-1",
+      executionId: "execution-frozen-1",
+      leaseId: "lease-1",
+      leaseEpoch: 4,
+      expiresAt: "2026-08-11T16:10:00.000Z",
+      idempotency: {
+        scope: "workspace-read-file",
+        key: "read-key-1",
+        requestFingerprint: `sha256:${"a".repeat(64)}`,
+      },
+      relativePathSegments: ["docs", "README.md"],
+    },
+    new AbortController().signal,
+  );
+
+  assert.deepEqual(frozen.routeIntent, {
+    deviceBindingId: "device-binding-1",
+    runtimeBindingId: "runtime-binding-1",
+  });
+  assert.deepEqual(frozen.reference, {
+    deviceId: "device-1",
+    executionId: "execution-frozen-1",
+    workspaceBindingId: "workspace-1",
+    incarnationId: "incarnation-1",
+    deviceBindingId: "device-binding-1",
+    runtimeBindingId: "runtime-binding-1",
+    actionDigest: frozen.command.actionDigest,
+    commandDigest: frozen.reference.commandDigest,
+    leaseId: "lease-1",
+    leaseEpoch: 4,
+    receiptId: null,
+  });
+  assert.match(frozen.reference.commandDigest, /^sha256:[a-f0-9]{64}$/u);
+});
+
 test("rejects stale Thread and malformed path before signing", async () => {
   let signs = 0;
   const service = commandService({
