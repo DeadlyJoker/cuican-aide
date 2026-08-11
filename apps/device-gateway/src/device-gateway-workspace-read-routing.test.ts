@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:https";
 import test from "node:test";
 
 import {
@@ -22,6 +23,12 @@ import {
   InMemoryWorkspaceReadDispatchStore,
   type WorkspaceReadRouteFence,
 } from "./workspace-read-dispatch-store.ts";
+import {
+  clientFor,
+  closeServer,
+  listen,
+  serverTls,
+} from "./device-gateway-workspace-peer-network.test-support.ts";
 
 const fixture = JSON.parse(
   readFileSync(
@@ -153,6 +160,48 @@ test("peer route validation fails closed on an invalid Gateway clock", () => {
     () => workspaceReadPeerNow(new Date(Number.NaN)),
     /workspace_read_clock_invalid/,
   );
+});
+
+test("workspace read peer client uses real loopback TLS 1.3 and bounded correlation", async (context) => {
+  const server = createServer(serverTls(), async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const body = JSON.stringify({
+      schemaVersion: "crewon.device-filesystem-read-peer-dispatch-response.v0",
+      apiVersion: 1,
+      route: input.route,
+      operation: input.operation,
+      resolution: {
+        status: "unknownOutcome",
+        executionId: command.executionId,
+        receiptId: null,
+        terminal: null,
+      },
+    });
+    response.writeHead(200, {
+      "content-length": Buffer.byteLength(body),
+      "content-type": "application/json; charset=utf-8",
+    });
+    response.end(body);
+  });
+  const port = await listen(server);
+  context.after(() => closeServer(server));
+  const client = clientFor(port, "gateway-a");
+  context.after(() => client.close());
+  const resolution = await client.dispatchRead(
+    { ...route, gatewayId: "gateway-2" },
+    "execute",
+    command,
+    { workerId: "worker-1", credentialId: "credential-1" },
+    new AbortController().signal,
+  );
+  assert.deepEqual(resolution, {
+    status: "unknownOutcome",
+    executionId: command.executionId,
+    receiptId: null,
+    terminal: null,
+  });
 });
 
 const worker = {
