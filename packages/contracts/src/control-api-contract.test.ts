@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { ContractValidationError } from "./contract-validation-error.ts";
 import {
+  formatAutomationCursor,
   formatAgentVersionCursor,
   formatMessageCursor,
   formatThreadCursor,
@@ -11,6 +12,8 @@ import {
   parseAgentVersionId,
   parseAgentVersionListQuery,
   parseArchiveThreadRequest,
+  parseAutomationId,
+  parseAutomationListQuery,
   parseAppendThreadMessageRequest,
   parseCancelRunRequest,
   parseClearThreadGoalRequest,
@@ -18,6 +21,7 @@ import {
   parseApprovalId,
   parseArtifactId,
   parseCreateRunRequest,
+  parseCreateAutomationRequest,
   parseCreateThreadRequest,
   parseDeleteThreadRequest,
   parseDecideToolApprovalRequest,
@@ -30,6 +34,7 @@ import {
   parseRunEventViewMode,
   parseRenameThreadRequest,
   parseRollbackThreadRequest,
+  parseRunAutomationNowRequest,
   parseSetThreadGoalRequest,
   parseStartTurnRequest,
   parseThreadId,
@@ -60,6 +65,9 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/agent-versions/{agentVersionId}",
     "/api/v1/artifacts/{artifactId}",
     "/api/v1/artifacts/{artifactId}/content",
+    "/api/v1/automations",
+    "/api/v1/automations/{automationId}",
+    "/api/v1/automations/{automationId}:run-now",
     "/api/v1/health/live",
     "/api/v1/health/ready",
     "/api/v1/runs",
@@ -129,6 +137,135 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
       JSON.stringify(openApi.components.schemas.RunView).includes(forbidden),
       false,
     );
+  }
+});
+
+test("freezes strict manual-only Automation commands and pagination", () => {
+  const create = {
+    threadId: "thread-1",
+    expectedThreadRevision: 3,
+    title: "Review changes",
+    prompt: "Review the current changes and summarize risks.",
+    agentVersionId: null,
+  };
+  assert.deepEqual(parseCreateAutomationRequest(create), create);
+  assert.deepEqual(
+    parseCreateAutomationRequest({
+      ...create,
+      agentVersionId: "agent-version-1",
+    }),
+    { ...create, agentVersionId: "agent-version-1" },
+  );
+  assert.deepEqual(
+    parseRunAutomationNowRequest({
+      expectedAutomationRevision: 1,
+      expectedThreadRevision: 4,
+    }),
+    { expectedAutomationRevision: 1, expectedThreadRevision: 4 },
+  );
+  assert.equal(parseAutomationId("automation-1"), "automation-1");
+
+  const cursor = formatAutomationCursor({
+    updatedAt: "2026-08-09T00:00:00Z",
+    automationId: "automation-1",
+  });
+  assert.deepEqual(parseAutomationListQuery({ cursor, limit: "25" }), {
+    before: {
+      updatedAt: "2026-08-09T00:00:00Z",
+      resourceId: "automation-1",
+    },
+    limit: 25,
+  });
+  assert.deepEqual(parseAutomationListQuery({}), { before: null, limit: 100 });
+
+  for (const input of [
+    { ...create, tenantId: "tenant-attacker" },
+    { ...create, prompt: "😀".repeat(2_500) },
+    { ...create, title: "x".repeat(257) },
+    { ...create, expectedThreadRevision: 0 },
+    { ...create, agentVersionId: "" },
+  ]) {
+    assert.throws(() => parseCreateAutomationRequest(input), isContractError);
+  }
+  for (const input of [
+    { expectedAutomationRevision: 2, expectedThreadRevision: 4 },
+    { expectedAutomationRevision: 1, expectedThreadRevision: 0 },
+    {
+      expectedAutomationRevision: 1,
+      expectedThreadRevision: 4,
+      routeDigest: `sha256:${"a".repeat(64)}`,
+    },
+  ]) {
+    assert.throws(() => parseRunAutomationNowRequest(input), isContractError);
+  }
+  for (const query of [
+    { cursor, limit: "0" },
+    { cursor, limit: "101" },
+    { cursor: `${cursor}injected`, limit: "25" },
+    { cursor, limit: "25", tenantId: "tenant-attacker" },
+  ]) {
+    assert.throws(() => parseAutomationListQuery(query), isContractError);
+  }
+
+  const automationView = openApi.components.schemas.AutomationView as {
+    required: string[];
+    properties: Record<string, { const?: unknown }>;
+  };
+  assert.deepEqual(Object.keys(automationView.properties), [
+    "automationId",
+    "threadId",
+    "title",
+    "prompt",
+    "agentVersionId",
+    "executionMode",
+    "automaticScheduling",
+    "revision",
+    "createdAt",
+    "updatedAt",
+  ]);
+  assert.equal(automationView.properties.executionMode.const, "manualOnly");
+  assert.equal(automationView.properties.automaticScheduling.const, false);
+  assert.deepEqual(
+    (
+      openApi.components.schemas.ListAutomationsResponse as {
+        required: string[];
+      }
+    ).required,
+    ["data", "nextCursor"],
+  );
+  assert.deepEqual(
+    (
+      openApi.components.schemas.AutomationInvocationView as {
+        required: string[];
+      }
+    ).required,
+    ["automationId", "runId"],
+  );
+  const publicContract = JSON.stringify({
+    paths: Object.fromEntries(
+      Object.entries(openApi.paths).filter(([path]) =>
+        path.startsWith("/api/v1/automations"),
+      ),
+    ),
+    schemas: Object.fromEntries(
+      Object.entries(openApi.components.schemas).filter(([name]) =>
+        name.includes("Automation"),
+      ),
+    ),
+  });
+  for (const forbidden of [
+    "tenantId",
+    "spaceId",
+    "actorId",
+    "createdByActorId",
+    "definitionDigest",
+    "instructionDigest",
+    "routeDigest",
+    "invocationId",
+    "providerSettings",
+    "workspaceBinding",
+  ]) {
+    assert.equal(publicContract.includes(forbidden), false, forbidden);
   }
 });
 

@@ -4,6 +4,21 @@ import { ContractValidationError } from "./contract-validation-error.ts";
 
 export type ControlApiPaths = paths;
 export type ControlApiOperations = operations;
+export type CreateAutomationRequest =
+  components["schemas"]["CreateAutomationRequest"];
+export type RunAutomationNowRequest =
+  components["schemas"]["RunAutomationNowRequest"];
+export type AutomationView = components["schemas"]["AutomationView"];
+export type AutomationMutationResponse =
+  components["schemas"]["AutomationMutationResponse"];
+export type GetAutomationResponse =
+  components["schemas"]["GetAutomationResponse"];
+export type ListAutomationsResponse =
+  components["schemas"]["ListAutomationsResponse"];
+export type AutomationInvocationView =
+  components["schemas"]["AutomationInvocationView"];
+export type RunAutomationNowResponse =
+  components["schemas"]["RunAutomationNowResponse"];
 export type CreateThreadRequest = components["schemas"]["CreateThreadRequest"];
 export type AppendThreadMessageRequest =
   components["schemas"]["AppendThreadMessageRequest"];
@@ -95,6 +110,7 @@ const MESSAGE_CURSOR_PREFIX = "crewon.message.cursor.v1:";
 const AGENT_VERSION_CURSOR_PREFIX = "crewon.agent-version.cursor.v1:";
 const THREAD_CURSOR_PREFIX = "crewon.thread.cursor.v1:";
 const THREAD_RUN_CURSOR_PREFIX = "crewon.thread-run.cursor.v1:";
+const AUTOMATION_CURSOR_PREFIX = "crewon.automation.cursor.v1:";
 
 export type MessageListQuery = Readonly<{
   afterSequence: number;
@@ -131,6 +147,104 @@ export function parseCreateThreadRequest(input: unknown): CreateThreadRequest {
       "thread_title_invalid",
     ),
   };
+}
+
+export function parseCreateAutomationRequest(
+  input: unknown,
+): CreateAutomationRequest {
+  if (
+    !hasExactKeys(input, [
+      "agentVersionId",
+      "expectedThreadRevision",
+      "prompt",
+      "threadId",
+      "title",
+    ])
+  ) {
+    throw new ContractValidationError("create_automation_fields_invalid");
+  }
+  if (
+    !Number.isSafeInteger(input.expectedThreadRevision) ||
+    Number(input.expectedThreadRevision) < 1
+  ) {
+    throw new ContractValidationError("expected_revision_invalid");
+  }
+  const prompt = requireBoundedString(
+    input.prompt,
+    9_999,
+    "automation_prompt_invalid",
+  );
+  if (new TextEncoder().encode(prompt).byteLength > 9_999) {
+    throw new ContractValidationError("automation_prompt_too_large");
+  }
+  return {
+    threadId: parseThreadId(input.threadId),
+    expectedThreadRevision: Number(input.expectedThreadRevision),
+    title: requireBoundedString(
+      input.title,
+      MAX_THREAD_TITLE_LENGTH,
+      "automation_title_invalid",
+    ),
+    prompt,
+    agentVersionId:
+      input.agentVersionId === null
+        ? null
+        : parseAgentVersionId(input.agentVersionId),
+  };
+}
+
+export function parseRunAutomationNowRequest(
+  input: unknown,
+): RunAutomationNowRequest {
+  if (
+    !hasExactKeys(input, [
+      "expectedAutomationRevision",
+      "expectedThreadRevision",
+    ])
+  ) {
+    throw new ContractValidationError("run_automation_fields_invalid");
+  }
+  if (
+    input.expectedAutomationRevision !== 1 ||
+    !Number.isSafeInteger(input.expectedThreadRevision) ||
+    Number(input.expectedThreadRevision) < 1
+  ) {
+    throw new ContractValidationError("automation_revision_invalid");
+  }
+  return {
+    expectedAutomationRevision: 1,
+    expectedThreadRevision: Number(input.expectedThreadRevision),
+  };
+}
+
+export function parseAutomationId(input: unknown): string {
+  return requireBoundedString(
+    input,
+    MAX_RESOURCE_ID_LENGTH,
+    "automation_id_invalid",
+  );
+}
+
+export function parseAutomationListQuery(input: unknown): ResourceListQuery {
+  return parseResourceListQuery(
+    input,
+    AUTOMATION_CURSOR_PREFIX,
+    "automation_cursor_invalid",
+  );
+}
+
+export function formatAutomationCursor(input: {
+  updatedAt: string;
+  automationId: string;
+}): string {
+  return formatResourceCursor(
+    {
+      updatedAt: input.updatedAt,
+      resourceId: parseAutomationId(input.automationId),
+    },
+    AUTOMATION_CURSOR_PREFIX,
+    "automation_cursor_invalid",
+  );
 }
 
 export function parseAppendThreadMessageRequest(
