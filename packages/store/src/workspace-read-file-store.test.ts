@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -110,18 +112,22 @@ function conformance(name: string, create: () => WorkspaceReadFileStore) {
       idempotency: executeIdempotency,
       frozen: frozen(),
     });
+    const fenced = await store.markWorkspaceReadFilePossiblySent({
+      ...locator,
+      expectedRevision: prepared.operation.revision,
+    });
     const committed = await store.commitWorkspaceReadFileResolution({
       ...locator,
       phase: "execute",
       idempotency: executeIdempotency,
-      expectedRevision: prepared.operation.revision,
+      expectedRevision: fenced.revision,
       resolution: completed(),
     });
     const replay = await store.commitWorkspaceReadFileResolution({
       ...locator,
       phase: "execute",
       idempotency: executeIdempotency,
-      expectedRevision: prepared.operation.revision,
+      expectedRevision: fenced.revision,
       resolution: completed(),
     });
     assert.equal(committed.operation.status, "completed");
@@ -131,7 +137,7 @@ function conformance(name: string, create: () => WorkspaceReadFileStore) {
         ...locator,
         phase: "execute",
         idempotency: executeIdempotency,
-        expectedRevision: prepared.operation.revision,
+        expectedRevision: fenced.revision,
         resolution: { ...completed(), receiptId: "receipt-drift" },
       }),
     );
@@ -157,6 +163,59 @@ function conformance(name: string, create: () => WorkspaceReadFileStore) {
       { status: "prepared", revision: 3 },
     );
   });
+
+  test(`${name}: exact locator and revision fence every mutation`, async () => {
+    const store = create();
+    const prepared = await store.prepareWorkspaceReadFile({
+      ...locator,
+      idempotency: executeIdempotency,
+      frozen: frozen(),
+    });
+    const wrong = { ...locator, runId: "run-drift" };
+    await assert.rejects(() =>
+      store.prepareWorkspaceReadFileAction({
+        ...wrong,
+        phase: "reconcile",
+        idempotency: idempotency("wrong-action"),
+      }),
+    );
+    await assert.rejects(() =>
+      store.markWorkspaceReadFilePossiblySent({
+        ...wrong,
+        expectedRevision: prepared.operation.revision,
+      }),
+    );
+    await assert.rejects(() =>
+      store.commitWorkspaceReadFileResolution({
+        ...locator,
+        phase: "execute",
+        idempotency: executeIdempotency,
+        expectedRevision: prepared.operation.revision,
+        resolution: completed(),
+      }),
+    );
+    const action = await store.prepareWorkspaceReadFileAction({
+      ...locator,
+      phase: "reconcile",
+      idempotency: idempotency("wrong-action"),
+    });
+    assert.equal(action.disposition, "committed");
+  });
+
+  test(`${name}: rejects unbounded or noncanonical idempotency`, async () => {
+    await assert.rejects(() =>
+      create().loadWorkspaceReadFileReceipt({
+        tenantId: locator.tenantId,
+        spaceId: locator.spaceId,
+        phase: "execute",
+        idempotency: {
+          scope: "x".repeat(129),
+          key: "key",
+          requestFingerprint: "not-a-digest",
+        },
+      }),
+    );
+  });
 }
 
 conformance(
@@ -167,6 +226,70 @@ conformance(
   "SQLite workspace read authority",
   () => new SqliteWorkspaceReadFileStore(new DatabaseSync(":memory:")),
 );
+
+test("SQLite fails closed when persisted terminal correlation drifts", async () => {
+  const database = new DatabaseSync(":memory:");
+  const store = new SqliteWorkspaceReadFileStore(database);
+  const prepared = await store.prepareWorkspaceReadFile({
+    ...locator,
+    idempotency: executeIdempotency,
+    frozen: frozen(),
+  });
+  const fenced = await store.markWorkspaceReadFilePossiblySent({
+    ...locator,
+    expectedRevision: prepared.operation.revision,
+  });
+  await store.commitWorkspaceReadFileResolution({
+    ...locator,
+    phase: "execute",
+    idempotency: executeIdempotency,
+    expectedRevision: fenced.revision,
+    resolution: completed(),
+  });
+  database
+    .prepare(`UPDATE workspace_read_file_operations
+      SET record_json = json_set(record_json, '$.resolution.executionId', 'execution-drift')`)
+    .run();
+  await assert.rejects(() =>
+    store.loadWorkspaceReadFileReceipt({
+      tenantId: locator.tenantId,
+      spaceId: locator.spaceId,
+      phase: "execute",
+      idempotency: executeIdempotency,
+    }),
+  );
+});
+
+test("owned SQLite authority reopens a possiblySent receipt after restart", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-workspace-read-"));
+  const path = join(directory, "authority.sqlite3");
+  try {
+    const first = SqliteWorkspaceReadFileStore.open(path);
+    const prepared = await first.prepareWorkspaceReadFile({
+      ...locator,
+      idempotency: executeIdempotency,
+      frozen: frozen(),
+    });
+    await first.markWorkspaceReadFilePossiblySent({
+      ...locator,
+      expectedRevision: prepared.operation.revision,
+    });
+    await first.close();
+    await first.close();
+
+    const reopened = SqliteWorkspaceReadFileStore.open(path);
+    const receipt = await reopened.loadWorkspaceReadFileReceipt({
+      tenantId: locator.tenantId,
+      spaceId: locator.spaceId,
+      phase: "execute",
+      idempotency: executeIdempotency,
+    });
+    assert.equal(receipt?.operation.status, "possiblySent");
+    await reopened.close();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test("execute fences before network and a crash replay performs zero dispatch", async () => {
   const store = new InMemoryWorkspaceReadFileStore();
@@ -180,16 +303,28 @@ test("execute fences before network and a crash replay performs zero dispatch", 
     expectedRevision: prepared.operation.revision,
   });
   let dispatches = 0;
+  let authorityReads = 0;
   const service = serviceOf(store, async () => {
     dispatches += 1;
     return completed();
   });
-  const replay = await service.execute(
-    executeIntent(),
+  const replay = await service.executeWithAuthority(
+    {
+      ...locator,
+      idempotency: executeIdempotency,
+      relativePathSegments: ["docs", "README.md"],
+    },
+    {
+      async resolve() {
+        authorityReads += 1;
+        return executeIntent();
+      },
+    },
     new AbortController().signal,
   );
   assert.equal(replay.operation.status, "possiblySent");
   assert.equal(dispatches, 0);
+  assert.equal(authorityReads, 0);
 });
 
 test("notSent reopens execute while possiblySent remains fenced", async () => {

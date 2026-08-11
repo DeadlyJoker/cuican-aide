@@ -14,7 +14,9 @@ import {
 
 import {
   exactResolution,
+  requireWorkspaceReadFileLocator,
   validateFrozenWorkspaceReadFileDispatch,
+  validateWorkspaceReadFileIdempotency,
   validateWorkspaceReadFileLocator,
   validateWorkspaceReadFileRecord,
   withResolution,
@@ -25,9 +27,12 @@ type ReceiptRow = { request_fingerprint: string; execution_id: string };
 
 export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
   readonly #database: DatabaseSync;
+  readonly #owned: boolean;
+  #closed = false;
 
-  constructor(database: DatabaseSync) {
+  constructor(database: DatabaseSync, owned = false) {
     this.#database = database;
+    this.#owned = owned;
     database.exec(`
       CREATE TABLE IF NOT EXISTS workspace_read_file_operations (
         tenant_id TEXT NOT NULL, space_id TEXT NOT NULL, execution_id TEXT NOT NULL,
@@ -44,7 +49,21 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
     `);
   }
 
+  static open(path: string) {
+    if (typeof path !== "string" || path.length < 1 || path.includes("\0"))
+      throw new RunStoreError("workspace_read_file_sqlite_path_invalid");
+    return new SqliteWorkspaceReadFileStore(new DatabaseSync(path), true);
+  }
+
+  async close() {
+    if (this.#closed) return;
+    this.#closed = true;
+    if (this.#owned) this.#database.close();
+  }
+
   async loadWorkspaceReadFileReceipt(query: WorkspaceReadFileReceiptQuery) {
+    this.#assertOpen();
+    validateWorkspaceReadFileIdempotency(query.idempotency);
     const row = this.#receipt(
       query.tenantId,
       query.spaceId,
@@ -60,6 +79,7 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
   }
 
   async prepareWorkspaceReadFile(input: PrepareWorkspaceReadFileInput) {
+    validateWorkspaceReadFileIdempotency(input.idempotency);
     return this.#transaction(() => {
       const locator = validateWorkspaceReadFileLocator(locatorOf(input));
       const receipt = this.#receipt(
@@ -86,6 +106,7 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
         locator.executionId,
       );
       if (existing !== null) {
+        requireWorkspaceReadFileLocator(existing, locator);
         if (JSON.stringify(existing.frozen) !== JSON.stringify(frozen))
           conflict();
         this.#insertReceipt(locator, "execute", input.idempotency);
@@ -118,6 +139,7 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
   async prepareWorkspaceReadFileAction(
     input: PrepareWorkspaceReadFileActionInput,
   ) {
+    validateWorkspaceReadFileIdempotency(input.idempotency);
     return this.#transaction(() => {
       const locator = validateWorkspaceReadFileLocator(locatorOf(input));
       const operation = this.#required(
@@ -125,6 +147,7 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
         locator.spaceId,
         locator.executionId,
       );
+      requireWorkspaceReadFileLocator(operation, locator);
       const receipt = this.#receipt(
         locator.tenantId,
         locator.spaceId,
@@ -186,28 +209,14 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
       WorkspaceReadFileStore["commitWorkspaceReadFileResolution"]
     >[0],
   ) {
+    validateWorkspaceReadFileIdempotency(input.idempotency);
     return this.#transaction(() => {
       const current = this.#required(
         input.tenantId,
         input.spaceId,
         input.executionId,
       );
-      if (current.resolution !== null) {
-        const parsed = exactResolution(current, input.phase, input.resolution);
-        if (JSON.stringify(parsed) !== JSON.stringify(current.resolution))
-          conflict();
-        return result("replayed", current);
-      }
-      if (
-        current.revision !== input.expectedRevision &&
-        current.status !== "possiblySent"
-      )
-        conflict();
-      const next = withResolution(
-        current,
-        exactResolution(current, input.phase, input.resolution),
-      );
-      this.#update(input, current.revision, next);
+      requireWorkspaceReadFileLocator(current, input);
       const receipt = this.#receipt(
         input.tenantId,
         input.spaceId,
@@ -215,7 +224,23 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
         input.idempotency,
       );
       if (receipt !== null) fingerprint(receipt, input.idempotency);
-      else this.#insertReceipt(input, input.phase, input.idempotency);
+      if (current.resolution !== null) {
+        if (receipt === null) conflict();
+        const parsed = exactResolution(current, input.phase, input.resolution);
+        if (JSON.stringify(parsed) !== JSON.stringify(current.resolution))
+          conflict();
+        return result("replayed", current);
+      }
+      if (current.revision !== input.expectedRevision) conflict();
+      if (input.phase === "execute" && current.status !== "possiblySent")
+        conflict();
+      const next = withResolution(
+        current,
+        exactResolution(current, input.phase, input.resolution),
+      );
+      this.#update(input, current.revision, next);
+      if (receipt === null)
+        this.#insertReceipt(input, input.phase, input.idempotency);
       return result("committed", next);
     });
   }
@@ -243,6 +268,7 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
       input.spaceId,
       input.executionId,
     );
+    requireWorkspaceReadFileLocator(current, input);
     if (current.revision !== input.expectedRevision) conflict();
     return current;
   }
@@ -304,6 +330,7 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
     if (changed !== 1) conflict();
   }
   #transaction<T>(call: () => T): T {
+    this.#assertOpen();
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       const result = call();
@@ -313,6 +340,10 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
       this.#database.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  #assertOpen() {
+    if (this.#closed) throw new RunStoreError("workspace_read_file_store_closed");
   }
 }
 

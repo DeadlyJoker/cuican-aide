@@ -12,7 +12,9 @@ import {
 
 import {
   exactResolution,
+  requireWorkspaceReadFileLocator,
   validateFrozenWorkspaceReadFileDispatch,
+  validateWorkspaceReadFileIdempotency,
   validateWorkspaceReadFileLocator,
   validateWorkspaceReadFileRecord,
   withResolution,
@@ -25,6 +27,7 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
   readonly #receipts = new Map<string, Receipt>();
 
   async loadWorkspaceReadFileReceipt(query: WorkspaceReadFileReceiptQuery) {
+    validateWorkspaceReadFileIdempotency(query.idempotency);
     const receipt = this.#receipts.get(
       receiptKey(query.tenantId, query.spaceId, query.phase, query.idempotency),
     );
@@ -34,6 +37,7 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
   }
 
   async prepareWorkspaceReadFile(input: PrepareWorkspaceReadFileInput) {
+    validateWorkspaceReadFileIdempotency(input.idempotency);
     const locator = validateWorkspaceReadFileLocator(locatorOf(input));
     const key = executionKey(locator);
     const rKey = receiptKey(
@@ -50,6 +54,7 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
     const frozen = validateFrozenWorkspaceReadFileDispatch(input.frozen);
     const existing = this.#operations.get(key);
     if (existing !== undefined) {
+      requireWorkspaceReadFileLocator(existing, locator);
       if (JSON.stringify(existing.frozen) !== JSON.stringify(frozen))
         conflict();
       this.#receipts.set(rKey, {
@@ -77,9 +82,11 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
   async prepareWorkspaceReadFileAction(
     input: PrepareWorkspaceReadFileActionInput,
   ) {
+    validateWorkspaceReadFileIdempotency(input.idempotency);
     const locator = validateWorkspaceReadFileLocator(locatorOf(input));
     const key = executionKey(locator);
     const operation = this.#required(key);
+    requireWorkspaceReadFileLocator(operation, locator);
     const rKey = receiptKey(
       locator.tenantId,
       locator.spaceId,
@@ -133,22 +140,10 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
       WorkspaceReadFileStore["commitWorkspaceReadFileResolution"]
     >[0],
   ) {
+    validateWorkspaceReadFileIdempotency(input.idempotency);
     const key = executionKey(input);
     const current = this.#required(key);
-    if (current.resolution !== null) {
-      const parsed = exactResolution(current, input.phase, input.resolution);
-      if (JSON.stringify(parsed) !== JSON.stringify(current.resolution))
-        conflict();
-      return result("replayed", current);
-    }
-    if (
-      current.revision !== input.expectedRevision &&
-      current.status !== "possiblySent"
-    )
-      conflict();
-    const resolution = exactResolution(current, input.phase, input.resolution);
-    const next = withResolution(current, resolution);
-    this.#operations.set(key, next);
+    requireWorkspaceReadFileLocator(current, input);
     const rKey = receiptKey(
       input.tenantId,
       input.spaceId,
@@ -157,6 +152,19 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
     );
     const receipt = this.#receipts.get(rKey);
     if (receipt !== undefined) requireFingerprint(receipt, input.idempotency);
+    if (current.resolution !== null) {
+      if (receipt === undefined) conflict();
+      const parsed = exactResolution(current, input.phase, input.resolution);
+      if (JSON.stringify(parsed) !== JSON.stringify(current.resolution))
+        conflict();
+      return result("replayed", current);
+    }
+    if (current.revision !== input.expectedRevision) conflict();
+    if (input.phase === "execute" && current.status !== "possiblySent")
+      conflict();
+    const resolution = exactResolution(current, input.phase, input.resolution);
+    const next = withResolution(current, resolution);
+    this.#operations.set(key, next);
     this.#receipts.set(rKey, {
       fingerprint: input.idempotency.requestFingerprint,
       executionKey: key,
@@ -166,6 +174,7 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
 
   #expected(input: WorkspaceReadFileLocator & { expectedRevision: number }) {
     const current = this.#required(executionKey(input));
+    requireWorkspaceReadFileLocator(current, input);
     if (current.revision !== input.expectedRevision) conflict();
     return current;
   }

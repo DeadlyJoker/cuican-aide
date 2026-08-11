@@ -9,6 +9,7 @@ import {
 import {
   RunStoreError,
   type FrozenWorkspaceReadFileDispatch,
+  type IdempotencyDescriptor,
   type WorkspaceReadFileLocator,
   type WorkspaceReadFileRecord,
 } from "@crewon/application";
@@ -64,6 +65,45 @@ export function validateWorkspaceReadFileLocator(
   return structuredClone(input);
 }
 
+export function requireWorkspaceReadFileLocator(
+  operation: WorkspaceReadFileRecord,
+  input: WorkspaceReadFileLocator,
+): void {
+  const locator = validateWorkspaceReadFileLocator({
+    tenantId: input.tenantId,
+    spaceId: input.spaceId,
+    runId: input.runId,
+    stepId: input.stepId,
+    attemptId: input.attemptId,
+    executionId: input.executionId,
+  });
+  if (
+    operation.tenantId !== locator.tenantId ||
+    operation.spaceId !== locator.spaceId ||
+    operation.runId !== locator.runId ||
+    operation.stepId !== locator.stepId ||
+    operation.attemptId !== locator.attemptId ||
+    operation.executionId !== locator.executionId
+  )
+    invalid();
+}
+
+export function validateWorkspaceReadFileIdempotency(
+  input: IdempotencyDescriptor,
+): IdempotencyDescriptor {
+  if (
+    !exactKeys(input, ["key", "requestFingerprint", "scope"]) ||
+    typeof input.scope !== "string" ||
+    typeof input.key !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(input.scope) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/u.test(input.key) ||
+    typeof input.requestFingerprint !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/u.test(input.requestFingerprint)
+  )
+    invalid();
+  return structuredClone(input);
+}
+
 export function validateWorkspaceReadFileRecord(
   input: WorkspaceReadFileRecord,
 ) {
@@ -104,7 +144,18 @@ export function validateWorkspaceReadFileRecord(
     invalid();
   if (input.resolution === null) {
     if (!["prepared", "possiblySent"].includes(input.status)) invalid();
-  } else if (input.status !== input.resolution.status) invalid();
+  } else {
+    const parsed = exactResolution(
+      { ...input, frozen, resolution: null },
+      "execute",
+      input.resolution,
+    );
+    if (
+      input.status !== parsed.status ||
+      frozen.reference.receiptId !== parsed.receiptId
+    )
+      invalid();
+  }
   return structuredClone({ ...input, frozen });
 }
 
