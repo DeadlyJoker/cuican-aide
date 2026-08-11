@@ -66,6 +66,7 @@ members = [
     "network-proxy",
     "ollama",
     "process-hardening",
+    "process-guardian",
     "policy",
     "provider-agent-platform",
     "provider-transport",
@@ -199,6 +200,7 @@ crewon-artifact = { path = "artifact" }
 crewon-policy = { path = "policy" }
 crewon-model-provider = { path = "model-provider" }
 crewon-process-hardening = { path = "process-hardening" }
+crewon-process-guardian = { path = "process-guardian" }
 crewon-provider-agent-platform = { path = "provider-agent-platform" }
 crewon-provider-transport = { path = "provider-transport" }
 crewon-protocol = { path = "crewon-protocol" }

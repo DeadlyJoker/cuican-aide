@@ -3616,6 +3616,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "crewon-process-guardian"
+version = "0.0.0"
+dependencies = [
+ "crewon-utils-cargo-bin",
+ "libc",
+ "pretty_assertions",
+ "tempfile",
+ "windows-sys 0.61.2",
+ "zeroize",
+]
+
+[[package]]
 name = "crewon-process-hardening"
 version = "0.0.0"
 dependencies = [
