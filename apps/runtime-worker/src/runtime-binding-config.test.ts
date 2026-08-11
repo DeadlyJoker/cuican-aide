@@ -186,20 +186,97 @@ test("detects remote config drift and fails closed while composition is absent",
     }),
     "utf8",
   );
-  const factory = loadAgentVersionRuntimeFactory(path, {});
+  let composeAttempts = 0;
+  const driftFactory = loadAgentVersionRuntimeFactory(
+    path,
+    {},
+    {
+      mode: "production",
+      credentialLeaseFactory: () => {
+        composeAttempts += 1;
+        throw new Error("unexpected_compose");
+      },
+      tenantEgressFactory: () => {
+        throw new Error("unexpected_compose");
+      },
+    },
+  );
   const changed = structuredClone(remote);
   changed.servers[0]!.endpoint = "https://mcp.example:9443/mcp";
   writeFileSync(remotePath, JSON.stringify(changed), "utf8");
   await assert.rejects(
-    factory.create({ tenantId: "tenant-1", version }),
+    driftFactory.create({ tenantId: "tenant-1", version }),
     hasMessage("agent_version_runtime_materialization_drift"),
   );
+  assert.equal(composeAttempts, 0);
 
   writeFileSync(remotePath, JSON.stringify(remote), "utf8");
+  const factory = loadAgentVersionRuntimeFactory(path, {});
   await assert.rejects(
     factory.create({ tenantId: "tenant-1", version }),
     hasMessage("remote_mcp_runtime_not_composed"),
   );
+});
+
+test("createBoundToolRuntime composes remote MCP only with explicit exact dependencies", async (context) => {
+  const version = compileAgentVersion(source(), { sha256 });
+  const path = temporaryFile(context);
+  const remotePath = `${path}.remote.json`;
+  const manifest = config(version.contentDigest, null);
+  const productionRemote = remoteConfig();
+  const remote = {
+    ...productionRemote,
+    servers: productionRemote.servers.map((server) => ({
+      ...server,
+      mode: "standaloneLoopback" as const,
+      endpoint: "http://127.0.0.1:1234/mutations",
+    })),
+  };
+  writeFileSync(remotePath, JSON.stringify(remote), "utf8");
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...manifest,
+      bindings: [{ ...manifest.bindings[0], remoteMcpConfigPath: remotePath }],
+    }),
+    "utf8",
+  );
+  const identities: unknown[] = [];
+  const factory = loadAgentVersionRuntimeFactory(
+    path,
+    {},
+    {
+      mode: "standaloneLoopback",
+      staticBearerResolver: (identity) => {
+        identities.push(identity);
+        return "static-test-bearer";
+      },
+    },
+  );
+  const runtime = await factory.create({ tenantId: "tenant-1", version });
+  context.after(() => runtime.close?.());
+
+  assert.deepEqual(runtime.toolRuntime.definitions(), [
+    {
+      schemaVersion: "crewon.tool-definition.v0",
+      kind: "function",
+      name: "mcp__reviewed-mcp__create_record",
+      description: "Creates one record.",
+      execution: "serial",
+      inputSchema: { type: "object", additionalProperties: false },
+    },
+  ]);
+  assert.deepEqual(identities, [
+    {
+      tenantId: "tenant-1",
+      agentVersionId: "agent-version-1",
+      contentDigest: version.contentDigest,
+      materializationDigest:
+        factory.deploymentBindings("tenant-1")[0]!.materializationDigest,
+      serverBindingId: "remote-1",
+      credentialBindingId: "credential-1",
+    },
+  ]);
 });
 
 test("rejects injected fields and unsafe runtime manifests", () => {

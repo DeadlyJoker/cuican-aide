@@ -23,6 +23,10 @@ import {
 } from "./configured-agent-version-runtime-factory.ts";
 import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
 import { loadRemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
+import {
+  composeRemoteMcpRuntime,
+  type RemoteMcpCompositionDependencies,
+} from "./remote-mcp-composition.ts";
 
 const MAX_BINDINGS = 1_000;
 const MAX_CONFIG_BYTES = 1024 * 1024;
@@ -54,6 +58,7 @@ type RuntimeBindingConfig = Readonly<{
 export function loadAgentVersionRuntimeFactory(
   path: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  remoteMcpDependencies?: RemoteMcpCompositionDependencies,
 ): ConfiguredAgentVersionRuntimeFactory {
   const input = readBoundedJson(
     path,
@@ -61,7 +66,11 @@ export function loadAgentVersionRuntimeFactory(
     "CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_invalid",
   );
   return new ConfiguredAgentVersionRuntimeFactory(
-    runtimeBindings(parseRuntimeBindingConfig(input), environment),
+    runtimeBindings(
+      parseRuntimeBindingConfig(input),
+      environment,
+      remoteMcpDependencies,
+    ),
   );
 }
 
@@ -195,6 +204,7 @@ function parseProvider(
 function runtimeBindings(
   config: RuntimeBindingConfig,
   environment: Readonly<Record<string, string | undefined>>,
+  remoteMcpDependencies: RemoteMcpCompositionDependencies | undefined,
 ): readonly AgentVersionRuntimeBinding[] {
   return config.bindings.map((binding) => {
     const apiKey =
@@ -212,7 +222,11 @@ function runtimeBindings(
       createTransport: (version) =>
         directResponsesTransport(binding.provider, version, apiKey),
       createToolRuntime: () =>
-        createBoundToolRuntime(binding, expectedMaterializationDigest),
+        createBoundToolRuntime(
+          binding,
+          expectedMaterializationDigest,
+          remoteMcpDependencies,
+        ),
     };
   });
 }
@@ -272,11 +286,15 @@ function stableJson(value: unknown): string {
 async function createBoundToolRuntime(
   binding: RuntimeBindingConfig["bindings"][number],
   expectedMaterializationDigest: string,
+  remoteMcpDependencies: RemoteMcpCompositionDependencies | undefined,
 ): Promise<ToolRuntimePort> {
   if (materializationDigest(binding) !== expectedMaterializationDigest) {
     throw new Error("agent_version_runtime_materialization_drift");
   }
-  if (binding.remoteMcpConfigPath !== null) {
+  if (
+    binding.remoteMcpConfigPath !== null &&
+    remoteMcpDependencies === undefined
+  ) {
     throw new Error("remote_mcp_runtime_not_composed");
   }
   const runtimes: ToolRuntimePort[] = [];
@@ -288,6 +306,20 @@ async function createBoundToolRuntime(
     }
     if (binding.deviceToolConfigPath !== null) {
       runtimes.push(loadDeviceToolRuntime(binding.deviceToolConfigPath));
+    }
+    if (binding.remoteMcpConfigPath !== null) {
+      runtimes.push(
+        await composeRemoteMcpRuntime(
+          loadRemoteMcpRuntimeConfig(binding.remoteMcpConfigPath),
+          {
+            tenantId: binding.tenantId,
+            agentVersionId: binding.agentVersionId,
+            contentDigest: binding.contentDigest,
+            materializationDigest: expectedMaterializationDigest,
+          },
+          remoteMcpDependencies!,
+        ),
+      );
     }
     if (runtimes.length === 0) {
       return new InMemoryToolBroker();
