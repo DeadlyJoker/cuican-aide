@@ -4,6 +4,9 @@ use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+
 use crate::provider_credentials::validate_catalog;
 use crate::provider_credentials::ProviderCredentialCatalogFile;
 use crate::provider_credentials::ProviderCredentialError;
@@ -34,8 +37,36 @@ pub(super) fn write_catalog(
     catalog: &ProviderCredentialCatalogFile,
 ) -> Result<(), ProviderCredentialError> {
     validate_catalog(catalog)?;
-    let encoded =
-        serde_json::to_vec(catalog).map_err(|_| ProviderCredentialError::CatalogInvalid)?;
+    write_secure_json(path, catalog)
+}
+
+pub(super) fn read_optional_secure_json<T: DeserializeOwned>(
+    path: &Path,
+) -> Result<Option<T>, ProviderCredentialError> {
+    let mut file = match OpenOptions::new().read(true).open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(ProviderCredentialError::CatalogInvalid),
+    };
+    let metadata = file
+        .metadata()
+        .map_err(|_| ProviderCredentialError::CatalogInvalid)?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_CATALOG_BYTES {
+        return Err(ProviderCredentialError::CatalogInvalid);
+    }
+    let mut encoded = Vec::with_capacity(metadata.len() as usize);
+    file.read_to_end(&mut encoded)
+        .map_err(|_| ProviderCredentialError::CatalogInvalid)?;
+    serde_json::from_slice(&encoded)
+        .map(Some)
+        .map_err(|_| ProviderCredentialError::CatalogInvalid)
+}
+
+pub(super) fn write_secure_json<T: Serialize>(
+    path: &Path,
+    value: &T,
+) -> Result<(), ProviderCredentialError> {
+    let encoded = serde_json::to_vec(value).map_err(|_| ProviderCredentialError::CatalogInvalid)?;
     if encoded.is_empty() || encoded.len() as u64 > MAX_CATALOG_BYTES {
         return Err(ProviderCredentialError::CatalogInvalid);
     }
@@ -78,6 +109,22 @@ pub(super) fn write_catalog(
     fs::File::open(parent)
         .and_then(|directory| directory.sync_all())
         .map_err(|_| ProviderCredentialError::CatalogInvalid)?;
+    Ok(())
+}
+
+pub(super) fn remove_secure_file(path: &Path) -> Result<(), ProviderCredentialError> {
+    match fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err(ProviderCredentialError::CatalogInvalid),
+    }
+    #[cfg(unix)]
+    fs::File::open(
+        path.parent()
+            .ok_or(ProviderCredentialError::CatalogInvalid)?,
+    )
+    .and_then(|directory| directory.sync_all())
+    .map_err(|_| ProviderCredentialError::CatalogInvalid)?;
     Ok(())
 }
 

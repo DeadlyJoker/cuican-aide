@@ -24,6 +24,7 @@ use self::store::OsProviderSecretStore;
 use self::store::ProviderCredentialManager;
 
 const CATALOG_SCHEMA_VERSION: &str = "crewon.provider-credential-catalog.v1";
+const MUTATION_JOURNAL_SCHEMA_VERSION: &str = "crewon.provider-credential-mutation.v1";
 const CREDENTIAL_SERVICE: &str = "ai.crewon.desktop.model-provider";
 const MAX_CATALOG_BYTES: u64 = 64 * 1024;
 const MAX_ENDPOINT_BYTES: usize = 2048;
@@ -58,6 +59,39 @@ enum ProviderCredentialMutationError {
     Credential(ProviderCredentialError),
     Runtime(&'static str),
     Rollback,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProviderRuntimeMutationFailure {
+    BeforeCommit(&'static str),
+    AfterCommit,
+}
+
+pub(crate) struct ProviderRuntimeMutation<'a> {
+    pub(crate) operation_id: &'a str,
+    pub(crate) active_provider_id: Option<&'a str>,
+    pub(crate) runtime_binding_id: Option<&'a str>,
+    pub(crate) bindings: Vec<ProviderRuntimeMutationBinding>,
+    pub(crate) previous_runtime: Option<&'a ActiveProviderRuntime>,
+    pub(crate) candidate_runtime: Option<&'a ActiveProviderRuntime>,
+}
+
+pub(crate) struct ProviderRuntimeMutationBinding {
+    pub(crate) credential_kind: ProviderCredentialKind,
+    pub(crate) endpoint: String,
+    pub(crate) environment_variable: Option<String>,
+    pub(crate) provider_id: String,
+}
+
+pub(crate) enum ProviderCredentialRecoveryDisposition {
+    KeepCandidate,
+    RestorePrevious,
+}
+
+pub(crate) struct ProviderCredentialRecovery<'a> {
+    pub(crate) operation_id: &'a str,
+    pub(crate) runtime_binding_id: Option<&'a str>,
+    pub(crate) previous_runtime: Option<&'a ActiveProviderRuntime>,
 }
 
 impl ProviderCredentialMutationError {
@@ -97,14 +131,30 @@ struct ProviderBinding {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ProviderCredentialCatalogFile {
     active_provider_id: Option<String>,
+    #[serde(default)]
+    active_runtime_binding_id: Option<String>,
     bindings: BTreeMap<String, ProviderBinding>,
     schema_version: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProviderCredentialMutationJournal {
+    schema_version: String,
+    operation_id: String,
+    runtime_binding_id: Option<String>,
+    provider_id: String,
+    backup_secret_key: String,
+    previous_secret_present: bool,
+    previous_catalog: ProviderCredentialCatalogFile,
+    candidate_catalog: ProviderCredentialCatalogFile,
 }
 
 impl Default for ProviderCredentialCatalogFile {
     fn default() -> Self {
         Self {
             active_provider_id: None,
+            active_runtime_binding_id: None,
             bindings: BTreeMap::new(),
             schema_version: CATALOG_SCHEMA_VERSION.to_string(),
         }
@@ -160,6 +210,7 @@ pub struct ActiveProviderBinding {
     pub endpoint: String,
     pub environment_variable: Option<String>,
     pub provider_id: String,
+    pub runtime_binding_id: String,
 }
 
 pub struct ActiveProviderRuntime {
@@ -198,9 +249,8 @@ pub fn provider_credential_upsert(
 ) -> Result<ProviderCredentialCatalogView, &'static str> {
     credential_mutation_result(
         &app,
-        manager.upsert_with_reload(&request, |previous, candidate| {
-            crate::control_runtime::reload::replace_provider_runtime(&app, previous, candidate)
-                .map_err(crate::control_runtime::ControlRuntimeStartError::code)
+        manager.upsert_with_coordinator(&request, |mutation| {
+            crate::control_runtime::provider_switch::coordinate_provider_runtime(&app, mutation)
         }),
     )
 }
@@ -213,9 +263,8 @@ pub fn provider_credential_activate(
 ) -> Result<ProviderCredentialCatalogView, &'static str> {
     credential_mutation_result(
         &app,
-        manager.activate_with_reload(&request, |previous, candidate| {
-            crate::control_runtime::reload::replace_provider_runtime(&app, previous, candidate)
-                .map_err(crate::control_runtime::ControlRuntimeStartError::code)
+        manager.activate_with_coordinator(&request, |mutation| {
+            crate::control_runtime::provider_switch::coordinate_provider_runtime(&app, mutation)
         }),
     )
 }
@@ -228,9 +277,8 @@ pub fn provider_credential_delete(
 ) -> Result<ProviderCredentialCatalogView, &'static str> {
     credential_mutation_result(
         &app,
-        manager.delete_with_reload(&request, |previous, candidate| {
-            crate::control_runtime::reload::replace_provider_runtime(&app, previous, candidate)
-                .map_err(crate::control_runtime::ControlRuntimeStartError::code)
+        manager.delete_with_coordinator(&request, |mutation| {
+            crate::control_runtime::provider_switch::coordinate_provider_runtime(&app, mutation)
         }),
     )
 }
@@ -295,145 +343,16 @@ pub fn active_provider_runtime(
         .active_runtime()
 }
 
-fn validated_binding(
-    request: &ProviderCredentialUpsertRequest,
-) -> Result<ProviderBinding, ProviderCredentialError> {
-    validate_provider_id(&request.provider_id)?;
-    let endpoint = validate_endpoint(&request.endpoint)?;
-    let environment_variable = match request.credential_kind {
-        ProviderCredentialKind::Environment => Some(validate_environment_variable(
-            request
-                .environment_variable
-                .as_deref()
-                .ok_or(ProviderCredentialError::InvalidRequest)?,
-        )?),
-        ProviderCredentialKind::Keychain | ProviderCredentialKind::None => {
-            if request.environment_variable.is_some() {
-                return Err(ProviderCredentialError::InvalidRequest);
-            }
-            None
-        }
-    };
-    match request.credential_kind {
-        ProviderCredentialKind::Keychain => {
-            if let Some(secret) = request.secret.as_deref() {
-                validate_secret(secret)?;
-            }
-        }
-        ProviderCredentialKind::Environment | ProviderCredentialKind::None => {
-            if request.secret.is_some() {
-                return Err(ProviderCredentialError::InvalidRequest);
-            }
-        }
-    }
-    Ok(ProviderBinding {
-        credential_kind: request.credential_kind,
-        endpoint,
-        environment_variable,
-        provider_id: request.provider_id.clone(),
-    })
-}
-
-fn validate_catalog(
-    catalog: &ProviderCredentialCatalogFile,
+pub(crate) fn recover_pending_mutation(
+    app: &AppHandle,
+    recover: impl FnOnce(
+        &ProviderCredentialRecovery<'_>,
+    ) -> Result<ProviderCredentialRecoveryDisposition, &'static str>,
 ) -> Result<(), ProviderCredentialError> {
-    if catalog.schema_version != CATALOG_SCHEMA_VERSION {
-        return Err(ProviderCredentialError::CatalogInvalid);
-    }
-    for (provider_id, binding) in &catalog.bindings {
-        if provider_id != &binding.provider_id {
-            return Err(ProviderCredentialError::CatalogInvalid);
-        }
-        validate_provider_id(provider_id).map_err(|_| ProviderCredentialError::CatalogInvalid)?;
-        validate_endpoint(&binding.endpoint)
-            .map_err(|_| ProviderCredentialError::CatalogInvalid)?;
-        match binding.credential_kind {
-            ProviderCredentialKind::Environment => {
-                validate_environment_variable(
-                    binding
-                        .environment_variable
-                        .as_deref()
-                        .ok_or(ProviderCredentialError::CatalogInvalid)?,
-                )
-                .map_err(|_| ProviderCredentialError::CatalogInvalid)?;
-            }
-            ProviderCredentialKind::Keychain | ProviderCredentialKind::None => {
-                if binding.environment_variable.is_some() {
-                    return Err(ProviderCredentialError::CatalogInvalid);
-                }
-            }
-        }
-    }
-    if catalog
-        .active_provider_id
-        .as_ref()
-        .is_some_and(|provider_id| !catalog.bindings.contains_key(provider_id))
-    {
-        return Err(ProviderCredentialError::CatalogInvalid);
-    }
-    Ok(())
+    app.try_state::<ProviderCredentialManager>()
+        .ok_or(ProviderCredentialError::StateUnavailable)?
+        .recover_with_coordinator(recover)
+        .map_err(|_| ProviderCredentialError::StateUnavailable)
 }
 
-fn validate_provider_id(provider_id: &str) -> Result<(), ProviderCredentialError> {
-    if provider_id.is_empty()
-        || provider_id.len() > MAX_PROVIDER_ID_BYTES
-        || !provider_id.bytes().enumerate().all(|(index, byte)| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || (index > 0 && matches!(byte, b'-' | b'_'))
-        })
-    {
-        return Err(ProviderCredentialError::InvalidRequest);
-    }
-    Ok(())
-}
-
-fn validate_endpoint(endpoint: &str) -> Result<String, ProviderCredentialError> {
-    if endpoint.is_empty() || endpoint.len() > MAX_ENDPOINT_BYTES {
-        return Err(ProviderCredentialError::InvalidRequest);
-    }
-    let parsed = url::Url::parse(endpoint).map_err(|_| ProviderCredentialError::InvalidRequest)?;
-    let is_loopback = match parsed.host() {
-        Some(url::Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
-        Some(url::Host::Ipv4(address)) => address.is_loopback(),
-        Some(url::Host::Ipv6(address)) => address.is_loopback(),
-        None => false,
-    };
-    if !matches!(parsed.scheme(), "http" | "https")
-        || (parsed.scheme() == "http" && !is_loopback)
-        || !parsed.username().is_empty()
-        || parsed.password().is_some()
-        || parsed.query().is_some()
-        || parsed.fragment().is_some()
-    {
-        return Err(ProviderCredentialError::InvalidRequest);
-    }
-    Ok(endpoint.to_string())
-}
-
-fn validate_environment_variable(variable: &str) -> Result<String, ProviderCredentialError> {
-    if variable.is_empty()
-        || variable.len() > 128
-        || !variable.bytes().enumerate().all(|(index, byte)| {
-            byte.is_ascii_alphabetic() || byte == b'_' || (index > 0 && byte.is_ascii_digit())
-        })
-    {
-        return Err(ProviderCredentialError::InvalidRequest);
-    }
-    Ok(variable.to_string())
-}
-
-fn validate_secret(secret: &str) -> Result<(), ProviderCredentialError> {
-    if secret.is_empty()
-        || secret.len() > MAX_SECRET_BYTES
-        || secret.trim() != secret
-        || secret.chars().any(char::is_control)
-    {
-        return Err(ProviderCredentialError::InvalidRequest);
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-#[path = "provider_credentials_tests.rs"]
-mod tests;
+include!("provider_credentials_validation.rs");
