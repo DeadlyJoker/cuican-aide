@@ -56,6 +56,7 @@ test("runs SQLite Thread freeze through private loopback and real mTLS Gateway",
     ...config,
     databasePath,
     scanIntervalMs: null,
+    workspaceReadFile: native.readFile,
     workspacePrivate: native.config,
   });
   context.after(() => runtime.close());
@@ -433,6 +434,7 @@ function runtimeConfig(): RuntimeWorkerCompositionConfig {
     maxToolRounds: 1,
     autoCompactAtTokens: 96_000,
     modelContextWindowTokens: 128_000,
+    nativeWorkspaceReadCatalog: "enabled",
   };
 }
 
