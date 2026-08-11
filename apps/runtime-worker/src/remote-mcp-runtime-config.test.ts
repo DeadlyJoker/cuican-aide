@@ -153,6 +153,48 @@ test("enforces UTF-8 byte bounds and finite acyclic JSON schemas", () => {
   );
 });
 
+test("aligns descriptor byte bounds with McpToolRuntime", () => {
+  const descriptionBoundary = validConfig();
+  descriptionBoundary.servers[0]!.tools[0]!.descriptor.description = "a".repeat(
+    2 * 1024,
+  );
+  assert.doesNotThrow(() => parseRemoteMcpRuntimeConfig(descriptionBoundary));
+  descriptionBoundary.servers[0]!.tools[0]!.descriptor.description += "a";
+  assert.throws(() => parseRemoteMcpRuntimeConfig(descriptionBoundary));
+
+  const schemaBoundary = validConfig();
+  (
+    schemaBoundary.servers[0]!.tools[0]!.descriptor as {
+      inputSchema: Record<string, unknown>;
+    }
+  ).inputSchema = schemaWithBytes(32 * 1024);
+  assert.doesNotThrow(() => parseRemoteMcpRuntimeConfig(schemaBoundary));
+  (
+    schemaBoundary.servers[0]!.tools[0]!.descriptor as {
+      inputSchema: Record<string, unknown>;
+    }
+  ).inputSchema = schemaWithBytes(32 * 1024 + 1);
+  assert.throws(
+    () => parseRemoteMcpRuntimeConfig(schemaBoundary),
+    hasMessage("remote_mcp_tool_schema_invalid"),
+  );
+});
+
+test("caps the complete remote catalog at 128 tools", () => {
+  const config = validConfig();
+  const first = serverWithTools(config.servers[0]!, "first", "remote-1", 64);
+  const second = serverWithTools(config.servers[0]!, "second", "remote-2", 64);
+  assert.doesNotThrow(() =>
+    parseRemoteMcpRuntimeConfig({ ...config, servers: [first, second] }),
+  );
+  second.tools.push(structuredClone(second.tools[0]!));
+  second.tools[64]!.descriptor.name = "tool-64";
+  assert.throws(
+    () => parseRemoteMcpRuntimeConfig({ ...config, servers: [first, second] }),
+    hasMessage("remote_mcp_tool_catalog_invalid"),
+  );
+});
+
 test("fails closed on extra and secret-bearing fields", () => {
   const config = validConfig();
   for (const extra of [
@@ -228,6 +270,29 @@ function validConfig() {
       },
     ],
   };
+}
+
+function schemaWithBytes(bytes: number): Record<string, unknown> {
+  const empty = JSON.stringify({ padding: "" });
+  return { padding: "a".repeat(bytes - Buffer.byteLength(empty, "utf8")) };
+}
+
+function serverWithTools(
+  template: ReturnType<typeof validConfig>["servers"][number],
+  serverId: string,
+  serverBindingId: string,
+  count: number,
+) {
+  const server = structuredClone(template);
+  server.serverId = serverId;
+  server.serverBindingId = serverBindingId;
+  server.tools = Array.from({ length: count }, (_, index) => {
+    const tool = structuredClone(template.tools[0]!);
+    tool.descriptor.name = `tool-${index}`;
+    tool.policy.executionTarget.bindingId = serverBindingId;
+    return tool;
+  });
+  return server;
 }
 
 function hasMessage(message: string): (error: unknown) => boolean {

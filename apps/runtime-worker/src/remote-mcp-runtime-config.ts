@@ -8,7 +8,9 @@ import {
 const MAX_CONFIG_BYTES = 512 * 1024;
 const MAX_SERVERS = 32;
 const MAX_TOOLS_PER_SERVER = 128;
-const MAX_SCHEMA_BYTES = 64 * 1024;
+const MAX_TOTAL_TOOLS = 128;
+const MAX_DESCRIPTION_BYTES = 2 * 1024;
+const MAX_SCHEMA_BYTES = 32 * 1024;
 const MAX_SCHEMA_DEPTH = 16;
 const MAX_SCHEMA_NODES = 4_096;
 
@@ -17,7 +19,7 @@ export type RemoteMcpRuntimeConfig = Readonly<{
   servers: readonly RemoteMcpServerConfig[];
 }>;
 
-type RemoteMcpServerConfig = Readonly<{
+export type RemoteMcpServerConfig = Readonly<{
   serverId: string;
   serverBindingId: string;
   mode: "production" | "standaloneLoopback";
@@ -69,8 +71,13 @@ export function parseRemoteMcpRuntimeConfig(
   }
   const serverIds = new Set<string>();
   const bindingIds = new Set<string>();
+  let totalTools = 0;
   const servers = input.servers.map((value) => {
     const server = parseServer(value);
+    totalTools += server.tools.length;
+    if (totalTools > MAX_TOTAL_TOOLS) {
+      throw new Error("remote_mcp_tool_catalog_invalid");
+    }
     if (
       serverIds.has(server.serverId) ||
       bindingIds.has(server.serverBindingId)
@@ -149,7 +156,10 @@ function parseTool(
   return {
     descriptor: {
       name,
-      description: boundedString(value.descriptor.description, 4_096),
+      description: boundedString(
+        value.descriptor.description,
+        MAX_DESCRIPTION_BYTES,
+      ),
       inputSchema: structuredClone(value.descriptor.inputSchema),
     },
     policy,
