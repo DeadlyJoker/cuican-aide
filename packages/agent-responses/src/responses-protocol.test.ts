@@ -123,6 +123,77 @@ const createdWithoutIdFixture = JSON.parse(
   ),
 ) as CreatedWithoutIdFixture;
 
+type PostTerminalFixture = Readonly<{
+  caseId: string;
+  cases: ReadonlyArray<
+    Readonly<{
+      name: string;
+      events: readonly Readonly<Record<string, unknown>>[];
+      expected: Readonly<{
+        stableEvents: readonly string[];
+        output: string;
+        terminal: "failed";
+        errorCategory: "provider" | "incomplete";
+        retryable: boolean;
+      }>;
+    }>
+  >;
+}>;
+
+const postTerminalFixture = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../test-contracts/fixtures/responses-post-terminal.reference.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as PostTerminalFixture;
+
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(`${postTerminalFixture.caseId}: ${sequencePolicy} first failure cutoff`, () => {
+    for (const fixtureCase of postTerminalFixture.cases) {
+      const decoder = new ResponsesProtocolDecoder({
+        sequencePolicy,
+        completedCheckpoint: () => null,
+      });
+      const events = [];
+      for (const event of fixtureCase.events) {
+        events.push(...decoder.accept(event));
+        if (decoder.terminal) {
+          break;
+        }
+      }
+      decoder.finish();
+      const failure = events.find((event) => event.type === "failed");
+      assert.deepEqual(
+        {
+          stableEvents: events.map((event) => event.type),
+          output: events
+            .filter((event) => event.type === "output.delta")
+            .map((event) => event.delta)
+            .join(""),
+          terminal: failure?.type ?? null,
+          errorCategory:
+            failure?.type === "failed" &&
+            failure.code.startsWith("responses_provider_")
+              ? "provider"
+              : "incomplete",
+          retryable: failure?.type === "failed" ? failure.retryable : null,
+        },
+        fixtureCase.expected,
+        fixtureCase.name,
+      );
+      assert.equal(
+        decoder.completedResponseId,
+        (fixtureCase.events[0]?.response as Readonly<Record<string, unknown>>)
+          .id,
+        "the first validated identity remains stable after cutoff",
+      );
+    }
+  });
+}
+
 for (const sequencePolicy of ["required", "whenPresent"] as const) {
   test(`${fixture.caseId}: ${sequencePolicy} transport framing`, () => {
     for (const fixtureCase of fixture.cases) {

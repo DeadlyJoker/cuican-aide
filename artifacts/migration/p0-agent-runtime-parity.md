@@ -293,5 +293,12 @@ shared fixture 有意不冻结实现内部 revision/cursor/`Instant`，focused/o
    compiler/registry、Control admission 与 runtime factory 已把 AR-012/024 推进到 server-selected multi-version 后端链路。
    staging/live Provider 与真实 UI 尚未验证，production routing Gate 仍未关闭。
 
+### AR-037 Responses terminal cutoff
+
+Rust HTTP/SSE 与 Responses WebSocket 统一以首个 `response.failed` 或 `response.incomplete` 为 terminal cutoff。HTTP/SSE 不再暂存错误并
+继续接受后续 completed；首个错误的 retry/category 保持不变，cutoff 后的第二个 failure、output、usage、metadata、identity 与 checkpoint
+均不可见。依赖 legacy failure→completed 成功行为的异常 provider stream 会从“成功”变为首个分类错误；正常 provider stream 与既有
+WebSocket/TS 行为不变。`AR-037-responses-post-terminal` shared fixture 冻结该兼容边界。
+
 每完成一个 case，必须同时留下 Rust source pointer、shared fixture、TS candidate test 和差分结果；只新增 TS snapshot 或只引用
 Rust 测试名称都不能把状态改成 `PARITY`。

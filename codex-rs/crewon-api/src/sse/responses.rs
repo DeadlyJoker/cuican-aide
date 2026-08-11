@@ -440,7 +440,6 @@ pub async fn process_sse(
     telemetry: Option<Arc<dyn SseTelemetry>>,
 ) {
     let mut stream = stream.eventsource();
-    let mut response_error: Option<ApiError> = None;
     let mut last_server_model: Option<String> = None;
 
     loop {
@@ -457,10 +456,11 @@ pub async fn process_sse(
                 return;
             }
             Ok(None) => {
-                let error = response_error.unwrap_or(ApiError::Stream(
-                    "stream closed before response.completed".into(),
-                ));
-                let _ = tx_event.send(Err(error)).await;
+                let _ = tx_event
+                    .send(Err(ApiError::Stream(
+                        "stream closed before response.completed".into(),
+                    )))
+                    .await;
                 return;
             }
             Err(_) => {
@@ -524,7 +524,8 @@ pub async fn process_sse(
             }
             Ok(None) => {}
             Err(error) => {
-                response_error = Some(error.into_api_error());
+                let _ = tx_event.send(Err(error.into_api_error())).await;
+                return;
             }
         };
     }
@@ -728,6 +729,111 @@ mod tests {
         name: String,
         events: Vec<Value>,
         expected: Value,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PostTerminalFixture {
+        case_id: String,
+        cases: Vec<PostTerminalCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct PostTerminalCase {
+        name: String,
+        events: Vec<Value>,
+        expected: Value,
+    }
+
+    #[tokio::test]
+    async fn first_failure_stops_sse_before_later_events_from_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-post-terminal.reference.json"
+        )
+        .expect("post-terminal fixture must exist");
+        let fixture: PostTerminalFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("post-terminal fixture must be readable"),
+        )
+        .expect("post-terminal fixture must parse");
+
+        for case in fixture.cases {
+            let body = case
+                .events
+                .into_iter()
+                .map(|event| {
+                    let kind = event["type"].as_str().expect("fixture event type");
+                    format!("event: {kind}\ndata: {event}\n\n")
+                })
+                .collect::<String>();
+            let events = collect_events(&[body.as_bytes()]).await;
+            let mut stable_events = Vec::new();
+            let mut error_category = None;
+            let mut retryable = None;
+
+            for event in events {
+                match event {
+                    Ok(ResponseEvent::Created) => {}
+                    Err(ApiError::Retryable { .. }) => {
+                        stable_events.push("failed");
+                        error_category = Some("provider");
+                        retryable = Some(true);
+                    }
+                    Err(ApiError::Stream(message))
+                        if message.starts_with("Incomplete response returned") =>
+                    {
+                        stable_events.push("failed");
+                        error_category = Some("incomplete");
+                        retryable = Some(false);
+                    }
+                    event => panic!("unexpected post-terminal event: {event:?}"),
+                }
+            }
+
+            assert_eq!(
+                json!({
+                    "stableEvents": stable_events,
+                    "output": "",
+                    "terminal": "failed",
+                    "errorCategory": error_category,
+                    "retryable": retryable,
+                }),
+                case.expected,
+                "fixture {} / {}",
+                fixture.case_id,
+                case.name,
+            );
+        }
+    }
+
+    #[test]
+    fn shared_dispatcher_returns_the_first_fixture_failure_immediately() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-post-terminal.reference.json"
+        )
+        .expect("post-terminal fixture must exist");
+        let fixture: PostTerminalFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("post-terminal fixture must be readable"),
+        )
+        .expect("post-terminal fixture must parse");
+
+        for case in fixture.cases {
+            let first_failure = case.events.into_iter().nth(1).expect("fixture failure");
+            let event = serde_json::from_value(first_failure).expect("deserialize fixture failure");
+            let error = process_responses_event(event)
+                .expect_err("shared dispatcher must return the first failure")
+                .into_api_error();
+            let (error_category, retryable) = match error {
+                ApiError::Retryable { .. } => ("provider", true),
+                ApiError::Stream(message)
+                    if message.starts_with("Incomplete response returned") =>
+                {
+                    ("incomplete", false)
+                }
+                error => panic!("unexpected shared dispatcher fixture error: {error:?}"),
+            };
+            assert_eq!(case.expected["errorCategory"], error_category);
+            assert_eq!(case.expected["retryable"], retryable);
+        }
     }
 
     #[test]

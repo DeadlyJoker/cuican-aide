@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "crewon.responses-post-terminal.v0",
+  "caseId": "AR-037-responses-post-terminal",
+  "cases": [
+    {
+      "name": "failed-stops-before-later-events",
+      "events": [
+        {
+          "type": "response.created",
+          "sequence_number": 0,
+          "response": { "id": "resp-failed" }
+        },
+        {
+          "type": "response.failed",
+          "sequence_number": 1,
+          "response": {
+            "id": "resp-failed",
+            "status": "failed",
+            "error": { "code": "server_error", "message": "first failure" }
+          }
+        },
+        {
+          "type": "response.incomplete",
+          "sequence_number": 2,
+          "response": {
+            "id": "resp-failed",
+            "status": "incomplete",
+            "incomplete_details": { "reason": "content_filter" }
+          }
+        },
+        {
+          "type": "response.output_text.delta",
+          "sequence_number": 3,
+          "delta": "must not escape"
+        },
+        {
+          "type": "response.completed",
+          "sequence_number": 4,
+          "response": {
+            "id": "resp-failed",
+            "status": "completed",
+            "model": "post-terminal-model"
+          }
+        }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "output": "",
+        "terminal": "failed",
+        "errorCategory": "provider",
+        "retryable": true
+      }
+    },
+    {
+      "name": "incomplete-stops-before-later-events",
+      "events": [
+        {
+          "type": "response.created",
+          "sequence_number": 0,
+          "response": { "id": "resp-incomplete" }
+        },
+        {
+          "type": "response.incomplete",
+          "sequence_number": 1,
+          "response": {
+            "id": "resp-incomplete",
+            "status": "incomplete",
+            "incomplete_details": { "reason": "content_filter" }
+          }
+        },
+        {
+          "type": "response.failed",
+          "sequence_number": 2,
+          "response": {
+            "id": "resp-incomplete",
+            "status": "failed",
+            "error": { "code": "server_error", "message": "second failure" }
+          }
+        },
+        {
+          "type": "response.output_item.done",
+          "sequence_number": 3,
+          "item": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{ "type": "output_text", "text": "must not persist" }]
+          }
+        },
+        {
+          "type": "response.completed",
+          "sequence_number": 4,
+          "response": {
+            "id": "resp-incomplete",
+            "status": "completed",
+            "usage": {
+              "input_tokens": 1,
+              "output_tokens": 1,
+              "total_tokens": 2
+            }
+          }
+        }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "output": "",
+        "terminal": "failed",
+        "errorCategory": "incomplete",
+        "retryable": false
+      }
+    }
+  ]
+}
