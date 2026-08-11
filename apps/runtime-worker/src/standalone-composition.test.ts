@@ -76,6 +76,7 @@ test("requires an externally activated bootstrap release before execution", asyn
     databasePath,
     scanIntervalMs: null,
   });
+  assert.equal(runtime.workspacePrivateOrigin, null);
   await runtime.close();
 
   const store = new SqliteRunStore(databasePath);
@@ -197,8 +198,90 @@ test("starts and closes the optional private Provider probe server", async (cont
     scanIntervalMs: null,
     providerProbe: probeConfig(0),
   });
-  assert.match(runtime.providerProbeOrigin ?? "", /^http:\/\/127\.0\.0\.1:\d+$/u);
+  assert.match(
+    runtime.providerProbeOrigin ?? "",
+    /^http:\/\/127\.0\.0\.1:\d+$/u,
+  );
   await runtime.close();
+});
+
+test("starts the optional loopback Workspace server and closes its Gateway client", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = workspaceRuntimeConfig();
+  await activateRelease(databasePath, config);
+  let gatewayCloses = 0;
+  const runtime = await createStandaloneRuntimeWorker({
+    ...config,
+    databasePath,
+    scanIntervalMs: null,
+    workspacePrivate: workspaceConfig(0, () => {
+      gatewayCloses += 1;
+    }),
+  });
+  assert.match(
+    runtime.workspacePrivateOrigin ?? "",
+    /^http:\/\/127\.0\.0\.1:\d+$/u,
+  );
+  await runtime.close();
+  assert.equal(gatewayCloses, 1);
+});
+
+test("closes Workspace resources when the private loopback port is occupied", async (context) => {
+  const blocker = createServer();
+  await new Promise<void>((resolve, reject) => {
+    blocker.once("error", reject);
+    blocker.listen(0, "127.0.0.1", resolve);
+  });
+  context.after(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        blocker.close((error) => (error ? reject(error) : resolve()));
+      }),
+  );
+  const address = blocker.address();
+  assert.ok(address !== null && typeof address !== "string");
+  const databasePath = temporaryDatabasePath(context);
+  const config = workspaceRuntimeConfig();
+  await activateRelease(databasePath, config);
+  let gatewayCloses = 0;
+  await assert.rejects(
+    createStandaloneRuntimeWorker({
+      ...config,
+      databasePath,
+      scanIntervalMs: null,
+      workspacePrivate: workspaceConfig(address.port, () => {
+        gatewayCloses += 1;
+      }),
+    }),
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "EADDRINUSE",
+  );
+  assert.equal(gatewayCloses, 1);
+  const reopened = new SqliteRunStore(databasePath);
+  await reopened.close();
+});
+
+test("closes packaged Workspace Gateway and Store on static deployment mismatch", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = runtimeConfig();
+  await activateRelease(databasePath, config);
+  let gatewayCloses = 0;
+  await assert.rejects(
+    createStandaloneRuntimeWorker({
+      ...config,
+      databasePath,
+      scanIntervalMs: null,
+      workspacePrivate: workspaceConfig(0, () => {
+        gatewayCloses += 1;
+      }),
+    }),
+    (error) =>
+      error instanceof Error &&
+      error.message === "runtime_workspace_deployment_mismatch",
+  );
+  assert.equal(gatewayCloses, 1);
+  const reopened = new SqliteRunStore(databasePath);
+  await reopened.close();
 });
 
 test("closes Worker resources when the private probe port is occupied", async (context) => {
@@ -227,7 +310,8 @@ test("closes Worker resources when the private probe port is occupied", async (c
       scanIntervalMs: null,
       providerProbe: probeConfig(address.port),
     }),
-    (error) => error instanceof Error && "code" in error && error.code === "EADDRINUSE",
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "EADDRINUSE",
   );
   const reopened = new SqliteRunStore(databasePath);
   await reopened.close();
@@ -249,6 +333,17 @@ function runtimeConfig(): RuntimeWorkerCompositionConfig {
     maxToolRounds: 12,
     autoCompactAtTokens: 96_000,
     modelContextWindowTokens: 128_000,
+  };
+}
+
+function workspaceRuntimeConfig(): RuntimeWorkerCompositionConfig {
+  return {
+    ...runtimeConfig(),
+    route: {
+      ...runtimeConfig().route,
+      runtimeGeneration: "runtime-binding-1",
+      workspaceBindingId: "workspace-1",
+    },
   };
 }
 
@@ -276,6 +371,31 @@ function probeConfig(port: number) {
     },
     secrets: { resolve: () => null },
     egressPolicy: new DesktopProviderProbeEgressPolicy(),
+  };
+}
+
+function workspaceConfig(port: number, closed: () => void) {
+  return {
+    port,
+    token: "runtime-worker-private-workspace-token-32-bytes",
+    authority: {
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      workspaceBindingId: "workspace-1",
+      incarnationId: "incarnation-1",
+      deviceBindingId: "device-binding-1",
+      deviceId: "device-1",
+      runtimeBindingId: "runtime-binding-1",
+      policySnapshotId: "policy-1",
+    },
+    ids: { nextExecutionId: () => "workspace-execution-1" },
+    signer: { sign: async () => assert.fail("sign not expected") },
+    gateway: {
+      execute: async () => assert.fail("execute not expected"),
+      reconcile: async () => assert.fail("reconcile not expected"),
+      cancel: async () => assert.fail("cancel not expected"),
+      close: async () => closed(),
+    },
   };
 }
 
