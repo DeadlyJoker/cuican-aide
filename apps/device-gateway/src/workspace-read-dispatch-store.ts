@@ -44,6 +44,11 @@ export type WorkspaceReadRouteFence = Readonly<{
   leaseExpiresAt: string;
 }>;
 
+/** Resolves the currently authoritative connection fence for a proposed read route. */
+export type WorkspaceReadCurrentRouteResolver = (
+  expected: WorkspaceReadRouteFence,
+) => WorkspaceReadRouteFence | null | Promise<WorkspaceReadRouteFence | null>;
+
 export interface WorkspaceReadDispatchStorePort {
   ready(): Promise<void>;
   prepare(
@@ -75,10 +80,10 @@ export class InMemoryWorkspaceReadDispatchStore
   readonly #records = new Map<string, WorkspaceReadDispatchRecord>();
   #closed = false;
 
-  readonly #currentRoute: (deviceId: string) => WorkspaceReadRouteFence | null;
+  readonly #currentRoute: WorkspaceReadCurrentRouteResolver;
   constructor(config: {
     now: () => Date;
-    currentRoute: (deviceId: string) => WorkspaceReadRouteFence | null;
+    currentRoute: WorkspaceReadCurrentRouteResolver;
     executionKinds?: InMemoryDeviceExecutionKindAuthority;
     initialRecords?: readonly WorkspaceReadDispatchRecord[];
   }) {
@@ -109,7 +114,7 @@ export class InMemoryWorkspaceReadDispatchStore
       route,
       command.deviceId,
     );
-    const currentRoute = this.#currentRoute(command.deviceId);
+    const currentRoute = await this.#currentRoute(projectedRoute);
     if (
       currentRoute === null ||
       !sameRoute(
@@ -182,7 +187,7 @@ export class InMemoryWorkspaceReadDispatchStore
     if (
       event.sequence === 1 &&
       !sameCurrentRoute(
-        this.#currentRoute(command.deviceId),
+        await this.#currentRoute(route),
         route,
         command.deviceId,
       )

@@ -8,6 +8,7 @@ import {
   parseWorkspaceReadDispatchRecord,
   type WorkspaceReadDispatchRecord,
   type WorkspaceReadDispatchStorePort,
+  type WorkspaceReadCurrentRouteResolver,
   type WorkspaceReadRouteFence,
 } from "./workspace-read-dispatch-store.ts";
 
@@ -18,7 +19,7 @@ export class SqliteWorkspaceReadDispatchStore
   readonly #database: DatabaseSync;
   readonly #config: {
     now: () => Date;
-    currentRoute: (deviceId: string) => WorkspaceReadRouteFence | null;
+    currentRoute: WorkspaceReadCurrentRouteResolver;
   };
   #tail: Promise<void> = Promise.resolve();
   #closePromise: Promise<void> | null = null;
@@ -29,7 +30,7 @@ export class SqliteWorkspaceReadDispatchStore
     path: string,
     config: {
       now: () => Date;
-      currentRoute: (deviceId: string) => WorkspaceReadRouteFence | null;
+      currentRoute: WorkspaceReadCurrentRouteResolver;
     },
   ) {
     this.#database = new DatabaseSync(path);

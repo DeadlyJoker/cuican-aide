@@ -10,6 +10,7 @@ import {
   parseWorkspaceReadDispatchRecord,
   type WorkspaceReadDispatchRecord,
   type WorkspaceReadDispatchStorePort,
+  type WorkspaceReadCurrentRouteResolver,
   type WorkspaceReadRouteFence,
 } from "./workspace-read-dispatch-store.ts";
 
@@ -22,7 +23,7 @@ export class PostgresWorkspaceReadDispatchStore
   readonly #schema: string;
   readonly #config: {
     now: () => Date;
-    currentRoute: (deviceId: string) => WorkspaceReadRouteFence | null;
+    currentRoute: WorkspaceReadCurrentRouteResolver;
   };
   #ready: Promise<void> | null = null;
   #closed = false;
@@ -30,7 +31,7 @@ export class PostgresWorkspaceReadDispatchStore
   constructor(
     options: PostgresDeviceDispatchStoreOptions & {
       now: () => Date;
-      currentRoute: (deviceId: string) => WorkspaceReadRouteFence | null;
+      currentRoute: WorkspaceReadCurrentRouteResolver;
     },
   ) {
     if (

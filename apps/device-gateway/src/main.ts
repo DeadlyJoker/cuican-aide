@@ -1,8 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 
 import {
-  createDeviceDispatchStoreFromEnvironment,
-  createWorkspaceDispatchStoreFromEnvironment,
+  createDeviceGatewayDispatchStoresFromEnvironment,
 } from "./device-dispatch-store-config.ts";
 import { DeviceGatewayServer } from "./device-gateway-server.ts";
 import { resolveDeviceGatewayRuntimeIdentity } from "./device-gateway-runtime-config.ts";
@@ -19,7 +18,6 @@ import { MtlsGatewayIdentityVerifier } from "./mtls-gateway-identity-verifier.ts
 import { MtlsWorkerIdentityVerifier } from "./mtls-worker-identity-verifier.ts";
 import { PostgresDeviceDispatchStore } from "./postgres-device-dispatch-store.ts";
 import { SqliteDeviceDispatchStore } from "./sqlite-device-dispatch-store.ts";
-import { SqliteWorkspaceDispatchStore } from "./sqlite-workspace-dispatch-store.ts";
 import { Ed25519WorkspaceCommandAuthorizationVerifier } from "./workspace-command-authorization-verifier.ts";
 import { WorkspaceWorkerRuntimeAuthorizer } from "./workspace-worker-runtime-authorizer.ts";
 
@@ -34,10 +32,12 @@ const registry = parseDeviceRegistryConfig(
     ).toString("utf8"),
   ),
 );
-const dispatchStore = createDeviceDispatchStoreFromEnvironment(process.env);
-const workspaceDispatchStore = createWorkspaceDispatchStoreFromEnvironment(
-  process.env,
-);
+const {
+  dispatchStore,
+  workspaceDispatchStore,
+  workspaceReadDispatchStore,
+  connectionRouteStore,
+} = createDeviceGatewayDispatchStoresFromEnvironment(process.env);
 const serverTls = {
   key: await readBoundedFile(
     requiredEnvironment("CREWON_DEVICE_GATEWAY_TLS_KEY_PATH"),
@@ -103,6 +103,19 @@ const workspacePeerDispatch =
         gateways: registry.gateways,
         tls: peerTls,
       });
+const connectionRoutes =
+  runtimeIdentity.kind === "team" ||
+  runtimeIdentity.kind === "standaloneWorkspace"
+    ? {
+        store: connectionRouteStore,
+        gatewayId: runtimeIdentity.gatewayId,
+        leaseDurationMs: parseOptionalPositiveInteger(
+          process.env.CREWON_DEVICE_CONNECTION_LEASE_MS,
+          30_000,
+          "CREWON_DEVICE_CONNECTION_LEASE_MS_invalid",
+        ),
+      }
+    : undefined;
 const server = new DeviceGatewayServer({
   tls: serverTls,
   identityVerifier: new MtlsDeviceIdentityVerifier(registry.devices),
@@ -112,6 +125,7 @@ const server = new DeviceGatewayServer({
   ),
   dispatchStore,
   workspaceDispatchStore,
+  workspaceReadDispatchStore,
   workspaceAuthorizationVerifier:
     new Ed25519WorkspaceCommandAuthorizationVerifier(
       registry.commandSigningKeys,
@@ -119,30 +133,7 @@ const server = new DeviceGatewayServer({
   workspaceWorkerAuthorizer: new WorkspaceWorkerRuntimeAuthorizer(
     registry.workers,
   ),
-  connectionRoutes:
-    runtimeIdentity.kind === "team" &&
-    dispatchStore instanceof PostgresDeviceDispatchStore
-      ? {
-          store: dispatchStore,
-          gatewayId: runtimeIdentity.gatewayId,
-          leaseDurationMs: parseOptionalPositiveInteger(
-            process.env.CREWON_DEVICE_CONNECTION_LEASE_MS,
-            30_000,
-            "CREWON_DEVICE_CONNECTION_LEASE_MS_invalid",
-          ),
-        }
-      : runtimeIdentity.kind === "standaloneWorkspace" &&
-          workspaceDispatchStore instanceof SqliteWorkspaceDispatchStore
-        ? {
-            store: workspaceDispatchStore,
-            gatewayId: runtimeIdentity.gatewayId,
-            leaseDurationMs: parseOptionalPositiveInteger(
-              process.env.CREWON_DEVICE_CONNECTION_LEASE_MS,
-              30_000,
-              "CREWON_DEVICE_CONNECTION_LEASE_MS_invalid",
-            ),
-          }
-        : undefined,
+  connectionRoutes,
   workspaceRouteTopology:
     runtimeIdentity.kind === "standaloneToolOnly"
       ? undefined
@@ -155,6 +146,7 @@ const server = new DeviceGatewayServer({
       : new MtlsGatewayIdentityVerifier(registry.gateways),
   peerDispatch: peerDispatch ?? undefined,
   workspacePeerDispatch: workspacePeerDispatch ?? undefined,
+  workspaceReadPeerDispatch: workspacePeerDispatch ?? undefined,
 });
 const listen = resolveDeviceGatewayListenConfig(process.env, runtimeIdentity);
 const address = await server.listen(listen.host, listen.port);
