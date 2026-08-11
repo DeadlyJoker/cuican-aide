@@ -63,7 +63,7 @@ pub(super) fn require_output_bound(
     Ok(())
 }
 
-pub(super) fn validate_binding(
+pub(crate) fn validate_binding(
     binding: &WorkspaceDirectoryBinding,
 ) -> Result<(), WorkspaceDirectoryError> {
     require_opaque_id(&binding.workspace_binding_id, "workspace_binding_invalid")?;

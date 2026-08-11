@@ -25,7 +25,7 @@ struct DirectoryIdentity {
     inode: libc::ino_t,
 }
 
-pub(super) struct StableDirectory {
+pub(crate) struct StableDirectory {
     stream: *mut DIR,
     identity: DirectoryIdentity,
 }

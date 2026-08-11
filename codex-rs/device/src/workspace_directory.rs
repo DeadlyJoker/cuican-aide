@@ -14,16 +14,18 @@ use uuid::Uuid;
 
 #[cfg(unix)]
 #[path = "workspace_directory_unix.rs"]
-mod platform;
+pub(crate) mod platform;
 #[cfg(windows)]
 #[path = "workspace_directory_windows.rs"]
-mod platform;
+pub(crate) mod platform;
 #[path = "workspace_directory_validation.rs"]
-mod validation;
+pub(crate) mod validation;
 
 use validation::entry_from_utf8_bytes;
 use validation::require_output_bound;
 use validation::validate_binding;
+#[cfg(test)]
+use crate::WorkspaceFileReadResult;
 
 const OUTPUT_SCHEMA_VERSION: &str = "crewon.workspace-list-native-result.v0";
 const CURSOR_PREFIX: &str = "workspace-page-";
@@ -34,7 +36,6 @@ pub const MAX_WORKSPACE_OUTPUT_BYTES: usize = 64 * 1024;
 pub const MAX_WORKSPACE_SCANNED_ENTRIES: usize = 10_000;
 pub const MAX_WORKSPACE_SCANNED_NAME_BYTES: usize = 1024 * 1024;
 pub const MAX_WORKSPACE_LIST_TIMEOUT: Duration = Duration::from_secs(30);
-pub const MAX_WORKSPACE_FILE_READ_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -65,15 +66,6 @@ pub struct WorkspaceListLimits {
     pub max_scanned_entries: usize,
     pub max_scanned_name_bytes: usize,
     pub timeout: Duration,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceFileReadResult {
-    pub schema_version: String,
-    pub encoding: String,
-    pub content: String,
-    pub byte_length: usize,
 }
 
 impl WorkspaceListLimits {
@@ -135,7 +127,7 @@ impl WorkspaceListCancellation {
         self.canceled.store(true, Ordering::Release);
     }
 
-    fn is_canceled(&self) -> bool {
+    pub(crate) fn is_canceled(&self) -> bool {
         self.canceled.load(Ordering::Acquire)
     }
 }
@@ -251,70 +243,6 @@ impl WorkspaceDirectoryRegistry {
             .scan(cancellation)
     }
 
-    /// Reads one bounded UTF-8 regular file through the registered directory
-    /// handle. Components are traversed by the platform implementation without
-    /// resolving or reopening an absolute path.
-    pub fn read_file(
-        &self,
-        binding: &WorkspaceDirectoryBinding,
-        components: &[String],
-        max_bytes: usize,
-        timeout: Duration,
-        cancellation: &WorkspaceListCancellation,
-    ) -> Result<WorkspaceFileReadResult, WorkspaceDirectoryError> {
-        validate_binding(binding)?;
-        if components.is_empty()
-            || components.len() > 32
-            || max_bytes == 0
-            || max_bytes > MAX_WORKSPACE_FILE_READ_BYTES
-            || timeout.is_zero()
-            || timeout > MAX_WORKSPACE_LIST_TIMEOUT
-        {
-            return Err(WorkspaceDirectoryError::new(
-                "workspace_file_read_limits_invalid",
-            ));
-        }
-        let deadline = Instant::now()
-            .checked_add(timeout)
-            .ok_or_else(|| WorkspaceDirectoryError::new("workspace_file_read_limits_invalid"))?;
-        let directory = {
-            let mut entries = self.lock_entries()?;
-            let registered = entries
-                .get_mut(&binding.workspace_binding_id)
-                .filter(|registered| registered.binding == *binding)
-                .ok_or_else(|| WorkspaceDirectoryError::new("workspace_binding_unavailable"))?;
-            registered
-                .directory
-                .take()
-                .ok_or_else(|| WorkspaceDirectoryError::new("workspace_binding_unavailable"))?
-        };
-        let mut lease = DirectoryLease {
-            registry: self,
-            workspace_binding_id: binding.workspace_binding_id.clone(),
-            directory: Some(directory),
-        };
-        let content =
-            lease
-                .directory_mut()?
-                .read_file(components, max_bytes, deadline, cancellation)?;
-        self.validate_current_binding(binding)?;
-        let result = WorkspaceFileReadResult {
-            schema_version: "crewon.workspace-file-read-result.v0".to_string(),
-            encoding: "utf8".to_string(),
-            byte_length: content.len(),
-            content,
-        };
-        let encoded = serde_json::to_vec(&result).map_err(|error| {
-            WorkspaceDirectoryError::with_source("workspace_file_read_result_invalid", error)
-        })?;
-        if encoded.len() > max_bytes {
-            return Err(WorkspaceDirectoryError::new(
-                "workspace_file_read_output_too_large",
-            ));
-        }
-        Ok(result)
-    }
-
     /// Exclusively acquires the already-open handle without performing I/O.
     ///
     /// Native connection admission uses this as its epoch linearization point,
@@ -362,7 +290,7 @@ impl WorkspaceDirectoryRegistry {
         })
     }
 
-    fn lock_entries(
+    pub(super) fn lock_entries(
         &self,
     ) -> Result<
         std::sync::MutexGuard<'_, HashMap<String, RegisteredDirectory>>,
@@ -489,22 +417,33 @@ impl WorkspaceDirectoryError {
 }
 
 #[derive(Debug)]
-struct RegisteredDirectory {
-    binding: WorkspaceDirectoryBinding,
-    directory: Option<platform::StableDirectory>,
+pub(super) struct RegisteredDirectory {
+    pub(super) binding: WorkspaceDirectoryBinding,
+    pub(super) directory: Option<platform::StableDirectory>,
 }
 
-struct DirectoryLease<'a> {
-    registry: &'a WorkspaceDirectoryRegistry,
-    workspace_binding_id: String,
-    directory: Option<platform::StableDirectory>,
+pub(super) struct DirectoryLease<'a> {
+    pub(super) registry: &'a WorkspaceDirectoryRegistry,
+    pub(super) workspace_binding_id: String,
+    pub(super) directory: Option<platform::StableDirectory>,
 }
 
 impl DirectoryLease<'_> {
-    fn directory_mut(&mut self) -> Result<&mut platform::StableDirectory, WorkspaceDirectoryError> {
+    pub(super) fn directory_mut(&mut self) -> Result<&mut platform::StableDirectory, WorkspaceDirectoryError> {
         self.directory
             .as_mut()
             .ok_or_else(|| WorkspaceDirectoryError::new("workspace_binding_unavailable"))
+    }
+
+    pub(super) fn read_file(
+        &mut self,
+        components: &[String],
+        max_bytes: usize,
+        deadline: Instant,
+        cancellation: &WorkspaceListCancellation,
+    ) -> Result<String, WorkspaceDirectoryError> {
+        self.directory_mut()?
+            .read_file(components, max_bytes, deadline, cancellation)
     }
 }
 

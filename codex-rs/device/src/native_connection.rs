@@ -111,7 +111,7 @@ impl DeviceCommandAuthorizer {
         Ok(command)
     }
 
-    fn verify(
+    pub(crate) fn verify(
         &self,
         command: &DeviceExecutionCommand,
         now: DateTime<Utc>,
@@ -175,10 +175,10 @@ impl DeviceCommandAuthorizer {
 /// One authenticated Gateway socket admitted by the Native epoch authority.
 #[derive(Debug, Clone)]
 pub struct NativeDeviceConnection<'a> {
-    fence: &'a ConnectionEpochFence,
-    authorizer: &'a DeviceCommandAuthorizer,
-    accepted: AcceptedGatewayConnection,
-    runtime_binding: Option<NativeDeviceRuntimeBinding>,
+    pub(crate) fence: &'a ConnectionEpochFence,
+    pub(crate) authorizer: &'a DeviceCommandAuthorizer,
+    pub(crate) accepted: AcceptedGatewayConnection,
+    pub(crate) runtime_binding: Option<NativeDeviceRuntimeBinding>,
 }
 
 impl<'a> NativeDeviceConnection<'a> {
@@ -544,11 +544,11 @@ impl NativeDeviceAdmissionError {
         }
     }
 
-    fn from_protocol(error: crewon_device_protocol::DeviceProtocolError) -> Self {
+    pub(crate) fn from_protocol(error: crewon_device_protocol::DeviceProtocolError) -> Self {
         Self::with_source(error.code, error)
     }
 
-    fn from_fence(error: ConnectionEpochFenceError) -> Self {
+    pub(crate) fn from_fence(error: ConnectionEpochFenceError) -> Self {
         Self::with_source(error.code, error)
     }
 
@@ -557,7 +557,7 @@ impl NativeDeviceAdmissionError {
     }
 }
 
-fn parse_bounded_json(
+pub(crate) fn parse_bounded_json(
     frame: &[u8],
     max_bytes: usize,
     invalid_code: &'static str,

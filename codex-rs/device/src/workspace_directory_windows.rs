@@ -47,7 +47,7 @@ struct DirectoryIdentity {
     file_index: u64,
 }
 
-pub(super) struct StableDirectory {
+pub(crate) struct StableDirectory {
     handle: HANDLE,
     identity: DirectoryIdentity,
 }
