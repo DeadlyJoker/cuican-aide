@@ -124,6 +124,24 @@ import {
   evaluateGoalToolCall,
   type GoalToolExecutionInput,
   type GoalToolExecutionResult,
+  type AbandonWorkspaceDeliveryInput,
+  type ClaimWorkspaceDeliveryInput,
+  type CommitWorkspaceOperationResolutionInput,
+  type PrepareWorkspaceOperationInput,
+  type PrepareWorkspaceOperationActionInput,
+  type WorkspaceDeliveryAttempt,
+  type WorkspaceDeliveryAttemptQuery,
+  type WorkspaceDeliverySettlementResult,
+  type WorkspaceOperationMutationResult,
+  type WorkspaceOperationEvent,
+  type WorkspaceOperationEventQuery,
+  type WorkspaceOperationLocator,
+  type WorkspaceOperationListPage,
+  type WorkspaceOperationListQuery,
+  type WorkspaceOperationPreparationResult,
+  type WorkspaceOperationReceiptQuery,
+  type WorkspaceOperationRecord,
+  type WorkspaceOperationSnapshot,
 } from "@crewon/application";
 import { InMemoryAutomationAuthority } from "./in-memory-automation-authority.ts";
 import type {
@@ -144,6 +162,7 @@ import {
   validateAgentVersionList,
   validateAgentVersionLocator,
 } from "./agent-version-store-invariants.ts";
+import { InMemoryWorkspaceOperationStore } from "./in-memory-workspace-operation-store.ts";
 import {
   parseAbortModelProviderSettingsReceipt,
   parseFinalizeModelProviderSettingsReceipt,
@@ -347,6 +366,13 @@ export class InMemoryRunStore implements DomainStore {
   readonly #workItems = new Map<string, QueueRecord<WorkItem>>();
   readonly #idempotency = new Map<string, IdempotencyReceipt>();
   readonly #threads = new Map<string, ThreadState>();
+  readonly #workspaceOperations = new InMemoryWorkspaceOperationStore(
+    (tenantId, threadId) => {
+      const thread = this.#threads.get(threadId) ?? null;
+      return thread?.tenantId === tenantId ? clone(thread) : null;
+    },
+    () => readLeaseClock(this.#clock),
+  );
   readonly #threadGoals = new Map<string, ThreadGoal>();
   readonly #threadEvents = new Map<string, ThreadLifecycleEvent[]>();
   readonly #threadEventIds = new Set<string>();
@@ -993,6 +1019,77 @@ export class InMemoryRunStore implements DomainStore {
       state.spaceId === locator.spaceId
       ? clone(state)
       : null;
+  }
+
+  loadWorkspaceOperationReceipt(
+    query: WorkspaceOperationReceiptQuery,
+  ): Promise<WorkspaceOperationMutationResult | null> {
+    return this.#workspaceOperations.loadWorkspaceOperationReceipt(query);
+  }
+
+  prepareWorkspaceOperation(
+    input: PrepareWorkspaceOperationInput,
+  ): Promise<WorkspaceOperationPreparationResult> {
+    return this.#workspaceOperations.prepareWorkspaceOperation(input);
+  }
+
+  loadWorkspaceOperation(input: {
+    tenantId: string;
+    spaceId: string;
+    threadId: string;
+    executionId: string;
+  }): Promise<WorkspaceOperationRecord | null> {
+    return this.#workspaceOperations.loadWorkspaceOperation(input);
+  }
+
+  loadWorkspaceOperationSnapshot(
+    locator: WorkspaceOperationLocator,
+  ): Promise<WorkspaceOperationSnapshot | null> {
+    return this.#workspaceOperations.loadWorkspaceOperationSnapshot(locator);
+  }
+
+  listWorkspaceOperationEvents(
+    query: WorkspaceOperationEventQuery,
+  ): Promise<readonly WorkspaceOperationEvent[]> {
+    return this.#workspaceOperations.listWorkspaceOperationEvents(query);
+  }
+
+  listWorkspaceOperations(
+    query: WorkspaceOperationListQuery,
+  ): Promise<WorkspaceOperationListPage> {
+    return this.#workspaceOperations.listWorkspaceOperations(query);
+  }
+
+  prepareWorkspaceOperationAction(
+    input: PrepareWorkspaceOperationActionInput,
+  ): Promise<WorkspaceOperationPreparationResult> {
+    return this.#workspaceOperations.prepareWorkspaceOperationAction(input);
+  }
+
+  claimWorkspaceOperationDelivery(
+    input: ClaimWorkspaceDeliveryInput,
+  ): Promise<WorkspaceDeliveryAttempt> {
+    return this.#workspaceOperations.claimWorkspaceOperationDelivery(input);
+  }
+
+  listWorkspaceOperationDeliveryAttempts(
+    query: WorkspaceDeliveryAttemptQuery,
+  ): Promise<readonly WorkspaceDeliveryAttempt[]> {
+    return this.#workspaceOperations.listWorkspaceOperationDeliveryAttempts(
+      query,
+    );
+  }
+
+  abandonWorkspaceOperationDelivery(
+    input: AbandonWorkspaceDeliveryInput,
+  ): Promise<WorkspaceDeliveryAttempt> {
+    return this.#workspaceOperations.abandonWorkspaceOperationDelivery(input);
+  }
+
+  settleWorkspaceOperationDelivery(
+    input: CommitWorkspaceOperationResolutionInput,
+  ): Promise<WorkspaceDeliverySettlementResult> {
+    return this.#workspaceOperations.settleWorkspaceOperationDelivery(input);
   }
 
   async loadThreadGoal(locator: ThreadLocator): Promise<ThreadGoal | null> {
