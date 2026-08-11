@@ -202,7 +202,9 @@ Gate 报告为通过。
   assistant items、Run events/usage、Model History、Thread model state、sample marker 与 Step/Attempt completion 原子提交。每个 sample
   使用独立、完整语义绑定的 idempotency receipt；commit 后进程丢失会从 exact durable history suffix 继续，不重复 sample、usage 或
   assistant Message。InMemory、SQLite 与 PostgreSQL adapter 共用 execution-store conformance；Rust 与 TS 消费同一份三请求 fixture，冻结
-  `working`、`still working`、`done` 的历史和累计 usage。stored-response/provider-checkpoint continuation 仍有意 fail closed，因此广义
+  `working`、`still working`、`done` 的历史和累计 usage。`9906618be` 继续补齐 stored-response checkpoint：空的
+  `end_turn=false` stored response 以 checkpoint 发起新的 POST，不 retrieve、不消耗 retry budget；stored Tool response 返回 durable Tool
+  boundary 与 checkpoint。带 assistant output 或 mixed output 的 stored continuation 仍 fail closed，等待完整原子提交语义，所以广义
   AR-031 继续标为 `PARTIAL`。
 - Runtime Worker read command / client：`78d6bbeec`、`5dc2472a8` 生成并签名 `workspace.read_file.v0`，canonical action digest
   绑定 tenant/space/thread、Run/Step/Attempt/execution、lease、Workspace/Device/Runtime、policy、路径和固定 limits。`8564a679b`、
@@ -216,9 +218,36 @@ Gate 报告为通过。
   `190 pass + 1 PostgreSQL-unconfigured skip`；对应 package typecheck 全部通过。Rust
   `suite::provider_end_turn::end_turn_false_assistant_items_continue_same_turn` focused reference `1/1` 通过。此前本纵切的
   `crewon-device-journal 21/21`、`crewon-device 30/30`、`crewon-device-runtime 21/21` 证据保持有效。
-- 能力边界：本阶段没有增加 Control/public API。command producer 与 production Gateway client 已具备，但尚未由 durable
+- 该阶段的能力边界：当时没有增加 Control/public API。command producer 与 production Gateway client 已具备，但尚未由 durable
   Application read-operation authority 在网络发送前原子冻结 reference，也未接入 Agent Tool catalog/Runtime Worker 调度、native bootstrap
-  composition 和 packaged read smoke；所以能力仍为 internal-only，不能宣告用户可用。
+  composition 和 packaged read smoke；因此不能只凭该阶段宣告用户可用，后续 production composition 与 packaged smoke 见下一节。
+
+## Packaged `read_file` production composition 与 crash recovery
+
+- `e6e04d142` 补齐 Device Gateway 生产入口缺失的 Workspace Read composition：SQLite standalone 与 PostgreSQL Team 分别使用其
+  durable connection-route authority，生产 server 同时安装 Device、Workspace List、Workspace Read store，并复用已实现双接口的 HTTPS
+  peer client。route resolver 在每次 prepare 时重新核对 device/gateway/connection/epoch/lease；stale takeover fail closed。
+- `64cd9e374` 将 Runtime Worker Workspace Read 幂等指纹绑定到稳定的 `workItemId`、`stepId`、`attemptId`，排除每次 claim 都会变化的
+  `leaseId`、`leaseEpoch`、`expiresAt`。因此进程恢复或租约重领不会把同一 Tool execution 误报为
+  `workspace_read_file_conflict`。
+- 严格 Provider harness `6deda420e` 冻结完整 Tool catalog，只接受 immutable `read_file` 与 server-owned `get_goal`、`create_goal`；
+  每轮使用唯一 call/response ID，并验证历史 `function_call` / `function_call_output` 必须完整配对、同一路径、唯一且有界。真实 Provider
+  两轮 transcript 分别记录 `toolRequested` 与 25-byte `toolResultObserved`。
+- rebuild 后的 macOS `Crewon.app` 在隔离 HOME `/private/tmp/crewon-packaged-smoke.LxwDwe` 完成真实 Turn。epoch 11 的首次尝试 Run
+  `019ff1f7-898f-71ec-aedc-f79806ea67aa` 读取 `README.md`，Control Tool receipt 与 Workspace operation 都结算为 `completed`，输出精确为
+  `packaged workspace smoke\n`。Gateway durable record 包含 accepted/terminal，Rust journal 包含 sequence 1/2 与 ACK 1/2。
+- 对 GUI 根进程发送 `SIGKILL` 后，guardian 清理所有 bundle executable，Control `3210` 与 app-server `6176` 均释放。同一 HOME 重启后
+  route epoch 从 11 精确推进到 12，并由新的 connection ID 接管；没有复用旧 route lease。
+- epoch 12 下使用新 call ID 和 idempotency key 再执行真实 Turn：Run
+  `019ff1fc-17e0-704a-880e-84d324bd1750`、execution `019ff1fc-1a2c-728e-bc87-b9fa7060e34a` 首次尝试完成，
+  Worker `attempt_count=1`、`last_error_code=null`。Gateway 为 `workspace_read.accepted` + `workspace_read.completed`，Device journal 的两个
+  event 均绑定 connection epoch 12，`acknowledged_through=2`；命令后 route 仍为 epoch 12。
+- AR-031 并行 worktree 已阶段集成为 `9906618be`、`b112e22e6`、`d6efadb14`。Control 的
+  `segment.provider_continuation` public projection 只暴露 `segmentId`、`sampleIndex`、`throughHistorySequence`，client/audit 两种 view
+  一致且不泄漏内部 `segmentSequence`。
+- 当前合并态验证：Agent Kernel `24/24`、Agent Responses `35/35`、Contracts `77/77`、Control API
+  `90 pass + 3 PostgreSQL-unconfigured skip`、Runtime Worker `213 pass + 1 PostgreSQL-unconfigured skip`、Device Gateway
+  `109 pass + 7 PostgreSQL-unconfigured skip`、Rust Device `27/27`、Tauri `100/100`。这些 skip 继续按未验证处理。
 
 ## 尚未关闭的完整迁移 Gate
 
