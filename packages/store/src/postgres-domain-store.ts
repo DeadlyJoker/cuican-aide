@@ -40,6 +40,24 @@ import {
   validateToolApprovalReplacement,
   validateToolApprovalReplacementCommit,
   validateToolApprovalReplacementReplay,
+  type AbandonWorkspaceDeliveryInput,
+  type ClaimWorkspaceDeliveryInput,
+  type CommitWorkspaceOperationResolutionInput,
+  type PrepareWorkspaceOperationActionInput,
+  type PrepareWorkspaceOperationInput,
+  type WorkspaceDeliveryAttempt,
+  type WorkspaceDeliveryAttemptQuery,
+  type WorkspaceDeliverySettlementResult,
+  type WorkspaceOperationMutationResult,
+  type WorkspaceOperationEvent,
+  type WorkspaceOperationEventQuery,
+  type WorkspaceOperationLocator,
+  type WorkspaceOperationListPage,
+  type WorkspaceOperationListQuery,
+  type WorkspaceOperationPreparationResult,
+  type WorkspaceOperationReceiptQuery,
+  type WorkspaceOperationRecord,
+  type WorkspaceOperationSnapshot,
 } from "@crewon/application";
 import {
   ToolApprovalError,
@@ -97,6 +115,23 @@ import {
   loadPostgresAutomationInvocationContext,
   loadPostgresAutomationInvocationReceipt,
 } from "./postgres-automation-store.ts";
+import {
+  POSTGRES_WORKSPACE_OPERATION_SCHEMA_VERSION,
+  migratePostgresWorkspaceOperationSchema,
+} from "./postgres-workspace-operation-schema.ts";
+import {
+  abandonPostgresWorkspaceOperationDelivery,
+  claimPostgresWorkspaceOperationDelivery,
+  listPostgresWorkspaceOperationDeliveryAttempts,
+  listPostgresWorkspaceOperationEvents,
+  listPostgresWorkspaceOperations,
+  loadPostgresWorkspaceOperation,
+  loadPostgresWorkspaceOperationSnapshot,
+  loadPostgresWorkspaceOperationReceipt,
+  preparePostgresWorkspaceOperationAction,
+  preparePostgresWorkspaceOperation,
+  settlePostgresWorkspaceOperationDelivery,
+} from "./postgres-workspace-operation-store.ts";
 import { requireNonEmpty, validateQueueRetry } from "./store-invariants.ts";
 import {
   sameAgentVersionAsset,
@@ -196,6 +231,24 @@ export class PostgresDomainStore
       ) {
         throw new RunStoreError("postgres_schema_version_unsupported");
       }
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `crewon:${this.schema}:workspace-operation-authority`,
+      ]);
+      await migratePostgresWorkspaceOperationSchema(
+        client,
+        this.schemaSql(),
+        this.schema,
+      );
+      const workspaceVersion = await client.query<{ version: number }>(
+        `SELECT version FROM ${this.schemaSql()}.schema_migrations
+         WHERE component = 'workspace_operation_authority'`,
+      );
+      if (
+        workspaceVersion.rows[0]?.version !==
+        POSTGRES_WORKSPACE_OPERATION_SCHEMA_VERSION
+      ) {
+        throw new RunStoreError("postgres_schema_version_unsupported");
+      }
       await client.query("COMMIT");
     } catch (error) {
       await rollbackPostgres(client);
@@ -213,6 +266,125 @@ export class PostgresDomainStore
       this.pool,
       this.schemaSql(),
       query,
+    );
+  }
+
+  async loadWorkspaceOperationReceipt(
+    query: WorkspaceOperationReceiptQuery,
+  ): Promise<WorkspaceOperationMutationResult | null> {
+    this.assertOpen();
+    return loadPostgresWorkspaceOperationReceipt(
+      this.pool,
+      this.schemaSql(),
+      this.schema,
+      query,
+    );
+  }
+
+  async prepareWorkspaceOperation(
+    input: PrepareWorkspaceOperationInput,
+  ): Promise<WorkspaceOperationPreparationResult> {
+    this.assertOpen();
+    return preparePostgresWorkspaceOperation(
+      this.pool,
+      this.schemaSql(),
+      this.schema,
+      input,
+    );
+  }
+
+  async loadWorkspaceOperation(input: {
+    tenantId: string;
+    spaceId: string;
+    threadId: string;
+    executionId: string;
+  }): Promise<WorkspaceOperationRecord | null> {
+    this.assertOpen();
+    return loadPostgresWorkspaceOperation(this.pool, this.schemaSql(), input);
+  }
+
+  async loadWorkspaceOperationSnapshot(
+    locator: WorkspaceOperationLocator,
+  ): Promise<WorkspaceOperationSnapshot | null> {
+    this.assertOpen();
+    return loadPostgresWorkspaceOperationSnapshot(
+      this.pool,
+      this.schemaSql(),
+      locator,
+    );
+  }
+
+  async listWorkspaceOperationEvents(
+    query: WorkspaceOperationEventQuery,
+  ): Promise<readonly WorkspaceOperationEvent[]> {
+    this.assertOpen();
+    return listPostgresWorkspaceOperationEvents(
+      this.pool,
+      this.schemaSql(),
+      query,
+    );
+  }
+
+  async listWorkspaceOperations(
+    query: WorkspaceOperationListQuery,
+  ): Promise<WorkspaceOperationListPage> {
+    this.assertOpen();
+    return listPostgresWorkspaceOperations(this.pool, this.schemaSql(), query);
+  }
+
+  async prepareWorkspaceOperationAction(
+    input: PrepareWorkspaceOperationActionInput,
+  ): Promise<WorkspaceOperationPreparationResult> {
+    this.assertOpen();
+    return preparePostgresWorkspaceOperationAction(
+      this.pool,
+      this.schemaSql(),
+      this.schema,
+      input,
+    );
+  }
+
+  async claimWorkspaceOperationDelivery(
+    input: ClaimWorkspaceDeliveryInput,
+  ): Promise<WorkspaceDeliveryAttempt> {
+    this.assertOpen();
+    return claimPostgresWorkspaceOperationDelivery(
+      this.pool,
+      this.schemaSql(),
+      input,
+    );
+  }
+
+  async listWorkspaceOperationDeliveryAttempts(
+    query: WorkspaceDeliveryAttemptQuery,
+  ): Promise<readonly WorkspaceDeliveryAttempt[]> {
+    this.assertOpen();
+    return listPostgresWorkspaceOperationDeliveryAttempts(
+      this.pool,
+      this.schemaSql(),
+      query,
+    );
+  }
+
+  async abandonWorkspaceOperationDelivery(
+    input: AbandonWorkspaceDeliveryInput,
+  ): Promise<WorkspaceDeliveryAttempt> {
+    this.assertOpen();
+    return abandonPostgresWorkspaceOperationDelivery(
+      this.pool,
+      this.schemaSql(),
+      input,
+    );
+  }
+
+  async settleWorkspaceOperationDelivery(
+    input: CommitWorkspaceOperationResolutionInput,
+  ): Promise<WorkspaceDeliverySettlementResult> {
+    this.assertOpen();
+    return settlePostgresWorkspaceOperationDelivery(
+      this.pool,
+      this.schemaSql(),
+      input,
     );
   }
 
