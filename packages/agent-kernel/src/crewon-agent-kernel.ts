@@ -137,6 +137,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
       let completedCheckpoint: ProviderCheckpoint | null = null;
       let completedToolCalls: ObservedToolCall[] = [];
       let completedAssistantItems: string[] = [];
+      let completedProviderRequestsContinuation = false;
       let createdCheckpoint: ProviderCheckpoint | null = null;
       let retries = 0;
       while (true) {
@@ -358,7 +359,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 false,
               );
             }
-            const continuationCheckpoint =
+            const continuationCheckpoint: ProviderCheckpoint | null =
               completedCheckpoint ?? createdCheckpoint;
             retries = 0;
             const assistantItems = completedItems
@@ -367,20 +368,12 @@ export class CrewONAgentKernel implements AgentKernelPort {
                   item.type === "message",
               )
               .map((item) => item.content);
-            if (
-              continuationCheckpoint !== null &&
-              toolCalls.length > 0 &&
-              assistantItems.length > 0
-            ) {
-              throw new AgentKernelError(
-                "model_end_turn_false_stored_mixed_response_unsupported",
-                false,
-              );
-            }
             if (toolCalls.length > 0) {
               completedOutput = output;
               completedToolCalls = toolCalls;
               completedAssistantItems = assistantItems;
+              completedCheckpoint = continuationCheckpoint;
+              completedProviderRequestsContinuation = true;
               break;
             }
             if (output.length > 0 || assistantItems.length > 0) {
@@ -507,6 +500,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
           false,
         );
       }
+      const continuationAssistantItems = [...completedAssistantItems];
       for (const call of completedToolCalls) {
         observedCallIds.add(call.callId);
         sequence += 1;
@@ -520,6 +514,26 @@ export class CrewONAgentKernel implements AgentKernelPort {
             : {}),
         });
         completedAssistantItems.length = 0;
+      }
+      if (
+        completedProviderRequestsContinuation &&
+        completedCheckpoint !== null &&
+        continuationAssistantItems.length > 0
+      ) {
+        sequence += 1;
+        yield {
+          schemaVersion: "crewon.agent-event.v0",
+          runId: contract.runId,
+          segmentId: contract.segmentId,
+          sequence,
+          type: "segment.continuation_requested",
+          data: {
+            output: completedOutput,
+            completedAssistantItems: continuationAssistantItems,
+            checkpoint: completedCheckpoint,
+          },
+        };
+        return;
       }
       if (completedCheckpoint !== null) {
         sequence += 1;

@@ -730,13 +730,23 @@ export function validateAssistantSampleContinuationInput(
     completed?.type === "segment.provider_continuation"
       ? completed.data.segmentId
       : null;
+  const toolEvents = input.commit.events.filter(
+    (event): event is Extract<RunLifecycleEvent, { type: "tool.requested" }> =>
+      event.type === "tool.requested",
+  );
+  const assistantItems = input.history.items.filter(
+    (item): item is Extract<ModelHistoryItem, { type: "message" }> =>
+      item.type === "message",
+  );
+  const toolItems = input.history.items.filter(
+    (item): item is Extract<ModelHistoryItem, { type: "tool_call" }> =>
+      item.type === "tool_call",
+  );
   if (
     input.history.items.length === 0 ||
     input.history.items.some(
       (item, index) =>
-        item.type !== "message" ||
-        item.role !== "assistant" ||
-        item.source !== "assistant_completion" ||
+        (item.type !== "message" && item.type !== "tool_call") ||
         item.tenantId !== input.commit.tenantId ||
         item.threadId !== input.modelState.threadId ||
         item.runId !== runId ||
@@ -746,6 +756,29 @@ export function validateAssistantSampleContinuationInput(
     history?.type !== "message" ||
     history.role !== "assistant" ||
     history.source !== "assistant_completion" ||
+    assistantItems.some(
+      (item) =>
+        item.role !== "assistant" || item.source !== "assistant_completion",
+    ) ||
+    toolItems.length !== toolEvents.length ||
+    toolItems.some((item, index) => {
+      const event = toolEvents[index];
+      return (
+        event === undefined ||
+        item.segmentId !== event.data.segmentId ||
+        item.callId !== event.data.callId ||
+        item.kind !== event.data.kind ||
+        item.name !== event.data.name ||
+        item.input !== event.data.input
+      );
+    }) ||
+    input.history.items.some(
+      (item, index) =>
+        item.type === "message" &&
+        input.history.items
+          .slice(0, index)
+          .some((prior) => prior.type === "tool_call"),
+    ) ||
     history.runId !== runId ||
     completed?.type !== "segment.provider_continuation" ||
     completed.data.sampleIndex !== input.sampleIndex ||

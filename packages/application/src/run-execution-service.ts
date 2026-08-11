@@ -1755,7 +1755,10 @@ export class RunExecutionService {
       input.completedAssistantItems.length === 0 ||
       input.completedAssistantItems.join("") !== input.output
     ) {
-      throw new ApplicationError("validation", "assistant_sample_items_invalid");
+      throw new ApplicationError(
+        "validation",
+        "assistant_sample_items_invalid",
+      );
     }
     const historyItems: ModelHistoryItem[] = input.completedAssistantItems.map(
       (content, index) => ({
@@ -1774,6 +1777,35 @@ export class RunExecutionService {
         contentDigest: this.#digest(content),
       }),
     );
+    const toolRequests = input.events.filter(
+      (event) => event.type === "tool.requested",
+    );
+    for (const event of toolRequests) {
+      const { kind, callId, name, input: toolInput } = event.data;
+      if (
+        (kind !== "function" && kind !== "custom") ||
+        typeof callId !== "string" ||
+        typeof name !== "string" ||
+        typeof toolInput !== "string"
+      ) {
+        throw new ApplicationError("validation", "model_tool_call_invalid");
+      }
+      historyItems.push({
+        schemaVersion: "crewon.model-history-item.v0",
+        itemId: this.#nextId("modelHistoryItem"),
+        tenantId: state.tenantId,
+        threadId: state.threadId,
+        sequence: head.lastSequence + historyItems.length + 1,
+        runId: state.runId,
+        segmentId: input.segmentId,
+        createdAt: occurredAt,
+        type: "tool_call",
+        kind,
+        callId,
+        name,
+        input: toolInput,
+      });
+    }
     const events: RunLifecycleEvent[] = input.events.map((event, index) =>
       mapAgentEvent(
         event,
@@ -1847,7 +1879,10 @@ export class RunExecutionService {
           outbox: events.map((event) => this.#outbox(state.tenantId, event)),
           workItems: [],
         },
-        history: { expectedLastSequence: head.lastSequence, items: historyItems },
+        history: {
+          expectedLastSequence: head.lastSequence,
+          items: historyItems,
+        },
         modelState,
         continuation,
         attempt: {

@@ -470,6 +470,232 @@ test("atomically continues stored AR-031 assistant output after a committed cras
   await worker.close();
 });
 
+test("reopens a committed stored mixed assistant and Tool boundary exactly once", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-ar031-stored-mixed-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const fixture = await createFixture(
+    context,
+    (clock) => new SqliteRunStore(databasePath, { clock }),
+  );
+  const providerCalls: Array<{
+    method: string;
+    body: Record<string, unknown>;
+  }> = [];
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+      storeResponses: true,
+    },
+    {
+      fetch: async (_input, init) => {
+        providerCalls.push({
+          method: init?.method ?? "GET",
+          body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+        });
+        return new Response(
+          providerCalls.length === 1
+            ? responsesMixedToolEventStream()
+            : responsesEventStream("resp-mixed-done", "done", undefined, {
+                input_tokens: 4,
+                output_tokens: 1,
+                total_tokens: 5,
+              }),
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        );
+      },
+    },
+  );
+  let toolInvocations = 0;
+  const toolRuntime = new InMemoryToolBroker(
+    [
+      {
+        schemaVersion: "crewon.tool-definition.v0",
+        kind: "function",
+        name: "fixture_tool",
+        description: "Returns a deterministic mixed response result.",
+        execution: "serial",
+        inputSchema: { type: "object" },
+      },
+    ],
+    new Map([
+      [
+        "function:fixture_tool",
+        async () => {
+          toolInvocations += 1;
+          return { output: "tool-result" };
+        },
+      ],
+    ]),
+    new Map([["function:fixture_tool", toolPolicy("readOnly", "replaySafe")]]),
+  );
+  const crashed = fixture.worker({
+    transport,
+    toolRuntime,
+    retryAfterMs: 0,
+    afterAssistantSampleCommitted: async () => {
+      throw new Error("crash_after_stored_mixed_commit");
+    },
+  });
+
+  assert.deepEqual(await crashed.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "crash_after_stored_mixed_commit",
+  });
+  assert.equal(toolInvocations, 0);
+  await crashed.close();
+  await fixture.store.close();
+  const reopenedStore = new SqliteRunStore(databasePath, {
+    clock: fixture.leaseClock,
+  });
+  context.after(() => reopenedStore.close());
+  const recovered = fixture.worker({
+    transport,
+    toolRuntime,
+    store: reopenedStore,
+  });
+
+  assert.deepEqual(await recovered.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  assert.equal(toolInvocations, 1);
+  assert.deepEqual(
+    providerCalls.map(({ method }) => method),
+    ["POST", "POST"],
+  );
+  assert.equal(
+    providerCalls[1]?.body.previous_response_id,
+    "resp-stored-mixed",
+  );
+  assert.deepEqual(providerCalls[1]?.body.input, [
+    {
+      type: "function_call_output",
+      call_id: "stored-mixed-call",
+      output: "tool-result",
+    },
+  ]);
+  const events = await reopenedStore.listRunEvents(
+    { tenantId: actor().tenantId, runId: fixture.runId },
+    0,
+    100,
+  );
+  assert.equal(
+    events.filter((event) => event.type === "tool.requested").length,
+    1,
+  );
+  assert.equal(
+    events.filter((event) => event.type === "tool.completed").length,
+    1,
+  );
+  assert.equal(
+    events.filter((event) => event.type === "segment.provider_continuation")
+      .length,
+    1,
+  );
+  assert.equal(
+    events.filter((event) => event.type === "model.sampling.retry").length,
+    0,
+  );
+  const history = await reopenedStore.listModelHistoryItems(
+    { tenantId: actor().tenantId, threadId: fixture.threadId },
+    0,
+    100,
+  );
+  assert.deepEqual(
+    history.map(({ type }) => type),
+    ["message", "message", "tool_call", "tool_result", "message"],
+  );
+  const messages = await reopenedStore.listMessages(
+    { tenantId: actor().tenantId, threadId: fixture.threadId },
+    0,
+    100,
+  );
+  assert.deepEqual(
+    messages.map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "done" },
+    ],
+  );
+  assert.deepEqual(
+    (
+      await reopenedStore.loadRun({
+        tenantId: actor().tenantId,
+        runId: fixture.runId,
+      })
+    )?.usage,
+    { inputTokens: 7, cachedInputTokens: 0, outputTokens: 3, totalTokens: 10 },
+  );
+  await recovered.close();
+});
+
+test("rolls back a stored mixed boundary that crashes before commit", async (context) => {
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  let providerPosts = 0;
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+      storeResponses: true,
+    },
+    {
+      fetch: async (_input, init) => {
+        assert.equal(init?.method, "POST");
+        providerPosts += 1;
+        return new Response(responsesMixedToolEventStream(), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      },
+    },
+  );
+  const worker = fixture.worker({
+    transport,
+    retryAfterMs: 0,
+    beforeAssistantSampleCommitted: async () => {
+      throw new Error("crash_before_stored_mixed_commit");
+    },
+  });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "crash_before_stored_mixed_commit",
+  });
+  assert.equal(providerPosts, 1);
+  assert.deepEqual(
+    (
+      await fixture.store.listModelHistoryItems(
+        { tenantId: actor().tenantId, threadId: fixture.threadId },
+        0,
+        100,
+      )
+    ).map(({ type }) => type),
+    ["message"],
+  );
+  const events = await fixture.events();
+  assert.equal(
+    events.filter((event) => event.type === "tool.requested").length,
+    0,
+  );
+  assert.equal(
+    events.filter((event) => event.type === "segment.provider_continuation")
+      .length,
+    0,
+  );
+  assert.deepEqual(
+    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    [{ role: "user", content: "hello" }],
+  );
+  await worker.close();
+});
+
 test("executes Plan mode with server instructions and stores only the proposed Plan body", async (context) => {
   const fixture = await createFixture(
     context,
@@ -5490,6 +5716,127 @@ function registerRuntimeWorkerConformance(
   options: RuntimeWorkerConformanceOptions = {},
 ): void {
   describe(name, () => {
+    test("commits stored mixed assistant and Tool continuation atomically", async (context) => {
+      const fixture = await createFixture(context, createStore);
+      const checkpoint = directProviderCheckpoint("resp-stored-mixed");
+      const requests: ModelRequest[] = [];
+      const transport: ModelTransportPort = {
+        adapterName: checkpoint.adapterName,
+        adapterVersion: checkpoint.adapterVersion,
+        modelId: checkpoint.modelId,
+        async *stream(request) {
+          requests.push(structuredClone(request));
+          if (requests.length === 1) {
+            yield { type: "output.delta", delta: "checking" };
+            yield {
+              type: "output.item.completed",
+              item: {
+                type: "message",
+                role: "assistant",
+                content: "checking",
+              },
+            };
+            yield {
+              type: "output.item.completed",
+              item: {
+                type: "tool_call",
+                kind: "function",
+                callId: "stored-mixed-call",
+                name: "fixture_tool",
+                input: "{}",
+              },
+            };
+            yield {
+              type: "usage",
+              inputTokens: 3,
+              cachedInputTokens: 0,
+              outputTokens: 2,
+              totalTokens: 5,
+            };
+            yield { type: "completed", checkpoint, endTurn: false };
+            return;
+          }
+          yield { type: "output.delta", delta: "done" };
+          yield {
+            type: "usage",
+            inputTokens: 4,
+            cachedInputTokens: 0,
+            outputTokens: 1,
+            totalTokens: 5,
+          };
+          yield { type: "completed", checkpoint: null };
+        },
+      };
+      let invocations = 0;
+      const toolRuntime = new InMemoryToolBroker(
+        [
+          {
+            schemaVersion: "crewon.tool-definition.v0",
+            kind: "function",
+            name: "fixture_tool",
+            description: "Returns a deterministic stored mixed result.",
+            execution: "serial",
+            inputSchema: { type: "object" },
+          },
+        ],
+        new Map([
+          [
+            "function:fixture_tool",
+            async () => {
+              invocations += 1;
+              return { output: "tool-result" };
+            },
+          ],
+        ]),
+        new Map([
+          ["function:fixture_tool", toolPolicy("readOnly", "replaySafe")],
+        ]),
+      );
+      const worker = fixture.worker({ transport, toolRuntime });
+
+      assert.deepEqual(await worker.wake(), {
+        kind: "completed",
+        runId: fixture.runId,
+      });
+      assert.equal(invocations, 1);
+      assert.equal(requests.length, 2);
+      const continuationInput = requests[1]?.input;
+      assert.equal(continuationInput?.strategy, "providerCheckpoint");
+      if (continuationInput?.strategy !== "providerCheckpoint") {
+        assert.fail(
+          "stored mixed response did not use its Provider checkpoint",
+        );
+      }
+      assert.deepEqual(continuationInput.checkpoint, checkpoint);
+      assert.deepEqual(
+        continuationInput.items.slice(continuationInput.newHistoryStartIndex),
+        [
+          {
+            type: "tool_result",
+            kind: "function",
+            callId: "stored-mixed-call",
+            output: "tool-result",
+          },
+        ],
+      );
+      const history = await fixture.store.listModelHistoryItems(
+        { tenantId: actor().tenantId, threadId: fixture.threadId },
+        0,
+        100,
+      );
+      assert.deepEqual(
+        history.map(({ type }) => type),
+        ["message", "message", "tool_call", "tool_result", "message"],
+      );
+      assert.equal(
+        (await fixture.events()).filter(
+          (event) => event.type === "segment.provider_continuation",
+        ).length,
+        1,
+      );
+      await worker.close();
+    });
+
     test("completes a manual compaction maintenance Run atomically", async (context) => {
       const fixture = await createFixture(context, createStore);
       const initialWorker = fixture.worker({
@@ -8049,6 +8396,56 @@ function responsesEventStream(
           },
         ],
         usage,
+      },
+    },
+  ];
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+        );
+      }
+      controller.close();
+    },
+  });
+}
+
+function responsesMixedToolEventStream(): ReadableStream<Uint8Array> {
+  const message = {
+    type: "message",
+    role: "assistant",
+    content: [{ type: "output_text", text: "checking" }],
+  };
+  const tool = {
+    type: "function_call",
+    call_id: "stored-mixed-call",
+    name: "fixture_tool",
+    arguments: "{}",
+  };
+  const events = [
+    {
+      type: "response.created",
+      sequence_number: 0,
+      response: { id: "resp-stored-mixed" },
+    },
+    {
+      type: "response.output_text.delta",
+      sequence_number: 1,
+      delta: "checking",
+    },
+    { type: "response.output_item.done", sequence_number: 2, item: message },
+    { type: "response.output_item.done", sequence_number: 3, item: tool },
+    {
+      type: "response.completed",
+      sequence_number: 4,
+      response: {
+        id: "resp-stored-mixed",
+        status: "completed",
+        end_turn: false,
+        output: [message, tool],
+        usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
       },
     },
   ];

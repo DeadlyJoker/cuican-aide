@@ -139,8 +139,12 @@ function decode(
     row.adapter_name !== locator.adapterName ||
     row.adapter_version !== locator.adapterVersion ||
     row.model_id !== locator.modelId ||
-    row.history_item_type !== "message" ||
-    row.history_message_role !== "assistant" ||
+    !(
+      (row.history_item_type === "message" &&
+        row.history_message_role === "assistant") ||
+      (row.history_item_type === "tool_call" &&
+        row.history_message_role === null)
+    ) ||
     continuation.tenantId !== row.tenant_id ||
     continuation.threadId !== row.thread_id ||
     continuation.agentVersionId !== row.agent_version_id ||

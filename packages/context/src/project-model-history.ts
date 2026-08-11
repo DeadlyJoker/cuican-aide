@@ -118,7 +118,8 @@ export function projectedContinuationStart(
   }
   const boundary = projection.items[boundaryIndex];
   const start = boundaryIndex + 1;
-  return boundary?.type === "message" && boundary.role === "assistant"
+  return (boundary?.type === "message" && boundary.role === "assistant") ||
+    boundary?.type === "tool_call"
     ? start
     : null;
 }

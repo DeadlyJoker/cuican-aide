@@ -5664,8 +5664,12 @@ function decodeThreadContinuation(
     row.adapter_name !== locator.adapterName ||
     row.adapter_version !== locator.adapterVersion ||
     row.model_id !== locator.modelId ||
-    row.history_item_type !== "message" ||
-    row.history_message_role !== "assistant" ||
+    !(
+      (row.history_item_type === "message" &&
+        row.history_message_role === "assistant") ||
+      (row.history_item_type === "tool_call" &&
+        row.history_message_role === null)
+    ) ||
     typeof row.context_revision !== "string" ||
     row.context_revision.trim().length === 0 ||
     !Number.isSafeInteger(row.through_history_sequence) ||

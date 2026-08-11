@@ -404,6 +404,53 @@ export function registerRunExecutionStoreConformance(
       );
     });
 
+    test("atomically commits and replays a mixed assistant and Tool continuation", async (context) => {
+      const fixture = await executionFixture(context, createStore);
+      const claim = await claimWork(
+        fixture.store,
+        "worker-mixed-assistant-tool",
+        "lease-mixed-assistant-tool",
+      );
+      await prepareTextCompletion(fixture.store, claim);
+      const input = mixedAssistantToolContinuationInput(claim);
+
+      const committed =
+        await fixture.store.commitAssistantSampleContinuation(input);
+      await expireWorkItem(fixture, options);
+      const replayed =
+        await fixture.store.commitAssistantSampleContinuation(input);
+
+      assert.deepEqual(replayed, {
+        ...committed,
+        run: { ...committed.run, disposition: "replayed" },
+      });
+      assert.deepEqual(
+        await fixture.store.listRunEvents(
+          { tenantId: "tenant-1", runId: "run-store-1" },
+          3,
+          10,
+        ),
+        input.commit.events,
+      );
+      assert.deepEqual(
+        await fixture.store.listModelHistoryItems(
+          { tenantId: "tenant-1", threadId: "thread-1" },
+          0,
+          10,
+        ),
+        input.history.items,
+      );
+      assert.deepEqual(
+        await fixture.store.loadThreadContinuation(continuationLocator()),
+        input.continuation,
+      );
+      assert.equal(committed.attempt.status, "completed");
+      assert.equal(
+        committed.attempt.checkpointDigest,
+        input.attempt.checkpointDigest,
+      );
+    });
+
     test("atomically persists, replays and rolls back a proposed Plan with its terminal Message", async (context) => {
       const fixture = await executionFixture(context, createStore, "plan");
       const claim = await claimWork(
@@ -2541,6 +2588,47 @@ export async function prepareTextCompletion(
 function assistantSampleContinuationInput(
   claim: WorkItemClaim,
 ): CommitAssistantSampleContinuationInput {
+  const input = mixedAssistantToolContinuationInput(claim);
+  const events = input.commit.events.filter(
+    (event) => event.type !== "tool.requested",
+  );
+  const continuationEvent = events.at(-1);
+  if (continuationEvent?.type !== "segment.provider_continuation") {
+    throw new Error("assistant_sample_continuation_fixture_invalid");
+  }
+  const normalizedEvents = [
+    ...events.slice(0, -1),
+    {
+      ...continuationEvent,
+      sequence: 6,
+      data: {
+        ...continuationEvent.data,
+        segmentSequence: 4,
+        throughHistorySequence: 1,
+      },
+    },
+  ];
+  return {
+    ...input,
+    commit: {
+      ...input.commit,
+      events: normalizedEvents,
+      outbox: normalizedEvents.map((event, index) =>
+        toolOutbox(`outbox-assistant-sample-${index + 1}`, event),
+      ),
+    },
+    history: { ...input.history, items: input.history.items.slice(0, 1) },
+    modelState: { ...input.modelState, throughHistorySequence: 1 },
+    continuation:
+      input.continuation === null
+        ? null
+        : { ...input.continuation, throughHistorySequence: 1 },
+  };
+}
+
+function mixedAssistantToolContinuationInput(
+  claim: WorkItemClaim,
+): CommitAssistantSampleContinuationInput {
   const occurredAt = "2026-08-08T00:01:02Z";
   const contentDigest = `sha256:${"f".repeat(64)}`;
   const checkpointDigest = `sha256:${"c".repeat(64)}`;
@@ -2584,15 +2672,31 @@ function assistantSampleContinuationInput(
     {
       schemaVersion: "crewon.run-event.v0",
       identity: { runId: "run-store-1" },
-      eventId: "event-assistant-sample-continuation",
+      eventId: "event-assistant-sample-tool-requested",
       sequence: 6,
+      occurredAt,
+      type: "tool.requested",
+      data: {
+        segmentId: "text-segment-1",
+        segmentSequence: 4,
+        callId: "assistant-sample-call",
+        kind: "function",
+        name: "fixture_tool",
+        input: "{}",
+      },
+    },
+    {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: "run-store-1" },
+      eventId: "event-assistant-sample-continuation",
+      sequence: 7,
       occurredAt,
       type: "segment.provider_continuation",
       data: {
         segmentId: "text-segment-1",
-        segmentSequence: 4,
+        segmentSequence: 5,
         sampleIndex: 1,
-        throughHistorySequence: 1,
+        throughHistorySequence: 2,
       },
     },
   ] as const;
@@ -2630,6 +2734,21 @@ function assistantSampleContinuationInput(
           content: "working",
           contentDigest,
         },
+        {
+          schemaVersion: "crewon.model-history-item.v0",
+          itemId: "history-assistant-sample-tool-1",
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+          sequence: 2,
+          runId: "run-store-1",
+          segmentId: "text-segment-1",
+          createdAt: occurredAt,
+          type: "tool_call",
+          kind: "function",
+          callId: "assistant-sample-call",
+          name: "fixture_tool",
+          input: "{}",
+        },
       ],
     },
     modelState: {
@@ -2637,14 +2756,14 @@ function assistantSampleContinuationInput(
       ...continuationLocator(),
       contextWindowTokens: 273_000,
       autoCompactAtTokens: 200_000,
-      throughHistorySequence: 1,
+      throughHistorySequence: 2,
       contextRevision: "canonical",
       latestUsage: { inputTokens: 4, outputTokens: 1, totalTokens: 5 },
       updatedAt: occurredAt,
     },
     continuation: {
       ...continuationLocator(),
-      throughHistorySequence: 1,
+      throughHistorySequence: 2,
       contextRevision: "canonical",
       checkpoint,
       updatedAt: occurredAt,

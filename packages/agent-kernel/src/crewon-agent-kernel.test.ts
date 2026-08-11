@@ -385,6 +385,64 @@ test("returns a stored end_turn=false Tool boundary with its checkpoint", async 
   );
 });
 
+test("returns one durable boundary for stored mixed assistant and Tool output", async () => {
+  const checkpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "stored-mixed-adapter",
+    adapterVersion: "1",
+    modelId: "stored-mixed-model",
+    opaquePayload: { responseId: "response-stored-mixed" },
+  } as const;
+  const transport: ModelTransportPort = {
+    adapterName: checkpoint.adapterName,
+    adapterVersion: checkpoint.adapterVersion,
+    modelId: checkpoint.modelId,
+    async *stream() {
+      yield { type: "output.delta", delta: "checking" };
+      yield {
+        type: "output.item.completed",
+        item: { type: "message", role: "assistant", content: "checking" },
+      };
+      yield {
+        type: "output.item.completed",
+        item: {
+          type: "tool_call",
+          kind: "function",
+          callId: "call-mixed",
+          name: "fixture_reader",
+          input: "{}",
+        },
+      };
+      yield { type: "completed", checkpoint, endTurn: false };
+    },
+  };
+  const events = await collect(
+    new CrewONAgentKernel({ transport }).runSegment(
+      segmentContract(),
+      new AbortController().signal,
+    ),
+  );
+
+  assert.deepEqual(
+    events.map(({ sequence, type }) => ({ sequence, type })),
+    [
+      { sequence: 1, type: "segment.started" },
+      { sequence: 2, type: "model.output.delta" },
+      { sequence: 3, type: "tool.requested" },
+      { sequence: 4, type: "segment.continuation_requested" },
+    ],
+  );
+  assert.deepEqual(events.at(-1)?.data, {
+    output: "checking",
+    completedAssistantItems: ["checking"],
+    checkpoint,
+  });
+  assert.equal(
+    events.filter((event) => event.type === "model.sampling.retry").length,
+    0,
+  );
+});
+
 test("keeps compaction segments Tool-free", async () => {
   const requests: import("./model-transport-port.ts").ModelRequest[] = [];
   const transport: ModelTransportPort = {

@@ -386,7 +386,8 @@ export class RuntimeWorker {
     );
     this.#afterRunStarted = config.afterRunStarted;
     this.#afterAttemptStarted = config.afterAttemptStarted;
-    this.#beforeAssistantSampleCommitted = config.beforeAssistantSampleCommitted;
+    this.#beforeAssistantSampleCommitted =
+      config.beforeAssistantSampleCommitted;
     this.#afterAssistantSampleCommitted = config.afterAssistantSampleCommitted;
     this.#afterProviderResponseCheckpointed =
       config.afterProviderResponseCheckpointed;
@@ -954,7 +955,10 @@ export class RuntimeWorker {
           event.type === "segment.started" ||
           event.type === "rate_limit.updated"
         ) {
-          const persisted = await this.#execution.recordAgentEvent(claim, event);
+          const persisted = await this.#execution.recordAgentEvent(
+            claim,
+            event,
+          );
           run = persisted.state;
           continue;
         }
@@ -1005,10 +1009,25 @@ export class RuntimeWorker {
           },
         );
         await this.#afterAssistantSampleCommitted?.();
-        toolBoundaryCompleted = true;
+        if (requestedTools.length > 0) {
+          toolBoundaryOutcome = await this.#executeToolCalls(
+            claim,
+            run,
+            requestedTools,
+            lastAgentSequence,
+            controller.signal,
+            runtime,
+          );
+          toolBoundaryCompleted = toolBoundaryOutcome === null;
+        } else {
+          toolBoundaryCompleted = true;
+        }
       } else {
         for (const event of bufferedEvents) {
-          const persisted = await this.#execution.recordAgentEvent(claim, event);
+          const persisted = await this.#execution.recordAgentEvent(
+            claim,
+            event,
+          );
           run = persisted.state;
           if (event.type !== "segment.failed") continue;
           if (event.data.retryable) {
@@ -1019,7 +1038,11 @@ export class RuntimeWorker {
           return { kind: "failed", runId: run.runId, code: event.data.code };
         }
       }
-      if (!completed && requestedTools.length > 0) {
+      if (
+        assistantContinuation === null &&
+        !completed &&
+        requestedTools.length > 0
+      ) {
         const completedAssistantOutput = requestedTools
           .flatMap((event) => event.data.completedAssistantItems ?? [])
           .join("");
@@ -1619,7 +1642,9 @@ export class RuntimeWorker {
         completedToolSegments.add(event.data.segmentId);
       } else if (event.type === "segment.provider_continuation") {
         if (event.data.sampleIndex !== providerContinuationSamples + 1) {
-          throw new PermanentWorkerError("provider_continuation_sequence_invalid");
+          throw new PermanentWorkerError(
+            "provider_continuation_sequence_invalid",
+          );
         }
         providerContinuationSamples = event.data.sampleIndex;
       }
