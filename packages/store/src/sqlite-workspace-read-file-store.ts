@@ -45,85 +45,175 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
   }
 
   async loadWorkspaceReadFileReceipt(query: WorkspaceReadFileReceiptQuery) {
-    const row = this.#receipt(query.tenantId, query.spaceId, query.phase, query.idempotency);
+    const row = this.#receipt(
+      query.tenantId,
+      query.spaceId,
+      query.phase,
+      query.idempotency,
+    );
     if (row === null) return null;
     fingerprint(row, query.idempotency);
-    return result("replayed", this.#required(query.tenantId, query.spaceId, row.execution_id));
+    return result(
+      "replayed",
+      this.#required(query.tenantId, query.spaceId, row.execution_id),
+    );
   }
 
   async prepareWorkspaceReadFile(input: PrepareWorkspaceReadFileInput) {
     return this.#transaction(() => {
       const locator = validateWorkspaceReadFileLocator(locatorOf(input));
-      const receipt = this.#receipt(locator.tenantId, locator.spaceId, "execute", input.idempotency);
+      const receipt = this.#receipt(
+        locator.tenantId,
+        locator.spaceId,
+        "execute",
+        input.idempotency,
+      );
       if (receipt !== null) {
         fingerprint(receipt, input.idempotency);
-        return result("replayed", this.#required(locator.tenantId, locator.spaceId, receipt.execution_id));
+        return result(
+          "replayed",
+          this.#required(
+            locator.tenantId,
+            locator.spaceId,
+            receipt.execution_id,
+          ),
+        );
       }
       const frozen = validateFrozenWorkspaceReadFileDispatch(input.frozen);
-      const existing = this.#load(locator.tenantId, locator.spaceId, locator.executionId);
+      const existing = this.#load(
+        locator.tenantId,
+        locator.spaceId,
+        locator.executionId,
+      );
       if (existing !== null) {
-        if (JSON.stringify(existing.frozen) !== JSON.stringify(frozen)) conflict();
+        if (JSON.stringify(existing.frozen) !== JSON.stringify(frozen))
+          conflict();
         this.#insertReceipt(locator, "execute", input.idempotency);
         return result("replayed", existing);
       }
       const operation = validateWorkspaceReadFileRecord({
-        schemaVersion: "crewon.workspace-read-file-operation.v0", ...locator,
-        revision: 1, status: "prepared", frozen, resolution: null,
+        schemaVersion: "crewon.workspace-read-file-operation.v0",
+        ...locator,
+        revision: 1,
+        status: "prepared",
+        frozen,
+        resolution: null,
       });
-      this.#database.prepare(`INSERT INTO workspace_read_file_operations
-        (tenant_id, space_id, execution_id, record_json) VALUES (?, ?, ?, ?)`)
-        .run(locator.tenantId, locator.spaceId, locator.executionId, JSON.stringify(operation));
+      this.#database
+        .prepare(
+          `INSERT INTO workspace_read_file_operations
+        (tenant_id, space_id, execution_id, record_json) VALUES (?, ?, ?, ?)`,
+        )
+        .run(
+          locator.tenantId,
+          locator.spaceId,
+          locator.executionId,
+          JSON.stringify(operation),
+        );
       this.#insertReceipt(locator, "execute", input.idempotency);
       return result("committed", operation);
     });
   }
 
-  async prepareWorkspaceReadFileAction(input: PrepareWorkspaceReadFileActionInput) {
+  async prepareWorkspaceReadFileAction(
+    input: PrepareWorkspaceReadFileActionInput,
+  ) {
     return this.#transaction(() => {
       const locator = validateWorkspaceReadFileLocator(locatorOf(input));
-      const operation = this.#required(locator.tenantId, locator.spaceId, locator.executionId);
-      const receipt = this.#receipt(locator.tenantId, locator.spaceId, input.phase, input.idempotency);
+      const operation = this.#required(
+        locator.tenantId,
+        locator.spaceId,
+        locator.executionId,
+      );
+      const receipt = this.#receipt(
+        locator.tenantId,
+        locator.spaceId,
+        input.phase,
+        input.idempotency,
+      );
       if (receipt !== null) {
         fingerprint(receipt, input.idempotency);
-        return result("replayed", this.#required(locator.tenantId, locator.spaceId, receipt.execution_id));
+        return result(
+          "replayed",
+          this.#required(
+            locator.tenantId,
+            locator.spaceId,
+            receipt.execution_id,
+          ),
+        );
       }
       this.#insertReceipt(locator, input.phase, input.idempotency);
       return result("committed", operation);
     });
   }
 
-  async markWorkspaceReadFilePossiblySent(input: WorkspaceReadFileLocator & { expectedRevision: number }) {
+  async markWorkspaceReadFilePossiblySent(
+    input: WorkspaceReadFileLocator & { expectedRevision: number },
+  ) {
     return this.#transaction(() => {
       const current = this.#expected(input);
-      if (current.resolution !== null || current.status === "possiblySent") return current;
-      const next = validateWorkspaceReadFileRecord({ ...current, revision: current.revision + 1, status: "possiblySent" });
+      if (current.resolution !== null || current.status === "possiblySent")
+        return current;
+      const next = validateWorkspaceReadFileRecord({
+        ...current,
+        revision: current.revision + 1,
+        status: "possiblySent",
+      });
       this.#update(input, current.revision, next);
       return next;
     });
   }
 
-  async abandonWorkspaceReadFileSend(input: WorkspaceReadFileLocator & { expectedRevision: number }) {
+  async abandonWorkspaceReadFileSend(
+    input: WorkspaceReadFileLocator & { expectedRevision: number },
+  ) {
     return this.#transaction(() => {
       const current = this.#expected(input);
-      if (current.status !== "possiblySent" || current.resolution !== null) conflict();
-      const next = validateWorkspaceReadFileRecord({ ...current, revision: current.revision + 1, status: "prepared" });
+      if (current.status !== "possiblySent" || current.resolution !== null)
+        conflict();
+      const next = validateWorkspaceReadFileRecord({
+        ...current,
+        revision: current.revision + 1,
+        status: "prepared",
+      });
       this.#update(input, current.revision, next);
       return next;
     });
   }
 
-  async commitWorkspaceReadFileResolution(input: Parameters<WorkspaceReadFileStore["commitWorkspaceReadFileResolution"]>[0]) {
+  async commitWorkspaceReadFileResolution(
+    input: Parameters<
+      WorkspaceReadFileStore["commitWorkspaceReadFileResolution"]
+    >[0],
+  ) {
     return this.#transaction(() => {
-      const current = this.#required(input.tenantId, input.spaceId, input.executionId);
+      const current = this.#required(
+        input.tenantId,
+        input.spaceId,
+        input.executionId,
+      );
       if (current.resolution !== null) {
         const parsed = exactResolution(current, input.phase, input.resolution);
-        if (JSON.stringify(parsed) !== JSON.stringify(current.resolution)) conflict();
+        if (JSON.stringify(parsed) !== JSON.stringify(current.resolution))
+          conflict();
         return result("replayed", current);
       }
-      if (current.revision !== input.expectedRevision && current.status !== "possiblySent") conflict();
-      const next = withResolution(current, exactResolution(current, input.phase, input.resolution));
+      if (
+        current.revision !== input.expectedRevision &&
+        current.status !== "possiblySent"
+      )
+        conflict();
+      const next = withResolution(
+        current,
+        exactResolution(current, input.phase, input.resolution),
+      );
       this.#update(input, current.revision, next);
-      const receipt = this.#receipt(input.tenantId, input.spaceId, input.phase, input.idempotency);
+      const receipt = this.#receipt(
+        input.tenantId,
+        input.spaceId,
+        input.phase,
+        input.idempotency,
+      );
       if (receipt !== null) fingerprint(receipt, input.idempotency);
       else this.#insertReceipt(input, input.phase, input.idempotency);
       return result("committed", next);
@@ -131,50 +221,120 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
   }
 
   #load(tenantId: string, spaceId: string, executionId: string) {
-    const row = this.#database.prepare(`SELECT record_json FROM workspace_read_file_operations
-      WHERE tenant_id = ? AND space_id = ? AND execution_id = ?`).get(tenantId, spaceId, executionId) as OperationRow | undefined;
-    return row === undefined ? null : validateWorkspaceReadFileRecord(JSON.parse(row.record_json));
+    const row = this.#database
+      .prepare(
+        `SELECT record_json FROM workspace_read_file_operations
+      WHERE tenant_id = ? AND space_id = ? AND execution_id = ?`,
+      )
+      .get(tenantId, spaceId, executionId) as OperationRow | undefined;
+    return row === undefined
+      ? null
+      : validateWorkspaceReadFileRecord(JSON.parse(row.record_json));
   }
   #required(tenantId: string, spaceId: string, executionId: string) {
     const value = this.#load(tenantId, spaceId, executionId);
-    if (value === null) throw new RunStoreError("workspace_read_file_not_found");
+    if (value === null)
+      throw new RunStoreError("workspace_read_file_not_found");
     return value;
   }
   #expected(input: WorkspaceReadFileLocator & { expectedRevision: number }) {
-    const current = this.#required(input.tenantId, input.spaceId, input.executionId);
+    const current = this.#required(
+      input.tenantId,
+      input.spaceId,
+      input.executionId,
+    );
     if (current.revision !== input.expectedRevision) conflict();
     return current;
   }
-  #receipt(tenantId: string, spaceId: string, phase: string, value: IdempotencyDescriptor) {
-    return (this.#database.prepare(`SELECT request_fingerprint, execution_id FROM workspace_read_file_receipts
-      WHERE tenant_id = ? AND space_id = ? AND phase = ? AND idempotency_scope = ? AND idempotency_key = ?`)
-      .get(tenantId, spaceId, phase, value.scope, value.key) as ReceiptRow | undefined) ?? null;
+  #receipt(
+    tenantId: string,
+    spaceId: string,
+    phase: string,
+    value: IdempotencyDescriptor,
+  ) {
+    return (
+      (this.#database
+        .prepare(
+          `SELECT request_fingerprint, execution_id FROM workspace_read_file_receipts
+      WHERE tenant_id = ? AND space_id = ? AND phase = ? AND idempotency_scope = ? AND idempotency_key = ?`,
+        )
+        .get(tenantId, spaceId, phase, value.scope, value.key) as
+        | ReceiptRow
+        | undefined) ?? null
+    );
   }
-  #insertReceipt(locator: WorkspaceReadFileLocator, phase: string, value: IdempotencyDescriptor) {
-    this.#database.prepare(`INSERT INTO workspace_read_file_receipts
+  #insertReceipt(
+    locator: WorkspaceReadFileLocator,
+    phase: string,
+    value: IdempotencyDescriptor,
+  ) {
+    this.#database
+      .prepare(
+        `INSERT INTO workspace_read_file_receipts
       (tenant_id, space_id, phase, idempotency_scope, idempotency_key, request_fingerprint, execution_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(locator.tenantId, locator.spaceId, phase,
-        value.scope, value.key, value.requestFingerprint, locator.executionId);
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        locator.tenantId,
+        locator.spaceId,
+        phase,
+        value.scope,
+        value.key,
+        value.requestFingerprint,
+        locator.executionId,
+      );
   }
-  #update(locator: WorkspaceReadFileLocator, revision: number, next: WorkspaceReadFileRecord) {
-    const changed = this.#database.prepare(`UPDATE workspace_read_file_operations SET record_json = ?
-      WHERE tenant_id = ? AND space_id = ? AND execution_id = ? AND json_extract(record_json, '$.revision') = ?`)
-      .run(JSON.stringify(next), locator.tenantId, locator.spaceId, locator.executionId, revision).changes;
+  #update(
+    locator: WorkspaceReadFileLocator,
+    revision: number,
+    next: WorkspaceReadFileRecord,
+  ) {
+    const changed = this.#database
+      .prepare(
+        `UPDATE workspace_read_file_operations SET record_json = ?
+      WHERE tenant_id = ? AND space_id = ? AND execution_id = ? AND json_extract(record_json, '$.revision') = ?`,
+      )
+      .run(
+        JSON.stringify(next),
+        locator.tenantId,
+        locator.spaceId,
+        locator.executionId,
+        revision,
+      ).changes;
     if (changed !== 1) conflict();
   }
   #transaction<T>(call: () => T): T {
     this.#database.exec("BEGIN IMMEDIATE");
-    try { const result = call(); this.#database.exec("COMMIT"); return result; }
-    catch (error) { this.#database.exec("ROLLBACK"); throw error; }
+    try {
+      const result = call();
+      this.#database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
   }
 }
 
-function locatorOf(value: WorkspaceReadFileLocator): WorkspaceReadFileLocator { return {
-  tenantId: value.tenantId, spaceId: value.spaceId, runId: value.runId,
-  stepId: value.stepId, attemptId: value.attemptId, executionId: value.executionId,
-}; }
-function fingerprint(row: ReceiptRow, value: IdempotencyDescriptor) { if (row.request_fingerprint !== value.requestFingerprint) conflict(); }
-function result(disposition: "committed" | "replayed", operation: WorkspaceReadFileRecord): WorkspaceReadFileMutationResult {
+function locatorOf(value: WorkspaceReadFileLocator): WorkspaceReadFileLocator {
+  return {
+    tenantId: value.tenantId,
+    spaceId: value.spaceId,
+    runId: value.runId,
+    stepId: value.stepId,
+    attemptId: value.attemptId,
+    executionId: value.executionId,
+  };
+}
+function fingerprint(row: ReceiptRow, value: IdempotencyDescriptor) {
+  if (row.request_fingerprint !== value.requestFingerprint) conflict();
+}
+function result(
+  disposition: "committed" | "replayed",
+  operation: WorkspaceReadFileRecord,
+): WorkspaceReadFileMutationResult {
   return { disposition, operation: structuredClone(operation) };
 }
-function conflict(): never { throw new RunStoreError("workspace_read_file_conflict"); }
+function conflict(): never {
+  throw new RunStoreError("workspace_read_file_conflict");
+}
