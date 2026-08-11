@@ -30,7 +30,7 @@ fn projects_unselected_and_selected_authority_into_exact_runtime_routes() {
         RuntimeRouteProjection::from_authority(manager.authority()).unwrap(),
         RuntimeRouteProjection {
             agent_version_id: format!(
-                "default-agent-v0:{}",
+                "default-agent-v1:{}",
                 candidate.workspace_runtime_binding_id()
             ),
             runtime_generation: candidate.workspace_runtime_binding_id().to_string(),

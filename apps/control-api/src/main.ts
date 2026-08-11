@@ -110,7 +110,7 @@ try {
       },
       defaultAgentVersionId: environmentOr(
         "CREWON_AGENT_VERSION_ID",
-        "default-agent-v0",
+        "default-agent-v1",
       ),
       sessionToken: requiredEnvironment("CREWON_CONTROL_SESSION_TOKEN"),
       csrfToken: requiredEnvironment("CREWON_CONTROL_CSRF_TOKEN"),

@@ -3,7 +3,7 @@ use super::WorkspaceNativeError;
 use super::STANDALONE_POLICY_SNAPSHOT_ID;
 
 const STANDALONE_RUNTIME_GENERATION: &str = "ts-v0";
-const STANDALONE_AGENT_VERSION_ID: &str = "default-agent-v0";
+const STANDALONE_AGENT_VERSION_ID: &str = "default-agent-v1";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RuntimeRouteProjection {
