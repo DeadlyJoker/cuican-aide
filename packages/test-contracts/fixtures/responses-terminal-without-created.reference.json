@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "crewon.responses-terminal-parity.v0",
+  "caseId": "AR-035-responses-terminal-without-created",
+  "cases": [
+    {
+      "name": "failed",
+      "terminal": {
+        "type": "response.failed",
+        "sequence_number": 0,
+        "response": {
+          "error": { "code": "server_error", "message": "provider busy" }
+        }
+      },
+      "expected": {
+        "stableEvents": ["failed"],
+        "partialOutput": "",
+        "completedHistory": [],
+        "terminal": "failed",
+        "usage": null,
+        "errorCategory": "provider",
+        "retryable": true,
+        "responseId": null
+      }
+    },
+    {
+      "name": "incomplete",
+      "terminal": {
+        "type": "response.incomplete",
+        "sequence_number": 0,
+        "response": {
+          "incomplete_details": { "reason": "content_filter" }
+        }
+      },
+      "expected": {
+        "stableEvents": ["failed"],
+        "partialOutput": "",
+        "completedHistory": [],
+        "terminal": "failed",
+        "usage": null,
+        "errorCategory": "incomplete",
+        "retryable": false,
+        "responseId": null
+      }
+    }
+  ]
+}

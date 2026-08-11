@@ -7,5 +7,6 @@ crewon_rust_crate(
         "//:packages/test-contracts/fixtures/provider-usage-validation.reference.json",
         "//:packages/test-contracts/fixtures/responses-completed-without-output.reference.json",
         "//:packages/test-contracts/fixtures/responses-completed-without-usage.reference.json",
+        "//:packages/test-contracts/fixtures/responses-terminal-without-created.reference.json",
     ],
 )

@@ -107,25 +107,23 @@ export class ResponsesProtocolDecoder {
           : [{ type: "usage", ...usage }, completed];
       }
       case "response.failed": {
-        requireCreated(this.#responseId);
-        const response = terminalResponse(
+        const response = failureResponse(
           event.response,
           this.#responseId,
           "responses_failed_response_invalid",
         );
-        requireStatus(response, "failed");
+        requireOptionalStatus(response, "failed");
         const failure = parseStreamFailure(response);
         this.#terminal = true;
         return [{ type: "failed", ...failure }];
       }
       case "response.incomplete": {
-        requireCreated(this.#responseId);
-        const response = terminalResponse(
+        const response = failureResponse(
           event.response,
           this.#responseId,
           "responses_incomplete_response_invalid",
         );
-        requireStatus(response, "incomplete");
+        requireOptionalStatus(response, "incomplete");
         const failure = parseIncomplete(response);
         this.#terminal = true;
         return [{ type: "failed", ...failure }];
@@ -313,6 +311,25 @@ function terminalResponse(
   return response;
 }
 
+function failureResponse(
+  value: unknown,
+  expectedId: string | null,
+  code: string,
+): Readonly<Record<string, unknown>> {
+  const response = requireObject(value, code);
+  if (response.id !== undefined) {
+    const responseId = boundedNonEmpty(
+      response.id,
+      MAX_RESPONSE_ID_LENGTH,
+      "responses_response_id_invalid",
+    );
+    if (expectedId !== null && responseId !== expectedId) {
+      throw protocolError("responses_response_id_mismatch");
+    }
+  }
+  return response;
+}
+
 function parseUsage(value: unknown): {
   inputTokens: number;
   cachedInputTokens: number;
@@ -396,6 +413,15 @@ function requireStatus(
 ): void {
   if (response.status !== expected) {
     throw protocolError("responses_status_invalid");
+  }
+}
+
+function requireOptionalStatus(
+  response: Readonly<Record<string, unknown>>,
+  expected: string,
+): void {
+  if (response.status !== undefined) {
+    requireStatus(response, expected);
   }
 }
 

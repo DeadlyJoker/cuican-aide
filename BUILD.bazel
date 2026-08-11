@@ -86,6 +86,7 @@ exports_files([
     "packages/test-contracts/fixtures/provider-usage-validation.reference.json",
     "packages/test-contracts/fixtures/responses-completed-without-output.reference.json",
     "packages/test-contracts/fixtures/responses-lite-request.reference.json",
+    "packages/test-contracts/fixtures/responses-terminal-without-created.reference.json",
     "packages/test-contracts/fixtures/shell-tool-output.reference.json",
     "packages/test-contracts/fixtures/stream-early-close-retry.reference.json",
     "packages/test-contracts/fixtures/stream-partial-close-retry.reference.json",

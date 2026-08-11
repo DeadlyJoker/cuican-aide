@@ -702,6 +702,20 @@ mod tests {
         total_tokens: i64,
     }
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct TerminalWithoutCreatedFixture {
+        case_id: String,
+        cases: Vec<TerminalWithoutCreatedCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct TerminalWithoutCreatedCase {
+        name: String,
+        terminal: Value,
+        expected: Value,
+    }
+
     #[test]
     fn accepts_completed_without_output_from_shared_fixture() {
         let fixture_path = crewon_utils_cargo_bin::find_resource!(
@@ -786,6 +800,52 @@ mod tests {
         );
         assert_eq!(fixture.expected.error_category, None);
         assert_eq!(fixture.expected.retryable, None);
+    }
+
+    #[test]
+    fn accepts_failed_and_incomplete_without_created_from_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-terminal-without-created.reference.json"
+        )
+        .expect("terminal-without-created fixture must exist");
+        let fixture: TerminalWithoutCreatedFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path)
+                .expect("terminal-without-created fixture must be readable"),
+        )
+        .expect("terminal-without-created fixture must parse");
+
+        for case in fixture.cases {
+            let event: ResponsesStreamEvent =
+                serde_json::from_value(case.terminal).expect("fixture event must deserialize");
+            let error = process_responses_event(event)
+                .expect_err("fixture terminal must fail")
+                .into_api_error();
+            let (error_category, retryable) = match error {
+                ApiError::Retryable { .. } => ("provider", true),
+                ApiError::Stream(message)
+                    if message.starts_with("Incomplete response returned") =>
+                {
+                    ("incomplete", false)
+                }
+                error => panic!("unexpected terminal error: {error:?}"),
+            };
+            assert_eq!(
+                json!({
+                    "stableEvents": ["failed"],
+                    "partialOutput": "",
+                    "completedHistory": [],
+                    "terminal": "failed",
+                    "usage": null,
+                    "errorCategory": error_category,
+                    "retryable": retryable,
+                    "responseId": null,
+                }),
+                case.expected,
+                "fixture {} / {}",
+                fixture.case_id,
+                case.name,
+            );
+        }
     }
 
     #[test]

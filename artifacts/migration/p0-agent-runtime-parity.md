@@ -79,6 +79,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-032 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | Provider usage 必须非负、cached≤input 且 total=input+output；异常计量 fail closed | PARITY       | Rust+TS shared malformed-usage fixture                                                                                    |
 | AR-033 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | completed response 可缺省/null usage；成功终态不得伪造零 usage                    | PARITY       | Rust+TS shared completed-without-usage fixture，覆盖 HTTP/SSE 与 WebSocket framing                                        |
 | AR-034 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | completed response 可缺省冗余 final output snapshot；已有 output 仍严格一致       | PARITY       | Rust+TS shared completed-without-output fixture，覆盖 completed item、usage、HTTP/SSE 与 WebSocket framing                |
+| AR-035 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | failed/incomplete 可作为首个 terminal，省略 created/id/status；存在的 id/status 仍严格校验 | PARITY       | Rust+TS shared terminal-without-created fixture，覆盖 error category/retryable、无 phantom history/usage 与两种 sequence policy |
 
 ## 已有证据映射
 
@@ -179,6 +180,12 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 - `responses-completed-without-output.reference.json` 冻结 AR-034：Rust `ResponseCompleted` 不要求重复携带最终 `response.output`
   snapshot；TS decoder 在该字段缺省时保留 streamed delta、matching completed assistant item、usage、response ID 与成功终态。
   `required` / `whenPresent` framing 共用同一 decoder；字段存在时仍必须与 streamed output 精确一致，mismatch 继续 fail closed。
+- `responses-terminal-without-created.reference.json` 冻结 AR-035：Rust 对带可分类 `error` / `incomplete_details` 的
+  `response.failed` / `response.incomplete` 不依赖 `response.created`，也不要求冗余 `id` / `status`。TS shared decoder 在
+  `required`（HTTP/SSE）与 `whenPresent`（WebSocket）策略下产生相同 failed terminal、category/retryability，并且不伪造 history、usage
+  或 response identity。若 `id` 出现仍执行 bounded 格式校验，并在已有 created identity 时要求匹配；若 `status` 出现仍要求 exact
+  terminal status；completed 路径仍要求 created + matching identity。`event.response`、可分类 error/details 完全缺失的 generic failure，
+  以及 failure 后事件/重复 terminal 仍未纳入 AR-035，等待 Rust core sampling retry 与 TS retry projection 的独立 shared evidence。
 
 ## Goal runtime focused parity gate（2026-08-09）
 
