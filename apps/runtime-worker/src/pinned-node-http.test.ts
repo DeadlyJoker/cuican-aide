@@ -1,0 +1,263 @@
+import assert from "node:assert/strict";
+import { createServer, type RequestListener, type Server } from "node:http";
+import test, { type TestContext } from "node:test";
+
+import {
+  ProductionNetworkEgressPolicy,
+  type NetworkEgressPolicy,
+} from "./network-egress.ts";
+import {
+  PinnedNodeHttpError,
+  PinnedNodeHttpTransport,
+  sameRemoteAddress,
+} from "./pinned-node-http.ts";
+import { ProductionRemoteMcpMutationHttp } from "./remote-mcp-mutation-http.ts";
+
+const loopbackPolicy: NetworkEgressPolicy = {
+  authorize: ({ addresses }) => ({
+    approvedAddresses: addresses.map(({ address }) => address),
+  }),
+};
+
+test("production policy rejects every non-public address", () => {
+  const policy = new ProductionNetworkEgressPolicy();
+  for (const address of [
+    "127.0.0.1",
+    "10.0.0.1",
+    "169.254.169.254",
+    "::",
+    "::1",
+    "::ffff:127.0.0.1",
+    "64:ff9b::7f00:1",
+    "fe80::1",
+    "ff02::1",
+  ]) {
+    assert.throws(
+      () =>
+        policy.authorize({
+          tenantId: "tenant-1",
+          scopeId: "binding-1",
+          endpoint: new URL("https://server.example/mutate"),
+          addresses: [{ address, family: address.includes(":") ? 6 : 4 }],
+        }),
+      /network_egress_denied/u,
+    );
+  }
+});
+
+test("remote address comparison accepts equivalent IPv6 text", () => {
+  assert.equal(sameRemoteAddress("2001:db8:0:0::1", "2001:db8::1", 6), true);
+});
+
+test("transport pins and sends a bounded POST body", async (t) => {
+  let received: Buffer | undefined;
+  const server = await listen(t, (request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      received = Buffer.concat(chunks);
+      response.writeHead(201, { "content-type": "application/json" });
+      response.end('{"ok":true}');
+    });
+  });
+  const body = Buffer.from('{"command":"run"}');
+  const response = await new PinnedNodeHttpTransport().request(
+    {
+      method: "POST",
+      target: {
+        endpoint: new URL(`${origin(server)}/mutate`),
+        address: "127.0.0.1",
+        family: 4,
+      },
+      headers: { "content-type": "application/json" },
+      body,
+      maxRequestBytes: 256 * 1024,
+      maxResponseBytes: 256 * 1024,
+    },
+    new AbortController().signal,
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual(received, body);
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(response.body)), {
+    ok: true,
+  });
+});
+
+test("production adapter cannot bypass baseline egress policy", async () => {
+  let transportCalls = 0;
+  const transport = {
+    request: async () => {
+      transportCalls += 1;
+      throw new Error("unexpected_transport_call");
+    },
+  };
+  const request = {
+    endpoint: new URL("http://localhost/mutate"),
+    headers: {},
+    body: new Uint8Array(),
+    signal: new AbortController().signal,
+  };
+  const adapter = new ProductionRemoteMcpMutationHttp({
+    tenantId: "tenant-1",
+    serverBindingId: "binding-1",
+    egressPolicy: loopbackPolicy,
+    dns: { resolveAll: async () => [{ address: "127.0.0.1", family: 4 }] },
+    transport,
+  });
+  await assert.rejects(adapter.post(request), /network_egress_denied/u);
+  assert.equal(transportCalls, 0);
+
+  const tenantDeny: NetworkEgressPolicy = {
+    authorize: () => {
+      throw new Error("tenant_denied");
+    },
+  };
+  const denied = new ProductionRemoteMcpMutationHttp({
+    tenantId: "tenant-1",
+    serverBindingId: "binding-1",
+    egressPolicy: tenantDeny,
+    dns: { resolveAll: async () => [{ address: "93.184.216.34", family: 4 }] },
+    transport,
+  });
+  await assert.rejects(
+    denied.post({
+      ...request,
+      endpoint: new URL("https://server.example/mutate"),
+    }),
+    /tenant_denied/u,
+  );
+  assert.equal(transportCalls, 0);
+});
+
+test("transport enforces declared and streaming response caps", async (t) => {
+  await assert.rejects(
+    new PinnedNodeHttpTransport().request(
+      {
+        method: "POST",
+        target: {
+          endpoint: new URL("http://localhost/"),
+          address: "127.0.0.1",
+          family: 4,
+        },
+        body: new Uint8Array(11),
+        maxRequestBytes: 10,
+        maxResponseBytes: 10,
+      },
+      new AbortController().signal,
+    ),
+    /body_too_large/u,
+  );
+
+  const declared = await listen(t, (_request, response) => {
+    response.writeHead(200, { "content-length": "12" });
+    response.end("x".repeat(12));
+  });
+  await assert.rejects(request(declared, 10), /body_too_large/u);
+
+  const streaming = await listen(t, (_request, response) => {
+    response.writeHead(200);
+    response.write("x".repeat(8));
+    response.end("x".repeat(8));
+  });
+  await assert.rejects(request(streaming, 10), /body_too_large/u);
+});
+
+test("transport rejects a remote-address mismatch", async (t) => {
+  const server = await listen(t, (_request, response) => response.end("ok"));
+  const transport = new PinnedNodeHttpTransport({
+    remoteAddressMatches: () => false,
+  });
+  await assert.rejects(
+    transport.request(input(server, 10), new AbortController().signal),
+    (error: unknown) =>
+      error instanceof PinnedNodeHttpError &&
+      error.code === "remote_address_mismatch",
+  );
+});
+
+test("transport observes AbortSignal", async (t) => {
+  const server = await listen(t, () => {});
+  const controller = new AbortController();
+  const pending = new PinnedNodeHttpTransport().request(
+    input(server, 10),
+    controller.signal,
+  );
+  controller.abort(new Error("test_abort"));
+  await assert.rejects(pending, /request_aborted/u);
+});
+
+test("transport never exposes sensitive lower-level errors", async (t) => {
+  const server = await listen(t, (_request, response) => response.end("ok"));
+  const endpoint = new URL(origin(server));
+  const sensitive =
+    "Authorization: Bearer secret; Idempotency-Key: idem; body-secret";
+  const transport = new PinnedNodeHttpTransport({
+    remoteAddressMatches: () => {
+      throw new Error(sensitive);
+    },
+  });
+  const error = await transport
+    .request(
+      {
+        method: "POST",
+        target: { endpoint, address: "127.0.0.1", family: 4 },
+        headers: {
+          "authorization": "Bearer secret",
+          "idempotency-key": "idem",
+        },
+        body: Buffer.from("body-secret"),
+        maxRequestBytes: 100,
+        maxResponseBytes: 100,
+      },
+      new AbortController().signal,
+    )
+    .catch((caught: unknown) => caught);
+  const inspected = JSON.stringify(error, Object.getOwnPropertyNames(error));
+  assert.equal(inspected.includes("secret"), false);
+  assert.equal(inspected.includes("Idempotency"), false);
+});
+
+function request(server: Server, maxResponseBytes: number) {
+  return new PinnedNodeHttpTransport().request(
+    input(server, maxResponseBytes),
+    new AbortController().signal,
+  );
+}
+
+function input(server: Server, maxResponseBytes: number) {
+  return {
+    method: "GET" as const,
+    target: {
+      endpoint: new URL(origin(server)),
+      address: "127.0.0.1",
+      family: 4 as const,
+    },
+    maxRequestBytes: 0,
+    maxResponseBytes,
+  };
+}
+
+async function listen(
+  t: TestContext,
+  listener: RequestListener,
+): Promise<Server> {
+  const server = createServer(listener);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
+  );
+  return server;
+}
+
+function origin(server: Server): string {
+  const address = server.address();
+  if (address === null || typeof address === "string")
+    throw new Error("invalid_address");
+  return `http://localhost:${address.port}`;
+}
