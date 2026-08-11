@@ -29,6 +29,7 @@ members = [
     "device",
     "device-journal",
     "device-protocol",
+    "device-runtime",
     "shell-command",
     "shell-escalation",
     "skills",
@@ -163,6 +164,7 @@ crewon-core-skills = { path = "core-skills" }
 crewon-device = { path = "device" }
 crewon-device-journal = { path = "device-journal" }
 crewon-device-protocol = { path = "device-protocol" }
+crewon-device-runtime = { path = "device-runtime" }
 crewon-file-system = { path = "file-system" }
 crewon-exec-server = { path = "exec-server" }
 crewon-execpolicy = { path = "execpolicy" }
@@ -399,6 +401,7 @@ tiny_http = "0.12"
 tokio = "1"
 tokio-stream = "0.1.18"
 tokio-test = "0.4"
+tokio-rustls = "0.26.4"
 tokio-tungstenite = { version = "0.28.0", features = [
     "proxy",
     "rustls-tls-native-roots",

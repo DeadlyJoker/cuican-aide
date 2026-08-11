@@ -2941,6 +2941,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "crewon-device-runtime"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "crewon-device",
+ "crewon-device-journal",
+ "crewon-device-protocol",
+ "crewon-utils-cargo-bin",
+ "crewon-utils-rustls-provider",
+ "ed25519-dalek",
+ "futures",
+ "pretty_assertions",
+ "rcgen",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-rustls",
+ "tokio-tungstenite 0.28.0",
+ "url",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "crewon-exec-server"
 version = "0.0.0"
 dependencies = [
@@ -14686,6 +14715,7 @@ version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
 dependencies = [
+ "serde",
  "zeroize_derive",
 ]
 
