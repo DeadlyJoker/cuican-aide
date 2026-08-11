@@ -17,59 +17,12 @@ import {
   streamWorkspaceOperationEvents,
 } from "@crewon/control-client";
 
-const PAGE_SIZE = 100;
-const MAX_LIST_PAGES = 100;
+import {
+  MAX_LIST_PAGES, PAGE_SIZE, buildWorkspaceState, emptyState, isConflict, isGenerationCurrent, isStreamableOperation, isUnknownNetwork, validateThreadSnapshot, requireWorkspaceClient,
+} from "./controlWorkspaceRuntimeSupport";
+import type { ControlWorkspaceState, ControlWorkspaceStatus, OperationStream, Selection, WorkspaceOperationEventStream } from "./controlWorkspaceRuntimeSupport";
+export type { ControlWorkspaceState, ControlWorkspaceStatus, WorkspaceOperationEventStream } from "./controlWorkspaceRuntimeSupport";
 
-export type ControlWorkspaceStatus =
-  | "available"
-  | "unavailable"
-  | "loading"
-  | "live"
-  | "mutating"
-  | "conflict"
-  | "error";
-
-export type ControlWorkspaceState = Readonly<{
-  status: ControlWorkspaceStatus;
-  threadId: string | null;
-  threadRevision: number | null;
-  threadStatus: "active" | "archived" | "deleted" | null;
-  operations: readonly WorkspaceOperationView[];
-  eventSequences: Readonly<Record<string, number>>;
-}>;
-
-export type WorkspaceOperationEventStream = (
-  client: ControlApiClient,
-  input: {
-    threadId: string;
-    executionId: string;
-    afterSequence?: number;
-    reconnectDelayMs?: number;
-    signal?: AbortSignal;
-  },
-) => AsyncIterable<WorkspaceOperationEventView>;
-
-type Selection = {
-  generation: number;
-  threadId: string;
-  threadRevision: number;
-  threadStatus: "active" | "archived" | "deleted";
-  controller: AbortController;
-  operations: Map<string, WorkspaceOperationView>;
-  eventSequences: Map<string, number>;
-  streams: Map<string, OperationStream>;
-};
-
-type OperationStream = {
-  generation: number;
-  controller: AbortController;
-};
-
-/**
- * Owns the selected Thread's redacted Workspace operation state. It deliberately
- * has no legacy filesystem/AppServer dependency: when Control authority is not
- * available, every operation fails closed without falling back.
- */
 export class ControlWorkspaceRuntime {
   #client: ControlApiClient | null;
   readonly #eventStream: WorkspaceOperationEventStream;
@@ -94,8 +47,7 @@ export class ControlWorkspaceRuntime {
     this.#state = emptyState(
       config.client === null ? "unavailable" : "available",
     );
-  }
-
+}
   getSnapshot(): ControlWorkspaceState {
     return this.#state;
   }
@@ -128,7 +80,7 @@ export class ControlWorkspaceRuntime {
       );
       return;
     }
-    const client = this.#requireClient();
+    const client = requireWorkspaceClient(this.#client, this.#closed);
     const controller = new AbortController();
     const generation = this.#generation;
     this.#publish({
@@ -155,7 +107,7 @@ export class ControlWorkspaceRuntime {
         eventSequences: new Map(),
         streams: new Map(),
       };
-      if (!this.#isGenerationCurrent(generation, controller)) return;
+      if (!isGenerationCurrent(this.#closed, this.#generation, generation, controller)) return;
       this.#selection = selection;
       await this.#recoverList(selection, client);
       if (!this.#isCurrent(selection)) return;
@@ -169,7 +121,7 @@ export class ControlWorkspaceRuntime {
         );
       }
     } catch (error) {
-      if (this.#isGenerationCurrent(generation, controller)) {
+      if (isGenerationCurrent(this.#closed, this.#generation, generation, controller)) {
         if (this.#selection?.generation === generation) {
           this.#selection = null;
         }
@@ -216,7 +168,7 @@ export class ControlWorkspaceRuntime {
     executionId: string,
   ): Promise<WorkspaceOperationView> {
     const selection = this.#requireSelection(threadId);
-    const client = this.#requireClient();
+    const client = requireWorkspaceClient(this.#client, this.#closed);
     this.#publishSelection(selection, "loading");
     try {
       const response = parseGetWorkspaceOperationResponse(
@@ -300,7 +252,7 @@ export class ControlWorkspaceRuntime {
       key: string,
     ) => Promise<WorkspaceOperationMutationResponse>,
   ): Promise<WorkspaceOperationMutationResponse> {
-    const client = this.#requireClient();
+    const client = requireWorkspaceClient(this.#client, this.#closed);
     const key = this.#idempotencyKey(operationName);
     this.#publishSelection(selection, "mutating");
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -355,7 +307,7 @@ export class ControlWorkspaceRuntime {
     selection: Selection,
     executionId: string | null,
   ): Promise<void> {
-    const client = this.#requireClient();
+    const client = requireWorkspaceClient(this.#client, this.#closed);
     const thread = validateThreadSnapshot(
       await client.getThread(selection.threadId, {
         signal: selection.controller.signal,
@@ -453,7 +405,7 @@ export class ControlWorkspaceRuntime {
   ): Promise<void> {
     try {
       let cursor = afterSequence;
-      for await (const raw of this.#eventStream(this.#requireClient(), {
+      for await (const raw of this.#eventStream(requireWorkspaceClient(this.#client, this.#closed), {
         threadId: selection.threadId,
         executionId,
         afterSequence,
@@ -491,36 +443,12 @@ export class ControlWorkspaceRuntime {
     status: ControlWorkspaceStatus,
   ): void {
     if (!this.#isCurrent(selection)) return;
-    const operations = [...selection.operations.values()].sort((left, right) =>
-      compareUtf8(left.executionId, right.executionId),
-    );
-    const eventSequences = Object.fromEntries(
-      operations.map((operation) => [
-        operation.executionId,
-        selection.eventSequences.get(operation.executionId) ??
-          operation.revision,
-      ]),
-    );
-    this.#publish({
-      status,
-      threadId: selection.threadId,
-      threadRevision: selection.threadRevision,
-      threadStatus: selection.threadStatus,
-      operations: structuredClone(operations),
-      eventSequences,
-    });
+    this.#publish(buildWorkspaceState(selection, status));
   }
 
   #publish(state: ControlWorkspaceState): void {
     this.#state = state;
     for (const listener of this.#listeners) listener();
-  }
-
-  #requireClient(): ControlApiClient {
-    if (this.#client === null || this.#closed) {
-      throw new Error("control_workspace_unavailable");
-    }
-    return this.#client;
   }
 
   #requireSelection(threadId: string): Selection {
@@ -534,22 +462,15 @@ export class ControlWorkspaceRuntime {
     }
     return selection;
   }
-
-  #isGenerationCurrent(
-    generation: number,
-    controller: AbortController,
-  ): boolean {
-    return (
-      !this.#closed &&
-      generation === this.#generation &&
-      !controller.signal.aborted
-    );
-  }
-
   #isCurrent(selection: Selection): boolean {
     return (
       this.#selection === selection &&
-      this.#isGenerationCurrent(selection.generation, selection.controller)
+      isGenerationCurrent(
+        this.#closed,
+        this.#generation,
+        selection.generation,
+        selection.controller,
+      )
     );
   }
 
@@ -573,63 +494,4 @@ export class ControlWorkspaceRuntime {
     for (const stream of selection.streams.values()) stream.controller.abort();
     selection.streams.clear();
   }
-}
-
-function validateThreadSnapshot(
-  response: GetThreadResponse,
-  threadId: string,
-): GetThreadResponse {
-  if (
-    response.thread.threadId !== threadId ||
-    !Number.isSafeInteger(response.thread.revision) ||
-    response.thread.revision < 1 ||
-    response.eventSequence !== response.thread.revision ||
-    !["active", "archived", "deleted"].includes(response.thread.status)
-  ) {
-    throw new Error("control_workspace_thread_snapshot_invalid");
-  }
-  return response;
-}
-
-function isUnknownNetwork(error: unknown): boolean {
-  return (
-    error instanceof TypeError ||
-    (error instanceof ControlApiClientError &&
-      error.category === "unknownOutcome")
-  );
-}
-
-function isConflict(error: unknown): boolean {
-  return error instanceof ControlApiClientError && error.status === 409;
-}
-
-function isStreamableOperation(operation: WorkspaceOperationView): boolean {
-  return (
-    operation.status === "pending" || operation.status === "unknownOutcome"
-  );
-}
-
-function emptyState(
-  status: "available" | "unavailable",
-): ControlWorkspaceState {
-  return {
-    status,
-    threadId: null,
-    threadRevision: null,
-    threadStatus: null,
-    operations: [],
-    eventSequences: {},
-  };
-}
-
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = new TextEncoder().encode(left);
-  const rightBytes = new TextEncoder().encode(right);
-  const length = Math.min(leftBytes.byteLength, rightBytes.byteLength);
-  for (let index = 0; index < length; index += 1) {
-    if (leftBytes[index] !== rightBytes[index]) {
-      return leftBytes[index]! - rightBytes[index]!;
-    }
-  }
-  return leftBytes.byteLength - rightBytes.byteLength;
 }
