@@ -10,9 +10,11 @@ import {
   RunApplicationService,
   RunExecutionService,
   RunStoreError,
+  validateWorkspaceOperationRecord,
   type ActorContext,
   type ApplicationIdKind,
   type RunStore,
+  type WorkspaceOperationRecord,
 } from "@crewon/application";
 import {
   createRunGoalAccountingCursor,
@@ -62,6 +64,220 @@ import {
   registerThreadRollbackStoreConformance,
 } from "./thread-rollback-store-conformance.test-support.ts";
 import { registerAutomationStoreConformance } from "./automation-store-conformance.test-support.ts";
+import {
+  prepareInput,
+  receiptQuery,
+  registerWorkspaceOperationStoreConformance,
+  seedWorkspaceThread,
+} from "./workspace-operation-store-conformance.test-support.ts";
+import { workspaceOperationResultDigest } from "./workspace-operation-store-support.ts";
+
+registerWorkspaceOperationStoreConformance(
+  "SqliteRunStore workspace operation authority (:memory:)",
+  () => new SqliteRunStore(":memory:"),
+);
+
+test("bounds SQLite snapshot and high-cursor reads independently of old revisions", async (context) => {
+  const path = temporaryDatabasePath(context);
+  const store = new SqliteRunStore(path);
+  context.after(() => store.close());
+  await seedWorkspaceThread(store);
+  const prepared = await store.prepareWorkspaceOperation(prepareInput());
+  const database = new DatabaseSync(path);
+  context.after(() => database.close());
+  const insert = database.prepare(
+    `INSERT INTO workspace_operation_revisions (
+       tenant_id, execution_id, revision, result_digest, operation_json
+     ) VALUES (?, ?, ?, ?, ?)`,
+  );
+  let head = prepared.operation;
+  database.exec("BEGIN IMMEDIATE");
+  for (let revision = 2; revision <= 150; revision += 1) {
+    head = unknownWorkspaceRevision(prepared.operation, revision);
+    insert.run(
+      head.tenantId,
+      head.executionId,
+      head.revision,
+      workspaceOperationResultDigest(head),
+      JSON.stringify(head),
+    );
+  }
+  database
+    .prepare(
+      `UPDATE workspace_operations
+       SET revision = ?, status = ?, operation_json = ?
+       WHERE tenant_id = ? AND execution_id = ?`,
+    )
+    .run(
+      head.revision,
+      head.status,
+      JSON.stringify(head),
+      head.tenantId,
+      head.executionId,
+    );
+  database
+    .prepare(
+      `UPDATE workspace_operation_revisions
+       SET operation_json = json_set(operation_json, '$.unexpected', 1)
+       WHERE tenant_id = ? AND execution_id = ? AND revision = 1`,
+    )
+    .run(head.tenantId, head.executionId);
+  database.exec("COMMIT");
+
+  const locator = workspaceOperationLocator(head);
+  assert.deepEqual(await store.loadWorkspaceOperationSnapshot(locator), {
+    operation: head,
+    eventSequence: 150,
+  });
+  assert.deepEqual(
+    await store.listWorkspaceOperations({
+      tenantId: head.tenantId,
+      spaceId: head.spaceId,
+      threadId: head.threadId,
+      afterExecutionId: null,
+      limit: 100,
+    }),
+    { operations: [head], nextAfterExecutionId: null },
+  );
+  assert.deepEqual(
+    await store.listWorkspaceOperationEvents({
+      ...locator,
+      afterSequence: 149,
+      limit: 100,
+    }),
+    [{ sequence: 150, operation: head }],
+  );
+  await assert.rejects(
+    store.listWorkspaceOperationEvents({
+      ...locator,
+      afterSequence: 0,
+      limit: 1,
+    }),
+  );
+});
+
+test("fails closed on SQLite revision gaps, digest drift, and head mismatches", async (context) => {
+  for (const corruption of [
+    "gap",
+    "digest",
+    "extraHead",
+    "headJson",
+  ] as const) {
+    const path = temporaryDatabasePath(context);
+    const store = new SqliteRunStore(path);
+    await seedWorkspaceThread(store);
+    const prepared = await store.prepareWorkspaceOperation(prepareInput());
+    const database = new DatabaseSync(path);
+    database.exec("PRAGMA foreign_keys = OFF");
+    if (corruption === "gap") {
+      database
+        .prepare(
+          `DELETE FROM workspace_operation_revisions
+           WHERE tenant_id = ? AND execution_id = ? AND revision = 1`,
+        )
+        .run(prepared.operation.tenantId, prepared.operation.executionId);
+    } else if (corruption === "digest") {
+      database
+        .prepare(
+          `UPDATE workspace_operation_revisions SET result_digest = ?
+           WHERE tenant_id = ? AND execution_id = ? AND revision = 1`,
+        )
+        .run(
+          `sha256:${"f".repeat(64)}`,
+          prepared.operation.tenantId,
+          prepared.operation.executionId,
+        );
+    } else if (corruption === "extraHead") {
+      const extra = unknownWorkspaceRevision(prepared.operation, 2);
+      database
+        .prepare(
+          `INSERT INTO workspace_operation_revisions (
+             tenant_id, execution_id, revision, result_digest, operation_json
+           ) VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(
+          extra.tenantId,
+          extra.executionId,
+          extra.revision,
+          workspaceOperationResultDigest(extra),
+          JSON.stringify(extra),
+        );
+    } else {
+      database
+        .prepare(
+          `UPDATE workspace_operations
+           SET operation_json = json_set(operation_json, '$.unexpected', 1)
+           WHERE tenant_id = ? AND execution_id = ?`,
+        )
+        .run(prepared.operation.tenantId, prepared.operation.executionId);
+    }
+    await assert.rejects(
+      store.loadWorkspaceOperationSnapshot(
+        workspaceOperationLocator(prepared.operation),
+      ),
+    );
+    await assert.rejects(
+      store.listWorkspaceOperations({
+        tenantId: prepared.operation.tenantId,
+        spaceId: prepared.operation.spaceId,
+        threadId: prepared.operation.threadId,
+        afterExecutionId: null,
+        limit: 100,
+      }),
+    );
+    database.close();
+    await store.close();
+  }
+});
+
+test("SQLite workspace lease expiry requires a new reconcile attempt", async () => {
+  const clock = new ManualLeaseClock(Date.parse("2026-08-10T00:00:00.000Z"));
+  const store = new SqliteRunStore(":memory:", { clock });
+  await seedWorkspaceThread(store);
+  const prepared = await store.prepareWorkspaceOperation(prepareInput());
+  const attempt = prepared.deliveryAttempt!;
+  await store.claimWorkspaceOperationDelivery({
+    tenantId: attempt.tenantId,
+    spaceId: attempt.spaceId,
+    threadId: attempt.threadId,
+    executionId: attempt.executionId,
+    attemptNumber: attempt.attemptNumber,
+    operationRevision: attempt.operationRevision,
+    phase: attempt.phase,
+    ownerId: "owner-1",
+    leaseDurationMs: 35_000,
+  });
+  clock.advance(35_000);
+  await assert.rejects(
+    store.claimWorkspaceOperationDelivery({
+      tenantId: attempt.tenantId,
+      spaceId: attempt.spaceId,
+      threadId: attempt.threadId,
+      executionId: attempt.executionId,
+      attemptNumber: attempt.attemptNumber,
+      operationRevision: attempt.operationRevision,
+      phase: attempt.phase,
+      ownerId: "owner-2",
+      leaseDurationMs: 35_000,
+    }),
+    (error: unknown) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "workspace_delivery_reconcile_required",
+  );
+  const reconcile = receiptQuery("reconcile");
+  const recovered = await store.prepareWorkspaceOperationAction({
+    tenantId: attempt.tenantId,
+    spaceId: attempt.spaceId,
+    threadId: attempt.threadId,
+    executionId: attempt.executionId,
+    expectedOperationRevision: attempt.operationRevision,
+    phase: "reconcile",
+    idempotency: reconcile.idempotency,
+  });
+  assert.equal(recovered.deliveryAttempt?.phase, "reconcile");
+  await store.close();
+});
 
 registerAutomationStoreConformance(
   "SqliteRunStore Automation authority (:memory:)",
@@ -1143,6 +1359,10 @@ test("configures WAL and foreign keys and applies the current schema once", (con
       { name: "tool_approvals" },
       { name: "tool_execution_receipts" },
       { name: "work_items" },
+      { name: "workspace_delivery_attempts" },
+      { name: "workspace_operation_receipts" },
+      { name: "workspace_operation_revisions" },
+      { name: "workspace_operations" },
     ],
   );
   assert.equal(
@@ -1910,6 +2130,33 @@ function downgradeContextCompactionAuthority(database: DatabaseSync): void {
     PRAGMA user_version = 7;
     PRAGMA foreign_keys = ON;
   `);
+}
+
+function unknownWorkspaceRevision(
+  prepared: WorkspaceOperationRecord,
+  revision: number,
+): WorkspaceOperationRecord {
+  return validateWorkspaceOperationRecord({
+    ...prepared,
+    revision,
+    status: "unknownOutcome",
+    resolution: {
+      status: "unknownOutcome",
+      executionId: prepared.executionId,
+      actionDigest: prepared.command.actionDigest,
+      commandDigest: prepared.command.commandDigest,
+      providerReceiptId: null,
+    },
+  });
+}
+
+function workspaceOperationLocator(operation: WorkspaceOperationRecord) {
+  return {
+    tenantId: operation.tenantId,
+    spaceId: operation.spaceId,
+    threadId: operation.threadId,
+    executionId: operation.executionId,
+  };
 }
 
 function temporaryDatabasePath(context: TestContext): string {

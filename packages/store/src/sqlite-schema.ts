@@ -5,8 +5,12 @@ import {
   migrateSqliteAutomationAuthority,
   sqliteAutomationTablesSql,
 } from "./sqlite-automation-schema.ts";
+import {
+  migrateSqliteWorkspaceOperationAuthority,
+  sqliteWorkspaceOperationTablesSql,
+} from "./sqlite-workspace-operation-schema.ts";
 
-export const SQLITE_SCHEMA_VERSION = 21;
+export const SQLITE_SCHEMA_VERSION = 23;
 
 type LegacyRunRow = Readonly<{
   tenant_id: string;
@@ -34,6 +38,7 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
     throw new RunStoreError("sqlite_schema_too_new");
   }
   if (version === SQLITE_SCHEMA_VERSION) {
+    migrateSqliteWorkspaceOperationAuthority(database);
     return;
   }
 
@@ -113,6 +118,10 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
       // Version 19 has append-only rollback but predates Provider settings.
     } else if (version === 20) {
       // Version 20 has Provider settings but predates Automation authority.
+    } else if (version === 21) {
+      // Version 21 has Automation authority but predates workspace operations.
+    } else if (version === 22) {
+      // Version 22 has workspace operation v1 but predates durable delivery leases.
     } else {
       throw new RunStoreError("sqlite_schema_version_unsupported");
     }
@@ -151,6 +160,12 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
     }
     if (version !== 0 && version <= 20) {
       migrateVersionTwenty(database);
+    }
+    if (version !== 0 && version <= 21) {
+      migrateVersionTwentyOne(database);
+    }
+    if (version !== 0 && version <= 22) {
+      migrateVersionTwentyTwo(database);
     }
     database.exec(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION}`);
     database.exec("COMMIT");
@@ -220,6 +235,8 @@ function createCurrentSchema(database: DatabaseSync): void {
     ${modelProviderSettingsTablesSql()}
 
     ${sqliteAutomationTablesSql()}
+
+    ${sqliteWorkspaceOperationTablesSql()}
 
     CREATE TABLE run_events (
       tenant_id TEXT NOT NULL,
@@ -1073,6 +1090,14 @@ function migrateVersionNineteen(database: DatabaseSync): void {
 
 function migrateVersionTwenty(database: DatabaseSync): void {
   migrateSqliteAutomationAuthority(database);
+}
+
+function migrateVersionTwentyOne(database: DatabaseSync): void {
+  migrateSqliteWorkspaceOperationAuthority(database);
+}
+
+function migrateVersionTwentyTwo(database: DatabaseSync): void {
+  migrateSqliteWorkspaceOperationAuthority(database);
 }
 
 function modelProviderSettingsTablesSql(): string {

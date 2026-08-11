@@ -130,6 +130,24 @@ import {
   evaluateGoalToolCall,
   type GoalToolExecutionInput,
   type GoalToolExecutionResult,
+  type AbandonWorkspaceDeliveryInput,
+  type ClaimWorkspaceDeliveryInput,
+  type CommitWorkspaceOperationResolutionInput,
+  type PrepareWorkspaceOperationActionInput,
+  type PrepareWorkspaceOperationInput,
+  type WorkspaceDeliveryAttempt,
+  type WorkspaceDeliveryAttemptQuery,
+  type WorkspaceDeliverySettlementResult,
+  type WorkspaceOperationMutationResult,
+  type WorkspaceOperationEvent,
+  type WorkspaceOperationEventQuery,
+  type WorkspaceOperationLocator,
+  type WorkspaceOperationListPage,
+  type WorkspaceOperationListQuery,
+  type WorkspaceOperationPreparationResult,
+  type WorkspaceOperationReceiptQuery,
+  type WorkspaceOperationRecord,
+  type WorkspaceOperationSnapshot,
 } from "@crewon/application";
 import {
   validateAutomationRecord,
@@ -151,6 +169,19 @@ import {
   validateAgentVersionList,
   validateAgentVersionLocator,
 } from "./agent-version-store-invariants.ts";
+import {
+  abandonSqliteWorkspaceOperationDelivery,
+  claimSqliteWorkspaceOperationDelivery,
+  listSqliteWorkspaceOperationDeliveryAttempts,
+  listSqliteWorkspaceOperationEvents,
+  listSqliteWorkspaceOperations,
+  loadSqliteWorkspaceOperation,
+  loadSqliteWorkspaceOperationSnapshot,
+  loadSqliteWorkspaceOperationReceipt,
+  prepareSqliteWorkspaceOperationAction,
+  prepareSqliteWorkspaceOperation,
+  settleSqliteWorkspaceOperationDelivery,
+} from "./sqlite-workspace-operation-store.ts";
 import {
   abortSqliteModelProviderSettings,
   expireSqliteModelProviderSettings,
@@ -932,6 +963,106 @@ export class SqliteRunStore implements DomainStore {
     } catch (error) {
       throw normalizeSqliteError(error);
     }
+  }
+
+  async loadWorkspaceOperationReceipt(
+    query: WorkspaceOperationReceiptQuery,
+  ): Promise<WorkspaceOperationMutationResult | null> {
+    this.#assertOpen();
+    return loadSqliteWorkspaceOperationReceipt(this.#database, query);
+  }
+
+  async prepareWorkspaceOperation(
+    input: PrepareWorkspaceOperationInput,
+  ): Promise<WorkspaceOperationPreparationResult> {
+    this.#assertOpen();
+    return prepareSqliteWorkspaceOperation(
+      this.#database,
+      input,
+      readLeaseClock(this.#clock),
+    );
+  }
+
+  async loadWorkspaceOperation(input: {
+    tenantId: string;
+    spaceId: string;
+    threadId: string;
+    executionId: string;
+  }): Promise<WorkspaceOperationRecord | null> {
+    this.#assertOpen();
+    return loadSqliteWorkspaceOperation(this.#database, input);
+  }
+
+  async loadWorkspaceOperationSnapshot(
+    locator: WorkspaceOperationLocator,
+  ): Promise<WorkspaceOperationSnapshot | null> {
+    this.#assertOpen();
+    return loadSqliteWorkspaceOperationSnapshot(this.#database, locator);
+  }
+
+  async listWorkspaceOperationEvents(
+    query: WorkspaceOperationEventQuery,
+  ): Promise<readonly WorkspaceOperationEvent[]> {
+    this.#assertOpen();
+    return listSqliteWorkspaceOperationEvents(this.#database, query);
+  }
+
+  async listWorkspaceOperations(
+    query: WorkspaceOperationListQuery,
+  ): Promise<WorkspaceOperationListPage> {
+    this.#assertOpen();
+    return listSqliteWorkspaceOperations(this.#database, query);
+  }
+
+  async prepareWorkspaceOperationAction(
+    input: PrepareWorkspaceOperationActionInput,
+  ): Promise<WorkspaceOperationPreparationResult> {
+    this.#assertOpen();
+    return prepareSqliteWorkspaceOperationAction(
+      this.#database,
+      input,
+      readLeaseClock(this.#clock),
+    );
+  }
+
+  async claimWorkspaceOperationDelivery(
+    input: ClaimWorkspaceDeliveryInput,
+  ): Promise<WorkspaceDeliveryAttempt> {
+    this.#assertOpen();
+    return claimSqliteWorkspaceOperationDelivery(
+      this.#database,
+      input,
+      readLeaseClock(this.#clock),
+    );
+  }
+
+  async listWorkspaceOperationDeliveryAttempts(
+    query: WorkspaceDeliveryAttemptQuery,
+  ): Promise<readonly WorkspaceDeliveryAttempt[]> {
+    this.#assertOpen();
+    return listSqliteWorkspaceOperationDeliveryAttempts(this.#database, query);
+  }
+
+  async abandonWorkspaceOperationDelivery(
+    input: AbandonWorkspaceDeliveryInput,
+  ): Promise<WorkspaceDeliveryAttempt> {
+    this.#assertOpen();
+    return abandonSqliteWorkspaceOperationDelivery(
+      this.#database,
+      input,
+      readLeaseClock(this.#clock),
+    );
+  }
+
+  async settleWorkspaceOperationDelivery(
+    input: CommitWorkspaceOperationResolutionInput,
+  ): Promise<WorkspaceDeliverySettlementResult> {
+    this.#assertOpen();
+    return settleSqliteWorkspaceOperationDelivery(
+      this.#database,
+      input,
+      readLeaseClock(this.#clock),
+    );
   }
 
   async loadThreadGoal(locator: ThreadLocator): Promise<ThreadGoal | null> {
