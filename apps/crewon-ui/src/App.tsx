@@ -56,12 +56,15 @@ import {
   addLocalComposerResources,
   assistantThreadRuntimeState,
   commandShellRuntimeState,
+  isLegacyWorkspacePanelItem,
   platformResourceMentionPath,
   saveCapabilityDraftAction,
   withPlatformResourceMention,
   useAppCommandModelOptions,
   useAppDraftWorkspaceState,
   useProviderResourceComposer,
+  workspaceCapabilityHandlersForAuthority,
+  workspaceCwdForAuthority,
 } from "./lib/app";
 import {
   mentionsWithSlashCommand,
@@ -82,13 +85,17 @@ import { officeRecordKey } from "./lib/office/officePanelFromRecord";
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
+import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
 import { selectThreadRuntimeAuthority } from "./lib/control-runtime/threadRuntimeAuthority";
+import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
 
 export function App({
   controlClient = null,
 }: {
   controlClient?: ControlApiClient | null;
 }) {
+  const workspaceUiAuthority =
+    controlClient === null ? ("legacy" as const) : ("control" as const);
   const { isDemoPreview, platform, principalSessionEnabled, serverUrl } =
     useAppEnvironment();
   // Who you are in CrewON. The model account below is a separate credential.
@@ -168,8 +175,11 @@ export function App({
   } = workspaceStatus;
   const { automationRunByTurnRef, officeRunByTurnRef } =
     useAppRunTrackingRefs();
-  const { connected: controlRuntimeConnected, runtime: controlThreadRuntime } =
-    useControlThreadRuntime({
+  const {
+    connected: controlRuntimeConnected,
+    rehydrateThreadAuthority: rehydrateControlThreadAuthority,
+    runtime: controlThreadRuntime,
+  } = useControlThreadRuntime({
       appendStreamingTextDelta: threadState.appendStreamingTextDelta,
       client: controlClient,
       selectedThreadId,
@@ -181,6 +191,13 @@ export function App({
       setThreads: threadState.setThreads,
       showArchivedThreadsRef,
     });
+  const controlWorkspace = useControlWorkspaceRuntime({
+    client: controlRuntimeConnected ? controlClient : null,
+    nativeAuthority:
+      controlClient === null ? null : desktopWorkspaceAuthority(),
+    rehydrateThreadAuthority: rehydrateControlThreadAuthority,
+    selectedThreadId,
+  });
   /*
    * Pending server requests are only ever forwarded to coordinators, never read
    * here, so the group is kept intact and spread at each callsite. Destructuring
@@ -671,13 +688,16 @@ export function App({
   });
   useAppKeyboardShortcutEffects({
     ...composerState,
-    startDraftThread: () => startCommandShellDraftThread(cwd || null),
+    startDraftThread: () =>
+      startCommandShellDraftThread(
+        workspaceCwdForAuthority(workspaceUiAuthority, cwd),
+      ),
   });
   const {
-    attachWorkspaceContext,
+    attachWorkspaceContext: legacyAttachWorkspaceContext,
     loadBrowserApps,
-    readWorkspaceDiff,
-    readWorkspaceFiles,
+    readWorkspaceDiff: legacyReadWorkspaceDiff,
+    readWorkspaceFiles: legacyReadWorkspaceFiles,
     resizeWorkbenchTerminal,
     runTerminalStatus,
     startWorkbenchTerminal,
@@ -699,6 +719,25 @@ export function App({
     setTerminalProcessId,
     terminalCommand,
   });
+
+  const { attachWorkspaceContext, readWorkspaceDiff, readWorkspaceFiles } =
+    workspaceCapabilityHandlersForAuthority({
+      authority: workspaceUiAuthority,
+      legacy: {
+        attachWorkspaceContext: legacyAttachWorkspaceContext,
+        readWorkspaceDiff: legacyReadWorkspaceDiff,
+        readWorkspaceFiles: legacyReadWorkspaceFiles,
+      },
+      onUnavailable: () => {
+        setNotice({
+          text:
+            locale === "zh"
+              ? "Control 模式下旧本地工作空间入口不可用，请使用工作空间操作面板。"
+              : "Legacy local workspace actions are unavailable in Control mode. Use the Workspace operations panel.",
+          tone: "warning",
+        });
+      },
+    });
 
   const {
     openThreadSettingsPanel,
@@ -838,6 +877,19 @@ export function App({
   const handleComposerCapabilityPanelItem = async (
     item: CapabilityPanelItem,
   ) => {
+    if (
+      workspaceUiAuthority === "control" &&
+      isLegacyWorkspacePanelItem(item)
+    ) {
+      setNotice({
+        text:
+          locale === "zh"
+            ? "Control 模式下旧本地工作空间入口不可用，请使用工作空间操作面板。"
+            : "Legacy local workspace actions are unavailable in Control mode. Use the Workspace operations panel.",
+        tone: "warning",
+      });
+      return;
+    }
     const officeAttachmentConsumer = officeAttachmentConsumerRef.current;
     if (
       officeAttachmentConsumer &&
@@ -957,6 +1009,33 @@ export function App({
         modelOptions={commandModelOptions}
         executionTargetClient={clientRef.current}
         scheduleClient={clientRef.current}
+        workspaceAuthority={workspaceUiAuthority}
+        workspaceOperations={
+          controlClient === null
+            ? null
+            : {
+                state: controlWorkspace.state,
+                mutationAuthority: controlWorkspace.mutationAuthority,
+                nativeWorkspaceSelected:
+                  (controlWorkspace.nativeWorkspace?.displayName ?? null) !== null,
+                nativeWorkspaceDisplayName:
+                  controlWorkspace.nativeWorkspace?.displayName ?? null,
+                nativeWorkspaceBusy: controlWorkspace.nativeBusy,
+                safeError: controlWorkspace.safeError,
+                onCreate: controlWorkspace.create,
+                onReconcile: controlWorkspace.reconcile,
+                onCancel: controlWorkspace.cancel,
+                onSelectNativeWorkspace:
+                  controlWorkspace.mutationAuthority === "desktop"
+                    ? controlWorkspace.selectNativeWorkspace
+                    : undefined,
+                onClearNativeWorkspace:
+                  controlWorkspace.mutationAuthority === "desktop" &&
+                  (controlWorkspace.nativeWorkspace?.displayName ?? null) !== null
+                    ? controlWorkspace.clearNativeWorkspace
+                    : undefined,
+              }
+        }
         capabilityDrawer={{
           busyToolId,
           commandValue: terminalCommand,
@@ -979,7 +1058,7 @@ export function App({
           onTerminalStart: startWorkbenchTerminal,
           onTerminalStop: stopWorkbenchTerminal,
           onTerminalWrite: writeWorkbenchTerminalInput,
-          terminalCwd: cwd || null,
+          terminalCwd: workspaceCwdForAuthority(workspaceUiAuthority, cwd),
           terminalOutput,
           terminalProcessId,
           onWeb: loadBrowserApps,
@@ -1042,7 +1121,11 @@ export function App({
           }
         }}
         onRetryConnection={retryConnection}
-        onChangeWorkspaceCwd={changeCommandShellWorkspace}
+        onChangeWorkspaceCwd={
+          workspaceUiAuthority === "legacy"
+            ? changeCommandShellWorkspace
+            : undefined
+        }
         onSelectLinkedThread={openCommandShellThread}
         onSendAssistant={(text, threadSettings, images) => {
           const settings = assistantThreadRuntimeSettings(threadSettings);
@@ -1103,7 +1186,9 @@ export function App({
           void openLibrary(kind);
         }}
         onNewThread={() => {
-          startCommandShellDraftThread(cwd || null);
+          startCommandShellDraftThread(
+            workspaceCwdForAuthority(workspaceUiAuthority, cwd),
+          );
         }}
         onRenameThread={renameThread}
         onSearchChange={setThreadSearchTerm}
