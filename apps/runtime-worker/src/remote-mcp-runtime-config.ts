@@ -108,14 +108,21 @@ function parseServer(value: unknown): RemoteMcpServerConfig {
   ) {
     throw new Error("remote_mcp_server_invalid");
   }
+  const parsedServerId = serverId(value.serverId);
   const serverBindingId = opaqueId(value.serverBindingId);
   const credentialBindingId = opaqueId(value.credentialBindingId);
   const toolNames = new Set<string>();
   const tools = value.tools.map((tool) =>
-    parseTool(tool, serverBindingId, credentialBindingId, toolNames),
+    parseTool(
+      tool,
+      parsedServerId,
+      serverBindingId,
+      credentialBindingId,
+      toolNames,
+    ),
   );
   return {
-    serverId: serverId(value.serverId),
+    serverId: parsedServerId,
     serverBindingId,
     mode: value.mode,
     endpoint: endpoint(value.endpoint, value.mode),
@@ -126,6 +133,7 @@ function parseServer(value: unknown): RemoteMcpServerConfig {
 
 function parseTool(
   value: unknown,
+  serverId: string,
   serverBindingId: string,
   credentialBindingId: string,
   toolNames: Set<string>,
@@ -133,11 +141,13 @@ function parseTool(
   if (
     !hasExactKeys(value, ["descriptor", "policy"]) ||
     !hasExactKeys(value.descriptor, ["description", "inputSchema", "name"]) ||
-    !isPlainObject(value.descriptor.inputSchema)
+    !isPlainObject(value.descriptor.inputSchema) ||
+    value.descriptor.inputSchema.type !== "object"
   ) {
     throw new Error("remote_mcp_tool_invalid");
   }
   const name = toolName(value.descriptor.name);
+  validateExposedToolName(serverId, name);
   if (toolNames.has(name)) {
     throw new Error("remote_mcp_tool_duplicate");
   }
@@ -164,6 +174,14 @@ function parseTool(
     },
     policy,
   };
+}
+
+// Keep the immutable catalog materializable by McpToolRuntime::exposeName.
+function validateExposedToolName(serverId: string, toolName: string): void {
+  const name = `mcp__${serverId}__${toolName}`;
+  if (name.length > 128 || !/^[A-Za-z0-9_.:-]+$/u.test(name)) {
+    throw new Error("remote_mcp_exposed_tool_name_invalid");
+  }
 }
 
 function parsePolicy(value: unknown): ToolExecutionPolicy {

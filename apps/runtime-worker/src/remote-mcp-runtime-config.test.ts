@@ -133,14 +133,14 @@ test("enforces UTF-8 byte bounds and finite acyclic JSON schemas", () => {
       config.servers[0]!.tools[0]!.descriptor as {
         inputSchema: Record<string, unknown>;
       }
-    ).inputSchema = { invalid };
+    ).inputSchema = { type: "object", invalid };
     assert.throws(
       () => parseRemoteMcpRuntimeConfig(config),
       hasMessage("remote_mcp_tool_schema_invalid"),
     );
   }
   const config = validConfig();
-  const cyclic: Record<string, unknown> = {};
+  const cyclic: Record<string, unknown> = { type: "object" };
   cyclic.self = cyclic;
   (
     config.servers[0]!.tools[0]!.descriptor as {
@@ -177,6 +177,29 @@ test("aligns descriptor byte bounds with McpToolRuntime", () => {
   assert.throws(
     () => parseRemoteMcpRuntimeConfig(schemaBoundary),
     hasMessage("remote_mcp_tool_schema_invalid"),
+  );
+});
+
+test("requires object input schemas and materializable exposed names", () => {
+  const invalidSchema = validConfig();
+  (
+    invalidSchema.servers[0]!.tools[0]!.descriptor as {
+      inputSchema: Record<string, unknown>;
+    }
+  ).inputSchema = {};
+  assert.throws(
+    () => parseRemoteMcpRuntimeConfig(invalidSchema),
+    hasMessage("remote_mcp_tool_invalid"),
+  );
+
+  const exposedNameBoundary = validConfig();
+  exposedNameBoundary.servers[0]!.serverId = "s";
+  exposedNameBoundary.servers[0]!.tools[0]!.descriptor.name = "a".repeat(120);
+  assert.doesNotThrow(() => parseRemoteMcpRuntimeConfig(exposedNameBoundary));
+  exposedNameBoundary.servers[0]!.tools[0]!.descriptor.name += "a";
+  assert.throws(
+    () => parseRemoteMcpRuntimeConfig(exposedNameBoundary),
+    hasMessage("remote_mcp_exposed_tool_name_invalid"),
   );
 });
 
@@ -273,8 +296,11 @@ function validConfig() {
 }
 
 function schemaWithBytes(bytes: number): Record<string, unknown> {
-  const empty = JSON.stringify({ padding: "" });
-  return { padding: "a".repeat(bytes - Buffer.byteLength(empty, "utf8")) };
+  const empty = JSON.stringify({ type: "object", padding: "" });
+  return {
+    type: "object",
+    padding: "a".repeat(bytes - Buffer.byteLength(empty, "utf8")),
+  };
 }
 
 function serverWithTools(
