@@ -266,6 +266,10 @@ export class DeviceGatewaySession {
     );
   }
 
+  requestWorkspaceReadCancel(executionId: string, reasonCode: string): void {
+    this.#workspaceRead.requestCancel(executionId, reasonCode);
+  }
+
   setWorkspaceReadOrphanEventCommitter(
     committer: WorkspaceReadEventCommitter | null,
   ): void {

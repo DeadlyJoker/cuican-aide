@@ -1,6 +1,9 @@
 import type { IncomingMessage } from "node:http";
 
-import { DEVICE_PROTOCOL_VERSION } from "@crewon/contracts";
+import {
+  DEVICE_PROTOCOL_VERSION,
+  type DeviceFilesystemReadRouteIntent,
+} from "@crewon/contracts";
 import type { DeviceWorkspaceListPeerRoute } from "@crewon/contracts";
 import type WebSocket from "ws";
 
@@ -179,6 +182,28 @@ export class DeviceGateway {
         gatewayId: entry.route.gatewayId,
         connectionId: entry.route.connectionId,
         connectionEpoch: entry.route.epoch,
+        leaseExpiresAt: entry.route.leaseExpiresAt,
+      },
+    };
+  }
+
+  workspaceReadSession(
+    deviceId: string,
+    intent?: DeviceFilesystemReadRouteIntent,
+  ) {
+    const entry = this.#sessions.get(validateDeviceId(deviceId));
+    if (entry === undefined || entry.route === null || intent === undefined)
+      return null;
+    return {
+      session: entry.session,
+      route: {
+        deviceId: entry.route.deviceId,
+        gatewayId: entry.route.gatewayId,
+        connectionId: entry.route.connectionId,
+        connectionEpoch: entry.route.epoch,
+        deviceBindingId: intent.deviceBindingId,
+        runtimeBindingId: intent.runtimeBindingId,
+        capability: "workspace.read_file.v0" as const,
         leaseExpiresAt: entry.route.leaseExpiresAt,
       },
     };

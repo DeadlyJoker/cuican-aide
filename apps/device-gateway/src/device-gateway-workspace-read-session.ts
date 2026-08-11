@@ -3,6 +3,8 @@ import {
   parseDeviceFilesystemReadAck,
   parseDeviceFilesystemReadCommand,
   parseDeviceFilesystemReadEvent,
+  DEVICE_PROTOCOL_VERSION,
+  type DeviceExecutionCancel,
   type DeviceFilesystemReadCommand,
   type DeviceFilesystemReadEvent,
 } from "@crewon/contracts";
@@ -124,6 +126,24 @@ export class DeviceGatewayWorkspaceReadSession {
 
   setOrphanCommitter(value: WorkspaceReadEventCommitter | null): void {
     this.#orphan = value;
+  }
+
+  requestCancel(executionId: string, reasonCode: string): void {
+    if (this.#closed) throw new DeviceGatewayError("device_session_closed");
+    const pending = this.#pending.get(executionId);
+    if (pending === undefined)
+      throw new DeviceGatewayError("device_execution_not_pending");
+    const cancel: DeviceExecutionCancel = {
+      schemaVersion: "crewon.device-cancel.v0",
+      protocolVersion: DEVICE_PROTOCOL_VERSION,
+      deviceId: this.#deviceId,
+      executionId,
+      leaseId: pending.command.leaseId,
+      leaseEpoch: pending.command.leaseEpoch,
+      reasonCode,
+      requestedAt: this.#now().toISOString(),
+    };
+    void this.#send(cancel).catch(() => this.#unknown(executionId));
   }
 
   async handleFrame(input: unknown): Promise<boolean> {

@@ -1,5 +1,8 @@
 import {
   parseDeviceFilesystemReadCommand,
+  parseDeviceFilesystemReadDispatchReference,
+  type DeviceFilesystemReadDispatchReference,
+  type DeviceFilesystemReadRouteIntent,
   type DeviceFilesystemReadCommand,
   type DeviceFilesystemReadEvent,
 } from "@crewon/contracts";
@@ -22,7 +25,10 @@ export type WorkspaceReadSessionTarget = Readonly<{
 }>;
 
 export interface WorkspaceReadSessionRegistryPort {
-  workspaceReadSession(deviceId: string): WorkspaceReadSessionTarget | null;
+  workspaceReadSession(
+    deviceId: string,
+    intent?: DeviceFilesystemReadRouteIntent,
+  ): WorkspaceReadSessionTarget | null;
   setWorkspaceReadOrphanEventCommitter?(
     committer:
       | ((
@@ -71,23 +77,32 @@ export class DeviceGatewayWorkspaceReadService {
 
   async execute(
     worker: WorkspaceWorkerIdentity,
-    runtimeBindingId: string,
+    intentInput: string | DeviceFilesystemReadRouteIntent,
     input: DeviceFilesystemReadCommand,
     signal: AbortSignal = new AbortController().signal,
   ): Promise<WorkspaceReadResolution> {
     if (this.#closed) throw new DeviceGatewayError("workspace_read_closed");
     const command = parseDeviceFilesystemReadCommand(input);
+    const intent = readIntent(intentInput);
+    const runtimeBindingId = intent.runtimeBindingId;
     this.#workers.authorize(worker, runtimeBindingId);
     if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
     const prior = await this.#store.load(command.executionId);
     if (prior !== null) {
       this.#requireMatch(prior, command);
       if (prior.resolution !== null) return structuredClone(prior.resolution);
-      return this.#start(prior, true, runtimeBindingId, signal);
+      return this.#start(prior, true, intent, signal);
     }
     await this.#verifier.verify(command);
-    const target = this.#sessions.workspaceReadSession(command.deviceId);
-    if (target === null || target.route.runtimeBindingId !== runtimeBindingId)
+    const target = this.#sessions.workspaceReadSession(
+      command.deviceId,
+      intent,
+    );
+    if (target === null) throw new DeviceGatewayError("device_unavailable");
+    if (
+      target.route.runtimeBindingId !== runtimeBindingId ||
+      target.route.deviceBindingId !== intent.deviceBindingId
+    )
       throw new DeviceGatewayError("workspace_read_route_stale");
     const prepared = await this.#store.prepare(
       command,
@@ -99,25 +114,72 @@ export class DeviceGatewayWorkspaceReadService {
     return this.#start(
       prepared.record,
       prepared.outcome === "existing",
-      runtimeBindingId,
+      intent,
       signal,
     );
   }
 
   async reconcile(
     worker: WorkspaceWorkerIdentity,
-    runtimeBindingId: string,
-    input: DeviceFilesystemReadCommand,
+    intentInput: string | DeviceFilesystemReadRouteIntent,
+    input: DeviceFilesystemReadDispatchReference,
     signal: AbortSignal = new AbortController().signal,
   ): Promise<WorkspaceReadResolution> {
     if (this.#closed) throw new DeviceGatewayError("workspace_read_closed");
-    const command = parseDeviceFilesystemReadCommand(input);
+    const reference = parseDeviceFilesystemReadDispatchReference(input);
+    const intent = readIntent(intentInput, reference.deviceBindingId);
+    const runtimeBindingId = intent.runtimeBindingId;
     this.#workers.authorize(worker, runtimeBindingId);
-    const record = await this.#store.load(command.executionId);
-    if (record === null) return unknown(command.executionId, null);
-    this.#requireMatch(record, command);
+    const record = await this.#store.load(reference.executionId);
+    if (record === null)
+      return unknown(reference.executionId, reference.receiptId);
+    this.#requireReference(record, reference, runtimeBindingId);
     if (record.resolution !== null) return structuredClone(record.resolution);
-    return this.#start(record, true, runtimeBindingId, signal);
+    return this.#start(record, true, intent, signal);
+  }
+
+  async cancel(
+    worker: WorkspaceWorkerIdentity,
+    intentInput: string | DeviceFilesystemReadRouteIntent,
+    input: DeviceFilesystemReadDispatchReference,
+    signal: AbortSignal = new AbortController().signal,
+  ): Promise<WorkspaceReadResolution> {
+    const reference = parseDeviceFilesystemReadDispatchReference(input);
+    const intent = readIntent(intentInput, reference.deviceBindingId);
+    if (this.#closed) throw new DeviceGatewayError("workspace_read_closed");
+    this.#workers.authorize(worker, intent.runtimeBindingId);
+    if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
+    const record = await this.#store.load(reference.executionId);
+    if (record === null)
+      return unknown(reference.executionId, reference.receiptId);
+    this.#requireReference(record, reference, intent.runtimeBindingId);
+    if (record.resolution !== null) return structuredClone(record.resolution);
+    if (record.acceptedEvent?.type === "workspace_read.accepted") {
+      if (
+        record.acceptedEvent.data.leaseId !== reference.leaseId ||
+        record.acceptedEvent.data.leaseEpoch !== reference.leaseEpoch ||
+        record.acceptedEvent.receiptId !== reference.receiptId
+      )
+        throw new DeviceGatewayError("workspace_read_identity_conflict");
+      const target = this.#sessions.workspaceReadSession(
+        record.command.deviceId,
+        intent,
+      );
+      if (target !== null) {
+        try {
+          target.session.requestWorkspaceReadCancel(
+            reference.executionId,
+            "worker_cancel_requested",
+          );
+        } catch {
+          // The frozen receipt remains the only outcome authority.
+        }
+      }
+    }
+    return (
+      this.#active.get(reference.executionId)?.promise ??
+      unknown(reference.executionId, record.acceptedEvent?.receiptId ?? null)
+    );
   }
 
   async close(): Promise<void> {
@@ -134,7 +196,7 @@ export class DeviceGatewayWorkspaceReadService {
   #start(
     record: WorkspaceReadDispatchRecord,
     replay: boolean,
-    runtimeBindingId: string,
+    intentInput: string | DeviceFilesystemReadRouteIntent,
     signal: AbortSignal,
   ): Promise<WorkspaceReadResolution> {
     const existing = this.#active.get(record.executionId);
@@ -143,7 +205,12 @@ export class DeviceGatewayWorkspaceReadService {
         throw new DeviceGatewayError("workspace_read_identity_conflict");
       return existing.promise;
     }
-    const target = this.#sessions.workspaceReadSession(record.command.deviceId);
+    const intent = readIntent(intentInput, record.route?.deviceBindingId);
+    const runtimeBindingId = intent.runtimeBindingId;
+    const target = this.#sessions.workspaceReadSession(
+      record.command.deviceId,
+      intent,
+    );
     if (target === null) throw new DeviceGatewayError("device_unavailable");
     if (!target.session.supportsWorkspaceRead())
       throw new DeviceGatewayError("device_capability_unavailable");
@@ -209,12 +276,52 @@ export class DeviceGatewayWorkspaceReadService {
     )
       throw new DeviceGatewayError("workspace_read_identity_conflict");
   }
+  #requireReference(
+    record: WorkspaceReadDispatchRecord,
+    reference: DeviceFilesystemReadDispatchReference,
+    runtimeBindingId: string,
+  ) {
+    const command = record.command;
+    if (
+      record.route === null ||
+      runtimeBindingId !== reference.runtimeBindingId ||
+      command.deviceId !== reference.deviceId ||
+      command.executionId !== reference.executionId ||
+      command.workspaceBindingId !== reference.workspaceBindingId ||
+      command.arguments.workspaceIncarnationId !== reference.incarnationId ||
+      record.route.deviceBindingId !== reference.deviceBindingId ||
+      record.route.runtimeBindingId !== reference.runtimeBindingId ||
+      command.actionDigest !== reference.actionDigest ||
+      command.leaseId !== reference.leaseId ||
+      command.leaseEpoch !== reference.leaseEpoch ||
+      canonicalDeviceFilesystemReadCommandDigest(command, digestUtf8) !==
+        reference.commandDigest ||
+      (reference.receiptId !== null &&
+        record.acceptedEvent?.receiptId !== reference.receiptId)
+    )
+      throw new DeviceGatewayError("workspace_read_identity_conflict");
+  }
   #timestamp() {
     const now = this.#now();
     if (!Number.isFinite(now.getTime()))
       throw new DeviceGatewayError("workspace_read_clock_invalid");
     return now.toISOString();
   }
+}
+
+function readIntent(
+  input: string | DeviceFilesystemReadRouteIntent,
+  deviceBindingId = "legacy-device-binding",
+): DeviceFilesystemReadRouteIntent {
+  return typeof input === "string"
+    ? { deviceBindingId, runtimeBindingId: input }
+    : input;
+}
+
+import { canonicalDeviceFilesystemReadCommandDigest } from "@crewon/contracts";
+import { createHash } from "node:crypto";
+function digestUtf8(value: string): string {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
 
 function unknown(
