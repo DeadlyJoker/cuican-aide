@@ -606,6 +606,7 @@ mod tests {
     use bytes::Bytes;
     use crewon_client::StreamResponse;
     use crewon_client::TransportError;
+    use crewon_protocol::models::ContentItem;
     use crewon_protocol::models::MessagePhase;
     use crewon_protocol::models::ResponseItem;
     use futures::TryStreamExt;
@@ -669,6 +670,122 @@ mod tests {
     struct CompletedWithoutUsageCase {
         name: String,
         terminal: Value,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CompletedWithoutOutputFixture {
+        case_id: String,
+        events: Vec<Value>,
+        expected: CompletedWithoutOutputExpected,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CompletedWithoutOutputExpected {
+        terminal: bool,
+        response_id: String,
+        stable_events: Vec<String>,
+        output: String,
+        completed_item: Value,
+        usage: CompletedWithoutOutputUsage,
+        error_category: Option<String>,
+        retryable: Option<bool>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CompletedWithoutOutputUsage {
+        input_tokens: i64,
+        cached_input_tokens: i64,
+        output_tokens: i64,
+        total_tokens: i64,
+    }
+
+    #[test]
+    fn accepts_completed_without_output_from_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-completed-without-output.reference.json"
+        )
+        .expect("completed-without-output fixture must exist");
+        let fixture: CompletedWithoutOutputFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path)
+                .expect("completed-without-output fixture must be readable"),
+        )
+        .expect("completed-without-output fixture must parse");
+        let mut stable_events = Vec::new();
+        let mut output = String::new();
+        let mut completed_item = None;
+        let mut completed = None;
+
+        for value in fixture.events {
+            let event: ResponsesStreamEvent =
+                serde_json::from_value(value).expect("fixture event must deserialize");
+            match process_responses_event(event).expect("fixture event must succeed") {
+                Some(ResponseEvent::OutputTextDelta(delta)) => {
+                    stable_events.push("output.delta".to_string());
+                    output.push_str(&delta);
+                }
+                Some(ResponseEvent::OutputItemDone(ResponseItem::Message {
+                    role,
+                    content,
+                    ..
+                })) => {
+                    stable_events.push("output.item.completed".to_string());
+                    let content = content
+                        .into_iter()
+                        .map(|item| match item {
+                            ContentItem::OutputText { text } => text,
+                            item => panic!("unexpected fixture content: {item:?}"),
+                        })
+                        .collect::<String>();
+                    completed_item = Some(json!({
+                        "type": "message",
+                        "role": role,
+                        "content": content,
+                    }));
+                }
+                Some(ResponseEvent::Completed {
+                    response_id,
+                    token_usage,
+                    ..
+                }) => {
+                    stable_events.push("usage".to_string());
+                    stable_events.push("completed".to_string());
+                    completed = Some((response_id, token_usage));
+                }
+                Some(ResponseEvent::Created) | None => {}
+                Some(event) => panic!("unexpected fixture event: {event:?}"),
+            }
+        }
+
+        assert_eq!(
+            completed.is_some(),
+            fixture.expected.terminal,
+            "fixture {}",
+            fixture.case_id
+        );
+        let (response_id, usage) = completed.expect("fixture must complete");
+        let usage = usage.expect("fixture must report usage");
+        assert_eq!(response_id, fixture.expected.response_id);
+        assert_eq!(stable_events, fixture.expected.stable_events);
+        assert_eq!(output, fixture.expected.output);
+        assert_eq!(
+            completed_item.expect("fixture must complete an output item"),
+            fixture.expected.completed_item
+        );
+        assert_eq!(
+            usage,
+            TokenUsage {
+                input_tokens: fixture.expected.usage.input_tokens,
+                cached_input_tokens: fixture.expected.usage.cached_input_tokens,
+                output_tokens: fixture.expected.usage.output_tokens,
+                reasoning_output_tokens: 0,
+                total_tokens: fixture.expected.usage.total_tokens,
+            }
+        );
+        assert_eq!(fixture.expected.error_category, None);
+        assert_eq!(fixture.expected.retryable, None);
     }
 
     #[test]

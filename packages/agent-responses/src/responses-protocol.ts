@@ -82,7 +82,9 @@ export class ResponsesProtocolDecoder {
         ) {
           throw protocolError("responses_end_turn_invalid");
         }
-        validateFinalOutput(response.output, this.#output);
+        if (response.output !== undefined) {
+          validateFinalOutput(response.output, this.#output);
+        }
         if (
           this.#output.length > 0 &&
           !this.#completedHistoryItems.some((item) => item.type === "message")
