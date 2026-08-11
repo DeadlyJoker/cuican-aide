@@ -7,6 +7,7 @@ import type {
 } from "@crewon/application";
 
 import {
+  ControlProviderProbeService,
   HttpProviderProbeWorkerClient,
   ProviderProbeWorkerError,
   TenantRoutedProviderProbeWorker,
@@ -62,6 +63,14 @@ test("fails closed on insecure routing and malformed cross-shape responses", asy
       }),
     hasCode("provider_probe_worker_url_invalid"),
   );
+  assert.throws(
+    () =>
+      new HttpProviderProbeWorkerClient({
+        origin: "https://worker.example",
+        token: "密".repeat(3_000),
+      }),
+    hasCode("provider_probe_worker_token_invalid"),
+  );
   for (const body of [
     { ...okResult(), rawBody: "provider-secret" },
     { ...okResult(), modelCount: 2 },
@@ -70,7 +79,12 @@ test("fails closed on insecure routing and malformed cross-shape responses", asy
       ...okResult(),
       models: [{ id: "model-1", displayName: null, endpoint: "secret" }],
     },
+    {
+      ...okResult(),
+      models: [{ id: "model-\u202econfused", displayName: null }],
+    },
     { ...okResult(), retryAfterMs: 1_000 },
+    { ...okResult(), retryable: true },
     {
       ...emptyResult("rateLimited"),
       retryable: false,
@@ -96,6 +110,20 @@ test("fails closed on insecure routing and malformed cross-shape responses", asy
       hasCode("provider_probe_worker_response_invalid"),
     );
   }
+  const wrongGeneration = new HttpProviderProbeWorkerClient(
+    { origin: "https://worker.example", token: TOKEN },
+    {
+      fetch: async () =>
+        jsonResponse({
+          ...okResult(),
+          runtimeBindingId: "desktop-supervisor:generation-6",
+        }),
+    },
+  );
+  await assert.rejects(
+    wrongGeneration.probe(probeRequest(), new AbortController().signal),
+    hasCode("provider_probe_worker_response_mismatch"),
+  );
 });
 
 test("routes only by verified tenant and fails unavailable without a route", async () => {
@@ -113,12 +141,14 @@ test("routes only by verified tenant and fails unavailable without a route", asy
     },
   };
   const routed = new TenantRoutedProviderProbeWorker({
-    resolve: ({ tenantId }) =>
-      tenantId === "tenant-1"
+    resolve: ({ tenantId, runtimeBindingId }) => {
+      calls.push(`route:${tenantId}:${runtimeBindingId}`);
+      return tenantId === "tenant-1"
         ? tenantOne
         : tenantId === "tenant-2"
           ? tenantTwo
-          : null,
+          : null;
+    },
   });
   assert.equal(
     (
@@ -134,7 +164,10 @@ test("routes only by verified tenant and fails unavailable without a route", asy
     ).providerId,
     "tenant-two-provider",
   );
-  assert.deepEqual(calls, ["two:tenant-2"]);
+  assert.deepEqual(calls, [
+    "route:tenant-2:desktop-supervisor:generation-7",
+    "two:tenant-2",
+  ]);
   await assert.rejects(
     routed.probe(
       {
@@ -149,6 +182,72 @@ test("routes only by verified tenant and fails unavailable without a route", asy
   );
 });
 
+test("preserves caller cancellation through HTTP and tenant resolution", async () => {
+  const reason = new Error("caller_cancelled");
+  const httpAbort = new AbortController();
+  const http = new HttpProviderProbeWorkerClient(
+    { origin: "http://127.0.0.1:3211", token: TOKEN },
+    {
+      fetch: async (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          );
+        }),
+    },
+  );
+  const httpResult = http.probe(probeRequest(), httpAbort.signal);
+  httpAbort.abort(reason);
+  await assert.rejects(httpResult, (error) => error === reason);
+
+  const routeAbort = new AbortController();
+  const routed = new TenantRoutedProviderProbeWorker({
+    resolve: () => new Promise(() => {}),
+  });
+  const routedResult = routed.probe(probeRequest(), routeAbort.signal);
+  routeAbort.abort(reason);
+  await assert.rejects(routedResult, (error) => error === reason);
+});
+
+test("bounds authorization and tenant resolution with one Control deadline", async () => {
+  for (const phase of ["authorization", "registry"] as const) {
+    let expire = () => {};
+    const started = deferred<void>();
+    const service = new ControlProviderProbeService(
+      {
+        settings: {
+          authorizeProbe:
+            phase === "authorization"
+              ? async () => {
+                  started.resolve();
+                  return new Promise(() => {});
+                }
+              : async () => catalog(),
+        },
+        workers: new TenantRoutedProviderProbeWorker({
+          resolve: () => {
+            started.resolve();
+            return new Promise(() => {});
+          },
+        }),
+      },
+      {
+        deadlineMs: 25,
+        schedule: (callback) => {
+          expire = callback;
+          return () => {};
+        },
+      },
+    );
+    const result = service.probe(actor(), new AbortController().signal);
+    await started.promise;
+    expire();
+    await assert.rejects(result, hasCode("provider_probe_worker_unavailable"));
+  }
+});
+
 function okResult(catalogRevision = 1): ModelProviderProbeResult {
   return {
     providerId: "gateway",
@@ -161,6 +260,43 @@ function okResult(catalogRevision = 1): ModelProviderProbeResult {
     retryable: false,
     retryAfterMs: null,
   };
+}
+
+function probeRequest() {
+  return {
+    tenantId: "tenant-1",
+    expectedRevision: 1,
+    expectedProviderId: "gateway",
+    expectedRuntimeBindingId: "desktop-supervisor:generation-7",
+  };
+}
+
+function catalog() {
+  return {
+    tenantId: "tenant-1",
+    revision: 1,
+    activeProviderId: "gateway",
+    runtimeBindingId: "desktop-supervisor:generation-7",
+    bindings: [],
+    updatedAt: "2026-08-09T00:00:00.000Z",
+  };
+}
+
+function actor() {
+  return {
+    principalId: "principal-1",
+    actorId: "actor-1",
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 function emptyResult(

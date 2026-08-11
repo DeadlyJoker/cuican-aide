@@ -45,10 +45,7 @@ test("runs the private tenant-routed vertical through a real loopback Provider",
     response.writeHead(200, { "content-type": "application/json" });
     response.end(
       JSON.stringify({
-        data: [
-          { id: "model-a", display_name: "Model A" },
-          { id: "model-b" },
-        ],
+        data: [{ id: "model-a", display_name: "Model A" }, { id: "model-b" }],
         rawProviderMarker: "not-projected",
       }),
     );
@@ -91,7 +88,11 @@ test("runs the private tenant-routed vertical through a real loopback Provider",
       token: PROBE_TOKEN,
     });
   const registry: TenantProviderProbeWorkerRegistry = {
-    resolve: () => selected,
+    resolve: ({ tenantId, runtimeBindingId }) =>
+      tenantId === ACTOR.tenantId &&
+      runtimeBindingId === "provider-probe-test:generation-1"
+        ? selected
+        : null,
   };
   const runtime = createStandaloneControlApi({
     actor: ACTOR,
@@ -132,12 +133,8 @@ test("runs the private tenant-routed vertical through a real loopback Provider",
     token: PROBE_TOKEN,
   });
   assert.equal(
-    (
-      await runtime.providerProbes.probe(
-        ACTOR,
-        new AbortController().signal,
-      )
-    ).status,
+    (await runtime.providerProbes.probe(ACTOR, new AbortController().signal))
+      .status,
     "bindingMismatch",
   );
 
@@ -161,6 +158,57 @@ test("runs the private tenant-routed vertical through a real loopback Provider",
       error instanceof ProviderProbeWorkerError &&
       error.code === "provider_probe_worker_unavailable",
   );
+
+  const probeStarted = deferred<void>();
+  const secretReleased = deferred<void>();
+  const cancelWorker = await startRuntimeProviderProbeServer({
+    port: 0,
+    token: PROBE_TOKEN,
+    service: new RuntimeProviderProbeService(
+      {
+        store: workerStore,
+        tenantId: "tenant-1",
+        runtimeBinding: {
+          runtimeBindingId: "provider-probe-test:generation-1",
+          providerId: "gateway",
+          endpoint,
+          credentialKind: "keychain",
+          environmentVariable: null,
+        },
+        secrets: {
+          resolve: () => ({
+            value: "worker-memory-secret",
+            release: () => secretReleased.resolve(),
+          }),
+        },
+        egressPolicy: new DesktopProviderProbeEgressPolicy(),
+      },
+      {
+        createProbe: () => ({
+          probe: (signal) => {
+            probeStarted.resolve();
+            return new Promise((_resolve, reject) => {
+              const abort = () => reject(signal.reason);
+              if (signal.aborted) abort();
+              else signal.addEventListener("abort", abort, { once: true });
+            });
+          },
+        }),
+      },
+    ),
+  });
+  t.after(() => cancelWorker.close());
+  selected = new HttpProviderProbeWorkerClient({
+    origin: cancelWorker.origin,
+    token: PROBE_TOKEN,
+  });
+  const abort = new AbortController();
+  const reason = new Error("caller_cancelled");
+  const canceled = runtime.providerProbes.probe(ACTOR, abort.signal);
+  await probeStarted.promise;
+  abort.abort(reason);
+  await assert.rejects(canceled, (error) => error === reason);
+  await secretReleased.promise;
 });
 
 function probeService(
@@ -185,7 +233,10 @@ function probeService(
   });
 }
 
-async function seedProviderCatalog(path: string, endpoint: string): Promise<void> {
+async function seedProviderCatalog(
+  path: string,
+  endpoint: string,
+): Promise<void> {
   const store = new SqliteRunStore(path);
   try {
     const actor = {
@@ -224,4 +275,12 @@ async function seedProviderCatalog(path: string, endpoint: string): Promise<void
   } finally {
     await store.close();
   }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }

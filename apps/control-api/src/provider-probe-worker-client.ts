@@ -49,16 +49,13 @@ export class HttpProviderProbeWorkerClient
       const response = await this.#fetch(this.#url, {
         method: "POST",
         headers: {
-          accept: "application/json",
-          authorization: `Bearer ${this.#token}`,
+          "accept": "application/json",
+          "authorization": `Bearer ${this.#token}`,
           "content-type": "application/json",
         },
         body: JSON.stringify(input),
         redirect: "error",
-        signal: AbortSignal.any([
-          signal,
-          AbortSignal.timeout(this.#timeoutMs),
-        ]),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(this.#timeoutMs)]),
       });
       if (!response.ok) {
         await response.body?.cancel().catch(() => {});
@@ -66,6 +63,12 @@ export class HttpProviderProbeWorkerClient
           response.status === 401 || response.status === 403
             ? "provider_probe_worker_authentication_failed"
             : "provider_probe_worker_unavailable",
+          {
+            certainty:
+              response.status === 401 || response.status === 403
+                ? "notSent"
+                : "possiblySent",
+          },
         );
       }
       const result = parseResponse(await readBoundedJson(response));
@@ -84,16 +87,20 @@ export class HttpProviderProbeWorkerClient
       if (error instanceof ProviderProbeWorkerError) throw error;
       throw new ProviderProbeWorkerError("provider_probe_worker_unavailable", {
         cause: error,
+        certainty: "possiblySent",
       });
     }
   }
 }
 
-/** Registry is server-owned; callers can supply only an authenticated tenant ID. */
+/** Registry is server-owned and routes by verified tenant plus runtime generation. */
 export interface TenantProviderProbeWorkerRegistry {
   resolve(
     input: Readonly<{ tenantId: string; runtimeBindingId: string }>,
-  ): ModelProviderProbeWorkerPort | null | Promise<ModelProviderProbeWorkerPort | null>;
+  ):
+    | ModelProviderProbeWorkerPort
+    | null
+    | Promise<ModelProviderProbeWorkerPort | null>;
 }
 
 export class TenantRoutedProviderProbeWorker
@@ -131,6 +138,31 @@ export class UnavailableTenantProviderProbeWorkerRegistry
 {
   resolve(): null {
     return null;
+  }
+}
+
+/** Fixed loopback route for the one verified packaged-desktop tenant. */
+export class SingleTenantProviderProbeWorkerRegistry
+  implements TenantProviderProbeWorkerRegistry
+{
+  readonly #tenantId: string;
+  readonly #worker: ModelProviderProbeWorkerPort;
+
+  constructor(input: {
+    tenantId: string;
+    worker: ModelProviderProbeWorkerPort;
+  }) {
+    if (!boundedField(input.tenantId, 512)) {
+      throw new ProviderProbeWorkerError(
+        "provider_probe_worker_registry_invalid",
+      );
+    }
+    this.#tenantId = input.tenantId;
+    this.#worker = input.worker;
+  }
+
+  resolve(input: Readonly<{ tenantId: string; runtimeBindingId: string }>) {
+    return input.tenantId === this.#tenantId ? this.#worker : null;
   }
 }
 
@@ -217,11 +249,18 @@ export class ControlProviderProbeService {
 
 export class ProviderProbeWorkerError extends Error {
   readonly code: string;
+  readonly certainty: "notSent" | "possiblySent";
 
-  constructor(code: string, options?: ErrorOptions) {
+  constructor(
+    code: string,
+    options: ErrorOptions & {
+      certainty?: "notSent" | "possiblySent";
+    } = {},
+  ) {
     super(code, options);
     this.name = "ProviderProbeWorkerError";
     this.code = code;
+    this.certainty = options.certainty ?? "notSent";
   }
 }
 
@@ -314,7 +353,8 @@ function parseResponse(value: unknown): ModelProviderProbeResult {
     throw invalidResponse();
   }
   if (
-    (value.status === "ok" && value.retryAfterMs !== null) ||
+    (value.status === "ok" &&
+      (value.retryAfterMs !== null || value.retryable !== false)) ||
     (value.status === "rateLimited" && value.retryable !== true) ||
     (value.status !== "rateLimited" && value.retryAfterMs !== null) ||
     ((value.status === "credentialMissing" ||
@@ -338,7 +378,9 @@ function parseResponse(value: unknown): ModelProviderProbeResult {
   };
 }
 
-function parseModels(value: unknown): readonly ModelProviderProbeModel[] | null {
+function parseModels(
+  value: unknown,
+): readonly ModelProviderProbeModel[] | null {
   if (value === null) return null;
   if (!Array.isArray(value) || value.length > MAX_MODELS) {
     throw invalidResponse();
@@ -402,9 +444,10 @@ function validateRequest(value: ModelProviderProbeRequest): void {
 }
 
 function boundedSecret(value: string): string {
+  const byteLength = new TextEncoder().encode(value).byteLength;
   if (
-    value.length < 32 ||
-    value.length > 8_192 ||
+    byteLength < 32 ||
+    byteLength > 8_192 ||
     /[\u0000-\u001f\u007f]/u.test(value)
   ) {
     throw new ProviderProbeWorkerError("provider_probe_worker_token_invalid");
@@ -434,9 +477,12 @@ function object(value: unknown): value is Record<string, unknown> {
 }
 
 function invalidResponse(cause?: unknown): ProviderProbeWorkerError {
-  return new ProviderProbeWorkerError("provider_probe_worker_response_invalid", {
-    cause,
-  });
+  return new ProviderProbeWorkerError(
+    "provider_probe_worker_response_invalid",
+    {
+      cause,
+    },
+  );
 }
 
 async function abortable<T>(

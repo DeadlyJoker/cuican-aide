@@ -9,7 +9,7 @@ import type { ModelProviderProbeRequest } from "@crewon/application";
 
 import type { RuntimeProviderProbeService } from "./provider-probe-service.ts";
 
-const MAX_REQUEST_BYTES = 1_024;
+const MAX_REQUEST_BYTES = 2 * 1_024;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
 export type RuntimeProviderProbeServer = Readonly<{
@@ -131,19 +131,19 @@ async function readRequest(
         .join("\0") ||
     typeof value.expectedProviderId !== "string" ||
     value.expectedProviderId.length === 0 ||
-    value.expectedProviderId.length > 128 ||
+    Buffer.byteLength(value.expectedProviderId) > 128 ||
     value.expectedProviderId !== value.expectedProviderId.trim() ||
     /[\u0000-\u001f\u007f]/u.test(value.expectedProviderId) ||
     typeof value.expectedRuntimeBindingId !== "string" ||
     value.expectedRuntimeBindingId.length === 0 ||
-    value.expectedRuntimeBindingId.length > 512 ||
+    Buffer.byteLength(value.expectedRuntimeBindingId) > 512 ||
     value.expectedRuntimeBindingId !== value.expectedRuntimeBindingId.trim() ||
     /[\u0000-\u001f\u007f]/u.test(value.expectedRuntimeBindingId) ||
     !Number.isSafeInteger(value.expectedRevision) ||
     Number(value.expectedRevision) < 1 ||
     typeof value.tenantId !== "string" ||
     value.tenantId.length === 0 ||
-    value.tenantId.length > 512 ||
+    Buffer.byteLength(value.tenantId) > 512 ||
     value.tenantId !== value.tenantId.trim() ||
     /[\u0000-\u001f\u007f]/u.test(value.tenantId)
   ) {
@@ -199,9 +199,10 @@ function validPort(value: number): number {
 }
 
 function validToken(value: string): string {
+  const byteLength = Buffer.byteLength(value);
   if (
-    value.length < 32 ||
-    value.length > 8_192 ||
+    byteLength < 32 ||
+    byteLength > 8_192 ||
     /[\u0000-\u001f\u007f]/u.test(value)
   ) {
     throw new Error("provider_probe_token_invalid");
@@ -210,7 +211,9 @@ function validToken(value: string): string {
 }
 
 function loopbackPeer(value: string | undefined): boolean {
-  return value === "127.0.0.1" || value === "::ffff:127.0.0.1" || value === "::1";
+  return (
+    value === "127.0.0.1" || value === "::ffff:127.0.0.1" || value === "::1"
+  );
 }
 
 function object(value: unknown): value is Record<string, unknown> {
