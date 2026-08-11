@@ -23,6 +23,7 @@ import {
 } from "./configured-agent-version-runtime-factory.ts";
 import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
 import { loadRemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
+import type { RemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import {
   composeRemoteMcpRuntime,
   type RemoteMcpCompositionDependencies,
@@ -237,6 +238,7 @@ function sha256(value: string): string {
 
 function materializationDigest(
   binding: RuntimeBindingConfig["bindings"][number],
+  snapshots?: Readonly<{ remoteMcpConfig: RemoteMcpRuntimeConfig | null }>,
 ): string {
   return sha256(
     stableJson({
@@ -259,9 +261,10 @@ function materializationDigest(
               "agent_version_materialization_config_invalid",
             ),
       remoteMcpConfig:
-        binding.remoteMcpConfigPath === null
+        snapshots?.remoteMcpConfig ??
+        (binding.remoteMcpConfigPath === null
           ? null
-          : loadRemoteMcpRuntimeConfig(binding.remoteMcpConfigPath),
+          : loadRemoteMcpRuntimeConfig(binding.remoteMcpConfigPath)),
     }),
   );
 }
@@ -288,7 +291,14 @@ async function createBoundToolRuntime(
   expectedMaterializationDigest: string,
   remoteMcpDependencies: RemoteMcpCompositionDependencies | undefined,
 ): Promise<ToolRuntimePort> {
-  if (materializationDigest(binding) !== expectedMaterializationDigest) {
+  const remoteMcpConfig =
+    binding.remoteMcpConfigPath === null
+      ? null
+      : loadRemoteMcpRuntimeConfig(binding.remoteMcpConfigPath);
+  if (
+    materializationDigest(binding, { remoteMcpConfig }) !==
+    expectedMaterializationDigest
+  ) {
     throw new Error("agent_version_runtime_materialization_drift");
   }
   if (
@@ -310,7 +320,7 @@ async function createBoundToolRuntime(
     if (binding.remoteMcpConfigPath !== null) {
       runtimes.push(
         await composeRemoteMcpRuntime(
-          loadRemoteMcpRuntimeConfig(binding.remoteMcpConfigPath),
+          remoteMcpConfig!,
           {
             tenantId: binding.tenantId,
             agentVersionId: binding.agentVersionId,

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -277,6 +279,61 @@ test("createBoundToolRuntime composes remote MCP only with explicit exact depend
       credentialBindingId: "credential-1",
     },
   ]);
+});
+
+test("validates and composes one remote manifest snapshot per create", async (context) => {
+  const version = compileAgentVersion(source(), { sha256 });
+  const path = temporaryFile(context);
+  const remotePath = `${path}.remote.json`;
+  const manifest = config(version.contentDigest, null);
+  const checked = remoteConfig();
+  checked.servers[0]!.mode = "standaloneLoopback" as never;
+  checked.servers[0]!.endpoint = "http://127.0.0.1:1234/mutations";
+  const unchecked = structuredClone(checked);
+  unchecked.servers[0]!.tools[0]!.descriptor.name = "unchecked_tool";
+  writeFileSync(remotePath, JSON.stringify(checked), "utf8");
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...manifest,
+      bindings: [{ ...manifest.bindings[0], remoteMcpConfigPath: remotePath }],
+    }),
+    "utf8",
+  );
+  const factory = loadAgentVersionRuntimeFactory(
+    path,
+    {},
+    {
+      mode: "standaloneLoopback",
+      staticBearerResolver: () => "static-test-bearer",
+    },
+  );
+
+  const mutableFs = createRequire(import.meta.url)("node:fs") as {
+    readFileSync: typeof import("node:fs").readFileSync;
+  };
+  const originalReadFileSync = mutableFs.readFileSync;
+  let remoteReads = 0;
+  mutableFs.readFileSync = ((candidate: unknown, ...args: unknown[]) => {
+    if (candidate === remotePath) {
+      remoteReads += 1;
+      return JSON.stringify(remoteReads === 1 ? checked : unchecked);
+    }
+    return Reflect.apply(originalReadFileSync, mutableFs, [candidate, ...args]);
+  }) as typeof import("node:fs").readFileSync;
+  syncBuiltinESMExports();
+  try {
+    const runtime = await factory.create({ tenantId: "tenant-1", version });
+    context.after(() => runtime.close?.());
+    assert.equal(remoteReads, 1);
+    assert.deepEqual(
+      runtime.toolRuntime.definitions().map(({ name }) => name),
+      ["mcp__reviewed-mcp__create_record"],
+    );
+  } finally {
+    mutableFs.readFileSync = originalReadFileSync;
+    syncBuiltinESMExports();
+  }
 });
 
 test("rejects injected fields and unsafe runtime manifests", () => {
