@@ -52,6 +52,7 @@ export interface WorkspaceReadDispatchStorePort {
   ready(): Promise<void>;
   prepare(
     command: DeviceFilesystemReadCommand,
+    route: WorkspaceReadRouteFence,
     at: string,
   ): Promise<
     Readonly<{
@@ -89,7 +90,8 @@ export class InMemoryWorkspaceReadDispatchStore
     this.#kinds =
       config.executionKinds ?? new InMemoryDeviceExecutionKindAuthority();
     this.#currentRoute = config.currentRoute;
-    for (const record of config.initialRecords ?? []) {
+    for (const input of config.initialRecords ?? []) {
+      const record = parseWorkspaceReadDispatchRecord(input);
       this.#kinds.claim(record.executionId, "workspaceRead");
       this.#records.set(record.executionId, clone(record));
     }
@@ -99,11 +101,18 @@ export class InMemoryWorkspaceReadDispatchStore
     this.#assertOpen();
   }
 
-  async prepare(input: DeviceFilesystemReadCommand, at: string) {
+  async prepare(
+    input: DeviceFilesystemReadCommand,
+    route: WorkspaceReadRouteFence,
+    at: string,
+  ) {
     this.#assertOpen();
     const command = parseDeviceFilesystemReadCommand(input);
     timestamp(at);
-    const fingerprint = digest(command);
+    requireRoute(command, route);
+    if (!same(this.#currentRoute(command.deviceId), route))
+      conflict("workspace_read_route_stale");
+    const fingerprint = fingerprintFor(command, route);
     const prior = this.#records.get(command.executionId);
     if (prior !== undefined) {
       if (prior.fingerprint !== fingerprint)
@@ -116,7 +125,7 @@ export class InMemoryWorkspaceReadDispatchStore
       executionId: command.executionId,
       fingerprint,
       command,
-      route: null,
+      route: clone(route),
       acceptedEvent: null,
       terminalEvent: null,
       resolution: null,
@@ -142,7 +151,8 @@ export class InMemoryWorkspaceReadDispatchStore
     if (
       this.#kinds.kind(command.executionId) !== "workspaceRead" ||
       prior === undefined ||
-      prior.fingerprint !== digest(command)
+      prior.route === null ||
+      prior.fingerprint !== fingerprintFor(command, prior.route)
     )
       conflict("workspace_read_authority_missing");
     requireEventIdentity(command, event, input.route.connectionEpoch);
@@ -160,21 +170,20 @@ export class InMemoryWorkspaceReadDispatchStore
       prior.acceptedEvent?.receiptId !== event.receiptId
     )
       conflict("workspace_read_event_conflict");
-    if (
-      prior.route !== null &&
-      JSON.stringify(prior.route) !== JSON.stringify(input.route)
-    )
+    if (prior.route !== null && !same(prior.route, input.route))
       conflict("workspace_read_route_stale");
     if (
       event.sequence === 1 &&
-      JSON.stringify(this.#currentRoute(command.deviceId)) !==
-        JSON.stringify(input.route)
+      !same(this.#currentRoute(command.deviceId), input.route)
     )
       conflict("workspace_read_route_stale");
     const now = this.#timestamp();
     if (
-      Date.parse(event.observedAt) < Date.parse(prior.updatedAt) ||
-      Date.parse(now) < Date.parse(event.observedAt)
+      (event.sequence === 2 &&
+        prior.acceptedEvent !== null &&
+        Date.parse(event.observedAt) <
+          Date.parse(prior.acceptedEvent.observedAt)) ||
+      Date.parse(now) < Date.parse(prior.updatedAt)
     )
       conflict("workspace_read_event_time_invalid");
     const terminal = event.sequence === 2 ? event : null;
@@ -193,7 +202,10 @@ export class InMemoryWorkspaceReadDispatchStore
   async load(executionId: string) {
     this.#assertOpen();
     if (this.#kinds.kind(executionId) !== "workspaceRead") return null;
-    return clone(this.#records.get(executionId) ?? null);
+    const record = this.#records.get(executionId);
+    return record === undefined
+      ? null
+      : parseWorkspaceReadDispatchRecord(record);
   }
   async close(): Promise<void> {
     this.#closed = true;
@@ -212,8 +224,99 @@ export class InMemoryWorkspaceReadDispatchStore
 
 export function workspaceReadFingerprint(
   command: DeviceFilesystemReadCommand,
+  route: WorkspaceReadRouteFence,
 ): string {
-  return digest(parseDeviceFilesystemReadCommand(command));
+  return fingerprintFor(parseDeviceFilesystemReadCommand(command), route);
+}
+
+export function parseWorkspaceReadDispatchRecord(
+  input: unknown,
+): WorkspaceReadDispatchRecord {
+  if (input === null || Array.isArray(input) || typeof input !== "object")
+    conflict("workspace_read_record_invalid");
+  const value = input as Record<string, unknown>;
+  const keys = [
+    "acceptedEvent",
+    "command",
+    "createdAt",
+    "executionId",
+    "fingerprint",
+    "resolution",
+    "route",
+    "terminalEvent",
+    "updatedAt",
+  ];
+  if (Object.keys(value).sort().join() !== keys.sort().join())
+    conflict("workspace_read_record_invalid");
+  const command = parseDeviceFilesystemReadCommand(value.command);
+  const route = value.route as WorkspaceReadRouteFence;
+  requireRoute(command, route);
+  const acceptedEvent =
+    value.acceptedEvent === null
+      ? null
+      : readEvent(value.acceptedEvent as DeviceFilesystemReadEvent);
+  const terminalEvent =
+    value.terminalEvent === null
+      ? null
+      : readEvent(value.terminalEvent as DeviceFilesystemReadEvent);
+  timestamp(String(value.createdAt));
+  timestamp(String(value.updatedAt));
+  if (
+    value.executionId !== command.executionId ||
+    value.fingerprint !== fingerprintFor(command, route) ||
+    Date.parse(String(value.updatedAt)) < Date.parse(String(value.createdAt))
+  )
+    conflict("workspace_read_record_invalid");
+  if (acceptedEvent !== null)
+    requireEventIdentity(command, acceptedEvent, route.connectionEpoch);
+  if (terminalEvent !== null) {
+    requireEventIdentity(command, terminalEvent, route.connectionEpoch);
+    if (
+      acceptedEvent === null ||
+      terminalEvent.receiptId !== acceptedEvent.receiptId ||
+      Date.parse(terminalEvent.observedAt) <
+        Date.parse(acceptedEvent.observedAt)
+    )
+      conflict("workspace_read_record_invalid");
+  }
+  const expectedResolution =
+    terminalEvent === null ? null : resolution(terminalEvent);
+  if (!same(value.resolution, expectedResolution))
+    conflict("workspace_read_record_invalid");
+  return clone({
+    executionId: command.executionId,
+    fingerprint: value.fingerprint as string,
+    command,
+    route,
+    acceptedEvent,
+    terminalEvent,
+    resolution: expectedResolution,
+    createdAt: value.createdAt as string,
+    updatedAt: value.updatedAt as string,
+  });
+}
+
+function fingerprintFor(
+  command: DeviceFilesystemReadCommand,
+  route: WorkspaceReadRouteFence,
+): string {
+  return digestUtf8(JSON.stringify({ commandDigest: digest(command), route }));
+}
+function requireRoute(
+  command: DeviceFilesystemReadCommand,
+  route: WorkspaceReadRouteFence,
+): void {
+  if (
+    route === null ||
+    typeof route !== "object" ||
+    route.deviceId !== command.deviceId ||
+    route.capability !== "workspace.read_file.v0" ||
+    !Number.isFinite(Date.parse(route.leaseExpiresAt))
+  )
+    conflict("workspace_read_route_invalid");
+}
+function same(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function readEvent(

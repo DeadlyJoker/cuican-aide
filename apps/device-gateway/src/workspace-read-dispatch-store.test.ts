@@ -30,7 +30,7 @@ test("workspace read authority commits accepted and terminal before exact replay
     currentRoute: () => route,
   });
   assert.equal(
-    (await store.prepare(command, now.toISOString())).outcome,
+    (await store.prepare(command, route, now.toISOString())).outcome,
     "created",
   );
   now = new Date("2026-08-08T00:00:03Z");
@@ -43,7 +43,8 @@ test("workspace read authority commits accepted and terminal before exact replay
   const terminal = await store.commit({ command, route, event: events[1]! });
   assert.equal(terminal.record.resolution?.status, "completed");
   assert.deepEqual(
-    (await store.prepare(command, "2026-08-09T00:00:00Z")).record.resolution,
+    (await store.prepare(command, route, "2026-08-09T00:00:00Z")).record
+      .resolution,
     terminal.record.resolution,
   );
   assert.equal(
@@ -57,7 +58,7 @@ test("workspace read authority rejects epoch drift and terminal-before-accepted"
     now: () => new Date("2026-08-08T00:00:03Z"),
     currentRoute: () => route,
   });
-  await store.prepare(command, "2026-08-08T00:00:02Z");
+  await store.prepare(command, route, "2026-08-08T00:00:02Z");
   await assert.rejects(
     store.commit({
       command,

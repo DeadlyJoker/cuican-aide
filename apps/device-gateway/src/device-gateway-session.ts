@@ -15,6 +15,7 @@ import {
   type DeviceHello,
   type DeviceWorkspaceListCommand,
   type DeviceWorkspaceListDispatchResolution,
+  type DeviceFilesystemReadCommand,
 } from "@crewon/contracts";
 import WebSocket, { type RawData } from "ws";
 
@@ -27,6 +28,11 @@ import {
   type WorkspaceSessionEventCommitter,
   type WorkspaceSessionExecutionMode,
 } from "./device-gateway-workspace-session.ts";
+import {
+  DeviceGatewayWorkspaceReadSession,
+  type WorkspaceReadEventCommitter,
+} from "./device-gateway-workspace-read-session.ts";
+import type { WorkspaceReadResolution } from "./workspace-read-dispatch-store.ts";
 
 const MAX_DEVICE_FRAME_BYTES = 128 * 1024;
 const MAX_EXECUTION_EVENTS = 4_096;
@@ -60,6 +66,7 @@ export class DeviceGatewaySession {
   readonly #now: () => Date;
   readonly #authorizationVerifier: DeviceCommandAuthorizationVerifierPort;
   readonly #workspace: DeviceGatewayWorkspaceSession;
+  readonly #workspaceRead: DeviceGatewayWorkspaceReadSession;
   readonly #starting = new Map<string, StartingExecution>();
   readonly #pending = new Map<string, PendingExecution>();
   #closed = false;
@@ -79,6 +86,11 @@ export class DeviceGatewaySession {
     this.#workspace = new DeviceGatewayWorkspaceSession({
       deviceId: this.identity.deviceId,
       lastAcknowledged: this.hello.lastAcknowledged,
+      now: this.#now,
+      send: (value) => this.#send(value),
+    });
+    this.#workspaceRead = new DeviceGatewayWorkspaceReadSession({
+      deviceId: this.identity.deviceId,
       now: this.#now,
       send: (value) => this.#send(value),
     });
@@ -232,6 +244,34 @@ export class DeviceGatewaySession {
     return this.hello.capabilities.includes(WORKSPACE_LIST_CAPABILITY);
   }
 
+  supportsWorkspaceRead(): boolean {
+    return this.hello.capabilities.includes("workspace.read_file.v0");
+  }
+
+  executeWorkspaceRead(
+    command: DeviceFilesystemReadCommand,
+    connectionEpoch: number,
+    replay: boolean,
+    signal: AbortSignal,
+    commit: WorkspaceReadEventCommitter,
+  ): Promise<WorkspaceReadResolution> {
+    if (!this.supportsWorkspaceRead())
+      throw new DeviceGatewayError("device_capability_unavailable");
+    return this.#workspaceRead.execute(
+      command,
+      connectionEpoch,
+      replay,
+      signal,
+      commit,
+    );
+  }
+
+  setWorkspaceReadOrphanEventCommitter(
+    committer: WorkspaceReadEventCommitter | null,
+  ): void {
+    this.#workspaceRead.setOrphanCommitter(committer);
+  }
+
   executeWorkspaceList(
     command: DeviceWorkspaceListCommand,
     connectionEpoch: number,
@@ -347,6 +387,7 @@ export class DeviceGatewaySession {
       });
     }
     if (await this.#workspace.handleFrame(decoded)) return;
+    if (await this.#workspaceRead.handleFrame(decoded)) return;
     const event = parseDeviceExecutionEvent(decoded);
     if (event.deviceId !== this.identity.deviceId) {
       throw new DeviceGatewayError("device_event_identity_mismatch");
@@ -525,6 +566,7 @@ export class DeviceGatewaySession {
     this.#socket.off("close", this.#onClose);
     this.#socket.off("error", this.#onError);
     this.#workspace.close();
+    this.#workspaceRead.close();
     for (const executionId of [...this.#pending.keys()]) {
       this.#finishUnknown(executionId);
     }
