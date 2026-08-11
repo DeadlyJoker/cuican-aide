@@ -704,16 +704,7 @@ export class RunExecutionService {
       throw new ApplicationError("conflict", "run_not_running");
     }
     const requiredAt = this.#now();
-    if (
-      input.expiresAfterMs !== null &&
-      (!Number.isSafeInteger(input.expiresAfterMs) || input.expiresAfterMs < 1)
-    ) {
-      throw new ApplicationError("validation", "approval_expiry_invalid");
-    }
-    const expiresAt =
-      input.expiresAfterMs === null
-        ? null
-        : new Date(Date.parse(requiredAt) + input.expiresAfterMs).toISOString();
+    const expiresAt = approvalExpiresAt(requiredAt, input.expiresAfterMs);
     let approval: ToolApprovalState;
     try {
       approval = createToolApproval({
@@ -907,6 +898,8 @@ export class RunExecutionService {
     input: Readonly<{ expiresAfterMs: number | null; retryAfterMs: number }>,
   ): Promise<ToolApprovalState> {
     validateClaim(claim);
+    const occurredAt = this.#now();
+    const expiresAt = approvalExpiresAt(occurredAt, input.expiresAfterMs);
     const replay = await this.#store.loadToolApprovalByAction({
       tenantId: replacementReceipt.tenantId,
       runId: replacementReceipt.runId,
@@ -963,11 +956,6 @@ export class RunExecutionService {
         "tool_approval_replacement_invalid",
       );
     }
-    const occurredAt = this.#now();
-    const expiresAt =
-      input.expiresAfterMs === null
-        ? null
-        : new Date(Date.parse(occurredAt) + input.expiresAfterMs).toISOString();
     let replacement: ToolApprovalState;
     try {
       replacement = createToolApproval({
@@ -2664,6 +2652,23 @@ function validateToolExecutionCall(call: ToolExecutionCall): void {
   ) {
     throw new ApplicationError("validation", "tool_input_invalid");
   }
+}
+
+function approvalExpiresAt(
+  requiredAt: string,
+  value: number | null,
+): string | null {
+  if (value !== null && (!Number.isSafeInteger(value) || value < 1)) {
+    throw new ApplicationError("validation", "approval_expiry_invalid");
+  }
+  if (value === null) {
+    return null;
+  }
+  const expiresAt = new Date(Date.parse(requiredAt) + value);
+  if (Number.isNaN(expiresAt.getTime())) {
+    throw new ApplicationError("validation", "approval_expiry_invalid");
+  }
+  return expiresAt.toISOString();
 }
 
 function validateApprovalBinding(
