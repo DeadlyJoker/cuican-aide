@@ -44,7 +44,10 @@ import {
   GovernedContextBundle,
   type ContextCompactorPort,
 } from "@crewon/context";
-import { createArtifactRecord } from "@crewon/domain";
+import {
+  createArtifactRecord,
+  type ToolExecutionReceiptState,
+} from "@crewon/domain";
 import {
   InMemoryRunStore,
   PostgresDomainStore,
@@ -6858,6 +6861,153 @@ function registerRuntimeWorkerConformance(
       await worker.close();
     });
 
+    test("adopts a different prepared Tool approval without Provider side effects", async (context) => {
+      const fixture = await createFixture(context, createStore);
+      const policy = toolPolicy("mutation", "reconcilable", "perAction");
+      const providerCalls = { execute: 0, reconcile: 0, cancel: 0 };
+      const toolRuntime: ToolRuntimePort = {
+        definitions: () => [
+          {
+            schemaVersion: "crewon.tool-definition.v0",
+            kind: "function",
+            name: "fixture_writer",
+            description: "Writes only after approval.",
+            execution: "serial",
+            inputSchema: { type: "object" },
+          },
+        ],
+        executionPolicy: () => policy,
+        execute: async () => {
+          providerCalls.execute += 1;
+          throw new Error("unexpected execute");
+        },
+        reconcile: async () => {
+          providerCalls.reconcile += 1;
+          throw new Error("unexpected reconcile");
+        },
+        cancel: async () => {
+          providerCalls.cancel += 1;
+          throw new Error("unexpected cancel");
+        },
+      };
+      const transport: ModelTransportPort = {
+        adapterName: "approval-replacement-adapter",
+        adapterVersion: "1",
+        modelId: "approval-replacement-model",
+        async *stream() {
+          yield {
+            type: "tool.call",
+            kind: "function",
+            callId: "approval-action-a",
+            name: "fixture_writer",
+            input: '{"value":"a"}',
+          };
+          yield {
+            type: "tool.call",
+            kind: "function",
+            callId: "approval-action-b",
+            name: "fixture_writer",
+            input: '{"value":"b"}',
+          };
+          yield { type: "completed", checkpoint: null };
+        },
+      };
+      let currentReceipt: ToolExecutionReceiptState | undefined;
+      const crashed = fixture.worker({
+        transport,
+        toolRuntime,
+        retryAfterMs: 0,
+        afterToolPrepared: async (receipt) => {
+          currentReceipt = receipt;
+          throw new Error("simulated_process_loss_after_prepare");
+        },
+      });
+      assert.deepEqual(await crashed.wake(), {
+        kind: "retried",
+        runId: fixture.runId,
+        code: "simulated_process_loss_after_prepare",
+      });
+      await crashed.close();
+      assert.ok(currentReceipt !== undefined);
+
+      const claim = await fixture.store.claimNextWorkItem({
+        ownerId: "replacement-seed-worker",
+        leaseId: "replacement-seed-lease",
+        leaseDurationMs: 10_000,
+      });
+      assert.ok(claim !== null);
+      const replacementReceipt = await fixture.execution.beginToolExecution(
+        claim,
+        {
+          segmentId: currentReceipt.call.segmentId,
+          callId: "approval-action-b",
+          kind: "function",
+          name: "fixture_writer",
+          input: '{"value":"b"}',
+        },
+        policy,
+      );
+      assert.equal(replacementReceipt.receipt.status, "prepared");
+      const required = await fixture.execution.requireToolApproval(
+        claim,
+        currentReceipt,
+        { expiresAfterMs: null, retryAfterMs: 0 },
+      );
+      const oldApproval = required.approval;
+
+      const recovered = fixture.worker({
+        transport,
+        toolRuntime,
+        approvalRecheckMs: 1,
+      });
+      const adopted = await recovered.wake();
+      assert.equal(adopted.kind, "waitingApproval");
+      assert.notEqual(
+        adopted.kind === "waitingApproval" ? adopted.approvalId : null,
+        oldApproval.approvalId,
+      );
+      const waiting = await fixture.loadRun();
+      assert.equal(waiting.status, "waitingApproval");
+      const replacementApprovalId = waiting.waitingApproval?.approvalId;
+      assert.ok(replacementApprovalId !== undefined);
+      assert.equal(
+        (await fixture.approvals.getApproval(actor(), oldApproval.approvalId))
+          .status,
+        "superseded",
+      );
+      assert.equal(
+        (await fixture.approvals.getApproval(actor(), replacementApprovalId))
+          .status,
+        "required",
+      );
+      assert.equal(
+        (await fixture.approvals.getApproval(actor(), replacementApprovalId))
+          .receiptId,
+        replacementReceipt.receipt.receiptId,
+      );
+      assert.deepEqual(await fixture.store.listPendingWorkItems(10), []);
+      assert.deepEqual(providerCalls, { execute: 0, reconcile: 0, cancel: 0 });
+      const requiredEvents = (await fixture.events()).filter(
+        (event) => event.type === "run.approval.required",
+      );
+      assert.equal(requiredEvents.length, 2);
+
+      fixture.leaseClock.advance(1);
+      assert.deepEqual(await recovered.wake(), {
+        kind: "waitingApproval",
+        runId: fixture.runId,
+        approvalId: replacementApprovalId,
+      });
+      assert.equal(
+        (await fixture.events()).filter(
+          (event) => event.type === "run.approval.required",
+        ).length,
+        2,
+      );
+      assert.deepEqual(providerCalls, { execute: 0, reconcile: 0, cancel: 0 });
+      await recovered.close();
+    });
+
     test("fences an expired worker lease before a Run mutation", async (context) => {
       const fixture = await createFixture(context, createStore);
       const first = await fixture.store.claimNextWorkItem({
@@ -7202,12 +7352,14 @@ async function createFixture(
       agentVersionRuntimeResolver?: AgentVersionRuntimeResolverPort;
       policy?: RunExecutionPolicyPort;
       retryAfterMs?: number;
+      approvalRecheckMs?: number;
       streamMaxRetries?: number;
       retryScheduler?: SamplingRetryScheduler;
       toolRuntime?: ToolRuntimePort;
       artifacts?: ToolOutputArtifactPort;
       afterRunStarted?: () => Promise<void>;
       afterProviderResponseCheckpointed?: () => Promise<void>;
+      afterToolPrepared?: RuntimeWorkerConfig["afterToolPrepared"];
       afterToolDispatched?: RuntimeWorkerConfig["afterToolDispatched"];
       afterToolProviderResolved?: RuntimeWorkerConfig["afterToolProviderResolved"];
       afterToolReceiptCommitted?: RuntimeWorkerConfig["afterToolReceiptCommitted"];
@@ -7243,6 +7395,7 @@ async function createFixture(
           nextLeaseId: () => ids.nextId("outboxLease"),
           leaseDurationMs: 10_000,
           retryAfterMs: options.retryAfterMs,
+          approvalRecheckMs: options.approvalRecheckMs,
           scanIntervalMs: null,
           cancellationScheduler: options.cancellationScheduler,
           maxContextItems: options.maxContextItems,
@@ -7254,6 +7407,7 @@ async function createFixture(
           afterRunStarted: options.afterRunStarted,
           afterProviderResponseCheckpointed:
             options.afterProviderResponseCheckpointed,
+          afterToolPrepared: options.afterToolPrepared,
           afterToolDispatched: options.afterToolDispatched,
           afterToolProviderResolved: options.afterToolProviderResolved,
           afterToolReceiptCommitted: options.afterToolReceiptCommitted,
