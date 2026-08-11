@@ -23,6 +23,7 @@ import {
   validateProposedPlan,
   validateThreadGoal,
   isGoalRunnable,
+  isModelHistoryMessageBacked,
   settleThreadGoalForRun,
   threadGoalContinuationPrompt,
   ThreadGoalError,
@@ -1303,12 +1304,7 @@ function deriveRollbackMessageInvalidationsFromLedger(
   messages: readonly MessageRecord[],
   input: Pick<CommitThreadRollbackInput, "tenantId" | "event" | "marker">,
 ): readonly InvalidatedMessage[] {
-  const historyMessages = ledgerHistory.filter(
-    (item): item is Extract<ModelHistoryItem, { type: "message" }> =>
-      item.type === "message" &&
-      (item.source === "thread_message" ||
-        item.source === "assistant_completion"),
-  );
+  const historyMessages = ledgerHistory.filter(isModelHistoryMessageBacked);
   if (historyMessages.length !== messages.length) {
     throw new RunStoreError("message_history_correlation_invalid");
   }
@@ -1322,7 +1318,8 @@ function deriveRollbackMessageInvalidationsFromLedger(
       message.role !== historyItem.role ||
       message.content !== historyItem.content ||
       message.contentDigest !== historyItem.contentDigest ||
-      message.createdAt !== historyItem.createdAt
+      message.createdAt !== historyItem.createdAt ||
+      !messageOriginMatchesHistory(message, historyItem)
     ) {
       throw new RunStoreError("message_history_correlation_invalid");
     }
@@ -1334,9 +1331,7 @@ function deriveRollbackMessageInvalidationsFromLedger(
     projectEffectiveModelHistory(historyBeforeMarker)
       .items.filter(
         (item) =>
-          item.type === "message" &&
-          (item.source === "thread_message" ||
-            item.source === "assistant_completion") &&
+          isModelHistoryMessageBacked(item) &&
           item.sequence >= boundary &&
           item.sequence <= input.marker.historyThroughSequence,
       )
@@ -1357,6 +1352,20 @@ function deriveRollbackMessageInvalidationsFromLedger(
           },
         ]
       : [],
+  );
+}
+
+function messageOriginMatchesHistory(
+  message: MessageRecord,
+  historyItem: Extract<ModelHistoryItem, { type: "message" }>,
+): boolean {
+  if (historyItem.source !== "automation_invocation") {
+    return message.origin === null || message.origin === undefined;
+  }
+  return (
+    message.origin !== null &&
+    message.origin !== undefined &&
+    stableJson(message.origin) === stableJson(historyItem.origin)
   );
 }
 

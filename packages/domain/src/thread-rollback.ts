@@ -1,6 +1,7 @@
 import {
   MAX_MODEL_HISTORY_ROLLBACK_TURNS,
   ModelHistoryError,
+  isModelHistoryInstructionBoundary,
   validateModelHistoryItem,
   type ModelHistoryItem,
 } from "./model-history.ts";
@@ -229,7 +230,7 @@ function planFromEffectiveItems(
   let removedTurns = 0;
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]!;
-    if (!isInstructionBoundary(item)) {
+    if (!isModelHistoryInstructionBoundary(item)) {
       continue;
     }
     cutIndex = index;
@@ -239,7 +240,9 @@ function planFromEffectiveItems(
     }
   }
   if (removedTurns > 0) {
-    const firstInstructionIndex = items.findIndex(isInstructionBoundary);
+    const firstInstructionIndex = items.findIndex(
+      isModelHistoryInstructionBoundary,
+    );
     while (
       cutIndex > firstInstructionIndex &&
       isContextualUpdate(items[cutIndex - 1]!)
@@ -271,14 +274,6 @@ function validateRawHistory(history: readonly ModelHistoryItem[]): void {
       throw new ModelHistoryError("model_history_identity_mismatch");
     }
   }
-}
-
-function isInstructionBoundary(item: EffectiveModelHistoryItem): boolean {
-  return (
-    item.type === "message" &&
-    item.role === "user" &&
-    item.source === "thread_message"
-  );
 }
 
 function isContextualUpdate(item: EffectiveModelHistoryItem): boolean {

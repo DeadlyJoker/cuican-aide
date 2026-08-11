@@ -7,6 +7,10 @@ import {
   renderAutomationInstruction,
 } from "./automation.ts";
 import {
+  TURN_ABORTED_HISTORY_MARKER,
+  isModelHistoryInstructionBoundary,
+  isModelHistoryMessageBacked,
+  isModelHistoryRetainedUserMessage,
   ModelHistoryError,
   validateModelHistoryItem,
   type ModelHistoryItem,
@@ -153,6 +157,69 @@ test("accepts only a provenance-bound user Automation invocation", () => {
         origin: automationOrigin(),
       } as unknown as ModelHistoryItem),
     hasHistoryCode("model_history_message_origin_invalid"),
+  );
+});
+
+test("classifies canonical message sources consistently for rollback, ledger correlation, and compaction", () => {
+  const automation = automationInvocationItem("Run the daily summary.");
+  const items = [
+    messageItem(),
+    automation,
+    { ...messageItem(), role: "assistant", source: "assistant_completion" },
+    { ...messageItem(), source: "goal_continuation" },
+    { ...messageItem(), source: "goal_steering" },
+    {
+      ...messageItem(),
+      source: "turn_aborted",
+      content: TURN_ABORTED_HISTORY_MARKER,
+    },
+  ] satisfies readonly ModelHistoryItem[];
+
+  assert.deepEqual(
+    items.map((item) => ({
+      source: item.type === "message" ? item.source : null,
+      instructionBoundary: isModelHistoryInstructionBoundary(item),
+      messageBacked: isModelHistoryMessageBacked(item),
+      retainedUser: isModelHistoryRetainedUserMessage(item),
+    })),
+    [
+      {
+        source: "thread_message",
+        instructionBoundary: true,
+        messageBacked: true,
+        retainedUser: true,
+      },
+      {
+        source: "automation_invocation",
+        instructionBoundary: true,
+        messageBacked: true,
+        retainedUser: true,
+      },
+      {
+        source: "assistant_completion",
+        instructionBoundary: false,
+        messageBacked: true,
+        retainedUser: false,
+      },
+      {
+        source: "goal_continuation",
+        instructionBoundary: false,
+        messageBacked: false,
+        retainedUser: false,
+      },
+      {
+        source: "goal_steering",
+        instructionBoundary: false,
+        messageBacked: false,
+        retainedUser: false,
+      },
+      {
+        source: "turn_aborted",
+        instructionBoundary: false,
+        messageBacked: false,
+        retainedUser: false,
+      },
+    ],
   );
 });
 

@@ -53,6 +53,31 @@ test("does not treat assistant or contextual-only history as an instruction turn
   });
 });
 
+test("treats a canonical Automation invocation as an instruction boundary", () => {
+  const history = [
+    message(1, "user", "thread_message", "first"),
+    message(2, "assistant", "assistant_completion", "answer one"),
+    message(3, "user", "goal_steering", "goal changed"),
+    automationMessage(4, "automation replacement"),
+    message(5, "assistant", "assistant_completion", "automation answer"),
+  ] satisfies readonly ModelHistoryItem[];
+
+  assert.deepEqual(planModelHistoryRollback(history, 1), {
+    requestedTurns: 1,
+    removedTurns: 1,
+    historyFromSequence: 3,
+    historyThroughSequence: 5,
+    markerHistorySequence: 6,
+  });
+  assert.deepEqual(planModelHistoryRollback(history, 2), {
+    requestedTurns: 2,
+    removedTurns: 2,
+    historyFromSequence: 1,
+    historyThroughSequence: 5,
+    markerHistorySequence: 6,
+  });
+});
+
 test("applies cumulative rollback tombstones while preserving later raw sequence gaps", () => {
   let history: readonly ModelHistoryItem[] = [
     message(1, "user", "thread_message", "first"),
@@ -204,6 +229,42 @@ function message(
     source,
     content,
     contentDigest: `sha256:${"a".repeat(64)}`,
+  };
+}
+
+function automationMessage(
+  sequence: number,
+  content: string,
+): Extract<
+  ModelHistoryItem,
+  { type: "message"; source: "automation_invocation" }
+> {
+  return {
+    schemaVersion: "crewon.model-history-item.v0",
+    type: "message",
+    itemId: `history-${sequence}`,
+    tenantId: "tenant-1",
+    threadId: "thread-1",
+    sequence,
+    runId: "automation-run-1",
+    segmentId: null,
+    createdAt: "2026-08-08T00:00:00Z",
+    role: "user",
+    source: "automation_invocation",
+    content,
+    contentDigest: `sha256:${"b".repeat(64)}`,
+    origin: {
+      kind: "automation",
+      binding: {
+        automationId: "automation-1",
+        automationRevision: 1,
+        definitionDigest: `sha256:${"c".repeat(64)}`,
+        instructionDigest: `sha256:${"b".repeat(64)}`,
+        invocationId: "invocation-1",
+        runId: "automation-run-1",
+        routeDigest: `sha256:${"d".repeat(64)}`,
+      },
+    },
   };
 }
 

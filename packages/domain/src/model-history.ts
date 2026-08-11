@@ -32,6 +32,24 @@ export type ModelHistoryMessageSource =
 export type ModelHistoryCompactionMode =
   (typeof MODEL_HISTORY_COMPACTION_MODES)[number];
 
+export type ModelHistoryMessageItem = Extract<
+  ModelHistoryItem,
+  { type: "message" }
+>;
+export type ModelHistoryMessageBackedItem = ModelHistoryMessageItem &
+  Readonly<{
+    source:
+      | "thread_message"
+      | "automation_invocation"
+      | "assistant_completion";
+  }>;
+export type ModelHistoryInstructionBoundaryItem =
+  ModelHistoryMessageBackedItem &
+    Readonly<{
+      role: "user";
+      source: "thread_message" | "automation_invocation";
+    }>;
+
 type ModelHistoryItemBase = Readonly<{
   schemaVersion: "crewon.model-history-item.v0";
   itemId: string;
@@ -100,6 +118,37 @@ export type ModelHistoryItem =
       historyFromSequence: number | null;
       historyThroughSequence: number;
     });
+
+/** True for durable messages that have a corresponding entry in the Message ledger. */
+export function isModelHistoryMessageBacked(
+  item: ModelHistoryItem,
+): item is ModelHistoryMessageBackedItem {
+  return (
+    item.type === "message" &&
+    (item.source === "thread_message" ||
+      item.source === "automation_invocation" ||
+      item.source === "assistant_completion")
+  );
+}
+
+/** True for user instructions that define rollback turn boundaries. */
+export function isModelHistoryInstructionBoundary(
+  item: ModelHistoryItem,
+): item is ModelHistoryInstructionBoundaryItem {
+  return (
+    isModelHistoryMessageBacked(item) &&
+    item.role === "user" &&
+    (item.source === "thread_message" ||
+      item.source === "automation_invocation")
+  );
+}
+
+/** True for ordinary or automation instructions retained across compaction. */
+export function isModelHistoryRetainedUserMessage(
+  item: ModelHistoryItem,
+): item is ModelHistoryInstructionBoundaryItem {
+  return isModelHistoryInstructionBoundary(item);
+}
 
 export type ModelHistoryHead = Readonly<{
   tenantId: string;
