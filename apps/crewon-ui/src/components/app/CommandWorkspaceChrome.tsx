@@ -43,10 +43,7 @@ import {
   canPickWorkspaceFolder,
   pickWorkspaceFolder,
 } from "../../lib/desktop/workspaceFolderPicker";
-import {
-  detectRuntimeSurface,
-  type PlatformKind,
-} from "../../lib/platform";
+import { detectRuntimeSurface, type PlatformKind } from "../../lib/platform";
 import {
   forgetWorkspace,
   mergeWorkspaceRoster,
@@ -82,6 +79,40 @@ export type CommandLinkedThread = {
   updatedAt?: number;
   updatedLabel: string;
 };
+
+export type CommandWorkspaceAuthority = "control" | "legacy";
+
+export function readCommandSidebarWorkspaceRoster(
+  authority: CommandWorkspaceAuthority,
+  accountId: string | null,
+): WorkspaceRosterEntry[] {
+  return authority === "legacy" ? readWorkspaceRoster(accountId) : [];
+}
+
+export function writeCommandSidebarWorkspaceRoster(
+  authority: CommandWorkspaceAuthority,
+  accountId: string | null,
+  entries: WorkspaceRosterEntry[],
+): void {
+  if (authority === "legacy") {
+    writeWorkspaceRoster(accountId, entries);
+  }
+}
+
+export function commandSidebarHasFolderPicker(
+  authority: CommandWorkspaceAuthority,
+  canPick: () => boolean = canPickWorkspaceFolder,
+): boolean {
+  return authority === "legacy" && canPick();
+}
+
+export async function pickCommandSidebarWorkspaceFolder(
+  authority: CommandWorkspaceAuthority,
+  title: string,
+  pick: (title: string) => Promise<string | null> = pickWorkspaceFolder,
+): Promise<string | null> {
+  return authority === "legacy" ? pick(title) : null;
+}
 
 type SidebarSearchResult =
   | {
@@ -253,6 +284,7 @@ export function CommandSidebar({
   query,
   selectedLinkedThreadId,
   slots,
+  workspaceAuthority,
   onCreateWorkspace,
   onNewThread,
   onOpenLinkedThread,
@@ -272,6 +304,7 @@ export function CommandSidebar({
   query: string;
   selectedLinkedThreadId: string | null;
   slots: CommandHomeSlots;
+  workspaceAuthority: CommandWorkspaceAuthority;
   onCloseSearch: () => void;
   onCreateWorkspace?: (cwd: string) => void;
   onNewThread: (workspaceCwd: string | null) => void;
@@ -322,6 +355,9 @@ export function CommandSidebar({
             "当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。",
           workspaceThreadsEmpty: "开始一次任务后，会话会出现在这个工作空间下。",
           workspaceTree: "工作空间和对话",
+          tasks: "任务",
+          tasksEmpty: "开始一次任务后，对话会出现在这里。",
+          tasksTree: "任务和对话",
         }
       : {
           addWorkspace: "Add workspace",
@@ -358,15 +394,20 @@ export function CommandSidebar({
           workspaceThreadsEmpty:
             "Conversations will appear under this workspace after you start a task.",
           workspaceTree: "Workspaces and conversations",
+          tasks: "Tasks",
+          tasksEmpty: "Conversations will appear here after you start a task.",
+          tasksTree: "Tasks and conversations",
         };
   const [workspaceFormOpen, setWorkspaceFormOpen] = useState(false);
-  const [workspaceDraft, setWorkspaceDraft] = useState(cwd);
+  const [workspaceDraft, setWorkspaceDraft] = useState(
+    workspaceAuthority === "legacy" ? cwd : "",
+  );
   /*
    * A native dialog is the only way to learn an absolute folder path, so where
    * one exists the `+` button is the picker and the typed-path form never
    * appears. The form stays for web, where no such dialog exists.
    */
-  const nativeFolderPicker = canPickWorkspaceFolder();
+  const nativeFolderPicker = commandSidebarHasFolderPicker(workspaceAuthority);
   const [pickerBusy, setPickerBusy] = useState(false);
   const workspaceFormRef = useRef<HTMLDivElement>(null);
   const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<
@@ -376,7 +417,7 @@ export function CommandSidebar({
   const accountId = account ? String(account.user.id) : null;
   const [storedWorkspaces, setStoredWorkspaces] = useState<
     WorkspaceRosterEntry[]
-  >(() => readWorkspaceRoster(accountId));
+  >(() => readCommandSidebarWorkspaceRoster(workspaceAuthority, accountId));
   const [removedWorkspaces, setRemovedWorkspaces] = useState<Set<string>>(
     () => new Set(),
   );
@@ -385,9 +426,11 @@ export function CommandSidebar({
    * one's folders or their removals.
    */
   useEffect(() => {
-    setStoredWorkspaces(readWorkspaceRoster(accountId));
+    setStoredWorkspaces(
+      readCommandSidebarWorkspaceRoster(workspaceAuthority, accountId),
+    );
     setRemovedWorkspaces(new Set());
-  }, [accountId]);
+  }, [accountId, workspaceAuthority]);
   /*
    * Derived during render rather than in an effect: a folder that only its
    * conversations know about has to be in the very first frame, or the tree
@@ -397,25 +440,43 @@ export function CommandSidebar({
    * `removedWorkspaces` is applied last so a folder the user just removed does
    * not come straight back via one of its own conversations.
    */
-  const workspaces = mergeWorkspaceRoster(
-    cwd ? rememberWorkspace(storedWorkspaces, cwd, Date.now()) : storedWorkspaces,
-    linkedThreads.map((thread) => thread.cwd),
-    0,
-  ).filter((entry) => !removedWorkspaces.has(entry.path));
-  const workspacePathsKey = workspaces.map((entry) => entry.path).join("\u0000");
+  const workspaces =
+    workspaceAuthority === "legacy"
+      ? mergeWorkspaceRoster(
+          cwd
+            ? rememberWorkspace(storedWorkspaces, cwd, Date.now())
+            : storedWorkspaces,
+          linkedThreads.map((thread) => thread.cwd),
+          0,
+        ).filter((entry) => !removedWorkspaces.has(entry.path))
+      : [];
+  const workspacePathsKey = workspaces
+    .map((entry) => entry.path)
+    .join("\u0000");
   useEffect(() => {
-    writeWorkspaceRoster(accountId, workspaces);
+    writeCommandSidebarWorkspaceRoster(
+      workspaceAuthority,
+      accountId,
+      workspaces,
+    );
     // Keyed on the paths rather than the array so a re-render with the same
     // folders does not rewrite storage on every pass.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, workspacePathsKey]);
+  }, [accountId, workspaceAuthority, workspacePathsKey]);
 
   function removeWorkspace(path: string) {
+    if (workspaceAuthority !== "legacy") {
+      return;
+    }
     const normalized = normalizeWorkspacePath(path);
     setRemovedWorkspaces((current) => new Set(current).add(normalized));
     const remaining = forgetWorkspace(workspaces, path);
     setStoredWorkspaces(remaining);
-    writeWorkspaceRoster(accountId, remaining);
+    writeCommandSidebarWorkspaceRoster(
+      workspaceAuthority,
+      accountId,
+      remaining,
+    );
     // Removing the folder the shell is currently pointed at has to move it
     // somewhere, or the tree would keep showing it as the active workspace.
     if (normalizeWorkspacePath(path) === normalizeWorkspacePath(cwd)) {
@@ -423,26 +484,36 @@ export function CommandSidebar({
     }
   }
 
-  const currentWorkspaceName = workspaceName(cwd, copy.noWorkspace);
-  const currentWorkspaceThreads = linkedThreads
-    .filter((thread) => Boolean(cwd) && thread.cwd === cwd)
-    .slice(0, 5);
-  const standaloneThreads = linkedThreads
-    .filter((thread) => !thread.cwd)
-    .slice(0, 5);
+  const currentWorkspaceName =
+    workspaceAuthority === "legacy"
+      ? workspaceName(cwd, copy.noWorkspace)
+      : copy.noWorkspace;
+  const currentWorkspaceThreads =
+    workspaceAuthority === "legacy"
+      ? linkedThreads
+          .filter((thread) => Boolean(cwd) && thread.cwd === cwd)
+          .slice(0, 5)
+      : [];
+  const standaloneThreads =
+    workspaceAuthority === "legacy"
+      ? linkedThreads.filter((thread) => !thread.cwd).slice(0, 5)
+      : [];
   /*
    * Driven by the roster rather than by conversation grouping: a folder the user
    * opened but has not used yet still belongs in the tree, and a folder they
    * removed must stay out of it even while its old conversations exist.
    */
-  const threadsByWorkspace = linkedThreads.reduce((groups, thread) => {
-    const threadCwd = normalizeWorkspacePath(thread.cwd ?? "");
-    if (!threadCwd) {
-      return groups;
-    }
-    groups.set(threadCwd, [...(groups.get(threadCwd) ?? []), thread]);
-    return groups;
-  }, new Map<string, CommandLinkedThread[]>());
+  const threadsByWorkspace =
+    workspaceAuthority === "legacy"
+      ? linkedThreads.reduce((groups, thread) => {
+          const threadCwd = normalizeWorkspacePath(thread.cwd ?? "");
+          if (!threadCwd) {
+            return groups;
+          }
+          groups.set(threadCwd, [...(groups.get(threadCwd) ?? []), thread]);
+          return groups;
+        }, new Map<string, CommandLinkedThread[]>())
+      : new Map<string, CommandLinkedThread[]>();
   const otherWorkspaceGroups = workspaces
     .map((entry) => entry.path)
     .filter((path) => path !== normalizeWorkspacePath(cwd))
@@ -453,11 +524,14 @@ export function CommandSidebar({
     }));
 
   useEffect(() => {
-    setWorkspaceDraft(cwd);
-  }, [cwd]);
+    setWorkspaceDraft(workspaceAuthority === "legacy" ? cwd : "");
+  }, [cwd, workspaceAuthority]);
 
   function submitWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (workspaceAuthority !== "legacy") {
+      return;
+    }
     const trimmed = workspaceDraft.trim();
     if (!trimmed) {
       return;
@@ -474,7 +548,10 @@ export function CommandSidebar({
     }
     setPickerBusy(true);
     try {
-      const picked = await pickWorkspaceFolder(copy.addWorkspace);
+      const picked = await pickCommandSidebarWorkspaceFolder(
+        workspaceAuthority,
+        copy.addWorkspace,
+      );
       if (!picked) {
         return;
       }
@@ -497,7 +574,9 @@ export function CommandSidebar({
   }
 
   const currentWorkspaceCollapsed =
-    Boolean(cwd) && collapsedWorkspaceGroups.has(cwd);
+    workspaceAuthority === "legacy" &&
+    Boolean(cwd) &&
+    collapsedWorkspaceGroups.has(cwd);
   const standaloneWorkspaceCollapsed =
     collapsedWorkspaceGroups.has("standalone");
   const sidebarSearchResults: SidebarSearchResult[] = [
@@ -512,7 +591,9 @@ export function CommandSidebar({
     ...linkedThreads.map((thread) => ({
       action: "thread" as const,
       detail: [
-        workspaceName(thread.cwd ?? "", copy.noWorkspace),
+        ...(workspaceAuthority === "legacy"
+          ? [workspaceName(thread.cwd ?? "", copy.noWorkspace)]
+          : []),
         thread.preview || thread.updatedLabel,
       ]
         .filter(Boolean)
@@ -673,7 +754,9 @@ export function CommandSidebar({
             type="button"
             onClick={() => {
               if (item.key === "command") {
-                onNewThread(cwd || null);
+                onNewThread(
+                  workspaceAuthority === "legacy" ? cwd || null : null,
+                );
                 return;
               }
               onSwitchView(item.key);
@@ -703,261 +786,322 @@ export function CommandSidebar({
       <section
         className="space-tree"
         data-od-id="desktop-workspace-tree"
-        aria-label={copy.workspaceTree}
+        aria-label={
+          workspaceAuthority === "control" ? copy.tasksTree : copy.workspaceTree
+        }
       >
-        <div className="tree-head">
-          <strong className="tree-head-label">{copy.workspace}</strong>
-          <button
-            aria-expanded={nativeFolderPicker ? undefined : workspaceFormOpen}
-            aria-label={
-              nativeFolderPicker ? copy.chooseFolder : copy.addWorkspace
-            }
-            className="tree-head-action"
-            /*
-             * Only the picker path disables: a dialog already on screen must not
-             * be asked for a second one. The form path keeps its old behaviour of
-             * opening regardless, with the submit button carrying the guard.
-             */
-            disabled={nativeFolderPicker && (pickerBusy || !onCreateWorkspace)}
-            title={nativeFolderPicker ? copy.chooseFolder : copy.addWorkspace}
-            type="button"
-            onClick={() => {
-              if (nativeFolderPicker) {
-                void chooseWorkspaceFolder();
-                return;
-              }
-              setWorkspaceFormOpen((open) => !open);
-            }}
-          >
-            <Plus aria-hidden="true" />
-          </button>
-          <form
-            className="sidebar-workspace-form"
-            hidden={nativeFolderPicker || !workspaceFormOpen}
-            onSubmit={submitWorkspace}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setWorkspaceFormOpen(false);
-              }
-            }}
-          >
-            <strong className="sidebar-workspace-form-title">
-              {copy.addWorkspace}
-            </strong>
-            <label htmlFor="command-workspace-path">{copy.folderPath}</label>
-            <input
-              id="command-workspace-path"
-              placeholder="/Users/me/project"
-              value={workspaceDraft}
-              onChange={(event) => setWorkspaceDraft(event.target.value)}
-            />
-            <p className="sidebar-workspace-form-hint">{copy.folderPathHint}</p>
-            <div className="sidebar-workspace-form-actions">
-              <button type="button" onClick={() => setWorkspaceFormOpen(false)}>
-                {copy.cancel}
-              </button>
+        {workspaceAuthority === "control" ? (
+          <>
+            <div className="tree-head">
+              <strong className="tree-head-label">{copy.tasks}</strong>
               <button
-                className="primary"
-                type="submit"
-                disabled={!workspaceDraft.trim() || !onCreateWorkspace}
+                aria-label={copy.newThread}
+                className="tree-head-action"
+                title={copy.newThread}
+                type="button"
+                onClick={() => onNewThread(null)}
               >
-                {copy.open}
+                <Plus aria-hidden="true" />
               </button>
             </div>
-          </form>
-        </div>
-        {cwd ? (
-          <div
-            className={classNames(
-              "space-node current real-workspace-node",
-              currentWorkspaceCollapsed && "collapsed",
-            )}
-          >
-            <div className="space-title real-workspace-title">
-              <button
-                aria-controls="current-workspace-thread-list"
-                aria-expanded={!currentWorkspaceCollapsed}
-                className="workspace-title-toggle"
-                type="button"
-                onClick={() => toggleWorkspaceGroup(cwd)}
-              >
-                {currentWorkspaceCollapsed ? (
-                  <Folder aria-hidden="true" />
+            <div className="space-node current control-task-node">
+              <div className="conversation-list recent-thread-list">
+                {linkedThreads.length > 0 ? (
+                  linkedThreads.slice(0, 10).map((thread) => (
+                    <button
+                      className={classNames(
+                        "conversation-item linked-conversation-item recent-thread-item",
+                        selectedLinkedThreadId === thread.id && "active",
+                      )}
+                      data-linked-thread-id={thread.id}
+                      key={thread.id}
+                      title={thread.preview}
+                      type="button"
+                      onClick={() => onOpenLinkedThread(thread.id)}
+                    >
+                      <span>{thread.title}</span>
+                      <em>{thread.updatedLabel}</em>
+                    </button>
+                  ))
                 ) : (
-                  <FolderOpen aria-hidden="true" />
+                  <p className="sidebar-empty-hint">{copy.tasksEmpty}</p>
                 )}
-                <strong>{currentWorkspaceName}</strong>
-              </button>
-              <span className="workspace-row-actions">
-                <button
-                  aria-label={copy.newThread}
-                  title={copy.newThread}
-                  type="button"
-                  onClick={() => onNewThread(cwd)}
-                >
-                  <SquarePen aria-hidden="true" />
-                </button>
-                <button
-                  aria-label={copy.removeWorkspace(currentWorkspaceName)}
-                  className="workspace-remove-action"
-                  title={copy.removeWorkspace(currentWorkspaceName)}
-                  type="button"
-                  onClick={() => setPendingRemoval(cwd)}
-                >
-                  <Trash2 aria-hidden="true" />
-                </button>
-              </span>
-            </div>
-            <div
-              className="conversation-list recent-thread-list"
-              hidden={currentWorkspaceCollapsed}
-              id="current-workspace-thread-list"
-            >
-              {currentWorkspaceThreads.length > 0 ? (
-                currentWorkspaceThreads.map((thread) => (
-                  <button
-                    className={classNames(
-                      "conversation-item linked-conversation-item recent-thread-item",
-                      selectedLinkedThreadId === thread.id && "active",
-                    )}
-                    data-linked-thread-id={thread.id}
-                    key={thread.id}
-                    title={thread.preview}
-                    type="button"
-                    onClick={() => onOpenLinkedThread(thread.id)}
-                  >
-                    <span>{thread.title}</span>
-                    <em>{thread.updatedLabel}</em>
-                  </button>
-                ))
-              ) : (
-                <p className="sidebar-empty-hint">
-                  {copy.workspaceThreadsEmpty}
-                </p>
-              )}
-            </div>
-          </div>
-        ) : standaloneThreads.length === 0 &&
-          otherWorkspaceGroups.length === 0 ? (
-          <p className="sidebar-empty-hint workspace-empty-hint">
-            {copy.workspaceEmpty}
-          </p>
-        ) : null}
-        {otherWorkspaceGroups.map((group, index) => {
-          const name = workspaceName(group.path);
-          return (
-            <div className="space-node real-workspace-node" key={group.path}>
-              <div className="space-title real-workspace-title">
-                <button
-                  aria-controls={`other-workspace-thread-list-${index}`}
-                  aria-label={copy.switchWorkspace(name)}
-                  className="workspace-title-toggle"
-                  type="button"
-                  onClick={() => onCreateWorkspace?.(group.path)}
-                >
-                  <Folder aria-hidden="true" />
-                  <strong>{name}</strong>
-                </button>
-                <span className="workspace-row-actions">
-                  <button
-                    aria-label={copy.threadInWorkspace(name)}
-                    title={copy.threadInWorkspace(name)}
-                    type="button"
-                    onClick={() => onNewThread(group.path)}
-                  >
-                    <SquarePen aria-hidden="true" />
-                  </button>
-                  <button
-                    aria-label={copy.removeWorkspace(name)}
-                    className="workspace-remove-action"
-                    title={copy.removeWorkspace(name)}
-                    type="button"
-                    onClick={() => setPendingRemoval(group.path)}
-                  >
-                    <Trash2 aria-hidden="true" />
-                  </button>
-                </span>
-              </div>
-              <div
-                className="conversation-list recent-thread-list"
-                id={`other-workspace-thread-list-${index}`}
-              >
-                {group.threads.map((thread) => (
-                  <button
-                    className={classNames(
-                      "conversation-item linked-conversation-item recent-thread-item",
-                      selectedLinkedThreadId === thread.id && "active",
-                    )}
-                    data-linked-thread-id={thread.id}
-                    key={thread.id}
-                    title={thread.preview}
-                    type="button"
-                    onClick={() => onOpenLinkedThread(thread.id)}
-                  >
-                    <span>{thread.title}</span>
-                    <em>{thread.updatedLabel}</em>
-                  </button>
-                ))}
               </div>
             </div>
-          );
-        })}
-        {standaloneThreads.length > 0 ? (
-          <div
-            className={classNames(
-              "space-node standalone-workspace-node",
-              standaloneWorkspaceCollapsed && "collapsed",
-            )}
-          >
-            <div className="space-title standalone-workspace-title">
+          </>
+        ) : (
+          <>
+            <div className="tree-head">
+              <strong className="tree-head-label">{copy.workspace}</strong>
               <button
-                aria-controls="standalone-workspace-thread-list"
-                aria-expanded={!standaloneWorkspaceCollapsed}
-                className="workspace-title-toggle standalone-workspace-toggle"
+                aria-expanded={
+                  nativeFolderPicker ? undefined : workspaceFormOpen
+                }
+                aria-label={
+                  nativeFolderPicker ? copy.chooseFolder : copy.addWorkspace
+                }
+                className="tree-head-action"
+                /*
+                 * Only the picker path disables: a dialog already on screen must not
+                 * be asked for a second one. The form path keeps its old behaviour of
+                 * opening regardless, with the submit button carrying the guard.
+                 */
+                disabled={
+                  nativeFolderPicker && (pickerBusy || !onCreateWorkspace)
+                }
+                title={
+                  nativeFolderPicker ? copy.chooseFolder : copy.addWorkspace
+                }
                 type="button"
-                onClick={() => toggleWorkspaceGroup("standalone")}
+                onClick={() => {
+                  if (nativeFolderPicker) {
+                    void chooseWorkspaceFolder();
+                    return;
+                  }
+                  setWorkspaceFormOpen((open) => !open);
+                }}
               >
-                <ChevronRight aria-hidden="true" />
-                <strong>{copy.noWorkspace}</strong>
+                <Plus aria-hidden="true" />
               </button>
-              <span className="workspace-row-actions">
-                <button
-                  aria-label={copy.newStandaloneThread}
-                  type="button"
-                  onClick={() => onNewThread(null)}
-                >
-                  <SquarePen aria-hidden="true" />
-                </button>
-              </span>
+              <form
+                className="sidebar-workspace-form"
+                hidden={nativeFolderPicker || !workspaceFormOpen}
+                onSubmit={submitWorkspace}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setWorkspaceFormOpen(false);
+                  }
+                }}
+              >
+                <strong className="sidebar-workspace-form-title">
+                  {copy.addWorkspace}
+                </strong>
+                <label htmlFor="command-workspace-path">
+                  {copy.folderPath}
+                </label>
+                <input
+                  id="command-workspace-path"
+                  placeholder="/Users/me/project"
+                  value={workspaceDraft}
+                  onChange={(event) => setWorkspaceDraft(event.target.value)}
+                />
+                <p className="sidebar-workspace-form-hint">
+                  {copy.folderPathHint}
+                </p>
+                <div className="sidebar-workspace-form-actions">
+                  <button
+                    type="button"
+                    onClick={() => setWorkspaceFormOpen(false)}
+                  >
+                    {copy.cancel}
+                  </button>
+                  <button
+                    className="primary"
+                    type="submit"
+                    disabled={!workspaceDraft.trim() || !onCreateWorkspace}
+                  >
+                    {copy.open}
+                  </button>
+                </div>
+              </form>
             </div>
-            <div
-              className="conversation-list recent-thread-list standalone-thread-list"
-              hidden={standaloneWorkspaceCollapsed}
-              id="standalone-workspace-thread-list"
-            >
-              {standaloneThreads.map((thread) => (
-                <button
-                  className={classNames(
-                    "conversation-item linked-conversation-item recent-thread-item",
-                    selectedLinkedThreadId === thread.id && "active",
+            {cwd ? (
+              <div
+                className={classNames(
+                  "space-node current real-workspace-node",
+                  currentWorkspaceCollapsed && "collapsed",
+                )}
+              >
+                <div className="space-title real-workspace-title">
+                  <button
+                    aria-controls="current-workspace-thread-list"
+                    aria-expanded={!currentWorkspaceCollapsed}
+                    className="workspace-title-toggle"
+                    type="button"
+                    onClick={() => toggleWorkspaceGroup(cwd)}
+                  >
+                    {currentWorkspaceCollapsed ? (
+                      <Folder aria-hidden="true" />
+                    ) : (
+                      <FolderOpen aria-hidden="true" />
+                    )}
+                    <strong>{currentWorkspaceName}</strong>
+                  </button>
+                  <span className="workspace-row-actions">
+                    <button
+                      aria-label={copy.newThread}
+                      title={copy.newThread}
+                      type="button"
+                      onClick={() => onNewThread(cwd)}
+                    >
+                      <SquarePen aria-hidden="true" />
+                    </button>
+                    <button
+                      aria-label={copy.removeWorkspace(currentWorkspaceName)}
+                      className="workspace-remove-action"
+                      title={copy.removeWorkspace(currentWorkspaceName)}
+                      type="button"
+                      onClick={() => setPendingRemoval(cwd)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </button>
+                  </span>
+                </div>
+                <div
+                  className="conversation-list recent-thread-list"
+                  hidden={currentWorkspaceCollapsed}
+                  id="current-workspace-thread-list"
+                >
+                  {currentWorkspaceThreads.length > 0 ? (
+                    currentWorkspaceThreads.map((thread) => (
+                      <button
+                        className={classNames(
+                          "conversation-item linked-conversation-item recent-thread-item",
+                          selectedLinkedThreadId === thread.id && "active",
+                        )}
+                        data-linked-thread-id={thread.id}
+                        key={thread.id}
+                        title={thread.preview}
+                        type="button"
+                        onClick={() => onOpenLinkedThread(thread.id)}
+                      >
+                        <span>{thread.title}</span>
+                        <em>{thread.updatedLabel}</em>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="sidebar-empty-hint">
+                      {copy.workspaceThreadsEmpty}
+                    </p>
                   )}
-                  data-linked-thread-id={thread.id}
-                  key={thread.id}
-                  title={thread.preview}
-                  type="button"
-                  onClick={() => onOpenLinkedThread(thread.id)}
+                </div>
+              </div>
+            ) : standaloneThreads.length === 0 &&
+              otherWorkspaceGroups.length === 0 ? (
+              <p className="sidebar-empty-hint workspace-empty-hint">
+                {copy.workspaceEmpty}
+              </p>
+            ) : null}
+            {otherWorkspaceGroups.map((group, index) => {
+              const name = workspaceName(group.path);
+              return (
+                <div
+                  className="space-node real-workspace-node"
+                  key={group.path}
                 >
-                  <span>{thread.title}</span>
-                  <em>{thread.updatedLabel}</em>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
+                  <div className="space-title real-workspace-title">
+                    <button
+                      aria-controls={`other-workspace-thread-list-${index}`}
+                      aria-label={copy.switchWorkspace(name)}
+                      className="workspace-title-toggle"
+                      type="button"
+                      onClick={() => onCreateWorkspace?.(group.path)}
+                    >
+                      <Folder aria-hidden="true" />
+                      <strong>{name}</strong>
+                    </button>
+                    <span className="workspace-row-actions">
+                      <button
+                        aria-label={copy.threadInWorkspace(name)}
+                        title={copy.threadInWorkspace(name)}
+                        type="button"
+                        onClick={() => onNewThread(group.path)}
+                      >
+                        <SquarePen aria-hidden="true" />
+                      </button>
+                      <button
+                        aria-label={copy.removeWorkspace(name)}
+                        className="workspace-remove-action"
+                        title={copy.removeWorkspace(name)}
+                        type="button"
+                        onClick={() => setPendingRemoval(group.path)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </button>
+                    </span>
+                  </div>
+                  <div
+                    className="conversation-list recent-thread-list"
+                    id={`other-workspace-thread-list-${index}`}
+                  >
+                    {group.threads.map((thread) => (
+                      <button
+                        className={classNames(
+                          "conversation-item linked-conversation-item recent-thread-item",
+                          selectedLinkedThreadId === thread.id && "active",
+                        )}
+                        data-linked-thread-id={thread.id}
+                        key={thread.id}
+                        title={thread.preview}
+                        type="button"
+                        onClick={() => onOpenLinkedThread(thread.id)}
+                      >
+                        <span>{thread.title}</span>
+                        <em>{thread.updatedLabel}</em>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {standaloneThreads.length > 0 ? (
+              <div
+                className={classNames(
+                  "space-node standalone-workspace-node",
+                  standaloneWorkspaceCollapsed && "collapsed",
+                )}
+              >
+                <div className="space-title standalone-workspace-title">
+                  <button
+                    aria-controls="standalone-workspace-thread-list"
+                    aria-expanded={!standaloneWorkspaceCollapsed}
+                    className="workspace-title-toggle standalone-workspace-toggle"
+                    type="button"
+                    onClick={() => toggleWorkspaceGroup("standalone")}
+                  >
+                    <ChevronRight aria-hidden="true" />
+                    <strong>{copy.noWorkspace}</strong>
+                  </button>
+                  <span className="workspace-row-actions">
+                    <button
+                      aria-label={copy.newStandaloneThread}
+                      type="button"
+                      onClick={() => onNewThread(null)}
+                    >
+                      <SquarePen aria-hidden="true" />
+                    </button>
+                  </span>
+                </div>
+                <div
+                  className="conversation-list recent-thread-list standalone-thread-list"
+                  hidden={standaloneWorkspaceCollapsed}
+                  id="standalone-workspace-thread-list"
+                >
+                  {standaloneThreads.map((thread) => (
+                    <button
+                      className={classNames(
+                        "conversation-item linked-conversation-item recent-thread-item",
+                        selectedLinkedThreadId === thread.id && "active",
+                      )}
+                      data-linked-thread-id={thread.id}
+                      key={thread.id}
+                      title={thread.preview}
+                      type="button"
+                      onClick={() => onOpenLinkedThread(thread.id)}
+                    >
+                      <span>{thread.title}</span>
+                      <em>{thread.updatedLabel}</em>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
       </section>
 
-      {pendingRemoval ? (
+      {workspaceAuthority === "legacy" && pendingRemoval ? (
         <WorkspaceRemoveDialog
           cancelLabel={copy.cancel}
           confirmLabel={copy.remove}

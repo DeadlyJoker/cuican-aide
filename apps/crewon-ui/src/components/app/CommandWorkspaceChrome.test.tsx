@@ -2,9 +2,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  commandSidebarHasFolderPicker,
   CommandSidebar,
   paletteSearchKeyAction,
+  pickCommandSidebarWorkspaceFolder,
+  readCommandSidebarWorkspaceRoster,
   SidebarAccount,
+  writeCommandSidebarWorkspaceRoster,
 } from "./CommandWorkspaceChrome";
 import type { CommandHomeSlots } from "./commandWorkspaceState";
 
@@ -50,6 +54,7 @@ function renderSidebar() {
       query=""
       selectedLinkedThreadId={null}
       slots={sidebarSlots}
+      workspaceAuthority="legacy"
       onCloseSearch={vi.fn()}
       onCreateWorkspace={vi.fn()}
       onNewThread={vi.fn()}
@@ -81,6 +86,7 @@ describe("CommandSidebar", () => {
         query=""
         selectedLinkedThreadId={null}
         slots={sidebarSlots}
+        workspaceAuthority="legacy"
         onCloseSearch={vi.fn()}
         onCreateWorkspace={vi.fn()}
         onNewThread={vi.fn()}
@@ -116,6 +122,7 @@ describe("CommandSidebar", () => {
         query=""
         selectedLinkedThreadId={null}
         slots={sidebarSlots}
+        workspaceAuthority="legacy"
         onCloseSearch={vi.fn()}
         onCreateWorkspace={vi.fn()}
         onNewThread={vi.fn()}
@@ -172,6 +179,125 @@ describe("CommandSidebar", () => {
       offersPathField: true,
       addWorkspaceAction: true,
     });
+  });
+
+  it("cuts local storage, folder picker, and cwd markup out of Control authority", async () => {
+    const getItem = vi.fn(() => null);
+    const setItem = vi.fn();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: { getItem, setItem },
+    });
+    const pickerAvailable = vi.fn(() => true);
+    const pickFolder = vi.fn(async () => "/Users/private/control-secret");
+
+    try {
+      expect(readCommandSidebarWorkspaceRoster("control", "account-1")).toEqual(
+        [],
+      );
+      writeCommandSidebarWorkspaceRoster("control", "account-1", [
+        { path: "/Users/private/control-secret", usedAt: 1 },
+      ]);
+      expect(commandSidebarHasFolderPicker("control", pickerAvailable)).toBe(
+        false,
+      );
+      await expect(
+        pickCommandSidebarWorkspaceFolder("control", "Choose", pickFolder),
+      ).resolves.toBeNull();
+
+      const markup = renderToStaticMarkup(
+        <CommandSidebar
+          activeView="command"
+          cwd="/Users/private/control-secret"
+          isSearchOpen
+          linkedThreads={[
+            {
+              cwd: "/Users/private/control-secret/child",
+              id: "thread-control",
+              preview: "Safe preview",
+              title: "Control task",
+              updatedLabel: "Today",
+            },
+          ]}
+          locale="en"
+          query=""
+          selectedLinkedThreadId={null}
+          slots={sidebarSlots}
+          workspaceAuthority="control"
+          onCloseSearch={vi.fn()}
+          onCreateWorkspace={vi.fn()}
+          onNewThread={vi.fn()}
+          onOpenLinkedThread={vi.fn()}
+          onQueryChange={vi.fn()}
+          onSwitchView={vi.fn()}
+          onToggleCollapse={vi.fn()}
+          onToggleSearch={vi.fn()}
+        />,
+      );
+
+      expect({
+        getItemCalls: getItem.mock.calls,
+        setItemCalls: setItem.mock.calls,
+        pickerAvailableCalls: pickerAvailable.mock.calls,
+        pickFolderCalls: pickFolder.mock.calls,
+        hasAbsolutePath: markup.includes("/Users/private"),
+        hasLegacyPathInput: markup.includes("command-workspace-path"),
+        hasTasksTree: markup.includes('aria-label="Tasks and conversations"'),
+        hasTask: markup.includes("Control task"),
+      }).toEqual({
+        getItemCalls: [],
+        setItemCalls: [],
+        pickerAvailableCalls: [],
+        pickFolderCalls: [],
+        hasAbsolutePath: false,
+        hasLegacyPathInput: false,
+        hasTasksTree: true,
+        hasTask: true,
+      });
+      expect(markup).toMatchSnapshot();
+    } finally {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+  });
+
+  it("keeps legacy local storage and folder picker authority", async () => {
+    const getItem = vi.fn(() => "[]");
+    const setItem = vi.fn();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: { getItem, setItem },
+    });
+    const pickerAvailable = vi.fn(() => true);
+    const pickFolder = vi.fn(async () => "/Users/me/project");
+
+    try {
+      expect(readCommandSidebarWorkspaceRoster("legacy", "account-1")).toEqual(
+        [],
+      );
+      writeCommandSidebarWorkspaceRoster("legacy", "account-1", [
+        { path: "/Users/me/project", usedAt: 1 },
+      ]);
+      expect(commandSidebarHasFolderPicker("legacy", pickerAvailable)).toBe(
+        true,
+      );
+      await expect(
+        pickCommandSidebarWorkspaceFolder("legacy", "Choose", pickFolder),
+      ).resolves.toBe("/Users/me/project");
+
+      expect({
+        getItemCalls: getItem.mock.calls.length,
+        setItemCalls: setItem.mock.calls.length,
+        pickerAvailableCalls: pickerAvailable.mock.calls.length,
+        pickFolderCalls: pickFolder.mock.calls.length,
+      }).toEqual({
+        getItemCalls: 1,
+        setItemCalls: 1,
+        pickerAvailableCalls: 1,
+        pickFolderCalls: 1,
+      });
+    } finally {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
   });
 });
 
