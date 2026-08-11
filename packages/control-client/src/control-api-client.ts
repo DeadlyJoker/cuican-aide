@@ -72,7 +72,6 @@ export class ControlApiClient {
   readonly #csrfToken: string | null;
   readonly #origin: string | null;
   readonly #fetch: typeof globalThis.fetch;
-  readonly #workspace: WorkspaceControlClient;
 
   constructor(config: ControlApiClientConfig) {
     this.#baseUrl = parseBaseUrl(config.baseUrl);
@@ -110,20 +109,14 @@ export class ControlApiClient {
     });
   }
 
-  async getThread(
+  getThread(
     threadId: string,
     options: ControlApiRequestOptions = {},
   ): Promise<GetThreadResponse> {
-    const response = await this.#json<unknown>(
-      "GET",
-      `/api/v1/threads/${resourceId(threadId)}`,
-      null,
-      {
-        ...options,
-        expectedStatuses: [200],
-      },
-    );
-    return parseGetThreadResponse(response, threadId);
+    return this.#json("GET", `/api/v1/threads/${resourceId(threadId)}`, null, {
+      ...options,
+      expectedStatuses: [200],
+    });
   }
 
   archiveThread(
@@ -298,7 +291,7 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<WorkspaceOperationMutationResponse> {
-    return this.#workspace.create(threadId, body, idempotencyKey, options);
+    return this.#workspaceClient().create(threadId, body, idempotencyKey, options);
   }
 
   listWorkspaceListOperations(
@@ -306,7 +299,7 @@ export class ControlApiClient {
     query: { afterExecutionId?: string | null; limit?: number } = {},
     options: ControlApiRequestOptions = {},
   ): Promise<ListWorkspaceOperationsResponse> {
-    return this.#workspace.list(threadId, query, options);
+    return this.#workspaceClient().list(threadId, query, options);
   }
 
   getWorkspaceListOperation(
@@ -314,7 +307,7 @@ export class ControlApiClient {
     executionId: string,
     options: ControlApiRequestOptions = {},
   ): Promise<GetWorkspaceOperationResponse> {
-    return this.#workspace.get(threadId, executionId, options);
+    return this.#workspaceClient().get(threadId, executionId, options);
   }
 
   reconcileWorkspaceListOperation(
@@ -324,7 +317,7 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<WorkspaceOperationMutationResponse> {
-    return this.#workspace.reconcile(
+    return this.#workspaceClient().reconcile(
       threadId,
       executionId,
       body,
@@ -340,7 +333,7 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<WorkspaceOperationMutationResponse> {
-    return this.#workspace.cancel(
+    return this.#workspaceClient().cancel(
       threadId,
       executionId,
       body,
@@ -668,6 +661,26 @@ export class ControlApiClient {
       headers,
       credentials: "include",
       signal: input.signal,
+    });
+  }
+
+  openWorkspaceListOperationEventStream(input: {
+    threadId: string;
+    executionId: string;
+    afterSequence: number;
+    signal?: AbortSignal;
+  }): Promise<Response> {
+    return this.#workspaceClient().openEventStream(input);
+  }
+
+  #workspaceClient(): WorkspaceControlClient {
+    return new WorkspaceControlClient({
+      baseUrl: this.#baseUrl,
+      json: (method, path, body, options) =>
+        this.#json(method, path, body, options),
+      eventHeaders: () => this.#authenticatedHeaders("text/event-stream"),
+      fetch: (url, init) => this.#fetch(url, init),
+      protocolError: (code) => new ControlApiProtocolError(code),
     });
   }
 
