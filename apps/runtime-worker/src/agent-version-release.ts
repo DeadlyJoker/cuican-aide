@@ -25,6 +25,7 @@ import type { GovernedContextBundle } from "@crewon/context";
 import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
+import { runtimeReleaseToolDefinitions } from "./runtime-workspace-read-tool-catalog.ts";
 
 export type RuntimeAgentVersionReleaseConfig = Readonly<{
   runtimeTenantId: string;
@@ -33,6 +34,7 @@ export type RuntimeAgentVersionReleaseConfig = Readonly<{
   agentInstructions?: string | null;
   governedContext?: GovernedContextBundle;
   toolRuntime?: ToolRuntimePort;
+  nativeWorkspaceReadCatalog?: "disabled" | "enabled";
   streamMaxRetries?: number;
   maxToolRounds?: number;
   autoCompactAtTokens?: number | null;
@@ -176,6 +178,12 @@ export function compileRuntimeAgentVersion(
   config: RuntimeAgentVersionReleaseConfig,
   digester: ContentDigester = new NodeSha256ContentDigester(),
 ): CompiledAgentVersion {
+  if (
+    config.nativeWorkspaceReadCatalog === "enabled" &&
+    config.route.workspaceBindingId === null
+  ) {
+    throw new Error("runtime_release_workspace_read_authority_missing");
+  }
   return compileAgentVersion(
     {
       schemaVersion: "crewon.agent-version-source.v0",
@@ -206,7 +214,11 @@ export function compileRuntimeAgentVersion(
                 JSON.stringify(config.governedContext.modelItems()),
               ),
       },
-      tools: structuredClone(config.toolRuntime?.definitions() ?? []),
+      tools: runtimeReleaseToolDefinitions({
+        toolRuntime: config.toolRuntime,
+        nativeWorkspaceReadCatalog:
+          config.nativeWorkspaceReadCatalog ?? "disabled",
+      }),
     },
     digester,
     config.expectedAgentVersionDigest,

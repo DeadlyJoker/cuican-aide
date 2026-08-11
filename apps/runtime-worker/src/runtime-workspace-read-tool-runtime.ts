@@ -9,6 +9,8 @@ import {
   type ToolRuntimePort,
 } from "@crewon/tool-broker";
 
+import { workspaceReadToolDefinitions } from "./runtime-workspace-read-tool-catalog.ts";
+
 const TOOL_NAME = "read_file";
 const CAPABILITY = "workspace.read_file.v0";
 const MAX_PATH_BYTES = 8 * 1024;
@@ -114,21 +116,7 @@ export class WorkspaceReadToolRuntime implements ToolRuntimePort {
   }
 
   definitions(): readonly ToolDefinition[] {
-    return [
-      {
-        schemaVersion: "crewon.tool-definition.v0",
-        kind: "function",
-        name: TOOL_NAME,
-        description: "Read one bounded file.",
-        execution: "parallel",
-        inputSchema: {
-          type: "object",
-          additionalProperties: false,
-          properties: { path: { type: "string" } },
-          required: ["path"],
-        },
-      },
-    ];
+    return workspaceReadToolDefinitions();
   }
 
   executionPolicy(

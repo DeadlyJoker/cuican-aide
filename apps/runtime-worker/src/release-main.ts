@@ -55,6 +55,9 @@ try {
     transport,
     agentInstructions: process.env.CREWON_AGENT_INSTRUCTIONS?.trim() || null,
     toolRuntime,
+    nativeWorkspaceReadCatalog: parseNativeWorkspaceReadCatalog(
+      process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
+    ),
     streamMaxRetries: parseNonNegativeInteger(
       process.env.CREWON_RESPONSES_STREAM_MAX_RETRIES ?? "5",
       "CREWON_RESPONSES_STREAM_MAX_RETRIES_invalid",
@@ -109,4 +112,16 @@ try {
   );
 } finally {
   await Promise.allSettled([toolRuntime?.close?.(), transport.close?.()]);
+}
+
+function parseNativeWorkspaceReadCatalog(
+  value: string | undefined,
+): "disabled" | "enabled" {
+  if (value === undefined || value === "0") {
+    return "disabled";
+  }
+  if (value === "1") {
+    return "enabled";
+  }
+  throw new Error("CREWON_NATIVE_WORKSPACE_READ_ENABLED_invalid");
 }
