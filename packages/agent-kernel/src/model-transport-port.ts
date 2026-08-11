@@ -58,6 +58,8 @@ export type ModelTransportEvent =
   | Readonly<{
       type: "completed";
       checkpoint: ProviderCheckpoint | null;
+      /** A false Provider directive requires another sampling request in the same Turn. */
+      endTurn?: boolean;
     }>
   | Readonly<{ type: "failed"; code: string; retryable: boolean }>;
 

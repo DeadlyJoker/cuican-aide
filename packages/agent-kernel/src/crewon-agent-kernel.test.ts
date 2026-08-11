@@ -102,6 +102,132 @@ test("matches the shared deterministic text Segment trace", async () => {
   assert.deepEqual(compareTraces(reference, candidate), { equal: true });
 });
 
+test("matches AR-031 Provider end_turn=false empty continuation", async () => {
+  const reference = fixture<{
+    expectedRequests: ModelInputItem[][];
+    expectedStableEvents: Array<Record<string, unknown>>;
+    finalState: Record<string, unknown>;
+  }>("provider-end-turn-continuation.reference.json");
+  const requests: import("./model-transport-port.ts").ModelRequest[] = [];
+  let sampling = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "end-turn-reference",
+    adapterVersion: "1",
+    modelId: "reference-model",
+    async *stream(request) {
+      requests.push(structuredClone(request));
+      sampling += 1;
+      if (sampling === 1) {
+        yield {
+          type: "usage",
+          inputTokens: 4,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 4,
+        };
+        yield { type: "completed", checkpoint: null, endTurn: false };
+        return;
+      }
+      yield { type: "output.delta", delta: "done" };
+      yield {
+        type: "usage",
+        inputTokens: 5,
+        cachedInputTokens: 0,
+        outputTokens: 1,
+        totalTokens: 6,
+      };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const events = await collect(
+    new CrewONAgentKernel({ transport }).runSegment(
+      { ...segmentContract(), history: reference.expectedRequests[0] ?? [] },
+      new AbortController().signal,
+    ),
+  );
+  const stableEvents: Array<Record<string, unknown>> = [];
+  for (const event of events) {
+    switch (event.type) {
+      case "model.output.delta":
+      case "segment.completed":
+        stableEvents.push({ type: event.type, ...event.data });
+        break;
+      case "usage.recorded":
+        stableEvents.push({
+          type: event.type,
+          inputTokens: event.data.inputTokens,
+          outputTokens: event.data.outputTokens,
+          totalTokens: event.data.totalTokens,
+        });
+        break;
+      default:
+        break;
+    }
+  }
+  const candidate = {
+    expectedRequests: requests.map((request) => request.input.items),
+    expectedStableEvents: stableEvents,
+    finalState: {
+      requestCount: requests.length,
+      samplingRetries: events.filter(
+        (event) => event.type === "model.sampling.retry",
+      ).length,
+      terminal: "completed",
+      output: "done",
+      usage: stableEvents
+        .filter((event) => event.type === "usage.recorded")
+        .reduce<{ inputTokens: number; outputTokens: number; totalTokens: number }>(
+          (usage, event) => ({
+            inputTokens: usage.inputTokens + Number(event.inputTokens),
+            outputTokens: usage.outputTokens + Number(event.outputTokens),
+            totalTokens: usage.totalTokens + Number(event.totalTokens),
+          }),
+          { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        ),
+    },
+  };
+  assert.deepEqual(candidate, {
+    expectedRequests: reference.expectedRequests,
+    expectedStableEvents: reference.expectedStableEvents,
+    finalState: reference.finalState,
+  });
+});
+
+test("fails closed on end_turn=false stored-response recovery", async () => {
+  const checkpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "stored-end-turn",
+    adapterVersion: "1",
+    modelId: "stored-model",
+    opaquePayload: { responseId: "resp-stored" },
+  } as const;
+  let requests = 0;
+  const transport: ModelTransportPort = {
+    adapterName: checkpoint.adapterName,
+    adapterVersion: checkpoint.adapterVersion,
+    modelId: checkpoint.modelId,
+    supportsResponseRetrieve: true,
+    async *stream() {
+      requests += 1;
+      yield { type: "completed", checkpoint, endTurn: false };
+    },
+  };
+
+  await assert.rejects(
+    collect(
+      new CrewONAgentKernel({ transport }).runSegment(
+        segmentContract(),
+        new AbortController().signal,
+      ),
+    ),
+    (error) =>
+      error instanceof AgentKernelError &&
+      error.code === "model_end_turn_false_stored_response_unsupported" &&
+      !error.retryable,
+  );
+  assert.equal(requests, 1);
+});
+
 test("returns control at the Tool boundary without executing or resampling", async () => {
   const requests: import("./model-transport-port.ts").ModelRequest[] = [];
   const checkpoint = {

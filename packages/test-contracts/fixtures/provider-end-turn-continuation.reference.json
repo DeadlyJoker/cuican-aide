@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "crewon.provider-end-turn-continuation.v0",
+  "caseId": "AR-031-provider-end-turn-false-empty-continuation",
+  "rustSource": {
+    "implementation": "codex-rs/core/src/session/turn.rs: ResponseEvent::Completed { end_turn: Some(false) } sets needs_follow_up",
+    "integration": "codex-rs/core/tests/suite/provider_end_turn.rs::end_turn_false_empty_response_continues_same_turn"
+  },
+  "expectedRequests": [
+    [{ "type": "message", "role": "user", "content": "hello" }],
+    [{ "type": "message", "role": "user", "content": "hello" }]
+  ],
+  "expectedStableEvents": [
+    { "type": "usage.recorded", "inputTokens": 4, "outputTokens": 0, "totalTokens": 4 },
+    { "type": "model.output.delta", "delta": "done" },
+    { "type": "usage.recorded", "inputTokens": 5, "outputTokens": 1, "totalTokens": 6 },
+    { "type": "segment.completed", "output": "done" }
+  ],
+  "finalState": {
+    "requestCount": 2,
+    "samplingRetries": 0,
+    "terminal": "completed",
+    "output": "done",
+    "usage": { "inputTokens": 9, "outputTokens": 1, "totalTokens": 10 }
+  }
+}

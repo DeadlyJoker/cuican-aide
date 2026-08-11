@@ -76,6 +76,12 @@ export class ResponsesProtocolDecoder {
           "responses_completed_response_invalid",
         );
         requireStatus(response, "completed");
+        if (
+          response.end_turn !== undefined &&
+          typeof response.end_turn !== "boolean"
+        ) {
+          throw protocolError("responses_end_turn_invalid");
+        }
         validateFinalOutput(response.output, this.#output);
         if (
           this.#output.length > 0 &&
@@ -94,6 +100,7 @@ export class ResponsesProtocolDecoder {
           {
             type: "completed",
             checkpoint: this.#options.completedCheckpoint(this.#responseId),
+            ...(response.end_turn === false ? { endTurn: false } : {}),
           },
         ];
       }

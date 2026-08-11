@@ -143,6 +143,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
         let output = "";
         let usageSeen = false;
         let terminalSeen = false;
+        let providerRequestsContinuation = false;
         const completedItems: ModelInputItem[] = [];
         const toolCalls: ObservedToolCall[] = [];
         try {
@@ -324,6 +325,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
               case "completed":
                 validateCheckpoint(event.checkpoint, this.modelIdentity);
                 completedCheckpoint = event.checkpoint;
+                providerRequestsContinuation = event.endTurn === false;
                 terminalSeen = true;
                 break;
               case "failed":
@@ -341,6 +343,28 @@ export class CrewONAgentKernel implements AgentKernelPort {
           }
           if (!terminalSeen) {
             throw new AgentKernelError("model_stream_incomplete", true);
+          }
+          if (providerRequestsContinuation) {
+            if (output.length > 0 || completedItems.length > 0 || toolCalls.length > 0) {
+              throw new AgentKernelError(
+                "model_end_turn_false_output_unsupported",
+                false,
+              );
+            }
+            if (
+              request.reconcileCheckpoint !== undefined ||
+              createdCheckpoint !== null ||
+              completedCheckpoint !== null
+            ) {
+              throw new AgentKernelError(
+                "model_end_turn_false_stored_response_unsupported",
+                false,
+              );
+            }
+            completedCheckpoint = null;
+            createdCheckpoint = null;
+            retries = 0;
+            continue;
           }
           completedOutput = output;
           completedToolCalls = toolCalls;

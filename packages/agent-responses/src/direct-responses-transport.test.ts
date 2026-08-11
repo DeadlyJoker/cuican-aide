@@ -939,6 +939,53 @@ test("exposes a completed assistant item before the response terminal", async ()
   ]);
 });
 
+test("preserves the Provider end_turn=false continuation directive", async () => {
+  const transport = createTransport([
+    createdEvent(0),
+    {
+      type: "response.completed",
+      sequence_number: 1,
+      response: {
+        id: "resp-1",
+        status: "completed",
+        end_turn: false,
+        output: [],
+        usage: { input_tokens: 4, output_tokens: 0, total_tokens: 4 },
+      },
+    },
+  ]);
+
+  assert.deepEqual(await collect(transport.stream(manualRequest(), signal())), [
+    {
+      type: "usage",
+      inputTokens: 4,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 4,
+    },
+    { type: "completed", checkpoint: null, endTurn: false },
+  ]);
+
+  const invalid = createTransport([
+    createdEvent(0),
+    {
+      type: "response.completed",
+      sequence_number: 1,
+      response: {
+        id: "resp-1",
+        status: "completed",
+        end_turn: "false",
+        output: [],
+        usage: { input_tokens: 4, output_tokens: 0, total_tokens: 4 },
+      },
+    },
+  ]);
+  await assert.rejects(
+    collect(invalid.stream(manualRequest(), signal())),
+    hasTransportCode("responses_end_turn_invalid"),
+  );
+});
+
 test("defaults missing cached usage to zero and rejects cached input above total input", async () => {
   const compatible = createTransport([
     createdEvent(0),

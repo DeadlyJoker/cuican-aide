@@ -119,6 +119,93 @@ test("completes a durable Run through the Direct Responses transport", async (co
   await worker.close();
 });
 
+test("matches AR-031 end_turn=false continuation through the durable Worker", async (context) => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../packages/test-contracts/fixtures/provider-end-turn-continuation.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as {
+    expectedRequests: ModelInputItem[][];
+    finalState: { usage: Record<string, number> };
+  };
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const requests: ModelRequest[] = [];
+  let sampling = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "end-turn-worker",
+    adapterVersion: "1",
+    modelId: "end-turn-model",
+    async *stream(request) {
+      requests.push(structuredClone(request));
+      sampling += 1;
+      if (sampling === 1) {
+        yield {
+          type: "usage",
+          inputTokens: 4,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 4,
+        };
+        yield { type: "completed", checkpoint: null, endTurn: false };
+        return;
+      }
+      yield { type: "output.delta", delta: "done" };
+      yield {
+        type: "usage",
+        inputTokens: 5,
+        cachedInputTokens: 0,
+        outputTokens: 1,
+        totalTokens: 6,
+      };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const worker = fixture.worker({ transport });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  assert.deepEqual(
+    requests.map((request) =>
+      request.input.items.filter(
+        (item) => item.type === "message" && item.role === "user",
+      ),
+    ),
+    reference.expectedRequests,
+  );
+  assert.deepEqual((await fixture.loadRun()).usage, {
+    inputTokens: reference.finalState.usage.inputTokens,
+    cachedInputTokens: 0,
+    outputTokens: reference.finalState.usage.outputTokens,
+    totalTokens: reference.finalState.usage.totalTokens,
+  });
+  assert.deepEqual(
+    (
+      await fixture.store.loadThreadModelState({
+        tenantId: actor().tenantId,
+        threadId: fixture.threadId,
+      })
+    )?.latestUsage,
+    { inputTokens: 5, cachedInputTokens: 0, outputTokens: 1, totalTokens: 6 },
+  );
+  assert.deepEqual(
+    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "done" },
+    ],
+  );
+  await worker.close();
+});
+
 test("executes Plan mode with server instructions and stores only the proposed Plan body", async (context) => {
   const fixture = await createFixture(
     context,
