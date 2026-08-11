@@ -361,18 +361,17 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 false,
               );
             }
+            const continuationCheckpoint =
+              completedCheckpoint ?? createdCheckpoint;
             if (
-              request.reconcileCheckpoint !== undefined ||
-              createdCheckpoint !== null ||
-              completedCheckpoint !== null
+              continuationCheckpoint !== null &&
+              (output.length > 0 || completedAssistantOutput.length > 0)
             ) {
               throw new AgentKernelError(
                 "model_end_turn_false_stored_response_unsupported",
                 false,
               );
             }
-            completedCheckpoint = null;
-            createdCheckpoint = null;
             retries = 0;
             const assistantItems = completedItems
               .filter(
@@ -398,6 +397,14 @@ export class CrewONAgentKernel implements AgentKernelPort {
               };
               return;
             }
+            if (continuationCheckpoint !== null) {
+              request = continueFromProviderCheckpoint(
+                request,
+                continuationCheckpoint,
+              );
+            }
+            completedCheckpoint = null;
+            createdCheckpoint = null;
             continue;
           }
           completedOutput = output;
@@ -521,6 +528,22 @@ export class CrewONAgentKernel implements AgentKernelPort {
       return;
     }
   }
+}
+
+function continueFromProviderCheckpoint(
+  request: ModelRequest,
+  checkpoint: ProviderCheckpoint,
+): ModelRequest {
+  return {
+    ...request,
+    input: {
+      strategy: "providerCheckpoint",
+      checkpoint: structuredClone(checkpoint),
+      items: request.input.items,
+      newHistoryStartIndex: request.input.items.length,
+    },
+    reconcileCheckpoint: undefined,
+  };
 }
 
 function appendCompletedItems(

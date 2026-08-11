@@ -193,7 +193,7 @@ test("matches AR-031 Provider end_turn=false empty continuation", async () => {
   });
 });
 
-test("fails closed on end_turn=false stored-response recovery", async () => {
+test("continues an empty end_turn=false stored response from its checkpoint", async () => {
   const checkpoint = {
     schemaVersion: "crewon.provider-checkpoint.v0",
     adapterName: "stored-end-turn",
@@ -201,14 +201,63 @@ test("fails closed on end_turn=false stored-response recovery", async () => {
     modelId: "stored-model",
     opaquePayload: { responseId: "resp-stored" },
   } as const;
-  let requests = 0;
+  const requests: import("./model-transport-port.ts").ModelRequest[] = [];
   const transport: ModelTransportPort = {
     adapterName: checkpoint.adapterName,
     adapterVersion: checkpoint.adapterVersion,
     modelId: checkpoint.modelId,
     supportsResponseRetrieve: true,
+    async *stream(request) {
+      requests.push(structuredClone(request));
+      if (requests.length === 1) {
+        yield { type: "response.created", checkpoint };
+        yield { type: "completed", checkpoint, endTurn: false };
+        return;
+      }
+      yield { type: "output.delta", delta: "done" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+
+  const events = await collect(
+    new CrewONAgentKernel({ transport }).runSegment(
+      segmentContract(),
+      new AbortController().signal,
+    ),
+  );
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[1]?.input, {
+    strategy: "providerCheckpoint",
+    checkpoint,
+    items: segmentContract().history,
+    newHistoryStartIndex: segmentContract().history.length,
+  });
+  assert.equal(requests[1]?.reconcileCheckpoint, undefined);
+  assert.deepEqual(events.at(-1)?.data, { output: "done" });
+  assert.equal(
+    events.filter((event) => event.type === "model.sampling.retry").length,
+    0,
+  );
+});
+
+test("fails closed on stored end_turn=false assistant output", async () => {
+  const checkpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "stored-output",
+    adapterVersion: "1",
+    modelId: "stored-model",
+    opaquePayload: { responseId: "resp-stored-output" },
+  } as const;
+  const transport: ModelTransportPort = {
+    adapterName: checkpoint.adapterName,
+    adapterVersion: checkpoint.adapterVersion,
+    modelId: checkpoint.modelId,
     async *stream() {
-      requests += 1;
+      yield { type: "output.delta", delta: "working" };
+      yield {
+        type: "output.item.completed",
+        item: { type: "message", role: "assistant", content: "working" },
+      };
       yield { type: "completed", checkpoint, endTurn: false };
     },
   };
@@ -225,7 +274,6 @@ test("fails closed on end_turn=false stored-response recovery", async () => {
       error.code === "model_end_turn_false_stored_response_unsupported" &&
       !error.retryable,
   );
-  assert.equal(requests, 1);
 });
 
 test("returns a durable boundary for end_turn=false assistant-only output", async () => {
@@ -266,7 +314,7 @@ test("returns a durable boundary for end_turn=false assistant-only output", asyn
   });
 });
 
-test("returns control at the Tool boundary without executing or resampling", async () => {
+test("returns a stored end_turn=false Tool boundary with its checkpoint", async () => {
   const requests: import("./model-transport-port.ts").ModelRequest[] = [];
   const checkpoint = {
     schemaVersion: "crewon.provider-checkpoint.v0",
@@ -288,7 +336,7 @@ test("returns control at the Tool boundary without executing or resampling", asy
         name: "fixture_reader",
         input: "{}",
       };
-      yield { type: "completed", checkpoint };
+      yield { type: "completed", checkpoint, endTurn: false };
     },
   };
   const definition = {

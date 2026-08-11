@@ -986,6 +986,67 @@ test("preserves the Provider end_turn=false continuation directive", async () =>
   );
 });
 
+test("posts an empty stored continuation against the previous response", async () => {
+  let capturedBody: Record<string, unknown> | undefined;
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+      storeResponses: true,
+    },
+    {
+      fetch: async (_input, init) => {
+        capturedBody = JSON.parse(String(init?.body)) as Record<
+          string,
+          unknown
+        >;
+        return responseStream([
+          {
+            type: "response.created",
+            sequence_number: 0,
+            response: { id: "resp-2" },
+          },
+          {
+            type: "response.completed",
+            sequence_number: 1,
+            response: {
+              id: "resp-2",
+              status: "completed",
+              output: [],
+              usage: { input_tokens: 1, output_tokens: 0, total_tokens: 1 },
+            },
+          },
+        ]);
+      },
+    },
+  );
+  const request = manualRequest();
+
+  await collect(
+    transport.stream(
+      {
+        ...request,
+        input: {
+          strategy: "providerCheckpoint",
+          checkpoint: directCheckpoint("resp-1"),
+          items: request.input.items,
+          newHistoryStartIndex: request.input.items.length,
+        },
+      },
+      signal(),
+    ),
+  );
+
+  assert.deepEqual(capturedBody, {
+    model: "provider-model",
+    stream: true,
+    store: true,
+    input: [],
+    tools: [],
+    previous_response_id: "resp-1",
+  });
+});
+
 test("defaults missing cached usage to zero and rejects cached input above total input", async () => {
   const compatible = createTransport([
     createdEvent(0),

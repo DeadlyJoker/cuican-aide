@@ -434,7 +434,7 @@ export function validateResponsesRequest(request: ModelRequest): void {
     if (
       !Number.isSafeInteger(input.newHistoryStartIndex) ||
       input.newHistoryStartIndex < 0 ||
-      input.newHistoryStartIndex >= input.items.length
+      input.newHistoryStartIndex > input.items.length
     ) {
       throw protocolError("responses_new_history_start_invalid");
     }
