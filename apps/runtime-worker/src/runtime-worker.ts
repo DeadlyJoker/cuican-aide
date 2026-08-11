@@ -129,9 +129,6 @@ export type RuntimeWorkerConfig = Readonly<{
   afterRunStarted?: (() => Promise<void>) | undefined;
   afterAttemptStarted?: (() => Promise<void>) | undefined;
   afterProviderResponseCheckpointed?: (() => Promise<void>) | undefined;
-  afterToolPrepared?:
-    | ((receipt: ToolExecutionReceiptState) => Promise<void>)
-    | undefined;
   afterToolDispatched?:
     | ((receipt: ToolExecutionReceiptState) => Promise<void>)
     | undefined;
@@ -209,9 +206,6 @@ export class RuntimeWorker {
   readonly #afterAttemptStarted: (() => Promise<void>) | undefined;
   readonly #afterProviderResponseCheckpointed:
     | (() => Promise<void>)
-    | undefined;
-  readonly #afterToolPrepared:
-    | ((receipt: ToolExecutionReceiptState) => Promise<void>)
     | undefined;
   readonly #afterToolDispatched:
     | ((receipt: ToolExecutionReceiptState) => Promise<void>)
@@ -390,7 +384,6 @@ export class RuntimeWorker {
     this.#afterAttemptStarted = config.afterAttemptStarted;
     this.#afterProviderResponseCheckpointed =
       config.afterProviderResponseCheckpointed;
-    this.#afterToolPrepared = config.afterToolPrepared;
     this.#afterToolDispatched = config.afterToolDispatched;
     this.#afterToolProviderResolved = config.afterToolProviderResolved;
     this.#afterToolReceiptCommitted = config.afterToolReceiptCommitted;
@@ -1676,7 +1669,6 @@ export class RuntimeWorker {
         },
         policy,
       );
-      await this.#afterToolPrepared?.(prepared.receipt);
       const toolAttemptResult =
         prepared.attempt ??
         (await this.#execution.beginToolRecovery(claim, prepared.receipt));

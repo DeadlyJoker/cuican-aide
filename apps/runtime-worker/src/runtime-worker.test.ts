@@ -44,10 +44,7 @@ import {
   GovernedContextBundle,
   type ContextCompactorPort,
 } from "@crewon/context";
-import {
-  createArtifactRecord,
-  type ToolExecutionReceiptState,
-} from "@crewon/domain";
+import { createArtifactRecord } from "@crewon/domain";
 import {
   InMemoryRunStore,
   PostgresDomainStore,
@@ -6890,45 +6887,21 @@ function registerRuntimeWorkerConformance(
           throw new Error("unexpected cancel");
         },
       };
-      const transport: ModelTransportPort = {
-        adapterName: "approval-replacement-adapter",
-        adapterVersion: "1",
-        modelId: "approval-replacement-model",
-        async *stream() {
-          yield {
-            type: "tool.call",
-            kind: "function",
-            callId: "approval-action-a",
-            name: "fixture_writer",
-            input: '{"value":"a"}',
-          };
-          yield {
-            type: "tool.call",
-            kind: "function",
-            callId: "approval-action-b",
-            name: "fixture_writer",
-            input: '{"value":"b"}',
-          };
-          yield { type: "completed", checkpoint: null };
-        },
-      };
-      let currentReceipt: ToolExecutionReceiptState | undefined;
+      const transport = successfulTransport();
       const crashed = fixture.worker({
         transport,
         toolRuntime,
         retryAfterMs: 0,
-        afterToolPrepared: async (receipt) => {
-          currentReceipt = receipt;
-          throw new Error("simulated_process_loss_after_prepare");
+        afterAttemptStarted: async () => {
+          throw new Error("simulated_process_loss_after_attempt");
         },
       });
       assert.deepEqual(await crashed.wake(), {
         kind: "retried",
         runId: fixture.runId,
-        code: "simulated_process_loss_after_prepare",
+        code: "simulated_process_loss_after_attempt",
       });
       await crashed.close();
-      assert.ok(currentReceipt !== undefined);
 
       const claim = await fixture.store.claimNextWorkItem({
         ownerId: "replacement-seed-worker",
@@ -6936,10 +6909,53 @@ function registerRuntimeWorkerConformance(
         leaseDurationMs: 10_000,
       });
       assert.ok(claim !== null);
+      const segmentId = "approval-replacement-segment";
+      for (const [sequence, callId, input] of [
+        [1, "approval-action-a", '{"value":"a"}'],
+        [2, "approval-action-b", '{"value":"b"}'],
+      ] as const) {
+        await fixture.execution.recordAgentEvent(claim, {
+          schemaVersion: "crewon.agent-event.v0",
+          runId: fixture.runId,
+          segmentId,
+          sequence,
+          type: "tool.requested",
+          data: {
+            callId,
+            kind: "function",
+            name: "fixture_writer",
+            input,
+          },
+        });
+      }
+      const current = await fixture.execution.beginToolExecution(
+        claim,
+        {
+          segmentId,
+          callId: "approval-action-a",
+          kind: "function",
+          name: "fixture_writer",
+          input: '{"value":"a"}',
+        },
+        policy,
+      );
+      const replayedCurrent = await fixture.execution.beginToolExecution(
+        claim,
+        {
+          segmentId,
+          callId: "approval-action-a",
+          kind: "function",
+          name: "fixture_writer",
+          input: '{"value":"a"}',
+        },
+        policy,
+      );
+      assert.equal(replayedCurrent.disposition, "existing");
+      assert.deepEqual(replayedCurrent.receipt, current.receipt);
       const replacementReceipt = await fixture.execution.beginToolExecution(
         claim,
         {
-          segmentId: currentReceipt.call.segmentId,
+          segmentId,
           callId: "approval-action-b",
           kind: "function",
           name: "fixture_writer",
@@ -6950,7 +6966,7 @@ function registerRuntimeWorkerConformance(
       assert.equal(replacementReceipt.receipt.status, "prepared");
       const required = await fixture.execution.requireToolApproval(
         claim,
-        currentReceipt,
+        replayedCurrent.receipt,
         { expiresAfterMs: null, retryAfterMs: 0 },
       );
       const oldApproval = required.approval;
@@ -7358,8 +7374,8 @@ async function createFixture(
       toolRuntime?: ToolRuntimePort;
       artifacts?: ToolOutputArtifactPort;
       afterRunStarted?: () => Promise<void>;
+      afterAttemptStarted?: RuntimeWorkerConfig["afterAttemptStarted"];
       afterProviderResponseCheckpointed?: () => Promise<void>;
-      afterToolPrepared?: RuntimeWorkerConfig["afterToolPrepared"];
       afterToolDispatched?: RuntimeWorkerConfig["afterToolDispatched"];
       afterToolProviderResolved?: RuntimeWorkerConfig["afterToolProviderResolved"];
       afterToolReceiptCommitted?: RuntimeWorkerConfig["afterToolReceiptCommitted"];
@@ -7405,9 +7421,9 @@ async function createFixture(
           autoCompactAtTokens: options.autoCompactAtTokens,
           modelContextWindowTokens: options.modelContextWindowTokens,
           afterRunStarted: options.afterRunStarted,
+          afterAttemptStarted: options.afterAttemptStarted,
           afterProviderResponseCheckpointed:
             options.afterProviderResponseCheckpointed,
-          afterToolPrepared: options.afterToolPrepared,
           afterToolDispatched: options.afterToolDispatched,
           afterToolProviderResolved: options.afterToolProviderResolved,
           afterToolReceiptCommitted: options.afterToolReceiptCommitted,
