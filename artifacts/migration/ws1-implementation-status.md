@@ -625,8 +625,9 @@ HTTP 创建 Run -> Worker 大 Tool 输出 -> 加密落盘 -> HTTP 读回完整�
   Adapter 完成后才能全面启用；Gateway 间 mTLS 单跳与双进程 `SIGKILL` reconcile/cancel 已有本机共享 PostgreSQL 证据，但尚未
   接真实 Native sidecar 和 production chaos，因此没有完整生产 HA；
   stdio MCP read-only 主路径已经接入真实独立进程。
-  Tool round 中混合 assistant text + Tool call 当前显式 fail closed；aborted Tool call/output/marker
-  已进入 SQLite Model History，并在关闭重开后的下一 Run 请求中通过 shared Rust/TS fixture。
+  Tool round 中 completed assistant text + Tool call 的 manual/stored `end_turn=false` 主路径已接入 durable continuation；只有
+  partial delta 缺少 completed assistant item 时继续 fail closed。aborted Tool call/output/marker 已进入 SQLite Model History，
+  并在关闭重开后的下一 Run 请求中通过 shared Rust/TS fixture。
 - transport 收到 AbortSignal 后会主动终止 blocked fetch/body；SQLite durable cancel watcher 已落地，但仍是 bounded
   polling，不代表 PostgreSQL LISTEN/NOTIFY、跨节点低延迟或进程级强杀均已验收。
 - `previous_response_id` 已通过 atomic Thread continuation 跨 SQLite 重开；显式 Run Step/Attempt history、attempt lease
