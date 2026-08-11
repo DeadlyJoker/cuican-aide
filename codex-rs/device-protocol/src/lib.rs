@@ -14,6 +14,29 @@ use serde_json::Map;
 use serde_json::Value;
 use thiserror::Error;
 
+mod workspace_list_command;
+mod workspace_list_event;
+mod workspace_list_result;
+
+pub use workspace_list_command::DeviceWorkspaceListCommand;
+pub use workspace_list_command::DeviceWorkspaceListLimits;
+pub use workspace_list_command::canonical_device_workspace_list_command_signing_payload;
+pub use workspace_list_command::parse_device_workspace_list_command;
+pub use workspace_list_command::verify_device_workspace_list_command_authorization;
+pub use workspace_list_event::DeviceWorkspaceListAck;
+pub use workspace_list_event::DeviceWorkspaceListAcceptedData;
+pub use workspace_list_event::DeviceWorkspaceListCanceledData;
+pub use workspace_list_event::DeviceWorkspaceListCompletedData;
+pub use workspace_list_event::DeviceWorkspaceListEvent;
+pub use workspace_list_event::DeviceWorkspaceListEventEnvelope;
+pub use workspace_list_event::DeviceWorkspaceListFailedData;
+pub use workspace_list_event::DeviceWorkspaceListUnknownOutcomeData;
+pub use workspace_list_event::parse_device_workspace_list_ack;
+pub use workspace_list_event::parse_device_workspace_list_event;
+pub use workspace_list_result::DeviceWorkspaceListEntry;
+pub use workspace_list_result::DeviceWorkspaceListEntryKind;
+pub use workspace_list_result::DeviceWorkspaceListResult;
+
 pub const DEVICE_PROTOCOL_VERSION: u64 = 1;
 pub const MAX_DEVICE_COMMAND_BYTES: usize = 128 * 1024;
 pub const MAX_DEVICE_EVENT_BYTES: usize = 64 * 1024;

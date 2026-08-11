@@ -12,26 +12,32 @@ use sha2::Digest;
 use sha2::Sha256;
 
 use super::canonical_device_command_signing_payload;
+use super::canonical_device_workspace_list_command_signing_payload;
 use super::parse_device_execution_ack;
 use super::parse_device_execution_cancel;
 use super::parse_device_execution_command;
 use super::parse_device_execution_event;
 use super::parse_device_gateway_welcome;
 use super::parse_device_hello;
+use super::parse_device_workspace_list_command;
 use super::verify_device_command_authorization;
+use super::verify_device_workspace_list_command_authorization;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Reference {
     schema_version: String,
     signing_payload_sha256: String,
+    workspace_signing_payload_sha256: String,
     valid: ValidReference,
     invalid: Vec<InvalidReference>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ValidReference {
     command: Value,
+    workspace_command: Value,
     hello: Value,
     welcome: Value,
     ack: Value,
@@ -68,6 +74,14 @@ fn matches_typescript_device_protocol_reference_and_fail_closed_codes() {
         )
         .expect("serialize shared command"),
         fixture.valid.command,
+    );
+    assert_eq!(
+        serde_json::to_value(
+            parse_device_workspace_list_command(fixture.valid.workspace_command.clone())
+                .expect("parse shared workspace command")
+        )
+        .expect("serialize shared workspace command"),
+        fixture.valid.workspace_command,
     );
     assert_eq!(
         serde_json::to_value(
@@ -134,6 +148,31 @@ fn matches_typescript_device_protocol_reference_and_fail_closed_codes() {
         payload,
     );
 
+    let workspace_command =
+        parse_device_workspace_list_command(fixture.valid.workspace_command.clone())
+            .expect("parse workspace command for canonical signing payload");
+    let workspace_payload =
+        canonical_device_workspace_list_command_signing_payload(&workspace_command)
+            .expect("canonicalize Device workspace command signing payload");
+    assert_eq!(
+        format!("sha256:{:x}", Sha256::digest(workspace_payload.as_bytes())),
+        fixture.workspace_signing_payload_sha256,
+    );
+    let mut changed_workspace_signature = workspace_command.clone();
+    changed_workspace_signature.authorization.signature = "B".repeat(86);
+    assert_eq!(
+        canonical_device_workspace_list_command_signing_payload(&changed_workspace_signature)
+            .expect("canonicalize changed workspace signature"),
+        workspace_payload,
+    );
+    let mut changed_workspace_binding = workspace_command;
+    changed_workspace_binding.runtime_binding_id = "runtime-binding-2".to_string();
+    assert_ne!(
+        canonical_device_workspace_list_command_signing_payload(&changed_workspace_binding)
+            .expect("canonicalize changed runtime binding"),
+        workspace_payload,
+    );
+
     let signing_key = SigningKey::from_bytes(&[7; 32]);
     let mut authorized = parse_device_execution_command(fixture.valid.command.clone())
         .expect("parse command for authorization verification");
@@ -171,11 +210,50 @@ fn matches_typescript_device_protocol_reference_and_fail_closed_codes() {
         "device_authorization_signature_invalid",
     );
 
+    let mut authorized_workspace =
+        parse_device_workspace_list_command(fixture.valid.workspace_command.clone())
+            .expect("parse workspace command for authorization verification");
+    authorized_workspace.authorization.signature = URL_SAFE_NO_PAD.encode(
+        signing_key
+            .sign(
+                canonical_device_workspace_list_command_signing_payload(&authorized_workspace)
+                    .expect("canonicalize workspace command before signing")
+                    .as_bytes(),
+            )
+            .to_bytes(),
+    );
+    verify_device_workspace_list_command_authorization(
+        &authorized_workspace,
+        "control-key-1",
+        &signing_key.verifying_key(),
+        now,
+        Duration::minutes(5),
+    )
+    .expect("verify signed workspace command");
+    authorized_workspace.lease_epoch += 1;
+    assert_eq!(
+        verify_device_workspace_list_command_authorization(
+            &authorized_workspace,
+            "control-key-1",
+            &signing_key.verifying_key(),
+            now,
+            Duration::minutes(5),
+        )
+        .expect_err("reject workspace command changed after signing")
+        .code,
+        "device_authorization_signature_invalid",
+    );
+
     for invalid in fixture.invalid {
         let code = match invalid.parser.as_str() {
             "command" => {
                 parse_device_execution_command(invalid.value)
                     .expect_err("reject shared command")
+                    .code
+            }
+            "workspaceCommand" => {
+                parse_device_workspace_list_command(invalid.value)
+                    .expect_err("reject shared workspace command")
                     .code
             }
             "event" => {
