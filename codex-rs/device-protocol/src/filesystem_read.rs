@@ -1,9 +1,12 @@
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
+use sha2::Digest as _;
+use sha2::Sha256;
 
 use crate::DeviceExecutionCommand;
 use crate::DeviceProtocolError;
+use crate::canonical_device_command_signing_payload;
 use crate::parse_device_execution_command;
 
 pub const DEVICE_FILESYSTEM_READ_CAPABILITY: &str = "workspace.read_file.v0";
@@ -17,6 +20,13 @@ pub struct DeviceFilesystemReadArguments {
     pub workspace_incarnation_id: String,
     pub relative_path_segments: Vec<String>,
     pub encoding: String,
+}
+
+pub fn canonical_device_filesystem_read_command_digest(
+    command: &DeviceFilesystemReadCommand,
+) -> Result<String, DeviceProtocolError> {
+    let payload = canonical_device_command_signing_payload(&command.command)?;
+    Ok(format!("sha256:{:x}", Sha256::digest(payload.as_bytes())))
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,6 +1,7 @@
 import { ContractValidationError } from "./contract-validation-error.ts";
 import {
   parseDeviceExecutionCommand,
+  canonicalDeviceCommandSigningPayload,
   type DeviceExecutionCommand,
 } from "./device-protocol.ts";
 
@@ -279,4 +280,12 @@ export function parseDeviceFilesystemReadCommand(
     }
   }
   return structuredClone(command) as DeviceFilesystemReadCommand;
+}
+
+export function canonicalDeviceFilesystemReadCommandDigest(
+  input: unknown,
+  digestUtf8: (content: string) => string,
+): string {
+  const command = parseDeviceFilesystemReadCommand(input);
+  return digestUtf8(canonicalDeviceCommandSigningPayload(command));
 }

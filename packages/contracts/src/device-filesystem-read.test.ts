@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  canonicalDeviceFilesystemReadCommandDigest,
   parseDeviceFilesystemReadCommand,
   parseDeviceFilesystemReadAck,
   parseDeviceFilesystemReadEvent,
@@ -31,6 +32,13 @@ test("parses the shared bounded filesystem read command", () => {
   assert.deepEqual(
     parseDeviceFilesystemReadCommand(fixture.valid.filesystemReadCommand),
     fixture.valid.filesystemReadCommand,
+  );
+  assert.equal(
+    canonicalDeviceFilesystemReadCommandDigest(
+      fixture.valid.filesystemReadCommand,
+      digestUtf8,
+    ),
+    (fixture.valid.filesystemReadEvents[0] as any).commandDigest,
   );
 });
 

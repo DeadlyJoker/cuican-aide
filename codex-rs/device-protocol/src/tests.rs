@@ -12,6 +12,7 @@ use sha2::Digest;
 use sha2::Sha256;
 
 use super::canonical_device_command_signing_payload;
+use super::canonical_device_filesystem_read_command_digest;
 use super::canonical_device_workspace_list_command_signing_payload;
 use super::parse_device_execution_ack;
 use super::parse_device_execution_cancel;
@@ -80,6 +81,14 @@ fn matches_typescript_device_protocol_reference_and_fail_closed_codes() {
         )
         .expect("serialize shared filesystem read command"),
         fixture.valid.filesystem_read_command,
+    );
+    let read_command =
+        parse_device_filesystem_read_command(fixture.valid.filesystem_read_command.clone())
+            .expect("parse filesystem read command for digest");
+    assert_eq!(
+        canonical_device_filesystem_read_command_digest(&read_command)
+            .expect("digest filesystem read command"),
+        fixture.valid.filesystem_read_events[0]["commandDigest"],
     );
     for event in &fixture.valid.filesystem_read_events {
         assert_eq!(

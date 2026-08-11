@@ -25,6 +25,7 @@ pub use filesystem_read::DeviceFilesystemReadArguments;
 pub use filesystem_read::DeviceFilesystemReadCommand;
 pub use filesystem_read::MAX_DEVICE_FILESYSTEM_READ_BYTES;
 pub use filesystem_read::MAX_DEVICE_FILESYSTEM_READ_TIMEOUT_MS;
+pub use filesystem_read::canonical_device_filesystem_read_command_digest;
 pub use filesystem_read::parse_device_filesystem_read_command;
 pub use filesystem_read_event::DeviceFilesystemReadAcceptedData;
 pub use filesystem_read_event::DeviceFilesystemReadAck;
