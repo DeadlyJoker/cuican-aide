@@ -118,6 +118,52 @@ Codex worktree，不以主目录的 dirty state 作为通过依据。
 `just test`。隔离 worktree 初始/最终均 clean，`git diff --check` 通过，`pnpm install --frozen-lockfile` 前后 lockfile SHA-256
 均为 `934cc8f3ccf553b7e5f890818df3a42827e2d78de29a3380f50f3521f0298fa5`。
 
+## AR-031、Approval recovery 与 Native read foundation
+
+本节记录后续三个独立 Codex worktree 的最小可审阅纵切，以及它们合入真实 dirty 主工作树后的交叉验证。它们都直接落在现有
+`codex/agent-runtime-migration-20260811` 分支，没有创建新的产品项目或复制一套实现。
+
+- AR-031 narrow parity：`86c815345` 让 Responses decoder 解析可选 boolean `end_turn`，并让 TS Kernel 在
+  `storeResponses=false`、completed response 无 output/tool/checkpoint 且 `endTurn=false` 时，在同一 Turn/Segment 继续第二次 sample。
+  首次 usage 保留在 RunState 累计 authority 中，第二个 response 才提供 terminal output；这不是 sampling retry。为避免循环 retrieve
+  同一个 stored response，只要 request/response/completed 带 checkpoint，或第一段出现 output/tool item，就分别以
+  `model_end_turn_false_stored_response_unsupported` / `model_end_turn_false_output_unsupported` fail closed。迁移矩阵因此把 AR-031
+  标记为 `PARTIAL`：empty/manual 子场景已对齐，stored checkpoint chain 与 output/tool 分支仍未完成。
+- Tool Approval recovery/adoption：`983ebfc07`、`ff5041a3e`、`40cd02a4c` 只在 Worker 恢复/接管
+  `waitingApproval` 时寻找同一 Run/Work Item 已有 durable prepared receipt。发现 canonical ActionIntent 已变化后，调用既有
+  Application/Store replacement transaction，原子 supersede 旧 approval、安装新 required approval、追加 Event/Outbox 并继续 hold
+  Work Item；Provider/Device side effect 保持 0。相同 action 稳定 replay，不创建第三个 approval。正常顺序 Worker 路径不会制造
+  replacement candidate，本纵切也没有增加公共 Control API。
+- `workspace.read_file.v0` durable foundation：`bc9cefa6a..cf121f3b3` 增加独立 strict command/event/ACK contract 和
+  SQLite journal authority。accepted 固定 sequence 1，completed/failed/canceled/unknownOutcome 固定 sequence 2，ACK cumulative；事件绑定
+  execution、workspace/incarnation、connection epoch、receipt 和 canonical signed-command SHA-256 digest，completed content digest 由
+  journal 重算。TS parser 通过注入同步 digest 函数保持 browser-neutral，shared fixture 冻结 TS/Rust wire 与时间格式。
+- journal schema v3 对 command/event/ACK fingerprint 与 command digest 强制完整 `sha256:` + 64 位 lowercase hex CHECK；启动 authority
+  复核 columns、FK、index table/SQL 与完整 CHECK 形状。真实 populated v2→v3 migration test 保留 command、accepted、terminal 与 ACK head。
+  execution GET、bounded unacknowledged list 都在单一 read transaction 中；分页按 execution ID byte order、`limit+1` cursor 且严格限制
+  `1..=100`。backward ACK、早于 event/prior ACK 的时间、same-sequence identity drift 和冗余 `acknowledged_at` 列漂移均 fail closed。
+- 这仍是未广告、未路由的基础设施：Device Hello、Native dispatcher/runtime、Gateway admission 和 Runtime Worker 都没有暴露
+  `workspace.read_file.v0`。下一纵切必须单独接 dispatcher/runtime/Gateway，并继续维持 stable handle、epoch fence、path-free wire 与
+  bounded output 不变量；不能把 journal foundation 记成用户可用能力。
+
+合入主工作树后，6 个 TypeScript package typecheck 全部通过；测试结果如下：
+
+| 包 | Tests | Pass | Fail | Skipped |
+| --- | ---: | ---: | ---: | ---: |
+| Contracts | 73 | 73 | 0 | 0 |
+| Agent Kernel | 22 | 22 | 0 | 0 |
+| Agent Responses | 34 | 34 | 0 | 0 |
+| Application | 116 | 116 | 0 | 0 |
+| Store | 313 | 267 | 0 | 46 |
+| Runtime Worker | 179 | 178 | 0 | 1 |
+| **合计** | **737** | **690** | **0** | **47** |
+
+47 个 skip 全部来自未配置 `CREWON_TEST_POSTGRES_URL` 的条件测试，未计为通过。Rust focused 验证为
+`crewon-device-protocol` 3 / 3、`crewon-device-journal` 20 / 20、`crewon-core provider_end_turn` 1 / 1；后者另有
+2759 个非目标测试被过滤。三个独立 worktree 各自通过对应 typecheck/test/scoped fix/fmt，合入后
+`git diff --check 1cea8fb76..cf121f3b3` 通过。未运行仓库级完整 `just test`，也没有把缺少本地 PostgreSQL、Windows real-host 或发布签名凭据的
+Gate 报告为通过。
+
 ## 最终 macOS packaged smoke
 
 - Sidecar staging 使用官方 redistributable Node `v24.18.1`：
