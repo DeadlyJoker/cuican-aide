@@ -1,25 +1,32 @@
 use rusqlite::Connection;
 use rusqlite::OpenFlags;
 use rusqlite::OptionalExtension;
-use rusqlite::TransactionBehavior;
 use tauri::AppHandle;
 use tauri::Manager;
-use tauri_plugin_shell::process::CommandChild;
 
 use super::activate_runtime_release;
 use super::environment::control_environment;
+use super::environment::worker_bootstrap_input;
 use super::environment::worker_environment;
-use super::monitor_process;
+use super::environment::ControlAdmissionMode;
+use super::environment::WorkspaceWorkerEnvironment;
 use super::prepare_paths;
+use super::process::prepare_process_monitor;
 use super::process::spawn_node;
+use super::process::spawn_node_with_input;
+use super::process::terminate_managed_children;
 use super::process::wait_for_ready;
+use super::process::ManagedChild as CommandChild;
+use super::process::PreparedProcessMonitor;
 use super::process::ProcessEvents;
 use super::process::ProcessRole;
 use super::provider_credentials;
+use super::provider_ready_signal;
 use super::ControlRuntimeStartError;
 use super::ControlRuntimeSupervisor;
 use super::RuntimePaths;
 use super::READY_TIMEOUT;
+use crate::workspace_native::RuntimeRouteProjection;
 
 const ACTIVE_RUN_SQL: &str = "SELECT 1 FROM run_snapshots
     WHERE json_extract(state_json, '$.status') IS NULL
@@ -27,20 +34,47 @@ const ACTIVE_RUN_SQL: &str = "SELECT 1 FROM run_snapshots
           NOT IN ('completed', 'failed', 'canceled')
     LIMIT 1";
 
-#[derive(Clone, Copy)]
-struct RuntimeGeneration {
-    control: u64,
-    worker: u64,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct RuntimeGeneration {
+    pub(super) control: u64,
+    pub(super) device: u64,
+    pub(super) gateway: u64,
+    pub(super) worker: u64,
 }
 
-struct RuntimeChildren {
+pub(super) struct RuntimeChildren {
+    pub(super) control: CommandChild,
+    pub(super) control_events: ProcessEvents,
+    pub(super) worker: CommandChild,
+    pub(super) worker_events: ProcessEvents,
+}
+
+pub(super) struct StartedWorker {
+    pub(super) child: CommandChild,
+    pub(super) events: ProcessEvents,
+    pub(super) workspace_worker: Option<super::workspace::WorkspaceWorkerRoute>,
+}
+
+pub(super) struct StartedControl {
+    pub(super) child: CommandChild,
+    pub(super) events: ProcessEvents,
+}
+
+struct DetachedRuntime {
     control: CommandChild,
-    control_events: ProcessEvents,
     worker: CommandChild,
-    worker_events: ProcessEvents,
+    next_generation: RuntimeGeneration,
+    expected_terminations: Vec<ProcessRole>,
 }
 
-enum StopRuntimeError {
+pub(super) struct PreparedRuntimeSupervision {
+    control: CommandChild,
+    control_monitor: PreparedProcessMonitor,
+    worker: CommandChild,
+    worker_monitor: PreparedProcessMonitor,
+}
+
+pub(super) enum StopRuntimeError {
     BeforeStop(ControlRuntimeStartError),
     AfterStop(ControlRuntimeStartError, RuntimeGeneration),
 }
@@ -68,6 +102,7 @@ pub(crate) fn replace_provider_runtime(
         .lock()
         .map_err(|_| ControlRuntimeStartError::RuntimeUnavailable)?;
     let paths = prepare_paths(app)?;
+    let runtime_route = supervisor.runtime_route()?;
 
     let generation = match stop_idle_runtime(&supervisor, &paths) {
         Ok(generation) => generation,
@@ -77,15 +112,32 @@ pub(crate) fn replace_provider_runtime(
             return Err(ControlRuntimeStartError::RuntimeRollbackFailed);
         }
         Err(StopRuntimeError::AfterStop(error, generation)) => {
-            recover_runtime(app, &supervisor, &paths, previous, generation)?;
+            recover_runtime(
+                app,
+                &supervisor,
+                &paths,
+                previous,
+                &runtime_route,
+                generation,
+            )?;
             return Err(error);
         }
     };
 
-    if let Err(error) =
-        activate_runtime_release(app, &paths, candidate.map(|runtime| &runtime.binding))
-    {
-        recover_runtime(app, &supervisor, &paths, previous, generation)?;
+    if let Err(error) = activate_runtime_release(
+        app,
+        &paths,
+        candidate.map(|runtime| &runtime.binding),
+        &runtime_route,
+    ) {
+        recover_runtime(
+            app,
+            &supervisor,
+            &paths,
+            previous,
+            &runtime_route,
+            generation,
+        )?;
         return Err(error);
     }
 
@@ -96,55 +148,70 @@ pub(crate) fn replace_provider_runtime(
             Err(ControlRuntimeStartError::RuntimeRollbackFailed)
         }
         Err((error, recovery_generation)) => {
-            recover_runtime(app, &supervisor, &paths, previous, recovery_generation)?;
+            recover_runtime(
+                app,
+                &supervisor,
+                &paths,
+                previous,
+                &runtime_route,
+                recovery_generation,
+            )?;
             Err(error)
         }
     }
 }
 
-fn stop_idle_runtime(
+pub(super) fn stop_idle_runtime(
     supervisor: &ControlRuntimeSupervisor,
     paths: &RuntimePaths,
 ) -> Result<RuntimeGeneration, StopRuntimeError> {
-    let mut database = Connection::open_with_flags(
+    let database = Connection::open_with_flags(
         &paths.control_database,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|_| {
         StopRuntimeError::BeforeStop(ControlRuntimeStartError::RuntimeDatabaseUnavailable)
     })?;
-    let transaction = database
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|_| {
-            StopRuntimeError::BeforeStop(ControlRuntimeStartError::RuntimeDatabaseUnavailable)
-        })?;
-    if has_active_run(&transaction).map_err(StopRuntimeError::BeforeStop)? {
+    database.execute_batch("BEGIN IMMEDIATE").map_err(|_| {
+        StopRuntimeError::BeforeStop(ControlRuntimeStartError::RuntimeDatabaseUnavailable)
+    })?;
+    if has_active_run(&database).map_err(StopRuntimeError::BeforeStop)? {
         return Err(StopRuntimeError::BeforeStop(
             ControlRuntimeStartError::ActiveRun,
         ));
     }
 
     // BEGIN IMMEDIATE blocks every admission write before Control is detached.
-    // Once both children are killed, commit releases the DB for release
-    // activation while no process capable of accepting a new Run is alive.
-    let (control, worker, generation) =
-        detach_runtime(supervisor).map_err(StopRuntimeError::BeforeStop)?;
-    let control_killed = control.kill().is_ok();
-    let worker_killed = worker.kill().is_ok();
-    if !control_killed || !worker_killed {
+    // Only guardian proof that both process trees are clean allows this fence
+    // to commit and release admission for the replacement runtime.
+    let detached = detach_runtime(supervisor).map_err(StopRuntimeError::BeforeStop)?;
+    let DetachedRuntime {
+        control,
+        worker,
+        next_generation,
+        expected_terminations,
+    } = detached;
+    let processes = vec![control, worker];
+    if !terminate_managed_children(&processes, super::TERMINATION_TIMEOUT) {
         supervisor.shutdown();
+        supervisor.retain_failed_admission_fence_with_processes(
+            database,
+            expected_terminations,
+            processes,
+        );
         return Err(StopRuntimeError::AfterStop(
             ControlRuntimeStartError::RuntimeRollbackFailed,
-            generation,
+            next_generation,
         ));
     }
-    if transaction.commit().is_err() {
+    supervisor.terminations.finish(&expected_terminations);
+    if database.execute_batch("COMMIT").is_err() {
         return Err(StopRuntimeError::AfterStop(
             ControlRuntimeStartError::RuntimeDatabaseUnavailable,
-            generation,
+            next_generation,
         ));
     }
-    Ok(generation)
+    Ok(next_generation)
 }
 
 fn has_active_run(database: &Connection) -> Result<bool, ControlRuntimeStartError> {
@@ -169,7 +236,7 @@ fn has_active_run(database: &Connection) -> Result<bool, ControlRuntimeStartErro
 
 fn detach_runtime(
     supervisor: &ControlRuntimeSupervisor,
-) -> Result<(CommandChild, CommandChild, RuntimeGeneration), ControlRuntimeStartError> {
+) -> Result<DetachedRuntime, ControlRuntimeStartError> {
     let mut lifecycle = supervisor
         .lifecycle
         .lock()
@@ -177,16 +244,14 @@ fn detach_runtime(
     if !lifecycle.available || lifecycle.control_api.is_none() || lifecycle.worker.is_none() {
         return Err(ControlRuntimeStartError::RuntimeUnavailable);
     }
-    let generation = RuntimeGeneration {
-        control: lifecycle
-            .control_generation
-            .checked_add(1)
-            .ok_or(ControlRuntimeStartError::RuntimeUnavailable)?,
-        worker: lifecycle
-            .worker_generation
-            .checked_add(1)
-            .ok_or(ControlRuntimeStartError::RuntimeUnavailable)?,
-    };
+    let expected_terminations = vec![
+        ProcessRole::ControlApi(lifecycle.control_generation),
+        ProcessRole::Worker(lifecycle.worker_generation),
+    ];
+    let next_generation = next_provider_generation(&lifecycle)?;
+    supervisor
+        .terminations
+        .begin(expected_terminations.clone())?;
     let control = lifecycle
         .control_api
         .take()
@@ -195,187 +260,43 @@ fn detach_runtime(
         .worker
         .take()
         .ok_or(ControlRuntimeStartError::RuntimeUnavailable)?;
-    lifecycle.control_generation = generation.control;
-    lifecycle.worker_generation = generation.worker;
-    Ok((control, worker, generation))
-}
-
-fn start_and_supervise_runtime(
-    app: &AppHandle,
-    supervisor: &ControlRuntimeSupervisor,
-    paths: &RuntimePaths,
-    provider: Option<&provider_credentials::ActiveProviderRuntime>,
-    generation: RuntimeGeneration,
-) -> Result<(), (ControlRuntimeStartError, RuntimeGeneration)> {
-    let children = start_runtime(app, supervisor, paths, provider, generation)
-        .map_err(|error| (error, generation))?;
-    let (control_events, worker_events) = install_runtime(supervisor, children, generation)
-        .map_err(|children| {
-            let _ = children.control.kill();
-            let _ = children.worker.kill();
-            (ControlRuntimeStartError::RuntimeUnavailable, generation)
-        })?;
-
-    if monitor_process(
-        app.clone(),
-        control_events,
-        "control-api-reload",
-        ProcessRole::ControlApi(generation.control),
-    )
-    .is_err()
-    {
-        return stop_candidate_runtime(supervisor);
-    }
-    if monitor_process(
-        app.clone(),
-        worker_events,
-        "runtime-worker-reload",
-        ProcessRole::Worker(generation.worker),
-    )
-    .is_err()
-    {
-        return stop_candidate_runtime(supervisor);
-    }
-    Ok(())
-}
-
-fn start_runtime(
-    app: &AppHandle,
-    supervisor: &ControlRuntimeSupervisor,
-    paths: &RuntimePaths,
-    provider: Option<&provider_credentials::ActiveProviderRuntime>,
-    generation: RuntimeGeneration,
-) -> Result<RuntimeChildren, ControlRuntimeStartError> {
-    let session = supervisor
-        .session
-        .as_ref()
-        .ok_or(ControlRuntimeStartError::RuntimeUnavailable)?;
-    let (worker_events, worker) = spawn_node(
-        app,
-        &paths.worker_bundle,
-        &paths.root,
-        worker_environment(paths, provider),
-        if generation.worker.is_multiple_of(2) {
-            "crewon-runtime-worker-events-even"
-        } else {
-            "crewon-runtime-worker-events-odd"
-        },
-    )?;
-    if wait_for_ready(
-        &worker_events,
-        b"CrewON Runtime Worker started",
-        READY_TIMEOUT,
-    )
-    .is_err()
-    {
-        let _ = worker.kill();
-        return Err(ControlRuntimeStartError::WorkerNotReady);
-    }
-
-    let control = spawn_node(
-        app,
-        &paths.control_api_bundle,
-        &paths.root,
-        control_environment(paths, session),
-        if generation.control.is_multiple_of(2) {
-            "crewon-control-api-events-even"
-        } else {
-            "crewon-control-api-events-odd"
-        },
-    );
-    let (control_events, control) = match control {
-        Ok(started) => started,
-        Err(error) => {
-            let _ = worker.kill();
-            return Err(error);
-        }
-    };
-    if wait_for_ready(
-        &control_events,
-        b"CrewON Control API listening on 127.0.0.1:3210",
-        READY_TIMEOUT,
-    )
-    .is_err()
-    {
-        let _ = control.kill();
-        let _ = worker.kill();
-        return Err(ControlRuntimeStartError::ControlApiNotReady);
-    }
-    Ok(RuntimeChildren {
+    lifecycle.control_generation = next_generation.control;
+    lifecycle.worker_generation = next_generation.worker;
+    Ok(DetachedRuntime {
         control,
-        control_events,
         worker,
-        worker_events,
+        next_generation,
+        expected_terminations,
     })
 }
 
-fn install_runtime(
-    supervisor: &ControlRuntimeSupervisor,
-    children: RuntimeChildren,
-    generation: RuntimeGeneration,
-) -> Result<(ProcessEvents, ProcessEvents), RuntimeChildren> {
-    let Ok(mut lifecycle) = supervisor.lifecycle.lock() else {
-        return Err(children);
-    };
-    if !lifecycle.available
-        || lifecycle.control_generation != generation.control
-        || lifecycle.worker_generation != generation.worker
-        || lifecycle.control_api.is_some()
-        || lifecycle.worker.is_some()
-    {
-        return Err(children);
-    }
-    let RuntimeChildren {
-        control,
-        control_events,
-        worker,
-        worker_events,
-    } = children;
-    lifecycle.control_api = Some(control);
-    lifecycle.worker = Some(worker);
-    Ok((control_events, worker_events))
+fn next_provider_generation(
+    lifecycle: &super::RuntimeLifecycle,
+) -> Result<RuntimeGeneration, ControlRuntimeStartError> {
+    Ok(RuntimeGeneration {
+        control: lifecycle
+            .control_generation
+            .checked_add(1)
+            .ok_or(ControlRuntimeStartError::RuntimeUnavailable)?,
+        device: lifecycle.device_generation,
+        gateway: lifecycle.gateway_generation,
+        worker: lifecycle
+            .worker_generation
+            .checked_add(1)
+            .ok_or(ControlRuntimeStartError::RuntimeUnavailable)?,
+    })
 }
 
-fn stop_candidate_runtime(
-    supervisor: &ControlRuntimeSupervisor,
-) -> Result<(), (ControlRuntimeStartError, RuntimeGeneration)> {
-    let (control, worker, generation) = detach_runtime(supervisor).map_err(|_| {
-        supervisor.shutdown();
-        (
-            ControlRuntimeStartError::RuntimeRollbackFailed,
-            RuntimeGeneration {
-                control: 0,
-                worker: 0,
-            },
-        )
-    })?;
-    let control_killed = control.kill().is_ok();
-    let worker_killed = worker.kill().is_ok();
-    if !control_killed || !worker_killed {
-        supervisor.shutdown();
-        return Err((ControlRuntimeStartError::RuntimeRollbackFailed, generation));
-    }
-    Err((
-        ControlRuntimeStartError::ProcessEventUnavailable,
-        generation,
-    ))
+#[cfg(test)]
+pub(super) fn next_provider_generation_for_test(
+    lifecycle: &super::RuntimeLifecycle,
+) -> Result<RuntimeGeneration, ControlRuntimeStartError> {
+    next_provider_generation(lifecycle)
 }
 
-fn recover_runtime(
-    app: &AppHandle,
-    supervisor: &ControlRuntimeSupervisor,
-    paths: &RuntimePaths,
-    previous: Option<&provider_credentials::ActiveProviderRuntime>,
-    generation: RuntimeGeneration,
-) -> Result<(), ControlRuntimeStartError> {
-    if activate_runtime_release(app, paths, previous.map(|runtime| &runtime.binding)).is_err()
-        || start_and_supervise_runtime(app, supervisor, paths, previous, generation).is_err()
-    {
-        supervisor.shutdown();
-        return Err(ControlRuntimeStartError::RuntimeRollbackFailed);
-    }
-    Ok(())
-}
+include!("control_runtime_reload_lifecycle.rs");
+
+include!("control_runtime_reload_start.rs");
 
 #[cfg(test)]
 pub(super) fn active_run_sql() -> &'static str {
