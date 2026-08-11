@@ -324,7 +324,7 @@ function failureResponse(
   expectedId: string | null,
   code: string,
 ): Readonly<Record<string, unknown>> {
-  const response = requireObject(value, code);
+  const response = value === undefined ? {} : requireObject(value, code);
   if (response.id !== undefined) {
     const responseId = boundedNonEmpty(
       response.id,
