@@ -209,6 +209,7 @@ export class AutomationApplicationService {
     const context = await this.#storeCall(() =>
       this.#store.loadAutomationInvocationContext({
         tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
         automationId: command.automationId,
       }),
     );
@@ -442,7 +443,11 @@ export class AutomationApplicationService {
     automationId: string,
   ): Promise<AutomationDefinitionRecord> {
     const record = await this.#storeCall(() =>
-      this.#store.loadAutomation({ tenantId: actor.tenantId, automationId }),
+      this.#store.loadAutomation({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        automationId,
+      }),
     );
     if (record === null || record.definition.spaceId !== actor.spaceId) {
       throw new ApplicationError("notFound", "automation_not_found");
@@ -465,6 +470,7 @@ export class AutomationApplicationService {
     actor: ActorContext,
     record: AutomationDefinitionRecord,
   ): void {
+    this.#hideCrossSpaceRecord(actor, record);
     try {
       validateAutomationDefinition(record.definition);
     } catch (error) {
@@ -488,6 +494,7 @@ export class AutomationApplicationService {
     command: CreateAutomationCommand,
     result: AutomationCreateResult,
   ): void {
+    this.#hideCrossSpaceRecord(actor, result.record);
     this.#validateRecord(actor, result.record);
     const definition = result.record.definition;
     if (
@@ -512,6 +519,7 @@ export class AutomationApplicationService {
     command: RunAutomationNowCommand,
     context: AutomationInvocationContext,
   ): void {
+    this.#hideCrossSpaceRecord(actor, context.record);
     this.#validateRecord(actor, context.record);
     const definition = context.record.definition;
     if (definition.automationId !== command.automationId) {
@@ -707,6 +715,7 @@ export class AutomationApplicationService {
       record: AutomationDefinitionRecord;
     }>,
   ): void {
+    this.#hideCrossSpaceRecord(actor, result.record);
     this.#validateRecord(actor, result.record);
     const definition = result.record.definition;
     const instruction = renderAutomationInstruction(definition);
@@ -825,6 +834,21 @@ export class AutomationApplicationService {
     }
     validateAutomationRoute(route, agentVersionId);
     return route;
+  }
+
+  #hideCrossSpaceRecord(
+    actor: ActorContext,
+    record: AutomationDefinitionRecord,
+  ): void {
+    const definition = record?.definition;
+    if (
+      definition !== null &&
+      typeof definition === "object" &&
+      definition.tenantId === actor.tenantId &&
+      definition.spaceId !== actor.spaceId
+    ) {
+      throw new ApplicationError("notFound", "automation_not_found");
+    }
   }
 
   async #authorizeAutomation(

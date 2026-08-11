@@ -146,6 +146,42 @@ test("gets and lists only validated tenant-space Automation definitions", async 
   );
 });
 
+test("hides same-tenant cross-space create and invocation records before validation", async () => {
+  const crossSpace = recordWithSpace("space-2");
+
+  const createStore = new FakeAutomationStore([]);
+  createStore.createReceipt = {
+    disposition: "replayed",
+    record: crossSpace,
+  };
+  await assert.rejects(
+    createService(createStore, []).createAutomation(actor, createCommand()),
+    applicationError("notFound", "automation_not_found"),
+  );
+
+  const contextStore = new FakeAutomationStore([]);
+  contextStore.context = { ...invocationContext(), record: crossSpace };
+  await assert.rejects(
+    createService(contextStore, []).runAutomationNow(actor, runCommand()),
+    applicationError("notFound", "automation_not_found"),
+  );
+
+  const receiptStore = new FakeAutomationStore([]);
+  receiptStore.context = invocationContext();
+  const receiptService = createService(receiptStore, []);
+  const committed = await receiptService.runAutomationNow(actor, runCommand());
+  receiptStore.invocationReceipt = {
+    ...committed,
+    disposition: "replayed",
+    record: crossSpace,
+  };
+  receiptStore.context = null;
+  await assert.rejects(
+    receiptService.runAutomationNow(actor, runCommand()),
+    applicationError("notFound", "automation_not_found"),
+  );
+});
+
 test("builds one provenance-bound ordinary Turn in the compound commit", async () => {
   const events: string[] = [];
   const store = new FakeAutomationStore(events);

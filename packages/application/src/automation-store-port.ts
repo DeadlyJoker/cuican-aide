@@ -106,6 +106,7 @@ export type AutomationDefinitionRecord = Readonly<{
 
 export type AutomationLocator = Readonly<{
   tenantId: string;
+  spaceId: string;
   automationId: string;
 }>;
 
