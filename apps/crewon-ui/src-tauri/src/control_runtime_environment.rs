@@ -226,12 +226,18 @@ fn apply_runtime_route(environment: &mut ChildEnvironment, route: &RuntimeRouteP
         route.policy_snapshot_id(),
     );
     match route.workspace_binding_id() {
-        Some(workspace_binding_id) => set_env(
-            environment,
-            "CREWON_WORKSPACE_BINDING_ID",
-            workspace_binding_id,
-        ),
-        None => remove_env(environment, "CREWON_WORKSPACE_BINDING_ID"),
+        Some(workspace_binding_id) => {
+            set_env(
+                environment,
+                "CREWON_WORKSPACE_BINDING_ID",
+                workspace_binding_id,
+            );
+            set_env(environment, "CREWON_NATIVE_WORKSPACE_READ_ENABLED", "1");
+        }
+        None => {
+            remove_env(environment, "CREWON_WORKSPACE_BINDING_ID");
+            remove_env(environment, "CREWON_NATIVE_WORKSPACE_READ_ENABLED");
+        }
     }
 }
 

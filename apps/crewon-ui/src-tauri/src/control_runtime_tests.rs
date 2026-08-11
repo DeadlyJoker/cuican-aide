@@ -212,6 +212,7 @@ fn provider_changes_preserve_the_workspace_release_and_worker_route() {
                 let key = variable.key.to_str()?;
                 [
                     "CREWON_AGENT_VERSION_ID",
+                    "CREWON_NATIVE_WORKSPACE_READ_ENABLED",
                     "CREWON_POLICY_SNAPSHOT_ID",
                     "CREWON_RUNTIME_GENERATION",
                     "CREWON_WORKSPACE_BINDING_ID",
@@ -231,6 +232,10 @@ fn provider_changes_preserve_the_workspace_release_and_worker_route() {
                 (
                     "CREWON_AGENT_VERSION_ID".to_string(),
                     agent_version_id.clone(),
+                ),
+                (
+                    "CREWON_NATIVE_WORKSPACE_READ_ENABLED".to_string(),
+                    "1".to_string(),
                 ),
                 (
                     "CREWON_POLICY_SNAPSHOT_ID".to_string(),
@@ -254,6 +259,22 @@ fn provider_changes_preserve_the_workspace_release_and_worker_route() {
                 ChildEnvironmentValue::Plain(value) if value == agent_version_id.as_str()
             )
     }));
+}
+
+#[test]
+fn standalone_release_and_worker_omit_native_workspace_read_enablement() {
+    let directory = tempdir().expect("temporary directory");
+    let paths = runtime_paths(directory.path());
+    let route = RuntimeRouteProjection::standalone();
+    let release = release_environment(&paths, None, &route);
+    let worker = worker_environment(&paths, None, &route);
+
+    for environment in [&release, &worker] {
+        assert!(environment.iter().all(|variable| {
+            variable.key != "CREWON_NATIVE_WORKSPACE_READ_ENABLED"
+                && variable.key != "CREWON_WORKSPACE_BINDING_ID"
+        }));
+    }
 }
 
 #[test]
