@@ -1,5 +1,53 @@
 // This file is generated from openapi/control-api.v1.json. Do not edit.
 export interface paths {
+  "/api/v1/automations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listAutomations"];
+    put?: never;
+    post: operations["createAutomation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/automations/{automationId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getAutomation"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/automations/{automationId}:run-now": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["runAutomationNow"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/threads": {
     parameters: {
       query?: never;
@@ -536,6 +584,61 @@ export interface components {
     HealthResponse: {
       /** @constant */
       status: "ok";
+    };
+    CreateAutomationRequest: {
+      threadId: string;
+      expectedThreadRevision: number;
+      title: string;
+      prompt: string;
+      agentVersionId: string | null;
+    };
+    RunAutomationNowRequest: {
+      /** @constant */
+      expectedAutomationRevision: 1;
+      expectedThreadRevision: number;
+    };
+    /** @description Redacted immutable manual-only Automation definition. Tenant, actor, schedules, digests and invocation routes are private. */
+    AutomationView: {
+      automationId: string;
+      threadId: string;
+      title: string;
+      prompt: string;
+      agentVersionId: string;
+      /** @constant */
+      executionMode: "manualOnly";
+      /** @constant */
+      automaticScheduling: false;
+      /** @constant */
+      revision: 1;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    AutomationMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      automation: components["schemas"]["AutomationView"];
+    };
+    GetAutomationResponse: {
+      automation: components["schemas"]["AutomationView"];
+    };
+    ListAutomationsResponse: {
+      data: components["schemas"]["AutomationView"][];
+      nextCursor: string | null;
+    };
+    /** @description Safe public association between one Automation definition and its admitted Run. Private invocation IDs, digests and route bindings are omitted. */
+    AutomationInvocationView: {
+      automationId: string;
+      runId: string;
+    };
+    /** @description The Run is projected from the canonical Automation invocation result; private origin bindings and route digests are omitted. */
+    RunAutomationNowResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      automation: components["schemas"]["AutomationView"];
+      invocation: components["schemas"]["AutomationInvocationView"];
+      run: components["schemas"]["RunView"];
     };
     CreateThreadRequest: {
       title: string | null;
@@ -1432,6 +1535,7 @@ export interface components {
   parameters: {
     ThreadId: string;
     RunId: string;
+    AutomationId: string;
     WorkspaceExecutionId: string;
     WorkspaceAfterExecutionId: string | null;
     WorkspaceOperationLimit: number;
@@ -1460,6 +1564,150 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  listAutomations: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["ResourceCursor"];
+        limit?: components["parameters"]["Limit"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized manual-only Automation definitions ordered by durable update */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListAutomationsResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  createAutomation: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateAutomationRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed manual-only Automation definition */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AutomationMutationResponse"];
+        };
+      };
+      /** @description A newly committed manual-only Automation definition */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AutomationMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  getAutomation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        automationId: components["parameters"]["AutomationId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized redacted manual-only Automation definition */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetAutomationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  runAutomationNow: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        automationId: components["parameters"]["AutomationId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RunAutomationNowRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed canonical Automation invocation Run */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunAutomationNowResponse"];
+        };
+      };
+      /** @description A canonical Automation invocation Run admitted atomically */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunAutomationNowResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
   listThreads: {
     parameters: {
       query?: {

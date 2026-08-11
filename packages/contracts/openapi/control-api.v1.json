@@ -7,6 +7,213 @@
   "servers": [{ "url": "/" }],
   "security": [{ "sessionCookie": [] }, { "mobileBearer": [] }],
   "paths": {
+    "/api/v1/automations": {
+      "get": {
+        "operationId": "listAutomations",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ResourceCursor"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized manual-only Automation definitions ordered by durable update",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAutomationsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createAutomation",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAutomationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed manual-only Automation definition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A newly committed manual-only Automation definition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/automations/{automationId}": {
+      "get": {
+        "operationId": "getAutomation",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AutomationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized redacted manual-only Automation definition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAutomationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/automations/{automationId}:run-now": {
+      "post": {
+        "operationId": "runAutomationNow",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AutomationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAutomationNowRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed canonical Automation invocation Run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAutomationNowResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A canonical Automation invocation Run admitted atomically",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAutomationNowResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/threads": {
       "get": {
         "operationId": "listThreads",
@@ -1303,6 +1510,16 @@
         "required": true,
         "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
       },
+      "AutomationId": {
+        "name": "automationId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
       "WorkspaceExecutionId": {
         "name": "executionId",
         "in": "path",
@@ -1473,6 +1690,234 @@
         "additionalProperties": false,
         "required": ["status"],
         "properties": { "status": { "type": "string", "const": "ok" } }
+      },
+      "CreateAutomationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "threadId",
+          "expectedThreadRevision",
+          "title",
+          "prompt",
+          "agentVersionId"
+        ],
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedThreadRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 9999
+          },
+          "agentVersionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      },
+      "RunAutomationNowRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedAutomationRevision",
+          "expectedThreadRevision"
+        ],
+        "properties": {
+          "expectedAutomationRevision": {
+            "type": "integer",
+            "const": 1
+          },
+          "expectedThreadRevision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "AutomationView": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Redacted immutable manual-only Automation definition. Tenant, actor, schedules, digests and invocation routes are private.",
+        "required": [
+          "automationId",
+          "threadId",
+          "title",
+          "prompt",
+          "agentVersionId",
+          "executionMode",
+          "automaticScheduling",
+          "revision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "automationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 9999
+          },
+          "agentVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "executionMode": {
+            "type": "string",
+            "const": "manualOnly"
+          },
+          "automaticScheduling": {
+            "type": "boolean",
+            "const": false
+          },
+          "revision": {
+            "type": "integer",
+            "const": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AutomationMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disposition",
+          "automation"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "committed",
+              "replayed"
+            ]
+          },
+          "automation": {
+            "$ref": "#/components/schemas/AutomationView"
+          }
+        }
+      },
+      "GetAutomationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "automation"
+        ],
+        "properties": {
+          "automation": {
+            "$ref": "#/components/schemas/AutomationView"
+          }
+        }
+      },
+      "ListAutomationsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AutomationView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_-]{1,512}$",
+            "maxLength": 512
+          }
+        }
+      },
+      "AutomationInvocationView": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Safe public association between one Automation definition and its admitted Run. Private invocation IDs, digests and route bindings are omitted.",
+        "required": [
+          "automationId",
+          "runId"
+        ],
+        "properties": {
+          "automationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "RunAutomationNowResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The Run is projected from the canonical Automation invocation result; private origin bindings and route digests are omitted.",
+        "required": [
+          "disposition",
+          "automation",
+          "invocation",
+          "run"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "committed",
+              "replayed"
+            ]
+          },
+          "automation": {
+            "$ref": "#/components/schemas/AutomationView"
+          },
+          "invocation": {
+            "$ref": "#/components/schemas/AutomationInvocationView"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RunView"
+          }
+        }
       },
       "CreateThreadRequest": {
         "type": "object",
