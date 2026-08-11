@@ -1,7 +1,7 @@
 import type {
   ContentDigester,
   RunLocator,
-  ThreadScopedLocator,
+  ThreadSpaceLocator,
   WorkspaceReadFileExecuteAuthorityResolverPort,
   WorkspaceReadFileExecuteIntent,
   WorkspaceReadFileExecuteProbeIntent,
@@ -23,7 +23,7 @@ import type {
 
 export interface RuntimeWorkspaceReadAuthorityStorePort {
   loadRun(locator: RunLocator): Promise<RunState | null>;
-  loadThreadInSpace(locator: ThreadScopedLocator): Promise<ThreadState | null>;
+  loadThreadInSpace(locator: ThreadSpaceLocator): Promise<ThreadState | null>;
 }
 
 export interface RuntimeWorkspaceReadApplicationPort {
