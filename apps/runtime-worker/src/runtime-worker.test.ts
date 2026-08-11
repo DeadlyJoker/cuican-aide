@@ -4491,6 +4491,185 @@ test("retries an early-closed sample inside one durable Attempt", async (context
   await worker.close();
 });
 
+test("keeps a completed assistant item in retry history without duplicating final output", async (context) => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../packages/test-contracts/fixtures/stream-completed-assistant-close-retry.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as Readonly<{
+    completedItem: Extract<ModelInputItem, { type: "message" }>;
+    expectedSecondRequestItems: readonly ModelInputItem[];
+    finalState: {
+      requestCount: number;
+      samplingRetries: number;
+      finalOutput: string;
+    };
+  }>;
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const requests: ModelRequest[] = [];
+  const transport: ModelTransportPort = {
+    adapterName: "completed-assistant-adapter",
+    adapterVersion: "1",
+    modelId: "completed-assistant-model",
+    async *stream(request) {
+      requests.push(structuredClone(request));
+      if (requests.length === 1) {
+        yield {
+          type: "output.delta",
+          delta: reference.completedItem.content,
+        };
+        yield { type: "output.item.completed", item: reference.completedItem };
+        return;
+      }
+      yield { type: "output.delta", delta: reference.finalState.finalOutput };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const worker = fixture.worker({
+    transport,
+    streamMaxRetries: reference.finalState.samplingRetries,
+    retryScheduler: { wait: async () => undefined },
+  });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  assert.equal(requests.length, reference.finalState.requestCount);
+  assert.deepEqual(
+    requests[1]?.input.items.slice(
+      -reference.expectedSecondRequestItems.length,
+    ),
+    reference.expectedSecondRequestItems,
+  );
+  assert.deepEqual(
+    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: reference.finalState.finalOutput },
+    ],
+  );
+  assert.equal(
+    (await fixture.events()).filter(
+      (event) => event.type === "message.completed",
+    ).length,
+    1,
+  );
+  await worker.close();
+});
+
+test("executes a completed Tool item from a missing-terminal stream exactly once", async (context) => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../packages/test-contracts/fixtures/stream-completed-tool-close-retry.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as Readonly<{
+    completedItem: Extract<ModelInputItem, { type: "tool_call" }>;
+    expectedSecondRequestItems: readonly ModelInputItem[];
+    finalState: {
+      requestCount: number;
+      toolSideEffectCount: number;
+      toolRequestedEventCount: number;
+      toolCompletedEventCount: number;
+      finalOutput: string;
+    };
+  }>;
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const requests: ModelRequest[] = [];
+  const transport: ModelTransportPort = {
+    adapterName: "completed-tool-adapter",
+    adapterVersion: "1",
+    modelId: "completed-tool-model",
+    async *stream(request) {
+      requests.push(structuredClone(request));
+      if (requests.length === 1) {
+        yield { type: "output.item.completed", item: reference.completedItem };
+        return;
+      }
+      yield { type: "output.delta", delta: reference.finalState.finalOutput };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  let sideEffects = 0;
+  const toolRuntime = new InMemoryToolBroker(
+    [
+      {
+        schemaVersion: "crewon.tool-definition.v0",
+        kind: "function",
+        name: reference.completedItem.name,
+        description: "Returns the shared missing-terminal fixture output.",
+        execution: "serial",
+        inputSchema: { type: "object" },
+      },
+    ],
+    new Map([
+      [
+        `function:${reference.completedItem.name}`,
+        async () => {
+          sideEffects += 1;
+          return {
+            output:
+              reference.expectedSecondRequestItems[1]?.type === "tool_result"
+                ? reference.expectedSecondRequestItems[1].output
+                : "",
+          };
+        },
+      ],
+    ]),
+    new Map([
+      [
+        `function:${reference.completedItem.name}`,
+        toolPolicy("readOnly", "replaySafe"),
+      ],
+    ]),
+  );
+  const worker = fixture.worker({ transport, toolRuntime });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  assert.equal(requests.length, reference.finalState.requestCount);
+  assert.deepEqual(
+    requests[1]?.input.items.slice(
+      -reference.expectedSecondRequestItems.length,
+    ),
+    reference.expectedSecondRequestItems,
+  );
+  assert.equal(sideEffects, reference.finalState.toolSideEffectCount);
+  const events = await fixture.events();
+  assert.equal(
+    events.filter((event) => event.type === "tool.requested").length,
+    reference.finalState.toolRequestedEventCount,
+  );
+  assert.equal(
+    events.filter((event) => event.type === "tool.completed").length,
+    reference.finalState.toolCompletedEventCount,
+  );
+  assert.deepEqual(
+    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: reference.finalState.finalOutput },
+    ],
+  );
+  await worker.close();
+});
+
 test("rolls back terminal Run state when assistant Message persistence fails", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "crewon-worker-atomic-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));

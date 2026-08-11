@@ -129,7 +129,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
         let output = "";
         let usageSeen = false;
         let terminalSeen = false;
-        let completedOutputItem: string | null = null;
+        const completedItems: ModelInputItem[] = [];
         const toolCalls: ObservedToolCall[] = [];
         try {
           for await (const event of this.#transport.stream(request, signal)) {
@@ -153,13 +153,55 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 });
                 break;
               case "output.item.completed":
-                if (completedOutputItem !== null || event.content !== output) {
+                if (event.item.type === "message") {
+                  if (
+                    event.item.role !== "assistant" ||
+                    completedItems.some((item) => item.type === "message") ||
+                    event.item.content !== output
+                  ) {
+                    throw new AgentKernelError(
+                      "model_output_item_completed_invalid",
+                      false,
+                    );
+                  }
+                } else if (event.item.type === "tool_call") {
+                  const completedToolItem = event.item;
+                  const observedToolCall: ObservedToolCall = {
+                    type: "tool.call",
+                    kind: completedToolItem.kind,
+                    callId: completedToolItem.callId,
+                    name: completedToolItem.name,
+                    input: completedToolItem.input,
+                  };
+                  if (contract.purpose === "compaction") {
+                    throw new AgentKernelError(
+                      "compaction_tool_call_unsupported",
+                      false,
+                    );
+                  }
+                  validateToolCall(observedToolCall);
+                  if (
+                    completedItems.length >= MAX_TOOL_CALLS_PER_SAMPLE ||
+                    observedCallIds.has(completedToolItem.callId) ||
+                    completedItems.some(
+                      (item) =>
+                        item.type === "tool_call" &&
+                        item.callId === completedToolItem.callId,
+                    )
+                  ) {
+                    throw new AgentKernelError(
+                      "model_tool_call_invalid",
+                      false,
+                    );
+                  }
+                  toolCalls.push(observedToolCall);
+                } else {
                   throw new AgentKernelError(
                     "model_output_item_completed_invalid",
                     false,
                   );
                 }
-                completedOutputItem = event.content;
+                completedItems.push(event.item);
                 break;
               case "usage":
                 if (usageSeen) {
@@ -263,22 +305,36 @@ export class CrewONAgentKernel implements AgentKernelPort {
           if (!kernelError.retryable) {
             throw kernelError;
           }
+          const completedToolCalls = completedItems.filter(
+            (item): item is Extract<ModelInputItem, { type: "tool_call" }> =>
+              item.type === "tool_call",
+          );
+          if (completedToolCalls.length > 0) {
+            for (const call of completedToolCalls) {
+              observedCallIds.add(call.callId);
+              sequence += 1;
+              yield canonicalEvent(contract, sequence, "tool.requested", {
+                callId: call.callId,
+                kind: call.kind,
+                name: call.name,
+                input: call.input,
+              });
+            }
+            return;
+          }
           if (retries >= this.#streamMaxRetries) {
             throw exhaustedSamplingError(kernelError);
           }
           retries += 1;
-          if (completedOutputItem !== null) {
-            request = appendCompletedAssistantItem(
-              request,
-              completedOutputItem,
-            );
+          if (completedItems.length > 0) {
+            request = appendCompletedItems(request, completedItems);
           }
           sequence += 1;
           yield canonicalEvent(contract, sequence, "model.sampling.retry", {
             samplingAttempt: retries,
             maxRetries: this.#streamMaxRetries,
             code: kernelError.code,
-            discardedOutput: output.length > 0 && completedOutputItem === null,
+            discardedOutput: output.length > 0,
           });
           try {
             await this.#retryScheduler.wait(
@@ -332,15 +388,14 @@ export class CrewONAgentKernel implements AgentKernelPort {
   }
 }
 
-function appendCompletedAssistantItem(
+function appendCompletedItems(
   request: ModelRequest,
-  content: string,
+  items: readonly ModelInputItem[],
 ): ModelRequest {
-  const item: ModelInputItem = { type: "message", role: "assistant", content };
   const input = request.input;
   return {
     ...request,
-    input: { ...input, items: [...input.items, item] },
+    input: { ...input, items: [...input.items, ...items] },
   };
 }
 

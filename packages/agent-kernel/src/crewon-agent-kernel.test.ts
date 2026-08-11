@@ -9,6 +9,7 @@ import { CrewONAgentKernel } from "./crewon-agent-kernel.ts";
 import { DeterministicFakeModelTransport } from "./deterministic-fake-model.ts";
 import {
   ModelTransportError,
+  type ModelInputItem,
   type ModelTransportPort,
 } from "./model-transport-port.ts";
 
@@ -501,6 +502,11 @@ test("bounds same-Turn retries", async () => {
 });
 
 test("carries a completed assistant item into an incomplete-stream retry", async () => {
+  const reference = fixture<{
+    completedItem: ModelInputItem;
+    expectedSecondRequestItems: readonly ModelInputItem[];
+    finalState: { samplingRetries: number };
+  }>("stream-completed-assistant-close-retry.reference.json");
   const requests: import("./model-transport-port.ts").ModelRequest[] = [];
   let requestCount = 0;
   const transport: ModelTransportPort = {
@@ -512,7 +518,10 @@ test("carries a completed assistant item into an incomplete-stream retry", async
       requestCount += 1;
       if (requestCount === 1) {
         yield { type: "output.delta", delta: "first" };
-        yield { type: "output.item.completed", content: "first" };
+        yield {
+          type: "output.item.completed",
+          item: reference.completedItem,
+        };
         return;
       }
       yield { type: "output.delta", delta: "done" };
@@ -530,16 +539,57 @@ test("carries a completed assistant item into an incomplete-stream retry", async
 
   assert.deepEqual(requests[1]?.input.items, [
     ...segmentContract().history,
-    { type: "message", role: "assistant", content: "first" },
+    ...reference.expectedSecondRequestItems,
   ]);
   assert.deepEqual(
     events.find((event) => event.type === "model.sampling.retry")?.data,
     {
       samplingAttempt: 1,
-      maxRetries: 1,
+      maxRetries: reference.finalState.samplingRetries,
       code: "model_stream_incomplete",
-      discardedOutput: false,
+      discardedOutput: true,
     },
+  );
+});
+
+test("turns a completed Tool item without a terminal into one durable Tool boundary", async () => {
+  const reference = fixture<{
+    completedItem: Extract<ModelInputItem, { type: "tool_call" }>;
+    finalState: { toolRequestedEventCount: number };
+  }>("stream-completed-tool-close-retry.reference.json");
+  const transport: ModelTransportPort = {
+    adapterName: "completed-tool-adapter",
+    adapterVersion: "1",
+    modelId: "completed-tool-model",
+    async *stream() {
+      yield { type: "output.item.completed", item: reference.completedItem };
+    },
+  };
+
+  const events = await collect(
+    new CrewONAgentKernel({
+      transport,
+      streamMaxRetries: 1,
+      retryScheduler: { wait: async () => undefined },
+    }).runSegment(segmentContract(), new AbortController().signal),
+  );
+
+  assert.equal(
+    events.filter((event) => event.type === "tool.requested").length,
+    reference.finalState.toolRequestedEventCount,
+  );
+  assert.deepEqual(
+    events.find((event) => event.type === "tool.requested")?.data,
+    {
+      callId: reference.completedItem.callId,
+      kind: reference.completedItem.kind,
+      name: reference.completedItem.name,
+      input: reference.completedItem.input,
+    },
+  );
+  assert.equal(
+    events.some((event) => event.type === "model.sampling.retry"),
+    false,
   );
 });
 

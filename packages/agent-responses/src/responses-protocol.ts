@@ -72,7 +72,10 @@ export class ResponsesProtocolDecoder {
         );
         requireStatus(response, "completed");
         validateFinalOutput(response.output, this.#output);
-        if (this.#output.length > 0) {
+        if (
+          this.#output.length > 0 &&
+          !this.#completedHistoryItems.some((item) => item.type === "message")
+        ) {
           this.#completedHistoryItems.push({
             type: "message",
             role: "assistant",
@@ -129,7 +132,13 @@ export class ResponsesProtocolDecoder {
           if (content !== this.#output) {
             throw protocolError("responses_final_output_mismatch");
           }
-          return [{ type: "output.item.completed", content }];
+          const item = {
+            type: "message" as const,
+            role: "assistant" as const,
+            content,
+          };
+          this.#completedHistoryItems.push(item);
+          return [{ type: "output.item.completed", item }];
         }
         if (
           outputItem.type !== "function_call" &&
@@ -158,14 +167,15 @@ export class ResponsesProtocolDecoder {
             "responses_tool_input_invalid",
           ),
         };
-        this.#completedHistoryItems.push({
+        const item = {
           type: "tool_call",
           kind: call.kind,
           callId: call.callId,
           name: call.name,
           input: call.input,
-        });
-        return [call];
+        } as const;
+        this.#completedHistoryItems.push(item);
+        return [{ type: "output.item.completed", item }];
       }
       case "response.in_progress":
       case "response.output_item.added":

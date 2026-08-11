@@ -309,11 +309,14 @@ test("serializes Tool definitions and exact call outputs for follow-up sampling"
 
   assert.deepEqual(await collect(transport.stream(request, signal())), [
     {
-      type: "tool.call",
-      kind: "custom",
-      callId: "call-2",
-      name: "next_tool",
-      input: "next",
+      type: "output.item.completed",
+      item: {
+        type: "tool_call",
+        kind: "custom",
+        callId: "call-2",
+        name: "next_tool",
+        input: "next",
+      },
     },
     {
       type: "usage",
@@ -704,7 +707,10 @@ test("exposes a completed assistant item before the response terminal", async ()
 
   assert.deepEqual(await collect(transport.stream(manualRequest(), signal())), [
     { type: "output.delta", delta: "done" },
-    { type: "output.item.completed", content: "done" },
+    {
+      type: "output.item.completed",
+      item: { type: "message", role: "assistant", content: "done" },
+    },
     {
       type: "usage",
       inputTokens: 1,
