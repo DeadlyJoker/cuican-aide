@@ -24,15 +24,23 @@ tauri = { version = "2.9.4", features = [
 tauri-plugin-shell = "2.3.5"
 getrandom = "0.3"
 hex = "0.4"
+ed25519-dalek = { version = "2.2.0", features = ["pem", "pkcs8"] }
 keyring = { version = "3.6.3", default-features = false, features = [
   "apple-native",
   "sync-secret-service",
   "windows-native",
 ] }
+libc = "0.2"
+rcgen = { version = "0.14.7", default-features = false, features = [
+  "pem",
+  "ring",
+] }
 rusqlite = { version = "0.40.0", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+shared_child = { version = "1.1.1", features = ["timeout"] }
 url = "2"
-zeroize = "1"
+zeroize = { version = "1", features = ["serde"] }
 # `generate_context!` expands plugin config into `serde_json` calls, so the crate
 # has to name it even though no hand-written code touches it.
 serde_json = "1"
@@ -40,6 +48,10 @@ tauri-plugin-http = "2.5.9"
 
 [dev-dependencies]
 pretty_assertions = "1"
+rustls = { version = "0.23", default-features = false, features = [
+  "ring",
+  "std",
+] }
 tempfile = "3"
 
 # Desktop-only: the updater has no meaning on mobile targets, and building it
@@ -51,3 +63,9 @@ tauri-plugin-process = "2"
 # `webkitdirectory` input only reports names relative to the chosen folder, so
 # picking a directory has to go through the host's own file dialog.
 tauri-plugin-dialog = "2.4.1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+] }

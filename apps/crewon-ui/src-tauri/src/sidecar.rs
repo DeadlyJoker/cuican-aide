@@ -1,10 +1,11 @@
 //! Supervises the bundled `crewon-app-server` process.
 //!
 //! A packaged desktop build ships the backend as a Tauri sidecar rather than
-//! expecting a developer to start it by hand. The shell owns its lifetime so the
-//! backend cannot outlive the window (the manual `nohup` workflow routinely left
-//! orphans) and cannot silently vanish while the UI waits on a socket.
+//! expecting a developer to start it by hand. The process guardian owns its
+//! lifetime so the backend cannot outlive the window, including when the GUI is
+//! killed before Rust destructors or Tauri exit events can run.
 
+use std::ffi::OsString;
 use std::net::TcpStream;
 use std::net::ToSocketAddrs;
 use std::time::Duration;
@@ -13,8 +14,11 @@ use std::time::Instant;
 use tauri::AppHandle;
 use tauri::Manager;
 use tauri::RunEvent;
-use tauri_plugin_shell::process::CommandChild;
-use tauri_plugin_shell::ShellExt;
+use tauri_plugin_shell::process::CommandEvent;
+
+use crate::control_runtime::process::spawn_guarded_sidecar;
+use crate::control_runtime::process::ManagedChild;
+use crate::control_runtime::ControlRuntimeStartError;
 
 /// Loopback port the frontend dials in a packaged build. Keep in sync with
 /// `DEFAULT_APP_SERVER_PORT` in `src/lib/platform.ts`.
@@ -26,11 +30,11 @@ const SKIP_SIDECAR_ENV: &str = "CREWON_DESKTOP_SKIP_SIDECAR";
 
 /// Tracks the child so the exit handler can reap it.
 pub struct AppServerSidecar {
-    child: std::sync::Mutex<Option<CommandChild>>,
+    child: std::sync::Mutex<Option<ManagedChild>>,
 }
 
 impl AppServerSidecar {
-    fn new(child: CommandChild) -> Self {
+    fn new(child: ManagedChild) -> Self {
         Self {
             child: std::sync::Mutex::new(Some(child)),
         }
@@ -74,7 +78,7 @@ fn wait_until_listening(port: u16, timeout: Duration) -> bool {
 }
 
 /// Starts the bundled backend unless one is already running.
-pub fn spawn(app: &AppHandle) -> Result<(), tauri_plugin_shell::Error> {
+pub fn spawn(app: &AppHandle) -> Result<(), ControlRuntimeStartError> {
     if std::env::var(SKIP_SIDECAR_ENV).is_ok_and(|value| !value.is_empty()) {
         return Ok(());
     }
@@ -85,11 +89,33 @@ pub fn spawn(app: &AppHandle) -> Result<(), tauri_plugin_shell::Error> {
         return Ok(());
     }
 
-    let (_rx, child) = app
-        .shell()
-        .sidecar("crewon-app-server")?
-        .args(["--listen", &format!("ws://127.0.0.1:{APP_SERVER_PORT}")])
-        .spawn()?;
+    let current_dir =
+        std::env::current_dir().map_err(|_| ControlRuntimeStartError::ProcessSpawnFailed)?;
+    let arguments = [
+        OsString::from("--listen"),
+        OsString::from(format!("ws://127.0.0.1:{APP_SERVER_PORT}")),
+    ];
+    let (events, child) = spawn_guarded_sidecar(
+        app,
+        "crewon-app-server",
+        &arguments,
+        &current_dir,
+        "crewon-app-server",
+    )?;
+    if std::thread::Builder::new()
+        .name("crewon-app-server-events".to_string())
+        .spawn(move || {
+            while let Ok(event) = events.recv() {
+                if matches!(event, CommandEvent::Terminated(_) | CommandEvent::Error(_)) {
+                    return;
+                }
+            }
+        })
+        .is_err()
+    {
+        let _ = child.kill();
+        return Err(ControlRuntimeStartError::ProcessEventUnavailable);
+    }
 
     app.manage(AppServerSidecar::new(child));
 
@@ -100,10 +126,8 @@ pub fn spawn(app: &AppHandle) -> Result<(), tauri_plugin_shell::Error> {
     Ok(())
 }
 
-/// Reaps the backend when the app exits, on every platform.
-///
-/// Windows does not deliver POSIX signals, so relying on the child noticing its
-/// parent left is not portable -- the shell has to kill it explicitly.
+/// Reaps the backend when the app exits normally, on every platform. The guardian
+/// independently covers abrupt owner death.
 pub fn handle_run_event(app: &AppHandle, event: RunEvent) {
     if matches!(event, RunEvent::Exit) {
         if let Some(sidecar) = app.try_state::<AppServerSidecar>() {
