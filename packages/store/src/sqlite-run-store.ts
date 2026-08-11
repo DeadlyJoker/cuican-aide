@@ -132,20 +132,10 @@ import {
   type GoalToolExecutionResult,
 } from "@crewon/application";
 import {
-  automationReceiptKey,
-  normalizeAutomationStoreError,
-  prepareAutomationCreate,
-  prepareAutomationInvocation,
-  replayAutomationCreateReceipt,
-  replayAutomationInvocationReceipt,
-  validateAutomationCreateReceiptQuery,
-  validateAutomationCreateReceiptAuthority,
-  validateAutomationInvocationReceiptQuery,
-  validateAutomationInvocationReceiptAuthority,
   validateAutomationRecord,
-  type StoredAutomationCreateReceipt,
   type StoredAutomationInvocationReceipt,
 } from "./automation-store-support.ts";
+import { SqliteAutomationAuthority } from "./sqlite-automation-authority.ts";
 import {
   sameAgentVersionAsset,
   sameAgentVersionDeploymentCandidate,
@@ -476,17 +466,11 @@ type AutomationRow = Readonly<{
   definition_json: string;
   updated_at: string;
 }>;
-type AutomationReceiptRow = Readonly<{
-  tenant_id: string;
-  automation_id: string;
-  run_id?: string;
-  fingerprint: string;
-  result_json: string;
-}>;
 
 export class SqliteRunStore implements DomainStore {
   readonly #database: DatabaseSync;
   readonly #clock: LeaseClock;
+  readonly #automationAuthority: SqliteAutomationAuthority;
   #closed = false;
 
   constructor(path: string, options: { clock?: LeaseClock } = {}) {
@@ -494,6 +478,35 @@ export class SqliteRunStore implements DomainStore {
     this.#clock = options.clock ?? new SystemLeaseClock();
     this.#database = new DatabaseSync(path, {
       enableForeignKeyConstraints: true,
+    });
+    this.#automationAuthority = new SqliteAutomationAuthority(this.#database, {
+      assertOpen: () => this.#assertOpen(),
+      hasPendingProviderSwitch: (tenantId) =>
+        this.#hasPendingProviderSwitch(tenantId),
+      loadThread: (locator) => this.#loadThread(locator),
+      loadRun: (locator) => this.#loadRun(locator),
+      loadHistory: (locator) => this.#loadAllModelHistoryItems(locator),
+      threadEventIdExists: (id) => this.#threadEventIdExists(id),
+      messageIdExists: (id) => this.#messageIdExists(id),
+      historyItemIdExists: (id) => this.#modelHistoryItemIdExists(id),
+      runEventIdExists: (id) => this.#eventIdExists(id),
+      outboxIdExists: (id) => this.#outboxMessageIdExists(id),
+      workItemIdExists: (id) => this.#workItemIdExists(id),
+      loadInvocationAuthority: (receipt) =>
+        this.#loadAutomationInvocationAuthority(receipt),
+      writeThreadSnapshot: (current, next, expectedRevision) =>
+        this.#writeThreadSnapshot(current, next, expectedRevision),
+      writeThreadEvents: (events, tenantId) =>
+        this.#writeThreadEvents(events, tenantId),
+      writeMessages: (messages) => this.#writeMessages(messages),
+      writeHistory: (items) => this.#writeModelHistoryItems(items),
+      writeRunSnapshot: (current, next, expectedRevision) =>
+        this.#writeSnapshot(current, next, expectedRevision),
+      writeRunThreadBinding: (current, next) =>
+        this.#writeRunThreadBinding(current, next),
+      writeRunEvents: (events, tenantId) => this.#writeEvents(events, tenantId),
+      writeOutbox: (messages) => this.#writeOutbox(messages),
+      writeWorkItems: (items) => this.#writeWorkItems(items),
     });
     try {
       configureAndMigrateSqlite(this.#database);
@@ -515,357 +528,37 @@ export class SqliteRunStore implements DomainStore {
   async loadAutomationCreateReceipt(
     query: AutomationCreateReceiptQuery,
   ): Promise<AutomationCreateResult | null> {
-    this.#assertOpen();
-    validateAutomationCreateReceiptQuery(query);
-    try {
-      this.#database.exec("BEGIN");
-      const receipt = this.#loadAutomationCreateReceipt(
-        query.tenantId,
-        query.idempotency,
-      );
-      if (receipt !== null) this.#validateAutomationCreateAuthority(receipt);
-      const result =
-        receipt === null ? null : replayAutomationCreateReceipt(query, receipt);
-      this.#database.exec("COMMIT");
-      return result;
-    } catch (error) {
-      rollback(this.#database);
-      throw normalizeAutomationStoreError(error);
-    }
+    return this.#automationAuthority.loadCreateReceipt(query);
   }
-
   async commitAutomationCreate(
     input: CommitAutomationCreateInput,
   ): Promise<AutomationCreateResult> {
-    this.#assertOpen();
-    try {
-      this.#database.exec("BEGIN IMMEDIATE");
-      const prior = this.#loadAutomationCreateReceipt(
-        input.tenantId,
-        input.idempotency,
-      );
-      if (prior !== null) {
-        this.#validateAutomationCreateAuthority(prior);
-        const replay = replayAutomationCreateReceipt(
-          { tenantId: input.tenantId, idempotency: input.idempotency },
-          prior,
-        );
-        this.#database.exec("COMMIT");
-        return replay;
-      }
-      if (this.#hasPendingProviderSwitch(input.tenantId)) {
-        throw new RunStoreError("model_provider_settings_switch_pending");
-      }
-      if (
-        this.#loadAutomationRecord(input.record.definition.automationId) !==
-        null
-      ) {
-        throw new RunStoreError("automation_id_conflict");
-      }
-      const result = prepareAutomationCreate(
-        input,
-        this.#loadThread({
-          tenantId: input.tenantId,
-          threadId: input.threadFence.threadId,
-        }),
-      );
-      const record = result.record;
-      this.#database
-        .prepare(
-          `INSERT INTO automations (
-             tenant_id, space_id, automation_id, thread_id, revision,
-             definition_digest, definition_json, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          record.definition.tenantId,
-          record.definition.spaceId,
-          record.definition.automationId,
-          record.definition.threadId,
-          record.definition.revision,
-          record.definitionDigest,
-          stableJson(record.definition),
-          record.definition.updatedAt,
-        );
-      this.#database
-        .prepare(
-          `INSERT INTO automation_create_receipts (
-             tenant_id, scope, idempotency_key, automation_id, fingerprint,
-             result_json
-           ) VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          input.tenantId,
-          input.idempotency.scope,
-          input.idempotency.key,
-          record.definition.automationId,
-          input.idempotency.requestFingerprint,
-          stableJson(result),
-        );
-      this.#database.exec("COMMIT");
-      return clone(result);
-    } catch (error) {
-      rollback(this.#database);
-      throw normalizeAutomationStoreError(error);
-    }
+    return this.#automationAuthority.commitCreate(input);
   }
-
   async loadAutomation(
     locator: AutomationLocator,
   ): Promise<AutomationDefinitionRecord | null> {
-    this.#assertOpen();
-    requireNonEmpty(locator.tenantId, "tenant_id_invalid");
-    requireNonEmpty(locator.spaceId, "space_id_invalid");
-    requireNonEmpty(locator.automationId, "automation_id_invalid");
-    try {
-      const record = this.#loadAutomationRecordInSpace(locator);
-      if (record === null) return null;
-      return clone(record);
-    } catch (error) {
-      throw normalizeAutomationStoreError(error);
-    }
+    return this.#automationAuthority.load(locator);
   }
-
   async listAutomations(
     query: AutomationListQuery,
   ): Promise<readonly AutomationDefinitionRecord[]> {
-    this.#assertOpen();
-    requireNonEmpty(query.tenantId, "tenant_id_invalid");
-    requireNonEmpty(query.spaceId, "space_id_invalid");
-    if (
-      !Number.isSafeInteger(query.limit) ||
-      query.limit < 1 ||
-      query.limit > 100
-    ) {
-      throw normalizeAutomationStoreError(
-        new RunStoreError("automation_limit_invalid"),
-      );
-    }
-    try {
-      const rows = this.#database
-        .prepare(
-          `SELECT tenant_id, space_id, automation_id, thread_id, revision,
-                  definition_digest, definition_json, updated_at
-           FROM automations
-           WHERE tenant_id = ? AND space_id = ?
-             AND (? IS NULL OR updated_at < ?
-               OR (updated_at = ? AND automation_id < ?))
-           ORDER BY updated_at DESC, automation_id DESC
-           LIMIT ?`,
-        )
-        .all(
-          query.tenantId,
-          query.spaceId,
-          query.before?.updatedAt ?? null,
-          query.before?.updatedAt ?? null,
-          query.before?.updatedAt ?? null,
-          query.before?.automationId ?? null,
-          query.limit,
-        ) as unknown as AutomationRow[];
-      return rows.map(parseSqliteAutomationRow);
-    } catch (error) {
-      throw normalizeAutomationStoreError(error);
-    }
+    return this.#automationAuthority.list(query);
   }
-
   async loadAutomationInvocationReceipt(
     query: AutomationInvocationReceiptQuery,
   ): Promise<AutomationInvocationResult | null> {
-    this.#assertOpen();
-    validateAutomationInvocationReceiptQuery(query);
-    try {
-      this.#database.exec("BEGIN");
-      const receipt = this.#loadAutomationInvocationReceipt(
-        query.tenantId,
-        query.idempotency,
-      );
-      if (receipt !== null) {
-        this.#validateAutomationInvocationAuthority(receipt);
-      }
-      const result =
-        receipt === null
-          ? null
-          : replayAutomationInvocationReceipt(query, receipt);
-      this.#database.exec("COMMIT");
-      return result;
-    } catch (error) {
-      rollback(this.#database);
-      throw normalizeAutomationStoreError(error);
-    }
+    return this.#automationAuthority.loadInvocationReceipt(query);
   }
-
   async loadAutomationInvocationContext(
     locator: AutomationLocator,
   ): Promise<AutomationInvocationContext | null> {
-    this.#assertOpen();
-    requireNonEmpty(locator.tenantId, "tenant_id_invalid");
-    requireNonEmpty(locator.spaceId, "space_id_invalid");
-    requireNonEmpty(locator.automationId, "automation_id_invalid");
-    try {
-      const record = this.#loadAutomationRecordInSpace(locator);
-      if (record === null) return null;
-      const thread = this.#loadThread({
-        tenantId: locator.tenantId,
-        threadId: record.definition.threadId,
-      });
-      if (thread === null || thread.spaceId !== locator.spaceId) {
-        throw new RunStoreError("automation_context_invalid");
-      }
-      const row = this.#database
-        .prepare(
-          `SELECT COALESCE(MAX(sequence), 0) AS last_sequence
-           FROM model_history_items WHERE tenant_id = ? AND thread_id = ?`,
-        )
-        .get(locator.tenantId, thread.threadId) as
-        | { last_sequence: number }
-        | undefined;
-      const lastSequence = row?.last_sequence ?? 0;
-      if (!Number.isSafeInteger(lastSequence) || lastSequence < 0) {
-        throw new RunStoreError("automation_context_invalid");
-      }
-      return {
-        record: clone(record),
-        thread: clone(thread),
-        historyHead: {
-          tenantId: locator.tenantId,
-          threadId: thread.threadId,
-          lastSequence,
-        },
-      };
-    } catch (error) {
-      throw normalizeAutomationStoreError(error);
-    }
+    return this.#automationAuthority.loadInvocationContext(locator);
   }
-
   async commitAutomationInvocation(
     input: CommitAutomationInvocationInput,
   ): Promise<AutomationInvocationResult> {
-    this.#assertOpen();
-    try {
-      this.#database.exec("BEGIN IMMEDIATE");
-      const prior = this.#loadAutomationInvocationReceipt(
-        input.tenantId,
-        input.idempotency,
-      );
-      if (prior !== null) {
-        this.#validateAutomationInvocationAuthority(prior);
-        const replay = replayAutomationInvocationReceipt(
-          {
-            tenantId: input.tenantId,
-            automationId: input.definitionFence.automationId,
-            idempotency: input.idempotency,
-          },
-          prior,
-        );
-        this.#database.exec("COMMIT");
-        return replay;
-      }
-      if (this.#hasPendingProviderSwitch(input.tenantId)) {
-        throw new RunStoreError("model_provider_settings_switch_pending");
-      }
-      const record = this.#loadAutomationRecord(
-        input.definitionFence.automationId,
-      );
-      if (record === null || record.definition.tenantId !== input.tenantId) {
-        throw new RunStoreError("automation_not_found");
-      }
-      const threadId = input.threadFence.threadId;
-      const currentThread = this.#loadThread({
-        tenantId: input.tenantId,
-        threadId,
-      });
-      const history = this.#loadAllModelHistoryItems({
-        tenantId: input.tenantId,
-        threadId,
-      });
-      const threadRunRows = this.#database
-        .prepare(
-          `SELECT bindings.run_id
-           FROM run_thread_bindings AS bindings
-           WHERE bindings.tenant_id = ? AND bindings.thread_id = ?`,
-        )
-        .all(input.tenantId, threadId) as unknown as { run_id: string }[];
-      const activeRunExists = threadRunRows.some(({ run_id }) => {
-        const run = this.#loadRun({ tenantId: input.tenantId, runId: run_id });
-        if (run === null) {
-          throw new RunStoreError("stored_run_thread_binding_invalid");
-        }
-        return !isTerminalRunStatus(run.status);
-      });
-      const workRows = this.#database
-        .prepare(
-          `SELECT work.status
-           FROM work_items AS work
-           JOIN run_thread_bindings AS bindings
-             ON bindings.tenant_id = work.tenant_id
-            AND bindings.run_id = work.run_id
-           WHERE work.tenant_id = ? AND bindings.thread_id = ?`,
-        )
-        .all(input.tenantId, threadId) as unknown as { status: string }[];
-      const unsettledWorkExists = workRows.some(({ status }) => {
-        if (
-          status !== "pending" &&
-          status !== "leased" &&
-          status !== "completed"
-        ) {
-          throw new RunStoreError("stored_work_item_status_invalid");
-        }
-        return status !== "completed";
-      });
-      const result = prepareAutomationInvocation(input, {
-        record,
-        thread: currentThread,
-        history,
-        activeRunExists,
-        unsettledWorkExists,
-        runIdExists:
-          this.#loadRun({
-            tenantId: input.tenantId,
-            runId: input.binding.runId,
-          }) !== null,
-        threadEventIdExists: (id) => this.#threadEventIdExists(id),
-        messageIdExists: (id) => this.#messageIdExists(id),
-        historyItemIdExists: (id) => this.#modelHistoryItemIdExists(id),
-        runEventIdExists: (id) => this.#eventIdExists(id),
-        outboxIdExists: (id) => this.#outboxMessageIdExists(id),
-        workItemIdExists: (id) => this.#workItemIdExists(id),
-      });
-
-      this.#writeThreadSnapshot(
-        currentThread,
-        result.threadState,
-        input.threadFence.expectedRevision,
-      );
-      this.#writeThreadEvents([input.threadEvent], input.tenantId);
-      this.#writeMessages([input.message]);
-      this.#writeModelHistoryItems([input.historyItem]);
-      this.#writeSnapshot(null, result.runState, 0);
-      this.#writeRunThreadBinding(null, result.runState);
-      this.#writeEvents([input.runEvent], input.tenantId);
-      this.#writeOutbox([input.outbox]);
-      this.#writeWorkItems([input.workItem]);
-      this.#database
-        .prepare(
-          `INSERT INTO automation_invocation_receipts (
-             tenant_id, scope, idempotency_key, automation_id, run_id,
-             fingerprint, result_json
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          input.tenantId,
-          input.idempotency.scope,
-          input.idempotency.key,
-          record.definition.automationId,
-          input.binding.runId,
-          input.idempotency.requestFingerprint,
-          stableJson(result),
-        );
-      this.#database.exec("COMMIT");
-      return clone(result);
-    } catch (error) {
-      rollback(this.#database);
-      throw normalizeAutomationStoreError(error);
-    }
+    return this.#automationAuthority.commitInvocation(input);
   }
 
   async loadModelProviderSettingsState(input: {
@@ -5228,90 +4921,9 @@ export class SqliteRunStore implements DomainStore {
     return row === undefined ? null : parseSqliteAutomationRow(row);
   }
 
-  #loadAutomationRecordInSpace(
-    locator: AutomationLocator,
-  ): AutomationDefinitionRecord | null {
-    const row = this.#database
-      .prepare(
-        `SELECT tenant_id, space_id, automation_id, thread_id, revision,
-                definition_digest, definition_json, updated_at
-         FROM automations
-         WHERE tenant_id = ? AND space_id = ? AND automation_id = ?`,
-      )
-      .get(locator.tenantId, locator.spaceId, locator.automationId) as
-      | AutomationRow
-      | undefined;
-    return row === undefined ? null : parseSqliteAutomationRow(row);
-  }
-
-  #loadAutomationCreateReceipt(
-    tenantId: string,
-    idempotency: CommitAutomationCreateInput["idempotency"],
-  ): StoredAutomationCreateReceipt | null {
-    automationReceiptKey(tenantId, idempotency);
-    const row = this.#database
-      .prepare(
-        `SELECT tenant_id, automation_id, fingerprint, result_json
-         FROM automation_create_receipts
-         WHERE tenant_id = ? AND scope = ? AND idempotency_key = ?`,
-      )
-      .get(tenantId, idempotency.scope, idempotency.key) as
-      | AutomationReceiptRow
-      | undefined;
-    if (row === undefined) return null;
-    return {
-      tenantId: row.tenant_id,
-      automationId: row.automation_id,
-      fingerprint: row.fingerprint,
-      result: parseStoredJson<AutomationCreateResult>(
-        row.result_json,
-        "automation_create_receipt_invalid",
-      ),
-    };
-  }
-
-  #loadAutomationInvocationReceipt(
-    tenantId: string,
-    idempotency: CommitAutomationInvocationInput["idempotency"],
-  ): StoredAutomationInvocationReceipt | null {
-    automationReceiptKey(tenantId, idempotency);
-    const row = this.#database
-      .prepare(
-        `SELECT tenant_id, automation_id, run_id, fingerprint, result_json
-         FROM automation_invocation_receipts
-         WHERE tenant_id = ? AND scope = ? AND idempotency_key = ?`,
-      )
-      .get(tenantId, idempotency.scope, idempotency.key) as
-      | AutomationReceiptRow
-      | undefined;
-    if (row === undefined) return null;
-    if (typeof row.run_id !== "string") {
-      throw new RunStoreError("automation_invocation_receipt_invalid");
-    }
-    return {
-      tenantId: row.tenant_id,
-      automationId: row.automation_id,
-      runId: row.run_id,
-      fingerprint: row.fingerprint,
-      result: parseStoredJson<AutomationInvocationResult>(
-        row.result_json,
-        "automation_invocation_receipt_invalid",
-      ),
-    };
-  }
-
-  #validateAutomationCreateAuthority(
-    receipt: StoredAutomationCreateReceipt,
-  ): void {
-    validateAutomationCreateReceiptAuthority(
-      receipt,
-      this.#loadAutomationRecord(receipt.automationId),
-    );
-  }
-
-  #validateAutomationInvocationAuthority(
+  #loadAutomationInvocationAuthority(
     receipt: StoredAutomationInvocationReceipt,
-  ): void {
+  ) {
     const result = receipt.result;
     const threadId = result.record.definition.threadId;
     const locator = { tenantId: receipt.tenantId, threadId };
@@ -5391,7 +5003,7 @@ export class SqliteRunStore implements DomainStore {
       .get(receipt.tenantId, result.workItem.workItemId) as
       | WorkItemRow
       | undefined;
-    validateAutomationInvocationReceiptAuthority(receipt, {
+    return {
       record: this.#loadAutomationRecord(receipt.automationId),
       thread: this.#loadThread(locator),
       threadEvents,
@@ -5409,7 +5021,7 @@ export class SqliteRunStore implements DomainStore {
         outboxRow === undefined ? null : decodeStoredOutboxMessage(outboxRow),
       workItem:
         workItemRow === undefined ? null : decodeStoredWorkItem(workItemRow),
-    });
+    };
   }
 
   #writeSnapshot(
