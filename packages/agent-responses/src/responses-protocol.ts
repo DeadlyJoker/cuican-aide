@@ -471,13 +471,14 @@ function providerFailure(value: unknown): {
   const providerCode = safeProviderCode(value);
   return {
     code: `responses_provider_${providerCode}`,
-    retryable: [
-      "failed",
-      "server_error",
-      "rate_limit_exceeded",
-      "temporarily_unavailable",
-      "timeout",
-      "websocket_connection_limit_reached",
+    retryable: ![
+      "context_length_exceeded",
+      "insufficient_quota",
+      "usage_not_included",
+      "invalid_prompt",
+      "cyber_policy",
+      "server_is_overloaded",
+      "slow_down",
     ].includes(providerCode),
   };
 }

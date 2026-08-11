@@ -42,6 +42,25 @@
       }
     },
     {
+      "name": "failed with unknown provider code",
+      "events": [
+        { "type": "response.failed", "sequence_number": 0, "response": { "error": { "code": "provider_failed" } } },
+        { "type": "response.completed", "sequence_number": 1, "response": { "id": "resp-poison", "status": "completed" } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "provider",
+        "code": "responses_provider_provider_failed",
+        "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "checkpoint": null
+      }
+    },
+    {
       "name": "failed without response object",
       "events": [
         { "type": "response.failed", "sequence_number": 0 },

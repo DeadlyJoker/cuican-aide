@@ -319,6 +319,7 @@ test("keeps pending retrieve non-terminal and projects failed and incomplete ter
     [
       { id: "resp-lost", status: "failed", error: { code: "provider_failed" } },
       "responses_provider_provider_failed",
+      true,
     ],
     [
       {
@@ -327,12 +328,13 @@ test("keeps pending retrieve non-terminal and projects failed and incomplete ter
         incomplete_details: { reason: "max_output_tokens" },
       },
       "responses_incomplete_max_output_tokens",
+      false,
     ],
   ] as const;
-  for (const [body, code] of cases) {
+  for (const [body, code, retryable] of cases) {
     assert.deepEqual(await retrieveJson(body), [
       { type: "response.created", checkpoint: directCheckpoint("resp-lost") },
-      { type: "failed", code, retryable: false },
+      { type: "failed", code, retryable },
     ]);
   }
 });

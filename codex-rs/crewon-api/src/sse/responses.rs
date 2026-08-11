@@ -816,6 +816,13 @@ mod tests {
                     _ => None,
                 })
                 .expect("fixture terminal kind");
+            let provider_code = case
+                .events
+                .iter()
+                .find(|event| event["type"] == "response.failed")
+                .and_then(|event| event["response"]["error"]["code"].as_str())
+                .unwrap_or("failed")
+                .to_string();
             let body = case
                 .events
                 .into_iter()
@@ -839,7 +846,7 @@ mod tests {
                         completed_history.push(serde_json::to_value(item).expect("serialize item"));
                     }
                     Ok(ResponseEvent::Completed { token_usage, .. }) => usage = token_usage,
-                    Err(error @ ApiError::Stream(_)) => {
+                    Err(error @ (ApiError::Stream(_) | ApiError::Retryable { .. })) => {
                         stable_events.push("failed");
                         retryable = Some(crate::map_api_error(error).is_retryable());
                     }
@@ -853,9 +860,9 @@ mod tests {
                 "incomplete"
             };
             let code = if terminal_kind == "response.failed" {
-                "responses_provider_failed"
+                format!("responses_provider_{provider_code}")
             } else {
-                "responses_incomplete_unknown"
+                "responses_incomplete_unknown".to_string()
             };
             assert_eq!(
                 json!({
