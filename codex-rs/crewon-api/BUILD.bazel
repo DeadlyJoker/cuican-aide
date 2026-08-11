@@ -5,5 +5,6 @@ crewon_rust_crate(
     crate_name = "crewon_api",
     test_data_extra = [
         "//:packages/test-contracts/fixtures/provider-usage-validation.reference.json",
+        "//:packages/test-contracts/fixtures/responses-completed-without-usage.reference.json",
     ],
 )

@@ -658,6 +658,46 @@ mod tests {
         expected: String,
     }
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CompletedWithoutUsageFixture {
+        case_id: String,
+        cases: Vec<CompletedWithoutUsageCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct CompletedWithoutUsageCase {
+        name: String,
+        terminal: Value,
+    }
+
+    #[test]
+    fn accepts_completed_without_usage_from_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-completed-without-usage.reference.json"
+        )
+        .expect("completed-without-usage fixture must exist");
+        let fixture: CompletedWithoutUsageFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("completed-without-usage fixture must be readable"),
+        )
+        .expect("completed-without-usage fixture must parse");
+
+        for case in fixture.cases {
+            let event: ResponsesStreamEvent = serde_json::from_value(case.terminal)
+                .expect("fixture terminal event must deserialize");
+            assert_matches!(
+                process_responses_event(event),
+                Ok(Some(ResponseEvent::Completed {
+                    token_usage: None,
+                    ..
+                })),
+                "fixture {} / {}",
+                fixture.case_id,
+                case.name
+            );
+        }
+    }
+
     #[test]
     fn rejects_malformed_provider_usage_from_shared_fixture() {
         let fixture_path = crewon_utils_cargo_bin::find_resource!(

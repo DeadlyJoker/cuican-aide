@@ -95,14 +95,14 @@ export class ResponsesProtocolDecoder {
         }
         const usage = parseUsage(response.usage);
         this.#terminal = true;
-        return [
-          { type: "usage", ...usage },
-          {
-            type: "completed",
-            checkpoint: this.#options.completedCheckpoint(this.#responseId),
-            ...(response.end_turn === false ? { endTurn: false } : {}),
-          },
-        ];
+        const completed: ModelTransportEvent = {
+          type: "completed",
+          checkpoint: this.#options.completedCheckpoint(this.#responseId),
+          ...(response.end_turn === false ? { endTurn: false } : {}),
+        };
+        return usage === null
+          ? [completed]
+          : [{ type: "usage", ...usage }, completed];
       }
       case "response.failed": {
         requireCreated(this.#responseId);
@@ -316,7 +316,10 @@ function parseUsage(value: unknown): {
   cachedInputTokens: number;
   outputTokens: number;
   totalTokens: number;
-} {
+} | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
   const usage = requireObject(value, "responses_usage_missing");
   const inputTokens = nonNegativeInteger(
     usage.input_tokens,
