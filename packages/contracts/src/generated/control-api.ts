@@ -1,5 +1,37 @@
 // This file is generated from openapi/control-api.v1.json. Do not edit.
 export interface paths {
+  "/api/v1/model-provider-settings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getModelProviderSettings"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/model-provider-settings/probe": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["probeModelProvider"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/automations": {
     parameters: {
       query?: never;
@@ -584,6 +616,60 @@ export interface components {
     HealthResponse: {
       /** @constant */
       status: "ok";
+    };
+    /** @enum {string} */
+    ModelProviderCredentialKind: "environment" | "keychain" | "none";
+    /** @enum {string} */
+    ModelProviderRuntimeAvailability:
+      | "available"
+      | "unconfigured"
+      | "switchPending"
+      | "unavailable";
+    ModelProviderBindingView: {
+      providerId: string;
+      displayName: string;
+      endpoint: string;
+      credentialKind: components["schemas"]["ModelProviderCredentialKind"];
+      environmentVariable: string | null;
+      isActive: boolean;
+    };
+    ModelProviderSettingsSnapshot: {
+      revision: number;
+      activeProviderId: string | null;
+      providers: components["schemas"]["ModelProviderBindingView"][];
+      runtimeAvailability: components["schemas"]["ModelProviderRuntimeAvailability"];
+      /** Format: date-time */
+      updatedAt: string | null;
+    };
+    GetModelProviderSettingsResponse: {
+      settings: components["schemas"]["ModelProviderSettingsSnapshot"];
+    };
+    ProbeModelProviderRequest: Record<string, never>;
+    /** @enum {string} */
+    ModelProviderProbeStatus:
+      | "ok"
+      | "credentialMissing"
+      | "authenticationFailed"
+      | "rateLimited"
+      | "providerError"
+      | "unreachable"
+      | "invalidResponse"
+      | "bindingMismatch";
+    ModelProviderProbeModelView: {
+      id: string;
+      displayName: string | null;
+    };
+    ProbeModelProviderResponse: {
+      /** @enum {string} */
+      disposition: "completed" | "replayed";
+      providerId: string;
+      catalogRevision: number;
+      status: components["schemas"]["ModelProviderProbeStatus"];
+      models: components["schemas"]["ModelProviderProbeModelView"][] | null;
+      modelCount: number | null;
+      latencyMs: number;
+      retryable: boolean;
+      retryAfterMs: number | null;
     };
     CreateAutomationRequest: {
       threadId: string;
@@ -1564,6 +1650,63 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  getModelProviderSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized non-secret Provider settings snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetModelProviderSettingsResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  probeModelProvider: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProbeModelProviderRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded active Provider probe or its idempotent replay */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProbeModelProviderResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
   listAutomations: {
     parameters: {
       query?: {

@@ -7,6 +7,85 @@
   "servers": [{ "url": "/" }],
   "security": [{ "sessionCookie": [] }, { "mobileBearer": [] }],
   "paths": {
+    "/api/v1/model-provider-settings": {
+      "get": {
+        "operationId": "getModelProviderSettings",
+        "responses": {
+          "200": {
+            "description": "Authorized non-secret Provider settings snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetModelProviderSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/model-provider-settings/probe": {
+      "post": {
+        "operationId": "probeModelProvider",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProbeModelProviderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded active Provider probe or its idempotent replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeModelProviderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/automations": {
       "get": {
         "operationId": "listAutomations",
@@ -1690,6 +1769,236 @@
         "additionalProperties": false,
         "required": ["status"],
         "properties": { "status": { "type": "string", "const": "ok" } }
+      },
+      "ModelProviderCredentialKind": {
+        "type": "string",
+        "enum": [
+          "environment",
+          "keychain",
+          "none"
+        ]
+      },
+      "ModelProviderRuntimeAvailability": {
+        "type": "string",
+        "enum": [
+          "available",
+          "unconfigured",
+          "switchPending",
+          "unavailable"
+        ]
+      },
+      "ModelProviderBindingView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "providerId",
+          "displayName",
+          "endpoint",
+          "credentialKind",
+          "environmentVariable",
+          "isActive"
+        ],
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "endpoint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "credentialKind": {
+            "$ref": "#/components/schemas/ModelProviderCredentialKind"
+          },
+          "environmentVariable": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ModelProviderSettingsSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "activeProviderId",
+          "providers",
+          "runtimeAvailability",
+          "updatedAt"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "activeProviderId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "providers": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "$ref": "#/components/schemas/ModelProviderBindingView"
+            }
+          },
+          "runtimeAvailability": {
+            "$ref": "#/components/schemas/ModelProviderRuntimeAvailability"
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "GetModelProviderSettingsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "settings"
+        ],
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/ModelProviderSettingsSnapshot"
+          }
+        }
+      },
+      "ProbeModelProviderRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "ModelProviderProbeStatus": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "credentialMissing",
+          "authenticationFailed",
+          "rateLimited",
+          "providerError",
+          "unreachable",
+          "invalidResponse",
+          "bindingMismatch"
+        ]
+      },
+      "ModelProviderProbeModelView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "displayName"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "ProbeModelProviderResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disposition",
+          "providerId",
+          "catalogRevision",
+          "status",
+          "models",
+          "modelCount",
+          "latencyMs",
+          "retryable",
+          "retryAfterMs"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "replayed"
+            ]
+          },
+          "providerId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "catalogRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/ModelProviderProbeStatus"
+          },
+          "models": {
+            "oneOf": [
+              {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "$ref": "#/components/schemas/ModelProviderProbeModelView"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modelCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "latencyMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "retryAfterMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 86400000
+          }
+        }
       },
       "CreateAutomationRequest": {
         "type": "object",
