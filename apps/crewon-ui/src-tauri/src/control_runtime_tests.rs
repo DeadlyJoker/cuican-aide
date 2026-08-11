@@ -19,10 +19,12 @@ use super::environment::control_environment;
 use super::environment::release_environment;
 use super::environment::worker_bootstrap_input;
 use super::environment::worker_bootstrap_input_with_workspace;
+use super::environment::worker_bootstrap_input_with_workspace_and_credentials;
 use super::environment::worker_environment;
 use super::environment::ChildEnvironmentValue;
 use super::environment::ControlAdmissionMode;
 use super::environment::WorkspaceWorkerEnvironment;
+use super::private_credentials::PrivateCredentialBindings;
 use super::process::spawn_managed;
 use super::process::wait_for_bounded_json_exit;
 use super::process::wait_for_ready;
@@ -359,6 +361,102 @@ fn workspace_worker_uses_v2_stdin_and_control_gets_only_the_proven_loopback_rout
         variable.key == "CREWON_WORKSPACE_WORKER_TOKEN"
             && matches!(variable.value, ChildEnvironmentValue::Sensitive(_))
     }));
+}
+
+#[test]
+fn remote_mcp_credentials_use_exact_v3_zeroizing_stdin_without_legacy_wire_changes() {
+    let session = SessionMaterial::generate().expect("session");
+    let workspace_json =
+        serde_json::to_vec(&json!({ "workspace": "private" })).expect("workspace json");
+    let credentials = PrivateCredentialBindings::new(
+        "tenant-1".to_string(),
+        "workspace-1".to_string(),
+        "runtime-1".to_string(),
+        "agent-version-1".to_string(),
+        vec![(
+            "credential-1".to_string(),
+            Zeroizing::new("private+/bearer==".to_string()),
+        )],
+    )
+    .expect("credential bindings");
+    let bootstrap = worker_bootstrap_input_with_workspace_and_credentials(
+        None,
+        &session,
+        &workspace_json,
+        Some(&credentials),
+    )
+    .expect("v3 bootstrap");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&bootstrap).expect("bootstrap json"),
+        json!({
+            "apiKey": null,
+            "credentialBindings": {
+                "schemaVersion": "crewon.remote-mcp-private-credentials.v1",
+                "authority": {
+                    "tenantId": "tenant-1",
+                    "workspaceBindingId": "workspace-1",
+                    "runtimeBindingId": "runtime-1",
+                    "agentVersionId": "agent-version-1",
+                },
+                "bindings": [{
+                    "credentialBindingId": "credential-1",
+                    "bearerToken": "private+/bearer==",
+                }],
+            },
+            "probe": {
+                "port": 3211,
+                "token": session.provider_probe_token.as_str(),
+            },
+            "provider": null,
+            "schemaVersion": "crewon.worker-native-bootstrap.v3",
+            "workspace": { "workspace": "private" },
+        })
+    );
+    assert_eq!(
+        format!("{credentials:?}"),
+        "PrivateCredentialBindings([REDACTED])"
+    );
+
+    let legacy = worker_bootstrap_input_with_workspace(None, &session, &workspace_json)
+        .expect("legacy v2 bootstrap");
+    let legacy: serde_json::Value = serde_json::from_slice(&legacy).expect("legacy json");
+    assert_eq!(legacy["schemaVersion"], "crewon.worker-native-bootstrap.v2");
+    assert_eq!(legacy.get("credentialBindings"), None);
+}
+
+#[test]
+fn private_credential_bindings_reject_empty_duplicate_and_invalid_shapes() {
+    let token = || Zeroizing::new("private+/bearer==".to_string());
+    assert!(PrivateCredentialBindings::new(
+        "tenant-1".to_string(),
+        "workspace-1".to_string(),
+        "runtime-1".to_string(),
+        "agent-version-1".to_string(),
+        vec![],
+    )
+    .is_err());
+    assert!(PrivateCredentialBindings::new(
+        "tenant-1".to_string(),
+        "workspace-1".to_string(),
+        "runtime-1".to_string(),
+        "agent-version-1".to_string(),
+        vec![
+            ("credential-1".to_string(), token()),
+            ("credential-1".to_string(), token()),
+        ],
+    )
+    .is_err());
+    assert!(PrivateCredentialBindings::new(
+        "tenant-1".to_string(),
+        "workspace-1".to_string(),
+        "runtime-1".to_string(),
+        "agent-version-1".to_string(),
+        vec![(
+            "credential-1".to_string(),
+            Zeroizing::new("has space".to_string())
+        )],
+    )
+    .is_err());
 }
 
 #[test]

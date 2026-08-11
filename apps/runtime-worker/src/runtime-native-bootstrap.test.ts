@@ -31,6 +31,7 @@ test("accepts one exact in-memory native bootstrap and clears it on take", () =>
     apiKey: "worker-only-secret",
     probe: { port: 3211, token: "worker-private-token" },
     workspace: null,
+    credentialBindings: null,
   });
   assert.equal(takeRuntimeNativeBootstrap(), null);
 });
@@ -68,6 +69,7 @@ test("rejects authority injection and a second unread bootstrap", () => {
     apiKey: null,
     probe: { port: 3211, token: "worker-private-token" },
     workspace: null,
+    credentialBindings: null,
   });
 });
 
@@ -139,6 +141,76 @@ test("accepts one all-or-none Workspace v2 bootstrap and redacts every secret De
   }
 });
 
+test("accepts exact v3 private credential bindings and destroys them after one consumption", () => {
+  const value = workspaceBootstrap() as Record<string, any>;
+  value.schemaVersion = "crewon.worker-native-bootstrap.v3";
+  value.credentialBindings = privateCredentialBindings();
+  installRuntimeNativeBootstrap(value);
+  const bootstrap = takeRuntimeNativeBootstrap();
+  const credentials = bootstrap?.credentialBindings;
+  assert.ok(credentials !== null && credentials !== undefined);
+  assert.deepEqual(credentials.authority, {
+    tenantId: "tenant-1",
+    workspaceBindingId: "workspace-1",
+    runtimeBindingId: "runtime-generation-1",
+    agentVersionId: "agent-version-1",
+  });
+  let captured: readonly Readonly<Record<string, string>>[] = [];
+  credentials.consume(credentials.authority, (bindings) => {
+    captured = bindings.map((binding) => ({ ...binding }));
+  });
+  assert.deepEqual(captured, [
+    { credentialBindingId: "credential-1", bearerToken: "private+/token==" },
+  ]);
+  assert.throws(
+    () => credentials.consume(credentials.authority, () => undefined),
+    /invalid/u,
+  );
+  assert.equal(inspect(credentials), "RuntimeNativeBootstrap([REDACTED])");
+});
+
+test("rejects credential extras, duplicate ids, empty values, and cross-binding authority", () => {
+  for (const mutate of [
+    (value: Record<string, any>) => (value.credentialBindings.extra = true),
+    (value: Record<string, any>) =>
+      value.credentialBindings.bindings.push({
+        ...value.credentialBindings.bindings[0],
+      }),
+    (value: Record<string, any>) =>
+      (value.credentialBindings.bindings[0].bearerToken = ""),
+    (value: Record<string, any>) =>
+      (value.credentialBindings.authority.runtimeBindingId =
+        "other-valid-runtime"),
+  ]) {
+    const value = workspaceBootstrap() as Record<string, any>;
+    value.schemaVersion = "crewon.worker-native-bootstrap.v3";
+    value.credentialBindings = privateCredentialBindings();
+    mutate(value);
+    assert.throws(
+      () => installRuntimeNativeBootstrap(value),
+      /runtime_native_bootstrap_invalid/u,
+    );
+  }
+});
+
+test("requires the complete expected authority before credential consumption", () => {
+  const value = workspaceBootstrap() as Record<string, any>;
+  value.schemaVersion = "crewon.worker-native-bootstrap.v3";
+  value.credentialBindings = privateCredentialBindings();
+  installRuntimeNativeBootstrap(value);
+  const credentials = takeRuntimeNativeBootstrap()?.credentialBindings;
+  assert.ok(credentials !== null && credentials !== undefined);
+  assert.throws(
+    () =>
+      credentials.consume(
+        { ...credentials.authority, agentVersionId: "other-valid-version" },
+        () => undefined,
+      ),
+    /runtime_native_bootstrap_invalid/u,
+  );
+  credentials.destroy();
+});
+
 test("rejects partial Workspace secrets, extra keys, unsafe endpoint, and invalid caps", () => {
   for (const mutate of [
     (value: Record<string, any>) => delete value.workspace.gateway.tls.keyPem,
@@ -194,5 +266,20 @@ function workspaceBootstrap() {
         },
       },
     },
+  };
+}
+
+function privateCredentialBindings() {
+  return {
+    schemaVersion: "crewon.remote-mcp-private-credentials.v1",
+    authority: {
+      tenantId: "tenant-1",
+      workspaceBindingId: "workspace-1",
+      runtimeBindingId: "runtime-generation-1",
+      agentVersionId: "agent-version-1",
+    },
+    bindings: [
+      { credentialBindingId: "credential-1", bearerToken: "private+/token==" },
+    ],
   };
 }

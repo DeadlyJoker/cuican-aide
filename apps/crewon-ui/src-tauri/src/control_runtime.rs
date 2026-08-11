@@ -26,6 +26,12 @@ use zeroize::Zeroizing;
 
 #[path = "control_runtime_environment.rs"]
 mod environment;
+#[path = "control_runtime_private_credentials.rs"]
+#[allow(
+    dead_code,
+    reason = "Stage E exposes the private stdin boundary before Worker credential lease composition"
+)]
+pub(crate) mod private_credentials;
 #[path = "control_runtime_process.rs"]
 pub(crate) mod process;
 #[path = "control_runtime_provider_coordinator.rs"]

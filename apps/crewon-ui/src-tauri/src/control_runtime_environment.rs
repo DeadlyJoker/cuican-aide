@@ -5,6 +5,7 @@ use std::path::Path;
 use serde::Serialize;
 use zeroize::Zeroizing;
 
+use super::private_credentials::PrivateCredentialBindings;
 use super::RuntimePaths;
 use super::SessionMaterial;
 use super::ARTIFACT_KEY_ID;
@@ -306,16 +307,35 @@ pub(super) fn worker_bootstrap_input_with_workspace(
     session: &SessionMaterial,
     workspace_json: &[u8],
 ) -> Result<Zeroizing<Vec<u8>>, ()> {
+    worker_bootstrap_input_with_workspace_and_credentials(provider, session, workspace_json, None)
+}
+
+pub(super) fn worker_bootstrap_input_with_workspace_and_credentials(
+    provider: Option<&ActiveProviderRuntime>,
+    session: &SessionMaterial,
+    workspace_json: &[u8],
+    credentials: Option<&PrivateCredentialBindings>,
+) -> Result<Zeroizing<Vec<u8>>, ()> {
     if workspace_json.is_empty() {
         return Err(());
     }
-    let mut bootstrap =
-        serialize_worker_bootstrap(provider, session, "crewon.worker-native-bootstrap.v2")?;
+    // Preserve the exact v2 wire until private Remote MCP credentials exist;
+    // only the stdin-only credential envelope opts a launch into strict v3.
+    let schema_version = if credentials.is_some() {
+        "crewon.worker-native-bootstrap.v3"
+    } else {
+        "crewon.worker-native-bootstrap.v2"
+    };
+    let mut bootstrap = serialize_worker_bootstrap(provider, session, schema_version)?;
     if bootstrap.pop() != Some(b'}') {
         return Err(());
     }
     bootstrap.extend_from_slice(b",\"workspace\":");
     bootstrap.extend_from_slice(workspace_json);
+    if let Some(credentials) = credentials {
+        bootstrap.extend_from_slice(b",\"credentialBindings\":");
+        serde_json::to_writer(&mut *bootstrap, credentials).map_err(|_| ())?;
+    }
     bootstrap.push(b'}');
     Ok(bootstrap)
 }

@@ -5,7 +5,11 @@ import type { RuntimeWorkspaceDispatchAuthority } from "./runtime-workspace-bind
 
 const SCHEMA_VERSION_V1 = "crewon.worker-native-bootstrap.v1";
 const SCHEMA_VERSION_V2 = "crewon.worker-native-bootstrap.v2";
+const SCHEMA_VERSION_V3 = "crewon.worker-native-bootstrap.v3";
+const PRIVATE_CREDENTIAL_SCHEMA_VERSION =
+  "crewon.remote-mcp-private-credentials.v1";
 const MAX_PEM_BYTES = 128 * 1024;
+const MAX_CREDENTIAL_BINDINGS = 32;
 
 export type RuntimeNativeWorkspaceBootstrap = Readonly<{
   privateServer: Readonly<{ port: number; token: string }>;
@@ -28,7 +32,30 @@ export type RuntimeNativeBootstrap = Readonly<{
   apiKey: string | null;
   probe: Readonly<{ port: number; token: string }>;
   workspace: RuntimeNativeWorkspaceBootstrap | null;
+  credentialBindings: RuntimeNativeCredentialBindings | null;
 }>;
+
+export type RuntimeNativeCredentialBindingAuthority = Readonly<{
+  tenantId: string;
+  workspaceBindingId: string;
+  runtimeBindingId: string;
+  agentVersionId: string;
+}>;
+
+export type RuntimeNativeCredentialBinding = Readonly<{
+  credentialBindingId: string;
+  bearerToken: string;
+}>;
+
+/** One-shot owner for private credentials parsed from the native stdin channel. */
+export interface RuntimeNativeCredentialBindings {
+  readonly authority: RuntimeNativeCredentialBindingAuthority;
+  consume(
+    expectedAuthority: RuntimeNativeCredentialBindingAuthority,
+    consumer: (bindings: readonly RuntimeNativeCredentialBinding[]) => void,
+  ): void;
+  destroy(): void;
+}
 
 let pending: RuntimeNativeBootstrap | null = null;
 
@@ -38,13 +65,15 @@ export function installRuntimeNativeBootstrap(value: unknown): void {
     throw invalid();
   }
   const schemaVersion = value.schemaVersion;
-  const workspace =
+  const parsed =
     schemaVersion === SCHEMA_VERSION_V1
       ? parseV1(value)
       : schemaVersion === SCHEMA_VERSION_V2
         ? parseV2(value)
-        : null;
-  if (workspace === null) throw invalid();
+        : schemaVersion === SCHEMA_VERSION_V3
+          ? parseV3(value)
+          : null;
+  if (parsed === null) throw invalid();
   const provider = parseProvider(value.provider);
   const probe = parseProbe(value.probe);
   if (
@@ -63,7 +92,8 @@ export function installRuntimeNativeBootstrap(value: unknown): void {
     provider,
     apiKey: value.apiKey as string | null,
     probe,
-    workspace: workspace.value,
+    workspace: parsed.workspace,
+    credentialBindings: parsed.credentialBindings,
   });
 }
 
@@ -75,15 +105,15 @@ export function takeRuntimeNativeBootstrap(): RuntimeNativeBootstrap | null {
 
 function parseV1(
   value: Record<string, unknown>,
-): Readonly<{ value: null }> | null {
+): ParsedPrivateBootstrap | null {
   return exactKeys(value, ["apiKey", "probe", "provider", "schemaVersion"])
-    ? { value: null }
+    ? { workspace: null, credentialBindings: null }
     : null;
 }
 
 function parseV2(
   value: Record<string, unknown>,
-): Readonly<{ value: RuntimeNativeWorkspaceBootstrap | null }> | null {
+): ParsedPrivateBootstrap | null {
   if (
     !exactKeys(value, [
       "apiKey",
@@ -96,8 +126,148 @@ function parseV2(
     return null;
   }
   return {
-    value: value.workspace === null ? null : parseWorkspace(value.workspace),
+    workspace:
+      value.workspace === null ? null : parseWorkspace(value.workspace),
+    credentialBindings: null,
   };
+}
+
+type ParsedPrivateBootstrap = Readonly<{
+  workspace: RuntimeNativeWorkspaceBootstrap | null;
+  credentialBindings: RuntimeNativeCredentialBindings | null;
+}>;
+
+function parseV3(
+  value: Record<string, unknown>,
+): ParsedPrivateBootstrap | null {
+  if (
+    !exactKeys(value, [
+      "apiKey",
+      "credentialBindings",
+      "probe",
+      "provider",
+      "schemaVersion",
+      "workspace",
+    ]) ||
+    value.credentialBindings === null
+  ) {
+    return null;
+  }
+  if (value.workspace === null) return null;
+  const workspace = parseWorkspace(value.workspace);
+  const credentialBindings = parseCredentialBindings(value.credentialBindings);
+  const authority = credentialBindings.authority;
+  if (
+    authority.tenantId !== workspace.authority.tenantId ||
+    authority.workspaceBindingId !== workspace.authority.workspaceBindingId ||
+    authority.runtimeBindingId !== workspace.authority.runtimeBindingId
+  ) {
+    credentialBindings.destroy();
+    return null;
+  }
+  return { workspace, credentialBindings };
+}
+
+function parseCredentialBindings(
+  value: unknown,
+): RuntimeNativeCredentialBindings {
+  if (
+    !object(value) ||
+    !exactKeys(value, ["authority", "bindings", "schemaVersion"]) ||
+    value.schemaVersion !== PRIVATE_CREDENTIAL_SCHEMA_VERSION ||
+    !object(value.authority) ||
+    !exactKeys(value.authority, [
+      "agentVersionId",
+      "runtimeBindingId",
+      "tenantId",
+      "workspaceBindingId",
+    ]) ||
+    !Array.isArray(value.bindings) ||
+    value.bindings.length < 1 ||
+    value.bindings.length > MAX_CREDENTIAL_BINDINGS
+  ) {
+    throw invalid();
+  }
+  const authority = redact({
+    tenantId: opaque(value.authority.tenantId),
+    workspaceBindingId: opaque(value.authority.workspaceBindingId),
+    runtimeBindingId: opaque(value.authority.runtimeBindingId),
+    agentVersionId: opaque(value.authority.agentVersionId),
+  });
+  const ids = new Set<string>();
+  const bindings: { credentialBindingId: string; bearerToken: string }[] =
+    value.bindings.map((candidate) => {
+      if (
+        !object(candidate) ||
+        !exactKeys(candidate, ["bearerToken", "credentialBindingId"]) ||
+        !bearer(candidate.bearerToken)
+      ) {
+        throw invalid();
+      }
+      const credentialBindingId = opaque(candidate.credentialBindingId);
+      if (ids.has(credentialBindingId)) throw invalid();
+      ids.add(credentialBindingId);
+      const parsed = redact({
+        credentialBindingId,
+        bearerToken: candidate.bearerToken,
+      });
+      candidate.bearerToken = "";
+      return parsed;
+    });
+  let available = true;
+  const owner: RuntimeNativeCredentialBindings = {
+    authority,
+    consume(expectedAuthority, consumer): void {
+      if (
+        !available ||
+        !sameCredentialAuthority(expectedAuthority, authority) ||
+        typeof consumer !== "function"
+      ) {
+        throw invalid();
+      }
+      available = false;
+      try {
+        consumer(bindings);
+      } finally {
+        for (const binding of bindings) binding.bearerToken = "";
+        bindings.length = 0;
+      }
+    },
+    destroy(): void {
+      available = false;
+      for (const binding of bindings) binding.bearerToken = "";
+      bindings.length = 0;
+    },
+  };
+  return redact(owner);
+}
+
+function sameCredentialAuthority(
+  value: unknown,
+  expected: RuntimeNativeCredentialBindingAuthority,
+): boolean {
+  return (
+    object(value) &&
+    exactKeys(value, [
+      "agentVersionId",
+      "runtimeBindingId",
+      "tenantId",
+      "workspaceBindingId",
+    ]) &&
+    value.tenantId === expected.tenantId &&
+    value.workspaceBindingId === expected.workspaceBindingId &&
+    value.runtimeBindingId === expected.runtimeBindingId &&
+    value.agentVersionId === expected.agentVersionId
+  );
+}
+
+function bearer(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length >= 1 &&
+    value.length <= 4_096 &&
+    /^[\x21-\x7e]+$/u.test(value)
+  );
 }
 
 function parseWorkspace(value: unknown): RuntimeNativeWorkspaceBootstrap {
