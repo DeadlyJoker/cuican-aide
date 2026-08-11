@@ -58,7 +58,7 @@ if (connectionString === undefined) {
     assert.deepEqual(rows.rows, [
       { execution_id: "workspace-execution-1", command_kind: "tool" },
     ]);
-    assert.equal(version.rows[0]?.version, 3);
+    assert.equal(version.rows[0]?.version, 4);
   });
 
   test("commits Workspace authority and rejects kind orphans across pools", async (context) => {

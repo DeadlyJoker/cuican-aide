@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function configureSqliteDeviceGatewayDatabase(
   database: DatabaseSync,
@@ -23,6 +23,7 @@ export function configureSqliteDeviceGatewayDatabase(
   }
   if (version === 0) migrateEmptyDatabase(database);
   if (version === 1) migrateVersionOne(database);
+  if (version === 2) migrateVersionTwo(database);
   assertSqliteDeviceGatewaySchema(database);
 }
 
@@ -32,7 +33,8 @@ function migrateEmptyDatabase(database: DatabaseSync): void {
       ${executionKindsSql()}
       ${toolRecordsSql()}
       ${workspaceAndRouteTablesSql()}
-      PRAGMA user_version = 2;
+      ${workspaceReadTableSql()}
+      PRAGMA user_version = 3;
     `);
   });
 }
@@ -68,7 +70,8 @@ function migrateVersionOne(database: DatabaseSync): void {
       DROP TABLE device_dispatch_records;
       ALTER TABLE device_dispatch_records_v2 RENAME TO device_dispatch_records;
       ${workspaceAndRouteTablesSql()}
-      PRAGMA user_version = 2;
+      ${workspaceReadTableSql()}
+      PRAGMA user_version = 3;
     `);
   });
 }
@@ -78,9 +81,37 @@ function executionKindsSql(): string {
     CREATE TABLE device_execution_kinds (
       execution_id TEXT PRIMARY KEY NOT NULL,
       command_kind TEXT NOT NULL CHECK (
-        command_kind IN ('tool', 'workspaceList')
+        command_kind IN ('tool', 'workspaceList', 'workspaceRead')
       ),
       UNIQUE (execution_id, command_kind)
+    ) STRICT;
+  `;
+}
+
+function migrateVersionTwo(database: DatabaseSync): void {
+  database.exec("PRAGMA legacy_alter_table = ON");
+  transaction(database, () => {
+    database.exec(`
+      ALTER TABLE device_execution_kinds RENAME TO device_execution_kinds_v2;
+      ${executionKindsSql()}
+      INSERT INTO device_execution_kinds SELECT * FROM device_execution_kinds_v2;
+      DROP TABLE device_execution_kinds_v2;
+      ${workspaceReadTableSql()}
+      PRAGMA user_version = 3;
+    `);
+  });
+  database.exec("PRAGMA legacy_alter_table = OFF");
+}
+
+function workspaceReadTableSql(): string {
+  return `
+    CREATE TABLE workspace_read_dispatch_records (
+      execution_id TEXT PRIMARY KEY NOT NULL,
+      command_kind TEXT NOT NULL DEFAULT 'workspaceRead' CHECK (command_kind = 'workspaceRead'),
+      record_json TEXT NOT NULL CHECK (json_valid(record_json)),
+      FOREIGN KEY (execution_id, command_kind)
+        REFERENCES device_execution_kinds(execution_id, command_kind)
+        ON DELETE RESTRICT
     ) STRICT;
   `;
 }
@@ -141,7 +172,7 @@ function assertSqliteDeviceGatewaySchema(database: DatabaseSync): void {
     "command_kind",
   ]);
   requireTableSql(database, "device_execution_kinds", [
-    "command_kind IN ('tool', 'workspaceList')",
+    "command_kind IN ('tool', 'workspaceList', 'workspaceRead')",
   ]);
   requireStrictTable(database, "device_dispatch_records", [
     column("execution_id", "TEXT", 1, null, 1),
@@ -169,6 +200,12 @@ function assertSqliteDeviceGatewaySchema(database: DatabaseSync): void {
     "CHECK ( command_kind = 'workspaceList' )",
     "CHECK (json_valid(record_json))",
   ]);
+  requireStrictTable(database, "workspace_read_dispatch_records", [
+    column("execution_id", "TEXT", 1, null, 1),
+    column("command_kind", "TEXT", 1, "'workspaceRead'", 0),
+    column("record_json", "TEXT", 1, null, 0),
+  ]);
+  requireCompositeKindForeignKey(database, "workspace_read_dispatch_records");
   requireStrictTable(database, "device_connection_routes", [
     column("device_id", "TEXT", 1, null, 1),
     column("gateway_id", "TEXT", 1, null, 0),

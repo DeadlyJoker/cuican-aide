@@ -45,7 +45,7 @@ test("migrates v1 Tool authority to v2 kinds without changing its receipt", asyn
   assert.equal(
     (database.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    2,
+    3,
   );
   assert.deepEqual(
     database

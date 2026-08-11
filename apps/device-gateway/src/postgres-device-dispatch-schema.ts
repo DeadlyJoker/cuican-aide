@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export async function migratePostgresDeviceDispatchSchema(
   pool: Pool,
@@ -38,6 +38,8 @@ export async function migratePostgresDeviceDispatchSchema(
     }
     if (version === undefined) {
       await createCurrentSchema(client, schema);
+    } else if (version === 3) {
+      await migrateVersionThree(client, schema);
     } else {
       await migrateLegacySchema(client, schema);
     }
@@ -64,7 +66,21 @@ async function createCurrentSchema(
   await client.query(executionKindsSql(schema));
   await client.query(toolRecordsSql(schema));
   await client.query(workspaceRecordsSql(schema));
+  await client.query(workspaceReadRecordsSql(schema));
   await createRoutes(client, schema);
+}
+
+async function migrateVersionThree(
+  client: PoolClient,
+  schema: string,
+): Promise<void> {
+  await client.query(
+    `ALTER TABLE ${schema}.device_execution_kinds DROP CONSTRAINT device_execution_kinds_command_kind_check`,
+  );
+  await client.query(
+    `ALTER TABLE ${schema}.device_execution_kinds ADD CONSTRAINT device_execution_kinds_command_kind_check CHECK (command_kind IN ('tool', 'workspaceList', 'workspaceRead'))`,
+  );
+  await client.query(workspaceReadRecordsSql(schema));
 }
 
 async function migrateLegacySchema(
@@ -120,7 +136,7 @@ function executionKindsSql(schema: string): string {
     CREATE TABLE ${schema}.device_execution_kinds (
       execution_id TEXT PRIMARY KEY,
       command_kind TEXT NOT NULL CHECK (
-        command_kind IN ('tool', 'workspaceList')
+        command_kind IN ('tool', 'workspaceList', 'workspaceRead')
       ),
       CONSTRAINT device_execution_kinds_identity_kind_key
         UNIQUE (execution_id, command_kind)
@@ -170,6 +186,16 @@ function workspaceRecordsSql(schema: string): string {
   `;
 }
 
+function workspaceReadRecordsSql(schema: string): string {
+  return `CREATE TABLE ${schema}.workspace_read_dispatch_records (
+    execution_id TEXT PRIMARY KEY,
+    command_kind TEXT NOT NULL DEFAULT 'workspaceRead' CHECK (command_kind = 'workspaceRead'),
+    record_json JSONB NOT NULL CHECK (jsonb_typeof(record_json) = 'object'),
+    CONSTRAINT workspace_read_dispatch_records_execution_kind_fk FOREIGN KEY (execution_id, command_kind)
+      REFERENCES ${schema}.device_execution_kinds(execution_id, command_kind) ON DELETE RESTRICT
+  )`;
+}
+
 async function createRoutes(client: PoolClient, schema: string): Promise<void> {
   await client.query(`
     CREATE TABLE IF NOT EXISTS ${schema}.device_connection_routes (
@@ -213,6 +239,11 @@ async function assertPostgresDeviceDispatchSchema(
     "command_kind:text:NO",
     "record_json:jsonb:NO",
   ]);
+  await requireColumns(client, schema, "workspace_read_dispatch_records", [
+    "execution_id:text:NO",
+    "command_kind:text:NO",
+    "record_json:jsonb:NO",
+  ]);
   await requireColumns(client, schema, "device_connection_routes", [
     "device_id:text:NO",
     "gateway_id:text:NO",
@@ -224,7 +255,7 @@ async function assertPostgresDeviceDispatchSchema(
   await requireConstraints(client, schema, "device_execution_kinds", [
     "PRIMARY KEY (execution_id)",
     "UNIQUE (execution_id, command_kind)",
-    "CHECK (command_kind = ANY (ARRAY['tool'::text, 'workspaceList'::text]))",
+    "'workspaceRead'::text",
   ]);
   await requireConstraints(client, schema, "device_dispatch_schema", [
     "PRIMARY KEY (component)",
@@ -245,6 +276,12 @@ async function assertPostgresDeviceDispatchSchema(
     "CHECK (command_kind = 'workspaceList'::text)",
     "CHECK (jsonb_typeof(record_json) = 'object'::text)",
   ]);
+  await requireConstraints(client, schema, "workspace_read_dispatch_records", [
+    "PRIMARY KEY (execution_id)",
+    `FOREIGN KEY (execution_id, command_kind) REFERENCES ${schema}.device_execution_kinds(execution_id, command_kind) ON DELETE RESTRICT`,
+    "CHECK (command_kind = 'workspaceRead'::text)",
+    "CHECK (jsonb_typeof(record_json) = 'object'::text)",
+  ]);
   await requireConstraints(client, schema, "device_connection_routes", [
     "PRIMARY KEY (device_id)",
     "CHECK (epoch > 0)",
@@ -255,6 +292,13 @@ async function assertPostgresDeviceDispatchSchema(
     "device_dispatch_records",
     "command_kind",
     "'tool'::text",
+  );
+  await requireColumnDefault(
+    client,
+    schema,
+    "workspace_read_dispatch_records",
+    "command_kind",
+    "'workspaceRead'::text",
   );
   await requireColumnDefault(
     client,
