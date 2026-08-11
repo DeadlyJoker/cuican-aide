@@ -7,10 +7,10 @@ use url::Url;
 use super::CancelDisposition;
 use super::apply_cancel;
 use super::register_cancellation;
+use crate::test_support::ServerPin;
 use crate::test_support::accepted_event;
 use crate::test_support::runtime_fixture;
 use crate::test_support::signed_command;
-use crate::test_support::ServerPin;
 
 #[tokio::test]
 async fn accepted_only_and_terminal_late_cancel_are_safe_exact_noops() {

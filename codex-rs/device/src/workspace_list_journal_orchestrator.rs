@@ -211,9 +211,7 @@ impl NativeWorkspaceListOrchestrator {
                 let is_running = running_executions()
                     .lock()
                     .map_err(|_| {
-                        NativeDeviceAdmissionError::new(
-                            "device_workspace_single_flight_poisoned",
-                        )
+                        NativeDeviceAdmissionError::new("device_workspace_single_flight_poisoned")
                     })?
                     .contains(&execution.command.execution_id);
                 if is_running {
@@ -275,12 +273,12 @@ impl NativeWorkspaceListOrchestrator {
     ) -> Result<NativeWorkspaceListDispatchOutcome, NativeDeviceAdmissionError> {
         let terminal = unknown_terminal(&execution, (self.now)())?;
         match self.record_terminal_authority(&terminal).await? {
-            TerminalAuthority::Proposed(resolved) => {
-                Ok(NativeWorkspaceListDispatchOutcome::RecoveredUnknownOutcome {
+            TerminalAuthority::Proposed(resolved) => Ok(
+                NativeWorkspaceListDispatchOutcome::RecoveredUnknownOutcome {
                     accepted: resolved.accepted,
                     terminal: required_terminal(resolved.terminal)?,
-                })
-            }
+                },
+            ),
             TerminalAuthority::Existing(resolved) => terminal_replay(resolved),
         }
     }
@@ -322,7 +320,6 @@ impl NativeWorkspaceListOrchestrator {
             Err(error) => Err(from_journal(error)),
         }
     }
-
 }
 
 struct RunningExecution {

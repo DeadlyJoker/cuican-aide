@@ -23,6 +23,9 @@ impl NativeDeviceRuntimeBinding {
 
     pub(crate) fn validate(&self) -> Result<(), NativeDeviceAdmissionError> {
         require_opaque_id(&self.device_binding_id, "device_binding_id_invalid")?;
-        require_opaque_id(&self.runtime_binding_id, "device_runtime_binding_id_invalid")
+        require_opaque_id(
+            &self.runtime_binding_id,
+            "device_runtime_binding_id_invalid",
+        )
     }
 }

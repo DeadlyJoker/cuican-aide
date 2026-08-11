@@ -3,6 +3,9 @@ use std::os::windows::ffi::OsStrExt as _;
 use std::path::Path;
 use std::ptr;
 
+use windows_sys::Wdk::Storage::FileSystem::FILE_ID_BOTH_DIR_INFORMATION;
+use windows_sys::Wdk::Storage::FileSystem::FileIdBothDirectoryInformation;
+use windows_sys::Wdk::Storage::FileSystem::NtQueryDirectoryFile;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
@@ -22,9 +25,6 @@ use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE;
 use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandle;
 use windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING;
 use windows_sys::Win32::System::IO::IO_STATUS_BLOCK;
-use windows_sys::Wdk::Storage::FileSystem::FILE_ID_BOTH_DIR_INFORMATION;
-use windows_sys::Wdk::Storage::FileSystem::FileIdBothDirectoryInformation;
-use windows_sys::Wdk::Storage::FileSystem::NtQueryDirectoryFile;
 
 use super::ScanBudget;
 use super::WorkspaceDirectoryEntry;
@@ -152,24 +152,15 @@ impl StableDirectory {
             }
             // SAFETY: NtQueryDirectoryFile succeeded with the exact structure
             // class and one complete entry in buffer.
-            let raw = unsafe {
-                &*(buffer
-                    .0
-                    .as_ptr()
-                    .cast::<FILE_ID_BOTH_DIR_INFORMATION>())
-            };
+            let raw = unsafe { &*(buffer.0.as_ptr().cast::<FILE_ID_BOTH_DIR_INFORMATION>()) };
             let name_units = usize::try_from(raw.FileNameLength)
                 .ok()
                 .and_then(|length| length.checked_div(2))
-                .ok_or_else(|| {
-                    WorkspaceDirectoryError::new("workspace_list_entry_name_invalid")
-                })?;
+                .ok_or_else(|| WorkspaceDirectoryError::new("workspace_list_entry_name_invalid"))?;
             let name_offset = std::mem::offset_of!(FILE_ID_BOTH_DIR_INFORMATION, FileName);
             let required_bytes = name_offset
                 .checked_add(raw.FileNameLength as usize)
-                .ok_or_else(|| {
-                    WorkspaceDirectoryError::new("workspace_list_entry_name_invalid")
-                })?;
+                .ok_or_else(|| WorkspaceDirectoryError::new("workspace_list_entry_name_invalid"))?;
             if raw.FileNameLength % 2 != 0
                 || name_units > 255
                 || required_bytes > buffer.0.len()
@@ -181,14 +172,10 @@ impl StableDirectory {
             }
             // SAFETY: FileNameLength is supplied by the successful kernel call
             // and the buffer was sized for the maximum accepted name.
-            let wide_name = unsafe {
-                std::slice::from_raw_parts(raw.FileName.as_ptr(), name_units)
-            };
+            let wide_name =
+                unsafe { std::slice::from_raw_parts(raw.FileName.as_ptr(), name_units) };
             let name = String::from_utf16(wide_name).map_err(|error| {
-                WorkspaceDirectoryError::with_source(
-                    "workspace_list_entry_name_invalid",
-                    error,
-                )
+                WorkspaceDirectoryError::with_source("workspace_list_entry_name_invalid", error)
             })?;
             let name_bytes = name.as_bytes();
             if matches!(name.as_str(), "." | "..") {

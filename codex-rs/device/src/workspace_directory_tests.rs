@@ -46,10 +46,7 @@ fn lists_the_stable_handle_in_utf8_byte_order_with_exact_cursors() {
     assert_eq!(
         first,
         WorkspaceListPage {
-            entries: vec![
-                directory("a"),
-                file("z"),
-            ],
+            entries: vec![directory("a"), file("z"),],
             next_cursor: Some("workspace-page-1".to_string()),
             truncated: true,
         }
@@ -281,11 +278,7 @@ fn enforces_scan_name_output_timeout_and_cancellation_limits() {
     expired.timeout = Duration::from_nanos(1);
     assert_code(
         registry
-            .begin_listing(
-                &binding,
-                expired,
-                &WorkspaceListCancellation::default(),
-            )
+            .begin_listing(&binding, expired, &WorkspaceListCancellation::default())
             .expect_err("deadline"),
         "workspace_list_deadline_exceeded",
     );

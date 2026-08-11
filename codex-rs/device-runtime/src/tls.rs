@@ -41,16 +41,18 @@ pub(crate) fn build_client_config(
     }
     let mut roots = RootCertStore::empty();
     for authority in authorities {
-        roots
-            .add(authority)
-            .map_err(|error| DeviceRuntimeError::with_source("device_runtime_tls_invalid", error))?;
+        roots.add(authority).map_err(|error| {
+            DeviceRuntimeError::with_source("device_runtime_tls_invalid", error)
+        })?;
     }
 
     let builder = ClientConfig::builder_with_protocol_versions(&[&rustls::version::TLS13]);
     let config = if let Some(pin) = &material.server_certificate_sha256 {
         let verifier = WebPkiServerVerifier::builder(Arc::new(roots))
             .build()
-            .map_err(|error| DeviceRuntimeError::with_source("device_runtime_tls_invalid", error))?;
+            .map_err(|error| {
+                DeviceRuntimeError::with_source("device_runtime_tls_invalid", error)
+            })?;
         builder
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(PinnedServerVerifier {

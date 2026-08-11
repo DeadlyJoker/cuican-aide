@@ -53,8 +53,8 @@ async fn crash_reopen_turns_expired_accepted_only_into_unknown_without_touching_
     drop(_original);
     drop(fence);
 
-    let reopened_fence = ConnectionEpochFence::open("device-1", &epoch_path)
-        .expect("reopen durable epoch fence");
+    let reopened_fence =
+        ConnectionEpochFence::open("device-1", &epoch_path).expect("reopen durable epoch fence");
     let mut takeover = support::newer_welcome(&fixture.welcome, "2026-08-08T03:00:00Z");
     takeover.sent_at = "2026-08-08T02:00:00Z".to_string();
     let connection = support::establish(
@@ -163,7 +163,10 @@ async fn reconnect_projection_and_cumulative_ack_are_durable_and_redacted() {
         .await
         .expect("project unacknowledged events");
     assert_eq!(initial.items.len(), 1);
-    assert_eq!(initial.items[0].events, vec![accepted.clone(), terminal.clone()]);
+    assert_eq!(
+        initial.items[0].events,
+        vec![accepted.clone(), terminal.clone()]
+    );
 
     let ack_one = support::ack(&accepted, 1, "2026-08-08T00:00:05Z");
     orchestrator
@@ -189,11 +192,7 @@ async fn reconnect_projection_and_cumulative_ack_are_durable_and_redacted() {
         AcknowledgeWorkspaceListOutcome::Replayed(_)
     ));
     orchestrator
-        .acknowledge(&support::ack(
-            &accepted,
-            2,
-            "2026-08-08T00:00:07Z",
-        ))
+        .acknowledge(&support::ack(&accepted, 2, "2026-08-08T00:00:07Z"))
         .await
         .expect("ack terminal event");
     assert_eq!(
@@ -221,12 +220,8 @@ async fn epoch_takeover_after_scan_start_records_unknown_instead_of_old_completi
             .expect("open epoch fence"),
     ));
     let authorizer = Box::leak(Box::new(support::authorizer(&fixture.signing_key)));
-    let connection = support::establish(
-        fence,
-        authorizer,
-        &fixture.welcome,
-        "2026-08-08T00:00:03Z",
-    );
+    let connection =
+        support::establish(fence, authorizer, &fixture.welcome, "2026-08-08T00:00:03Z");
     let journal = DeviceWorkspaceJournal::open(state.path().join("journal.sqlite"))
         .await
         .expect("open journal");
@@ -263,12 +258,7 @@ async fn epoch_takeover_after_scan_start_records_unknown_instead_of_old_completi
     };
     reached_scan.wait();
     let takeover = support::newer_welcome(&fixture.welcome, "2026-08-08T00:00:35Z");
-    let _new_connection = support::establish(
-        fence,
-        authorizer,
-        &takeover,
-        "2026-08-08T00:00:04Z",
-    );
+    let _new_connection = support::establish(fence, authorizer, &takeover, "2026-08-08T00:00:04Z");
     release_scan.wait();
     assert!(matches!(
         task.await

@@ -62,12 +62,7 @@ fn verifies_shared_command_and_projects_the_exact_ts_result_shape() {
     let fence = ConnectionEpochFence::open("device-1", state.path().join("state"))
         .expect("open epoch fence");
     let authorizer = authorizer(&fixture.signing_key);
-    let connection = establish(
-        &fence,
-        &authorizer,
-        &fixture.welcome,
-        runtime_binding(),
-    );
+    let connection = establish(&fence, &authorizer, &fixture.welcome, runtime_binding());
     let verified = connection
         .verify_workspace_list_command(
             &serde_json::to_vec(&fixture.command).expect("serialize workspace command"),
@@ -112,12 +107,7 @@ fn current_epoch_accepts_workspace_command_after_initial_route_lease_expires() {
     let fence = ConnectionEpochFence::open("device-1", state.path().join("state"))
         .expect("open epoch fence");
     let authorizer = authorizer(&fixture.signing_key);
-    let connection = establish(
-        &fence,
-        &authorizer,
-        &fixture.welcome,
-        runtime_binding(),
-    );
+    let connection = establish(&fence, &authorizer, &fixture.welcome, runtime_binding());
     let after_initial_route_lease = timestamp("2026-08-08T00:02:00Z");
 
     let verified = connection
@@ -163,12 +153,7 @@ fn signature_and_current_runtime_bind_every_workspace_authority_field() {
     let fence = ConnectionEpochFence::open("device-1", state.path().join("state"))
         .expect("open epoch fence");
     let authorizer = authorizer(&fixture.signing_key);
-    let connection = establish(
-        &fence,
-        &authorizer,
-        &fixture.welcome,
-        runtime_binding(),
-    );
+    let connection = establish(&fence, &authorizer, &fixture.welcome, runtime_binding());
 
     let mut tampered = vec![
         fixture.command.clone(),
@@ -192,10 +177,7 @@ fn signature_and_current_runtime_bind_every_workspace_authority_field() {
         );
     }
 
-    for change in [
-        RuntimeChange::DeviceBinding,
-        RuntimeChange::RuntimeBinding,
-    ] {
+    for change in [RuntimeChange::DeviceBinding, RuntimeChange::RuntimeBinding] {
         let mut command = fixture.command.clone();
         match change {
             RuntimeChange::DeviceBinding => {
@@ -236,12 +218,7 @@ fn stable_handle_survives_path_replacement_and_old_incarnation_fails_closed() {
     let fence = ConnectionEpochFence::open("device-1", state.path().join("state"))
         .expect("open epoch fence");
     let authorizer = authorizer(&fixture.signing_key);
-    let connection = establish(
-        &fence,
-        &authorizer,
-        &fixture.welcome,
-        runtime_binding(),
-    );
+    let connection = establish(&fence, &authorizer, &fixture.welcome, runtime_binding());
     assert_eq!(
         execute(&connection, &registry, &fixture.command),
         DeviceWorkspaceListResult {
@@ -292,22 +269,12 @@ fn takeover_cancellation_links_and_output_caps_fail_closed() {
     let fence = ConnectionEpochFence::open("device-1", state.path().join("state"))
         .expect("open epoch fence");
     let authorizer = authorizer(&fixture.signing_key);
-    let old = establish(
-        &fence,
-        &authorizer,
-        &fixture.welcome,
-        runtime_binding(),
-    );
+    let old = establish(&fence, &authorizer, &fixture.welcome, runtime_binding());
     let verified = verify(&old, &fixture.command);
     let mut newer_welcome = fixture.welcome.clone();
     newer_welcome.connection_epoch += 1;
     newer_welcome.connection_id = "connection-2".to_string();
-    let current = establish(
-        &fence,
-        &authorizer,
-        &newer_welcome,
-        runtime_binding(),
-    );
+    let current = establish(&fence, &authorizer, &newer_welcome, runtime_binding());
     assert_code(
         old.start_workspace_list(
             verified,
@@ -379,12 +346,7 @@ fn blocked_scan_does_not_block_takeover_and_its_old_epoch_result_is_rejected() {
     let fence = ConnectionEpochFence::open("device-1", state.path().join("state"))
         .expect("open epoch fence");
     let authorizer = authorizer(&fixture.signing_key);
-    let old = establish(
-        &fence,
-        &authorizer,
-        &fixture.welcome,
-        runtime_binding(),
-    );
+    let old = establish(&fence, &authorizer, &fixture.welcome, runtime_binding());
     let verified = verify(&old, &fixture.command);
     let reached_scan_barrier = Arc::new(Barrier::new(2));
     let release_scan = Arc::new(Barrier::new(2));
@@ -410,12 +372,7 @@ fn blocked_scan_does_not_block_takeover_and_its_old_epoch_result_is_rejected() {
         let mut newer_welcome = fixture.welcome.clone();
         newer_welcome.connection_epoch += 1;
         newer_welcome.connection_id = "connection-2".to_string();
-        let _current = establish(
-            &fence,
-            &authorizer,
-            &newer_welcome,
-            runtime_binding(),
-        );
+        let _current = establish(&fence, &authorizer, &newer_welcome, runtime_binding());
         release_scan.wait();
         assert_code(
             scan.join()

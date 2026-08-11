@@ -6,11 +6,11 @@ use serde::Serialize;
 use crate::NativeDeviceAdmissionError;
 use crate::WorkspaceDirectoryBinding;
 use crate::WorkspaceDirectoryEntry;
-use crate::workspace_directory::WorkspaceDirectoryListingLease;
 use crate::WorkspaceDirectoryRegistry;
 use crate::WorkspaceListCancellation;
 use crate::WorkspaceListLimits;
 use crate::WorkspaceListPageRequest;
+use crate::workspace_directory::WorkspaceDirectoryListingLease;
 
 const RESULT_SCHEMA_VERSION: &str = "crewon.workspace-list-result.v0";
 const PAGE_ENTRIES: usize = 64;

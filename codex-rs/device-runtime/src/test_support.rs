@@ -9,12 +9,12 @@ use chrono::Utc;
 use crewon_device::TrustedDeviceCommandKey;
 use crewon_device_protocol::DeviceGatewayWelcome;
 use crewon_device_protocol::DeviceHello;
-use crewon_device_protocol::DeviceWorkspaceListAck;
 use crewon_device_protocol::DeviceWorkspaceListAcceptedData;
-use crewon_device_protocol::DeviceWorkspaceListCompletedData;
+use crewon_device_protocol::DeviceWorkspaceListAck;
 use crewon_device_protocol::DeviceWorkspaceListCommand;
-use crewon_device_protocol::DeviceWorkspaceListEventEnvelope;
+use crewon_device_protocol::DeviceWorkspaceListCompletedData;
 use crewon_device_protocol::DeviceWorkspaceListEvent;
+use crewon_device_protocol::DeviceWorkspaceListEventEnvelope;
 use crewon_device_protocol::DeviceWorkspaceListResult;
 use crewon_device_protocol::canonical_device_workspace_list_command_signing_payload;
 use crewon_device_protocol::parse_device_workspace_list_command;
@@ -128,10 +128,9 @@ pub(crate) fn signed_command(fixture: &RuntimeFixture, suffix: u16) -> DeviceWor
         "../../packages/test-contracts/fixtures/device-protocol.reference.json"
     )
     .expect("resolve protocol fixture");
-    let reference: Reference = serde_json::from_str(
-        &fs::read_to_string(fixture_path).expect("read protocol fixture"),
-    )
-    .expect("parse protocol fixture");
+    let reference: Reference =
+        serde_json::from_str(&fs::read_to_string(fixture_path).expect("read protocol fixture"))
+            .expect("parse protocol fixture");
     let mut command = parse_device_workspace_list_command(reference.valid.workspace_command)
         .expect("parse Workspace command");
     let now = Utc::now();
@@ -222,7 +221,12 @@ pub(crate) fn terminal_event(
         panic!("accepted event required");
     };
     DeviceWorkspaceListEvent::Completed {
-        envelope: event_envelope(command, envelope.receipt_id.clone(), envelope.connection_epoch, 2),
+        envelope: event_envelope(
+            command,
+            envelope.receipt_id.clone(),
+            envelope.connection_epoch,
+            2,
+        ),
         data: DeviceWorkspaceListCompletedData {
             result: DeviceWorkspaceListResult {
                 schema_version: "crewon.workspace-list-result.v0".to_string(),

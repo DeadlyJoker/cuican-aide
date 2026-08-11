@@ -16,19 +16,19 @@ use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
+use super::Outbound;
 use super::build_hello;
 use super::collect_replay_events;
 use super::enqueue_replay_events;
 use super::run_socket_with_ready;
-use super::Outbound;
+use crate::runtime::MAX_SOCKET_MESSAGE_BYTES;
+use crate::test_support::ServerPin;
 use crate::test_support::accepted_event;
 use crate::test_support::ack;
 use crate::test_support::runtime_fixture;
 use crate::test_support::signed_command;
 use crate::test_support::terminal_event;
 use crate::test_support::welcome;
-use crate::test_support::ServerPin;
-use crate::runtime::MAX_SOCKET_MESSAGE_BYTES;
 
 #[tokio::test]
 async fn real_mtls_wss_sends_hello_then_accepted_terminal_and_survives_late_cancel() {
@@ -108,18 +108,27 @@ async fn real_mtls_wss_sends_hello_then_accepted_terminal_and_survives_late_canc
         (accepted, terminal)
     });
 
-    let socket = fixture.runtime.connect_socket().await.expect("connect mTLS WSS");
+    let socket = fixture
+        .runtime
+        .connect_socket()
+        .await
+        .expect("connect mTLS WSS");
     let ready = std::sync::Mutex::new(Vec::new());
     run_socket_with_ready(Arc::clone(&fixture.runtime.state), socket, &|event| {
         ready.lock().expect("ready observer").push(event);
     })
-        .await
-        .expect("run Device session");
+    .await
+    .expect("run Device session");
     assert_eq!(
         ready.into_inner().expect("ready events"),
         vec![crate::DeviceRuntimeReady {
             device_id: fixture.runtime.state.device_id.clone(),
-            runtime_binding_id: fixture.runtime.state.runtime_binding.runtime_binding_id.clone(),
+            runtime_binding_id: fixture
+                .runtime
+                .state
+                .runtime_binding
+                .runtime_binding_id
+                .clone(),
             connection_epoch: 1,
         }]
     );
@@ -190,12 +199,7 @@ async fn disconnect_after_accepted_replays_durable_terminal_on_next_epoch() {
             .await
             .expect("send ordering ping");
         loop {
-            if let Message::Pong(_) = second
-                .next()
-                .await
-                .expect("pong frame")
-                .expect("read pong")
-            {
+            if let Message::Pong(_) = second.next().await.expect("pong frame").expect("read pong") {
                 break;
             }
         }
@@ -208,7 +212,10 @@ async fn disconnect_after_accepted_replays_durable_terminal_on_next_epoch() {
         .await
         .expect("run first session");
     loop {
-        let event = terminal_events.recv().await.expect("terminal journal event");
+        let event = terminal_events
+            .recv()
+            .await
+            .expect("terminal journal event");
         if event_sequence(&event) == 2 {
             break;
         }
@@ -235,12 +242,14 @@ async fn rejects_untrusted_server_certificate_and_wrong_welcome_connection() {
     let untrusted_server = Arc::clone(&untrusted.server_config);
     let server = tokio::spawn(async move {
         let (tcp, _) = listener.accept().await.expect("accept wrong-cert TCP");
-        assert!(TlsAcceptor::from(untrusted_server).accept(tcp).await.is_err());
+        assert!(
+            TlsAcceptor::from(untrusted_server)
+                .accept(tcp)
+                .await
+                .is_err()
+        );
     });
-    assert!(
-        trusted.runtime.connect_socket().await
-        .is_err()
-    );
+    assert!(trusted.runtime.connect_socket().await.is_err());
     server.await.expect("wrong-cert server");
 
     let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -419,7 +428,9 @@ async fn hello_omits_zero_acknowledgements_and_fails_closed_above_total_cap() {
     );
 }
 
-async fn receive_hello<Stream>(socket: &mut tokio_tungstenite::WebSocketStream<Stream>) -> DeviceHello
+async fn receive_hello<Stream>(
+    socket: &mut tokio_tungstenite::WebSocketStream<Stream>,
+) -> DeviceHello
 where
     Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -452,7 +463,11 @@ async fn connect(
     url: &Url,
 ) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     assert_eq!(fixture.runtime.state.gateway_url, *url);
-    fixture.runtime.connect_socket().await.expect("connect mTLS WSS")
+    fixture
+        .runtime
+        .connect_socket()
+        .await
+        .expect("connect mTLS WSS")
 }
 
 async fn receive_event<Stream>(

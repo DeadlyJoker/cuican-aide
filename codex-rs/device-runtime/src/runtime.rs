@@ -110,13 +110,11 @@ impl DeviceRuntime {
         .map_err(|error| {
             DeviceRuntimeError::with_source("device_runtime_binding_invalid", error)
         })?;
-        let authorizer = DeviceCommandAuthorizer::new(
-            bootstrap.command_keys,
-            ChronoDuration::seconds(30),
-        )
-        .map_err(|error| {
-            DeviceRuntimeError::with_source("device_runtime_command_keys_invalid", error)
-        })?;
+        let authorizer =
+            DeviceCommandAuthorizer::new(bootstrap.command_keys, ChronoDuration::seconds(30))
+                .map_err(|error| {
+                    DeviceRuntimeError::with_source("device_runtime_command_keys_invalid", error)
+                })?;
         let fence = ConnectionEpochFence::open(
             bootstrap.device_id.clone(),
             authority_directory(&bootstrap.journal_path),

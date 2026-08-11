@@ -18,7 +18,10 @@ async fn accepts_strict_bootstrap_and_redacts_all_sensitive_debug_output() {
     assert!(!debug.contains("journal-secret"));
     assert!(!debug.contains("PRIVATE KEY"));
     assert!(!debug.contains("CERTIFICATE"));
-    assert_eq!(debug, "DeviceRuntimeBootstrap([REDACTED]) DeviceRuntimeWorkspace([REDACTED])");
+    assert_eq!(
+        debug,
+        "DeviceRuntimeBootstrap([REDACTED]) DeviceRuntimeWorkspace([REDACTED])"
+    );
 }
 
 #[tokio::test]
@@ -40,14 +43,20 @@ async fn accepts_one_bounded_line_without_waiting_for_stdin_eof() {
 async fn rejects_unknown_fields_duplicate_keys_and_unsafe_paths() {
     let mut unknown = valid_bootstrap();
     unknown["unexpected"] = json!(true);
-    assert_eq!(read_error(unknown).await, "device_runtime_bootstrap_invalid");
+    assert_eq!(
+        read_error(unknown).await,
+        "device_runtime_bootstrap_invalid"
+    );
 
     let mut duplicate = valid_bootstrap();
     duplicate["commandPublicKeys"] = json!([
         {"keyId": "control-key-1", "publicKeyPem": "PUBLIC KEY ONE"},
         {"keyId": "control-key-1", "publicKeyPem": "PUBLIC KEY TWO"}
     ]);
-    assert_eq!(read_error(duplicate).await, "device_runtime_command_keys_invalid");
+    assert_eq!(
+        read_error(duplicate).await,
+        "device_runtime_command_keys_invalid"
+    );
 
     let mut relative = valid_bootstrap();
     relative["journalPath"] = json!("relative.sqlite");
@@ -74,7 +83,10 @@ async fn rejects_non_wss_or_noncanonical_gateway_and_oversized_stdin() {
 
     let oversized = vec![b' '; MAX_BOOTSTRAP_BYTES as usize + 1];
     assert_eq!(
-        read_bootstrap(&oversized[..]).await.expect_err("reject size").code,
+        read_bootstrap(&oversized[..])
+            .await
+            .expect_err("reject size")
+            .code,
         "device_runtime_bootstrap_size_invalid"
     );
 }

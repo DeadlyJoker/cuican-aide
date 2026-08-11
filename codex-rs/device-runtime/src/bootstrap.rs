@@ -102,10 +102,9 @@ pub async fn read_bootstrap(
     let mut bytes = Zeroizing::new(Vec::new());
     let mut chunk = Zeroizing::new(vec![0_u8; 8 * 1024]);
     loop {
-        let read = input
-            .read(chunk.as_mut_slice())
-            .await
-            .map_err(|error| DeviceRuntimeError::with_source("device_runtime_bootstrap_io", error))?;
+        let read = input.read(chunk.as_mut_slice()).await.map_err(|error| {
+            DeviceRuntimeError::with_source("device_runtime_bootstrap_io", error)
+        })?;
         if read == 0 {
             break;
         }
@@ -126,7 +125,9 @@ pub async fn read_bootstrap(
         bytes.pop();
     }
     if bytes.is_empty() {
-        return Err(DeviceRuntimeError::new("device_runtime_bootstrap_size_invalid"));
+        return Err(DeviceRuntimeError::new(
+            "device_runtime_bootstrap_size_invalid",
+        ));
     }
     let raw: RawBootstrap = serde_json::from_slice(&bytes).map_err(|error| {
         DeviceRuntimeError::with_source("device_runtime_bootstrap_invalid", error)
@@ -139,7 +140,9 @@ fn append_bootstrap_bytes(
     source: &[u8],
 ) -> Result<(), DeviceRuntimeError> {
     if destination.len().saturating_add(source.len()) > MAX_BOOTSTRAP_BYTES as usize {
-        return Err(DeviceRuntimeError::new("device_runtime_bootstrap_size_invalid"));
+        return Err(DeviceRuntimeError::new(
+            "device_runtime_bootstrap_size_invalid",
+        ));
     }
     destination.extend_from_slice(source);
     Ok(())
@@ -151,8 +154,9 @@ fn validate(raw: RawBootstrap) -> Result<DeviceRuntimeBootstrap, DeviceRuntimeEr
             "device_runtime_bootstrap_unsupported",
         ));
     }
-    let gateway_url = Url::parse(&raw.gateway_wss_url)
-        .map_err(|error| DeviceRuntimeError::with_source("device_runtime_gateway_invalid", error))?;
+    let gateway_url = Url::parse(&raw.gateway_wss_url).map_err(|error| {
+        DeviceRuntimeError::with_source("device_runtime_gateway_invalid", error)
+    })?;
     if gateway_url.scheme() != "wss"
         || gateway_url.path() != "/device/v1"
         || gateway_url.host_str().is_none()
@@ -245,10 +249,7 @@ fn validate(raw: RawBootstrap) -> Result<DeviceRuntimeBootstrap, DeviceRuntimeEr
 }
 
 fn require_absolute_path(value: &str) -> Result<PathBuf, DeviceRuntimeError> {
-    if value.is_empty()
-        || value.len() > 4_096
-        || value.chars().any(char::is_control)
-    {
+    if value.is_empty() || value.len() > 4_096 || value.chars().any(char::is_control) {
         return Err(DeviceRuntimeError::new("device_runtime_path_invalid"));
     }
     let path = PathBuf::from(value);
@@ -261,7 +262,9 @@ fn require_absolute_path(value: &str) -> Result<PathBuf, DeviceRuntimeError> {
 fn require_opaque_id(value: &str) -> Result<(), DeviceRuntimeError> {
     let mut bytes = value.bytes();
     if value.len() > 512
-        || !bytes.next().is_some_and(|byte| byte.is_ascii_alphanumeric())
+        || !bytes
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
         || !bytes
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
     {

@@ -29,8 +29,8 @@ use crate::dispatch::DispatchRequest;
 use crate::dispatch::apply_cancel;
 use crate::dispatch::enqueue_command;
 use crate::dispatch::run_dispatch_scheduler;
-use crate::runtime::DeviceRuntimeState;
 use crate::runtime::DeviceRuntimeReady;
+use crate::runtime::DeviceRuntimeState;
 use crate::runtime::MAX_ACKNOWLEDGED_EXECUTIONS;
 use crate::runtime::MAX_SOCKET_MESSAGE_BYTES;
 use crate::runtime::MAX_UNACKNOWLEDGED_EXECUTIONS;
@@ -70,7 +70,9 @@ where
         DeviceRuntimeError::with_source("device_runtime_welcome_invalid", error)
     })?;
     if welcome.connection_id != connection_id || welcome.device_id != state.device_id {
-        return Err(DeviceRuntimeError::new("device_runtime_welcome_identity_mismatch"));
+        return Err(DeviceRuntimeError::new(
+            "device_runtime_welcome_identity_mismatch",
+        ));
     }
     let connection = NativeDeviceConnection::establish_with_runtime_binding(
         &state.fence,
@@ -79,9 +81,7 @@ where
         &welcome_bytes,
         Utc::now(),
     )
-    .map_err(|error| {
-        DeviceRuntimeError::with_source("device_runtime_welcome_rejected", error)
-    })?;
+    .map_err(|error| DeviceRuntimeError::with_source("device_runtime_welcome_rejected", error))?;
     let accepted = connection.accepted_connection().clone();
     let generation = next_generation(&state)?;
     let mut journal_events = state.events.subscribe();
@@ -210,9 +210,7 @@ async fn build_hello(
             .map_err(|error| {
                 DeviceRuntimeError::with_source("device_runtime_journal_invalid", error)
             })?;
-        if last_acknowledged.len() + page.acknowledgements.len()
-            > MAX_ACKNOWLEDGED_EXECUTIONS
-        {
+        if last_acknowledged.len() + page.acknowledgements.len() > MAX_ACKNOWLEDGED_EXECUTIONS {
             return Err(DeviceRuntimeError::new(
                 "device_runtime_acknowledgement_capacity_exceeded",
             ));
@@ -305,9 +303,13 @@ async fn handle_text_frame(
                 DeviceRuntimeError::with_source("device_runtime_ack_invalid", error)
             })?;
             validate_ack_device(state, &ack)?;
-            state.orchestrator.acknowledge(&ack).await.map_err(|error| {
-                DeviceRuntimeError::with_source("device_runtime_ack_rejected", error)
-            })?;
+            state
+                .orchestrator
+                .acknowledge(&ack)
+                .await
+                .map_err(|error| {
+                    DeviceRuntimeError::with_source("device_runtime_ack_rejected", error)
+                })?;
             Ok(())
         }
         "crewon.device-cancel.v0" => {
@@ -338,10 +340,7 @@ fn parse_bounded_value(frame: &[u8]) -> Result<Value, DeviceRuntimeError> {
         .map_err(|error| DeviceRuntimeError::with_source("device_runtime_frame_invalid", error))
 }
 
-fn strict_text_frame(
-    frame: Message,
-    code: &'static str,
-) -> Result<Vec<u8>, DeviceRuntimeError> {
+fn strict_text_frame(frame: Message, code: &'static str) -> Result<Vec<u8>, DeviceRuntimeError> {
     match frame {
         Message::Text(text) => Ok(text.as_bytes().to_vec()),
         Message::Binary(_)

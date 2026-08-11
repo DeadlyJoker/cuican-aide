@@ -25,7 +25,9 @@ fn builds_tls13_mutual_tls_client_material_and_rejects_malformed_pem() {
         server_certificate_sha256: None,
     };
     assert_eq!(
-        build_client_config(&invalid).expect_err("reject malformed TLS material").code,
+        build_client_config(&invalid)
+            .expect_err("reject malformed TLS material")
+            .code,
         "device_runtime_tls_invalid"
     );
 }
@@ -44,8 +46,7 @@ fn valid_material() -> DeviceRuntimeTlsMaterial {
         CertificateParams::new(vec!["device-1".to_string()]).expect("client params");
     client_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
     client_params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
-    let client_key =
-        KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).expect("generate client key");
+    let client_key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).expect("generate client key");
     let client_certificate = client_params
         .signed_by(&client_key, &ca)
         .expect("sign client certificate");

@@ -73,12 +73,7 @@ pub(crate) async fn run_dispatch_scheduler(
             let blocking_state = Arc::clone(&worker_state);
             let handle = tokio::runtime::Handle::current();
             let outcome = tokio::task::spawn_blocking(move || {
-                dispatch_blocking(
-                    blocking_state,
-                    worker_accepted,
-                    request,
-                    handle,
-                )
+                dispatch_blocking(blocking_state, worker_accepted, request, handle)
             })
             .await;
             drop(permit);
@@ -105,22 +100,22 @@ fn dispatch_blocking(
         state.runtime_binding.clone(),
         accepted,
     )
-    .map_err(|error| {
-        DeviceRuntimeError::with_source("device_runtime_connection_stale", error)
-    })
+    .map_err(|error| DeviceRuntimeError::with_source("device_runtime_connection_stale", error))
     .and_then(|connection| {
         let observer_state = Arc::clone(&state);
         handle
             .block_on(
-                state.orchestrator.dispatch_workspace_list_with_accepted_observer(
-                    &connection,
-                    &request.command_frame,
-                    &state.registry,
-                    &request.cancellation,
-                    move |accepted| {
-                        let _ = observer_state.events.send(accepted.clone());
-                    },
-                ),
+                state
+                    .orchestrator
+                    .dispatch_workspace_list_with_accepted_observer(
+                        &connection,
+                        &request.command_frame,
+                        &state.registry,
+                        &request.cancellation,
+                        move |accepted| {
+                            let _ = observer_state.events.send(accepted.clone());
+                        },
+                    ),
             )
             .map_err(|error| {
                 DeviceRuntimeError::with_source("device_runtime_dispatch_failed", error)
@@ -170,9 +165,11 @@ fn register_cancellation(
 
 fn remove_owned_cancellation(state: &DeviceRuntimeState, command: &DeviceWorkspaceListCommand) {
     if let Ok(mut cancellations) = state.cancellations.lock()
-        && cancellations.get(&command.execution_id).is_some_and(|active| {
-            active.lease_id == command.lease_id && active.lease_epoch == command.lease_epoch
-        })
+        && cancellations
+            .get(&command.execution_id)
+            .is_some_and(|active| {
+                active.lease_id == command.lease_id && active.lease_epoch == command.lease_epoch
+            })
     {
         cancellations.remove(&command.execution_id);
     }

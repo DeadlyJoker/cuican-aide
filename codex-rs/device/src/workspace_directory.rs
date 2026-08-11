@@ -173,9 +173,7 @@ impl WorkspaceDirectoryRegistry {
         let directory = platform::StableDirectory::open(trusted_path)?;
         let mut entries = self.lock_entries()?;
         if entries.contains_key(&binding.workspace_binding_id) {
-            return Err(WorkspaceDirectoryError::new(
-                "workspace_binding_conflict",
-            ));
+            return Err(WorkspaceDirectoryError::new("workspace_binding_conflict"));
         }
         entries.insert(
             binding.workspace_binding_id.clone(),
@@ -274,9 +272,10 @@ impl WorkspaceDirectoryRegistry {
                     "workspace_binding_unavailable",
                 ));
             }
-            registered.directory.take().ok_or_else(|| {
-                WorkspaceDirectoryError::new("workspace_binding_unavailable")
-            })?
+            registered
+                .directory
+                .take()
+                .ok_or_else(|| WorkspaceDirectoryError::new("workspace_binding_unavailable"))?
         };
         Ok(WorkspaceDirectoryListingLease {
             lease: DirectoryLease {
@@ -291,8 +290,10 @@ impl WorkspaceDirectoryRegistry {
 
     fn lock_entries(
         &self,
-    ) -> Result<std::sync::MutexGuard<'_, HashMap<String, RegisteredDirectory>>, WorkspaceDirectoryError>
-    {
+    ) -> Result<
+        std::sync::MutexGuard<'_, HashMap<String, RegisteredDirectory>>,
+        WorkspaceDirectoryError,
+    > {
         self.entries
             .lock()
             .map_err(|_| WorkspaceDirectoryError::new("workspace_registry_poisoned"))
@@ -354,12 +355,10 @@ impl WorkspaceDirectoryListing {
         request: WorkspaceListPageRequest,
     ) -> Result<WorkspaceListPage, WorkspaceDirectoryError> {
         if request.max_entries == 0 || request.max_entries > MAX_WORKSPACE_LIST_ENTRIES {
-            return Err(WorkspaceDirectoryError::new(
-                "workspace_list_page_invalid",
-            ));
+            return Err(WorkspaceDirectoryError::new("workspace_list_page_invalid"));
         }
-        let expected_cursor = (self.next_page != 0)
-            .then(|| format!("{CURSOR_PREFIX}{}", self.next_page));
+        let expected_cursor =
+            (self.next_page != 0).then(|| format!("{CURSOR_PREFIX}{}", self.next_page));
         if request.cursor != expected_cursor {
             return Err(WorkspaceDirectoryError::new(
                 "workspace_list_cursor_invalid",

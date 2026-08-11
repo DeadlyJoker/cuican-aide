@@ -31,12 +31,8 @@ async fn public_observer_sees_durable_accepted_before_handle_acquisition_and_sca
             .expect("open epoch fence"),
     ));
     let authorizer = Box::leak(Box::new(support::authorizer(&fixture.signing_key)));
-    let connection = support::establish(
-        fence,
-        authorizer,
-        &fixture.welcome,
-        "2026-08-08T00:00:03Z",
-    );
+    let connection =
+        support::establish(fence, authorizer, &fixture.welcome, "2026-08-08T00:00:03Z");
     let journal = DeviceWorkspaceJournal::open(state.path().join("journal.sqlite"))
         .await
         .expect("open journal");
@@ -61,8 +57,7 @@ async fn public_observer_sees_durable_accepted_before_handle_acquisition_and_sca
                     &registry,
                     &WorkspaceListCancellation::default(),
                     move |accepted| {
-                        *observed.lock().expect("lock observed accepted") =
-                            Some(accepted.clone());
+                        *observed.lock().expect("lock observed accepted") = Some(accepted.clone());
                         observer_reached.wait();
                         release_observer.wait();
                     },
@@ -109,12 +104,8 @@ async fn accepted_is_durable_before_scan_and_same_process_replay_is_single_fligh
             .expect("open epoch fence"),
     ));
     let authorizer = Box::leak(Box::new(support::authorizer(&fixture.signing_key)));
-    let connection = support::establish(
-        fence,
-        authorizer,
-        &fixture.welcome,
-        "2026-08-08T00:00:03Z",
-    );
+    let connection =
+        support::establish(fence, authorizer, &fixture.welcome, "2026-08-08T00:00:03Z");
     let journal_path = state.path().join("journal.sqlite");
     let journal = DeviceWorkspaceJournal::open(&journal_path)
         .await
@@ -212,12 +203,8 @@ async fn workspace_handle_contention_never_holds_the_journal_writer_or_blocks_ac
             .expect("open epoch fence"),
     ));
     let authorizer = Box::leak(Box::new(support::authorizer(&fixture.signing_key)));
-    let connection = support::establish(
-        fence,
-        authorizer,
-        &fixture.welcome,
-        "2026-08-08T00:00:03Z",
-    );
+    let connection =
+        support::establish(fence, authorizer, &fixture.welcome, "2026-08-08T00:00:03Z");
     let journal = DeviceWorkspaceJournal::open(state.path().join("journal.sqlite"))
         .await
         .expect("open journal");
@@ -284,11 +271,7 @@ async fn workspace_handle_contention_never_holds_the_journal_writer_or_blocks_ac
     second_accepted.wait();
 
     orchestrator
-        .acknowledge(&support::ack(
-            &first.accepted,
-            1,
-            "2026-08-08T00:00:05Z",
-        ))
+        .acknowledge(&support::ack(&first.accepted, 1, "2026-08-08T00:00:05Z"))
         .await
         .expect("ACK commits while second execution waits outside DB transaction");
     release_second.wait();

@@ -199,13 +199,7 @@ impl<'a> NativeDeviceConnection<'a> {
         now: DateTime<Utc>,
     ) -> Result<Self, NativeDeviceAdmissionError> {
         runtime_binding.validate()?;
-        Self::establish_inner(
-            fence,
-            authorizer,
-            welcome_frame,
-            now,
-            Some(runtime_binding),
-        )
+        Self::establish_inner(fence, authorizer, welcome_frame, now, Some(runtime_binding))
     }
 
     /// Re-borrows an already accepted durable connection without advancing
@@ -366,12 +360,8 @@ impl<'a> NativeDeviceConnection<'a> {
             &WorkspaceListCancellation,
         ) -> Result<DeviceWorkspaceListResult, NativeDeviceAdmissionError>,
     ) -> Result<DeviceWorkspaceListResult, NativeDeviceAdmissionError> {
-        let (command, admitted) = self.admit_workspace_list_with(
-            verified,
-            now,
-            cancellation,
-            admit,
-        )?;
+        let (command, admitted) =
+            self.admit_workspace_list_with(verified, now, cancellation, admit)?;
         let result = execute(admitted, cancellation)?;
         self.validate_workspace_list_continuation(&command, now)?;
         Ok(result)
