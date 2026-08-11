@@ -255,6 +255,8 @@ async function assertPostgresDeviceDispatchSchema(
   await requireConstraints(client, schema, "device_execution_kinds", [
     "PRIMARY KEY (execution_id)",
     "UNIQUE (execution_id, command_kind)",
+    "'tool'::text",
+    "'workspaceList'::text",
     "'workspaceRead'::text",
   ]);
   await requireConstraints(client, schema, "device_dispatch_schema", [

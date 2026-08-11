@@ -201,6 +201,36 @@ if (connectionString === undefined) {
     );
   });
 
+  test("schema validation requires every legacy and read execution kind", async (context) => {
+    const schema = testSchema();
+    const pool = new Pool({ connectionString });
+    const authority = new PostgresDeviceDispatchStore({ pool, schema });
+    context.after(async () => {
+      await authority.close();
+      await dropSchema(connectionString, schema);
+      await pool.end();
+    });
+    await authority.ready();
+    await pool.query(`
+      ALTER TABLE ${schema}.device_execution_kinds
+        DROP CONSTRAINT device_execution_kinds_command_kind_check,
+        ADD CONSTRAINT device_execution_kinds_command_kind_check
+          CHECK (command_kind IN ('workspaceList', 'workspaceRead'))
+    `);
+    const reader = new PostgresDeviceDispatchStore({
+      connectionString,
+      schema,
+    });
+    await assert.rejects(
+      reader.ready(),
+      hasCode("device_dispatch_schema_invalid"),
+    );
+    await assert.rejects(
+      reader.close(),
+      hasCode("device_dispatch_schema_invalid"),
+    );
+  });
+
   test("takes execution lock before route and terminal receipt never waits on route", async (context) => {
     const schema = testSchema();
     const pool = new Pool({ connectionString, max: 6 });
