@@ -55,6 +55,7 @@ import { McpToolRuntime, type McpClientPort } from "@crewon/mcp-runtime";
 import {
   formatProcessToolOutput,
   InMemoryToolBroker,
+  type ToolDefinition,
   type ToolExecutionCommand,
   type ToolExecutionPolicy,
   type ToolRuntimePort,
@@ -4727,6 +4728,9 @@ test("deep-equals the Rust mixed completed assistant and Tool response trace", a
     context,
     (clock) => new InMemoryRunStore({ clock }),
   );
+  assert.equal(reference.completedAssistantItems.length, 1);
+  const [completedAssistantItem] = reference.completedAssistantItems;
+  assert.ok(completedAssistantItem);
   const requests: ModelRequest[] = [];
   const transport: ModelTransportPort = {
     adapterName: "mixed-response-adapter",
@@ -4737,11 +4741,11 @@ test("deep-equals the Rust mixed completed assistant and Tool response trace", a
       if (requests.length === 1) {
         yield {
           type: "output.delta",
-          delta: reference.completedAssistantItems[0]!.content,
+          delta: completedAssistantItem.content,
         };
         yield {
           type: "output.item.completed",
-          item: reference.completedAssistantItems[0]!,
+          item: completedAssistantItem,
         };
         yield { type: "output.item.completed", item: reference.toolCall };
         yield { type: "completed", checkpoint: null };
@@ -4753,17 +4757,26 @@ test("deep-equals the Rust mixed completed assistant and Tool response trace", a
     },
   };
   let toolInvocations = 0;
+  const toolDefinition: ToolDefinition =
+    reference.toolCall.kind === "custom"
+      ? {
+          schemaVersion: "crewon.tool-definition.v0",
+          kind: "custom",
+          name: reference.toolCall.name,
+          description: "Returns the mixed-response fixture output.",
+          execution: "serial",
+          inputFormat: "text",
+        }
+      : {
+          schemaVersion: "crewon.tool-definition.v0",
+          kind: "function",
+          name: reference.toolCall.name,
+          description: "Returns the mixed-response fixture output.",
+          execution: "serial",
+          inputSchema: { type: "object" },
+        };
   const toolRuntime = new InMemoryToolBroker(
-    [
-      {
-        schemaVersion: "crewon.tool-definition.v0",
-        kind: reference.toolCall.kind,
-        name: reference.toolCall.name,
-        description: "Returns the mixed-response fixture output.",
-        execution: "serial",
-        inputFormat: "text",
-      },
-    ],
+    [toolDefinition],
     new Map([
       [
         `${reference.toolCall.kind}:${reference.toolCall.name}`,
@@ -4793,13 +4806,27 @@ test("deep-equals the Rust mixed completed assistant and Tool response trace", a
     100,
   );
   const messages = await fixture.messages();
+  const completedAssistantHistory = history.filter(
+    (item): item is Extract<(typeof history)[number], { type: "message" }> =>
+      item.type === "message" &&
+      item.role === "assistant" &&
+      item.source === "assistant_completion",
+  );
+  const terminalMessages = messages.filter(
+    (message) => message.role === "assistant",
+  );
+  assert.equal(terminalMessages.length, 1);
+  const [terminalMessage] = terminalMessages;
+  assert.ok(terminalMessage);
+  const secondRequest = requests.at(1);
+  assert.ok(secondRequest);
   const candidate = {
     schemaVersion: "crewon.trace.v0",
     caseId: "AR-031-mixed-assistant-tool-response",
     completedAssistantItems: reference.completedAssistantItems,
     toolCall: reference.toolCall,
     toolResult: reference.toolResult,
-    expectedSecondRequestSuffix: requests[1]!.input.items.slice(
+    expectedSecondRequestSuffix: secondRequest.input.items.slice(
       -reference.expectedSecondRequestSuffix.length,
     ),
     stableEventTypes: [
@@ -4821,21 +4848,11 @@ test("deep-equals the Rust mixed completed assistant and Tool response trace", a
       toolCompletedEventCount: events.filter(
         (event) => event.type === "tool.completed",
       ).length,
-      completedAssistantOutputs: [
-        ...history
-          .filter(
-            (item) =>
-              item.type === "message" &&
-              item.role === "assistant" &&
-              item.source === "assistant_completion",
-          )
-          .map((item) => item.content),
-      ],
-      terminalMessageCount: messages.filter(
-        (message) => message.role === "assistant",
-      ).length,
-      finalOutput: messages.find((message) => message.role === "assistant")!
-        .content,
+      completedAssistantOutputs: completedAssistantHistory.map(
+        (item) => item.content,
+      ),
+      terminalMessageCount: terminalMessages.length,
+      finalOutput: terminalMessage.content,
       usage: (await fixture.loadRun()).usage,
       error: null,
     },
