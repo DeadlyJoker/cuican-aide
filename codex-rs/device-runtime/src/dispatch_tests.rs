@@ -9,8 +9,10 @@ use super::apply_cancel;
 use super::register_cancellation;
 use crate::test_support::ServerPin;
 use crate::test_support::accepted_event;
+use crate::test_support::read_accepted_event;
 use crate::test_support::runtime_fixture;
 use crate::test_support::signed_command;
+use crate::test_support::signed_read_command;
 
 #[tokio::test]
 async fn accepted_only_and_terminal_late_cancel_are_safe_exact_noops() {
@@ -78,6 +80,49 @@ async fn active_cancel_requires_exact_execution_lease_identity() {
         apply_cancel(&fixture.runtime.state, &forged)
             .await
             .expect_err("reject stale cancel")
+            .code,
+        "device_runtime_cancel_identity_mismatch"
+    );
+}
+
+#[tokio::test]
+async fn accepted_only_read_cancel_is_safe_and_lease_exact() {
+    let fixture = runtime_fixture(
+        Url::parse("wss://localhost/device/v1").expect("gateway URL"),
+        ServerPin::Omitted,
+    )
+    .await;
+    let command = signed_read_command(&fixture, 302);
+    let accepted = read_accepted_event(&command, 1);
+    fixture
+        .runtime
+        .state
+        .journal
+        .prepare_filesystem_read(&command, &accepted)
+        .await
+        .expect("prepare accepted-only read");
+    let cancel = DeviceExecutionCancel {
+        schema_version: "crewon.device-cancel.v0".to_string(),
+        protocol_version: 1,
+        device_id: command.command.device_id.clone(),
+        execution_id: command.command.execution_id.clone(),
+        lease_id: command.command.lease_id.clone(),
+        lease_epoch: command.command.lease_epoch,
+        reason_code: "user_requested".to_string(),
+        requested_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+    };
+    assert_eq!(
+        apply_cancel(&fixture.runtime.state, &cancel)
+            .await
+            .expect("ignore inactive accepted-only read"),
+        CancelDisposition::IgnoredInactive
+    );
+    let mut forged = cancel;
+    forged.lease_epoch += 1;
+    assert_eq!(
+        apply_cancel(&fixture.runtime.state, &forged)
+            .await
+            .expect_err("reject forged read cancel")
             .code,
         "device_runtime_cancel_identity_mismatch"
     );
