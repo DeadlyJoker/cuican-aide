@@ -142,6 +142,7 @@ const viewIcons: Record<CommandShellView, ReactNode> = {
   team: <Users aria-hidden="true" />,
 };
 
+import { CommandSidebarSearchView } from "./CommandSidebarSearchView";
 import { CommandSidebarWorkspaceTree } from "./CommandSidebarWorkspaceTree";
 import { SidebarAccount } from "./CommandWorkspaceSidebarAccount";
 import { useCommandSidebarWorkspaceController } from "./useCommandSidebarWorkspaceController";
@@ -396,67 +397,7 @@ export function CommandSidebar({
         </div>
       </div>
 
-      <section
-        className="sidebar-search-panel"
-        data-od-id="sidebar-search-panel"
-        data-sidebar-search=""
-        hidden={!isSearchOpen}
-        id="sidebar-search-panel"
-      >
-        <div className="sidebar-search-field">
-          <Search aria-hidden="true" />
-          <input
-            aria-label={copy.searchLabel}
-            data-sidebar-search-input=""
-            placeholder={copy.searchLabel}
-            type="search"
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                onCloseSearch();
-              } else if (event.key === "Enter" && sidebarSearchResults[0]) {
-                event.preventDefault();
-                activateSearchResult(sidebarSearchResults[0]);
-              }
-            }}
-          />
-          <kbd>⌘K</kbd>
-        </div>
-        <div
-          className="sidebar-search-results"
-          role="listbox"
-          aria-label={copy.searchResults}
-        >
-          {sidebarSearchResults.map((item) => (
-            <button
-              className="sidebar-search-result"
-              data-search-action={item.action}
-              data-search-result=""
-              data-thread-id={
-                item.action === "thread" ? item.threadId : undefined
-              }
-              key={item.key}
-              type="button"
-              onClick={() => activateSearchResult(item)}
-            >
-              <span>
-                <strong>{item.title}</strong>
-                <small>{item.detail}</small>
-              </span>
-              <em>{item.kind}</em>
-            </button>
-          ))}
-          <p
-            className="sidebar-search-empty"
-            data-search-empty=""
-            hidden={sidebarSearchResults.length > 0}
-          >
-            {copy.noMatches}
-          </p>
-        </div>
-      </section>
+      <CommandSidebarSearchView isSearchOpen={isSearchOpen} noMatches={copy.noMatches} query={query} results={sidebarSearchResults} searchLabel={copy.searchLabel} searchResultsLabel={copy.searchResults} onActivate={activateSearchResult} onClose={onCloseSearch} onQueryChange={onQueryChange} />
 
       <a
         className="sidebar-brand"
