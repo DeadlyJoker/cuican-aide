@@ -285,6 +285,31 @@ Gate 报告为通过。
   `290 pass + 50 PostgreSQL-unconfigured skip`、Runtime Worker `218 pass + 1 PostgreSQL-unconfigured skip`，六个相关 typecheck 仍全部通过；
   集成 AR-031 前后的未提交补丁 patch-id 均为 `ec6ab79d807909163c317460c0b9169505a7f3de`，证明本阶段没有改写该草稿。
 
+## Automation / Provider 公共契约与 self-contained Control composition
+
+- `f13c17835`、`1eb50bc4f` 发布 Automation create/get/list/run-now 的 OpenAPI 与 generated TypeScript，并以严格 parser 冻结
+  manual-only、`automaticScheduling=false`、revision/CAS、分页 cursor、prompt byte cap 和 authority-field injection rejection。
+  `2a608eb9c`、`5ee90a4b1` 发布只读 Provider Settings snapshot 与非变更型 probe 契约；公共形状不包含
+  `runtimeBindingId`、pending proof、credential secret 或 coordinator identity，也没有增加 Provider mutation route。
+- `08f12f7de` 完成独立 Control composition：Automation public vertical 连接既有 durable Application/Store authority；Provider GET
+  使用 redacted projection，POST probe 使用 mandatory CSRF + Idempotency-Key 和稳定 fingerprint `model-provider-probe.v1:{}`，复用
+  in-flight-safe private coordinator。Production policy adapter 保留完整 Automation action/resource discriminated request tuple；standalone
+  authorization 与 UUIDv7 generator 同时结构化实现 Automation ports，没有 cast/`any` 绕过。
+- standalone paused admission 只在显式 `CREWON_CONTROL_PAUSED_ADMISSION=1` 时启用；production 出现该变量即 fail closed。候选端口可由
+  OS 分配，但 readiness 必须投影为具体 `127.0.0.1:<port>`。激活输入只接受精确、可分片的 `activate\n` 且不等待 EOF；错误前缀、
+  oversize、截断 EOF、stream error/close、第二条记录和额外字节都会 fail closed，`onInvalid` 最多一次，controller close 会解绑监听。
+  进程级测试真实启动 Control candidate，证明激活前只有 exact live/ready GET/HEAD 可访问，其他 JSON/SSE/错误 body 请求均返回脱敏 503；
+  stdin 激活后真实 Thread read/create 成功，SIGTERM 正常退出。
+- 主工作区叠加回归：Contracts `77/77`、Agent Responses `45/45`、Control API
+  `101 pass + 3 PostgreSQL-unconfigured skip`、Runtime Worker `218 pass + 1 PostgreSQL-unconfigured skip`，四个 package typecheck 全部通过；
+  Rust `crewon-api 126/126`、`crewon-device 30/30`，Tauri `100/100`，`just bazel-lock-check` 通过。Tauri nextest 报告一条既有
+  process-output test 为 leaky，但套件退出码为 0；没有把该提示隐藏或算作额外通过。
+- 对隔离 HOME 中现存 SQLite authority 的复核进一步确认 Workspace list 修复后的三次真实执行：idempotency key
+  `packaged-smoke-workspace-list-v2`、`v3`、`packaged-final-ui-v1` 分别在 connection epoch 5、6、7 完成。每次 Control operation
+  `status=completed`、结果均为 UTF-8 byte order 的 `README.md`、`alpha`、`beta` 且 `truncated=false`；Gateway 均有 accepted + terminal，
+  Rust journal 均有 sequence 1/2 与 ACK 1/2、`acknowledged_through=2`。后续重启将 persisted route 推进到 epoch 12；当前 bundle
+  子进程均已退出且端口 3210/6176 已释放。
+
 ## 尚未关闭的完整迁移 Gate
 
 - Windows real-host：stable directory handle / UTF-16 / reparse rejection、Job Object 全树清理、NSIS 与 packaged smoke。
