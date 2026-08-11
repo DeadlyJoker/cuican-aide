@@ -37,6 +37,7 @@ use super::random_secret;
 use super::reload::active_run_sql;
 use super::reload::admit_workspace_ready;
 use super::reload::next_provider_generation_for_test;
+use super::reload::with_resolved_runtime_private_credentials;
 use super::reload::RuntimeGeneration;
 use super::ControlRuntimeSupervisor;
 use super::FailedProcessQuarantine;
@@ -308,6 +309,56 @@ fn candidate_release_activation_precedes_worker_start_and_fails_closed() {
     );
     assert_eq!(failed, Err("release-failed"));
     assert_eq!(*started.borrow(), false);
+}
+
+#[test]
+fn private_credentials_resolve_once_before_detach_and_are_reused_for_rollback() {
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let resolve_trace = Rc::clone(&trace);
+    let transition_trace = Rc::clone(&trace);
+    let missing = with_resolved_runtime_private_credentials(
+        move || {
+            resolve_trace.borrow_mut().push("resolve-missing");
+            Err::<String, _>("credential-missing")
+        },
+        move |_| {
+            transition_trace.borrow_mut().push("detach");
+            transition_trace.borrow_mut().push("activate");
+            Ok(())
+        },
+    );
+    assert_eq!(missing, Err("credential-missing"));
+    assert_eq!(trace.borrow().as_slice(), ["resolve-missing"]);
+
+    trace.borrow_mut().clear();
+    let resolve_trace = Rc::clone(&trace);
+    let transition_trace = Rc::clone(&trace);
+    let candidate_failure = with_resolved_runtime_private_credentials(
+        move || {
+            resolve_trace.borrow_mut().push("resolve");
+            Ok::<_, &str>(Zeroizing::new("one-read-secret".to_string()))
+        },
+        move |credentials| {
+            let candidate_pointer = credentials.as_ptr();
+            transition_trace.borrow_mut().push("detach");
+            transition_trace.borrow_mut().push("activate-candidate");
+            transition_trace.borrow_mut().push("candidate-failed");
+            assert_eq!(credentials.as_ptr(), candidate_pointer);
+            transition_trace.borrow_mut().push("activate-rollback");
+            Err::<(), _>("candidate-failed")
+        },
+    );
+    assert_eq!(candidate_failure, Err("candidate-failed"));
+    assert_eq!(
+        trace.borrow().as_slice(),
+        [
+            "resolve",
+            "detach",
+            "activate-candidate",
+            "candidate-failed",
+            "activate-rollback",
+        ]
+    );
 }
 
 #[test]

@@ -3,9 +3,17 @@ fn start_and_supervise_runtime(
     supervisor: &ControlRuntimeSupervisor,
     paths: &RuntimePaths,
     provider: Option<&provider_credentials::ActiveProviderRuntime>,
+    private_credentials: Option<&PrivateCredentialBindings>,
     generation: RuntimeGeneration,
 ) -> Result<(), (ControlRuntimeStartError, RuntimeGeneration)> {
-    let children = start_runtime(app, supervisor, paths, provider, generation)
+    let children = start_runtime(
+        app,
+        supervisor,
+        paths,
+        provider,
+        private_credentials,
+        generation,
+    )
         .map_err(|error| (error, generation))?;
     supervise_started_runtime(app, supervisor, children, generation)
 }

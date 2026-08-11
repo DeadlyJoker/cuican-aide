@@ -1,6 +1,7 @@
 use tauri::AppHandle;
 
 use super::environment::ControlAdmissionMode;
+use super::private_credentials::PrivateCredentialBindings;
 use super::reload::RuntimeGeneration;
 use super::workspace_candidate::stage_candidate;
 use super::workspace_candidate::stop_staged_candidate;
@@ -22,6 +23,7 @@ pub(super) fn recover_committed_candidate(
     supervisor: &ControlRuntimeSupervisor,
     paths: &RuntimePaths,
     authority: &DesktopWorkspaceAuthority,
+    private_credentials: Option<&PrivateCredentialBindings>,
     generation: RuntimeGeneration,
     fence: WorkspaceSwitchFence,
 ) -> Result<(), DesktopWorkspaceError> {
@@ -48,6 +50,7 @@ pub(super) fn recover_committed_candidate(
             supervisor,
             paths,
             authority,
+            private_credentials,
             generation,
             ControlAdmissionMode::Paused,
         )

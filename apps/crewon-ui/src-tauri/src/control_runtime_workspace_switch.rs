@@ -3,6 +3,8 @@ use tauri::AppHandle;
 use super::activate_release_before_worker;
 use super::activate_runtime_release;
 use super::environment::ControlAdmissionMode;
+use super::private_credentials::PrivateCredentialBindings;
+use super::reload::resolve_runtime_private_credentials;
 use super::reload::start_control_with_admission;
 use super::reload::start_worker_with_context;
 use super::reload::RuntimeGeneration;
@@ -64,6 +66,9 @@ pub(super) fn switch_workspace_runtime(
     let candidate_authority = manager
         .pending_candidate_authority(operation_id)
         .map_err(DesktopWorkspaceError::from_native)?;
+    let old_private_credentials = resolve_workspace_private_credentials(&old_authority)?;
+    let candidate_private_credentials =
+        resolve_workspace_private_credentials(&candidate_authority)?;
     if stage_pre_fence_foundation(app, supervisor, paths, &old_authority, &candidate_authority)
         .is_err()
     {
@@ -134,6 +139,7 @@ pub(super) fn switch_workspace_runtime(
             manager,
             operation_id,
             &old_authority,
+            old_private_credentials.as_ref(),
             generation,
         );
     }
@@ -143,6 +149,7 @@ pub(super) fn switch_workspace_runtime(
         supervisor,
         paths,
         &candidate_authority,
+        candidate_private_credentials.as_ref(),
         generation,
         ControlAdmissionMode::Paused,
     )
@@ -155,6 +162,7 @@ pub(super) fn switch_workspace_runtime(
             manager,
             operation_id,
             &old_authority,
+            old_private_credentials.as_ref(),
             generation,
         );
     }
@@ -179,6 +187,7 @@ pub(super) fn switch_workspace_runtime(
                 manager,
                 operation_id,
                 &old_authority,
+                old_private_credentials.as_ref(),
                 generation,
             );
         }
@@ -191,6 +200,7 @@ pub(super) fn switch_workspace_runtime(
             manager,
             operation_id,
             &old_authority,
+            old_private_credentials.as_ref(),
             generation,
         );
     }
@@ -222,6 +232,7 @@ pub(super) fn switch_workspace_runtime(
             manager,
             operation_id,
             &old_authority,
+            old_private_credentials.as_ref(),
             generation,
         );
     }
@@ -258,6 +269,7 @@ pub(super) fn switch_workspace_runtime(
                 supervisor,
                 paths,
                 &candidate_authority,
+                candidate_private_credentials.as_ref(),
                 generation,
                 fence,
             ),
@@ -281,6 +293,7 @@ pub(super) fn switch_workspace_runtime(
                 supervisor,
                 paths,
                 &candidate_authority,
+                candidate_private_credentials.as_ref(),
                 generation,
                 fence,
             ),
@@ -293,6 +306,14 @@ pub(super) fn switch_workspace_runtime(
         WorkspaceSwitchPhase::Published,
     )?;
     Ok(())
+}
+
+fn resolve_workspace_private_credentials(
+    authority: &DesktopWorkspaceAuthority,
+) -> Result<Option<PrivateCredentialBindings>, DesktopWorkspaceError> {
+    let route = runtime_route_for_authority(Some(authority))
+        .map_err(|error| map_runtime_error(error, false))?;
+    resolve_runtime_private_credentials(&route).map_err(|error| map_runtime_error(error, false))
 }
 
 fn advance_switch(

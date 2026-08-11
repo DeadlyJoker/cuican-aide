@@ -3,9 +3,10 @@ fn start_runtime(
     supervisor: &ControlRuntimeSupervisor,
     paths: &RuntimePaths,
     provider: Option<&provider_credentials::ActiveProviderRuntime>,
+    private_credentials: Option<&PrivateCredentialBindings>,
     generation: RuntimeGeneration,
 ) -> Result<RuntimeChildren, ControlRuntimeStartError> {
-    let worker = start_worker(app, paths, provider, generation)?;
+    let worker = start_worker(app, paths, provider, private_credentials, generation)?;
     let control = match start_control(
         app,
         supervisor,
@@ -31,6 +32,7 @@ pub(super) fn start_worker(
     app: &AppHandle,
     paths: &RuntimePaths,
     provider: Option<&provider_credentials::ActiveProviderRuntime>,
+    private_credentials: Option<&PrivateCredentialBindings>,
     generation: RuntimeGeneration,
 ) -> Result<StartedWorker, ControlRuntimeStartError> {
     let supervisor = app
@@ -51,6 +53,7 @@ pub(super) fn start_worker(
         &supervisor,
         paths,
         provider,
+        private_credentials,
         generation,
         session,
         workspace.as_deref(),
@@ -62,6 +65,7 @@ pub(super) fn start_worker_with_context(
     supervisor: &ControlRuntimeSupervisor,
     paths: &RuntimePaths,
     provider: Option<&provider_credentials::ActiveProviderRuntime>,
+    private_credentials: Option<&PrivateCredentialBindings>,
     generation: RuntimeGeneration,
     session: &super::SessionMaterial,
     workspace: Option<&super::workspace::WorkspaceRuntimeContext>,
@@ -70,24 +74,8 @@ pub(super) fn start_worker_with_context(
         .map(super::workspace::WorkspaceRuntimeContext::runtime_route)
         .transpose()?
         .unwrap_or_else(RuntimeRouteProjection::standalone);
-    let agent_version_id = effective_agent_version_id(&runtime_route);
-    let runtime_bindings_path = std::env::var_os("CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH")
-        .filter(|value| !value.is_empty())
-        .map(std::path::PathBuf::from);
-    let private_credentials = if runtime_route.workspace_binding_id().is_some() {
-        load_private_credential_bindings(
-            runtime_bindings_path.as_deref(),
-            &runtime_route,
-            &agent_version_id,
-        )
-        .map_err(|_| ControlRuntimeStartError::RuntimeUnavailable)?
-    } else {
-        None
-    };
     let workspace_bootstrap = workspace
-        .map(|workspace| {
-            workspace.worker_bootstrap(provider, session, private_credentials.as_ref())
-        })
+        .map(|workspace| workspace.worker_bootstrap(provider, session, private_credentials))
         .transpose()?;
     let legacy_bootstrap = workspace_bootstrap
         .is_none()
@@ -250,6 +238,7 @@ pub(super) fn recover_runtime(
     paths: &RuntimePaths,
     previous: Option<&provider_credentials::ActiveProviderRuntime>,
     runtime_route: &RuntimeRouteProjection,
+    private_credentials: Option<&PrivateCredentialBindings>,
     generation: RuntimeGeneration,
 ) -> Result<(), ControlRuntimeStartError> {
     if activate_runtime_release(
@@ -259,7 +248,15 @@ pub(super) fn recover_runtime(
         runtime_route,
     )
     .is_err()
-        || start_and_supervise_runtime(app, supervisor, paths, previous, generation).is_err()
+        || start_and_supervise_runtime(
+            app,
+            supervisor,
+            paths,
+            previous,
+            private_credentials,
+            generation,
+        )
+        .is_err()
     {
         supervisor.shutdown();
         return Err(ControlRuntimeStartError::RuntimeRollbackFailed);

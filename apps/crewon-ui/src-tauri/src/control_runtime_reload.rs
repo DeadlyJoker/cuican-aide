@@ -13,6 +13,7 @@ use super::environment::ControlAdmissionMode;
 use super::environment::WorkspaceWorkerEnvironment;
 use super::prepare_paths;
 use super::private_credentials::load_private_credential_bindings;
+use super::private_credentials::PrivateCredentialBindings;
 use super::process::prepare_process_monitor;
 use super::process::spawn_node;
 use super::process::spawn_node_with_input;
@@ -105,8 +106,32 @@ pub(crate) fn replace_provider_runtime(
         .map_err(|_| ControlRuntimeStartError::RuntimeUnavailable)?;
     let paths = prepare_paths(app)?;
     let runtime_route = supervisor.runtime_route()?;
+    with_resolved_runtime_private_credentials(
+        || resolve_runtime_private_credentials(&runtime_route),
+        |private_credentials| {
+            replace_provider_runtime_resolved(
+                app,
+                &supervisor,
+                &paths,
+                previous,
+                candidate,
+                &runtime_route,
+                private_credentials.as_ref(),
+            )
+        },
+    )
+}
 
-    let generation = match stop_idle_runtime(&supervisor, &paths) {
+fn replace_provider_runtime_resolved(
+    app: &AppHandle,
+    supervisor: &ControlRuntimeSupervisor,
+    paths: &RuntimePaths,
+    previous: Option<&provider_credentials::ActiveProviderRuntime>,
+    candidate: Option<&provider_credentials::ActiveProviderRuntime>,
+    runtime_route: &RuntimeRouteProjection,
+    private_credentials: Option<&PrivateCredentialBindings>,
+) -> Result<(), ControlRuntimeStartError> {
+    let generation = match stop_idle_runtime(supervisor, paths) {
         Ok(generation) => generation,
         Err(StopRuntimeError::BeforeStop(error)) => return Err(error),
         Err(StopRuntimeError::AfterStop(ControlRuntimeStartError::RuntimeRollbackFailed, _)) => {
@@ -116,10 +141,11 @@ pub(crate) fn replace_provider_runtime(
         Err(StopRuntimeError::AfterStop(error, generation)) => {
             recover_runtime(
                 app,
-                &supervisor,
-                &paths,
+                supervisor,
+                paths,
                 previous,
-                &runtime_route,
+                runtime_route,
+                private_credentials,
                 generation,
             )?;
             return Err(error);
@@ -128,22 +154,30 @@ pub(crate) fn replace_provider_runtime(
 
     if let Err(error) = activate_runtime_release(
         app,
-        &paths,
+        paths,
         candidate.map(|runtime| &runtime.binding),
-        &runtime_route,
+        runtime_route,
     ) {
         recover_runtime(
             app,
-            &supervisor,
-            &paths,
+            supervisor,
+            paths,
             previous,
-            &runtime_route,
+            runtime_route,
+            private_credentials,
             generation,
         )?;
         return Err(error);
     }
 
-    match start_and_supervise_runtime(app, &supervisor, &paths, candidate, generation) {
+    match start_and_supervise_runtime(
+        app,
+        supervisor,
+        paths,
+        candidate,
+        private_credentials,
+        generation,
+    ) {
         Ok(()) => Ok(()),
         Err((ControlRuntimeStartError::RuntimeRollbackFailed, _)) => {
             supervisor.shutdown();
@@ -152,15 +186,42 @@ pub(crate) fn replace_provider_runtime(
         Err((error, recovery_generation)) => {
             recover_runtime(
                 app,
-                &supervisor,
-                &paths,
+                supervisor,
+                paths,
                 previous,
-                &runtime_route,
+                runtime_route,
+                private_credentials,
                 recovery_generation,
             )?;
             Err(error)
         }
     }
+}
+
+pub(super) fn with_resolved_runtime_private_credentials<C, T, E>(
+    resolve: impl FnOnce() -> Result<C, E>,
+    transition: impl FnOnce(&C) -> Result<T, E>,
+) -> Result<T, E> {
+    let credentials = resolve()?;
+    transition(&credentials)
+}
+
+pub(super) fn resolve_runtime_private_credentials(
+    runtime_route: &RuntimeRouteProjection,
+) -> Result<Option<PrivateCredentialBindings>, ControlRuntimeStartError> {
+    let agent_version_id = effective_agent_version_id(runtime_route);
+    let runtime_bindings_path = std::env::var_os("CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH")
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from);
+    if runtime_route.workspace_binding_id().is_none() {
+        return Ok(None);
+    }
+    load_private_credential_bindings(
+        runtime_bindings_path.as_deref(),
+        runtime_route,
+        &agent_version_id,
+    )
+    .map_err(|_| ControlRuntimeStartError::RuntimeUnavailable)
 }
 
 pub(super) fn stop_idle_runtime(

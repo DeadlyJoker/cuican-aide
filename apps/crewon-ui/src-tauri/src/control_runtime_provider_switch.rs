@@ -10,10 +10,12 @@ use tauri::Manager;
 use super::activate_release_before_worker;
 use super::activate_runtime_release;
 use super::prepare_paths;
+use super::private_credentials::PrivateCredentialBindings;
 use super::provider_coordinator;
 use super::reload::install_staged_runtime_candidate;
 use super::reload::prepare_runtime_supervision;
 use super::reload::recover_runtime;
+use super::reload::resolve_runtime_private_credentials;
 use super::reload::stage_runtime_candidate;
 use super::reload::start_control;
 use super::reload::start_worker;
@@ -117,10 +119,25 @@ pub(crate) fn coordinate_provider_runtime(
         ));
     }
 
+    let private_credentials = match resolve_runtime_private_credentials(&runtime_route) {
+        Ok(credentials) => credentials,
+        Err(error) => {
+            return abort_before_commit(app, &paths, mutation, error, None, &supervisor, None);
+        }
+    };
+
     let generation = match stop_idle_runtime(&supervisor, &paths) {
         Ok(generation) => generation,
         Err(StopRuntimeError::BeforeStop(error)) => {
-            return abort_before_commit(app, &paths, mutation, error, None, &supervisor);
+            return abort_before_commit(
+                app,
+                &paths,
+                mutation,
+                error,
+                None,
+                &supervisor,
+                private_credentials.as_ref(),
+            );
         }
         Err(StopRuntimeError::AfterStop(ControlRuntimeStartError::RuntimeRollbackFailed, _)) => {
             supervisor.shutdown();
@@ -134,6 +151,7 @@ pub(crate) fn coordinate_provider_runtime(
                 error,
                 Some(generation),
                 &supervisor,
+                private_credentials.as_ref(),
             );
         }
     };
@@ -146,7 +164,15 @@ pub(crate) fn coordinate_provider_runtime(
                 &runtime_route,
             )
         },
-        || start_worker(app, &paths, mutation.candidate_runtime, generation),
+        || {
+            start_worker(
+                app,
+                &paths,
+                mutation.candidate_runtime,
+                private_credentials.as_ref(),
+                generation,
+            )
+        },
     ) {
         Ok(worker) => worker,
         Err(error) => {
@@ -157,6 +183,7 @@ pub(crate) fn coordinate_provider_runtime(
                 error,
                 Some(generation),
                 &supervisor,
+                private_credentials.as_ref(),
             );
         }
     };
@@ -184,6 +211,7 @@ pub(crate) fn coordinate_provider_runtime(
                 error,
                 Some(generation),
                 &supervisor,
+                private_credentials.as_ref(),
             );
         }
     };
@@ -203,6 +231,7 @@ pub(crate) fn coordinate_provider_runtime(
                 error,
                 Some(generation),
                 &supervisor,
+                private_credentials.as_ref(),
             );
         }
     };
@@ -215,6 +244,7 @@ pub(crate) fn coordinate_provider_runtime(
             ControlRuntimeStartError::RuntimeUnavailable,
             Some(generation),
             &supervisor,
+            private_credentials.as_ref(),
         );
     }
     let binding_id = coordinator_binding(mutation);
@@ -238,9 +268,15 @@ pub(crate) fn coordinate_provider_runtime(
         |()| stop_staged_runtime_candidate(&supervisor),
     ) {
         Ok(()) => Ok(()),
-        Err(CandidateCommitFailure::BeforeFinalize(error)) => {
-            abort_before_commit(app, &paths, mutation, error, Some(generation), &supervisor)
-        }
+        Err(CandidateCommitFailure::BeforeFinalize(error)) => abort_before_commit(
+            app,
+            &paths,
+            mutation,
+            error,
+            Some(generation),
+            &supervisor,
+            private_credentials.as_ref(),
+        ),
         Err(CandidateCommitFailure::FinalizedAuthorityInvalid)
         | Err(CandidateCommitFailure::Install(_)) => {
             supervisor.shutdown();
@@ -366,6 +402,7 @@ fn abort_before_commit(
     error: ControlRuntimeStartError,
     generation: Option<RuntimeGeneration>,
     supervisor: &ControlRuntimeSupervisor,
+    private_credentials: Option<&PrivateCredentialBindings>,
 ) -> Result<(), ProviderRuntimeMutationFailure> {
     let binding_id = coordinator_binding(mutation);
     let aborted = provider_coordinator::abort(app, paths, mutation.operation_id, &binding_id)
@@ -393,6 +430,7 @@ fn abort_before_commit(
                 paths,
                 mutation.previous_runtime,
                 &runtime_route,
+                private_credentials,
                 generation,
             )
             .is_ok()

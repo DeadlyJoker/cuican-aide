@@ -3,6 +3,7 @@ pub(super) fn complete_candidate(
     supervisor: &ControlRuntimeSupervisor,
     paths: &RuntimePaths,
     authority: &DesktopWorkspaceAuthority,
+    private_credentials: Option<&PrivateCredentialBindings>,
     generation: RuntimeGeneration,
     admission: ControlAdmissionMode,
 ) -> Result<(), DesktopWorkspaceError> {
@@ -42,6 +43,7 @@ pub(super) fn complete_candidate(
                 supervisor,
                 paths,
                 provider.as_ref(),
+                private_credentials,
                 generation,
                 session,
                 context.as_deref(),
@@ -78,6 +80,7 @@ fn recover_old(
     manager: &mut DesktopWorkspaceAuthorityManager,
     operation_id: &str,
     old: &DesktopWorkspaceAuthority,
+    private_credentials: Option<&PrivateCredentialBindings>,
     generation: RuntimeGeneration,
 ) -> Result<(), DesktopWorkspaceError> {
     stop_staged_candidate(supervisor);
@@ -89,6 +92,7 @@ fn recover_old(
             supervisor,
             paths,
             old,
+            private_credentials,
             generation,
             ControlAdmissionMode::Paused,
         )
