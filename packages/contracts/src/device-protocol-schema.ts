@@ -2,6 +2,7 @@ import {
   DEVICE_EXECUTION_EVENT_TYPES,
   DEVICE_PROTOCOL_VERSION,
 } from "./device-protocol.ts";
+import { deviceWorkspaceListCommandJsonSchema } from "./device-protocol-workspace-schema.ts";
 
 const opaqueId = {
   type: "string",
@@ -421,6 +422,7 @@ export const deviceGatewayWelcomeJsonSchema = {
 
 export const deviceProtocolJsonSchemas = {
   command: deviceExecutionCommandJsonSchema,
+  workspaceCommand: deviceWorkspaceListCommandJsonSchema,
   event: deviceExecutionEventJsonSchema,
   ack: deviceExecutionAckJsonSchema,
   cancel: deviceExecutionCancelJsonSchema,

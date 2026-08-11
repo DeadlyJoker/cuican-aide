@@ -16,6 +16,7 @@ import {
   canonicalDeviceCommandSigningPayload,
   canonicalUnsignedDeviceCommandSigningPayload,
 } from "./device-protocol.ts";
+import { parseDeviceWorkspaceListCommand } from "./device-protocol-workspace.ts";
 import {
   deviceExecutionCommandJsonSchema,
   deviceExecutionEventJsonSchema,
@@ -35,6 +36,7 @@ const reference = JSON.parse(
   signingPayloadSha256: string;
   valid: Readonly<{
     command: unknown;
+    workspaceCommand: unknown;
     hello: unknown;
     welcome: unknown;
     ack: unknown;
@@ -42,7 +44,14 @@ const reference = JSON.parse(
     events: readonly unknown[];
   }>;
   invalid: readonly Readonly<{
-    parser: "command" | "event" | "hello" | "welcome" | "ack" | "cancel";
+    parser:
+      | "command"
+      | "workspaceCommand"
+      | "event"
+      | "hello"
+      | "welcome"
+      | "ack"
+      | "cancel";
     code: string;
     value: unknown;
   }>[];
@@ -338,6 +347,8 @@ function sharedParser(parser: (typeof reference.invalid)[number]["parser"]) {
   switch (parser) {
     case "command":
       return parseDeviceExecutionCommand;
+    case "workspaceCommand":
+      return parseDeviceWorkspaceListCommand;
     case "event":
       return parseDeviceExecutionEvent;
     case "hello":
