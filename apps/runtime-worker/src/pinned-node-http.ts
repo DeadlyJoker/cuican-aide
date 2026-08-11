@@ -59,7 +59,12 @@ export class PinnedNodeHttpTransport implements PinnedHttpPort {
     input: PinnedHttpRequest,
     signal: AbortSignal,
   ): Promise<PinnedHttpResponse> {
-    validateBounds(input);
+    try {
+      validateBounds(input);
+    } catch (error) {
+      if (error instanceof PinnedNodeHttpError) throw error;
+      throw new PinnedNodeHttpError("request_invalid");
+    }
     try {
       return await new Promise((resolve, reject) => {
         const options: RequestOptions = {

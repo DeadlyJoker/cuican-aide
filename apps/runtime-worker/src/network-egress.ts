@@ -52,12 +52,14 @@ export class NetworkEgressResolver {
       dns: dependencies.dns,
       policy: {
         authorize: ({ tenantId, providerId, endpoint, addresses }) =>
-          dependencies.policy.authorize({
-            tenantId,
-            scopeId: providerId,
-            endpoint,
-            addresses,
-          }),
+          dependencies.policy.authorize(
+            policyView({
+              tenantId,
+              scopeId: providerId,
+              endpoint,
+              addresses,
+            }),
+          ),
       },
     });
   }
@@ -84,6 +86,18 @@ export class NetworkEgressResolver {
       throw error;
     }
   }
+}
+
+export function policyView(input: NetworkEgressInput): NetworkEgressInput {
+  return {
+    tenantId: input.tenantId,
+    scopeId: input.scopeId,
+    endpoint: new URL(input.endpoint),
+    addresses: input.addresses.map(({ address, family }) => ({
+      address,
+      family,
+    })),
+  };
 }
 
 /** Production policy permits only public HTTPS addresses. */

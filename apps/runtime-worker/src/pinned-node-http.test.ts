@@ -129,6 +129,70 @@ test("production adapter cannot bypass baseline egress policy", async () => {
   assert.equal(transportCalls, 0);
 });
 
+test("tenant policy mutation cannot change the authoritative pinned target", async () => {
+  let target: unknown;
+  const adapter = new ProductionRemoteMcpMutationHttp({
+    tenantId: "tenant-1",
+    serverBindingId: "binding-1",
+    egressPolicy: {
+      authorize: (input) => {
+        input.endpoint.protocol = "http:";
+        input.endpoint.hostname = "localhost";
+        return { approvedAddresses: ["93.184.216.34"] };
+      },
+    },
+    dns: { resolveAll: async () => [{ address: "93.184.216.34", family: 4 }] },
+    transport: {
+      request: async (input) => {
+        target = input.target;
+        return { status: 200, headers: {}, body: new Uint8Array() };
+      },
+    },
+  });
+  await adapter.post({
+    endpoint: new URL("https://server.example/mutate"),
+    headers: {},
+    body: new Uint8Array(),
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(target, {
+    endpoint: new URL("https://server.example/mutate"),
+    address: "93.184.216.34",
+    family: 4,
+  });
+});
+
+test("tenant policy cannot substitute a resolved address", async () => {
+  let transportCalls = 0;
+  const adapter = new ProductionRemoteMcpMutationHttp({
+    tenantId: "tenant-1",
+    serverBindingId: "binding-1",
+    egressPolicy: {
+      authorize: (input) => {
+        (input.addresses[0] as { address: string }).address = "127.0.0.1";
+        return { approvedAddresses: ["127.0.0.1"] };
+      },
+    },
+    dns: { resolveAll: async () => [{ address: "93.184.216.34", family: 4 }] },
+    transport: {
+      request: async () => {
+        transportCalls += 1;
+        throw new Error("unexpected_transport_call");
+      },
+    },
+  });
+  await assert.rejects(
+    adapter.post({
+      endpoint: new URL("https://server.example/mutate"),
+      headers: {},
+      body: new Uint8Array(),
+      signal: new AbortController().signal,
+    }),
+    /network_egress_decision_invalid/u,
+  );
+  assert.equal(transportCalls, 0);
+});
+
 test("transport enforces declared and streaming response caps", async (t) => {
   await assert.rejects(
     new PinnedNodeHttpTransport().request(
@@ -215,6 +279,30 @@ test("transport never exposes sensitive lower-level errors", async (t) => {
   const inspected = JSON.stringify(error, Object.getOwnPropertyNames(error));
   assert.equal(inspected.includes("secret"), false);
   assert.equal(inspected.includes("Idempotency"), false);
+});
+
+test("transport normalizes malformed runtime input", async () => {
+  const error = await new PinnedNodeHttpTransport()
+    .request(
+      null as unknown as Parameters<PinnedNodeHttpTransport["request"]>[0],
+      new AbortController().signal,
+    )
+    .catch((caught: unknown) => caught);
+  assert.equal(error instanceof PinnedNodeHttpError, true);
+  assert.equal((error as PinnedNodeHttpError).code, "request_invalid");
+  assert.equal("cause" in (error as object), false);
+});
+
+test("production adapter validates opaque server binding IDs", () => {
+  assert.throws(
+    () =>
+      new ProductionRemoteMcpMutationHttp({
+        tenantId: "tenant-1",
+        serverBindingId: "binding with spaces",
+        egressPolicy: loopbackPolicy,
+      }),
+    /remote_mcp_network_binding_invalid/u,
+  );
 });
 
 function request(server: Server, maxResponseBytes: number) {

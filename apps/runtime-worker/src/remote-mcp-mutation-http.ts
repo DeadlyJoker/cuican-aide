@@ -6,6 +6,7 @@ import type {
 import {
   NetworkEgressResolver,
   ProductionNetworkEgressPolicy,
+  policyView,
   type NetworkEgressPolicy,
   type NetworkDnsResolver,
 } from "./network-egress.ts";
@@ -14,9 +15,10 @@ import {
   PinnedNodeHttpTransport,
 } from "./pinned-node-http.ts";
 
-const MAX_ID_BYTES = 512;
+const MAX_TENANT_ID_BYTES = 512;
 const MAX_REQUEST_BYTES = 256 * 1024;
 const MAX_RESPONSE_BYTES = 256 * 1024;
+const OPAQUE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/u;
 
 /** Production adapter; composition must supply the tenant's strict egress policy. */
 export class ProductionRemoteMcpMutationHttp
@@ -34,8 +36,8 @@ export class ProductionRemoteMcpMutationHttp
     dns?: NetworkDnsResolver;
     transport?: PinnedHttpPort;
   }) {
-    this.#tenantId = boundedId(config.tenantId);
-    this.#serverBindingId = boundedId(config.serverBindingId);
+    this.#tenantId = tenantId(config.tenantId);
+    this.#serverBindingId = opaqueId(config.serverBindingId);
     this.#egress = new NetworkEgressResolver({
       dns: config.dns,
       policy: andPolicy(
@@ -84,19 +86,26 @@ function andPolicy(
 ): NetworkEgressPolicy {
   return {
     authorize: async (input) => {
-      await baseline.authorize(input);
-      return tenant.authorize(input);
+      await baseline.authorize(policyView(input));
+      return tenant.authorize(policyView(input));
     },
   };
 }
 
-function boundedId(value: string): string {
+function tenantId(value: string): string {
   if (
     typeof value !== "string" ||
     value.length === 0 ||
-    Buffer.byteLength(value, "utf8") > MAX_ID_BYTES ||
+    Buffer.byteLength(value, "utf8") > MAX_TENANT_ID_BYTES ||
     /[\u0000-\u001f\u007f]/u.test(value)
   ) {
+    throw new Error("remote_mcp_network_binding_invalid");
+  }
+  return value;
+}
+
+function opaqueId(value: string): string {
+  if (typeof value !== "string" || !OPAQUE_ID_PATTERN.test(value)) {
     throw new Error("remote_mcp_network_binding_invalid");
   }
   return value;
