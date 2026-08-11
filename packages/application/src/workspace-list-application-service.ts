@@ -5,7 +5,10 @@ import type { ContentDigester } from "./application-runtime-ports.ts";
 import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
 import { canonicalJson } from "./canonical-json.ts";
 import type { IdempotencyDescriptor } from "./run-store-port.ts";
-import type { ThreadStore } from "./thread-store-port.ts";
+import type {
+  SpaceScopedThreadStore,
+  ThreadStore,
+} from "./thread-store-port.ts";
 import { WorkspaceListCommandCoordinator } from "./workspace-list-command-coordinator.ts";
 import {
   DELIVERY_COMMIT_MARGIN_MS,
@@ -74,7 +77,9 @@ export type CancelWorkspaceListCommand = Readonly<{
   expectedOperationRevision: number;
 }>;
 
-type WorkspaceApplicationStore = ThreadStore & WorkspaceOperationStore;
+type WorkspaceApplicationStore = ThreadStore &
+  SpaceScopedThreadStore &
+  WorkspaceOperationStore;
 
 /** Receipt-first workspace list orchestration without concrete Device dependencies. */
 export class WorkspaceListApplicationService {

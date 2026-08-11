@@ -14,6 +14,12 @@ export type ThreadLocator = Readonly<{
   threadId: string;
 }>;
 
+export type ThreadSpaceLocator = Readonly<{
+  tenantId: string;
+  spaceId: string;
+  threadId: string;
+}>;
+
 export type ThreadListCursor = Readonly<{
   updatedAt: string;
   threadId: string;
@@ -95,4 +101,9 @@ export interface ThreadStore {
     limit: number,
     view?: MessageView,
   ): Promise<readonly MessageRecord[]>;
+}
+
+/** Fail-closed Thread authority for Workspace operations scoped to one space. */
+export interface SpaceScopedThreadStore {
+  loadThreadInSpace(locator: ThreadSpaceLocator): Promise<ThreadState | null>;
 }

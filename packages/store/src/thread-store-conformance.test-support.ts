@@ -192,6 +192,22 @@ export function registerThreadStoreConformance(
         await store.loadThread({ tenantId: "tenant-2", threadId: "thread-1" }),
         null,
       );
+      assert.equal(
+        await store.loadThreadInSpace({
+          tenantId: "tenant-1",
+          spaceId: "space-2",
+          threadId: "thread-1",
+        }),
+        null,
+      );
+      assert.deepEqual(
+        await store.loadThreadInSpace({
+          tenantId: "tenant-1",
+          spaceId: "space-1",
+          threadId: "thread-1",
+        }),
+        await store.loadThread({ tenantId: "tenant-1", threadId: "thread-1" }),
+      );
       assert.deepEqual(
         await store.listMessages(
           { tenantId: "tenant-2", threadId: "thread-1" },

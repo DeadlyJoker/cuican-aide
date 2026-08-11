@@ -73,6 +73,7 @@ import {
   type WorkItem,
   type WorkItemRetryInput,
   type ThreadLocator,
+  type ThreadSpaceLocator,
   type ThreadRollbackReceiptQuery,
   type ThreadListQuery,
   type ThreadContinuationLocator,
@@ -2764,6 +2765,11 @@ function modelHistoryCallKey(runId: string | null, callId: string): string {
 export function validateThreadLocator(locator: ThreadLocator): void {
   requireNonEmpty(locator.tenantId, "tenant_id_invalid");
   requireNonEmpty(locator.threadId, "thread_id_invalid");
+}
+
+export function validateThreadSpaceLocator(locator: ThreadSpaceLocator): void {
+  validateThreadLocator(locator);
+  requireNonEmpty(locator.spaceId, "space_id_invalid");
 }
 
 export function validateThreadListQuery(query: ThreadListQuery): void {

@@ -1,7 +1,10 @@
 import type { RunReceiptStore, RunStore } from "./run-store-port.ts";
 import type { RunExecutionStore } from "./run-execution-store-port.ts";
 import type { ModelHistoryStore } from "./model-history-store-port.ts";
-import type { ThreadStore } from "./thread-store-port.ts";
+import type {
+  SpaceScopedThreadStore,
+  ThreadStore,
+} from "./thread-store-port.ts";
 import type { ThreadRollbackStore } from "./thread-rollback-store-port.ts";
 import type { ToolExecutionStore } from "./tool-execution-store-port.ts";
 import type { ToolApprovalStore } from "./tool-approval-store-port.ts";
@@ -21,6 +24,7 @@ import type { GoalToolStore } from "./goal-tool-store-port.ts";
 export type DomainStore = RunStore &
   RunReceiptStore &
   ThreadStore &
+  SpaceScopedThreadStore &
   ThreadRollbackStore &
   ModelHistoryStore &
   RunExecutionStore &

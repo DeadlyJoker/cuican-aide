@@ -9,6 +9,7 @@ import {
   type InvalidatedMessage,
   type ModelHistoryStore,
   type ThreadLocator,
+  type ThreadSpaceLocator,
   type ThreadRollbackReceiptQuery,
   type ThreadRollbackStore,
   type ThreadListQuery,
@@ -81,6 +82,7 @@ import {
   validateThreadRollbackReceiptResult,
   validateThreadRollbackReceiptAuthority,
   validateThreadLocator,
+  validateThreadSpaceLocator,
   validateThreadListQuery,
 } from "./store-invariants.ts";
 import {
@@ -214,6 +216,28 @@ export class PostgresThreadStore
     validateThreadLocator(locator);
     try {
       return await this.loadThreadWithin(this.pool, locator);
+    } catch (error) {
+      throw normalizePostgresError(error);
+    }
+  }
+
+  async loadThreadInSpace(
+    locator: ThreadSpaceLocator,
+  ): Promise<ThreadState | null> {
+    this.assertOpen();
+    validateThreadSpaceLocator(locator);
+    try {
+      const result = await this.pool.query<PostgresThreadRow>(
+        `SELECT tenant_id, space_id, thread_id, created_by_actor_id, title, status,
+                revision, last_event_sequence, last_message_sequence, state_json,
+                created_at, updated_at, archived_at, deleted_at,
+                deleted_by_actor_id
+         FROM ${this.#tableSql("threads")}
+         WHERE tenant_id = $1 AND space_id = $2 AND thread_id = $3`,
+        [locator.tenantId, locator.spaceId, locator.threadId],
+      );
+      const row = result.rows[0];
+      return row === undefined ? null : decodePostgresThreadState(row, locator);
     } catch (error) {
       throw normalizePostgresError(error);
     }

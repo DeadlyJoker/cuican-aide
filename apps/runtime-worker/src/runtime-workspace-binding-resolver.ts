@@ -1,4 +1,4 @@
-import type { ThreadStore } from "@crewon/application";
+import type { SpaceScopedThreadStore } from "@crewon/application";
 
 import { RuntimeWorkspaceError } from "./runtime-workspace-error.ts";
 
@@ -58,11 +58,11 @@ export class StoreBackedRuntimeWorkspaceAuthority
     RuntimeWorkspaceBindingResolverPort,
     RuntimeWorkspaceDispatchAuthorityPort
 {
-  readonly #store: Pick<ThreadStore, "loadThreadInSpace">;
+  readonly #store: SpaceScopedThreadStore;
   readonly #authority: RuntimeWorkspaceDispatchAuthority;
 
   constructor(config: {
-    store: Pick<ThreadStore, "loadThreadInSpace">;
+    store: SpaceScopedThreadStore;
     authority: RuntimeWorkspaceDispatchAuthority;
   }) {
     this.#store = config.store;

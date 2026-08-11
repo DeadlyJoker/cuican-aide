@@ -2,7 +2,10 @@ import { validateThreadState, type ThreadState } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type { IdempotencyDescriptor } from "./run-store-port.ts";
-import type { ThreadStore } from "./thread-store-port.ts";
+import type {
+  SpaceScopedThreadStore,
+  ThreadStore,
+} from "./thread-store-port.ts";
 import {
   validateWorkspaceOperationMutationResult,
   type WorkspaceListOperationPhase,
@@ -10,7 +13,9 @@ import {
   type WorkspaceOperationStore,
 } from "./workspace-operation-store-port.ts";
 import { mapStoreError } from "./workspace-list-command-validation.ts";
-type WorkspaceApplicationStore = ThreadStore & WorkspaceOperationStore;
+type WorkspaceApplicationStore = ThreadStore &
+  SpaceScopedThreadStore &
+  WorkspaceOperationStore;
 export class WorkspaceListReadCoordinator {
   readonly store: WorkspaceApplicationStore;
 

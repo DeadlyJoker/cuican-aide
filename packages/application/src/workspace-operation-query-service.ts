@@ -2,7 +2,7 @@ import { validateThreadState, type ThreadState } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
-import type { ThreadStore } from "./thread-store-port.ts";
+import type { SpaceScopedThreadStore } from "./thread-store-port.ts";
 import {
   WORKSPACE_OPERATION_EVENT_PAGE_MAX_LIMIT,
   WORKSPACE_OPERATION_LIST_PAGE_MAX_LIMIT,
@@ -33,7 +33,7 @@ export type ListWorkspaceOperationEventsQuery = Readonly<{
   limit: number;
 }>;
 
-type WorkspaceOperationReadStore = Pick<ThreadStore, "loadThreadInSpace"> &
+type WorkspaceOperationReadStore = SpaceScopedThreadStore &
   Pick<
     WorkspaceOperationStore,
     | "listWorkspaceOperationEvents"

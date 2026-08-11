@@ -25,7 +25,7 @@ import type {
   AuthorizationAction,
   AuthorizationDecision,
 } from "./authorization-port.ts";
-import type { ThreadStore } from "./thread-store-port.ts";
+import type { ThreadSpaceLocator } from "./thread-store-port.ts";
 import {
   validateWorkspaceDeliveryAttempt,
   WorkspaceListDispatchError,
@@ -176,9 +176,7 @@ export class FakeStore {
     return structuredClone(this.thread);
   }
 
-  async loadThreadInSpace(
-    locator: Parameters<ThreadStore["loadThreadInSpace"]>[0],
-  ) {
+  async loadThreadInSpace(locator: ThreadSpaceLocator) {
     this.counts.threadReads += 1;
     return locator.tenantId === this.thread.tenantId &&
       locator.spaceId === this.thread.spaceId &&

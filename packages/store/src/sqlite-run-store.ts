@@ -87,6 +87,7 @@ import {
   type RetryRunAttemptInput,
   type RunAttemptTransitionResult,
   type ThreadLocator,
+  type ThreadSpaceLocator,
   type ThreadRollbackReceiptQuery,
   type ThreadGoalSnapshot,
   type ThreadListQuery,
@@ -209,6 +210,7 @@ import {
   validateThreadRollbackReceiptAuthority,
   validateTextRunPlanCorrelation,
   validateThreadLocator,
+  validateThreadSpaceLocator,
   validateThreadListQuery,
   validateThreadRunListQuery,
   validateThreadContinuationLocator,
@@ -817,6 +819,19 @@ export class SqliteRunStore implements DomainStore {
     validateThreadLocator(locator);
     try {
       return this.#loadThread(locator);
+    } catch (error) {
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async loadThreadInSpace(
+    locator: ThreadSpaceLocator,
+  ): Promise<ThreadState | null> {
+    this.#assertOpen();
+    validateThreadSpaceLocator(locator);
+    try {
+      const thread = this.#loadThread(locator);
+      return thread?.spaceId === locator.spaceId ? thread : null;
     } catch (error) {
       throw normalizeSqliteError(error);
     }

@@ -81,6 +81,7 @@ import {
   type RunAttemptTransitionResult,
   type RunStore,
   type ThreadLocator,
+  type ThreadSpaceLocator,
   type ThreadRollbackReceiptQuery,
   type ThreadGoalSnapshot,
   type ThreadListQuery,
@@ -201,6 +202,7 @@ import {
   validateThreadRollbackReceiptAuthority,
   validateTextRunPlanCorrelation,
   validateThreadLocator,
+  validateThreadSpaceLocator,
   validateThreadListQuery,
   validateThreadRunListQuery,
   validateThreadContinuationLocator,
@@ -375,7 +377,10 @@ export class InMemoryRunStore implements DomainStore {
     string,
     ModelProviderSettingsOperationRecord
   >();
-  readonly #latestFinalizedProviderSettingsOperation = new Map<string, string>();
+  readonly #latestFinalizedProviderSettingsOperation = new Map<
+    string,
+    string
+  >();
   readonly #executionAuthority = new InMemoryExecutionAuthority();
   readonly #toolExecutionReceipts = new Map<
     string,
@@ -425,9 +430,7 @@ export class InMemoryRunStore implements DomainStore {
         normalized,
       );
       const operation = this.#requireProviderOperationAny(normalized);
-      if (
-        stableJson(operation.authority.pending) !== stableJson(pending)
-      ) {
+      if (stableJson(operation.authority.pending) !== stableJson(pending)) {
         throw new RunStoreError("model_provider_settings_stored_state_invalid");
       }
       return {
@@ -514,7 +517,9 @@ export class InMemoryRunStore implements DomainStore {
         normalized,
       );
       const operation = this.#requireProviderOperation(normalized, "finalized");
-      if (stableJson(operation.resultEnvelope) !== stableJson(receipt.envelope)) {
+      if (
+        stableJson(operation.resultEnvelope) !== stableJson(receipt.envelope)
+      ) {
         throw new RunStoreError("model_provider_settings_stored_state_invalid");
       }
       validateFinalizedModelProviderSettingsOperation(
@@ -558,16 +563,22 @@ export class InMemoryRunStore implements DomainStore {
       finalizedAt,
       normalized.actor,
     );
-    validateFinalizedModelProviderSettingsOperation(operation.authority, catalog);
+    validateFinalizedModelProviderSettingsOperation(
+      operation.authority,
+      catalog,
+    );
     this.#modelProviderSettings.set(normalized.tenantId, clone(catalog));
     this.#pendingModelProviderSettings.delete(normalized.tenantId);
-    this.#modelProviderSettingsOperations.set(providerOperationKey(normalized), {
-      authority: operation.authority,
-      status: "finalized",
-      resultEnvelope: clone(envelope),
-      terminalBinding: normalized.coordinatorBinding,
-      completedAt: finalizedAt,
-    });
+    this.#modelProviderSettingsOperations.set(
+      providerOperationKey(normalized),
+      {
+        authority: operation.authority,
+        status: "finalized",
+        resultEnvelope: clone(envelope),
+        terminalBinding: normalized.coordinatorBinding,
+        completedAt: finalizedAt,
+      },
+    );
     this.#latestFinalizedProviderSettingsOperation.set(
       normalized.tenantId,
       providerOperationKey(normalized),
@@ -594,7 +605,9 @@ export class InMemoryRunStore implements DomainStore {
         normalized,
       );
       const operation = this.#requireProviderOperation(normalized, "aborted");
-      if (stableJson(operation.resultEnvelope) !== stableJson(receipt.envelope)) {
+      if (
+        stableJson(operation.resultEnvelope) !== stableJson(receipt.envelope)
+      ) {
         throw new RunStoreError("model_provider_settings_stored_state_invalid");
       }
       validateAbortedModelProviderSettingsOperation(
@@ -625,13 +638,16 @@ export class InMemoryRunStore implements DomainStore {
     );
     validateAbortedModelProviderSettingsOperation(operation.authority, catalog);
     this.#pendingModelProviderSettings.delete(normalized.tenantId);
-    this.#modelProviderSettingsOperations.set(providerOperationKey(normalized), {
-      authority: operation.authority,
-      status: "aborted",
-      resultEnvelope: clone(envelope),
-      terminalBinding: normalized.coordinatorBinding,
-      completedAt: abortedAt,
-    });
+    this.#modelProviderSettingsOperations.set(
+      providerOperationKey(normalized),
+      {
+        authority: operation.authority,
+        status: "aborted",
+        resultEnvelope: clone(envelope),
+        terminalBinding: normalized.coordinatorBinding,
+        completedAt: abortedAt,
+      },
+    );
     this.#modelProviderSettingsReceipts.set(receiptKey, {
       fingerprint: normalized.fingerprint,
       envelope: clone(envelope),
@@ -674,8 +690,7 @@ export class InMemoryRunStore implements DomainStore {
     );
     const expiredAt = new Date(readLeaseClock(this.#clock)).toISOString();
     if (
-      Date.parse(expiredAt) <=
-      Date.parse(operation.authority.pending.expiresAt)
+      Date.parse(expiredAt) <= Date.parse(operation.authority.pending.expiresAt)
     ) {
       throw new RunStoreError("model_provider_settings_operation_not_expired");
     }
@@ -690,13 +705,16 @@ export class InMemoryRunStore implements DomainStore {
       normalized.actor,
     );
     this.#pendingModelProviderSettings.delete(normalized.tenantId);
-    this.#modelProviderSettingsOperations.set(providerOperationKey(normalized), {
-      authority: operation.authority,
-      status: "expired",
-      resultEnvelope: clone(envelope),
-      terminalBinding: normalized.recoveryBinding,
-      completedAt: expiredAt,
-    });
+    this.#modelProviderSettingsOperations.set(
+      providerOperationKey(normalized),
+      {
+        authority: operation.authority,
+        status: "expired",
+        resultEnvelope: clone(envelope),
+        terminalBinding: normalized.recoveryBinding,
+        completedAt: expiredAt,
+      },
+    );
     this.#modelProviderSettingsReceipts.set(receiptKey, {
       fingerprint: normalized.fingerprint,
       envelope: clone(envelope),
@@ -879,6 +897,17 @@ export class InMemoryRunStore implements DomainStore {
     validateThreadLocator(locator);
     const state = this.#threads.get(locator.threadId) ?? null;
     return state?.tenantId === locator.tenantId ? clone(state) : null;
+  }
+
+  async loadThreadInSpace(
+    locator: ThreadSpaceLocator,
+  ): Promise<ThreadState | null> {
+    validateThreadSpaceLocator(locator);
+    const state = this.#threads.get(locator.threadId) ?? null;
+    return state?.tenantId === locator.tenantId &&
+      state.spaceId === locator.spaceId
+      ? clone(state)
+      : null;
   }
 
   async loadThreadGoal(locator: ThreadLocator): Promise<ThreadGoal | null> {
@@ -1717,7 +1746,8 @@ export class InMemoryRunStore implements DomainStore {
       throw new RunStoreError("model_provider_settings_stored_state_invalid");
     }
     if (latestFinalizedKey !== undefined) {
-      const latest = this.#modelProviderSettingsOperations.get(latestFinalizedKey);
+      const latest =
+        this.#modelProviderSettingsOperations.get(latestFinalizedKey);
       if (
         latest === undefined ||
         latest.status !== "finalized" ||

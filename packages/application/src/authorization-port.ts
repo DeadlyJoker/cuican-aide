@@ -32,6 +32,8 @@ export type ThreadAuthorizationAction =
   | "thread:delete"
   | "thread:compact"
   | "thread:rollback"
+  | "thread:workspace:read"
+  | "thread:workspace:write"
   | "thread:audit:read";
 
 export type ThreadAuthorizationResource = Readonly<{
