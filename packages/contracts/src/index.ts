@@ -3,6 +3,8 @@ export * from "./action-intent.ts";
 export * from "./action-intent-schema.ts";
 export * from "./device-protocol.ts";
 export * from "./device-filesystem-read.ts";
+export * from "./device-filesystem-read-dispatch-api.ts";
+export * from "./device-filesystem-read-dispatch-api-schema.ts";
 export * from "./device-protocol-schema.ts";
 export * from "./device-protocol-workspace.ts";
 export * from "./device-protocol-workspace-schema.ts";
