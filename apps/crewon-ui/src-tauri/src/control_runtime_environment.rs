@@ -243,17 +243,19 @@ fn apply_runtime_route(environment: &mut ChildEnvironment, route: &RuntimeRouteP
 }
 
 fn apply_agent_version_id(environment: &mut ChildEnvironment, route: &RuntimeRouteProjection) {
+    set_env(
+        environment,
+        "CREWON_AGENT_VERSION_ID",
+        effective_agent_version_id(route),
+    );
+}
+
+pub(super) fn effective_agent_version_id(route: &RuntimeRouteProjection) -> String {
     let configured = std::env::var("CREWON_AGENT_VERSION_ID")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
-    set_env(
-        environment,
-        "CREWON_AGENT_VERSION_ID",
-        configured
-            .as_deref()
-            .unwrap_or_else(|| route.agent_version_id()),
-    );
+    configured.unwrap_or_else(|| route.agent_version_id().to_string())
 }
 
 fn apply_provider_runtime(environment: &mut ChildEnvironment, provider: &ActiveProviderRuntime) {
@@ -302,6 +304,7 @@ pub(super) fn worker_bootstrap_input(
     serialize_worker_bootstrap(provider, session, "crewon.worker-native-bootstrap.v1")
 }
 
+#[cfg(test)]
 pub(super) fn worker_bootstrap_input_with_workspace(
     provider: Option<&ActiveProviderRuntime>,
     session: &SessionMaterial,

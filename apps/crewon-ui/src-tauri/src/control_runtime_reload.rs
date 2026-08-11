@@ -6,11 +6,13 @@ use tauri::Manager;
 
 use super::activate_runtime_release;
 use super::environment::control_environment;
+use super::environment::effective_agent_version_id;
 use super::environment::worker_bootstrap_input;
 use super::environment::worker_environment;
 use super::environment::ControlAdmissionMode;
 use super::environment::WorkspaceWorkerEnvironment;
 use super::prepare_paths;
+use super::private_credentials::load_private_credential_bindings;
 use super::process::prepare_process_monitor;
 use super::process::spawn_node;
 use super::process::spawn_node_with_input;

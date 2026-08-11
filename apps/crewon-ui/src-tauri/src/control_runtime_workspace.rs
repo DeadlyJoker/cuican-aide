@@ -11,8 +11,9 @@ use zeroize::Zeroizing;
 
 use super::environment::device_environment;
 use super::environment::gateway_environment;
-use super::environment::worker_bootstrap_input_with_workspace;
+use super::environment::worker_bootstrap_input_with_workspace_and_credentials;
 use super::environment::GatewayEnvironment;
+use super::private_credentials::PrivateCredentialBindings;
 use super::process::spawn_node;
 use super::process::spawn_sidecar_with_input;
 use super::process::wait_for_matching_ready;
@@ -86,6 +87,7 @@ impl WorkspaceRuntimeContext {
         &self,
         provider: Option<&ActiveProviderRuntime>,
         session: &SessionMaterial,
+        credentials: Option<&PrivateCredentialBindings>,
     ) -> Result<WorkspaceWorkerBootstrap, ControlRuntimeStartError> {
         let payloads = self
             .launch_session
@@ -114,8 +116,13 @@ impl WorkspaceRuntimeContext {
         {
             return Err(workspace_failed());
         }
-        let input = worker_bootstrap_input_with_workspace(provider, session, &workspace)
-            .map_err(|()| workspace_failed())?;
+        let input = worker_bootstrap_input_with_workspace_and_credentials(
+            provider,
+            session,
+            &workspace,
+            credentials,
+        )
+        .map_err(|()| workspace_failed())?;
         Ok(WorkspaceWorkerBootstrap {
             input,
             expected_runtime_binding_id: self

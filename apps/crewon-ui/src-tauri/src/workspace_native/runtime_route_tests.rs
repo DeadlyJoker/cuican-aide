@@ -29,6 +29,7 @@ fn projects_unselected_and_selected_authority_into_exact_runtime_routes() {
     assert_eq!(
         RuntimeRouteProjection::from_authority(manager.authority()).unwrap(),
         RuntimeRouteProjection {
+            tenant_id: "standalone-tenant".to_string(),
             agent_version_id: format!(
                 "default-agent-v1:{}",
                 candidate.workspace_runtime_binding_id()

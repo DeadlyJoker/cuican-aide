@@ -78,6 +78,14 @@ materialization. A Deployment also requires an existing same-tenant AgentVersion
 See [`runtime-bindings.example.json`](./runtime-bindings.example.json); replace its zero digest with the compiler output and keep
 the manifest free of raw credentials.
 
+Packaged desktop production Remote MCP credentials are resolved by the Tauri host from the operating-system secret store,
+never by the Worker environment or manifest. The keyring service is `ai.crewon.desktop.remote-mcp`; its account key is the
+compact JSON array `[tenantId, workspaceBindingId, runtimeBindingId, agentVersionId, credentialBindingId]`. At initial Worker
+start and every managed reload, Native re-reads the selected runtime binding and Remote MCP catalog, requires one exact current
+route, loads every production credential binding, and sends the resulting `crewon.worker-native-bootstrap.v3` envelope only over
+the guarded stdin channel. Missing or cross-bound credentials fail startup. Bindings without production Remote MCP keep the
+existing v1/v2 wire unchanged. Raw bearer values are excluded from manifests and materialization digests.
+
 The bootstrap `CREWON_MODEL_*`, route and AgentVersion variables must be identical for `release` and `start`. The Control API
 needs only `CREWON_AGENT_VERSION_ID` to select the default; authority, runtime generation, policy and workspace are derived from
 the durable asset and Deployment. The runtime-binding manifest adds independently selected versions; it never makes

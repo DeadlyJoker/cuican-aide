@@ -121,6 +121,20 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
     let session = SessionMaterial::generate()?;
     let workspace_authority = workspace::selected_workspace_authority(&paths)?;
     let runtime_route = runtime_route_for_authority(workspace_authority.as_ref())?;
+    let agent_version_id = effective_agent_version_id(&runtime_route);
+    let runtime_bindings_path = std::env::var_os("CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+    let private_credentials = if runtime_route.workspace_binding_id().is_some() {
+        load_private_credential_bindings(
+            runtime_bindings_path.as_deref(),
+            &runtime_route,
+            &agent_version_id,
+        )
+        .map_err(|_| ControlRuntimeStartError::RuntimeUnavailable)?
+    } else {
+        None
+    };
     let provider_binding = provider_credentials::active_provider_binding(app)
         .map_err(|_| ControlRuntimeStartError::ProviderCredentialUnavailable)?;
     activate_runtime_release(app, &paths, provider_binding.as_ref(), &runtime_route)?;
@@ -138,7 +152,11 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
         .map(|foundation| {
             foundation
                 .context
-                .worker_bootstrap(provider_runtime.as_ref(), &session)
+                .worker_bootstrap(
+                    provider_runtime.as_ref(),
+                    &session,
+                    private_credentials.as_ref(),
+                )
         })
         .transpose()
     {

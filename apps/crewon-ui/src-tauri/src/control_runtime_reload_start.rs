@@ -66,8 +66,28 @@ pub(super) fn start_worker_with_context(
     session: &super::SessionMaterial,
     workspace: Option<&super::workspace::WorkspaceRuntimeContext>,
 ) -> Result<StartedWorker, ControlRuntimeStartError> {
+    let runtime_route = workspace
+        .map(super::workspace::WorkspaceRuntimeContext::runtime_route)
+        .transpose()?
+        .unwrap_or_else(RuntimeRouteProjection::standalone);
+    let agent_version_id = effective_agent_version_id(&runtime_route);
+    let runtime_bindings_path = std::env::var_os("CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH")
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from);
+    let private_credentials = if runtime_route.workspace_binding_id().is_some() {
+        load_private_credential_bindings(
+            runtime_bindings_path.as_deref(),
+            &runtime_route,
+            &agent_version_id,
+        )
+        .map_err(|_| ControlRuntimeStartError::RuntimeUnavailable)?
+    } else {
+        None
+    };
     let workspace_bootstrap = workspace
-        .map(|workspace| workspace.worker_bootstrap(provider, session))
+        .map(|workspace| {
+            workspace.worker_bootstrap(provider, session, private_credentials.as_ref())
+        })
         .transpose()?;
     let legacy_bootstrap = workspace_bootstrap
         .is_none()
@@ -87,10 +107,7 @@ pub(super) fn start_worker_with_context(
         worker_environment(
             paths,
             provider,
-            &workspace
-                .map(super::workspace::WorkspaceRuntimeContext::runtime_route)
-                .transpose()?
-                .unwrap_or_else(RuntimeRouteProjection::standalone),
+            &runtime_route,
         ),
         if generation.worker.is_multiple_of(2) {
             "crewon-runtime-worker-events-even"

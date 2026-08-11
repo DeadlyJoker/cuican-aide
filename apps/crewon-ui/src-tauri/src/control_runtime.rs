@@ -27,10 +27,6 @@ use zeroize::Zeroizing;
 #[path = "control_runtime_environment.rs"]
 mod environment;
 #[path = "control_runtime_private_credentials.rs"]
-#[allow(
-    dead_code,
-    reason = "Stage E exposes the private stdin boundary before Worker credential lease composition"
-)]
 pub(crate) mod private_credentials;
 #[path = "control_runtime_process.rs"]
 pub(crate) mod process;
@@ -66,10 +62,12 @@ mod workspace_termination;
 mod workspace_wire;
 
 use self::environment::control_environment;
+use self::environment::effective_agent_version_id;
 use self::environment::release_environment;
 use self::environment::worker_bootstrap_input;
 use self::environment::worker_environment;
 use self::environment::ControlAdmissionMode;
+use self::private_credentials::load_private_credential_bindings;
 use self::process::managed_children_are_terminated;
 use self::process::monitor_process;
 use self::process::port_in_use;

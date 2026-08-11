@@ -7,6 +7,7 @@ const STANDALONE_AGENT_VERSION_ID: &str = "default-agent-v1";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RuntimeRouteProjection {
+    pub(super) tenant_id: String,
     pub(super) agent_version_id: String,
     pub(super) runtime_generation: String,
     pub(super) policy_snapshot_id: String,
@@ -16,6 +17,7 @@ pub(crate) struct RuntimeRouteProjection {
 impl RuntimeRouteProjection {
     pub(crate) fn standalone() -> Self {
         Self {
+            tenant_id: super::STANDALONE_TENANT_ID.to_string(),
             agent_version_id: STANDALONE_AGENT_VERSION_ID.to_string(),
             runtime_generation: STANDALONE_RUNTIME_GENERATION.to_string(),
             policy_snapshot_id: STANDALONE_POLICY_SNAPSHOT_ID.to_string(),
@@ -33,6 +35,7 @@ impl RuntimeRouteProjection {
             return Ok(Self::standalone());
         };
         Ok(Self {
+            tenant_id: super::STANDALONE_TENANT_ID.to_string(),
             agent_version_id: format!(
                 "{STANDALONE_AGENT_VERSION_ID}:{}",
                 workspace.workspace_runtime_binding_id()
@@ -45,6 +48,10 @@ impl RuntimeRouteProjection {
 
     pub(crate) fn agent_version_id(&self) -> &str {
         &self.agent_version_id
+    }
+
+    pub(crate) fn tenant_id(&self) -> &str {
+        &self.tenant_id
     }
 
     pub(crate) fn runtime_generation(&self) -> &str {
