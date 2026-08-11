@@ -21,11 +21,11 @@ pub(crate) mod platform;
 #[path = "workspace_directory_validation.rs"]
 pub(crate) mod validation;
 
+#[cfg(test)]
+use crate::WorkspaceFileReadResult;
 use validation::entry_from_utf8_bytes;
 use validation::require_output_bound;
 use validation::validate_binding;
-#[cfg(test)]
-use crate::WorkspaceFileReadResult;
 
 const OUTPUT_SCHEMA_VERSION: &str = "crewon.workspace-list-native-result.v0";
 const CURSOR_PREFIX: &str = "workspace-page-";
@@ -429,7 +429,9 @@ pub(super) struct DirectoryLease<'a> {
 }
 
 impl DirectoryLease<'_> {
-    pub(super) fn directory_mut(&mut self) -> Result<&mut platform::StableDirectory, WorkspaceDirectoryError> {
+    pub(super) fn directory_mut(
+        &mut self,
+    ) -> Result<&mut platform::StableDirectory, WorkspaceDirectoryError> {
         self.directory
             .as_mut()
             .ok_or_else(|| WorkspaceDirectoryError::new("workspace_binding_unavailable"))

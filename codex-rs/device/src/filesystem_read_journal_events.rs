@@ -102,7 +102,10 @@ fn terminal_envelope(
     execution: &FilesystemReadJournalExecution,
     observed_at: DateTime<Utc>,
 ) -> Result<DeviceFilesystemReadEventEnvelope, NativeDeviceAdmissionError> {
-    let DeviceFilesystemReadEvent::Accepted { envelope: accepted, .. } = &execution.accepted else {
+    let DeviceFilesystemReadEvent::Accepted {
+        envelope: accepted, ..
+    } = &execution.accepted
+    else {
         return Err(NativeDeviceAdmissionError::new(
             "device_journal_authority_corrupt",
         ));

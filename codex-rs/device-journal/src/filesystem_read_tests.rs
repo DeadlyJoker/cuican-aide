@@ -55,7 +55,10 @@ async fn concurrent_fresh_prepare_runs_admission_only_for_transaction_winner() {
     barrier.wait();
     assert!(matches!(
         first.await.expect("winner task").expect("winner prepare"),
-        PrepareFilesystemReadWithAdmissionOutcome::New { admitted: "winner", .. }
+        PrepareFilesystemReadWithAdmissionOutcome::New {
+            admitted: "winner",
+            ..
+        }
     ));
     assert!(matches!(
         second.await.expect("replay task").expect("replay prepare"),

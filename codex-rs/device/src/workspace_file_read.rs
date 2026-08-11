@@ -58,9 +58,7 @@ impl WorkspaceDirectoryRegistry {
             ));
         }
         if cancellation.is_canceled() {
-            return Err(WorkspaceDirectoryError::new(
-                "workspace_file_read_canceled",
-            ));
+            return Err(WorkspaceDirectoryError::new("workspace_file_read_canceled"));
         }
         let deadline = Instant::now()
             .checked_add(timeout)
@@ -105,9 +103,16 @@ impl WorkspaceFileReadLease<'_> {
     ) -> Result<WorkspaceFileReadResult, WorkspaceDirectoryError> {
         let content = self
             .lease
-            .read_file(&self.components, self.max_bytes, self.deadline, cancellation)
+            .read_file(
+                &self.components,
+                self.max_bytes,
+                self.deadline,
+                cancellation,
+            )
             .map_err(read_error)?;
-        self.lease.registry.validate_current_binding(&self.binding)?;
+        self.lease
+            .registry
+            .validate_current_binding(&self.binding)?;
         let result = WorkspaceFileReadResult {
             schema_version: "crewon.workspace-file-read-result.v0".to_string(),
             encoding: "utf8".to_string(),

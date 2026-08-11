@@ -55,7 +55,9 @@ impl DeviceWorkspaceJournal {
                 })
             })
             .collect::<Result<Vec<_>, DeviceJournalError>>()?;
-        let next_cursor = has_more.then(|| selected.last().map(|row| row.0.clone())).flatten();
+        let next_cursor = has_more
+            .then(|| selected.last().map(|row| row.0.clone()))
+            .flatten();
         tx.commit().await?;
         Ok(WorkspaceJournalAcknowledgementPage {
             acknowledgements,
