@@ -30,7 +30,9 @@ test("composes a real standalone 127/8 server with a static bearer", async (t) =
 
   assert.deepEqual(runtime.definitions(), [definition()]);
   assert.deepEqual(await runtime.execute(command(), signal()), completed());
-  assert.deepEqual(identities, [identity()]);
+  assert.deepEqual(identities, [
+    identity("standaloneLoopback", endpoint),
+  ]);
   assert.deepEqual(
     requests.map(({ authorization }) => authorization),
     ["Bearer standalone-secret"],
@@ -303,11 +305,16 @@ function release() {
   };
 }
 
-function identity() {
+function identity(
+  mode: "production" | "standaloneLoopback" = "production",
+  endpoint = "https://mcp.example:8443/mutations",
+) {
   return {
     ...release(),
+    mode,
     serverBindingId: "server-binding-1",
     credentialBindingId: "credential-binding-1",
+    endpoint,
   };
 }
 

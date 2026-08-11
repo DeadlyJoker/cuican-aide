@@ -18,12 +18,14 @@ import type {
 } from "./remote-mcp-runtime-config.ts";
 
 export type RemoteMcpBindingIdentity = Readonly<{
+  mode: RemoteMcpServerConfig["mode"];
   tenantId: string;
   agentVersionId: string;
   contentDigest: string;
   materializationDigest: string;
   serverBindingId: string;
   credentialBindingId: string;
+  endpoint: string;
 }>;
 
 export type RemoteMcpCompositionDependencies =
@@ -81,9 +83,11 @@ function createServerRuntime(
   dependencies: RemoteMcpCompositionDependencies,
 ): McpToolRuntime {
   const identity = Object.freeze({
+    mode: server.mode,
     ...release,
     serverBindingId: server.serverBindingId,
     credentialBindingId: server.credentialBindingId,
+    endpoint: server.endpoint,
   });
   const mutationProvider =
     dependencies.mode === "production"

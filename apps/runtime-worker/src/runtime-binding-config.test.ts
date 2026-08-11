@@ -12,6 +12,7 @@ import { compileAgentVersion } from "@crewon/agent-version";
 import {
   loadAgentVersionDeployments,
   loadAgentVersionRuntimeFactory,
+  loadRemoteMcpManifestBindings,
   parseRuntimeBindingConfig,
 } from "./runtime-binding-config.ts";
 
@@ -275,8 +276,10 @@ test("createBoundToolRuntime composes remote MCP only with explicit exact depend
       contentDigest: version.contentDigest,
       materializationDigest:
         factory.deploymentBindings("tenant-1")[0]!.materializationDigest,
+      mode: "standaloneLoopback",
       serverBindingId: "remote-1",
       credentialBindingId: "credential-1",
+      endpoint: "http://127.0.0.1:1234/mutations",
     },
   ]);
 });
@@ -330,6 +333,35 @@ test("validates and composes one remote manifest snapshot per create", async (co
       runtime.toolRuntime.definitions().map(({ name }) => name),
       ["mcp__reviewed-mcp__create_record"],
     );
+  } finally {
+    mutableFs.readFileSync = originalReadFileSync;
+    syncBuiltinESMExports();
+  }
+});
+
+test("extracts remote identities from exactly one manifest snapshot", (context) => {
+  const version = compileAgentVersion(source(), { sha256 });
+  const path = temporaryFile(context);
+  const remotePath = `${path}.remote.json`;
+  const manifest = config(version.contentDigest, null);
+  writeFileSync(remotePath, JSON.stringify(remoteConfig()), "utf8");
+  writeFileSync(path, JSON.stringify({
+    ...manifest,
+    bindings: [{ ...manifest.bindings[0], remoteMcpConfigPath: remotePath }],
+  }), "utf8");
+  const mutableFs = createRequire(import.meta.url)("node:fs") as {
+    readFileSync: typeof import("node:fs").readFileSync;
+  };
+  const originalReadFileSync = mutableFs.readFileSync;
+  let remoteReads = 0;
+  mutableFs.readFileSync = ((candidate: unknown, ...args: unknown[]) => {
+    if (candidate === remotePath) remoteReads += 1;
+    return Reflect.apply(originalReadFileSync, mutableFs, [candidate, ...args]);
+  }) as typeof import("node:fs").readFileSync;
+  syncBuiltinESMExports();
+  try {
+    assert.equal(loadRemoteMcpManifestBindings(path).length, 1);
+    assert.equal(remoteReads, 1);
   } finally {
     mutableFs.readFileSync = originalReadFileSync;
     syncBuiltinESMExports();

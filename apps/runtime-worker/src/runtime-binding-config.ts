@@ -26,6 +26,7 @@ import { loadRemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import type { RemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import {
   composeRemoteMcpRuntime,
+  type RemoteMcpBindingIdentity,
   type RemoteMcpCompositionDependencies,
 } from "./remote-mcp-composition.ts";
 
@@ -73,6 +74,40 @@ export function loadAgentVersionRuntimeFactory(
       remoteMcpDependencies,
     ),
   );
+}
+
+export type RemoteMcpManifestBinding = RemoteMcpBindingIdentity;
+
+/** Reads the same pinned manifests used by the runtime factory, without credentials. */
+export function loadRemoteMcpManifestBindings(
+  path: string,
+): readonly RemoteMcpManifestBinding[] {
+  const input = readBoundedJson(
+    path,
+    MAX_CONFIG_BYTES,
+    "CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_invalid",
+  );
+  return parseRuntimeBindingConfig(input).bindings.flatMap((binding) => {
+    if (binding.remoteMcpConfigPath === null) return [];
+    const remoteMcpConfig = loadRemoteMcpRuntimeConfig(
+      binding.remoteMcpConfigPath,
+    );
+    const materializationDigestValue = materializationDigest(binding, {
+      remoteMcpConfig,
+    });
+    return remoteMcpConfig.servers.map(
+      (server) => ({
+        mode: server.mode,
+        tenantId: binding.tenantId,
+        agentVersionId: binding.agentVersionId,
+        contentDigest: binding.contentDigest,
+        materializationDigest: materializationDigestValue,
+        serverBindingId: server.serverBindingId,
+        credentialBindingId: server.credentialBindingId,
+        endpoint: server.endpoint,
+      }),
+    );
+  });
 }
 
 /** Compiles release metadata without resolving or retaining Provider secrets. */
