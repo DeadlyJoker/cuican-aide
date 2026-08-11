@@ -77,6 +77,17 @@ test("fences an old Gateway session after a newer authenticated connection claim
   );
   await second.gateway.close();
   assert.equal(await routes.loadConnection("device-1"), null);
+  assert.equal(
+    (
+      await routes.claimConnection({
+        deviceId: "device-1",
+        gatewayId: "gateway-3",
+        connectionId: "connection-3",
+        leaseDurationMs: 30_000,
+      })
+    ).epoch,
+    3,
+  );
 });
 
 class ManualHeartbeatScheduler implements DeviceGatewayHeartbeatScheduler {

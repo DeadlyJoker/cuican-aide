@@ -194,6 +194,14 @@ if (connectionString === undefined) {
       null,
     );
     assert.equal(await second.releaseConnection(secondRoute), true);
+    assert.equal(await second.loadConnection("device-1"), null);
+    const resumedRoute = await first.claimConnection({
+      deviceId: "device-1",
+      gatewayId: "gateway-3",
+      connectionId: "connection-3",
+      leaseDurationMs: 30_000,
+    });
+    assert.equal(resumedRoute.epoch, 3);
   });
 
   test("rejects a newer Team authority schema before opening the listener", async (context) => {

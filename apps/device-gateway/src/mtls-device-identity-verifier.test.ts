@@ -84,6 +84,7 @@ test("parses a strict unique Device certificate registry", () => {
   assert.deepEqual(parseDeviceRegistryConfig(config), {
     ...config,
     gateways: [],
+    workers: [{ ...workerRegistration(), allowedRuntimeBindingIds: [] }],
   });
   assert.deepEqual(
     parseDeviceRegistryConfig({
@@ -112,6 +113,36 @@ test("parses a strict unique Device certificate registry", () => {
       }),
     hasCode("gateway_registration_invalid"),
   );
+  assert.deepEqual(
+    parseDeviceRegistryConfig({
+      ...config,
+      workers: [
+        {
+          ...workerRegistration(),
+          allowedRuntimeBindingIds: ["runtime-binding-1"],
+        },
+      ],
+    }).workers,
+    [
+      {
+        ...workerRegistration(),
+        allowedRuntimeBindingIds: ["runtime-binding-1"],
+      },
+    ],
+  );
+  for (const allowedRuntimeBindingIds of [
+    ["runtime-binding-1", "runtime-binding-1"],
+    ["unsafe binding"],
+  ]) {
+    assert.throws(
+      () =>
+        parseDeviceRegistryConfig({
+          ...config,
+          workers: [{ ...workerRegistration(), allowedRuntimeBindingIds }],
+        }),
+      hasCode("worker_registration_invalid"),
+    );
+  }
   assert.throws(
     () =>
       parseDeviceRegistryConfig({
