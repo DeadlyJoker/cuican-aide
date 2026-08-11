@@ -197,17 +197,28 @@ Gate 报告为通过。
   transaction 中锁定 execution kind 和当前 record、strict parse、应用 transition、写入并 commit 后才返回。SQLite write failure 会 rollback
   且不留下 phantom authority；PostgreSQL 两个独立 Pool 的 same-command convergence、identity/terminal conflict、跨副本可见性测试已写入
   条件套件。当前环境没有 `CREWON_TEST_POSTGRES_URL`，因此这 7 条 PostgreSQL 条件测试未实跑、不得算作通过。
-- Agent Runtime：`c3b108eba` 为 AR-031 增加独立 Rust/TS shared fixture。manual / `storeResponses=false` 的
-  `end_turn=false` mixed completed assistant→Tool 路径会保留 assistant/call/result、只执行并 receipt Tool 一次、累计两段 usage，且不计为
-  sampling retry。assistant-only continuation 因缺 durable intermediate sample recovery boundary 继续 fail closed；stored checkpoint chain
-  也保持 fail closed，因此 AR-031 仍为 `PARTIAL`。
-- 本纵切合入后的统一验证：Contracts `73/73`、Device Gateway `101 pass + 7 PostgreSQL-unconfigured skip`、Agent Kernel
-  `23/23`、Runtime Worker `178 pass + 1 PostgreSQL-unconfigured skip`；对应四个 package typecheck 全部通过。Rust
-  `crewon-device-journal 21/21`、`crewon-device 30/30`、`crewon-device-runtime 21/21`，以及 normal mixed / AR-031 两条
-  `crewon-core` focused reference 各 `1/1`。`just bazel-lock-update` 未产生 `MODULE.bazel.lock` 漂移，
-  `just bazel-lock-check` 通过。
-- 能力边界：本阶段没有增加 Control/public API。Runtime Worker/Application 尚未生成并提交 read command，也没有 private Worker HTTP
-  admission、跨 Gateway peer read router 或 packaged read smoke；所以该能力仍是 internal-only，不能宣告用户可用。
+- Agent Runtime AR-031：`f4912f93b`、`30ee5035c` 为 manual / `storeResponses=false` assistant-only
+  `end_turn=false` 增加显式 durable provider-continuation boundary。Kernel 不再把它伪装成 sampling retry；Worker 将本次 completed
+  assistant items、Run events/usage、Model History、Thread model state、sample marker 与 Step/Attempt completion 原子提交。每个 sample
+  使用独立、完整语义绑定的 idempotency receipt；commit 后进程丢失会从 exact durable history suffix 继续，不重复 sample、usage 或
+  assistant Message。InMemory、SQLite 与 PostgreSQL adapter 共用 execution-store conformance；Rust 与 TS 消费同一份三请求 fixture，冻结
+  `working`、`still working`、`done` 的历史和累计 usage。stored-response/provider-checkpoint continuation 仍有意 fail closed，因此广义
+  AR-031 继续标为 `PARTIAL`。
+- Runtime Worker read command / client：`78d6bbeec`、`5dc2472a8` 生成并签名 `workspace.read_file.v0`，canonical action digest
+  绑定 tenant/space/thread、Run/Step/Attempt/execution、lease、Workspace/Device/Runtime、policy、路径和固定 limits。`8564a679b`、
+  `ff96099c9` 增加 strict private Gateway execute/reconcile/cancel client：共享 parser 深校验请求、错误与 terminal receipt，HTTPS/mTLS
+  transport 使用有界 body、总 deadline、AbortSignal 和保守 `notSent` / `possiblySent` 边界，cancel 只发送 lease-exact passive reference。
+- Gateway private/peer read：`703193010..b6ca8ab8d` 增加 Worker admission、receipt-first execute/reconcile/passive cancel、跨 Gateway
+  TLS 1.3 单跳转发和完整 route/epoch/lease/digest/receipt correlation。heartbeat 只延长同一 route fence；caller abort 在 route load、
+  verifier、prepare 和发送前边界重复检查，取消不会触发命令 replay。
+- 本阶段根工作区统一验证：Contracts `77/77`、Device Gateway `107 pass + 7 PostgreSQL-unconfigured skip`、Agent Kernel
+  `23/23`、Application `116/116`、Store `269 pass + 46 environment-conditional skip`、Runtime Worker
+  `190 pass + 1 PostgreSQL-unconfigured skip`；对应 package typecheck 全部通过。Rust
+  `suite::provider_end_turn::end_turn_false_assistant_items_continue_same_turn` focused reference `1/1` 通过。此前本纵切的
+  `crewon-device-journal 21/21`、`crewon-device 30/30`、`crewon-device-runtime 21/21` 证据保持有效。
+- 能力边界：本阶段没有增加 Control/public API。command producer 与 production Gateway client 已具备，但尚未由 durable
+  Application read-operation authority 在网络发送前原子冻结 reference，也未接入 Agent Tool catalog/Runtime Worker 调度、native bootstrap
+  composition 和 packaged read smoke；所以能力仍为 internal-only，不能宣告用户可用。
 
 ## 尚未关闭的完整迁移 Gate
 
