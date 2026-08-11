@@ -41,6 +41,7 @@ test("packaged entry starts v2 Workspace listener and emits only non-secret read
       CREWON_FAKE_RESPONSE: "unused",
       CREWON_AUTHORITY_ID: config.route.authorityId,
       CREWON_AGENT_VERSION_ID: config.route.agentVersionId,
+      CREWON_NATIVE_WORKSPACE_READ_ENABLED: "1",
       CREWON_WORKER_SCAN_INTERVAL_MS: "1000",
     },
     stdio: ["pipe", "pipe", "pipe"],
@@ -201,6 +202,7 @@ function packagedConfig(): RuntimeWorkerCompositionConfig {
     maxToolRounds: 32,
     autoCompactAtTokens: 200_000,
     modelContextWindowTokens: 273_000,
+    nativeWorkspaceReadCatalog: "enabled",
   };
 }
 
