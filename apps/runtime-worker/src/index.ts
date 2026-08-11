@@ -18,6 +18,7 @@ export * from "./runtime-workspace-dispatch-service.ts";
 export * from "./runtime-workspace-error.ts";
 export * from "./runtime-workspace-freeze-service.ts";
 export * from "./runtime-workspace-read-file-command-service.ts";
+export * from "./runtime-workspace-read-application-adapter.ts";
 export * from "./runtime-workspace-read-tool-runtime.ts";
 export * from "./runtime-workspace-read-gateway-client.ts";
 export * from "./runtime-workspace-private-server.ts";
