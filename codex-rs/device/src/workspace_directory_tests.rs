@@ -15,6 +15,133 @@ use super::WorkspaceListPage;
 use super::WorkspaceListPageRequest;
 
 #[test]
+#[cfg(unix)]
+fn reads_a_nested_utf8_file_through_stable_nofollow_handles() {
+    let directory = tempdir().expect("temporary workspace");
+    fs::create_dir(directory.path().join("docs")).expect("docs directory");
+    fs::write(directory.path().join("docs/README.md"), "hello 世界").expect("write fixture");
+    let registry = WorkspaceDirectoryRegistry::new();
+    let binding = registry
+        .register_with_incarnation("workspace-1", "incarnation-1", directory.path())
+        .expect("register directory");
+
+    let result = registry
+        .read_file(
+            &binding,
+            &["docs".to_string(), "README.md".to_string()],
+            64 * 1024,
+            Duration::from_secs(30),
+            &WorkspaceListCancellation::default(),
+        )
+        .expect("read file");
+
+    assert_eq!(
+        result,
+        super::WorkspaceFileReadResult {
+            schema_version: "crewon.workspace-file-read-result.v0".to_string(),
+            encoding: "utf8".to_string(),
+            content: "hello 世界".to_string(),
+            byte_length: 12,
+        }
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn rejects_symlink_traversal_and_bounded_or_binary_output() {
+    let directory = tempdir().expect("temporary workspace");
+    fs::create_dir(directory.path().join("real")).expect("real directory");
+    fs::write(directory.path().join("real/large"), vec![b'x'; 5]).expect("large file");
+    fs::write(directory.path().join("real/binary"), [0xff]).expect("binary file");
+    std::os::unix::fs::symlink("real", directory.path().join("link")).expect("symlink");
+    let registry = WorkspaceDirectoryRegistry::new();
+    let binding = registry
+        .register_with_incarnation("workspace-1", "incarnation-1", directory.path())
+        .expect("register directory");
+    let cancellation = WorkspaceListCancellation::default();
+
+    for (components, maximum, code) in [
+        (
+            vec!["link".to_string(), "large".to_string()],
+            64,
+            "workspace_file_read_traversal_failed",
+        ),
+        (
+            vec!["real".to_string(), "large".to_string()],
+            4,
+            "workspace_file_read_too_large",
+        ),
+        (
+            vec!["real".to_string(), "binary".to_string()],
+            64,
+            "workspace_file_read_not_utf8",
+        ),
+        (
+            vec!["..".to_string()],
+            64,
+            "workspace_file_read_path_invalid",
+        ),
+    ] {
+        assert_code(
+            registry
+                .read_file(
+                    &binding,
+                    &components,
+                    maximum,
+                    Duration::from_secs(30),
+                    &cancellation,
+                )
+                .expect_err("read must fail closed"),
+            code,
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn caps_the_serialized_result_and_releases_handles_after_every_error_path() {
+    let directory = tempdir().expect("temporary workspace");
+    fs::create_dir_all(directory.path().join("a/b")).expect("nested directories");
+    fs::write(directory.path().join("a/b/quoted"), "\"\"\"\"").expect("quoted content");
+    let registry = WorkspaceDirectoryRegistry::new();
+    let binding = registry
+        .register_with_incarnation("workspace-1", "incarnation-1", directory.path())
+        .expect("register directory");
+
+    let error = registry
+        .read_file(
+            &binding,
+            &["a".to_string(), "b".to_string(), "missing".to_string()],
+            64,
+            Duration::from_secs(30),
+            &WorkspaceListCancellation::default(),
+        )
+        .expect_err("missing final file");
+    assert_code(error, "workspace_file_read_open_failed");
+    let error = registry
+        .read_file(
+            &binding,
+            &["a".to_string(), "b".to_string(), "quoted".to_string()],
+            8,
+            Duration::from_secs(30),
+            &WorkspaceListCancellation::default(),
+        )
+        .expect_err("serialized envelope exceeds content cap");
+    assert_code(error, "workspace_file_read_output_too_large");
+
+    let result = registry
+        .read_file(
+            &binding,
+            &["a".to_string(), "b".to_string(), "quoted".to_string()],
+            256,
+            Duration::from_secs(30),
+            &WorkspaceListCancellation::default(),
+        )
+        .expect("handles returned after failures");
+    assert_eq!(result.content, "\"\"\"\"");
+}
+
+#[test]
 fn lists_the_stable_handle_in_utf8_byte_order_with_exact_cursors() {
     let parent = tempdir().expect("temporary parent");
     let workspace_path = parent.path().join("workspace");

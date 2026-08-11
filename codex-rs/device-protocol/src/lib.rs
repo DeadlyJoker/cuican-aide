@@ -14,10 +14,17 @@ use serde_json::Map;
 use serde_json::Value;
 use thiserror::Error;
 
+mod filesystem_read;
 mod workspace_list_command;
 mod workspace_list_event;
 mod workspace_list_result;
 
+pub use filesystem_read::DEVICE_FILESYSTEM_READ_CAPABILITY;
+pub use filesystem_read::DeviceFilesystemReadArguments;
+pub use filesystem_read::DeviceFilesystemReadCommand;
+pub use filesystem_read::MAX_DEVICE_FILESYSTEM_READ_BYTES;
+pub use filesystem_read::MAX_DEVICE_FILESYSTEM_READ_TIMEOUT_MS;
+pub use filesystem_read::parse_device_filesystem_read_command;
 pub use workspace_list_command::DeviceWorkspaceListCommand;
 pub use workspace_list_command::DeviceWorkspaceListLimits;
 pub use workspace_list_command::canonical_device_workspace_list_command_signing_payload;

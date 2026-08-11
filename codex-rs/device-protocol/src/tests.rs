@@ -17,6 +17,7 @@ use super::parse_device_execution_ack;
 use super::parse_device_execution_cancel;
 use super::parse_device_execution_command;
 use super::parse_device_execution_event;
+use super::parse_device_filesystem_read_command;
 use super::parse_device_gateway_welcome;
 use super::parse_device_hello;
 use super::parse_device_workspace_list_command;
@@ -37,6 +38,7 @@ struct Reference {
 #[serde(rename_all = "camelCase")]
 struct ValidReference {
     command: Value,
+    filesystem_read_command: Value,
     workspace_command: Value,
     hello: Value,
     welcome: Value,
@@ -65,6 +67,15 @@ fn matches_typescript_device_protocol_reference_and_fail_closed_codes() {
     assert_eq!(
         fixture.schema_version,
         "crewon.device-protocol-reference.v0"
+    );
+    assert_eq!(
+        serde_json::to_value(
+            parse_device_filesystem_read_command(fixture.valid.filesystem_read_command.clone())
+                .expect("parse shared filesystem read command")
+                .command
+        )
+        .expect("serialize shared filesystem read command"),
+        fixture.valid.filesystem_read_command,
     );
 
     assert_eq!(

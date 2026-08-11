@@ -2,6 +2,7 @@ export * from "./agent-events.ts";
 export * from "./action-intent.ts";
 export * from "./action-intent-schema.ts";
 export * from "./device-protocol.ts";
+export * from "./device-filesystem-read.ts";
 export * from "./device-protocol-schema.ts";
 export * from "./device-protocol-workspace.ts";
 export * from "./device-protocol-workspace-schema.ts";

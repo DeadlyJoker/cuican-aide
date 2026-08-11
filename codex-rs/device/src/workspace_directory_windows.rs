@@ -2,6 +2,7 @@ use std::io;
 use std::os::windows::ffi::OsStrExt as _;
 use std::path::Path;
 use std::ptr;
+use std::time::Instant;
 
 use windows_sys::Wdk::Storage::FileSystem::FILE_ID_BOTH_DIR_INFORMATION;
 use windows_sys::Wdk::Storage::FileSystem::FileIdBothDirectoryInformation;
@@ -215,6 +216,18 @@ impl StableDirectory {
         validate_scan_progress(cancellation, budget.deadline)?;
         self.require_same_identity()?;
         Ok(entries)
+    }
+
+    pub(super) fn read_file(
+        &mut self,
+        _components: &[String],
+        _max_bytes: usize,
+        _deadline: Instant,
+        _cancellation: &WorkspaceListCancellation,
+    ) -> Result<String, WorkspaceDirectoryError> {
+        Err(WorkspaceDirectoryError::new(
+            "workspace_file_read_platform_unavailable",
+        ))
     }
 
     fn require_same_identity(&self) -> Result<(), WorkspaceDirectoryError> {

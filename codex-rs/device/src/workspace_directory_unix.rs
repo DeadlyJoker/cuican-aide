@@ -1,9 +1,13 @@
 use std::ffi::CStr;
 use std::io;
+use std::os::fd::AsRawFd as _;
+use std::os::fd::FromRawFd as _;
+use std::os::fd::OwnedFd;
 use std::os::fd::RawFd;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
 use std::ptr;
+use std::time::Instant;
 
 use libc::DIR;
 
@@ -141,6 +145,58 @@ impl StableDirectory {
         Ok(entries)
     }
 
+    pub(super) fn read_file(
+        &mut self,
+        components: &[String],
+        max_bytes: usize,
+        deadline: Instant,
+        cancellation: &WorkspaceListCancellation,
+    ) -> Result<String, WorkspaceDirectoryError> {
+        self.require_same_identity()?;
+        validate_scan_progress(cancellation, deadline)?;
+        let root_fd = unsafe { libc::dirfd(self.stream) };
+        let mut owned_directory_fd: Option<OwnedFd> = None;
+        let mut directory_fd = root_fd;
+        for component in &components[..components.len() - 1] {
+            validate_component(component)?;
+            let component = nul_terminated(component);
+            let next = unsafe {
+                libc::openat(
+                    directory_fd,
+                    component.as_ptr().cast(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if next < 0 {
+                return Err(io_error("workspace_file_read_traversal_failed"));
+            }
+            let next = unsafe { OwnedFd::from_raw_fd(next) };
+            directory_fd = next.as_raw_fd();
+            owned_directory_fd = Some(next);
+            validate_scan_progress(cancellation, deadline)?;
+        }
+        let final_component = components
+            .last()
+            .ok_or_else(|| WorkspaceDirectoryError::new("workspace_file_read_path_invalid"))?;
+        validate_component(final_component)?;
+        let final_component = nul_terminated(final_component);
+        let file_fd = unsafe {
+            libc::openat(
+                directory_fd,
+                final_component.as_ptr().cast(),
+                libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if file_fd < 0 {
+            return Err(io_error("workspace_file_read_open_failed"));
+        }
+        let file_fd = unsafe { OwnedFd::from_raw_fd(file_fd) };
+        drop(owned_directory_fd);
+        let result = read_regular_file(file_fd.as_raw_fd(), max_bytes, deadline, cancellation);
+        self.require_same_identity()?;
+        result
+    }
+
     fn entry_kind(
         &self,
         name: *const libc::c_char,
@@ -182,6 +238,73 @@ impl StableDirectory {
         }
         Ok(())
     }
+}
+
+fn validate_component(component: &str) -> Result<(), WorkspaceDirectoryError> {
+    if component.is_empty()
+        || component == "."
+        || component == ".."
+        || component.len() > 255
+        || component
+            .bytes()
+            .any(|byte| matches!(byte, 0 | b'/' | b'\\' | b':'))
+    {
+        return Err(WorkspaceDirectoryError::new(
+            "workspace_file_read_path_invalid",
+        ));
+    }
+    Ok(())
+}
+
+fn nul_terminated(component: &str) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(component.len() + 1);
+    bytes.extend_from_slice(component.as_bytes());
+    bytes.push(0);
+    bytes
+}
+
+fn read_regular_file(
+    fd: RawFd,
+    max_bytes: usize,
+    deadline: Instant,
+    cancellation: &WorkspaceListCancellation,
+) -> Result<String, WorkspaceDirectoryError> {
+    let mut status = std::mem::MaybeUninit::<libc::stat>::uninit();
+    if unsafe { libc::fstat(fd, status.as_mut_ptr()) } != 0
+        || unsafe { status.assume_init() }.st_mode & libc::S_IFMT != libc::S_IFREG
+    {
+        return Err(WorkspaceDirectoryError::new(
+            "workspace_file_read_not_regular",
+        ));
+    }
+    let mut bytes = vec![0u8; max_bytes.saturating_add(1)];
+    let mut length = 0usize;
+    while length < bytes.len() {
+        validate_scan_progress(cancellation, deadline)?;
+        let read = unsafe {
+            libc::read(
+                fd,
+                bytes[length..].as_mut_ptr().cast(),
+                bytes.len() - length,
+            )
+        };
+        if read < 0 {
+            return Err(io_error("workspace_file_read_failed"));
+        }
+        if read == 0 {
+            break;
+        }
+        length += read as usize;
+    }
+    if length > max_bytes {
+        return Err(WorkspaceDirectoryError::new(
+            "workspace_file_read_too_large",
+        ));
+    }
+    bytes.truncate(length);
+    String::from_utf8(bytes).map_err(|error| {
+        WorkspaceDirectoryError::with_source("workspace_file_read_not_utf8", error)
+    })
 }
 
 impl Drop for StableDirectory {

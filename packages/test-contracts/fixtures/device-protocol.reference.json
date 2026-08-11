@@ -43,6 +43,50 @@
       "idempotencyKey": "run-1:step-1:attempt-1",
       "traceContext": { "traceparent": null, "tracestate": null }
     },
+    "filesystemReadCommand": {
+      "schemaVersion": "crewon.device-command.v0",
+      "protocolVersion": 1,
+      "deviceId": "device-1",
+      "leaseId": "lease-filesystem-1",
+      "leaseEpoch": 4,
+      "expiresAt": "2026-08-08T01:00:00Z",
+      "runId": "run-filesystem-1",
+      "stepId": "step-filesystem-1",
+      "attemptId": "attempt-filesystem-1",
+      "executionId": "execution-filesystem-1",
+      "workspaceBindingId": "workspace-opaque-1",
+      "capability": "workspace.read_file.v0",
+      "actionDigest": "sha256:abababababababababababababababababababababababababababababababab",
+      "authorization": {
+        "schemaVersion": "crewon.device-authorization.v0",
+        "scheme": "ed25519",
+        "keyId": "control-key-1",
+        "issuedAt": "2026-08-08T00:00:02Z",
+        "expiresAt": "2026-08-08T00:30:00Z",
+        "approvalProof": null,
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "arguments": {
+        "schemaVersion": "crewon.device-filesystem-read-arguments.v0",
+        "workspaceIncarnationId": "incarnation-1",
+        "relativePathSegments": ["docs", "README.md"],
+        "encoding": "utf8"
+      },
+      "payloadRef": null,
+      "limits": {
+        "timeoutMs": 30000,
+        "maxOutputBytes": 65536,
+        "maxArtifactBytes": 16777216
+      },
+      "idempotencyKey": "filesystem-read-key-1",
+      "traceContext": { "traceparent": null, "tracestate": null }
+    },
+    "filesystemReadResult": {
+      "schemaVersion": "crewon.workspace-file-read-result.v0",
+      "encoding": "utf8",
+      "content": "hello 世界",
+      "byteLength": 12
+    },
     "workspaceCommand": {
       "schemaVersion": "crewon.device-workspace-list-command.v0",
       "protocolVersion": 1,
