@@ -76,21 +76,24 @@ export function requireWorkspaceClient(
   return client;
 }
 
-export function validateThreadSnapshot(
-  response: GetThreadResponse,
+export function validateThreadSnapshot<Snapshot extends CanonicalThreadSnapshot>(
+  response: Snapshot,
   threadId: string,
-): GetThreadResponse {
+): Snapshot {
   if (
     response.thread.threadId !== threadId ||
     !Number.isSafeInteger(response.thread.revision) ||
     response.thread.revision < 1 ||
-    response.eventSequence !== response.thread.revision ||
     !["active", "archived", "deleted"].includes(response.thread.status)
   ) {
     throw new Error("control_workspace_thread_snapshot_invalid");
   }
   return response;
 }
+
+type CanonicalThreadSnapshot = Readonly<{
+  thread: GetThreadResponse["thread"];
+}>;
 
 export function isUnknownNetwork(error: unknown): boolean {
   return (

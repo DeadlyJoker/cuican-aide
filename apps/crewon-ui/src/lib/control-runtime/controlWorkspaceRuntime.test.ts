@@ -12,8 +12,20 @@ import {
   ControlWorkspaceRuntime,
   type WorkspaceOperationEventStream,
 } from "./controlWorkspaceRuntime";
+import { validateThreadSnapshot } from "./controlWorkspaceRuntimeSupport";
 
 describe("ControlWorkspaceRuntime", () => {
+  it("uses only the canonical Thread snapshot fields as Workspace authority", () => {
+    const { thread } = threadSnapshot("thread-1", 7);
+    const canonical = { thread };
+    const withUnrelatedCursor = { ...canonical, eventSequence: 999 };
+
+    expect(validateThreadSnapshot(canonical, "thread-1")).toEqual(canonical);
+    expect(validateThreadSnapshot(withUnrelatedCursor, "thread-1")).toEqual(
+      withUnrelatedCursor,
+    );
+  });
+
   it("retries one unknown create outcome with the frozen command and same key", async () => {
     const requests: Array<{
       key: string | null;
