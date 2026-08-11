@@ -12,6 +12,7 @@ import {
   type CommitThreadInput,
   type MessageRecord,
   type ModelHistoryStore,
+  type SpaceScopedThreadStore,
   type ThreadStore,
 } from "@crewon/application";
 import type { LeaseClock } from "./lease-clock.ts";
@@ -42,6 +43,20 @@ export function registerThreadStoreConformance(
       assert.deepEqual(
         await store.loadThread(threadLocator()),
         committed.state,
+      );
+      assert.deepEqual(
+        await store.loadThreadInSpace({
+          ...threadLocator(),
+          spaceId: "space-1",
+        }),
+        committed.state,
+      );
+      assert.equal(
+        await store.loadThreadInSpace({
+          ...threadLocator(),
+          spaceId: "space-2",
+        }),
+        null,
       );
       assert.deepEqual(await store.commitThread(input), {
         ...committed,
@@ -641,6 +656,7 @@ function threadLocator() {
 }
 
 type ThreadConformanceStore = ThreadStore &
+  SpaceScopedThreadStore &
   ModelHistoryStore & { close(): Promise<void> };
 
 async function managedStore(
