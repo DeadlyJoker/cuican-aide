@@ -13410,6 +13410,51 @@ button.library-item:hover .library-card-chevron {
   gap: 12px;
 }
 
+/* Workspace operations stay in the selected Command thread, never a new page. */
+.screen-shell.command-screen .command-thread-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  gap: 12px;
+}
+
+.screen-shell.command-screen .command-thread-stage > .command-thread-room {
+  min-width: 0;
+  min-height: 0;
+}
+
+.screen-shell.command-screen .command-thread-operations-rail {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.screen-shell.command-screen
+  .command-thread-operations-rail
+  > .workspace-operations-panel {
+  align-content: start;
+  margin: 0;
+}
+
+@container command-canvas (max-width: 900px) {
+  .screen-shell.command-screen .command-thread-stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .screen-shell.command-screen .command-thread-operations-rail {
+    max-height: 152px;
+    padding: 0 2px 2px;
+  }
+}
+/* End selected Command thread Workspace operation rail. */
+
 .screen-shell.command-screen .home-title {
   margin-bottom: 6px;
   text-align: center;
