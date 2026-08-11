@@ -5,17 +5,24 @@ import { DeviceGatewayError } from "./device-gateway-error.ts";
 import { configureSqliteDeviceGatewayDatabase } from "./sqlite-device-dispatch-schema.ts";
 import {
   InMemoryWorkspaceReadDispatchStore,
+  parseWorkspaceReadDispatchRecord,
   type WorkspaceReadDispatchRecord,
   type WorkspaceReadDispatchStorePort,
   type WorkspaceReadRouteFence,
 } from "./workspace-read-dispatch-store.ts";
 
-/** SQLite-backed workspace-read receipt authority. */
+/** SQLite-backed transactional workspace-read receipt authority. */
 export class SqliteWorkspaceReadDispatchStore
   implements WorkspaceReadDispatchStorePort
 {
   readonly #database: DatabaseSync;
-  readonly #inner: InMemoryWorkspaceReadDispatchStore;
+  readonly #config: {
+    now: () => Date;
+    currentRoute: (deviceId: string) => WorkspaceReadRouteFence | null;
+  };
+  #tail: Promise<void> = Promise.resolve();
+  #closePromise: Promise<void> | null = null;
+  #closing = false;
   #closed = false;
 
   constructor(
@@ -27,75 +34,115 @@ export class SqliteWorkspaceReadDispatchStore
   ) {
     this.#database = new DatabaseSync(path);
     configureSqliteDeviceGatewayDatabase(this.#database, path);
-    const rows = (
-      this.#database
-        .prepare("SELECT record_json FROM workspace_read_dispatch_records")
-        .all() as { record_json: string }[]
-    ).map(
-      ({ record_json }) =>
-        JSON.parse(record_json) as WorkspaceReadDispatchRecord,
-    );
-    this.#inner = new InMemoryWorkspaceReadDispatchStore({
-      ...config,
-      initialRecords: rows,
-    });
+    this.#config = config;
   }
   async ready(): Promise<void> {
-    this.#assertOpen();
+    this.#assertAccepting();
   }
-  async prepare(
+
+  prepare(
     command: DeviceFilesystemReadCommand,
     route: WorkspaceReadRouteFence,
     at: string,
   ) {
-    this.#assertOpen();
-    const value = await this.#inner.prepare(command, route, at);
-    this.#write(value.record);
-    return value;
+    return this.#enqueue(async () =>
+      this.#mutate(command.executionId, (authority) =>
+        authority.prepare(command, route, at),
+      ),
+    );
   }
-  async commit(input: Parameters<WorkspaceReadDispatchStorePort["commit"]>[0]) {
-    this.#assertOpen();
-    const value = await this.#inner.commit(input);
-    this.#write(value.record);
-    return value;
+  commit(input: Parameters<WorkspaceReadDispatchStorePort["commit"]>[0]) {
+    return this.#enqueue(async () =>
+      this.#mutate(input.command.executionId, (authority) =>
+        authority.commit(input),
+      ),
+    );
   }
-  async load(executionId: string) {
-    this.#assertOpen();
-    return this.#inner.load(executionId);
+  load(executionId: string) {
+    return this.#enqueue(async () => this.#read(executionId));
   }
   async close(): Promise<void> {
-    if (this.#closed) return;
-    this.#closed = true;
-    await this.#inner.close();
-    this.#database.close();
+    if (this.#closePromise !== null) return this.#closePromise;
+    this.#closing = true;
+    this.#closePromise = this.#finishClose();
+    return this.#closePromise;
   }
-  #write(record: WorkspaceReadDispatchRecord): void {
+
+  async #mutate<T extends { record: WorkspaceReadDispatchRecord }>(
+    executionId: string,
+    transition: (authority: InMemoryWorkspaceReadDispatchStore) => Promise<T>,
+  ): Promise<T> {
     this.#database.exec("BEGIN IMMEDIATE");
     try {
-      this.#database
-        .prepare(
-          "INSERT INTO device_execution_kinds (execution_id, command_kind) VALUES (?, 'workspaceRead') ON CONFLICT (execution_id) DO NOTHING",
-        )
-        .run(record.executionId);
-      const kind = this.#database
-        .prepare(
-          "SELECT command_kind FROM device_execution_kinds WHERE execution_id = ?",
-        )
-        .get(record.executionId) as { command_kind: string };
-      if (kind.command_kind !== "workspaceRead")
-        throw new DeviceGatewayError("device_dispatch_kind_conflict");
+      const prior = this.#read(executionId);
+      const authority = new InMemoryWorkspaceReadDispatchStore({
+        ...this.#config,
+        initialRecords: prior === null ? [] : [prior],
+      });
+      const value = await transition(authority);
+      this.#claimKind(executionId);
       this.#database
         .prepare(
           "INSERT INTO workspace_read_dispatch_records (execution_id, record_json) VALUES (?, ?) ON CONFLICT (execution_id) DO UPDATE SET record_json = excluded.record_json",
         )
-        .run(record.executionId, JSON.stringify(record));
+        .run(executionId, JSON.stringify(value.record));
       this.#database.exec("COMMIT");
+      return value;
     } catch (error) {
       this.#database.exec("ROLLBACK");
       throw error;
     }
   }
-  #assertOpen(): void {
+  #read(executionId: string): WorkspaceReadDispatchRecord | null {
+    this.#assertDatabaseOpen();
+    const kind = this.#database
+      .prepare(
+        "SELECT command_kind FROM device_execution_kinds WHERE execution_id = ?",
+      )
+      .get(executionId) as { command_kind: string } | undefined;
+    const row = this.#database
+      .prepare(
+        "SELECT record_json FROM workspace_read_dispatch_records WHERE execution_id = ?",
+      )
+      .get(executionId) as { record_json: string } | undefined;
+    if (kind === undefined && row === undefined) return null;
+    if (kind?.command_kind !== "workspaceRead" || row === undefined)
+      throw new DeviceGatewayError("workspace_read_stored_state_invalid");
+    return parseWorkspaceReadDispatchRecord(JSON.parse(row.record_json));
+  }
+  #claimKind(executionId: string): void {
+    this.#database
+      .prepare(
+        "INSERT INTO device_execution_kinds (execution_id, command_kind) VALUES (?, 'workspaceRead') ON CONFLICT (execution_id) DO NOTHING",
+      )
+      .run(executionId);
+    const row = this.#database
+      .prepare(
+        "SELECT command_kind FROM device_execution_kinds WHERE execution_id = ?",
+      )
+      .get(executionId) as { command_kind: string };
+    if (row.command_kind !== "workspaceRead")
+      throw new DeviceGatewayError("device_dispatch_kind_conflict");
+  }
+  #enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    this.#assertAccepting();
+    const result = this.#tail.then(operation, operation);
+    this.#tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+  async #finishClose(): Promise<void> {
+    await this.#tail;
+    this.#database.close();
+    this.#closed = true;
+  }
+  #assertAccepting(): void {
+    if (this.#closing || this.#closed)
+      throw new DeviceGatewayError("workspace_read_store_closed");
+  }
+  #assertDatabaseOpen(): void {
     if (this.#closed)
       throw new DeviceGatewayError("workspace_read_store_closed");
   }
