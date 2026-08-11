@@ -24,6 +24,7 @@ use crewon_protocol::protocol::Op;
 use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
+use serde_json::json;
 
 fn sse_incomplete() -> String {
     responses::sse(vec![serde_json::json!({
@@ -37,6 +38,7 @@ struct ObservedRetryTrace {
     deltas: Vec<String>,
     completed_outputs: Vec<String>,
     stream_errors: Vec<String>,
+    usage: Option<Value>,
 }
 
 impl ObservedRetryTrace {
@@ -172,6 +174,17 @@ async fn observe_retry_trace(crewon: &CrewonThread) -> ObservedRetryTrace {
         }
         EventMsg::StreamError(event) => {
             trace.stream_errors.push(event.message.clone());
+            false
+        }
+        EventMsg::TokenCount(event) => {
+            if let Some(info) = &event.info {
+                trace.usage = Some(json!({
+                    "inputTokens": info.total_token_usage.input_tokens,
+                    "cachedInputTokens": info.total_token_usage.cached_input_tokens,
+                    "outputTokens": info.total_token_usage.output_tokens,
+                    "totalTokens": info.total_token_usage.total_tokens,
+                }));
+            }
             false
         }
         EventMsg::TurnComplete(_) => true,
@@ -420,6 +433,128 @@ async fn completed_tool_item_is_preserved_in_retry_request() {
     assert_eq!(
         observed.completed_outputs,
         vec![reference_string(&reference, "/finalState/finalOutput")]
+    );
+
+    server.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn completed_assistant_item_before_tool_is_preserved_for_follow_up() {
+    skip_if_no_network!();
+    let reference = load_reference("mixed-assistant-tool-response.reference.json");
+    let commentary = reference_string(&reference, "/completedAssistantItems/0/content");
+    let call_id = reference_string(&reference, "/toolCall/callId");
+    let tool_name = reference_string(&reference, "/toolCall/name");
+    let tool_input = reference_string(&reference, "/toolCall/input");
+    let tool_output = reference_string(&reference, "/toolResult/output");
+
+    let first_sse = responses::sse(vec![
+        responses::ev_response_created("resp_mixed"),
+        responses::ev_message_item_added("msg_commentary", ""),
+        responses::ev_output_text_delta(&commentary),
+        json!({
+            "type": "response.output_item.done",
+            "item": {
+                "type": "message",
+                "role": "assistant",
+                "id": "msg_commentary",
+                "content": [{"type": "output_text", "text": &commentary}],
+                "phase": "commentary"
+            }
+        }),
+        responses::ev_custom_tool_call(&call_id, &tool_name, &tool_input),
+        responses::ev_completed("resp_mixed"),
+    ]);
+    let second_sse = responses::sse(vec![
+        responses::ev_response_created("resp_final"),
+        responses::ev_message_item_added("msg_final", ""),
+        responses::ev_output_text_delta("done"),
+        responses::ev_assistant_message("msg_final", "done"),
+        json!({
+            "type": "response.completed",
+            "response": {
+                "id": "resp_final",
+                "usage": {
+                    "input_tokens": 4,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 1,
+                    "output_tokens_details": null,
+                    "total_tokens": 5
+                }
+            }
+        }),
+    ]);
+    let (server, _) = start_streaming_sse_server(vec![
+        vec![StreamingSseChunk {
+            gate: None,
+            body: first_sse,
+        }],
+        vec![StreamingSseChunk {
+            gate: None,
+            body: second_sse,
+        }],
+    ])
+    .await;
+
+    let TestCrewon { crewon, .. } = build_crewon(&server, 1).await;
+    submit_hello(&crewon).await;
+    let observed = observe_retry_trace(&crewon).await;
+
+    let requests = server.requests().await;
+    assert_eq!(
+        requests.len() as u64,
+        reference_u64(&reference, "/finalState/requestCount")
+    );
+    let suffix = request_input(&requests[1])
+        .into_iter()
+        .filter_map(|item| match item["type"].as_str() {
+            Some("message") if item["role"] == "assistant" => Some(json!({
+                "type": "message",
+                "role": "assistant",
+                "content": item["content"][0]["text"].clone(),
+            })),
+            Some("custom_tool_call") => Some(json!({
+                "type": "tool_call",
+                "kind": "custom",
+                "callId": item["call_id"].clone(),
+                "name": item["name"].clone(),
+                "input": item["input"].clone(),
+            })),
+            Some("custom_tool_call_output") => Some(json!({
+                "type": "tool_result",
+                "kind": "custom",
+                "callId": item["call_id"].clone(),
+                "output": item["output"].clone(),
+            })),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        suffix,
+        reference["expectedSecondRequestSuffix"]
+            .as_array()
+            .expect("expected second request suffix")
+            .clone()
+    );
+    assert_eq!(
+        suffix
+            .iter()
+            .filter(|item| item["type"] == "tool_result" && item["output"] == tool_output)
+            .count() as u64,
+        reference_u64(&reference, "/finalState/toolInvocationCount")
+    );
+    assert_eq!(
+        observed.completed_outputs,
+        reference["finalState"]["completedAssistantOutputs"]
+            .as_array()
+            .expect("completed outputs")
+            .iter()
+            .map(|value| value.as_str().expect("completed output").to_string())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        observed.usage.expect("Rust terminal usage"),
+        reference["finalState"]["usage"]
     );
 
     server.shutdown().await;

@@ -35,10 +35,11 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
    item 进入同 Turn retry request；observable completion projection 采用 intentional redesign：Rust 发出 `first`、`done` 两个
    completed assistant items，TS 保留 `first` 的 delta/history 但不提交缺 terminal 的 phantom final Message，只提交最终 `done`。
    Tool item 结束当前 Kernel segment，由 durable Worker exactly-once 执行后把 call+result 放入下一 request。
-3. **仍未关闭：同一 response 中混合 completed assistant text/commentary 与 Tool call。** Rust 可按多个
-   `OutputItemDone` 稳定记录并继续 Tool；TS Kernel 在缺 terminal catch 边界检测到混合项后以
-   `model_tool_call_with_text_unsupported` fail closed，且不会发出 `tool.requested` 或执行副作用。完整混合语义没有已冻结的
-   intentional redesign，因此状态仍为 `MISSING`，不能由 AR-013–022 的 Tool PARITY 总称覆盖。
+3. **已关闭：同一 response 中混合 completed assistant text/commentary 与 Tool call。**
+   `mixed-assistant-tool-response.reference.json` 由 Rust focused integration 与 TS durable Worker candidate 共同消费；completed
+   assistant item 在 Tool call 前按顺序进入 canonical history，Tool request/result exactly-once 后进行第二次 sampling，最终只提交
+   follow-up 的 terminal assistant Message。只有 partial delta、没有 completed assistant item 的混合输出仍以
+   `model_tool_call_with_text_unsupported` fail closed。
 
 ## 首批 30 个 Rust reference cases
 
@@ -137,6 +138,9 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
   只覆盖 model-visible call/result、第二请求 history 与 exactly-once boundary；Rust 侧是 unknown unsupported-call handler，TS
   侧是注册的 read-only test handler，两者不代表真实副作用类型等价。fixture 的
   `tsCandidateToolHandlerInvocationCount` 是 TS-only durability assertion；Rust evidence 是第二请求恰有一个对应 output。
+- `mixed-assistant-tool-response.reference.json` 冻结同一 completed response 的 commentary→Tool 顺序、第二请求的
+  assistant/call/result 后缀、一次 Tool 副作用、follow-up sampling、terminal usage/error 和唯一 terminal Message。TS 把 completed
+  assistant items 与首个 Tool request 原子追加到 durable Model History；Kernel/Worker 继续拒绝无法证明 completed item 的 partial text。
 
 ## Goal runtime focused parity gate（2026-08-09）
 

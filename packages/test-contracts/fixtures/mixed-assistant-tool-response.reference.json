@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-031-mixed-assistant-tool-response",
+  "completedAssistantItems": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": "I will check that now."
+    }
+  ],
+  "toolCall": {
+    "type": "tool_call",
+    "kind": "custom",
+    "callId": "mixed-call",
+    "name": "fixture_tool",
+    "input": "\"payload\""
+  },
+  "toolResult": {
+    "type": "tool_result",
+    "kind": "custom",
+    "callId": "mixed-call",
+    "output": "unsupported custom tool call: fixture_tool"
+  },
+  "expectedSecondRequestSuffix": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": "I will check that now."
+    },
+    {
+      "type": "tool_call",
+      "kind": "custom",
+      "callId": "mixed-call",
+      "name": "fixture_tool",
+      "input": "\"payload\""
+    },
+    {
+      "type": "tool_result",
+      "kind": "custom",
+      "callId": "mixed-call",
+      "output": "unsupported custom tool call: fixture_tool"
+    }
+  ],
+  "stableEventTypes": [
+    "model.output.delta",
+    "assistant.completed",
+    "tool.requested",
+    "tool.completed",
+    "model.output.delta",
+    "usage.recorded",
+    "turn.completed"
+  ],
+  "finalState": {
+    "status": "completed",
+    "requestCount": 2,
+    "toolInvocationCount": 1,
+    "toolRequestedEventCount": 1,
+    "toolCompletedEventCount": 1,
+    "completedAssistantOutputs": ["I will check that now.", "done"],
+    "terminalMessageCount": 1,
+    "finalOutput": "done",
+    "usage": {
+      "inputTokens": 4,
+      "cachedInputTokens": 0,
+      "outputTokens": 1,
+      "totalTokens": 5
+    },
+    "error": null
+  }
+}
