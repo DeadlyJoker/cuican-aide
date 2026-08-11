@@ -716,6 +716,20 @@ mod tests {
         expected: Value,
     }
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CreatedWithoutIdFixture {
+        case_id: String,
+        cases: Vec<CreatedWithoutIdCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct CreatedWithoutIdCase {
+        name: String,
+        events: Vec<Value>,
+        expected: Value,
+    }
+
     #[test]
     fn accepts_completed_without_output_from_shared_fixture() {
         let fixture_path = crewon_utils_cargo_bin::find_resource!(
@@ -839,6 +853,77 @@ mod tests {
                     "errorCategory": error_category,
                     "retryable": retryable,
                     "responseId": null,
+                }),
+                case.expected,
+                "fixture {} / {}",
+                fixture.case_id,
+                case.name,
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_created_without_id_from_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-created-without-id.reference.json"
+        )
+        .expect("created-without-id fixture must exist");
+        let fixture: CreatedWithoutIdFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("created-without-id fixture must be readable"),
+        )
+        .expect("created-without-id fixture must parse");
+
+        for case in fixture.cases {
+            let mut stable_events = Vec::new();
+            let mut terminal = None;
+            let mut error_category = None;
+            let mut retryable = None;
+            let mut response_id = None;
+
+            for value in case.events {
+                let event: ResponsesStreamEvent =
+                    serde_json::from_value(value).expect("fixture event must deserialize");
+                match process_responses_event(event) {
+                    Ok(Some(ResponseEvent::Created)) | Ok(None) => {}
+                    Ok(Some(ResponseEvent::OutputTextDelta(_))) => {
+                        stable_events.push("output.delta");
+                    }
+                    Ok(Some(ResponseEvent::OutputItemDone(_))) => {
+                        stable_events.push("output.item.completed");
+                    }
+                    Ok(Some(ResponseEvent::Completed {
+                        response_id: completed_response_id,
+                        ..
+                    })) => {
+                        stable_events.push("completed");
+                        terminal = Some("completed");
+                        response_id = Some(completed_response_id);
+                    }
+                    Err(error) => {
+                        stable_events.push("failed");
+                        terminal = Some("failed");
+                        let (category, can_retry) = match error.into_api_error() {
+                            ApiError::Retryable { .. } => ("provider", true),
+                            ApiError::Stream(message)
+                                if message.starts_with("Incomplete response returned") =>
+                            {
+                                ("incomplete", false)
+                            }
+                            error => panic!("unexpected terminal error: {error:?}"),
+                        };
+                        error_category = Some(category);
+                        retryable = Some(can_retry);
+                    }
+                    Ok(Some(event)) => panic!("unexpected fixture event: {event:?}"),
+                }
+            }
+            assert_eq!(
+                json!({
+                    "stableEvents": stable_events,
+                    "terminal": terminal,
+                    "errorCategory": error_category,
+                    "retryable": retryable,
+                    "responseId": response_id,
                 }),
                 case.expected,
                 "fixture {} / {}",

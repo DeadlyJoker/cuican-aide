@@ -97,6 +97,31 @@ const terminalWithoutCreatedFixture = JSON.parse(
   ),
 ) as TerminalWithoutCreatedFixture;
 
+type CreatedWithoutIdFixture = Readonly<{
+  caseId: string;
+  cases: ReadonlyArray<Readonly<{
+    name: "completed" | "failed" | "incomplete";
+    events: readonly Readonly<Record<string, unknown>>[];
+    expected: Readonly<{
+      stableEvents: readonly string[];
+      terminal: "completed" | "failed";
+      errorCategory: "provider" | "incomplete" | null;
+      retryable: boolean | null;
+      responseId: string | null;
+    }>;
+  }>>;
+}>;
+
+const createdWithoutIdFixture = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../test-contracts/fixtures/responses-created-without-id.reference.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as CreatedWithoutIdFixture;
+
 for (const sequencePolicy of ["required", "whenPresent"] as const) {
   test(`${fixture.caseId}: ${sequencePolicy} transport framing`, () => {
     for (const fixtureCase of fixture.cases) {
@@ -343,5 +368,144 @@ test("response.completed still requires its status field", () => {
     (error: unknown) =>
       error instanceof ModelTransportError &&
       error.code === "responses_status_invalid",
+  );
+});
+
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(`${createdWithoutIdFixture.caseId}: ${sequencePolicy} transport framing`, () => {
+    for (const fixtureCase of createdWithoutIdFixture.cases) {
+      const decoder = new ResponsesProtocolDecoder({
+        sequencePolicy,
+        completedCheckpoint: () => null,
+      });
+      const events = fixtureCase.events.flatMap((event) => decoder.accept(event));
+      decoder.finish();
+      const failure = events.find((event) => event.type === "failed");
+      const completed = events.find((event) => event.type === "completed");
+
+      assert.deepEqual(
+        {
+          stableEvents: events.map((event) => event.type),
+          terminal: failure?.type ?? completed?.type ?? null,
+          errorCategory:
+            failure?.type === "failed" &&
+            failure.code.startsWith("responses_provider_")
+              ? "provider"
+              : failure?.type === "failed" &&
+                  failure.code.startsWith("responses_incomplete_")
+                ? "incomplete"
+                : null,
+          retryable: failure?.type === "failed" ? failure.retryable : null,
+          responseId: decoder.completedResponseId,
+        },
+        fixtureCase.expected,
+        fixtureCase.name,
+      );
+    }
+  });
+}
+
+test(`${createdWithoutIdFixture.caseId}: late identity drives only the completion checkpoint`, () => {
+  const fixtureCase = createdWithoutIdFixture.cases.find(
+    (candidate) => candidate.name === "completed",
+  );
+  assert.ok(fixtureCase !== undefined);
+  const createdResponseIds: string[] = [];
+  const completedResponseIds: string[] = [];
+  const completedCheckpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0" as const,
+    adapterName: "direct-responses",
+    adapterVersion: "2",
+    modelId: "provider-model",
+    opaquePayload: { responseId: "resp-late-identity" },
+  };
+  const decoder = new ResponsesProtocolDecoder({
+    sequencePolicy: "required",
+    createdCheckpoint: (responseId) => {
+      createdResponseIds.push(responseId);
+      return null;
+    },
+    completedCheckpoint: (responseId) => {
+      completedResponseIds.push(responseId);
+      return completedCheckpoint;
+    },
+  });
+
+  const events = fixtureCase.events.flatMap((event) => decoder.accept(event));
+  decoder.finish();
+
+  assert.deepEqual(createdResponseIds, []);
+  assert.deepEqual(completedResponseIds, ["resp-late-identity"]);
+  assert.deepEqual(
+    events.find((event) => event.type === "completed"),
+    { type: "completed", checkpoint: completedCheckpoint },
+  );
+});
+
+test(`${createdWithoutIdFixture.caseId}: present identity and terminal fields remain strict`, () => {
+  const acceptCreated = (response: Readonly<Record<string, unknown>>) => {
+    const decoder = new ResponsesProtocolDecoder({
+      sequencePolicy: "required",
+      completedCheckpoint: () => null,
+    });
+    decoder.accept({
+      type: "response.created",
+      sequence_number: 0,
+      response,
+    });
+    return decoder;
+  };
+
+  assert.throws(
+    () => acceptCreated({ id: "" }),
+    (error: unknown) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_response_id_invalid",
+  );
+
+  const duplicate = acceptCreated({});
+  assert.throws(
+    () =>
+      duplicate.accept({
+        type: "response.created",
+        sequence_number: 1,
+        response: {},
+      }),
+    (error: unknown) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_created_duplicate",
+  );
+
+  for (const response of [
+    { id: "", status: "completed" },
+    { id: "resp-late", status: "failed" },
+  ]) {
+    const decoder = acceptCreated({});
+    assert.throws(
+      () =>
+        decoder.accept({
+          type: "response.completed",
+          sequence_number: 1,
+          response,
+        }),
+      (error: unknown) =>
+        error instanceof ModelTransportError &&
+        ["responses_response_id_invalid", "responses_status_invalid"].includes(
+          error.code,
+        ),
+    );
+  }
+
+  const mismatch = acceptCreated({ id: "resp-created" });
+  assert.throws(
+    () =>
+      mismatch.accept({
+        type: "response.completed",
+        sequence_number: 1,
+        response: { id: "resp-other", status: "completed" },
+      }),
+    (error: unknown) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_response_id_mismatch",
   );
 });

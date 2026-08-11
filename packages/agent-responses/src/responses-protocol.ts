@@ -18,6 +18,7 @@ export type ResponsesProtocolOptions = Readonly<{
 export class ResponsesProtocolDecoder {
   readonly #options: ResponsesProtocolOptions;
   #lastSequence = -1;
+  #created = false;
   #responseId: string | null = null;
   #output = "";
   #terminal = false;
@@ -52,10 +53,14 @@ export class ResponsesProtocolDecoder {
     const type = requireString(event.type, "responses_event_type_invalid");
     switch (type) {
       case "response.created": {
-        if (this.#responseId !== null) {
+        if (this.#created) {
           throw protocolError("responses_created_duplicate");
         }
-        this.#responseId = responseIdentity(event);
+        this.#created = true;
+        this.#responseId = optionalResponseIdentity(event);
+        if (this.#responseId === null) {
+          return [];
+        }
         const checkpoint =
           this.#options.createdCheckpoint?.(this.#responseId) ?? null;
         return checkpoint === null
@@ -63,18 +68,19 @@ export class ResponsesProtocolDecoder {
           : [{ type: "response.created", checkpoint }];
       }
       case "response.output_text.delta": {
-        requireCreated(this.#responseId);
+        requireCreated(this.#created);
         const delta = requireString(event.delta, "responses_delta_invalid");
         this.#output += delta;
         return [{ type: "output.delta", delta }];
       }
       case "response.completed": {
-        requireCreated(this.#responseId);
+        requireCreated(this.#created);
         const response = terminalResponse(
           event.response,
           this.#responseId,
           "responses_completed_response_invalid",
         );
+        this.#responseId = response.id;
         requireStatus(response, "completed");
         if (
           response.end_turn !== undefined &&
@@ -134,7 +140,7 @@ export class ResponsesProtocolDecoder {
         return [{ type: "failed", ...failure }];
       }
       case "response.output_item.done": {
-        requireCreated(this.#responseId);
+        requireCreated(this.#created);
         const outputItem = requireObject(
           event.item,
           "responses_output_item_invalid",
@@ -198,7 +204,7 @@ export class ResponsesProtocolDecoder {
       case "response.function_call_arguments.done":
       case "response.custom_tool_call_input.delta":
       case "response.custom_tool_call_input.done":
-        requireCreated(this.#responseId);
+        requireCreated(this.#created);
         return [];
       default:
         throw protocolError("responses_event_unsupported");
@@ -273,11 +279,16 @@ function validateSequence(
   return Number(value);
 }
 
-function responseIdentity(event: Readonly<Record<string, unknown>>): string {
+function optionalResponseIdentity(
+  event: Readonly<Record<string, unknown>>,
+): string | null {
   const response = requireObject(
     event.response,
     "responses_created_response_invalid",
   );
+  if (response.id === undefined) {
+    return null;
+  }
   return boundedNonEmpty(
     response.id,
     MAX_RESPONSE_ID_LENGTH,
@@ -286,29 +297,28 @@ function responseIdentity(event: Readonly<Record<string, unknown>>): string {
 }
 
 function requireCreated(
-  responseId: string | null,
-): asserts responseId is string {
-  if (responseId === null) {
+  created: boolean,
+): asserts created is true {
+  if (!created) {
     throw protocolError("responses_created_missing");
   }
 }
 
 function terminalResponse(
   value: unknown,
-  expectedId: string,
+  expectedId: string | null,
   code: string,
-): Readonly<Record<string, unknown>> {
+): Readonly<Record<string, unknown>> & { readonly id: string } {
   const response = requireObject(value, code);
-  if (
-    boundedNonEmpty(
-      response.id,
-      MAX_RESPONSE_ID_LENGTH,
-      "responses_response_id_invalid",
-    ) !== expectedId
-  ) {
+  const responseId = boundedNonEmpty(
+    response.id,
+    MAX_RESPONSE_ID_LENGTH,
+    "responses_response_id_invalid",
+  );
+  if (expectedId !== null && responseId !== expectedId) {
     throw protocolError("responses_response_id_mismatch");
   }
-  return response;
+  return { ...response, id: responseId };
 }
 
 function failureResponse(
