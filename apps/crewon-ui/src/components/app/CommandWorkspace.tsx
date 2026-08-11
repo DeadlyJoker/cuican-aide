@@ -32,9 +32,14 @@ import {
   Palette,
   type CommandLinkedThread,
   type PaletteItemWithCommand,
+  type CommandWorkspaceAuthority,
 } from "./CommandWorkspaceChrome";
 import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
+import {
+  CommandWorkspaceOperationsPanel,
+  type CommandWorkspaceOperationsPanelProps,
+} from "./CommandWorkspaceOperationsPanel";
 import { CommandSceneHeader, CommandSceneQuickRow } from "./CommandSceneHeader";
 import {
   AgentsView,
@@ -177,6 +182,11 @@ export type {
   ComposerKeyIntentInput as CommandComposerKeyIntentInput,
 } from "../composer/ComposerCore";
 
+export type CommandWorkspaceOperationsSlot = Omit<
+  CommandWorkspaceOperationsPanelProps,
+  "locale"
+>;
+
 type CommandWorkspaceProps = {
   activeTurnId?: string | null;
   assistantActiveTurnId?: string | null;
@@ -248,6 +258,13 @@ type CommandWorkspaceProps = {
       >,
     ) => Promise<{ record: ExpertTeamRecordReference }>;
   } | null;
+  workspaceOperations?: CommandWorkspaceOperationsSlot | null;
+  /**
+   * `control` removes every legacy cwd/path authority surface. Omission keeps
+   * historical call sites in the legacy cohort; production composition passes
+   * this explicitly.
+   */
+  workspaceAuthority?: CommandWorkspaceAuthority;
   scheduleClient?: ScheduleClient | null;
   isSending: boolean;
   linkedThreads?: Thread[];
@@ -539,6 +556,8 @@ export function CommandWorkspace({
   cwd,
   executionTargetClient = null,
   scheduleClient = null,
+  workspaceOperations = null,
+  workspaceAuthority = "legacy",
   isSending,
   linkedThreads = [],
   locale = "zh",
@@ -718,6 +737,9 @@ export function CommandWorkspace({
   // workspace now has a single source of truth (the sidebar), so adopt the old
   // parameter once and drop it from the URL.
   useEffect(() => {
+    if (workspaceAuthority !== "legacy") {
+      return;
+    }
     const legacyCwd = legacyCommandTeamWorkspaceCwd();
     if (!legacyCwd) {
       return;
@@ -726,7 +748,7 @@ export function CommandWorkspace({
     if (legacyCwd !== cwd.trim()) {
       onChangeWorkspaceCwd?.(legacyCwd);
     }
-  }, [cwd, onChangeWorkspaceCwd]);
+  }, [cwd, onChangeWorkspaceCwd, workspaceAuthority]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1096,8 +1118,13 @@ export function CommandWorkspace({
     [platformSnapshot],
   );
   const contextPaletteItems = useMemo(
-    () => commandSceneContextItems(scene, emptyAgentPlatformSnapshot, cwd),
-    [cwd, scene],
+    () =>
+      commandSceneContextItems(
+        scene,
+        emptyAgentPlatformSnapshot,
+        workspaceAuthority === "legacy" ? cwd : "",
+      ),
+    [cwd, scene, workspaceAuthority],
   );
   const slashPaletteItems = useMemo(
     () => commandSceneSlashItems(emptyAgentPlatformSnapshot, slashCommands),
@@ -1329,6 +1356,46 @@ export function CommandWorkspace({
           },
         ];
   const workspaceOptions = useMemo<CommandComposerSelectOption[]>(() => {
+    if (workspaceAuthority === "control") {
+      const displayName = workspaceOperations?.nativeWorkspaceDisplayName;
+      return [
+        {
+          detail:
+            locale === "zh"
+              ? "使用默认执行环境，不向新任务显式绑定目录"
+              : "Use the default execution environment without explicitly binding a directory",
+          label: locale === "zh" ? "无工作空间" : "No workspace",
+          value: noWorkspaceValue,
+        },
+        ...(displayName
+          ? [
+              {
+                detail:
+                  locale === "zh"
+                    ? "由桌面端安全 authority 管理"
+                    : "Managed by the desktop authority",
+                label: displayName,
+                value: "__native_workspace__",
+              },
+            ]
+          : []),
+        {
+          detail:
+            locale === "zh"
+              ? "打开桌面文件夹选择器；路径只交给 native authority"
+              : "Open the desktop folder picker; only the native authority receives the path",
+          label:
+            locale === "zh"
+              ? displayName
+                ? "更换工作空间…"
+                : "选择工作空间…"
+              : displayName
+                ? "Replace Workspace…"
+                : "Select Workspace…",
+          value: "__select_native_workspace__",
+        },
+      ];
+    }
     const paths = [cwd, ...linkedThreads.map((thread) => thread.cwd ?? "")]
       .map((path) => path.trim())
       .filter(
@@ -1349,7 +1416,13 @@ export function CommandWorkspace({
         value: path,
       })),
     ];
-  }, [cwd, linkedThreads, locale]);
+  }, [
+    cwd,
+    linkedThreads,
+    locale,
+    workspaceAuthority,
+    workspaceOperations?.nativeWorkspaceDisplayName,
+  ]);
   useEffect(() => {
     const targetProviderAgent = providerAgentResourceForTarget(
       providerResource?.executionAgents ?? [],
@@ -1411,7 +1484,7 @@ export function CommandWorkspace({
   const commandLinkedThreads: CommandLinkedThread[] = useMemo(
     () =>
       linkedThreads.map((thread) => ({
-        cwd: thread.cwd ?? null,
+        cwd: workspaceAuthority === "legacy" ? (thread.cwd ?? null) : null,
         id: thread.id,
         preview: thread.preview,
         title: sidebarThreadTitle(
@@ -1421,7 +1494,7 @@ export function CommandWorkspace({
         updatedAt: thread.updatedAt,
         updatedLabel: formatRelativeTime(thread.updatedAt, locale),
       })),
-    [linkedThreads, locale],
+    [linkedThreads, locale, workspaceAuthority],
   );
   const platformHasResources =
     platformSnapshot.agents.length +
@@ -1565,7 +1638,7 @@ export function CommandWorkspace({
       selectedThread,
     });
     submitCommandComposer({
-      cwd: cwd || null,
+      cwd: workspaceAuthority === "legacy" ? cwd || null : null,
       images: commandImages.map(({ detail, url }) => ({ detail, url })),
       onSend,
       onSendNewThread,
@@ -1977,9 +2050,10 @@ export function CommandWorkspace({
     }
   }
 
-  const currentWorkspace = basename(
-    cwd || (locale === "zh" ? "工作空间" : "Workspace"),
-  );
+  const currentWorkspace =
+    workspaceAuthority === "legacy"
+      ? basename(cwd || (locale === "zh" ? "工作空间" : "Workspace"))
+      : null;
   const selectedOfficeRecordKey = selectedOfficeRecord
     ? officeRecordKey(selectedOfficeRecord)
     : null;
@@ -2127,6 +2201,19 @@ export function CommandWorkspace({
     : locale === "zh"
       ? "发送任务"
       : "Send task";
+  const commandThreadRoom =
+    showCommandThread && selectedThread ? (
+      <CommandThreadRoom
+        activeTurnId={activeTurnId}
+        cwd={workspaceAuthority === "legacy" ? cwd : ""}
+        locale={locale}
+        selectedThread={selectedThread}
+        streamingText={streamingText}
+        workMode={workMode}
+        onModeChange={onModeChange}
+        onStop={onStop}
+      />
+    ) : null;
 
   return (
     <section
@@ -2163,22 +2250,27 @@ export function CommandWorkspace({
         <CommandSidebar
           activeView={activeView}
           isSearchOpen={sidebarSearchOpen}
-          cwd={cwd}
+          cwd={workspaceAuthority === "legacy" ? cwd : ""}
           linkedThreads={commandLinkedThreads}
           locale={locale}
           platform={platform}
           query={sidebarSearchQuery}
           selectedLinkedThreadId={activeLinkedThreadId}
           slots={slots}
+          workspaceAuthority={workspaceAuthority}
           onCloseSearch={() => {
             setSidebarSearchOpen(false);
             setSidebarSearchQuery("");
           }}
-          onCreateWorkspace={onChangeWorkspaceCwd}
+          onCreateWorkspace={
+            workspaceAuthority === "legacy" ? onChangeWorkspaceCwd : undefined
+          }
           onNewThread={(workspaceCwd) => {
             setActiveLinkedThreadId(null);
             setNewTaskDraft(true);
-            onChangeWorkspaceCwd?.(workspaceCwd);
+            if (workspaceAuthority === "legacy") {
+              onChangeWorkspaceCwd?.(workspaceCwd);
+            }
             onChangeComposerValue("");
             switchView("command");
             textareaRef.current?.focus();
@@ -2243,17 +2335,30 @@ export function CommandWorkspace({
               )}
               data-od-id="primary-work-area"
             >
-              {showCommandThread && selectedThread ? (
-                <CommandThreadRoom
-                  activeTurnId={activeTurnId}
-                  cwd={cwd}
-                  locale={locale}
-                  selectedThread={selectedThread}
-                  streamingText={streamingText}
-                  workMode={workMode}
-                  onModeChange={onModeChange}
-                  onStop={onStop}
-                />
+              {commandThreadRoom ? (
+                workspaceOperations ? (
+                  <div
+                    className="command-thread-stage"
+                    data-workspace-operations-slot="mounted"
+                  >
+                    {commandThreadRoom}
+                    <aside
+                      className="command-thread-operations-rail"
+                      aria-label={
+                        locale === "zh"
+                          ? "工作空间操作"
+                          : "Workspace operations"
+                      }
+                    >
+                      <CommandWorkspaceOperationsPanel
+                        {...workspaceOperations}
+                        locale={locale}
+                      />
+                    </aside>
+                  </div>
+                ) : (
+                  commandThreadRoom
+                )
               ) : (
                 <>
                   <CommandSceneHeader
@@ -2490,7 +2595,12 @@ export function CommandWorkspace({
                         className="workspace-label"
                         data-od-id="workspace-picker"
                       >
-                        {currentWorkspace}
+                        {workspaceAuthority === "control"
+                          ? (workspaceOperations?.nativeWorkspaceDisplayName ??
+                            (locale === "zh"
+                              ? "无工作空间"
+                              : "No workspace"))
+                          : currentWorkspace}
                       </span>
                     ) : (
                       <CommandComposerSelect
@@ -2499,14 +2609,32 @@ export function CommandWorkspace({
                         }
                         className="workspace-dropdown"
                         options={workspaceOptions}
-                        value={cwd || noWorkspaceValue}
-                        onChange={(nextWorkspace) =>
+                        value={
+                          workspaceAuthority === "control"
+                            ? workspaceOperations?.nativeWorkspaceDisplayName
+                              ? "__native_workspace__"
+                              : noWorkspaceValue
+                            : cwd || noWorkspaceValue
+                        }
+                        onChange={(nextWorkspace) => {
+                          if (workspaceAuthority === "control") {
+                            const action =
+                              nextWorkspace === noWorkspaceValue
+                                ? workspaceOperations?.onClearNativeWorkspace
+                                : workspaceOperations?.onSelectNativeWorkspace;
+                            if (action) {
+                              void Promise.resolve(action()).catch(
+                                () => undefined,
+                              );
+                            }
+                            return;
+                          }
                           onChangeWorkspaceCwd?.(
                             nextWorkspace === noWorkspaceValue
                               ? null
                               : nextWorkspace,
-                          )
-                        }
+                          );
+                        }}
                       />
                     )}
                     {composerActivityLabel ? (

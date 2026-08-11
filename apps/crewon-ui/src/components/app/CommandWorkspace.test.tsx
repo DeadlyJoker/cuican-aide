@@ -10,6 +10,7 @@ import {
   commandComposerResourceSelection,
   commandComposerKeyIntent,
   CommandWorkspace,
+  type CommandWorkspaceOperationsSlot,
   executionIntentAfterCommit,
   insertTokenIntoComposerValue,
   nextExecutionIntent,
@@ -233,6 +234,62 @@ describe("CommandWorkspace", () => {
 
   function renderCommandWorkspace() {
     return renderToStaticMarkup(commandWorkspaceElement());
+  }
+
+  function workspaceOperationsSlot(
+    threadStatus: CommandWorkspaceOperationsSlot["state"]["threadStatus"],
+  ): CommandWorkspaceOperationsSlot {
+    return {
+      state: {
+        status: "live",
+        threadId: "thread-command-room",
+        threadRevision: 4,
+        threadStatus,
+        operations: [],
+        eventSequences: {},
+      },
+      nativeWorkspaceSelected: true,
+      mutationAuthority: "desktop",
+      onCreate: () => undefined,
+      onReconcile: () => undefined,
+      onCancel: () => undefined,
+    };
+  }
+
+  function workspaceCommandThread(): Thread {
+    return {
+      id: "thread-command-room",
+      name: "Command room transcript",
+      preview: "Agent answered in the command shell",
+      updatedAt: Math.floor(Date.now() / 1000),
+      cwd: "/repo/frontend",
+      turns: [],
+    } as unknown as Thread;
+  }
+
+  function renderWorkspaceOperationsRail(
+    threadStatus: CommandWorkspaceOperationsSlot["state"]["threadStatus"],
+  ): string {
+    const selectedThread = workspaceCommandThread();
+    return renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        linkedThreads={[selectedThread]}
+        selectedThread={selectedThread}
+        selectedThreadId={selectedThread.id}
+        workMode="code"
+        workspaceOperations={workspaceOperationsSlot(threadStatus)}
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSelectLinkedThread={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
   }
 
   it("uses the selected locale across the primary command shell", () => {
@@ -717,6 +774,62 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("crewon");
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain('data-od-id="workspace-node-product"');
+  });
+
+  it("renders a path-free native Workspace selector for Control tasks", () => {
+    const privatePath = "/Users/private/control-only/workspace";
+    const thread = {
+      cwd: privatePath,
+      id: "thread-control-authority",
+      name: "Control task",
+      preview: "Safe task preview",
+      turns: [],
+      updatedAt: Math.floor(Date.now() / 1000),
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd={privatePath}
+        isSending={false}
+        linkedThreads={[thread]}
+        locale="en"
+        workspaceAuthority="control"
+        workspaceOperations={{
+          ...workspaceOperationsSlot("active"),
+          nativeWorkspaceDisplayName: "safe-project",
+        }}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onChangeWorkspaceCwd={vi.fn()}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect({
+      hasPrivatePath: markup.includes(privatePath),
+      hasPathPrefix: markup.includes("/Users/private"),
+      hasPathInput: markup.includes("command-workspace-path"),
+      hasWorkspaceSelector: markup.includes('aria-label="Workspace"'),
+      hasNoWorkspace: markup.includes("No workspace"),
+      hasSafeDisplayName: markup.includes("safe-project"),
+      hasNativeSelectIntent: markup.includes("__select_native_workspace__"),
+      hasTasksTree: markup.includes('aria-label="Tasks and conversations"'),
+      hasTask: markup.includes("Control task"),
+    }).toEqual({
+      hasPrivatePath: false,
+      hasPathPrefix: false,
+      hasPathInput: false,
+      hasWorkspaceSelector: true,
+      hasNoWorkspace: true,
+      hasSafeDisplayName: true,
+      hasNativeSelectIntent: true,
+      hasTasksTree: true,
+      hasTask: true,
+    });
   });
 
   it("offers full access as a warning-toned permission", () => {
@@ -1399,6 +1512,74 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("Command response");
     expect(markup).toContain("task-list-item");
     expect(markup).not.toContain('class="app-shell"');
+    expect(markup).not.toContain('data-workspace-operations-slot="mounted"');
+    expect(markup).not.toContain('data-workspace-operations="control"');
+  });
+
+  it("mounts the typed Workspace operations rail only inside a selected Command thread", () => {
+    const active = renderWorkspaceOperationsRail("active");
+    const stageStart = active.indexOf(
+      '<div class="command-thread-stage" data-workspace-operations-slot="mounted">',
+    );
+    const roomStart = active.indexOf(
+      'data-od-id="command-thread-room"',
+      stageStart,
+    );
+    const railStart = active.indexOf(
+      '<aside class="command-thread-operations-rail"',
+      roomStart,
+    );
+    const composerStart = active.indexOf(
+      '<form class="command-input thread-command-input"',
+      railStart,
+    );
+
+    expect(stageStart).toBeGreaterThanOrEqual(0);
+    expect(roomStart).toBeGreaterThan(stageStart);
+    expect(railStart).toBeGreaterThan(roomStart);
+    expect(composerStart).toBeGreaterThan(railStart);
+    expect(active).toContain('data-workspace-operations="control"');
+    expect(active).toContain('data-mutation-authority="desktop"');
+
+    const withoutSelectedThread = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        cwd="/repo/frontend"
+        isSending={false}
+        workMode="code"
+        workspaceOperations={workspaceOperationsSlot("active")}
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+    expect(withoutSelectedThread).not.toContain(
+      'data-workspace-operations-slot="mounted"',
+    );
+    expect(withoutSelectedThread).not.toContain(
+      'data-workspace-operations="control"',
+    );
+  });
+
+  it("snapshots active, archived, and deleted Thread Workspace rails", () => {
+    const rail = (markup: string) => {
+      const start = markup.indexOf(
+        '<aside class="command-thread-operations-rail"',
+      );
+      const end = markup.indexOf("</aside>", start);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThan(start);
+      return markup.slice(start, end + "</aside>".length);
+    };
+
+    expect({
+      active: rail(renderWorkspaceOperationsRail("active")),
+      archived: rail(renderWorkspaceOperationsRail("archived")),
+      deleted: rail(renderWorkspaceOperationsRail("deleted")),
+    }).toMatchSnapshot();
   });
 
   it("keeps Command, MCP, Skill, Markdown, and Mermaid output inside the command shell transcript", () => {
