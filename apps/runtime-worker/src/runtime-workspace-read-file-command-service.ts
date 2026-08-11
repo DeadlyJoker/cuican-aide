@@ -1,4 +1,4 @@
-import type { ContentDigester } from "@crewon/application";
+import { canonicalJson, type ContentDigester } from "@crewon/application";
 import {
   DEVICE_FILESYSTEM_READ_CAPABILITY,
   DEVICE_FILESYSTEM_READ_MAX_BYTES,
@@ -34,6 +34,45 @@ export type RuntimeWorkspaceReadFileIntent = Readonly<{
   authority: RuntimeWorkspaceReadFileAuthority;
   relativePathSegments: readonly string[];
 }>;
+
+export type CanonicalRuntimeWorkspaceReadFileIntent = Readonly<{
+  schemaVersion: "crewon.runtime-workspace-read-file-action.v0";
+  tenantId: string;
+  spaceId: string;
+  threadId: string;
+  expectedThreadRevision: number;
+  principalId: string;
+  actorId: string;
+  runId: string;
+  stepId: string;
+  attemptId: string;
+  executionId: string;
+  leaseId: string;
+  leaseEpoch: number;
+  expiresAt: string;
+  binding: Readonly<{
+    workspaceBindingId: string;
+    incarnationId: string;
+    deviceBindingId: string;
+    deviceId: string;
+    runtimeBindingId: string;
+  }>;
+  policySnapshotId: string;
+  capability: typeof DEVICE_FILESYSTEM_READ_CAPABILITY;
+  relativePathSegments: readonly string[];
+  limits: Readonly<{
+    timeoutMs: number;
+    maxOutputBytes: number;
+    maxArtifactBytes: number;
+  }>;
+}>;
+
+/** Canonicalizes every authority field that must survive outside the generic command. */
+export function canonicalRuntimeWorkspaceReadFileIntent(
+  input: CanonicalRuntimeWorkspaceReadFileIntent,
+): string {
+  return canonicalJson(input);
+}
 
 /** Produces one signed, server-routed read command for a future private Gateway client. */
 export interface RuntimeWorkspaceReadFileCommandPort {
@@ -81,20 +120,38 @@ export class RuntimeWorkspaceReadFileCommandService
       });
     }
     const binding = validateRuntimeWorkspaceBindingSnapshot(resolved, query);
+    const limits = {
+      timeoutMs: DEVICE_FILESYSTEM_READ_MAX_TIMEOUT_MS,
+      maxOutputBytes: DEVICE_FILESYSTEM_READ_MAX_BYTES,
+      maxArtifactBytes: MAX_ARTIFACT_BYTES,
+    };
     const actionDigest = this.#digester.sha256(
-      JSON.stringify({
-        schemaVersion: "crewon.workspace-read-file-action.v0",
+      canonicalRuntimeWorkspaceReadFileIntent({
+        schemaVersion: "crewon.runtime-workspace-read-file-action.v0",
         tenantId: authority.tenantId,
         spaceId: authority.spaceId,
         threadId: authority.threadId,
         expectedThreadRevision: authority.expectedThreadRevision,
+        principalId: authority.principalId,
+        actorId: authority.actorId,
         runId: authority.runId,
         stepId: authority.stepId,
         attemptId: authority.attemptId,
         executionId: authority.executionId,
-        workspaceBindingId: binding.workspaceBindingId,
-        workspaceIncarnationId: binding.incarnationId,
+        leaseId: authority.leaseId,
+        leaseEpoch: authority.leaseEpoch,
+        expiresAt: authority.expiresAt,
+        binding: {
+          workspaceBindingId: binding.workspaceBindingId,
+          incarnationId: binding.incarnationId,
+          deviceBindingId: binding.deviceBindingId,
+          deviceId: binding.deviceId,
+          runtimeBindingId: binding.runtimeBindingId,
+        },
+        policySnapshotId: binding.policySnapshotId,
+        capability: DEVICE_FILESYSTEM_READ_CAPABILITY,
         relativePathSegments,
+        limits,
       }),
     );
     const command: Omit<DeviceExecutionCommand, "authorization"> = {
@@ -118,11 +175,7 @@ export class RuntimeWorkspaceReadFileCommandService
         encoding: "utf8",
       },
       payloadRef: null,
-      limits: {
-        timeoutMs: DEVICE_FILESYSTEM_READ_MAX_TIMEOUT_MS,
-        maxOutputBytes: DEVICE_FILESYSTEM_READ_MAX_BYTES,
-        maxArtifactBytes: MAX_ARTIFACT_BYTES,
-      },
+      limits,
       idempotencyKey: `workspace-read:${actionDigest.slice("sha256:".length)}`,
       traceContext: { traceparent: null, tracestate: null },
     };
@@ -253,20 +306,18 @@ function withoutAuthorization(
 
 function requireNotAborted(signal: AbortSignal): void {
   if (signal.aborted) {
-    throw new RuntimeWorkspaceError("runtime_workspace_aborted");
+    throw abortReason(signal);
   }
 }
 
 function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) {
-    return Promise.reject(
-      new RuntimeWorkspaceError("runtime_workspace_aborted"),
-    );
+    return Promise.reject(abortReason(signal));
   }
   return new Promise<T>((resolve, reject) => {
     const abort = () => {
       cleanup();
-      reject(new RuntimeWorkspaceError("runtime_workspace_aborted"));
+      reject(abortReason(signal));
     };
     const cleanup = () => signal.removeEventListener("abort", abort);
     signal.addEventListener("abort", abort, { once: true });
@@ -281,4 +332,10 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
       },
     );
   });
+}
+
+function abortReason(signal: AbortSignal): RuntimeWorkspaceError {
+  return signal.reason instanceof RuntimeWorkspaceError
+    ? signal.reason
+    : new RuntimeWorkspaceError("runtime_workspace_aborted");
 }

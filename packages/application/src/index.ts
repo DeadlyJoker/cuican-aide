@@ -8,6 +8,7 @@ export * from "./agent-version-release-application-service.ts";
 export * from "./agent-version-application-service.ts";
 export * from "./agent-version-catalog-application-service.ts";
 export * from "./application-runtime-ports.ts";
+export * from "./canonical-json.ts";
 export * from "./automation-application-service.ts";
 export * from "./automation-store-port.ts";
 export * from "./authorization-port.ts";

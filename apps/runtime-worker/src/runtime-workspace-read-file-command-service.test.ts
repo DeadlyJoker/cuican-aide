@@ -12,7 +12,12 @@ import type {
   RuntimeWorkspaceBindingQuery,
   RuntimeWorkspaceBindingResolverPort,
 } from "./runtime-workspace-binding-resolver.ts";
-import { RuntimeWorkspaceReadFileCommandService } from "./runtime-workspace-read-file-command-service.ts";
+import { RuntimeWorkspaceError } from "./runtime-workspace-error.ts";
+import {
+  canonicalRuntimeWorkspaceReadFileIntent,
+  RuntimeWorkspaceReadFileCommandService,
+  type CanonicalRuntimeWorkspaceReadFileIntent,
+} from "./runtime-workspace-read-file-command-service.ts";
 
 test("freezes exact execution and current deployment authority into one signed read", async () => {
   const queries: RuntimeWorkspaceBindingQuery[] = [];
@@ -135,6 +140,19 @@ test("aborts a pending Thread check and the final pre-sign boundary", async () =
     /runtime_workspace_aborted/,
   );
   assert.equal(signs, 0);
+
+  const reason = new RuntimeWorkspaceError("runtime_workspace_lease_lost", {
+    retryable: true,
+  });
+  const alreadyAborted = new AbortController();
+  alreadyAborted.abort(reason);
+  await assert.rejects(
+    commandService().produce(
+      { authority: authority(), relativePathSegments: ["README.md"] },
+      alreadyAborted.signal,
+    ),
+    (error) => error === reason,
+  );
 });
 
 test("fails closed when the signer changes frozen command authority", async () => {
@@ -151,6 +169,47 @@ test("fails closed when the signer changes frozen command authority", async () =
       new AbortController().signal,
     ),
     /runtime_workspace_read_signature_mismatch/,
+  );
+});
+
+test("canonical digest binds device, runtime, policy, lease, capability, and limits", async () => {
+  const digester = new NodeSha256ContentDigester();
+  const base = canonicalReadIntent();
+  const digest = (value: CanonicalRuntimeWorkspaceReadFileIntent) =>
+    digester.sha256(canonicalRuntimeWorkspaceReadFileIntent(value));
+  const baseDigest = digest(base);
+  const variants: CanonicalRuntimeWorkspaceReadFileIntent[] = [
+    { ...base, leaseEpoch: base.leaseEpoch + 1 },
+    { ...base, expiresAt: "2026-08-11T16:11:00.000Z" },
+    {
+      ...base,
+      binding: { ...base.binding, deviceBindingId: "device-binding-2" },
+    },
+    { ...base, binding: { ...base.binding, deviceId: "device-2" } },
+    {
+      ...base,
+      binding: { ...base.binding, runtimeBindingId: "runtime-binding-2" },
+    },
+    { ...base, policySnapshotId: "policy-2" },
+    { ...base, limits: { ...base.limits, maxOutputBytes: 32_768 } },
+  ];
+  assert.deepEqual(
+    variants.map(digest).map((value) => value === baseDigest),
+    variants.map(() => false),
+  );
+
+  const signed: DeviceCommandSignInput[] = [];
+  const command = await commandService({ signed }).produce(
+    { authority: authority(), relativePathSegments: ["docs", "README.md"] },
+    new AbortController().signal,
+  );
+  assert.equal(command.actionDigest, baseDigest);
+  assert.equal(signed[0]!.command.actionDigest, baseDigest);
+  assert.deepEqual(signed[0]!.command.limits, base.limits);
+  assert.equal(signed[0]!.command.deviceId, base.binding.deviceId);
+  assert.equal(
+    signed[0]!.command.workspaceBindingId,
+    base.binding.workspaceBindingId,
   );
 });
 
@@ -243,5 +302,34 @@ function authorization() {
     expiresAt: "2026-08-11T16:05:00.000Z",
     approvalProof: null,
     signature: "A".repeat(86),
+  };
+}
+
+function canonicalReadIntent(): CanonicalRuntimeWorkspaceReadFileIntent {
+  return {
+    schemaVersion: "crewon.runtime-workspace-read-file-action.v0",
+    ...bindingQuery(),
+    runId: "run-frozen-1",
+    stepId: "step-frozen-1",
+    attemptId: "attempt-frozen-1",
+    executionId: "execution-frozen-1",
+    leaseId: "lease-1",
+    leaseEpoch: 4,
+    expiresAt: "2026-08-11T16:10:00.000Z",
+    binding: {
+      workspaceBindingId: "workspace-1",
+      incarnationId: "incarnation-1",
+      deviceBindingId: "device-binding-1",
+      deviceId: "device-1",
+      runtimeBindingId: "runtime-binding-1",
+    },
+    policySnapshotId: "policy-1",
+    capability: "workspace.read_file.v0",
+    relativePathSegments: ["docs", "README.md"],
+    limits: {
+      timeoutMs: 30_000,
+      maxOutputBytes: 65_536,
+      maxArtifactBytes: 16_777_216,
+    },
   };
 }
