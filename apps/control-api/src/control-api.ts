@@ -11,6 +11,9 @@ import type {
   ThreadRollbackApplicationService,
   ToolApprovalApplicationService,
   TurnApplicationService,
+  WorkspaceListApplicationService,
+  WorkspaceOperationQueryService,
+  ModelProviderSettingsApplicationService,
   CommitThreadResult,
   CommitTurnStartResult,
 } from "@crewon/application";
@@ -55,6 +58,11 @@ import {
   parseThreadListQuery,
   parseThreadRunListQuery,
   parseUnarchiveThreadRequest,
+  parseCreateWorkspaceListRequest,
+  parseWorkspaceExecutionId,
+  parseWorkspaceOperationActionRequest,
+  parseWorkspaceOperationLastEventSequence,
+  parseWorkspaceOperationListQuery,
   type AgentVersionMutationResponse,
   type ActiveAgentVersionCatalogResponse,
   type AppendThreadMessageResponse,
@@ -68,10 +76,17 @@ import {
   type ListThreadsResponse,
   type ListThreadMessagesResponse,
   type ListAgentVersionsResponse,
+  type ListAutomationsResponse,
+  type GetModelProviderSettingsResponse,
+  type ProbeModelProviderResponse,
   type RunMutationResponse,
+  type RunAutomationNowResponse,
   type StartTurnResponse,
   type ThreadMutationResponse,
   type ToolApprovalMutationResponse,
+  type GetWorkspaceOperationResponse,
+  type ListWorkspaceOperationsResponse,
+  type WorkspaceOperationMutationResponse,
 } from "@crewon/contracts";
 import Fastify, { type FastifyInstance } from "fastify";
 
@@ -79,6 +94,7 @@ import {
   errorResponse,
   notFoundResponse,
   readinessErrorResponse,
+  WorkspaceControlUnavailableError,
 } from "./control-api-errors.ts";
 import type {
   ControlApiIdentityPort,
@@ -108,6 +124,16 @@ import {
   projectThreadGoalMutation,
 } from "./thread-projection.ts";
 import { projectToolApproval } from "./tool-approval-projection.ts";
+import {
+  projectWorkspaceOperationList,
+  projectWorkspaceOperationMutation,
+  projectWorkspaceOperationSnapshot,
+} from "./workspace-operation-projection.ts";
+import {
+  IntervalWorkspaceOperationEventPoller,
+  streamWorkspaceOperationEvents,
+  type WorkspaceOperationEventPoller,
+} from "./workspace-operation-event-stream.ts";
 
 export type ControlApiDependencies = Readonly<{
   application: RunApplicationService;
@@ -120,6 +146,8 @@ export type ControlApiDependencies = Readonly<{
   agentVersions: AgentVersionApplicationService;
   agentVersionCatalogs: AgentVersionCatalogApplicationService;
   artifacts: ArtifactApplicationService;
+  workspaceQueries: WorkspaceOperationQueryService;
+  workspaceLists: WorkspaceListApplicationService | null;
   agentVersionDigester: ContentDigester;
   clock: ApplicationClock;
   identity: ControlApiIdentityPort;
@@ -129,6 +157,7 @@ export type ControlApiDependencies = Readonly<{
   outboxWakeup: OutboxWakeupPort;
   threadGoalEventPoller?: ThreadGoalEventPoller;
   threadEventPoller?: ThreadEventPoller;
+  workspaceOperationEventPoller?: WorkspaceOperationEventPoller;
   heartbeatIntervalMs?: number | null;
 }>;
 
@@ -145,6 +174,12 @@ export function buildControlApi(
     dependencies.threadGoalEventPoller ?? new IntervalThreadGoalEventPoller();
   const threadEventPoller =
     dependencies.threadEventPoller ?? new IntervalThreadEventPoller();
+  const workspaceOperationEventPoller =
+    dependencies.workspaceOperationEventPoller ??
+    new IntervalWorkspaceOperationEventPoller();
+  const providerProbeIdempotency = new ProviderProbeIdempotencyCoordinator(
+    dependencies.providerProbes,
+  );
   const app = Fastify({
     bodyLimit: 64 * 1024,
     logger: false,
@@ -368,6 +403,164 @@ export function buildControlApi(
           : dependencies.heartbeatIntervalMs,
     });
   });
+
+  app.post<{ Params: { threadId: string }; Body: unknown }>(
+    "/api/v1/threads/:threadId/workspace-list",
+    async (request, reply) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const body = parseCreateWorkspaceListRequest(request.body);
+      const idempotencyKey = parseIdempotencyKey(
+        request.headers["idempotency-key"],
+      );
+      const workspaceLists = requireWorkspaceLists(dependencies.workspaceLists);
+      const requestAbort = requestAbortSignal(request.raw);
+      try {
+        const result = await workspaceLists.executeWorkspaceList(
+          actor,
+          {
+            kind: "workspaceList.execute",
+            idempotencyKey,
+            threadId: parseThreadId(request.params.threadId),
+            expectedRevision: body.expectedThreadRevision,
+            maxEntries: body.maxEntries,
+          },
+          requestAbort.signal,
+        );
+        const response: WorkspaceOperationMutationResponse =
+          projectWorkspaceOperationMutation(result);
+        return reply
+          .code(result.disposition === "committed" ? 201 : 200)
+          .send(response);
+      } finally {
+        requestAbort.dispose();
+      }
+    },
+  );
+
+  app.get<{
+    Params: { threadId: string };
+    Querystring: Record<string, unknown>;
+  }>("/api/v1/threads/:threadId/workspace-list", async (request) => {
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    const threadId = parseThreadId(request.params.threadId);
+    const query = parseWorkspaceOperationListQuery({ ...request.query });
+    const page = await dependencies.workspaceQueries.listOperations(actor, {
+      threadId,
+      afterExecutionId: query.afterExecutionId,
+      limit: query.limit,
+    });
+    const response: ListWorkspaceOperationsResponse =
+      projectWorkspaceOperationList(page, {
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        threadId,
+        afterExecutionId: query.afterExecutionId,
+        limit: query.limit,
+      });
+    return response;
+  });
+
+  app.get<{ Params: { threadId: string; executionId: string } }>(
+    "/api/v1/threads/:threadId/workspace-list/:executionId",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const snapshot = await dependencies.workspaceQueries.getSnapshot(actor, {
+        threadId: parseThreadId(request.params.threadId),
+        executionId: parseWorkspaceExecutionId(request.params.executionId),
+      });
+      const response: GetWorkspaceOperationResponse =
+        projectWorkspaceOperationSnapshot(snapshot);
+      return response;
+    },
+  );
+
+  for (const phase of ["reconcile", "cancel"] as const) {
+    app.post<{
+      Params: { threadId: string; executionId: string };
+      Body: unknown;
+    }>(
+      `/api/v1/threads/:threadId/workspace-list/:executionId([^:]+)::${phase}`,
+      async (request, reply) => {
+        const actor = await dependencies.identity.resolveActor(
+          requestContext(request),
+        );
+        const body = parseWorkspaceOperationActionRequest(request.body);
+        const idempotencyKey = parseIdempotencyKey(
+          request.headers["idempotency-key"],
+        );
+        const workspaceLists = requireWorkspaceLists(
+          dependencies.workspaceLists,
+        );
+        const requestAbort = requestAbortSignal(request.raw);
+        try {
+          const threadId = parseThreadId(request.params.threadId);
+          const executionId = parseWorkspaceExecutionId(
+            request.params.executionId,
+          );
+          const result =
+            phase === "reconcile"
+              ? await workspaceLists.reconcileWorkspaceList(
+                  actor,
+                  {
+                    kind: "workspaceList.reconcile",
+                    idempotencyKey,
+                    threadId,
+                    executionId,
+                    expectedOperationRevision: body.expectedOperationRevision,
+                  },
+                  requestAbort.signal,
+                )
+              : await workspaceLists.cancelWorkspaceList(
+                  actor,
+                  {
+                    kind: "workspaceList.cancel",
+                    idempotencyKey,
+                    threadId,
+                    executionId,
+                    expectedOperationRevision: body.expectedOperationRevision,
+                  },
+                  requestAbort.signal,
+                );
+          return reply
+            .code(200)
+            .send(projectWorkspaceOperationMutation(result));
+        } finally {
+          requestAbort.dispose();
+        }
+      },
+    );
+  }
+
+  app.get<{ Params: { threadId: string; executionId: string } }>(
+    "/api/v1/threads/:threadId/workspace-list/:executionId/events",
+    async (request, reply) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      await streamWorkspaceOperationEvents({
+        request,
+        reply,
+        application: dependencies.workspaceQueries,
+        actor,
+        threadId: parseThreadId(request.params.threadId),
+        executionId: parseWorkspaceExecutionId(request.params.executionId),
+        afterSequence: parseWorkspaceOperationLastEventSequence(
+          request.headers["last-event-id"],
+        ),
+        poller: workspaceOperationEventPoller,
+        heartbeatIntervalMs:
+          dependencies.heartbeatIntervalMs === undefined
+            ? 15_000
+            : dependencies.heartbeatIntervalMs,
+      });
+    },
+  );
 
   app.get<{ Params: { threadId: string } }>(
     "/api/v1/threads/:threadId/goal",
@@ -927,6 +1120,22 @@ export function buildControlApi(
   return app;
 }
 
+function requestAbortSignal(
+  request: NodeJS.EventEmitter & { aborted: boolean },
+): {
+  signal: AbortSignal;
+  dispose(): void;
+} {
+  const abort = new AbortController();
+  const aborted = () => abort.abort(new Error("control_request_aborted"));
+  if (request.aborted) aborted();
+  else request.once("aborted", aborted);
+  return {
+    signal: abort.signal,
+    dispose: () => request.off("aborted", aborted),
+  };
+}
+
 function threadMutationResponse(
   result: CommitThreadResult,
 ): ThreadMutationResponse {
@@ -953,6 +1162,15 @@ function wakeOutbox(outboxWakeup: OutboxWakeupPort): void {
   void outboxWakeup.wake().catch(() => {
     // HTTP success is already durable; periodic scanning is the retry path.
   });
+}
+
+function requireWorkspaceLists(
+  workspaceLists: WorkspaceListApplicationService | null,
+): WorkspaceListApplicationService {
+  if (workspaceLists === null) {
+    throw new WorkspaceControlUnavailableError();
+  }
+  return workspaceLists;
 }
 
 function validateHeartbeatInterval(value: number | null | undefined): void {
