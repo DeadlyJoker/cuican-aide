@@ -31,19 +31,21 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
    pre-sampling durable compaction、revision-safe continuation、token-limit mid-turn、旧模型前缀压缩与 fork history copy 已落地；
    AR-026/027 的 import-only legacy rollout、compact/resume/fork shared differential 已落地，orphan/missing Tool pair normalization 已落地。
 2. Canonical final assistant item 已消除 streamed/final 重复；`response.output_item.done` 后缺失
-   `response.completed` 的 assistant 与 Tool 两类 completed-item boundary 已由 bounded shared fixture 冻结。assistant item
-   进入同 Turn retry request、但不重复成为最终 Message；Tool item 结束当前 Kernel segment，由 durable Worker exactly-once
-   执行后把 call+result 放入下一 request，避免采样 retry 重复副作用。
+   `response.completed` 的 assistant 与 Tool 两类 completed-item history boundary 已由 bounded shared fixture 冻结。assistant
+   item 进入同 Turn retry request；observable completion projection 采用 intentional redesign：Rust 发出 `first`、`done` 两个
+   completed assistant items，TS 保留 `first` 的 delta/history 但不提交缺 terminal 的 phantom final Message，只提交最终 `done`。
+   Tool item 结束当前 Kernel segment，由 durable Worker exactly-once 执行后把 call+result 放入下一 request。
 3. **仍未关闭：同一 response 中混合 completed assistant text/commentary 与 Tool call。** Rust 可按多个
-   `OutputItemDone` 稳定记录并继续 Tool；TS Worker 当前仍以 `model_tool_call_with_text_unsupported` fail closed。没有已冻结的
-   intentional redesign，因此该边界状态为 `MISSING`，不能由 AR-013–022 的 Tool PARITY 总称覆盖。
+   `OutputItemDone` 稳定记录并继续 Tool；TS Kernel 在缺 terminal catch 边界检测到混合项后以
+   `model_tool_call_with_text_unsupported` fail closed，且不会发出 `tool.requested` 或执行副作用。完整混合语义没有已冻结的
+   intentional redesign，因此状态仍为 `MISSING`，不能由 AR-013–022 的 Tool PARITY 总称覆盖。
 
 ## 首批 30 个 Rust reference cases
 
 | ID     | Rust integration source                                                                               | 要冻结的稳定语义                                                       | 当前 TS 状态 | 下一证据                              |
 | ------ | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------ | ------------------------------------- |
 | AR-001 | `session/turn.rs::run_turn` + `client.rs` basic text cases                                            | user input→assistant item→Turn complete；同一 Turn client session 复用 | PARITY       | shared full-Turn trace                |
-| AR-002 | `stream_no_completed.rs` early/partial/completed-item close cases                                     | 未见 terminal 时 partial 丢弃；completed assistant/Tool 保留且不重复   | PARITY       | Rust+TS shared fixtures 4/4           |
+| AR-002 | `stream_no_completed.rs` early/partial/completed-item close cases                                     | partial 丢弃；completed item 进入后续 history；completion 投影见脚注   | PARITY†      | Rust+TS shared fixtures 4/4           |
 | AR-003 | `stream_error_allows_next_turn.rs::continue_after_stream_error`                                       | 错误 Turn 必须释放 active task，下一 Turn 可成功                       | PARITY       | Rust+TS shared two-turn fixture       |
 | AR-004 | `websocket_fallback.rs::websocket_fallback_switches_to_http_after_retries_exhausted`                  | initial + N retry 后切 HTTP                                            | PARITY       | shared fallback decision fixture      |
 | AR-005 | `websocket_fallback.rs::websocket_fallback_is_sticky_across_turns`                                    | fallback 对后续 Turn sticky                                            | PARITY       | shared two-turn decision fixture      |
@@ -129,8 +131,12 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 - `stream-completed-assistant-close-retry.reference.json` 与
   `stream-completed-tool-close-retry.reference.json` 由 Rust `stream_no_completed.rs`、TS Kernel 和真实 durable Worker 共同消费。
   Rust integration 直接断言第二次 `/responses` request：assistant completed item 保留；Tool completed item 与它的一次
-  model-visible output 同时保留。TS assistant path 断言只提交最终 `done` Message/一次 `message.completed`；Tool path 断言一次
-  `tool.requested`、一次 `tool.completed`、一次 Provider 副作用，并在第二次 model request 中 deep-equal call+result。
+  model-visible output 同时保留。`PARITY†` 仅指 request-history boundary；completion observable 是上文明确的 intentional
+  redesign。TS assistant test 同时消费 fixture 的 `completedAssistantOutputs=["first","done"]` 与
+  `duplicateFinalOutput=false`，并断言 durable projection 只提交最终 `done` Message/一次 `message.completed`。Tool shared parity
+  只覆盖 model-visible call/result、第二请求 history 与 exactly-once boundary；Rust 侧是 unknown unsupported-call handler，TS
+  侧是注册的 read-only test handler，两者不代表真实副作用类型等价。fixture 的
+  `tsCandidateToolHandlerInvocationCount` 是 TS-only durability assertion；Rust evidence 是第二请求恰有一个对应 output。
 
 ## Goal runtime focused parity gate（2026-08-09）
 

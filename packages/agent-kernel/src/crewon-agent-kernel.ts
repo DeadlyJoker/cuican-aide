@@ -310,6 +310,12 @@ export class CrewONAgentKernel implements AgentKernelPort {
               item.type === "tool_call",
           );
           if (completedToolCalls.length > 0) {
+            if (completedItems.some((item) => item.type === "message")) {
+              throw new AgentKernelError(
+                "model_tool_call_with_text_unsupported",
+                false,
+              );
+            }
             for (const call of completedToolCalls) {
               observedCallIds.add(call.callId);
               sequence += 1;

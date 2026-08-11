@@ -4507,6 +4507,8 @@ test("keeps a completed assistant item in retry history without duplicating fina
       requestCount: number;
       samplingRetries: number;
       finalOutput: string;
+      completedAssistantOutputs: readonly string[];
+      duplicateFinalOutput: boolean;
     };
   }>;
   const fixture = await createFixture(
@@ -4549,12 +4551,24 @@ test("keeps a completed assistant item in retry history without duplicating fina
     ),
     reference.expectedSecondRequestItems,
   );
-  assert.deepEqual(
-    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
-    [
-      { role: "user", content: "hello" },
-      { role: "assistant", content: reference.finalState.finalOutput },
-    ],
+  assert.deepEqual(reference.finalState.completedAssistantOutputs, [
+    reference.completedItem.content,
+    reference.finalState.finalOutput,
+  ]);
+  const messages = (await fixture.messages()).map(({ role, content }) => ({
+    role,
+    content,
+  }));
+  assert.deepEqual(messages, [
+    { role: "user", content: "hello" },
+    { role: "assistant", content: reference.finalState.finalOutput },
+  ]);
+  assert.equal(
+    messages.filter(
+      ({ role, content }) =>
+        role === "assistant" && content === reference.finalState.finalOutput,
+    ).length > 1,
+    reference.finalState.duplicateFinalOutput,
   );
   assert.equal(
     (await fixture.events()).filter(
@@ -4579,7 +4593,7 @@ test("executes a completed Tool item from a missing-terminal stream exactly once
     expectedSecondRequestItems: readonly ModelInputItem[];
     finalState: {
       requestCount: number;
-      toolSideEffectCount: number;
+      tsCandidateToolHandlerInvocationCount: number;
       toolRequestedEventCount: number;
       toolCompletedEventCount: number;
       finalOutput: string;
@@ -4650,7 +4664,10 @@ test("executes a completed Tool item from a missing-terminal stream exactly once
     ),
     reference.expectedSecondRequestItems,
   );
-  assert.equal(sideEffects, reference.finalState.toolSideEffectCount);
+  assert.equal(
+    sideEffects,
+    reference.finalState.tsCandidateToolHandlerInvocationCount,
+  );
   const events = await fixture.events();
   assert.equal(
     events.filter((event) => event.type === "tool.requested").length,

@@ -25,7 +25,7 @@
   ],
   "finalState": {
     "requestCount": 2,
-    "toolSideEffectCount": 1,
+    "tsCandidateToolHandlerInvocationCount": 1,
     "toolRequestedEventCount": 1,
     "toolCompletedEventCount": 1,
     "finalOutput": "done",

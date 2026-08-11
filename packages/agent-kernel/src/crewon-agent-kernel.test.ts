@@ -4,7 +4,10 @@ import test from "node:test";
 
 import { compareTraces, type CanonicalTrace } from "@crewon/test-contracts";
 
-import { AgentKernelError } from "./agent-kernel-port.ts";
+import {
+  AgentKernelError,
+  type KernelAgentEvent,
+} from "./agent-kernel-port.ts";
 import { CrewONAgentKernel } from "./crewon-agent-kernel.ts";
 import { DeterministicFakeModelTransport } from "./deterministic-fake-model.ts";
 import {
@@ -589,6 +592,48 @@ test("turns a completed Tool item without a terminal into one durable Tool bound
   );
   assert.equal(
     events.some((event) => event.type === "model.sampling.retry"),
+    false,
+  );
+});
+
+test("fails closed before executing a completed Tool mixed with assistant output", async () => {
+  let requests = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "mixed-completed-item-adapter",
+    adapterVersion: "1",
+    modelId: "mixed-completed-item-model",
+    async *stream() {
+      requests += 1;
+      yield { type: "output.delta", delta: "commentary" };
+      yield {
+        type: "output.item.completed",
+        item: { type: "message", role: "assistant", content: "commentary" },
+      };
+      yield {
+        type: "output.item.completed",
+        item: {
+          type: "tool_call",
+          kind: "function",
+          callId: "mixed-call",
+          name: "fixture_tool",
+          input: "{}",
+        },
+      };
+    },
+  };
+
+  const events: KernelAgentEvent[] = [];
+  await assert.rejects(async () => {
+    for await (const event of new CrewONAgentKernel({
+      transport,
+      streamMaxRetries: 1,
+    }).runSegment(segmentContract(), new AbortController().signal)) {
+      events.push(event);
+    }
+  }, hasKernelCode("model_tool_call_with_text_unsupported"));
+  assert.equal(requests, 1);
+  assert.equal(
+    events.some((event) => event.type === "tool.requested"),
     false,
   );
 });
