@@ -103,9 +103,13 @@ export class SqliteWorkspaceReadFileStore implements WorkspaceReadFileStore {
   }
 
   async abandonWorkspaceReadFileSend(input: WorkspaceReadFileLocator & { expectedRevision: number }) {
-    const current = this.#expected(input);
-    if (current.status !== "prepared" || current.resolution !== null) conflict();
-    return current;
+    return this.#transaction(() => {
+      const current = this.#expected(input);
+      if (current.status !== "possiblySent" || current.resolution !== null) conflict();
+      const next = validateWorkspaceReadFileRecord({ ...current, revision: current.revision + 1, status: "prepared" });
+      this.#update(input, current.revision, next);
+      return next;
+    });
   }
 
   async commitWorkspaceReadFileResolution(input: Parameters<WorkspaceReadFileStore["commitWorkspaceReadFileResolution"]>[0]) {
@@ -174,4 +178,3 @@ function result(disposition: "committed" | "replayed", operation: WorkspaceReadF
   return { disposition, operation: structuredClone(operation) };
 }
 function conflict(): never { throw new RunStoreError("workspace_read_file_conflict"); }
-

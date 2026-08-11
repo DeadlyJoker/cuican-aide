@@ -135,7 +135,12 @@ export class WorkspaceReadFileApplicationService {
     idempotency: IdempotencyDescriptor,
     signal: AbortSignal,
   ): Promise<WorkspaceReadFileMutationResult> {
-    const { routeIntent, command, reference } = operation.frozen;
+    const dispatchOperation = phase === "execute"
+      ? await this.#store.markWorkspaceReadFilePossiblySent({
+          ...locator(operation), expectedRevision: operation.revision,
+        })
+      : operation;
+    const { routeIntent, command, reference } = dispatchOperation.frozen;
     let resolution: DeviceFilesystemReadDispatchResolution;
     try {
       resolution = await (phase === "execute"
@@ -145,24 +150,19 @@ export class WorkspaceReadFileApplicationService {
           : this.#gateway.cancel(routeIntent, reference, signal));
     } catch (error) {
       const certainty = dispatchCertainty(error);
-      if (phase !== "execute" || certainty === "possiblySent") {
-        await this.#store.markWorkspaceReadFilePossiblySent({
-          ...locator(operation),
-          expectedRevision: operation.revision,
-        });
-      } else {
+      if (phase === "execute" && certainty === "notSent") {
         await this.#store.abandonWorkspaceReadFileSend({
-          ...locator(operation),
-          expectedRevision: operation.revision,
+          ...locator(dispatchOperation),
+          expectedRevision: dispatchOperation.revision,
         });
       }
       throw new WorkspaceReadFileDispatchError(certainty, { cause: error });
     }
     return this.#store.commitWorkspaceReadFileResolution({
-      ...locator(operation),
+      ...locator(dispatchOperation),
       phase,
       idempotency,
-      expectedRevision: operation.revision,
+      expectedRevision: dispatchOperation.revision,
       resolution,
     });
   }

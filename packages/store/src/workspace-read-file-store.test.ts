@@ -11,6 +11,10 @@ import type {
   IdempotencyDescriptor,
   WorkspaceReadFileStore,
 } from "@crewon/application";
+import {
+  WorkspaceReadFileApplicationService,
+  WorkspaceReadFileDispatchError,
+} from "@crewon/application";
 
 import { InMemoryWorkspaceReadFileStore } from "./in-memory-workspace-read-file-store.ts";
 import { DatabaseSync } from "node:sqlite";
@@ -92,10 +96,63 @@ function conformance(name: string, create: () => WorkspaceReadFileStore) {
       resolution: { ...completed(), receiptId: "receipt-drift" },
     }));
   });
+
+  test(`${name}: notSent abandon is a revisioned prepared transition`, async () => {
+    const store = create();
+    const prepared = await store.prepareWorkspaceReadFile({
+      ...locator, idempotency: executeIdempotency, frozen: frozen(),
+    });
+    const fenced = await store.markWorkspaceReadFilePossiblySent({
+      ...locator, expectedRevision: prepared.operation.revision,
+    });
+    const abandoned = await store.abandonWorkspaceReadFileSend({
+      ...locator, expectedRevision: fenced.revision,
+    });
+    assert.deepEqual(
+      { status: abandoned.status, revision: abandoned.revision },
+      { status: "prepared", revision: 3 },
+    );
+  });
 }
 
 conformance("in-memory workspace read authority", () => new InMemoryWorkspaceReadFileStore());
 conformance("SQLite workspace read authority", () => new SqliteWorkspaceReadFileStore(new DatabaseSync(":memory:")));
+
+test("execute fences before network and a crash replay performs zero dispatch", async () => {
+  const store = new InMemoryWorkspaceReadFileStore();
+  const prepared = await store.prepareWorkspaceReadFile({
+    ...locator, idempotency: executeIdempotency, frozen: frozen(),
+  });
+  await store.markWorkspaceReadFilePossiblySent({ ...locator, expectedRevision: prepared.operation.revision });
+  let dispatches = 0;
+  const service = serviceOf(store, async () => { dispatches += 1; return completed(); });
+  const replay = await service.execute(executeIntent(), new AbortController().signal);
+  assert.equal(replay.operation.status, "possiblySent");
+  assert.equal(dispatches, 0);
+});
+
+test("notSent reopens execute while possiblySent remains fenced", async () => {
+  const store = new InMemoryWorkspaceReadFileStore();
+  let dispatches = 0;
+  const notSent = serviceOf(store, async () => {
+    dispatches += 1;
+    throw Object.assign(new Error("before write"), { certainty: "notSent" });
+  });
+  await assert.rejects(() => notSent.execute(executeIntent(), new AbortController().signal), WorkspaceReadFileDispatchError);
+  const receipt = await store.loadWorkspaceReadFileReceipt({ tenantId: locator.tenantId,
+    spaceId: locator.spaceId, phase: "execute", idempotency: executeIdempotency });
+  assert.deepEqual({ status: receipt?.operation.status, revision: receipt?.operation.revision },
+    { status: "prepared", revision: 3 });
+
+  const possiblySent = serviceOf(store, async () => {
+    dispatches += 1;
+    throw Object.assign(new Error("after write"), { certainty: "possiblySent" });
+  });
+  await assert.rejects(() => possiblySent.execute(executeIntent(), new AbortController().signal), WorkspaceReadFileDispatchError);
+  const fenced = await possiblySent.execute(executeIntent(), new AbortController().signal);
+  assert.equal(fenced.operation.status, "possiblySent");
+  assert.equal(dispatches, 2);
+});
 
 function frozen(): FrozenWorkspaceReadFileDispatch {
   return {
@@ -118,4 +175,21 @@ function completed() {
 }
 function idempotency(key: string): IdempotencyDescriptor {
   return { scope: "workspace-read-file", key, requestFingerprint: `sha256:${"a".repeat(64)}` };
+}
+function executeIntent() { return {
+  ...locator, threadId: "thread-1", expectedThreadRevision: 1,
+  principalId: "principal-1", actorId: "actor-1", leaseId: command.leaseId,
+  leaseEpoch: command.leaseEpoch, expiresAt: command.expiresAt,
+  idempotency: executeIdempotency, relativePathSegments: ["docs", "README.md"],
+}; }
+function serviceOf(store: WorkspaceReadFileStore, execute: () => Promise<ReturnType<typeof completed>>) {
+  return new WorkspaceReadFileApplicationService({
+    store,
+    commands: { async create() { return frozen(); } },
+    gateway: {
+      execute,
+      async reconcile() { return completed(); },
+      async cancel() { return completed(); },
+    },
+  });
 }

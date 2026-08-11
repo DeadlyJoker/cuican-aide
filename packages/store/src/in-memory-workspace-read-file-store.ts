@@ -84,8 +84,10 @@ export class InMemoryWorkspaceReadFileStore implements WorkspaceReadFileStore {
 
   async abandonWorkspaceReadFileSend(input: WorkspaceReadFileLocator & { expectedRevision: number }) {
     const current = this.#expected(input);
-    if (current.status !== "prepared" || current.resolution !== null) conflict();
-    return structuredClone(current);
+    if (current.status !== "possiblySent" || current.resolution !== null) conflict();
+    const next = validateWorkspaceReadFileRecord({ ...current, revision: current.revision + 1, status: "prepared" });
+    this.#operations.set(executionKey(input), next);
+    return structuredClone(next);
   }
 
   async commitWorkspaceReadFileResolution(input: Parameters<WorkspaceReadFileStore["commitWorkspaceReadFileResolution"]>[0]) {
