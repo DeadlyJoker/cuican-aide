@@ -15,8 +15,8 @@ import {
   type PrepareDeviceDispatchResult,
 } from "./device-dispatch-store.ts";
 import { DeviceGatewayError } from "./device-gateway-error.ts";
-
-const SCHEMA_VERSION = 1;
+import { configureSqliteDeviceGatewayDatabase } from "./sqlite-device-dispatch-schema.ts";
+import { requireSqliteExecutionAuthorityState } from "./sqlite-workspace-dispatch-support.ts";
 
 type DispatchRow = Readonly<{
   execution_id: string;
@@ -42,7 +42,7 @@ export class SqliteDeviceDispatchStore implements DeviceDispatchStorePort {
       allowExtension: false,
     });
     try {
-      configureDatabase(this.#database, path);
+      configureSqliteDeviceGatewayDatabase(this.#database, path);
     } catch (error) {
       this.#database.close();
       throw error;
@@ -69,13 +69,37 @@ export class SqliteDeviceDispatchStore implements DeviceDispatchStorePort {
     });
     this.#database.exec("BEGIN IMMEDIATE");
     try {
-      const inserted = this.#database
+      const { kind } = requireSqliteExecutionAuthorityState(
+        this.#database,
+        candidate.executionId,
+      );
+      const prior = this.#load(candidate.executionId);
+      if (prior !== null) {
+        if (kind !== "tool") {
+          throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
+        }
+        requireFingerprint(prior, candidate.fingerprint);
+        this.#database.exec("COMMIT");
+        return { outcome: "existing", record: prior };
+      }
+      if (kind === "workspaceList") {
+        throw new DeviceGatewayError("device_dispatch_kind_conflict");
+      }
+      if (kind === "tool") {
+        throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
+      }
+      this.#database
+        .prepare(
+          `INSERT INTO device_execution_kinds (execution_id, command_kind)
+           VALUES (?, 'tool')`,
+        )
+        .run(candidate.executionId);
+      this.#database
         .prepare(
           `INSERT INTO device_dispatch_records (
              execution_id, fingerprint, command_json, resolution_json,
              created_at, updated_at
-           ) VALUES (?, ?, ?, NULL, ?, ?)
-           ON CONFLICT(execution_id) DO NOTHING`,
+           ) VALUES (?, ?, ?, NULL, ?, ?)`,
         )
         .run(
           candidate.executionId,
@@ -85,12 +109,8 @@ export class SqliteDeviceDispatchStore implements DeviceDispatchStorePort {
           candidate.updatedAt,
         );
       const record = this.#loadRequired(candidate.executionId);
-      requireFingerprint(record, candidate.fingerprint);
       this.#database.exec("COMMIT");
-      return {
-        outcome: inserted.changes === 1 ? "created" : "existing",
-        record,
-      };
+      return { outcome: "created", record };
     } catch (error) {
       rollback(this.#database);
       throw error;
@@ -116,7 +136,20 @@ export class SqliteDeviceDispatchStore implements DeviceDispatchStorePort {
     });
     this.#database.exec("BEGIN IMMEDIATE");
     try {
-      const prior = this.#loadRequired(command.executionId);
+      const { kind } = requireSqliteExecutionAuthorityState(
+        this.#database,
+        command.executionId,
+      );
+      const prior = this.#load(command.executionId);
+      if (kind === null && prior === null) {
+        throw new DeviceGatewayError("device_dispatch_authority_missing");
+      }
+      if (kind === "workspaceList") {
+        throw new DeviceGatewayError("device_dispatch_kind_conflict");
+      }
+      if (kind !== "tool" || prior === null) {
+        throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
+      }
       requireFingerprint(prior, fingerprint);
       if (prior.resolution !== null) {
         if (JSON.stringify(prior.resolution) !== JSON.stringify(resolution)) {
@@ -152,7 +185,23 @@ export class SqliteDeviceDispatchStore implements DeviceDispatchStorePort {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/.test(executionId)) {
       throw new DeviceGatewayError("device_execution_id_invalid");
     }
-    return this.#load(executionId);
+    this.#database.exec("BEGIN");
+    try {
+      const { kind } = requireSqliteExecutionAuthorityState(
+        this.#database,
+        executionId,
+      );
+      const record = this.#load(executionId);
+      if (kind === "workspaceList") {
+        this.#database.exec("COMMIT");
+        return null;
+      }
+      this.#database.exec("COMMIT");
+      return record;
+    } catch (error) {
+      rollback(this.#database);
+      throw error;
+    }
   }
 
   async close(): Promise<void> {
@@ -190,46 +239,6 @@ export class SqliteDeviceDispatchStore implements DeviceDispatchStorePort {
   }
 }
 
-function configureDatabase(database: DatabaseSync, path: string): void {
-  database.exec("PRAGMA foreign_keys = ON");
-  database.exec("PRAGMA busy_timeout = 5000");
-  if (path !== ":memory:") {
-    database.exec("PRAGMA journal_mode = WAL");
-    database.exec("PRAGMA synchronous = FULL");
-  }
-  const version = Number(
-    (database.prepare("PRAGMA user_version").get() as { user_version: number })
-      .user_version,
-  );
-  if (version > SCHEMA_VERSION) {
-    throw new DeviceGatewayError("device_dispatch_schema_newer");
-  }
-  if (version === 0) {
-    database.exec("BEGIN IMMEDIATE");
-    try {
-      database.exec(`
-        CREATE TABLE device_dispatch_records (
-          execution_id TEXT PRIMARY KEY NOT NULL,
-          fingerprint TEXT NOT NULL CHECK (
-            length(fingerprint) = 71 AND fingerprint GLOB 'sha256:[0-9a-f]*'
-          ),
-          command_json TEXT NOT NULL,
-          resolution_json TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          CHECK (resolution_json IS NULL OR json_valid(resolution_json)),
-          CHECK (json_valid(command_json))
-        ) STRICT;
-        PRAGMA user_version = 1;
-      `);
-      database.exec("COMMIT");
-    } catch (error) {
-      rollback(database);
-      throw error;
-    }
-  }
-}
-
 function recordFromRow(row: DispatchRow): DeviceDispatchAuthorityRecord {
   let command: unknown;
   let resolution: unknown = null;
@@ -263,7 +272,9 @@ function requireFingerprint(
 }
 
 function rollback(database: DatabaseSync): void {
-  if (database.isTransaction) {
+  try {
     database.exec("ROLLBACK");
+  } catch {
+    // Preserve the original transaction failure.
   }
 }

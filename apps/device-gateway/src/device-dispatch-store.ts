@@ -6,6 +6,7 @@ import {
 } from "@crewon/contracts";
 
 import { deviceDispatchFingerprint } from "./device-dispatch-identity.ts";
+import { InMemoryDeviceExecutionKindAuthority } from "./device-execution-kind-authority.ts";
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 
 export type DeviceDispatchAuthorityRecord = Readonly<{
@@ -40,7 +41,14 @@ export interface DeviceDispatchStorePort {
 
 export class InMemoryDeviceDispatchStore implements DeviceDispatchStorePort {
   readonly #records = new Map<string, DeviceDispatchAuthorityRecord>();
+  readonly #executionKinds: InMemoryDeviceExecutionKindAuthority;
   #closed = false;
+
+  constructor(
+    executionKinds: InMemoryDeviceExecutionKindAuthority = new InMemoryDeviceExecutionKindAuthority(),
+  ) {
+    this.#executionKinds = executionKinds;
+  }
 
   async ready(): Promise<void> {
     this.#assertOpen();
@@ -56,8 +64,18 @@ export class InMemoryDeviceDispatchStore implements DeviceDispatchStorePort {
     const fingerprint = deviceDispatchFingerprint(command);
     const prior = this.#records.get(command.executionId);
     if (prior !== undefined) {
+      if (this.#executionKinds.kind(command.executionId) !== "tool") {
+        throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
+      }
       requireFingerprint(prior, fingerprint);
       return { outcome: "existing", record: cloneRecord(prior) };
+    }
+    const currentKind = this.#executionKinds.kind(command.executionId);
+    if (currentKind === "workspaceList") {
+      throw new DeviceGatewayError("device_dispatch_kind_conflict");
+    }
+    if (currentKind === "tool") {
+      throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
     }
     const record: DeviceDispatchAuthorityRecord = {
       executionId: command.executionId,
@@ -67,6 +85,7 @@ export class InMemoryDeviceDispatchStore implements DeviceDispatchStorePort {
       createdAt: preparedAt,
       updatedAt: preparedAt,
     };
+    this.#executionKinds.claim(command.executionId, "tool");
     this.#records.set(command.executionId, cloneRecord(record));
     return { outcome: "created", record: cloneRecord(record) };
   }

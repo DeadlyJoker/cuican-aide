@@ -27,8 +27,7 @@ import {
   type PrepareDeviceDispatchResult,
 } from "./device-dispatch-store.ts";
 import { DeviceGatewayError } from "./device-gateway-error.ts";
-
-const SCHEMA_VERSION = 2;
+import { migratePostgresDeviceDispatchSchema } from "./postgres-device-dispatch-schema.ts";
 const DEFAULT_SCHEMA = "crewon_device_gateway";
 
 type DispatchRow = Readonly<{
@@ -88,7 +87,12 @@ export class PostgresDeviceDispatchStore
       );
       this.#ownsPool = true;
     }
-    this.#ready = this.#migrate();
+    this.#ready = migratePostgresDeviceDispatchSchema(
+      this.#pool,
+      this.#schema,
+    ).catch((error: unknown) => {
+      throw normalizePostgresError(error);
+    });
   }
 
   async ready(): Promise<void> {
@@ -111,28 +115,59 @@ export class PostgresDeviceDispatchStore
       createdAt: preparedAt,
       updatedAt: preparedAt,
     });
+    const client = await this.#pool.connect().catch((error: unknown) => {
+      throw normalizePostgresError(error);
+    });
     try {
-      const inserted = await this.#pool.query<{ execution_id: string }>(
+      await client.query("BEGIN");
+      await this.#lockExecution(client, candidate.executionId);
+      const kind = await this.#loadKind(candidate.executionId, client);
+      const prior = await this.#load(candidate.executionId, client, true);
+      const workspaceRecord = await this.#workspaceRecordExists(
+        candidate.executionId,
+        client,
+        true,
+      );
+      requireExecutionState(kind, prior !== null, workspaceRecord);
+      if (prior !== null) {
+        if (kind !== "tool") {
+          throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
+        }
+        requireFingerprint(prior, candidate.fingerprint);
+        await client.query("COMMIT");
+        return { outcome: "existing", record: prior };
+      }
+      if (kind === "workspaceList") {
+        throw new DeviceGatewayError("device_dispatch_kind_conflict");
+      }
+      if (kind === "tool") {
+        throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
+      }
+      await client.query(
+        `INSERT INTO ${this.#schema}.device_execution_kinds (
+           execution_id, command_kind
+         ) VALUES ($1, 'tool')`,
+        [candidate.executionId],
+      );
+      await client.query(
         `INSERT INTO ${this.#schema}.device_dispatch_records (
            execution_id, fingerprint, command_json, resolution_json,
            created_at, updated_at
-         ) VALUES ($1, $2, $3::jsonb, NULL, clock_timestamp(), clock_timestamp())
-         ON CONFLICT (execution_id) DO NOTHING
-         RETURNING execution_id`,
+         ) VALUES ($1, $2, $3::jsonb, NULL, clock_timestamp(), clock_timestamp())`,
         [
           candidate.executionId,
           candidate.fingerprint,
           JSON.stringify(candidate.command),
         ],
       );
-      const record = await this.#loadRequired(candidate.executionId);
-      requireFingerprint(record, candidate.fingerprint);
-      return {
-        outcome: inserted.rowCount === 1 ? "created" : "existing",
-        record,
-      };
+      const record = await this.#loadRequired(candidate.executionId, client);
+      await client.query("COMMIT");
+      return { outcome: "created", record };
     } catch (error) {
+      await rollback(client);
       throw normalizePostgresError(error);
+    } finally {
+      client.release();
     }
   }
 
@@ -158,11 +193,24 @@ export class PostgresDeviceDispatchStore
     });
     try {
       await client.query("BEGIN");
-      const prior = await this.#loadRequired(
+      await this.#lockExecution(client, candidate.executionId);
+      const kind = await this.#loadKind(candidate.executionId, client);
+      const prior = await this.#load(candidate.executionId, client, true);
+      const workspaceRecord = await this.#workspaceRecordExists(
         candidate.executionId,
         client,
         true,
       );
+      requireExecutionState(kind, prior !== null, workspaceRecord);
+      if (kind === null && prior === null) {
+        throw new DeviceGatewayError("device_dispatch_authority_missing");
+      }
+      if (kind === "workspaceList") {
+        throw new DeviceGatewayError("device_dispatch_kind_conflict");
+      }
+      if (kind !== "tool" || prior === null) {
+        throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
+      }
       requireFingerprint(prior, candidate.fingerprint);
       if (prior.resolution !== null) {
         if (!isDeepStrictEqual(prior.resolution, candidate.resolution)) {
@@ -195,10 +243,26 @@ export class PostgresDeviceDispatchStore
     this.#assertOpen();
     await this.#ready;
     requireExecutionId(executionId);
-    try {
-      return await this.#load(executionId, this.#pool);
-    } catch (error) {
+    const client = await this.#pool.connect().catch((error: unknown) => {
       throw normalizePostgresError(error);
+    });
+    try {
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const kind = await this.#loadKind(executionId, client, false);
+      const record = await this.#load(executionId, client);
+      const workspaceRecord = await this.#workspaceRecordExists(
+        executionId,
+        client,
+      );
+      requireExecutionState(kind, record !== null, workspaceRecord);
+      await client.query("COMMIT");
+      if (kind === "workspaceList") return null;
+      return record;
+    } catch (error) {
+      await rollback(client);
+      throw normalizePostgresError(error);
+    } finally {
+      client.release();
     }
   }
 
@@ -291,7 +355,9 @@ export class PostgresDeviceDispatchStore
     const input = validateFenceDeviceConnectionInput(rawInput);
     try {
       const result = await this.#pool.query(
-        `DELETE FROM ${this.#schema}.device_connection_routes
+        `UPDATE ${this.#schema}.device_connection_routes
+            SET lease_expires_at = clock_timestamp(),
+                updated_at = clock_timestamp()
           WHERE device_id = $1
             AND gateway_id = $2
             AND connection_id = $3
@@ -342,79 +408,6 @@ export class PostgresDeviceDispatchStore
     }
   }
 
-  async #migrate(): Promise<void> {
-    const client = await this.#pool.connect().catch((error: unknown) => {
-      throw normalizePostgresError(error);
-    });
-    try {
-      await client.query("BEGIN");
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
-        `${this.#schema}:device-dispatch-schema`,
-      ]);
-      await client.query(`CREATE SCHEMA IF NOT EXISTS ${this.#schema}`);
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS ${this.#schema}.device_dispatch_schema (
-          component TEXT PRIMARY KEY,
-          version INTEGER NOT NULL CHECK (version > 0)
-        )
-      `);
-      const migration = await client.query<{ version: number }>(
-        `SELECT version
-           FROM ${this.#schema}.device_dispatch_schema
-          WHERE component = 'dispatch-authority'`,
-      );
-      const version = migration.rows[0]?.version;
-      if (version !== undefined && version > SCHEMA_VERSION) {
-        throw new DeviceGatewayError("device_dispatch_schema_newer");
-      }
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS ${this.#schema}.device_dispatch_records (
-          execution_id TEXT PRIMARY KEY,
-          fingerprint TEXT NOT NULL CHECK (
-            fingerprint ~ '^sha256:[0-9a-f]{64}$'
-          ),
-          command_json JSONB NOT NULL CHECK (
-            jsonb_typeof(command_json) = 'object'
-          ),
-          resolution_json JSONB CHECK (
-            resolution_json IS NULL OR jsonb_typeof(resolution_json) = 'object'
-          ),
-          created_at TIMESTAMPTZ NOT NULL,
-          updated_at TIMESTAMPTZ NOT NULL CHECK (updated_at >= created_at)
-        )
-      `);
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS ${this.#schema}.device_connection_routes (
-          device_id TEXT PRIMARY KEY,
-          gateway_id TEXT NOT NULL,
-          connection_id TEXT NOT NULL,
-          epoch BIGINT NOT NULL CHECK (epoch > 0),
-          lease_expires_at TIMESTAMPTZ NOT NULL,
-          updated_at TIMESTAMPTZ NOT NULL
-        )
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS device_connection_routes_gateway_idx
-            ON ${this.#schema}.device_connection_routes (
-              gateway_id, lease_expires_at
-            )
-      `);
-      await client.query(
-        `INSERT INTO ${this.#schema}.device_dispatch_schema (component, version)
-         VALUES ('dispatch-authority', $1)
-         ON CONFLICT (component) DO UPDATE SET version = EXCLUDED.version
-         WHERE ${this.#schema}.device_dispatch_schema.version <= EXCLUDED.version`,
-        [SCHEMA_VERSION],
-      );
-      await client.query("COMMIT");
-    } catch (error) {
-      await rollback(client);
-      throw normalizePostgresError(error);
-    } finally {
-      client.release();
-    }
-  }
-
   async #loadRequired(
     executionId: string,
     queryable: Queryable = this.#pool,
@@ -425,6 +418,32 @@ export class PostgresDeviceDispatchStore
       throw new DeviceGatewayError("device_dispatch_authority_missing");
     }
     return record;
+  }
+
+  async #loadKind(
+    executionId: string,
+    queryable: Queryable,
+    forUpdate = true,
+  ): Promise<"tool" | "workspaceList" | null> {
+    const result = await queryable.query<{ command_kind: string }>(
+      `SELECT command_kind
+         FROM ${this.#schema}.device_execution_kinds
+        WHERE execution_id = $1${forUpdate ? " FOR UPDATE" : ""}`,
+      [executionId],
+    );
+    const kind = result.rows[0]?.command_kind;
+    if (kind === undefined) return null;
+    if (kind !== "tool" && kind !== "workspaceList") {
+      throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
+    }
+    return kind;
+  }
+
+  async #lockExecution(client: PoolClient, executionId: string): Promise<void> {
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+      [`device-dispatch:${this.#schema}:${executionId}`],
+    );
   }
 
   async #load(
@@ -444,6 +463,20 @@ export class PostgresDeviceDispatchStore
     );
     const row = result.rows[0];
     return row === undefined ? null : recordFromRow(row);
+  }
+
+  async #workspaceRecordExists(
+    executionId: string,
+    queryable: Queryable,
+    forUpdate = false,
+  ): Promise<boolean> {
+    const result = await queryable.query(
+      `SELECT execution_id
+         FROM ${this.#schema}.workspace_dispatch_records
+        WHERE execution_id = $1${forUpdate ? " FOR UPDATE" : ""}`,
+      [executionId],
+    );
+    return result.rows[0] !== undefined;
   }
 
   #assertOpen(): void {
@@ -500,6 +533,20 @@ function requireFingerprint(
 function requireExecutionId(executionId: string): void {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/.test(executionId)) {
     throw new DeviceGatewayError("device_execution_id_invalid");
+  }
+}
+
+function requireExecutionState(
+  kind: "tool" | "workspaceList" | null,
+  toolRecord: boolean,
+  workspaceRecord: boolean,
+): void {
+  if (
+    (kind === null && (toolRecord || workspaceRecord)) ||
+    (kind === "tool" && (!toolRecord || workspaceRecord)) ||
+    (kind === "workspaceList" && (toolRecord || !workspaceRecord))
+  ) {
+    throw new DeviceGatewayError("device_dispatch_stored_state_invalid");
   }
 }
 
