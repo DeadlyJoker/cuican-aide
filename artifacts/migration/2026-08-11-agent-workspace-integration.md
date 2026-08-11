@@ -306,10 +306,22 @@ Gate 报告为通过。
   oversize、截断 EOF、stream error/close、第二条记录和额外字节都会 fail closed，`onInvalid` 最多一次，controller close 会解绑监听。
   进程级测试真实启动 Control candidate，证明激活前只有 exact live/ready GET/HEAD 可访问，其他 JSON/SSE/错误 body 请求均返回脱敏 503；
   stdin 激活后真实 Thread read/create 成功，SIGTERM 正常退出。
-- 主工作区叠加回归：Contracts `77/77`、Agent Responses `45/45`、Control API
-  `101 pass + 3 PostgreSQL-unconfigured skip`、Runtime Worker `218 pass + 1 PostgreSQL-unconfigured skip`，四个 package typecheck 全部通过；
-  Rust `crewon-api 126/126`、`crewon-device 30/30`，Tauri `100/100`，`just bazel-lock-check` 通过。Tauri nextest 报告一条既有
-  process-output test 为 leaky，但套件退出码为 0；没有把该提示隐藏或算作额外通过。
+- `b7e18fa88` 将 Provider probe foundation 接入 standalone 真实启动入口。Control 环境只接受完整的 Worker origin/token/timeout 组合，
+  production 出现任一 ambient route 即拒绝启动；Runtime Worker 使用严格的 standalone/production security mode，Provider
+  binding/port/token/endpoint/credential name/secret 必须 all-or-none，bootstrap 与 ambient 同时存在时 fail closed。endpoint 仅允许 HTTPS
+  或 loopback HTTP，拒绝 userinfo、query 与 fragment；inspect 只投影非 secret 字段。进程测试从同一 parser-derived 配置启动私有 Worker，
+  经过 bearer 协议请求真实 loopback `/v1/models`，并验证 credential 可用且日志/inspect 不泄漏 secret。
+- 在提交 `18262b9ce` 的干净 committed tree 上使用官方 Node `v24.18.1`
+  (`f480e325ee0ca9cb9eef00b5ca6057a2a104807a1b073f1bc373a55c67facff5`) 完成组合 Gate：Contracts `77/77`、Agent Responses
+  `45/45`、Control API `96 pass + 3 PostgreSQL-unconfigured skip`、Runtime Worker
+  `214 pass + 1 PostgreSQL-unconfigured skip`，四个 typecheck 全部通过；Rust `crewon-api 126/126`、`crewon-device 30/30`、
+  `crewon-device-runtime 21/21`，Tauri `100/100`，`just bazel-lock-check` 通过。合计 709 pass、4 个环境条件 skip、0 fail；Gate worktree
+  initial/final 均 clean、HEAD 未变化。该 Gate 是 Provider startup 与 AR-036 合入前的稳定 committed baseline，不外推为后续提交的全树证明。
+- Provider startup 与 AR-036 合入主工作层后的最新 focused overlay 回归：Agent Responses `49/49`、Control API
+  `103 pass + 3 PostgreSQL-unconfigured skip`、Runtime Worker `220 pass + 1 PostgreSQL-unconfigured skip`，三者在同一官方 Node 24 下
+  typecheck 全部通过；Rust `crewon-api 127/127`，共享 AR-036 fixture 在 Rust SSE decoder 中实际执行，`just bazel-lock-check` 无漂移。
+  此前同阶段 Contracts `77/77`、`crewon-device 30/30` 与 Tauri `100/100` 证据保持有效，但没有把未在本次 overlay 重跑的套件重复计入
+  最新 focused 总数。Tauri nextest 曾报告一条既有 process-output test 为 leaky，但套件退出码为 0；没有隐藏该提示或算作额外通过。
 - 对隔离 HOME 中现存 SQLite authority 的复核进一步确认 Workspace list 修复后的三次真实执行：idempotency key
   `packaged-smoke-workspace-list-v2`、`v3`、`packaged-final-ui-v1` 分别在 connection epoch 5、6、7 完成。每次 Control operation
   `status=completed`、结果均为 UTF-8 byte order 的 `README.md`、`alpha`、`beta` 且 `truncated=false`；Gateway 均有 accepted + terminal，
