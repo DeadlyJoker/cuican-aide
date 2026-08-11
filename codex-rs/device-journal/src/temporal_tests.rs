@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 
-use super::DeviceWorkspaceJournal;
 use super::AcknowledgeWorkspaceListOutcome;
+use super::DeviceWorkspaceJournal;
 use super::test_support;
 
 #[tokio::test]

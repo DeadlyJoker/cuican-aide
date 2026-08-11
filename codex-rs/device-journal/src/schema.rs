@@ -207,26 +207,26 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
     if index_count != 2 {
         return Err(authority("device_journal_schema_corrupt"));
     }
-    let unacknowledged_index_sql: String = sqlx::query_scalar(
-        "SELECT sql FROM sqlite_schema WHERE type = 'index' AND name = ?",
-    )
-    .bind("workspace_executions_unacknowledged_idx")
-    .fetch_one(pool)
-    .await?;
+    let unacknowledged_index_sql: String =
+        sqlx::query_scalar("SELECT sql FROM sqlite_schema WHERE type = 'index' AND name = ?")
+            .bind("workspace_executions_unacknowledged_idx")
+            .fetch_one(pool)
+            .await?;
     let unacknowledged_index_sql = unacknowledged_index_sql
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
         .to_lowercase();
-    if !unacknowledged_index_sql.contains("on workspace_executions (execution_id, acknowledged_through)") {
+    if !unacknowledged_index_sql
+        .contains("on workspace_executions (execution_id, acknowledged_through)")
+    {
         return Err(authority("device_journal_schema_corrupt"));
     }
-    let receipt_index_sql: String = sqlx::query_scalar(
-        "SELECT sql FROM sqlite_schema WHERE type = 'index' AND name = ?",
-    )
-    .bind("workspace_events_accepted_receipt_idx")
-    .fetch_one(pool)
-    .await?;
+    let receipt_index_sql: String =
+        sqlx::query_scalar("SELECT sql FROM sqlite_schema WHERE type = 'index' AND name = ?")
+            .bind("workspace_events_accepted_receipt_idx")
+            .fetch_one(pool)
+            .await?;
     let receipt_index_sql = receipt_index_sql
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -241,7 +241,9 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
     let foreign_key_errors = sqlx::query("PRAGMA foreign_key_check")
         .fetch_all(pool)
         .await?;
-    let quick_check: String = sqlx::query_scalar("PRAGMA quick_check").fetch_one(pool).await?;
+    let quick_check: String = sqlx::query_scalar("PRAGMA quick_check")
+        .fetch_one(pool)
+        .await?;
     if !foreign_key_errors.is_empty() || quick_check != "ok" {
         return Err(authority("device_journal_authority_corrupt"));
     }
@@ -249,10 +251,18 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
 }
 
 async fn assert_runtime_pragmas(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
-    let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode").fetch_one(pool).await?;
-    let synchronous: i64 = sqlx::query_scalar("PRAGMA synchronous").fetch_one(pool).await?;
-    let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys").fetch_one(pool).await?;
-    let busy_timeout: i64 = sqlx::query_scalar("PRAGMA busy_timeout").fetch_one(pool).await?;
+    let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(pool)
+        .await?;
+    let synchronous: i64 = sqlx::query_scalar("PRAGMA synchronous")
+        .fetch_one(pool)
+        .await?;
+    let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+        .fetch_one(pool)
+        .await?;
+    let busy_timeout: i64 = sqlx::query_scalar("PRAGMA busy_timeout")
+        .fetch_one(pool)
+        .await?;
     if journal_mode != "wal" || synchronous != 2 || foreign_keys != 1 || busy_timeout < 5_000 {
         return Err(authority("device_journal_runtime_unsafe"));
     }
@@ -291,7 +301,10 @@ fn expected_column_type(table: &str, column: &str) -> &'static str {
     if matches!(
         (table, column),
         ("device_journal_schema", "singleton" | "version")
-            | ("workspace_executions", "lease_epoch" | "acknowledged_through")
+            | (
+                "workspace_executions",
+                "lease_epoch" | "acknowledged_through"
+            )
             | ("workspace_events", "sequence" | "connection_epoch")
             | ("workspace_acks", "through_sequence" | "connection_epoch")
     ) {
@@ -306,14 +319,20 @@ async fn assert_table_sql(
     table: &str,
     required: &[&str],
 ) -> Result<(), DeviceJournalError> {
-    let sql: String = sqlx::query_scalar(
-        "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?",
-    )
-    .bind(table)
-    .fetch_one(pool)
-    .await?;
-    let normalized = sql.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
-    if required.iter().any(|fragment| !normalized.contains(fragment)) {
+    let sql: String =
+        sqlx::query_scalar("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?")
+            .bind(table)
+            .fetch_one(pool)
+            .await?;
+    let normalized = sql
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    if required
+        .iter()
+        .any(|fragment| !normalized.contains(fragment))
+    {
         return Err(authority("device_journal_schema_corrupt"));
     }
     Ok(())

@@ -102,7 +102,12 @@ pub fn parse_device_workspace_list_command(
             "workspaceBindingId",
         ],
     )?;
-    if field_value(object, "schemaVersion", "device_workspace_protocol_unsupported")?.as_str()
+    if field_value(
+        object,
+        "schemaVersion",
+        "device_workspace_protocol_unsupported",
+    )?
+    .as_str()
         != Some("crewon.device-workspace-list-command.v0")
         || field_value(
             object,
@@ -111,7 +116,12 @@ pub fn parse_device_workspace_list_command(
         )?
         .as_u64()
             != Some(DEVICE_PROTOCOL_VERSION)
-        || field_value(object, "commandKind", "device_workspace_protocol_unsupported")?.as_str()
+        || field_value(
+            object,
+            "commandKind",
+            "device_workspace_protocol_unsupported",
+        )?
+        .as_str()
             != Some("workspaceList")
         || field_value(object, "operation", "device_workspace_protocol_unsupported")?.as_str()
             != Some("listTopLevel")
@@ -157,11 +167,7 @@ pub fn parse_device_workspace_list_command(
         "traceContext",
         "device_trace_context_invalid",
     )?)?;
-    let authorization = field_value(
-        object,
-        "authorization",
-        "device_authorization_invalid",
-    )?;
+    let authorization = field_value(object, "authorization", "device_authorization_invalid")?;
     let authorization_object = require_object(authorization, "device_authorization_invalid")?;
     exact_keys(
         authorization_object,
@@ -197,11 +203,11 @@ pub fn parse_device_workspace_list_command(
 pub fn canonical_device_workspace_list_command_signing_payload(
     command: &DeviceWorkspaceListCommand,
 ) -> Result<String, DeviceProtocolError> {
-    let command = serde_json::to_value(command)
-        .map_err(|_| error("device_authorization_payload_invalid"))?;
+    let command =
+        serde_json::to_value(command).map_err(|_| error("device_authorization_payload_invalid"))?;
     let command = parse_device_workspace_list_command(command)?;
-    let mut command = serde_json::to_value(command)
-        .map_err(|_| error("device_authorization_payload_invalid"))?;
+    let mut command =
+        serde_json::to_value(command).map_err(|_| error("device_authorization_payload_invalid"))?;
     let command_object = command
         .as_object_mut()
         .ok_or_else(|| error("device_authorization_payload_invalid"))?;
@@ -290,13 +296,9 @@ fn validate_workspace_list_limits(value: &Value) -> Result<(), DeviceProtocolErr
     let max_entries = field_value(limits, "maxEntries", "device_workspace_limits_invalid")?
         .as_u64()
         .ok_or_else(|| error("device_workspace_limits_invalid"))?;
-    let max_name_bytes = field_value(
-        limits,
-        "maxNameBytes",
-        "device_workspace_limits_invalid",
-    )?
-    .as_u64()
-    .ok_or_else(|| error("device_workspace_limits_invalid"))?;
+    let max_name_bytes = field_value(limits, "maxNameBytes", "device_workspace_limits_invalid")?
+        .as_u64()
+        .ok_or_else(|| error("device_workspace_limits_invalid"))?;
     if field_value(
         limits,
         "maxScannedEntries",

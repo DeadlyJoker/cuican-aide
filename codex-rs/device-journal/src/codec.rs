@@ -35,8 +35,8 @@ pub(crate) struct EncodedAck {
 pub(crate) fn encode_command(
     command: &DeviceWorkspaceListCommand,
 ) -> Result<EncodedCommand, DeviceJournalError> {
-    let value = serde_json::to_value(command)
-        .map_err(|_| authority("device_journal_command_invalid"))?;
+    let value =
+        serde_json::to_value(command).map_err(|_| authority("device_journal_command_invalid"))?;
     let record = parse_device_workspace_list_command(value)
         .map_err(|_| authority("device_journal_command_invalid"))?;
     encode_validated_command(record)
@@ -46,8 +46,8 @@ pub(crate) fn decode_command(
     json: &str,
     fingerprint: &str,
 ) -> Result<EncodedCommand, DeviceJournalError> {
-    let value: Value = serde_json::from_str(json)
-        .map_err(|_| authority("device_journal_authority_corrupt"))?;
+    let value: Value =
+        serde_json::from_str(json).map_err(|_| authority("device_journal_authority_corrupt"))?;
     let record = parse_device_workspace_list_command(value)
         .map_err(|_| authority("device_journal_authority_corrupt"))?;
     let encoded = encode_validated_command(record)?;
@@ -60,8 +60,8 @@ pub(crate) fn decode_command(
 pub(crate) fn encode_event(
     event: &DeviceWorkspaceListEvent,
 ) -> Result<EncodedEvent, DeviceJournalError> {
-    let value = serde_json::to_value(event)
-        .map_err(|_| authority("device_journal_event_invalid"))?;
+    let value =
+        serde_json::to_value(event).map_err(|_| authority("device_journal_event_invalid"))?;
     let record = parse_device_workspace_list_event(value)
         .map_err(|_| authority("device_journal_event_invalid"))?;
     encode_validated_event(record)
@@ -72,8 +72,8 @@ pub(crate) fn decode_event(
     fingerprint: &str,
     event_type: &str,
 ) -> Result<EncodedEvent, DeviceJournalError> {
-    let value: Value = serde_json::from_str(json)
-        .map_err(|_| authority("device_journal_authority_corrupt"))?;
+    let value: Value =
+        serde_json::from_str(json).map_err(|_| authority("device_journal_authority_corrupt"))?;
     let record = parse_device_workspace_list_event(value)
         .map_err(|_| authority("device_journal_authority_corrupt"))?;
     let encoded = encode_validated_event(record)?;
@@ -86,22 +86,16 @@ pub(crate) fn decode_event(
     Ok(encoded)
 }
 
-pub(crate) fn encode_ack(
-    ack: &DeviceWorkspaceListAck,
-) -> Result<EncodedAck, DeviceJournalError> {
-    let value =
-        serde_json::to_value(ack).map_err(|_| authority("device_journal_ack_invalid"))?;
+pub(crate) fn encode_ack(ack: &DeviceWorkspaceListAck) -> Result<EncodedAck, DeviceJournalError> {
+    let value = serde_json::to_value(ack).map_err(|_| authority("device_journal_ack_invalid"))?;
     let record = parse_device_workspace_list_ack(value)
         .map_err(|_| authority("device_journal_ack_invalid"))?;
     encode_validated_ack(record)
 }
 
-pub(crate) fn decode_ack(
-    json: &str,
-    fingerprint: &str,
-) -> Result<EncodedAck, DeviceJournalError> {
-    let value: Value = serde_json::from_str(json)
-        .map_err(|_| authority("device_journal_authority_corrupt"))?;
+pub(crate) fn decode_ack(json: &str, fingerprint: &str) -> Result<EncodedAck, DeviceJournalError> {
+    let value: Value =
+        serde_json::from_str(json).map_err(|_| authority("device_journal_authority_corrupt"))?;
     let record = parse_device_workspace_list_ack(value)
         .map_err(|_| authority("device_journal_authority_corrupt"))?;
     let encoded = encode_validated_ack(record)?;
@@ -114,8 +108,8 @@ pub(crate) fn decode_ack(
 fn encode_validated_command(
     record: DeviceWorkspaceListCommand,
 ) -> Result<EncodedCommand, DeviceJournalError> {
-    let json = serde_json::to_string(&record)
-        .map_err(|_| authority("device_journal_command_invalid"))?;
+    let json =
+        serde_json::to_string(&record).map_err(|_| authority("device_journal_command_invalid"))?;
     Ok(EncodedCommand {
         fingerprint: fingerprint(&json),
         record,
@@ -127,8 +121,8 @@ fn encode_validated_event(
     record: DeviceWorkspaceListEvent,
 ) -> Result<EncodedEvent, DeviceJournalError> {
     let event_type = event_type(&record);
-    let json = serde_json::to_string(&record)
-        .map_err(|_| authority("device_journal_event_invalid"))?;
+    let json =
+        serde_json::to_string(&record).map_err(|_| authority("device_journal_event_invalid"))?;
     Ok(EncodedEvent {
         fingerprint: fingerprint(&json),
         record,
@@ -137,9 +131,7 @@ fn encode_validated_event(
     })
 }
 
-fn encode_validated_ack(
-    record: DeviceWorkspaceListAck,
-) -> Result<EncodedAck, DeviceJournalError> {
+fn encode_validated_ack(record: DeviceWorkspaceListAck) -> Result<EncodedAck, DeviceJournalError> {
     let json =
         serde_json::to_string(&record).map_err(|_| authority("device_journal_ack_invalid"))?;
     Ok(EncodedAck {
@@ -149,7 +141,9 @@ fn encode_validated_ack(
     })
 }
 
-pub(crate) fn event_envelope(event: &DeviceWorkspaceListEvent) -> &DeviceWorkspaceListEventEnvelope {
+pub(crate) fn event_envelope(
+    event: &DeviceWorkspaceListEvent,
+) -> &DeviceWorkspaceListEventEnvelope {
     match event {
         DeviceWorkspaceListEvent::Accepted { envelope, .. }
         | DeviceWorkspaceListEvent::Completed { envelope, .. }
@@ -255,13 +249,15 @@ pub(crate) fn validate_ack_time(
 ) -> Result<(), DeviceJournalError> {
     let event_time = match ack.through_sequence {
         1 => &event_envelope(&execution.accepted).observed_at,
-        2 => &event_envelope(
-            execution
-                .terminal
-                .as_ref()
-                .ok_or_else(|| authority("device_journal_ack_event_missing"))?,
-        )
-        .observed_at,
+        2 => {
+            &event_envelope(
+                execution
+                    .terminal
+                    .as_ref()
+                    .ok_or_else(|| authority("device_journal_ack_event_missing"))?,
+            )
+            .observed_at
+        }
         _ => return Err(authority("device_journal_ack_invalid")),
     };
     if timestamp(&ack.acknowledged_at)? < timestamp(event_time)? {
@@ -290,8 +286,7 @@ pub(crate) fn valid_cursor(cursor: &str) -> bool {
     !cursor.is_empty()
         && cursor.len() <= 512
         && cursor.bytes().enumerate().all(|(index, byte)| {
-            byte.is_ascii_alphanumeric()
-                || (index > 0 && matches!(byte, b'.' | b'_' | b':' | b'-'))
+            byte.is_ascii_alphanumeric() || (index > 0 && matches!(byte, b'.' | b'_' | b':' | b'-'))
         })
 }
 
@@ -308,6 +303,5 @@ fn fingerprint(json: &str) -> String {
 }
 
 fn timestamp(value: &str) -> Result<DateTime<chrono::FixedOffset>, DeviceJournalError> {
-    DateTime::parse_from_rfc3339(value)
-        .map_err(|_| authority("device_journal_timestamp_invalid"))
+    DateTime::parse_from_rfc3339(value).map_err(|_| authority("device_journal_timestamp_invalid"))
 }

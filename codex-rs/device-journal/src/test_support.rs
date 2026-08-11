@@ -11,9 +11,7 @@ use crewon_device_protocol::DeviceWorkspaceListFailedData;
 use crewon_device_protocol::DeviceWorkspaceListLimits;
 use crewon_device_protocol::DeviceWorkspaceListResult;
 
-pub(crate) fn authority(
-    suffix: usize,
-) -> (DeviceWorkspaceListCommand, DeviceWorkspaceListEvent) {
+pub(crate) fn authority(suffix: usize) -> (DeviceWorkspaceListCommand, DeviceWorkspaceListEvent) {
     let action_digest = format!("sha256:{}", "a".repeat(64));
     let command_digest = format!("sha256:{}", "b".repeat(64));
     let execution_id = format!("workspace-execution-{suffix:03}");
@@ -76,12 +74,7 @@ pub(crate) fn completed(
     accepted: &DeviceWorkspaceListEvent,
 ) -> DeviceWorkspaceListEvent {
     DeviceWorkspaceListEvent::Completed {
-        envelope: envelope(
-            command,
-            receipt_id(accepted),
-            2,
-            "2026-08-08T00:00:02Z",
-        ),
+        envelope: envelope(command, receipt_id(accepted), 2, "2026-08-08T00:00:02Z"),
         data: DeviceWorkspaceListCompletedData {
             result: DeviceWorkspaceListResult {
                 schema_version: "crewon.workspace-list-result.v0".to_string(),
@@ -100,12 +93,7 @@ pub(crate) fn failed(
     accepted: &DeviceWorkspaceListEvent,
 ) -> DeviceWorkspaceListEvent {
     DeviceWorkspaceListEvent::Failed {
-        envelope: envelope(
-            command,
-            receipt_id(accepted),
-            2,
-            "2026-08-08T00:00:03Z",
-        ),
+        envelope: envelope(command, receipt_id(accepted), 2, "2026-08-08T00:00:03Z"),
         data: DeviceWorkspaceListFailedData {
             code: "workspace_list_failed".to_string(),
             retryable: false,

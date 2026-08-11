@@ -93,9 +93,12 @@ impl DeviceWorkspaceJournal {
         &self,
         command: &DeviceWorkspaceListCommand,
         admit: impl FnOnce() -> Result<(DeviceWorkspaceListEvent, T), E>,
-    ) -> Result<PrepareWorkspaceListWithAdmissionOutcome<T>, PrepareWorkspaceListWithAdmissionError<E>>
-    {
-        let command = encode_command(command).map_err(PrepareWorkspaceListWithAdmissionError::Journal)?;
+    ) -> Result<
+        PrepareWorkspaceListWithAdmissionOutcome<T>,
+        PrepareWorkspaceListWithAdmissionError<E>,
+    > {
+        let command =
+            encode_command(command).map_err(PrepareWorkspaceListWithAdmissionError::Journal)?;
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
@@ -121,8 +124,10 @@ impl DeviceWorkspaceJournal {
                 PrepareWorkspaceListWithAdmissionOutcome::AcceptedReplay(existing)
             });
         }
-        let (accepted, admitted) = admit().map_err(PrepareWorkspaceListWithAdmissionError::Admission)?;
-        let accepted = encode_event(&accepted).map_err(PrepareWorkspaceListWithAdmissionError::Journal)?;
+        let (accepted, admitted) =
+            admit().map_err(PrepareWorkspaceListWithAdmissionError::Admission)?;
+        let accepted =
+            encode_event(&accepted).map_err(PrepareWorkspaceListWithAdmissionError::Journal)?;
         validate_fresh_acceptance(&command.record, &accepted.record)
             .map_err(PrepareWorkspaceListWithAdmissionError::Journal)?;
         let accepted_receipt = &event_envelope(&accepted.record).receipt_id;
@@ -234,9 +239,15 @@ SET acknowledged_through = ?
 WHERE execution_id = ? AND acknowledged_through = ?
             "#,
         )
-        .bind(i64::try_from(ack.record.through_sequence).map_err(|_| authority("device_journal_ack_invalid"))?)
+        .bind(
+            i64::try_from(ack.record.through_sequence)
+                .map_err(|_| authority("device_journal_ack_invalid"))?,
+        )
         .bind(&ack.record.execution_id)
-        .bind(i64::try_from(existing.acknowledged_through).map_err(|_| authority("device_journal_authority_corrupt"))?)
+        .bind(
+            i64::try_from(existing.acknowledged_through)
+                .map_err(|_| authority("device_journal_authority_corrupt"))?,
+        )
         .execute(&mut *tx)
         .await?;
         if updated.rows_affected() != 1 {
@@ -382,7 +393,10 @@ INSERT INTO workspace_executions (
     .bind(&command.json)
     .bind(&command.record.device_id)
     .bind(&command.record.lease_id)
-    .bind(i64::try_from(command.record.lease_epoch).map_err(|_| authority("device_journal_command_invalid"))?)
+    .bind(
+        i64::try_from(command.record.lease_epoch)
+            .map_err(|_| authority("device_journal_command_invalid"))?,
+    )
     .bind(&command.record.expires_at)
     .bind(&command.record.workspace_binding_id)
     .bind(&command.record.incarnation_id)
@@ -422,7 +436,10 @@ INSERT INTO workspace_events (
     .bind(&event.json)
     .bind(&envelope.device_id)
     .bind(&envelope.receipt_id)
-    .bind(i64::try_from(envelope.connection_epoch).map_err(|_| authority("device_journal_event_invalid"))?)
+    .bind(
+        i64::try_from(envelope.connection_epoch)
+            .map_err(|_| authority("device_journal_event_invalid"))?,
+    )
     .bind(&envelope.workspace_binding_id)
     .bind(&envelope.incarnation_id)
     .bind(&envelope.device_binding_id)
@@ -452,12 +469,18 @@ INSERT INTO workspace_acks (
         "#,
     )
     .bind(&ack.record.execution_id)
-    .bind(i64::try_from(ack.record.through_sequence).map_err(|_| authority("device_journal_ack_invalid"))?)
+    .bind(
+        i64::try_from(ack.record.through_sequence)
+            .map_err(|_| authority("device_journal_ack_invalid"))?,
+    )
     .bind(&ack.fingerprint)
     .bind(&ack.json)
     .bind(&ack.record.device_id)
     .bind(&ack.record.receipt_id)
-    .bind(i64::try_from(ack.record.connection_epoch).map_err(|_| authority("device_journal_ack_invalid"))?)
+    .bind(
+        i64::try_from(ack.record.connection_epoch)
+            .map_err(|_| authority("device_journal_ack_invalid"))?,
+    )
     .bind(&ack.record.workspace_binding_id)
     .bind(&ack.record.incarnation_id)
     .bind(&ack.record.device_binding_id)

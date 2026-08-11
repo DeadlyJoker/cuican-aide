@@ -267,11 +267,7 @@ pub fn parse_device_workspace_list_event(
         }
         _ => return Err(error("device_workspace_event_type_unsupported")),
     }
-    bounded_json(
-        &value,
-        MAX_EVENT_BYTES,
-        "device_workspace_event_too_large",
-    )?;
+    bounded_json(&value, MAX_EVENT_BYTES, "device_workspace_event_too_large")?;
     deserialize(value, "device_workspace_event_invalid")
 }
 
@@ -350,24 +346,17 @@ fn require_workspace_protocol(
     schema: &str,
     code: &'static str,
 ) -> Result<(), DeviceProtocolError> {
-    if field_value(object, "schemaVersion", code)?.as_str()
-        != Some(schema)
-        || field_value(object, "protocolVersion", code)?.as_u64()
-            != Some(DEVICE_PROTOCOL_VERSION)
-        || field_value(object, "commandKind", code)?.as_str()
-            != Some("workspaceList")
+    if field_value(object, "schemaVersion", code)?.as_str() != Some(schema)
+        || field_value(object, "protocolVersion", code)?.as_u64() != Some(DEVICE_PROTOCOL_VERSION)
+        || field_value(object, "commandKind", code)?.as_str() != Some("workspaceList")
     {
         return Err(error(code));
     }
     Ok(())
 }
 
-fn require_sequence(
-    object: &Map<String, Value>,
-    expected: u64,
-) -> Result<(), DeviceProtocolError> {
-    if field_value(object, "sequence", "device_event_sequence_invalid")?.as_u64()
-        != Some(expected)
+fn require_sequence(object: &Map<String, Value>, expected: u64) -> Result<(), DeviceProtocolError> {
+    if field_value(object, "sequence", "device_event_sequence_invalid")?.as_u64() != Some(expected)
     {
         return Err(error("device_event_sequence_invalid"));
     }

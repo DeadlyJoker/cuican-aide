@@ -9,8 +9,8 @@ use super::AcknowledgeWorkspaceListOutcome;
 use super::DeviceWorkspaceJournal;
 use super::PrepareWorkspaceListOutcome;
 use super::RecordTerminalOutcome;
-use super::WorkspaceJournalListQuery;
 use super::WorkspaceJournalAcknowledgement;
+use super::WorkspaceJournalListQuery;
 use super::test_support;
 
 fn database() -> (TempDir, std::path::PathBuf) {
@@ -22,7 +22,9 @@ fn database() -> (TempDir, std::path::PathBuf) {
 #[tokio::test]
 async fn commits_accepted_before_the_external_execution_barrier_and_reopens_crash_state() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(&path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(&path)
+        .await
+        .expect("open journal");
     let (command, accepted) = test_support::authority(1);
 
     let outcome = journal
@@ -62,7 +64,9 @@ async fn commits_accepted_before_the_external_execution_barrier_and_reopens_cras
 #[tokio::test]
 async fn replays_terminal_before_ack_across_process_reopen() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(&path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(&path)
+        .await
+        .expect("open journal");
     let (command, accepted) = test_support::authority(1);
     let terminal = test_support::completed(&command, &accepted);
     journal
@@ -78,7 +82,9 @@ async fn replays_terminal_before_ack_across_process_reopen() {
     };
     journal.close().await;
 
-    let reopened = DeviceWorkspaceJournal::open(&path).await.expect("reopen journal");
+    let reopened = DeviceWorkspaceJournal::open(&path)
+        .await
+        .expect("reopen journal");
     assert_eq!(
         reopened
             .prepare_workspace_list(&command, &accepted)
@@ -98,7 +104,9 @@ async fn replays_terminal_before_ack_across_process_reopen() {
 #[tokio::test]
 async fn exact_expired_command_replays_without_repeating_temporal_admission() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(path)
+        .await
+        .expect("open journal");
     let (command, accepted) = test_support::authority(1);
     journal
         .prepare_workspace_list(&command, &accepted)
@@ -117,7 +125,9 @@ async fn exact_expired_command_replays_without_repeating_temporal_admission() {
 #[tokio::test]
 async fn rejects_changed_signed_command_accepted_and_terminal_records() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(path)
+        .await
+        .expect("open journal");
     let (command, accepted) = test_support::authority(1);
     journal
         .prepare_workspace_list(&command, &accepted)
@@ -165,17 +175,16 @@ async fn rejects_changed_signed_command_accepted_and_terminal_records() {
 #[tokio::test]
 async fn enforces_global_accepted_receipt_identity() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(path)
+        .await
+        .expect("open journal");
     let (first_command, first_accepted) = test_support::authority(1);
     let (second_command, mut second_accepted) = test_support::authority(2);
     journal
         .prepare_workspace_list(&first_command, &first_accepted)
         .await
         .expect("accept first command");
-    test_support::set_receipt_id(
-        &mut second_accepted,
-        "workspace-receipt-001".to_string(),
-    );
+    test_support::set_receipt_id(&mut second_accepted, "workspace-receipt-001".to_string());
     assert_eq!(
         journal
             .prepare_workspace_list(&second_command, &second_accepted)
@@ -189,7 +198,9 @@ async fn enforces_global_accepted_receipt_identity() {
 #[tokio::test]
 async fn makes_ack_identity_exact_monotonic_and_durable() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(&path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(&path)
+        .await
+        .expect("open journal");
     let (command, accepted) = test_support::authority(1);
     let ack_one = test_support::ack(&command, &accepted, 1);
     let ack_two = test_support::ack(&command, &accepted, 2);
@@ -258,7 +269,9 @@ async fn makes_ack_identity_exact_monotonic_and_durable() {
         "device_journal_ack_time_invalid",
     );
     journal.close().await;
-    let reopened = DeviceWorkspaceJournal::open(path).await.expect("reopen journal");
+    let reopened = DeviceWorkspaceJournal::open(path)
+        .await
+        .expect("reopen journal");
     assert_eq!(
         reopened
             .get_workspace_list(&command.execution_id)
@@ -271,7 +284,9 @@ async fn makes_ack_identity_exact_monotonic_and_durable() {
 #[tokio::test]
 async fn pages_unacknowledged_authority_with_a_strict_bound_and_cursor() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(path)
+        .await
+        .expect("open journal");
     for suffix in 1..=3 {
         let (command, accepted) = test_support::authority(suffix);
         journal
@@ -323,7 +338,9 @@ async fn pages_unacknowledged_authority_with_a_strict_bound_and_cursor() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn concurrent_same_execution_has_one_durable_winner() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(path)
+        .await
+        .expect("open journal");
     let (command, accepted) = test_support::authority(1);
     let first = journal.clone();
     let second = journal.clone();
@@ -351,7 +368,9 @@ async fn concurrent_same_execution_has_one_durable_winner() {
 #[tokio::test]
 async fn pages_only_positive_acknowledgement_heads_for_hello_projection() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(path)
+        .await
+        .expect("open journal");
     let (unacknowledged_command, unacknowledged) = test_support::authority(1);
     journal
         .prepare_workspace_list(&unacknowledged_command, &unacknowledged)
@@ -383,7 +402,10 @@ async fn pages_only_positive_acknowledgement_heads_for_hello_projection() {
             through_sequence: 1,
         }]
     );
-    assert_eq!(first.next_cursor, Some("workspace-execution-002".to_string()));
+    assert_eq!(
+        first.next_cursor,
+        Some("workspace-execution-002".to_string())
+    );
     assert_eq!(
         journal
             .list_workspace_list_acknowledgements(&WorkspaceJournalListQuery {
@@ -403,7 +425,9 @@ async fn pages_only_positive_acknowledgement_heads_for_hello_projection() {
 #[tokio::test]
 async fn fails_closed_on_row_corruption_and_newer_schema() {
     let (_directory, path) = database();
-    let journal = DeviceWorkspaceJournal::open(&path).await.expect("open journal");
+    let journal = DeviceWorkspaceJournal::open(&path)
+        .await
+        .expect("open journal");
     let (command, accepted) = test_support::authority(1);
     journal
         .prepare_workspace_list(&command, &accepted)
@@ -418,7 +442,9 @@ async fn fails_closed_on_row_corruption_and_newer_schema() {
     .await
     .expect("inject column versus JSON corruption");
     pool.close().await;
-    let reopened = DeviceWorkspaceJournal::open(&path).await.expect("schema remains valid");
+    let reopened = DeviceWorkspaceJournal::open(&path)
+        .await
+        .expect("schema remains valid");
     assert_eq!(
         reopened
             .get_workspace_list(&command.execution_id)

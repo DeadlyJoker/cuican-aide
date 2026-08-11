@@ -75,8 +75,7 @@ pub(super) fn validate_workspace_list_result(
             require_digest(field_value(result, field, code)?, code)?;
         }
     }
-    if field_value(result, "executionId", "device_execution_id_invalid")?
-        != expected_execution_id
+    if field_value(result, "executionId", "device_execution_id_invalid")? != expected_execution_id
         || field_value(result, "actionDigest", "device_action_digest_invalid")?
             != expected_action_digest
         || field_value(result, "commandDigest", "device_command_digest_invalid")?

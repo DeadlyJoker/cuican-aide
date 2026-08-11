@@ -116,7 +116,10 @@ WHERE execution_id = ? AND through_sequence = ?
         "#,
     )
     .bind(&execution.command.execution_id)
-    .bind(i64::try_from(through_sequence).map_err(|_| authority("device_journal_authority_corrupt"))?)
+    .bind(
+        i64::try_from(through_sequence)
+            .map_err(|_| authority("device_journal_authority_corrupt"))?,
+    )
     .fetch_optional(&mut *connection)
     .await?;
     row.map(|row| decode_ack_row(&row, execution)).transpose()
@@ -160,7 +163,9 @@ ORDER BY through_sequence
     Ok(())
 }
 
-fn decode_event_row(row: &sqlx::sqlite::SqliteRow) -> Result<DeviceWorkspaceListEvent, DeviceJournalError> {
+fn decode_event_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<DeviceWorkspaceListEvent, DeviceJournalError> {
     let event_json: String = row.try_get("event_json")?;
     let event_fingerprint: String = row.try_get("event_fingerprint")?;
     let event_type: String = row.try_get("event_type")?;
@@ -211,10 +216,7 @@ fn decode_ack_row(
     Ok(ack)
 }
 
-fn integer_u64(
-    row: &sqlx::sqlite::SqliteRow,
-    column: &str,
-) -> Result<u64, DeviceJournalError> {
+fn integer_u64(row: &sqlx::sqlite::SqliteRow, column: &str) -> Result<u64, DeviceJournalError> {
     u64::try_from(row.try_get::<i64, _>(column)?)
         .map_err(|_| authority("device_journal_authority_corrupt"))
 }
