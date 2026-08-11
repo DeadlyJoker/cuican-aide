@@ -1,6 +1,10 @@
 mod control_runtime;
 mod provider_credentials;
 mod sidecar;
+// N5b2 deliberately keeps this authority private until the supervisor wiring
+// lands in the next slice.
+#[allow(dead_code)]
+mod workspace_native;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,6 +29,9 @@ pub fn run() {
     builder
         .invoke_handler(tauri::generate_handler![
             control_runtime::control_runtime_bootstrap,
+            control_runtime::workspace_status::desktop_workspace_status,
+            control_runtime::workspace_coordinator::desktop_workspace_select_and_register,
+            control_runtime::workspace_coordinator::desktop_workspace_clear,
             control_runtime::reload::control_runtime_reload_provider,
             provider_credentials::provider_credential_activate,
             provider_credentials::provider_credential_catalog,
@@ -36,7 +43,7 @@ pub fn run() {
             // shell owns it. Failing to spawn is not fatal: the window still opens
             // and reports its connection state instead of dying silently.
             if let Err(error) = sidecar::spawn(app.handle()) {
-                eprintln!("failed to start the bundled app-server: {error}");
+                eprintln!("failed to start the bundled app-server: {}", error.code());
             }
             if let Err(error) = provider_credentials::install(app.handle()) {
                 eprintln!(
