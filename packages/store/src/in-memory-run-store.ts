@@ -24,6 +24,16 @@ import {
   type AgentVersionAsset,
   type AgentVersionDeployment,
   type AgentVersionReleaseBundle,
+  type AutomationCreateReceiptQuery,
+  type AutomationCreateResult,
+  type AutomationDefinitionRecord,
+  type AutomationInvocationContext,
+  type AutomationInvocationReceiptQuery,
+  type AutomationInvocationResult,
+  type AutomationListQuery,
+  type AutomationLocator,
+  type CommitAutomationCreateInput,
+  type CommitAutomationInvocationInput,
   type RegisterAgentVersionResult,
   type BeginRunAttemptInput,
   type BeginRunAttemptResult,
@@ -115,6 +125,21 @@ import {
   type GoalToolExecutionInput,
   type GoalToolExecutionResult,
 } from "@crewon/application";
+import {
+  automationReceiptKey,
+  normalizeAutomationStoreError,
+  prepareAutomationCreate,
+  prepareAutomationInvocation,
+  replayAutomationCreateReceipt,
+  replayAutomationInvocationReceipt,
+  validateAutomationCreateReceiptQuery,
+  validateAutomationCreateReceiptAuthority,
+  validateAutomationInvocationReceiptQuery,
+  validateAutomationInvocationReceiptAuthority,
+  validateAutomationRecord,
+  type StoredAutomationCreateReceipt,
+  type StoredAutomationInvocationReceipt,
+} from "./automation-store-support.ts";
 import {
   sameAgentVersionAsset,
   sameAgentVersionDeploymentCandidate,
@@ -317,6 +342,15 @@ export class InMemoryRunStore implements DomainStore {
     ActiveAgentVersionRelease
   >();
   readonly #runs = new Map<string, RunState>();
+  readonly #automations = new Map<string, AutomationDefinitionRecord>();
+  readonly #automationCreateReceipts = new Map<
+    string,
+    StoredAutomationCreateReceipt
+  >();
+  readonly #automationInvocationReceipts = new Map<
+    string,
+    StoredAutomationInvocationReceipt
+  >();
   readonly #events = new Map<string, RunLifecycleEvent[]>();
   readonly #eventIds = new Set<string>();
   readonly #outbox = new Map<string, QueueRecord<OutboxMessage>>();
@@ -401,6 +435,299 @@ export class InMemoryRunStore implements DomainStore {
   }
 
   async close(): Promise<void> {}
+
+  async loadAutomationCreateReceipt(
+    query: AutomationCreateReceiptQuery,
+  ): Promise<AutomationCreateResult | null> {
+    try {
+      validateAutomationCreateReceiptQuery(query);
+      const prior = this.#automationCreateReceipts.get(
+        automationReceiptKey(query.tenantId, query.idempotency),
+      );
+      if (prior !== undefined) {
+        validateAutomationCreateReceiptAuthority(
+          prior,
+          this.#automations.get(prior.automationId) ?? null,
+        );
+      }
+      return prior === undefined
+        ? null
+        : replayAutomationCreateReceipt(query, clone(prior));
+    } catch (error) {
+      throw normalizeAutomationStoreError(error);
+    }
+  }
+
+  async commitAutomationCreate(
+    input: CommitAutomationCreateInput,
+  ): Promise<AutomationCreateResult> {
+    try {
+      const key = automationReceiptKey(input.tenantId, input.idempotency);
+      const prior = this.#automationCreateReceipts.get(key);
+      if (prior !== undefined) {
+        validateAutomationCreateReceiptAuthority(
+          prior,
+          this.#automations.get(prior.automationId) ?? null,
+        );
+        return replayAutomationCreateReceipt(
+          { tenantId: input.tenantId, idempotency: input.idempotency },
+          clone(prior),
+        );
+      }
+      if (this.#pendingModelProviderSettings.has(input.tenantId)) {
+        throw new RunStoreError("model_provider_settings_switch_pending");
+      }
+      const automationId = input.record.definition.automationId;
+      if (this.#automations.has(automationId)) {
+        throw new RunStoreError("automation_id_conflict");
+      }
+      const result = prepareAutomationCreate(
+        input,
+        this.#threads.get(input.threadFence.threadId) ?? null,
+      );
+      this.#automations.set(automationId, clone(result.record));
+      this.#automationCreateReceipts.set(key, {
+        tenantId: input.tenantId,
+        automationId,
+        fingerprint: input.idempotency.requestFingerprint,
+        result: clone(result),
+      });
+      return clone(result);
+    } catch (error) {
+      throw normalizeAutomationStoreError(error);
+    }
+  }
+
+  async loadAutomation(
+    locator: AutomationLocator,
+  ): Promise<AutomationDefinitionRecord | null> {
+    try {
+      requireNonEmpty(locator.tenantId, "tenant_id_invalid");
+      requireNonEmpty(locator.spaceId, "space_id_invalid");
+      requireNonEmpty(locator.automationId, "automation_id_invalid");
+      const record = this.#automations.get(locator.automationId);
+      if (
+        record === undefined ||
+        record.definition.tenantId !== locator.tenantId ||
+        record.definition.spaceId !== locator.spaceId
+      ) {
+        return null;
+      }
+      validateAutomationRecord(record);
+      return clone(record);
+    } catch (error) {
+      throw normalizeAutomationStoreError(error);
+    }
+  }
+
+  async listAutomations(
+    query: AutomationListQuery,
+  ): Promise<readonly AutomationDefinitionRecord[]> {
+    try {
+      requireNonEmpty(query.tenantId, "tenant_id_invalid");
+      requireNonEmpty(query.spaceId, "space_id_invalid");
+      if (
+        !Number.isSafeInteger(query.limit) ||
+        query.limit < 1 ||
+        query.limit > 100
+      ) {
+        throw new RunStoreError("automation_limit_invalid");
+      }
+      return [...this.#automations.values()]
+        .filter(
+          (record) =>
+            record.definition.tenantId === query.tenantId &&
+            record.definition.spaceId === query.spaceId &&
+            (query.before === null ||
+              record.definition.updatedAt < query.before.updatedAt ||
+              (record.definition.updatedAt === query.before.updatedAt &&
+                record.definition.automationId < query.before.automationId)),
+        )
+        .sort(
+          (left, right) =>
+            right.definition.updatedAt.localeCompare(
+              left.definition.updatedAt,
+            ) ||
+            right.definition.automationId.localeCompare(
+              left.definition.automationId,
+            ),
+        )
+        .slice(0, query.limit)
+        .map((record) => {
+          validateAutomationRecord(record);
+          return clone(record);
+        });
+    } catch (error) {
+      throw normalizeAutomationStoreError(error);
+    }
+  }
+
+  async loadAutomationInvocationReceipt(
+    query: AutomationInvocationReceiptQuery,
+  ): Promise<AutomationInvocationResult | null> {
+    try {
+      validateAutomationInvocationReceiptQuery(query);
+      const prior = this.#automationInvocationReceipts.get(
+        automationReceiptKey(query.tenantId, query.idempotency),
+      );
+      if (prior !== undefined) {
+        this.#validateAutomationInvocationReceiptAuthority(prior);
+      }
+      return prior === undefined
+        ? null
+        : replayAutomationInvocationReceipt(query, clone(prior));
+    } catch (error) {
+      throw normalizeAutomationStoreError(error);
+    }
+  }
+
+  async loadAutomationInvocationContext(
+    locator: AutomationLocator,
+  ): Promise<AutomationInvocationContext | null> {
+    try {
+      const record = await this.loadAutomation(locator);
+      if (record === null) return null;
+      const thread = this.#threads.get(record.definition.threadId);
+      if (
+        thread === undefined ||
+        thread.tenantId !== locator.tenantId ||
+        thread.spaceId !== locator.spaceId
+      ) {
+        throw new RunStoreError("automation_context_invalid");
+      }
+      const history = this.#modelHistory.get(thread.threadId) ?? [];
+      return {
+        record,
+        thread: clone(thread),
+        historyHead: {
+          tenantId: locator.tenantId,
+          threadId: thread.threadId,
+          lastSequence: history.at(-1)?.sequence ?? 0,
+        },
+      };
+    } catch (error) {
+      throw normalizeAutomationStoreError(error);
+    }
+  }
+
+  async commitAutomationInvocation(
+    input: CommitAutomationInvocationInput,
+  ): Promise<AutomationInvocationResult> {
+    try {
+      const key = automationReceiptKey(input.tenantId, input.idempotency);
+      const prior = this.#automationInvocationReceipts.get(key);
+      if (prior !== undefined) {
+        this.#validateAutomationInvocationReceiptAuthority(prior);
+        return replayAutomationInvocationReceipt(
+          {
+            tenantId: input.tenantId,
+            automationId: input.definitionFence.automationId,
+            idempotency: input.idempotency,
+          },
+          clone(prior),
+        );
+      }
+      if (this.#pendingModelProviderSettings.has(input.tenantId)) {
+        throw new RunStoreError("model_provider_settings_switch_pending");
+      }
+      const record = this.#automations.get(input.definitionFence.automationId);
+      if (
+        record === undefined ||
+        record.definition.tenantId !== input.tenantId
+      ) {
+        throw new RunStoreError("automation_not_found");
+      }
+      const threadId = input.threadFence.threadId;
+      const history = this.#modelHistory.get(threadId) ?? [];
+      const activeRunExists = [...this.#runs.values()].some(
+        (run) =>
+          run.tenantId === input.tenantId &&
+          run.threadId === threadId &&
+          !isTerminalRunStatus(run.status),
+      );
+      const unsettledWorkExists = [...this.#workItems.values()].some(
+        ({ item, status }) => {
+          const run = this.#runs.get(item.runId);
+          return (
+            status !== "settled" &&
+            run?.tenantId === input.tenantId &&
+            run.threadId === threadId
+          );
+        },
+      );
+      const result = prepareAutomationInvocation(input, {
+        record,
+        thread: this.#threads.get(threadId) ?? null,
+        history,
+        activeRunExists,
+        unsettledWorkExists,
+        runIdExists: this.#runs.has(input.binding.runId),
+        threadEventIdExists: (id) => this.#threadEventIds.has(id),
+        messageIdExists: (id) => this.#messageIds.has(id),
+        historyItemIdExists: (id) => this.#modelHistoryItemIds.has(id),
+        runEventIdExists: (id) => this.#eventIds.has(id),
+        outboxIdExists: (id) => this.#outbox.has(id),
+        workItemIdExists: (id) => this.#workItems.has(id),
+      });
+      const outboxRecord = queueRecord(input.outbox, input.outbox.createdAt);
+      const workItemRecord = queueRecord(
+        input.workItem,
+        input.workItem.createdAt,
+      );
+
+      this.#threads.set(threadId, clone(result.threadState));
+      this.#threadEvents.set(threadId, [
+        ...(this.#threadEvents.get(threadId) ?? []),
+        clone(input.threadEvent),
+      ]);
+      this.#threadEventIds.add(input.threadEvent.eventId);
+      this.#messages.set(threadId, [
+        ...(this.#messages.get(threadId) ?? []),
+        clone(input.message),
+      ]);
+      this.#messageIds.add(input.message.messageId);
+      this.#appendModelHistory(threadId, [input.historyItem]);
+      this.#runs.set(input.binding.runId, clone(result.runState));
+      this.#events.set(input.binding.runId, [clone(input.runEvent)]);
+      this.#eventIds.add(input.runEvent.eventId);
+      this.#outbox.set(input.outbox.messageId, outboxRecord);
+      this.#workItems.set(input.workItem.workItemId, workItemRecord);
+      this.#automationInvocationReceipts.set(key, {
+        tenantId: input.tenantId,
+        automationId: record.definition.automationId,
+        runId: input.binding.runId,
+        fingerprint: input.idempotency.requestFingerprint,
+        result: clone(result),
+      });
+      return clone(result);
+    } catch (error) {
+      throw normalizeAutomationStoreError(error);
+    }
+  }
+
+  #validateAutomationInvocationReceiptAuthority(
+    receipt: StoredAutomationInvocationReceipt,
+  ): void {
+    const result = receipt.result;
+    const threadId = result.record.definition.threadId;
+    validateAutomationInvocationReceiptAuthority(receipt, {
+      record: this.#automations.get(receipt.automationId) ?? null,
+      thread: this.#threads.get(threadId) ?? null,
+      threadEvents: this.#threadEvents.get(threadId) ?? [],
+      message:
+        (this.#messages.get(threadId) ?? []).find(
+          ({ messageId }) => messageId === result.message.messageId,
+        ) ?? null,
+      historyItem:
+        (this.#modelHistory.get(threadId) ?? []).find(
+          ({ itemId }) => itemId === result.historyItem.itemId,
+        ) ?? null,
+      run: this.#runs.get(receipt.runId) ?? null,
+      runEvents: this.#events.get(receipt.runId) ?? [],
+      outbox: this.#outbox.get(result.outbox.messageId)?.item ?? null,
+      workItem: this.#workItems.get(result.workItem.workItemId)?.item ?? null,
+    });
+  }
 
   async loadModelProviderSettingsState(input: {
     tenantId: string;
