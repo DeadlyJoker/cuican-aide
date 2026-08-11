@@ -8,9 +8,13 @@ use zeroize::Zeroizing;
 mod catalog_io;
 
 use self::catalog_io::read_catalog;
+use self::catalog_io::read_optional_secure_json;
+use self::catalog_io::remove_secure_file;
 pub(super) use self::catalog_io::restrict_directory;
 use self::catalog_io::write_catalog;
+use self::catalog_io::write_secure_json;
 
+use super::new_runtime_binding_id;
 use super::validate_catalog;
 use super::validate_provider_id;
 use super::validated_binding;
@@ -23,10 +27,17 @@ use super::ProviderCredentialCatalogView;
 use super::ProviderCredentialError;
 use super::ProviderCredentialKind;
 use super::ProviderCredentialMutationError;
+use super::ProviderCredentialMutationJournal;
+use super::ProviderCredentialRecovery;
+use super::ProviderCredentialRecoveryDisposition;
 use super::ProviderCredentialTargetRequest;
 use super::ProviderCredentialUpsertRequest;
+use super::ProviderRuntimeMutation;
+use super::ProviderRuntimeMutationBinding;
+use super::ProviderRuntimeMutationFailure;
 use super::ProviderSecretStore;
 use super::SecretStoreError;
+use super::MUTATION_JOURNAL_SCHEMA_VERSION;
 
 pub(super) struct OsProviderSecretStore {
     pub(super) service: &'static str,
@@ -86,7 +97,11 @@ impl ProviderCredentialManager {
         catalog_path: PathBuf,
         secrets: Arc<dyn ProviderSecretStore>,
     ) -> Result<Self, ProviderCredentialError> {
-        let catalog = read_catalog(&catalog_path)?;
+        let mut catalog = read_catalog(&catalog_path)?;
+        if catalog.active_provider_id.is_some() && catalog.active_runtime_binding_id.is_none() {
+            catalog.active_runtime_binding_id = Some(new_runtime_binding_id()?);
+            write_catalog(&catalog_path, &catalog)?;
+        }
         validate_catalog(&catalog)?;
         Ok(Self {
             catalog: Mutex::new(catalog),
@@ -113,6 +128,7 @@ impl ProviderCredentialManager {
         self.upsert_with_reload(request, |_, _| Ok(()))
     }
 
+    #[cfg(test)]
     pub(super) fn upsert_with_reload(
         &self,
         request: &ProviderCredentialUpsertRequest,
@@ -120,6 +136,19 @@ impl ProviderCredentialManager {
             Option<&ActiveProviderRuntime>,
             Option<&ActiveProviderRuntime>,
         ) -> Result<(), &'static str>,
+    ) -> Result<ProviderCredentialCatalogView, ProviderCredentialMutationError> {
+        self.upsert_with_coordinator(request, |mutation| {
+            reload(mutation.previous_runtime, mutation.candidate_runtime)
+                .map_err(ProviderRuntimeMutationFailure::BeforeCommit)
+        })
+    }
+
+    pub(super) fn upsert_with_coordinator(
+        &self,
+        request: &ProviderCredentialUpsertRequest,
+        coordinate: impl FnOnce(
+            &ProviderRuntimeMutation<'_>,
+        ) -> Result<(), ProviderRuntimeMutationFailure>,
     ) -> Result<ProviderCredentialCatalogView, ProviderCredentialMutationError> {
         let binding = validated_binding(request)?;
         let mut catalog = self
@@ -133,9 +162,11 @@ impl ProviderCredentialManager {
         if request.activate {
             next.active_provider_id = Some(binding.provider_id.clone());
         }
-        let affects_active = previous.active_provider_id.as_deref()
-            == Some(binding.provider_id.as_str())
-            || request.activate;
+        next.active_runtime_binding_id = if next.active_provider_id.is_some() {
+            Some(new_runtime_binding_id()?)
+        } else {
+            None
+        };
         let secret_mutation = match binding.credential_kind {
             ProviderCredentialKind::Keychain => match request.secret.as_deref() {
                 Some(secret) => SecretMutation::Set(secret),
@@ -151,11 +182,11 @@ impl ProviderCredentialManager {
             next,
             &binding.provider_id,
             secret_mutation,
-            affects_active,
-            reload,
+            coordinate,
         )
     }
 
+    #[cfg(test)]
     pub(super) fn activate_with_reload(
         &self,
         request: &ProviderCredentialTargetRequest,
@@ -163,6 +194,19 @@ impl ProviderCredentialManager {
             Option<&ActiveProviderRuntime>,
             Option<&ActiveProviderRuntime>,
         ) -> Result<(), &'static str>,
+    ) -> Result<ProviderCredentialCatalogView, ProviderCredentialMutationError> {
+        self.activate_with_coordinator(request, |mutation| {
+            reload(mutation.previous_runtime, mutation.candidate_runtime)
+                .map_err(ProviderRuntimeMutationFailure::BeforeCommit)
+        })
+    }
+
+    pub(super) fn activate_with_coordinator(
+        &self,
+        request: &ProviderCredentialTargetRequest,
+        coordinate: impl FnOnce(
+            &ProviderRuntimeMutation<'_>,
+        ) -> Result<(), ProviderRuntimeMutationFailure>,
     ) -> Result<ProviderCredentialCatalogView, ProviderCredentialMutationError> {
         validate_provider_id(&request.provider_id)?;
         let mut catalog = self
@@ -177,14 +221,14 @@ impl ProviderCredentialManager {
         require_credential_available(self.secrets.as_ref(), binding)?;
         let mut next = previous.clone();
         next.active_provider_id = Some(request.provider_id.clone());
+        next.active_runtime_binding_id = Some(new_runtime_binding_id()?);
         self.commit_mutation(
             &mut catalog,
             previous,
             next,
             &request.provider_id,
             SecretMutation::Keep,
-            /*affects_active*/ true,
-            reload,
+            coordinate,
         )
     }
 
@@ -196,6 +240,7 @@ impl ProviderCredentialManager {
         self.delete_with_reload(request, |_, _| Ok(()))
     }
 
+    #[cfg(test)]
     pub(super) fn delete_with_reload(
         &self,
         request: &ProviderCredentialTargetRequest,
@@ -203,6 +248,19 @@ impl ProviderCredentialManager {
             Option<&ActiveProviderRuntime>,
             Option<&ActiveProviderRuntime>,
         ) -> Result<(), &'static str>,
+    ) -> Result<ProviderCredentialCatalogView, ProviderCredentialMutationError> {
+        self.delete_with_coordinator(request, |mutation| {
+            reload(mutation.previous_runtime, mutation.candidate_runtime)
+                .map_err(ProviderRuntimeMutationFailure::BeforeCommit)
+        })
+    }
+
+    pub(super) fn delete_with_coordinator(
+        &self,
+        request: &ProviderCredentialTargetRequest,
+        coordinate: impl FnOnce(
+            &ProviderRuntimeMutation<'_>,
+        ) -> Result<(), ProviderRuntimeMutationFailure>,
     ) -> Result<ProviderCredentialCatalogView, ProviderCredentialMutationError> {
         validate_provider_id(&request.provider_id)?;
         let mut catalog = self
@@ -220,14 +278,18 @@ impl ProviderCredentialManager {
         if affects_active {
             next.active_provider_id = None;
         }
+        next.active_runtime_binding_id = if next.active_provider_id.is_some() {
+            Some(new_runtime_binding_id()?)
+        } else {
+            None
+        };
         self.commit_mutation(
             &mut catalog,
             previous,
             next,
             &request.provider_id,
             SecretMutation::Delete,
-            affects_active,
-            reload,
+            coordinate,
         )
     }
 
@@ -239,63 +301,82 @@ impl ProviderCredentialManager {
         next: ProviderCredentialCatalogFile,
         provider_id: &str,
         secret_mutation: SecretMutation<'_>,
-        affects_active: bool,
-        reload: impl FnOnce(
-            Option<&ActiveProviderRuntime>,
-            Option<&ActiveProviderRuntime>,
-        ) -> Result<(), &'static str>,
+        coordinate: impl FnOnce(
+            &ProviderRuntimeMutation<'_>,
+        ) -> Result<(), ProviderRuntimeMutationFailure>,
     ) -> Result<ProviderCredentialCatalogView, ProviderCredentialMutationError> {
-        let previous_runtime = if affects_active {
-            active_runtime_for(self.secrets.as_ref(), &previous)?
-        } else {
-            None
-        };
+        let previous_runtime = active_runtime_for(self.secrets.as_ref(), &previous)?;
         let previous_secret = secret_snapshot(self.secrets.as_ref(), provider_id)?;
-        apply_secret_mutation(self.secrets.as_ref(), provider_id, secret_mutation)?;
-        let next_secret = match secret_snapshot(self.secrets.as_ref(), provider_id) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                restore_secret(self.secrets.as_ref(), provider_id, previous_secret)
-                    .map_err(|_| ProviderCredentialMutationError::Rollback)?;
-                return Err(error.into());
-            }
+        let operation_id = new_operation_id()?;
+        let backup_secret_key = format!("__crewon_provider_backup__{operation_id}");
+        persist_secret_backup(self.secrets.as_ref(), &backup_secret_key, &previous_secret)?;
+        let journal = ProviderCredentialMutationJournal {
+            schema_version: MUTATION_JOURNAL_SCHEMA_VERSION.to_string(),
+            operation_id: operation_id.clone(),
+            runtime_binding_id: next.active_runtime_binding_id.clone(),
+            provider_id: provider_id.to_string(),
+            backup_secret_key,
+            previous_secret_present: matches!(previous_secret, SecretSnapshot::Present(_)),
+            previous_catalog: previous.clone(),
+            candidate_catalog: next.clone(),
         };
-        let had_catalog_file = self.catalog_path.exists();
+        if write_secure_json(&self.journal_path(), &journal).is_err() {
+            let _ = self.secrets.delete(&journal.backup_secret_key);
+            return Err(ProviderCredentialError::CatalogInvalid.into());
+        }
+        if let Err(error) =
+            apply_secret_mutation(self.secrets.as_ref(), provider_id, secret_mutation)
+        {
+            self.rollback_journal(&journal)?;
+            return Err(error.into());
+        }
+        if let Err(error) = secret_snapshot(self.secrets.as_ref(), provider_id) {
+            self.rollback_journal(&journal)?;
+            return Err(error.into());
+        }
         if let Err(error) = write_catalog(&self.catalog_path, &next) {
-            let catalog_may_have_changed = had_catalog_file || self.catalog_path.exists();
-            if restore_secret(self.secrets.as_ref(), provider_id, previous_secret).is_err()
-                || (catalog_may_have_changed
-                    && write_catalog(&self.catalog_path, &previous).is_err())
-            {
+            if self.rollback_journal(&journal).is_err() {
                 return Err(ProviderCredentialMutationError::Rollback);
             }
             return Err(error.into());
         }
 
-        if affects_active {
-            let candidate_runtime = match active_runtime_for(self.secrets.as_ref(), &next) {
-                Ok(runtime) => runtime,
-                Err(error) => {
-                    if restore_secret(self.secrets.as_ref(), provider_id, previous_secret).is_err()
-                        || write_catalog(&self.catalog_path, &previous).is_err()
-                    {
-                        let _ = restore_secret(self.secrets.as_ref(), provider_id, next_secret);
-                        return Err(ProviderCredentialMutationError::Rollback);
-                    }
-                    return Err(error.into());
-                }
-            };
-            if let Err(code) = reload(previous_runtime.as_ref(), candidate_runtime.as_ref()) {
-                if restore_secret(self.secrets.as_ref(), provider_id, previous_secret).is_err()
-                    || write_catalog(&self.catalog_path, &previous).is_err()
-                {
-                    let _ = restore_secret(self.secrets.as_ref(), provider_id, next_secret);
+        let candidate_runtime = match active_runtime_for(self.secrets.as_ref(), &next) {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                if self.rollback_journal(&journal).is_err() {
                     return Err(ProviderCredentialMutationError::Rollback);
                 }
-                return Err(ProviderCredentialMutationError::Runtime(code));
+                return Err(error.into());
+            }
+        };
+        let mutation = ProviderRuntimeMutation {
+            operation_id: &operation_id,
+            active_provider_id: next.active_provider_id.as_deref(),
+            runtime_binding_id: next.active_runtime_binding_id.as_deref(),
+            bindings: authority_bindings(&next),
+            previous_runtime: previous_runtime.as_ref(),
+            candidate_runtime: candidate_runtime.as_ref(),
+        };
+        if let Err(error) = coordinate(&mutation) {
+            match error {
+                ProviderRuntimeMutationFailure::BeforeCommit(code) => {
+                    if self.rollback_journal(&journal).is_err() {
+                        return Err(ProviderCredentialMutationError::Rollback);
+                    }
+                    return Err(ProviderCredentialMutationError::Runtime(code));
+                }
+                ProviderRuntimeMutationFailure::AfterCommit => {
+                    *catalog = next;
+                    return Err(ProviderCredentialMutationError::Rollback);
+                }
             }
         }
 
+        if self.cleanup_journal(&journal).is_err() {
+            *catalog = next;
+            return Err(ProviderCredentialMutationError::Rollback);
+        }
         *catalog = next;
         Ok(catalog_view_for(self.secrets.as_ref(), catalog))
     }
@@ -315,147 +396,72 @@ impl ProviderCredentialManager {
             .map_err(|_| ProviderCredentialError::StateUnavailable)?;
         active_runtime_for(self.secrets.as_ref(), &catalog)
     }
-}
 
-fn catalog_view_for(
-    secrets: &dyn ProviderSecretStore,
-    catalog: &ProviderCredentialCatalogFile,
-) -> ProviderCredentialCatalogView {
-    let bindings = catalog
-        .bindings
-        .values()
-        .map(|binding| ProviderCredentialBindingView {
-            credential_available: credential_available(secrets, binding),
-            credential_kind: binding.credential_kind,
-            endpoint: binding.endpoint.clone(),
-            environment_variable: binding.environment_variable.clone(),
-            is_active: catalog.active_provider_id.as_deref() == Some(binding.provider_id.as_str()),
-            provider_id: binding.provider_id.clone(),
-        })
-        .collect();
-    ProviderCredentialCatalogView {
-        active_provider_id: catalog.active_provider_id.clone(),
-        bindings,
-    }
-}
-
-fn active_binding_for(
-    catalog: &ProviderCredentialCatalogFile,
-) -> Result<Option<ActiveProviderBinding>, ProviderCredentialError> {
-    let Some(provider_id) = catalog.active_provider_id.as_deref() else {
-        return Ok(None);
-    };
-    let binding = catalog
-        .bindings
-        .get(provider_id)
-        .ok_or(ProviderCredentialError::CatalogInvalid)?;
-    Ok(Some(active_binding(binding)))
-}
-
-fn active_binding(binding: &ProviderBinding) -> ActiveProviderBinding {
-    ActiveProviderBinding {
-        credential_kind: binding.credential_kind,
-        endpoint: binding.endpoint.clone(),
-        environment_variable: binding.environment_variable.clone(),
-        provider_id: binding.provider_id.clone(),
-    }
-}
-
-fn active_runtime_for(
-    secrets: &dyn ProviderSecretStore,
-    catalog: &ProviderCredentialCatalogFile,
-) -> Result<Option<ActiveProviderRuntime>, ProviderCredentialError> {
-    let Some(binding) = active_binding_for(catalog)? else {
-        return Ok(None);
-    };
-    let secret = match binding.credential_kind {
-        ProviderCredentialKind::Keychain => Some(
-            secrets
-                .get(&binding.provider_id)
-                .map_err(map_secret_store_error)?,
-        ),
-        ProviderCredentialKind::Environment => {
-            let variable = binding
-                .environment_variable
-                .as_deref()
-                .ok_or(ProviderCredentialError::CatalogInvalid)?;
-            Some(Zeroizing::new(
-                std::env::var(variable).map_err(|_| ProviderCredentialError::CredentialMissing)?,
-            ))
+    pub(super) fn recover_with_coordinator(
+        &self,
+        recover: impl FnOnce(
+            &ProviderCredentialRecovery<'_>,
+        ) -> Result<ProviderCredentialRecoveryDisposition, &'static str>,
+    ) -> Result<(), ProviderCredentialMutationError> {
+        let Some(journal) =
+            read_optional_secure_json::<ProviderCredentialMutationJournal>(&self.journal_path())?
+        else {
+            return Ok(());
+        };
+        validate_journal(&journal)?;
+        let mut catalog = self
+            .catalog
+            .lock()
+            .map_err(|_| ProviderCredentialError::StateUnavailable)?;
+        let previous_runtime = previous_runtime_for_recovery(self.secrets.as_ref(), &journal)?;
+        let recovery = ProviderCredentialRecovery {
+            operation_id: &journal.operation_id,
+            runtime_binding_id: journal.runtime_binding_id.as_deref(),
+            previous_runtime: previous_runtime.as_ref(),
+        };
+        match recover(&recovery).map_err(ProviderCredentialMutationError::Runtime)? {
+            ProviderCredentialRecoveryDisposition::KeepCandidate => {
+                write_catalog(&self.catalog_path, &journal.candidate_catalog)?;
+                *catalog = journal.candidate_catalog.clone();
+                self.cleanup_journal(&journal)?;
+            }
+            ProviderCredentialRecoveryDisposition::RestorePrevious => {
+                self.rollback_journal(&journal)?;
+                *catalog = journal.previous_catalog.clone();
+            }
         }
-        ProviderCredentialKind::None => None,
-    };
-    Ok(Some(ActiveProviderRuntime { binding, secret }))
-}
-
-fn credential_available(secrets: &dyn ProviderSecretStore, binding: &ProviderBinding) -> bool {
-    match binding.credential_kind {
-        ProviderCredentialKind::Environment => binding
-            .environment_variable
-            .as_ref()
-            .is_some_and(|name| std::env::var_os(name).is_some()),
-        ProviderCredentialKind::Keychain => secrets.get(&binding.provider_id).is_ok(),
-        ProviderCredentialKind::None => true,
-    }
-}
-
-fn require_credential_available(
-    secrets: &dyn ProviderSecretStore,
-    binding: &ProviderBinding,
-) -> Result<(), ProviderCredentialError> {
-    if credential_available(secrets, binding) {
         Ok(())
-    } else {
-        Err(ProviderCredentialError::CredentialMissing)
+    }
+
+    fn journal_path(&self) -> PathBuf {
+        self.catalog_path
+            .with_file_name("provider-credential-mutation.v1.json")
+    }
+
+    fn rollback_journal(
+        &self,
+        journal: &ProviderCredentialMutationJournal,
+    ) -> Result<(), ProviderCredentialMutationError> {
+        restore_secret_from_backup(self.secrets.as_ref(), journal)
+            .map_err(|_| ProviderCredentialMutationError::Rollback)?;
+        write_catalog(&self.catalog_path, &journal.previous_catalog)
+            .map_err(|_| ProviderCredentialMutationError::Rollback)?;
+        self.cleanup_journal(journal)
+    }
+
+    fn cleanup_journal(
+        &self,
+        journal: &ProviderCredentialMutationJournal,
+    ) -> Result<(), ProviderCredentialMutationError> {
+        // The journal is the recovery authority. Remove it before its keychain
+        // backup so a crash can only leave an unreachable backup orphan, never
+        // a live journal whose required backup has already disappeared.
+        remove_secure_file(&self.journal_path())
+            .map_err(|_| ProviderCredentialMutationError::Rollback)?;
+        self.secrets
+            .delete(&journal.backup_secret_key)
+            .map_err(|_| ProviderCredentialMutationError::Rollback)
     }
 }
 
-fn secret_snapshot(
-    secrets: &dyn ProviderSecretStore,
-    provider_id: &str,
-) -> Result<SecretSnapshot, ProviderCredentialError> {
-    match secrets.get(provider_id) {
-        Ok(secret) => Ok(SecretSnapshot::Present(secret)),
-        Err(SecretStoreError::Missing) => Ok(SecretSnapshot::Missing),
-        Err(SecretStoreError::Unavailable) => {
-            Err(ProviderCredentialError::CredentialStoreUnavailable)
-        }
-    }
-}
-
-fn apply_secret_mutation(
-    secrets: &dyn ProviderSecretStore,
-    provider_id: &str,
-    mutation: SecretMutation<'_>,
-) -> Result<(), ProviderCredentialError> {
-    match mutation {
-        SecretMutation::Delete => secrets.delete(provider_id).map_err(map_secret_store_error),
-        SecretMutation::Keep => Ok(()),
-        SecretMutation::Require => {
-            let secret = secrets.get(provider_id).map_err(map_secret_store_error)?;
-            drop(secret);
-            Ok(())
-        }
-        SecretMutation::Set(secret) => secrets
-            .set(provider_id, secret)
-            .map_err(map_secret_store_error),
-    }
-}
-
-fn restore_secret(
-    secrets: &dyn ProviderSecretStore,
-    provider_id: &str,
-    snapshot: SecretSnapshot,
-) -> Result<(), SecretStoreError> {
-    match snapshot {
-        SecretSnapshot::Missing => secrets.delete(provider_id),
-        SecretSnapshot::Present(secret) => secrets.set(provider_id, secret.as_str()),
-    }
-}
-
-fn map_secret_store_error(error: SecretStoreError) -> ProviderCredentialError {
-    match error {
-        SecretStoreError::Missing => ProviderCredentialError::CredentialMissing,
-        SecretStoreError::Unavailable => ProviderCredentialError::CredentialStoreUnavailable,
-    }
-}
+include!("provider_credentials_store_projection.rs");
