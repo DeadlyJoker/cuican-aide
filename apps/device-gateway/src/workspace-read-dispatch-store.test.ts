@@ -48,8 +48,37 @@ test("workspace read authority commits accepted and terminal before exact replay
     terminal.record.resolution,
   );
   assert.equal(
-    (await store.commit({ command, route, event: events[1]! })).outcome,
+    (
+      await store.commit({
+        command,
+        route: reorderedRoute(),
+        event: events[1]!,
+      })
+    ).outcome,
     "replayed",
+  );
+});
+
+test("workspace read route projection rejects malformed initial authority", () => {
+  const record = {
+    executionId: command.executionId,
+    fingerprint: "sha256:" + "0".repeat(64),
+    command,
+    route: { ...route, ambientTenantId: "tenant-client" },
+    acceptedEvent: null,
+    terminalEvent: null,
+    resolution: null,
+    createdAt: "2026-08-08T00:00:02Z",
+    updatedAt: "2026-08-08T00:00:02Z",
+  };
+  assert.throws(
+    () =>
+      new InMemoryWorkspaceReadDispatchStore({
+        now: () => new Date("2026-08-08T00:00:02Z"),
+        currentRoute: () => route,
+        initialRecords: [record],
+      }),
+    /workspace_read_route_invalid/,
   );
 });
 
@@ -83,3 +112,16 @@ const route = {
   capability: "workspace.read_file.v0" as const,
   leaseExpiresAt: "2026-08-08T01:00:00Z",
 };
+
+function reorderedRoute() {
+  return {
+    runtimeBindingId: route.runtimeBindingId,
+    leaseExpiresAt: route.leaseExpiresAt,
+    gatewayId: route.gatewayId,
+    deviceId: route.deviceId,
+    deviceBindingId: route.deviceBindingId,
+    connectionId: route.connectionId,
+    connectionEpoch: route.connectionEpoch,
+    capability: route.capability,
+  };
+}

@@ -109,10 +109,20 @@ export class InMemoryWorkspaceReadDispatchStore
     this.#assertOpen();
     const command = parseDeviceFilesystemReadCommand(input);
     timestamp(at);
-    requireRoute(command, route);
-    if (!same(this.#currentRoute(command.deviceId), route))
+    const projectedRoute = parseWorkspaceReadRouteFence(
+      route,
+      command.deviceId,
+    );
+    const currentRoute = this.#currentRoute(command.deviceId);
+    if (
+      currentRoute === null ||
+      !sameRoute(
+        parseWorkspaceReadRouteFence(currentRoute, command.deviceId),
+        projectedRoute,
+      )
+    )
       conflict("workspace_read_route_stale");
-    const fingerprint = fingerprintFor(command, route);
+    const fingerprint = fingerprintFor(command, projectedRoute);
     const prior = this.#records.get(command.executionId);
     if (prior !== undefined) {
       if (prior.fingerprint !== fingerprint)
@@ -125,7 +135,7 @@ export class InMemoryWorkspaceReadDispatchStore
       executionId: command.executionId,
       fingerprint,
       command,
-      route: clone(route),
+      route: projectedRoute,
       acceptedEvent: null,
       terminalEvent: null,
       resolution: null,
@@ -147,6 +157,7 @@ export class InMemoryWorkspaceReadDispatchStore
     this.#assertOpen();
     const command = parseDeviceFilesystemReadCommand(input.command);
     const event = readEvent(input.event);
+    const route = parseWorkspaceReadRouteFence(input.route, command.deviceId);
     const prior = this.#records.get(command.executionId);
     if (
       this.#kinds.kind(command.executionId) !== "workspaceRead" ||
@@ -155,7 +166,7 @@ export class InMemoryWorkspaceReadDispatchStore
       prior.fingerprint !== fingerprintFor(command, prior.route)
     )
       conflict("workspace_read_authority_missing");
-    requireEventIdentity(command, event, input.route.connectionEpoch);
+    requireEventIdentity(command, event, route.connectionEpoch);
     const current =
       event.sequence === 1 ? prior.acceptedEvent : prior.terminalEvent;
     if (current !== null) {
@@ -170,11 +181,15 @@ export class InMemoryWorkspaceReadDispatchStore
       prior.acceptedEvent?.receiptId !== event.receiptId
     )
       conflict("workspace_read_event_conflict");
-    if (prior.route !== null && !same(prior.route, input.route))
+    if (prior.route !== null && !sameRoute(prior.route, route))
       conflict("workspace_read_route_stale");
     if (
       event.sequence === 1 &&
-      !same(this.#currentRoute(command.deviceId), input.route)
+      !sameCurrentRoute(
+        this.#currentRoute(command.deviceId),
+        route,
+        command.deviceId,
+      )
     )
       conflict("workspace_read_route_stale");
     const now = this.#timestamp();
@@ -229,6 +244,46 @@ export function workspaceReadFingerprint(
   return fingerprintFor(parseDeviceFilesystemReadCommand(command), route);
 }
 
+export function parseWorkspaceReadRouteFence(
+  input: unknown,
+  expectedDeviceId?: string,
+): WorkspaceReadRouteFence {
+  if (input === null || Array.isArray(input) || typeof input !== "object")
+    conflict("workspace_read_route_invalid");
+  const value = input as Record<string, unknown>;
+  const expectedKeys = [
+    "capability",
+    "connectionEpoch",
+    "connectionId",
+    "deviceBindingId",
+    "deviceId",
+    "gatewayId",
+    "leaseExpiresAt",
+    "runtimeBindingId",
+  ];
+  if (Object.keys(value).sort().join() !== expectedKeys.join())
+    conflict("workspace_read_route_invalid");
+  const deviceId = opaque(value.deviceId);
+  const leaseExpiresAt = canonicalTimestamp(value.leaseExpiresAt);
+  if (
+    (expectedDeviceId !== undefined && deviceId !== expectedDeviceId) ||
+    value.capability !== "workspace.read_file.v0" ||
+    !Number.isSafeInteger(value.connectionEpoch) ||
+    Number(value.connectionEpoch) < 1
+  )
+    conflict("workspace_read_route_invalid");
+  return {
+    deviceId,
+    gatewayId: opaque(value.gatewayId),
+    connectionId: opaque(value.connectionId),
+    connectionEpoch: Number(value.connectionEpoch),
+    deviceBindingId: opaque(value.deviceBindingId),
+    runtimeBindingId: opaque(value.runtimeBindingId),
+    capability: "workspace.read_file.v0",
+    leaseExpiresAt,
+  };
+}
+
 export function parseWorkspaceReadDispatchRecord(
   input: unknown,
 ): WorkspaceReadDispatchRecord {
@@ -249,8 +304,7 @@ export function parseWorkspaceReadDispatchRecord(
   if (Object.keys(value).sort().join() !== keys.sort().join())
     conflict("workspace_read_record_invalid");
   const command = parseDeviceFilesystemReadCommand(value.command);
-  const route = value.route as WorkspaceReadRouteFence;
-  requireRoute(command, route);
+  const route = parseWorkspaceReadRouteFence(value.route, command.deviceId);
   const acceptedEvent =
     value.acceptedEvent === null
       ? null
@@ -300,23 +354,49 @@ function fingerprintFor(
   command: DeviceFilesystemReadCommand,
   route: WorkspaceReadRouteFence,
 ): string {
-  return digestUtf8(JSON.stringify({ commandDigest: digest(command), route }));
-}
-function requireRoute(
-  command: DeviceFilesystemReadCommand,
-  route: WorkspaceReadRouteFence,
-): void {
-  if (
-    route === null ||
-    typeof route !== "object" ||
-    route.deviceId !== command.deviceId ||
-    route.capability !== "workspace.read_file.v0" ||
-    !Number.isFinite(Date.parse(route.leaseExpiresAt))
-  )
-    conflict("workspace_read_route_invalid");
+  const projected = parseWorkspaceReadRouteFence(route, command.deviceId);
+  return digestUtf8(
+    JSON.stringify({ commandDigest: digest(command), route: projected }),
+  );
 }
 function same(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+function sameRoute(
+  left: WorkspaceReadRouteFence,
+  right: WorkspaceReadRouteFence,
+): boolean {
+  return same(
+    parseWorkspaceReadRouteFence(left),
+    parseWorkspaceReadRouteFence(right),
+  );
+}
+function sameCurrentRoute(
+  current: WorkspaceReadRouteFence | null,
+  expected: WorkspaceReadRouteFence,
+  deviceId: string,
+): boolean {
+  return (
+    current !== null &&
+    sameRoute(parseWorkspaceReadRouteFence(current, deviceId), expected)
+  );
+}
+function opaque(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/u.test(value)
+  )
+    conflict("workspace_read_route_invalid");
+  return value;
+}
+function canonicalTimestamp(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value) ||
+    !Number.isFinite(Date.parse(value))
+  )
+    conflict("workspace_read_route_invalid");
+  return value;
 }
 
 function readEvent(

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import type {
   DeviceFilesystemReadCommand,
@@ -71,6 +72,39 @@ test("SQLite preserves workspace-read accepted and terminal authority across rec
       "completed",
     );
     await store.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("SQLite rejects corrupted workspace-read route JSON on load", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-read-corrupt-"));
+  const path = join(directory, "gateway.sqlite");
+  try {
+    const store = new SqliteWorkspaceReadDispatchStore(path, {
+      now: () => new Date("2026-08-08T00:00:02Z"),
+      currentRoute: () => route,
+    });
+    await store.prepare(command, route, "2026-08-08T00:00:02Z");
+    await store.close();
+    const database = new DatabaseSync(path);
+    const row = database
+      .prepare("SELECT record_json FROM workspace_read_dispatch_records")
+      .get() as { record_json: string };
+    const record = JSON.parse(row.record_json);
+    record.route.connectionEpoch = 0;
+    database
+      .prepare("UPDATE workspace_read_dispatch_records SET record_json = ?")
+      .run(JSON.stringify(record));
+    database.close();
+    assert.throws(
+      () =>
+        new SqliteWorkspaceReadDispatchStore(path, {
+          now: () => new Date("2026-08-08T00:00:02Z"),
+          currentRoute: () => route,
+        }),
+      /workspace_read_route_invalid/,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
