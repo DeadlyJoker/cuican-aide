@@ -8,10 +8,11 @@
 
 ## 本轮落地范围
 
-- 基础 Agent Runtime 对齐了缺失 `response.completed` 时的 completed assistant / Tool item history boundary。
-  Rust integration 直接断言第二次 `/responses` 请求；TS Kernel、Responses transport 与 durable Worker 共用 bounded fixtures。
-  completed assistant 的 Rust observable 与 TS durable final Message 是已登记的 intentional projection redesign；混合 assistant + Tool
-  在 TS 侧会在任何 Tool 副作用前 fail closed，不再被笼统标成 full-trace parity。
+- 基础 Agent Runtime 对齐了缺失 `response.completed` 时的 completed assistant / Tool item history boundary，并关闭了同一 response
+  混合 completed assistant/commentary 与 Tool call 的剩余缺口。Rust integration 直接断言第二次 `/responses` 请求；TS Kernel、
+  Responses transport 与 durable Worker 共用 bounded fixtures。completed assistant 按顺序进入 canonical history，但不形成 terminal
+  Message；Tool call/result exactly-once 后继续 sampling，最终只提交 follow-up assistant。只有裸 partial delta、没有
+  `output.item.completed` 证明的文本仍在任何 Tool 副作用前 fail closed。
 - Workspace top-level list 已贯通 Contracts → Application → Store → Device Dispatch → Gateway → Runtime Worker → Control API / Client。
   execute、reconcile、cancel、receipt-first replay、route epoch、delivery lease、accepted/terminal commit-before-ACK 与 SQLite restart authority
   均进入分层测试。
@@ -27,26 +28,49 @@
 
 ## 主分支验证
 
-| 层 | 结果 | 说明 |
-| --- | ---: | --- |
-| Agent Kernel | 20 / 20 | completed assistant / Tool、mixed fail-closed |
-| Agent Responses | 28 / 28 | HTTP / WS、completed item、fallback |
-| Rust core focused | 4 / 4 | `stream_no_completed`，828 个无关 case 过滤 |
-| Contracts | 69 / 69 | typecheck、test、license、generate-check |
-| Application | 115 / 115 | Workspace command/query/delivery authority |
-| Device Dispatch | 37 / 37 | signer、executor、client、certainty |
-| Store | 263 passed、46 skipped | SQLite/migration/conformance通过；本轮无 PostgreSQL URL |
-| Device Gateway | 92 passed、6 skipped | local/TLS/peer/session/receipt；PG 条件测试跳过 |
-| Runtime Worker | 168 passed、1 skipped | Agent + Workspace private server；PG 条件测试跳过 |
-| Control API | 89 passed、3 skipped | public Workspace routes/SSE/client；PG 条件测试跳过 |
-| Native Rust crates | 58 / 58 | protocol 3、journal 14、device 27、runtime 14 |
-| Tauri | 99 / 99 | strict Clippy 通过 |
-| Staging config | 13 / 13 | sidecar manifest、Node/native probes |
-| CrewON UI | 1802 / 1802 | 288 个 test files；lint 与 production build 通过 |
+| 层                     |                   结果 | 说明                                                                   |
+| ---------------------- | ---------------------: | ---------------------------------------------------------------------- |
+| Agent Kernel           |                20 / 20 | completed assistant / Tool、mixed fail-closed                          |
+| Agent Responses        |                28 / 28 | HTTP / WS、completed item、fallback                                    |
+| Rust core focused      |                  4 / 4 | `stream_no_completed`，828 个无关 case 过滤                            |
+| Contracts              |                69 / 69 | typecheck、test、license、generate-check                               |
+| Application            |              110 / 110 | clean committed-tree Agent + Workspace authority                       |
+| Device Dispatch        |                37 / 37 | signer、executor、client、certainty                                    |
+| Store                  | 263 passed、46 skipped | SQLite/migration/conformance通过；本轮无 PostgreSQL URL                |
+| Device Gateway         |   92 passed、6 skipped | local/TLS/peer/session/receipt；PG 条件测试跳过                        |
+| Runtime Worker         |  164 passed、1 skipped | clean committed-tree Agent + Workspace private server；PG 条件测试跳过 |
+| Control API            |   89 passed、3 skipped | public Workspace routes/SSE/client；PG 条件测试跳过                    |
+| Native Rust crates     |                62 / 62 | protocol 3、journal 14、device 27、runtime 18                          |
+| Tauri                  |                99 / 99 | strict Clippy 通过                                                     |
+| Staging config         |                13 / 13 | sidecar manifest、Node/native probes                                   |
+| CrewON UI cutover Gate |                  8 / 8 | legacy Thread 零调用；lint 与 production build 通过                    |
 
 Workspace UI 另在只含 committed `HEAD` 的独立 `git archive` 中验证：9 个 focused files、125 tests、lint、production build 全部通过。
 该 Gate 暴露并修复了对未提交 Contracts `eventSequence` 扩展的隐式依赖；Workspace Thread authority 现在只消费 canonical
 `GetThreadResponse.thread` 的 identity、revision 与 status。
+
+## 后续 clean committed-tree Gate
+
+- 新 Codex worktree 从已提交分支启动后首先暴露共享
+  `device-protocol.reference.json` 的 Workspace command/ACK/event fixture 仍只存在于主工作树。fixture 已作为独立提交补入；
+  `crewon-device-runtime` clean-tree full test 从 6 个反序列化失败恢复为 18 / 18。
+- Device Runtime 不再完全吞掉 reconnect/session 错误，也不恢复无界 `eprintln!`：stderr 诊断按 60 秒窗口去重，每窗口最多 8 个
+  不同的 `&'static str` 稳定错误码，不格式化 source；stdout ready line、terminal、replay 与重连语义不变。新增 4 个无 sleep
+  diagnostics tests，scoped fix 与 fmt 通过。
+- Legacy Thread cutover 新增 AST + production authority Gate，覆盖 list/read/create/fork/archive/unarchive/rename/delete、Turn/Run、
+  Goal、Plan、compact 与 rollback。Control 配置后断线必须 fail closed；未配置 Control 的 legacy-only cohort 仍可运行。调用图证明
+  account/config、Native workbench、MCP/catalog、external resources、Workflow/Office/Automation/Human Gate、memory/settings 和 packaging
+  仍依赖 compatibility sidecar，因此没有提前删除 `crewon-app-server`。
+- Agent mixed-response shared trace 同时冻结 Rust 与 TS：completed commentary → custom Tool call → 一次 Tool result → follow-up sampling；
+  第二请求后缀、stable event order、terminal usage、exactly-once Tool invocation 与唯一 terminal Message 自动 deep-equal。
+- clean worktree 还暴露 committed `ThreadStore` 缺少 space-scoped authority、三种 Store 未实现 `loadThreadInSpace`、Workspace read/write
+  未进入 authorization action，导致 Runtime private server 安全返回 503。修复后使用独立必需 `SpaceScopedThreadStore`；PostgreSQL
+  在 SQL `WHERE` 中同时约束 tenant/space/thread，SQLite/InMemory 在 Store 边界核验 space，不使用 optional invocation 或 fallback。
+- 最终 clean Gate tree 与主分支 committed tree ID 均为 `16b31191749885b30482299b328d0012f3fabad9`。组合验证：Agent Kernel
+  20 passed、Application 110 passed、Runtime Worker 164 passed、Store scoped 167 passed，共 461 passed、0 failed；Runtime Worker 和
+  PostgreSQL Thread conformance 各因未设置 `CREWON_TEST_POSTGRES_URL` 条件跳过 1 条，未报告为通过。所有对应 typecheck 通过。
+- clean UI worktree 的 legacy cutover focused 8 / 8、lint、production build 通过。其意外触发的 full UI suite 仍有一条既存
+  `CommandWorkspaceConversationStyle` CSS snapshot mismatch；本切片未把该无关视觉漂移静默接受为新基线。
 
 ## 最终 macOS packaged smoke
 
