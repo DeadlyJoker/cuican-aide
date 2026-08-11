@@ -64,37 +64,43 @@ export function installRuntimeNativeBootstrap(value: unknown): void {
   if (pending !== null || !object(value)) {
     throw invalid();
   }
-  const schemaVersion = value.schemaVersion;
-  const parsed =
-    schemaVersion === SCHEMA_VERSION_V1
-      ? parseV1(value)
-      : schemaVersion === SCHEMA_VERSION_V2
-        ? parseV2(value)
-        : schemaVersion === SCHEMA_VERSION_V3
-          ? parseV3(value)
-          : null;
-  if (parsed === null) throw invalid();
-  const provider = parseProvider(value.provider);
-  const probe = parseProbe(value.probe);
-  if (
-    (provider === null && value.apiKey !== null) ||
-    (provider !== null &&
-      provider.credentialKind === "none" &&
-      value.apiKey !== null) ||
-    (provider !== null &&
-      provider.credentialKind !== "none" &&
-      value.apiKey === null) ||
-    (value.apiKey !== null && !bounded(value.apiKey, 32 * 1024))
-  ) {
+  let parsed: ParsedPrivateBootstrap | null = null;
+  try {
+    const schemaVersion = value.schemaVersion;
+    parsed =
+      schemaVersion === SCHEMA_VERSION_V1
+        ? parseV1(value)
+        : schemaVersion === SCHEMA_VERSION_V2
+          ? parseV2(value)
+          : schemaVersion === SCHEMA_VERSION_V3
+            ? parseV3(value)
+            : null;
+    if (parsed === null) throw invalid();
+    const provider = parseProvider(value.provider);
+    const probe = parseProbe(value.probe);
+    if (
+      (provider === null && value.apiKey !== null) ||
+      (provider !== null &&
+        provider.credentialKind === "none" &&
+        value.apiKey !== null) ||
+      (provider !== null &&
+        provider.credentialKind !== "none" &&
+        value.apiKey === null) ||
+      (value.apiKey !== null && !bounded(value.apiKey, 32 * 1024))
+    ) {
+      throw invalid();
+    }
+    pending = redact({
+      provider,
+      apiKey: value.apiKey as string | null,
+      probe,
+      workspace: parsed.workspace,
+      credentialBindings: parsed.credentialBindings,
+    });
+  } catch {
+    parsed?.credentialBindings?.destroy();
     throw invalid();
   }
-  pending = redact({
-    provider,
-    apiKey: value.apiKey as string | null,
-    probe,
-    workspace: parsed.workspace,
-    credentialBindings: parsed.credentialBindings,
-  });
 }
 
 export function takeRuntimeNativeBootstrap(): RuntimeNativeBootstrap | null {

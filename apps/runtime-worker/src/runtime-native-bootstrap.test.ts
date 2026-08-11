@@ -211,6 +211,56 @@ test("requires the complete expected authority before credential consumption", (
   credentials.destroy();
 });
 
+test("destroys parsed v3 credentials when later bootstrap validation fails", () => {
+  for (const mutate of [
+    (value: Record<string, any>) => (value.probe.port = 0),
+    (value: Record<string, any>) =>
+      (value.provider = {
+        credentialKind: "none",
+        endpoint: "file:///not-allowed",
+        environmentVariable: null,
+        providerId: "local",
+        runtimeBindingId: "runtime-generation-1",
+      }),
+  ]) {
+    const value = workspaceBootstrap() as Record<string, any>;
+    value.schemaVersion = "crewon.worker-native-bootstrap.v3";
+    value.credentialBindings = privateCredentialBindings();
+    mutate(value);
+    assert.throws(
+      () => installRuntimeNativeBootstrap(value),
+      /^Error: runtime_native_bootstrap_invalid$/u,
+    );
+    assert.equal(
+      value.credentialBindings.bindings[0].bearerToken,
+      "",
+      "the parsed source must not retain a second bearer copy",
+    );
+    assert.equal(takeRuntimeNativeBootstrap(), null);
+  }
+});
+
+test("rejects a second unread bootstrap before parsing its credentials", () => {
+  installRuntimeNativeBootstrap({
+    schemaVersion: "crewon.worker-native-bootstrap.v1",
+    provider: null,
+    apiKey: null,
+    probe: { port: 3211, token: "worker-private-token" },
+  });
+  const rejected = workspaceBootstrap() as Record<string, any>;
+  rejected.schemaVersion = "crewon.worker-native-bootstrap.v3";
+  rejected.credentialBindings = privateCredentialBindings();
+  assert.throws(
+    () => installRuntimeNativeBootstrap(rejected),
+    /^Error: runtime_native_bootstrap_invalid$/u,
+  );
+  assert.equal(
+    rejected.credentialBindings.bindings[0].bearerToken,
+    "private+/token==",
+  );
+  assert.ok(takeRuntimeNativeBootstrap() !== null);
+});
+
 test("rejects partial Workspace secrets, extra keys, unsafe endpoint, and invalid caps", () => {
   for (const mutate of [
     (value: Record<string, any>) => delete value.workspace.gateway.tls.keyPem,
