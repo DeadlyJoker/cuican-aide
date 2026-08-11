@@ -455,7 +455,7 @@ async fn fails_closed_on_row_corruption_and_newer_schema() {
     );
     reopened.close().await;
     let pool = raw_pool(&path).await;
-    sqlx::query("UPDATE device_journal_schema SET version = 2 WHERE singleton = 1")
+    sqlx::query("UPDATE device_journal_schema SET version = 3 WHERE singleton = 1")
         .execute(&pool)
         .await
         .expect("inject newer schema version");

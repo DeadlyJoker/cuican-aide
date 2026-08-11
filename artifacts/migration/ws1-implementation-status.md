@@ -550,6 +550,13 @@ lookup、Ed25519 signature/expiry 验证，并在最终 start 点重复时间校
 Cargo focused `10/10` 通过；Bazel 新 target 可 query，但同样被 Apple CLTools
 SDK `403 Forbidden` 阻断在 analysis，未进入编译。
 
+`workspace.read_file.v0` durable foundation 已独立于 `workspaceList` 落地：strict accepted/terminal/unknown-outcome event 与 cumulative
+ACK 绑定 execution、workspace incarnation、connection epoch、sequence 和 command digest；completed UTF-8 content 复算 SHA-256，
+时间与 exact keys 均 fail closed。Native SQLite journal 使用独立 read execution/event/ACK 表，accepted 在 side effect 前提交，
+terminal/ACK 可跨重启 replay，command、terminal 或 ACK identity drift 均拒绝。该 capability 仍未进入 Device Hello、Native runtime
+router、Gateway admission 或 Worker 产品路由；下一阶段仍是 ConnectionEpochPermit 下获取 stable file handles、释放 permit 后 blocking
+read、完成前复核 expiry/epoch/incarnation，并用 deterministic takeover barrier 证明旧 epoch 不产生成功 terminal。
+
 首次无法证明的 Tool 结果不再经过三次独立提交：Receipt `unknownOutcome`、`run.reconciliation.required`、Outbox、当前 Tool
 Attempt 的 retryable failure 与原 Work Item retry release 已收敛为同一 fenced InMemory/SQLite transaction。双 Store
 conformance 同时验证成功状态和强制 Outbox 冲突时全量回滚；Worker 集成路径验证进入 reconciliation 前的 Attempt 已终结为

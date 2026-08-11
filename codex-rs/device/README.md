@@ -16,10 +16,11 @@ takeover between verification and start therefore rejects the old socket.
 The unconnected filesystem read primitive accepts only canonical
 workspace-relative components, traverses Unix directories with no-follow
 handles, reads regular UTF-8 files under hard byte/output caps and between-call
-deadline checks, and rechecks workspace incarnation after execution. It is
-deliberately absent from Device Hello and the runtime frame router: durable
-accepted/terminal receipts, ACK and reconnect recovery must be wired before
-`workspace.read_file.v0` can be advertised. A supervised strict wall-clock
+deadline checks, and rechecks workspace incarnation after execution. Its
+independent strict accepted/terminal/ACK wire and SQLite restart-replay journal
+are now durable, but it remains absent from Device Hello and the runtime frame
+router. The Native handle adapter, takeover barrier and reconnect projection
+must be wired before `workspace.read_file.v0` can be advertised. A supervised strict wall-clock
 boundary and Windows handle-relative traversal also remain unavailable. Its
 next Native connection adapter must acquire stable handles under the epoch
 permit, release that permit before any blocking read, then recheck command time,

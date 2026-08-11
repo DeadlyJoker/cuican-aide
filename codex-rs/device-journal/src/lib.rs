@@ -5,6 +5,7 @@
 //! admission checks while replaying an already accepted command.
 
 mod codec;
+mod filesystem_read;
 mod journal;
 mod listing;
 mod records;
@@ -14,6 +15,10 @@ use crewon_device_protocol::DeviceWorkspaceListCommand;
 use crewon_device_protocol::DeviceWorkspaceListEvent;
 use thiserror::Error;
 
+pub use filesystem_read::AcknowledgeFilesystemReadOutcome;
+pub use filesystem_read::FilesystemReadJournalExecution;
+pub use filesystem_read::PrepareFilesystemReadOutcome;
+pub use filesystem_read::RecordFilesystemReadTerminalOutcome;
 pub use journal::DeviceWorkspaceJournal;
 
 pub const MAX_JOURNAL_PAGE_SIZE: u16 = 100;
@@ -137,3 +142,7 @@ mod test_support;
 #[cfg(test)]
 #[path = "temporal_tests.rs"]
 mod temporal_tests;
+
+#[cfg(test)]
+#[path = "filesystem_read_tests.rs"]
+mod filesystem_read_tests;

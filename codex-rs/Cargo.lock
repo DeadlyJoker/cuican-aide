@@ -2916,6 +2916,7 @@ version = "0.0.0"
 dependencies = [
  "chrono",
  "crewon-device-protocol",
+ "crewon-utils-cargo-bin",
  "pretty_assertions",
  "serde_json",
  "sha2 0.10.9",
