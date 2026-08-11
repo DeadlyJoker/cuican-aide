@@ -150,6 +150,81 @@ test("preserves unknown and canceled recovery resolutions without regenerating a
   ]);
 });
 
+test("maps an exact durable failure to a completed Tool error result", async () => {
+  const { runtime, setResolution } = toolRuntime();
+  setResolution({
+    status: "failed",
+    executionId: "execution-1",
+    providerReceiptId: "receipt-failed",
+    code: "workspace_file_read_not_found",
+    retryable: false,
+  });
+  assert.deepEqual(
+    await runtime.execute(toolCommand("missing.txt"), signal()),
+    {
+      status: "completed",
+      executionId: "execution-1",
+      providerReceiptId: "receipt-failed",
+      result: {
+        schemaVersion: "crewon.tool-result.v0",
+        callId: "call-1",
+        output: "device execution failed: workspace_file_read_not_found",
+        isError: true,
+        artifactRef: null,
+      },
+    },
+  );
+});
+
+test("rejects malformed, oversized, and unsafe durable failure codes", async () => {
+  const { runtime, setResolution } = toolRuntime();
+  const failures: unknown[] = [
+    {
+      status: "failed",
+      executionId: "execution-1",
+      providerReceiptId: "receipt-failed",
+      code: "UPPERCASE",
+      retryable: false,
+    },
+    {
+      status: "failed",
+      executionId: "execution-1",
+      providerReceiptId: "receipt-failed",
+      code: "x".repeat(129),
+      retryable: false,
+    },
+    {
+      status: "failed",
+      executionId: "execution-1",
+      providerReceiptId: "receipt-failed",
+      code: "failure\nsecret",
+      retryable: false,
+    },
+    {
+      status: "failed",
+      executionId: "execution-1",
+      providerReceiptId: "receipt-failed",
+      code: "workspace_file_read_failed",
+      retryable: "yes",
+    },
+    {
+      status: "failed",
+      executionId: "execution-1",
+      providerReceiptId: "receipt-failed",
+      code: "workspace_file_read_failed",
+      retryable: true,
+      route: "secret",
+    },
+  ];
+  for (const failure of failures) {
+    setResolution(failure as DurableWorkspaceReadResolution);
+    await assert.rejects(
+      runtime.execute(toolCommand("README.md"), signal()),
+      hasCode("workspace_read_resolution_invalid"),
+    );
+  }
+});
+
 test("honors abort before dispatch and after a pending durable read", async () => {
   const before = new AbortController();
   before.abort(new Error("lease lost"));

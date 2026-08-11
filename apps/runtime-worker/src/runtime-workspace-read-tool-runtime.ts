@@ -28,6 +28,13 @@ export type DurableWorkspaceReadResolution =
       }>;
     }>
   | Readonly<{
+      status: "failed";
+      executionId: string;
+      providerReceiptId: string;
+      code: string;
+      retryable: boolean;
+    }>
+  | Readonly<{
       status: "canceled" | "unknownOutcome";
       executionId: string;
       providerReceiptId: string | null;
@@ -244,6 +251,35 @@ function projectResolution(
       throw new ToolBrokerError("workspace_read_resolution_invalid");
     }
     return structuredClone(value) as ToolExecutionResolution;
+  }
+  if (value.status === "failed") {
+    if (
+      !sameKeys(value, [
+        "code",
+        "executionId",
+        "providerReceiptId",
+        "retryable",
+        "status",
+      ]) ||
+      !opaqueIdOrFalse(value.providerReceiptId) ||
+      typeof value.code !== "string" ||
+      !/^[a-z0-9_.:-]{1,128}$/u.test(value.code) ||
+      typeof value.retryable !== "boolean"
+    ) {
+      throw new ToolBrokerError("workspace_read_resolution_invalid");
+    }
+    return {
+      status: "completed",
+      executionId: command.executionId,
+      providerReceiptId: value.providerReceiptId,
+      result: {
+        schemaVersion: "crewon.tool-result.v0",
+        callId: command.callId,
+        output: `device execution failed: ${value.code}`,
+        isError: true,
+        artifactRef: null,
+      },
+    };
   }
   if (
     value.status !== "completed" ||
