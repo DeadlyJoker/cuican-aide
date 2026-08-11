@@ -13,7 +13,6 @@ import type {
   TurnApplicationService,
   WorkspaceListApplicationService,
   WorkspaceOperationQueryService,
-  ModelProviderSettingsApplicationService,
   CommitThreadResult,
   CommitTurnStartResult,
 } from "@crewon/application";
@@ -76,11 +75,7 @@ import {
   type ListThreadsResponse,
   type ListThreadMessagesResponse,
   type ListAgentVersionsResponse,
-  type ListAutomationsResponse,
-  type GetModelProviderSettingsResponse,
-  type ProbeModelProviderResponse,
   type RunMutationResponse,
-  type RunAutomationNowResponse,
   type StartTurnResponse,
   type ThreadMutationResponse,
   type ToolApprovalMutationResponse,
@@ -177,9 +172,6 @@ export function buildControlApi(
   const workspaceOperationEventPoller =
     dependencies.workspaceOperationEventPoller ??
     new IntervalWorkspaceOperationEventPoller();
-  const providerProbeIdempotency = new ProviderProbeIdempotencyCoordinator(
-    dependencies.providerProbes,
-  );
   const app = Fastify({
     bodyLimit: 64 * 1024,
     logger: false,
