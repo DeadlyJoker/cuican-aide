@@ -36,4 +36,21 @@ test("production composition rejects missing security authorities before opening
     } as unknown as ProductionPostgresControlApiConfig),
     /production_authorization_required/u,
   );
+  await assert.rejects(
+    createProductionPostgresControlApi({
+      ...base,
+      identity: {
+        async resolveActor() {
+          throw new Error("unused");
+        },
+      },
+      authorization: {
+        async authorize() {
+          return { outcome: "allow" };
+        },
+      },
+      providerProbeWorkers: {},
+    } as unknown as ProductionPostgresControlApiConfig),
+    /production_provider_probe_registry_invalid/u,
+  );
 });
