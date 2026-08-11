@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -35,7 +36,7 @@ test("parses the shared bounded filesystem read command", () => {
 
 test("parses durable read events and cumulative ACK from the shared fixture", () => {
   for (const event of fixture.valid.filesystemReadEvents) {
-    assert.deepEqual(parseDeviceFilesystemReadEvent(event), event);
+    assert.deepEqual(parseDeviceFilesystemReadEvent(event, digestUtf8), event);
   }
   assert.deepEqual(
     parseDeviceFilesystemReadAck(fixture.valid.filesystemReadAck),
@@ -44,19 +45,23 @@ test("parses durable read events and cumulative ACK from the shared fixture", ()
   const drift = structuredClone(fixture.valid.filesystemReadEvents[1]) as any;
   drift.sequence = 1;
   assert.throws(
-    () => parseDeviceFilesystemReadEvent(drift),
+    () => parseDeviceFilesystemReadEvent(drift, digestUtf8),
     /device_filesystem_read_event_invalid/,
   );
   const badTime = structuredClone(fixture.valid.filesystemReadEvents[0]) as any;
   badTime.observedAt = "not-a-timestamp";
-  assert.throws(() => parseDeviceFilesystemReadEvent(badTime));
+  assert.throws(() => parseDeviceFilesystemReadEvent(badTime, digestUtf8));
   const digestDrift = structuredClone(
     fixture.valid.filesystemReadEvents[1],
   ) as any;
   digestDrift.data.result.content = "changed";
   digestDrift.data.result.byteLength = 7;
-  assert.throws(() => parseDeviceFilesystemReadEvent(digestDrift));
+  assert.throws(() => parseDeviceFilesystemReadEvent(digestDrift, digestUtf8));
 });
+
+function digestUtf8(content: string): string {
+  return `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
+}
 
 test("parses the shared UTF-8 result under its serialized output cap", () => {
   assert.deepEqual(

@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { ContractValidationError } from "./contract-validation-error.ts";
 import {
   parseDeviceExecutionCommand,
@@ -68,6 +66,7 @@ const ackKeys = [
 
 export function parseDeviceFilesystemReadEvent(
   input: unknown,
+  digestUtf8: (content: string) => string,
 ): DeviceFilesystemReadEvent {
   const event = record(input);
   keys(event, eventKeys);
@@ -85,7 +84,7 @@ export function parseDeviceFilesystemReadEvent(
     case "workspace_read.completed":
       sequence(event, 2);
       keys(data, ["result"]);
-      completed(data.result);
+      completed(data.result, digestUtf8);
       break;
     case "workspace_read.failed":
       sequence(event, 2);
@@ -143,7 +142,10 @@ function envelope(value: Record<string, unknown>, schema: string): void {
   if (!/^sha256:[0-9a-f]{64}$/.test(String(value.commandDigest))) invalid();
 }
 
-function completed(input: unknown): void {
+function completed(
+  input: unknown,
+  digestUtf8: (content: string) => string,
+): void {
   const result = record(input);
   keys(result, [
     "byteLength",
@@ -157,8 +159,7 @@ function completed(input: unknown): void {
     result.encoding !== "utf8" ||
     typeof result.content !== "string" ||
     result.byteLength !== new TextEncoder().encode(result.content).length ||
-    result.outputDigest !==
-      `sha256:${createHash("sha256").update(result.content, "utf8").digest("hex")}` ||
+    result.outputDigest !== digestUtf8(result.content) ||
     new TextEncoder().encode(JSON.stringify(result)).length >
       DEVICE_FILESYSTEM_READ_MAX_BYTES
   )
