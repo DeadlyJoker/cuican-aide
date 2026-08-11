@@ -421,20 +421,19 @@ pub fn process_responses_event(
 }
 
 fn top_level_provider_error(nested: Option<Value>, flat_code: Option<Value>) -> Error {
-    let code = nested
-        .as_ref()
-        .and_then(Value::as_object)
-        .and_then(|nested| nested.get("code"))
-        .or(flat_code.as_ref())
-        .and_then(Value::as_str)
-        .filter(|code| {
-            !code.is_empty()
-                && code.len() <= 96
-                && code
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-        })
-        .map(str::to_string);
+    let code = match nested.as_ref().and_then(Value::as_object) {
+        Some(nested) => nested.get("code"),
+        None => flat_code.as_ref(),
+    }
+    .and_then(Value::as_str)
+    .filter(|code| {
+        !code.is_empty()
+            && code.len() <= 96
+            && code
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+    })
+    .map(str::to_string);
     Error {
         r#type: None,
         code,

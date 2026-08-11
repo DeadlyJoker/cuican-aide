@@ -38,6 +38,20 @@
       }
     },
     {
+      "name": "nested object missing code wins over fatal flat code",
+      "events": [
+        { "type": "error", "sequence_number": 0, "error": { "message": "secret" }, "code": "invalid_prompt", "message": "poison" },
+        { "type": "response.output_text.delta", "sequence_number": 1, "delta": "poison" },
+        { "type": "response.completed", "sequence_number": 2, "response": { "id": "resp-poison", "status": "completed", "usage": { "input_tokens": 2, "output_tokens": 3, "total_tokens": 5 } } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"], "terminal": "failed", "errorCategory": "provider",
+        "code": "responses_provider_failed", "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "", "completedHistory": [], "usage": null, "checkpoint": null
+      }
+    },
+    {
       "name": "malformed non-object nested and flat payload",
       "events": [
         { "type": "error", "sequence_number": 0, "error": "broken", "code": ["server_error"], "message": { "secret": "provider copy" } },
