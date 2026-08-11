@@ -5,6 +5,7 @@ import type {
   DeviceFilesystemReadDispatchReference,
 } from "@crewon/contracts";
 
+import { ApplicationError } from "./application-error.ts";
 import type { IdempotencyDescriptor } from "./run-store-port.ts";
 import type {
   FrozenWorkspaceReadFileDispatch,
@@ -29,6 +30,15 @@ export type WorkspaceReadFileExecuteIntent = WorkspaceReadFileLocator &
   }>;
 export type WorkspaceReadFileRecoveryIntent = WorkspaceReadFileLocator &
   Readonly<{ idempotency: IdempotencyDescriptor }>;
+export type WorkspaceReadFileExecuteProbeIntent = WorkspaceReadFileRecoveryIntent &
+  Readonly<{ relativePathSegments: readonly string[] }>;
+
+export interface WorkspaceReadFileExecuteAuthorityResolverPort {
+  resolve(
+    intent: WorkspaceReadFileExecuteProbeIntent,
+    signal: AbortSignal,
+  ): Promise<WorkspaceReadFileExecuteIntent>;
+}
 
 export interface WorkspaceReadFileCommandFactoryPort {
   create(
@@ -107,6 +117,31 @@ export class WorkspaceReadFileApplicationService {
       intent.idempotency,
       signal,
     );
+  }
+
+  async executeWithAuthority(
+    intent: WorkspaceReadFileExecuteProbeIntent,
+    authority: WorkspaceReadFileExecuteAuthorityResolverPort,
+    signal: AbortSignal,
+  ): Promise<WorkspaceReadFileMutationResult> {
+    const replay = await this.#receipt(intent, "execute");
+    if (replay !== null) {
+      return replay.operation.status === "prepared"
+        ? this.#dispatch(
+            replay.operation,
+            "execute",
+            intent.idempotency,
+            signal,
+          )
+        : replay;
+    }
+    const resolved = await authority.resolve(intent, signal);
+    if (!sameProbe(intent, resolved))
+      throw new ApplicationError(
+        "internal",
+        "workspace_read_file_authority_drift",
+      );
+    return this.execute(resolved, signal);
   }
 
   reconcile(intent: WorkspaceReadFileRecoveryIntent, signal: AbortSignal) {
@@ -214,4 +249,21 @@ function dispatchCertainty(error: unknown): "notSent" | "possiblySent" {
   )
     return error.certainty;
   return "possiblySent";
+}
+
+function sameProbe(
+  probe: WorkspaceReadFileExecuteProbeIntent,
+  resolved: WorkspaceReadFileExecuteIntent,
+): boolean {
+  return (
+    probe.tenantId === resolved.tenantId &&
+    probe.spaceId === resolved.spaceId &&
+    probe.runId === resolved.runId &&
+    probe.stepId === resolved.stepId &&
+    probe.attemptId === resolved.attemptId &&
+    probe.executionId === resolved.executionId &&
+    JSON.stringify(probe.idempotency) === JSON.stringify(resolved.idempotency) &&
+    JSON.stringify(probe.relativePathSegments) ===
+      JSON.stringify(resolved.relativePathSegments)
+  );
 }
