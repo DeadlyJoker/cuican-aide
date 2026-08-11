@@ -17,7 +17,9 @@ use super::parse_device_execution_ack;
 use super::parse_device_execution_cancel;
 use super::parse_device_execution_command;
 use super::parse_device_execution_event;
+use super::parse_device_filesystem_read_ack;
 use super::parse_device_filesystem_read_command;
+use super::parse_device_filesystem_read_event;
 use super::parse_device_gateway_welcome;
 use super::parse_device_hello;
 use super::parse_device_workspace_list_command;
@@ -39,6 +41,8 @@ struct Reference {
 struct ValidReference {
     command: Value,
     filesystem_read_command: Value,
+    filesystem_read_events: Vec<Value>,
+    filesystem_read_ack: Value,
     workspace_command: Value,
     hello: Value,
     welcome: Value,
@@ -76,6 +80,24 @@ fn matches_typescript_device_protocol_reference_and_fail_closed_codes() {
         )
         .expect("serialize shared filesystem read command"),
         fixture.valid.filesystem_read_command,
+    );
+    for event in &fixture.valid.filesystem_read_events {
+        assert_eq!(
+            serde_json::to_value(
+                parse_device_filesystem_read_event(event.clone())
+                    .expect("parse shared filesystem read event")
+            )
+            .expect("serialize filesystem read event"),
+            *event,
+        );
+    }
+    assert_eq!(
+        serde_json::to_value(
+            parse_device_filesystem_read_ack(fixture.valid.filesystem_read_ack.clone())
+                .expect("parse shared filesystem read ACK")
+        )
+        .expect("serialize filesystem read ACK"),
+        fixture.valid.filesystem_read_ack,
     );
 
     assert_eq!(

@@ -4,6 +4,8 @@ import test from "node:test";
 
 import {
   parseDeviceFilesystemReadCommand,
+  parseDeviceFilesystemReadAck,
+  parseDeviceFilesystemReadEvent,
   parseDeviceFilesystemReadResult,
 } from "./device-filesystem-read.ts";
 
@@ -16,13 +18,34 @@ const fixture = JSON.parse(
     "utf8",
   ),
 ) as {
-  valid: { filesystemReadCommand: unknown; filesystemReadResult: unknown };
+  valid: {
+    filesystemReadCommand: unknown;
+    filesystemReadResult: unknown;
+    filesystemReadEvents: unknown[];
+    filesystemReadAck: unknown;
+  };
 };
 
 test("parses the shared bounded filesystem read command", () => {
   assert.deepEqual(
     parseDeviceFilesystemReadCommand(fixture.valid.filesystemReadCommand),
     fixture.valid.filesystemReadCommand,
+  );
+});
+
+test("parses durable read events and cumulative ACK from the shared fixture", () => {
+  for (const event of fixture.valid.filesystemReadEvents) {
+    assert.deepEqual(parseDeviceFilesystemReadEvent(event), event);
+  }
+  assert.deepEqual(
+    parseDeviceFilesystemReadAck(fixture.valid.filesystemReadAck),
+    fixture.valid.filesystemReadAck,
+  );
+  const drift = structuredClone(fixture.valid.filesystemReadEvents[1]) as any;
+  drift.sequence = 1;
+  assert.throws(
+    () => parseDeviceFilesystemReadEvent(drift),
+    /device_filesystem_read_event_invalid/,
   );
 });
 
