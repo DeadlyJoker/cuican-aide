@@ -1,4 +1,4 @@
-import type { Pool, PoolClient } from "pg";
+import { Pool, type PoolClient } from "pg";
 
 import {
   RunStoreError,
@@ -14,7 +14,9 @@ import {
 
 import {
   exactResolution,
+  requireWorkspaceReadFileLocator,
   validateFrozenWorkspaceReadFileDispatch,
+  validateWorkspaceReadFileIdempotency,
   validateWorkspaceReadFileLocator,
   validateWorkspaceReadFileRecord,
   withResolution,
@@ -27,16 +29,36 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
   readonly #pool: Pool;
   readonly #schema: string;
   readonly #schemaSql: string;
+  readonly #owned: boolean;
+  #closed = false;
 
-  constructor(pool: Pool, schema: string) {
+  constructor(pool: Pool, schema: string, owned = false) {
     if (!/^[a-z_][a-z0-9_]{0,62}$/u.test(schema))
       throw new RunStoreError("postgres_schema_invalid");
     this.#pool = pool;
     this.#schema = schema;
     this.#schemaSql = `"${schema}"`;
+    this.#owned = owned;
+  }
+
+  static open(connectionString: string, schema: string) {
+    if (typeof connectionString !== "string" || connectionString.length < 1)
+      throw new RunStoreError("postgres_connection_string_invalid");
+    return new PostgresWorkspaceReadFileStore(
+      new Pool({ connectionString }),
+      schema,
+      true,
+    );
+  }
+
+  async close() {
+    if (this.#closed) return;
+    this.#closed = true;
+    if (this.#owned) await this.#pool.end();
   }
 
   async initialize() {
+    this.#assertOpen();
     await this.#pool.query(`CREATE SCHEMA IF NOT EXISTS ${this.#schemaSql};
       CREATE TABLE IF NOT EXISTS ${this.#schemaSql}.workspace_read_file_operations (
         tenant_id text NOT NULL, space_id text NOT NULL, execution_id text NOT NULL,
@@ -53,6 +75,8 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
   }
 
   async loadWorkspaceReadFileReceipt(query: WorkspaceReadFileReceiptQuery) {
+    this.#assertOpen();
+    validateWorkspaceReadFileIdempotency(query.idempotency);
     const receipt = await this.#receipt(
       this.#pool,
       query.tenantId,
@@ -74,8 +98,10 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
   }
 
   async prepareWorkspaceReadFile(input: PrepareWorkspaceReadFileInput) {
+    validateWorkspaceReadFileIdempotency(input.idempotency);
     return this.#transaction(async (client) => {
       const locator = validateWorkspaceReadFileLocator(locatorOf(input));
+      await this.#lock(client, locator, "execute", input.idempotency);
       const receipt = await this.#receipt(
         client,
         locator.tenantId,
@@ -105,6 +131,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
         true,
       );
       if (existing !== null) {
+        requireWorkspaceReadFileLocator(existing, locator);
         if (JSON.stringify(existing.frozen) !== JSON.stringify(frozen))
           conflict();
         await this.#insertReceipt(
@@ -141,8 +168,10 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
   async prepareWorkspaceReadFileAction(
     input: PrepareWorkspaceReadFileActionInput,
   ) {
+    validateWorkspaceReadFileIdempotency(input.idempotency);
     return this.#transaction(async (client) => {
       const locator = validateWorkspaceReadFileLocator(locatorOf(input));
+      await this.#lock(client, locator, input.phase, input.idempotency);
       const operation = await this.#required(
         client,
         locator.tenantId,
@@ -150,6 +179,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
         locator.executionId,
         true,
       );
+      requireWorkspaceReadFileLocator(operation, locator);
       const receipt = await this.#receipt(
         client,
         locator.tenantId,
@@ -218,6 +248,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
       WorkspaceReadFileStore["commitWorkspaceReadFileResolution"]
     >[0],
   ) {
+    validateWorkspaceReadFileIdempotency(input.idempotency);
     return this.#transaction(async (client) => {
       const current = await this.#required(
         client,
@@ -226,22 +257,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
         input.executionId,
         true,
       );
-      if (current.resolution !== null) {
-        const parsed = exactResolution(current, input.phase, input.resolution);
-        if (JSON.stringify(parsed) !== JSON.stringify(current.resolution))
-          conflict();
-        return result("replayed", current);
-      }
-      if (
-        current.revision !== input.expectedRevision &&
-        current.status !== "possiblySent"
-      )
-        conflict();
-      const next = withResolution(
-        current,
-        exactResolution(current, input.phase, input.resolution),
-      );
-      await this.#update(client, input, current.revision, next);
+      requireWorkspaceReadFileLocator(current, input);
       const receipt = await this.#receipt(
         client,
         input.tenantId,
@@ -250,7 +266,22 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
         input.idempotency,
       );
       if (receipt !== null) fingerprint(receipt, input.idempotency);
-      else
+      if (current.resolution !== null) {
+        if (receipt === null) conflict();
+        const parsed = exactResolution(current, input.phase, input.resolution);
+        if (JSON.stringify(parsed) !== JSON.stringify(current.resolution))
+          conflict();
+        return result("replayed", current);
+      }
+      if (current.revision !== input.expectedRevision) conflict();
+      if (input.phase === "execute" && current.status !== "possiblySent")
+        conflict();
+      const next = withResolution(
+        current,
+        exactResolution(current, input.phase, input.resolution),
+      );
+      await this.#update(client, input, current.revision, next);
+      if (receipt === null)
         await this.#insertReceipt(
           client,
           input,
@@ -306,6 +337,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
       input.executionId,
       true,
     );
+    requireWorkspaceReadFileLocator(current, input);
     if (current.revision !== input.expectedRevision) conflict();
     return current;
   }
@@ -366,6 +398,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
     if (changed.rowCount !== 1) conflict();
   }
   async #transaction<T>(call: (client: PoolClient) => Promise<T>) {
+    this.#assertOpen();
     const client = await this.#pool.connect();
     try {
       await client.query("BEGIN");
@@ -378,6 +411,21 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
     } finally {
       client.release();
     }
+  }
+
+  async #lock(
+    client: PoolClient,
+    locator: WorkspaceReadFileLocator,
+    phase: string,
+    idempotency: IdempotencyDescriptor,
+  ) {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `${this.#schema}:${locator.tenantId}:${locator.spaceId}:${locator.executionId}:${phase}:${idempotency.scope}:${idempotency.key}`,
+    ]);
+  }
+
+  #assertOpen() {
+    if (this.#closed) throw new RunStoreError("workspace_read_file_store_closed");
   }
 }
 

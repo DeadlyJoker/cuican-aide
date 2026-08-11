@@ -3,9 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import type {
-  DeviceFilesystemReadCommand,
-  DeviceFilesystemReadEvent,
+import {
+  canonicalDeviceFilesystemReadCommandDigest,
+  type DeviceFilesystemReadCommand,
+  type DeviceFilesystemReadEvent,
 } from "@crewon/contracts";
 import type {
   FrozenWorkspaceReadFileDispatch,
@@ -58,6 +59,76 @@ postgresTest(
     });
     assert.equal(first.operation.frozen.reference.receiptId, null);
     assert.deepEqual(replay?.operation, first.operation);
+  },
+);
+
+test(
+  "PostgreSQL two pools converge prepare and terminal while rejecting frozen conflict",
+  {
+    skip:
+      url === undefined
+        ? "CREWON_TEST_POSTGRES_URL is not configured"
+        : false,
+  },
+  async () => {
+    const firstPool = new Pool({ connectionString: url, max: 2 });
+    const secondPool = new Pool({ connectionString: url, max: 2 });
+    const schema = `workspace_read_${randomUUID().replaceAll("-", "")}`;
+    const first = new PostgresWorkspaceReadFileStore(firstPool, schema);
+    const second = new PostgresWorkspaceReadFileStore(secondPool, schema);
+    try {
+      await first.initialize();
+      const preparations = await Promise.all([
+        first.prepareWorkspaceReadFile({
+          ...locator,
+          idempotency: executeIdempotency,
+          frozen: frozen(),
+        }),
+        second.prepareWorkspaceReadFile({
+          ...locator,
+          idempotency: executeIdempotency,
+          frozen: frozen(),
+        }),
+      ]);
+      assert.deepEqual(
+        preparations.map((value) => value.disposition).sort(),
+        ["committed", "replayed"],
+      );
+      await assert.rejects(() =>
+        second.prepareWorkspaceReadFile({
+          ...locator,
+          idempotency: idempotency("conflicting-prepare"),
+          frozen: conflictingFrozen(),
+        }),
+      );
+      const fenced = await first.markWorkspaceReadFilePossiblySent({
+        ...locator,
+        expectedRevision: preparations[0]!.operation.revision,
+      });
+      const terminals = await Promise.all([
+        first.commitWorkspaceReadFileResolution({
+          ...locator,
+          phase: "execute",
+          idempotency: executeIdempotency,
+          expectedRevision: fenced.revision,
+          resolution: completed(),
+        }),
+        second.commitWorkspaceReadFileResolution({
+          ...locator,
+          phase: "execute",
+          idempotency: executeIdempotency,
+          expectedRevision: fenced.revision,
+          resolution: completed(),
+        }),
+      ]);
+      assert.deepEqual(
+        terminals.map((value) => value.disposition).sort(),
+        ["committed", "replayed"],
+      );
+    } finally {
+      await firstPool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await Promise.all([firstPool.end(), secondPool.end()]);
+    }
   },
 );
 
@@ -176,6 +247,26 @@ function frozen(): FrozenWorkspaceReadFileDispatch {
       leaseId: command.leaseId,
       leaseEpoch: command.leaseEpoch,
       receiptId: null,
+    },
+  };
+}
+function conflictingFrozen(): FrozenWorkspaceReadFileDispatch {
+  const value = frozen();
+  const conflictingCommand = {
+    ...value.command,
+    actionDigest: `sha256:${"c".repeat(64)}`,
+  };
+  return {
+    ...value,
+    command: conflictingCommand,
+    reference: {
+      ...value.reference,
+      actionDigest: conflictingCommand.actionDigest,
+      commandDigest: canonicalDeviceFilesystemReadCommandDigest(
+        conflictingCommand,
+        (input) =>
+          `sha256:${createHash("sha256").update(input).digest("hex")}`,
+      ),
     },
   };
 }
