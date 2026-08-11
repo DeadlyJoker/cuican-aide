@@ -3,13 +3,13 @@ use std::sync::Arc;
 use chrono::SecondsFormat;
 use chrono::Utc;
 use crewon_device_protocol::DeviceExecutionCancel;
-use crewon_device_protocol::DeviceHello;
-use crewon_device_protocol::DeviceWorkspaceListEvent;
-use crewon_device_protocol::parse_device_hello;
-use crewon_device_protocol::parse_device_workspace_list_event;
-use crewon_device_protocol::parse_device_filesystem_read_event;
 use crewon_device_protocol::DeviceFilesystemReadAck;
 use crewon_device_protocol::DeviceFilesystemReadEvent;
+use crewon_device_protocol::DeviceHello;
+use crewon_device_protocol::DeviceWorkspaceListEvent;
+use crewon_device_protocol::parse_device_filesystem_read_event;
+use crewon_device_protocol::parse_device_hello;
+use crewon_device_protocol::parse_device_workspace_list_event;
 use futures::SinkExt as _;
 use futures::StreamExt as _;
 use pretty_assertions::assert_eq;
@@ -29,11 +29,11 @@ use crate::runtime::RuntimeEvent;
 use crate::test_support::ServerPin;
 use crate::test_support::accepted_event;
 use crate::test_support::ack;
+use crate::test_support::read_accepted_event;
+use crate::test_support::read_completed_event;
 use crate::test_support::runtime_fixture;
 use crate::test_support::signed_command;
 use crate::test_support::signed_read_command;
-use crate::test_support::read_accepted_event;
-use crate::test_support::read_completed_event;
 use crate::test_support::terminal_event;
 use crate::test_support::welcome;
 
@@ -156,8 +156,14 @@ async fn real_mtls_wss_sends_hello_then_accepted_terminal_and_survives_late_canc
 
 #[tokio::test]
 async fn real_mtls_wss_executes_and_acknowledges_workspace_read_without_regressing_list() {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind WSS listener");
-    let url = Url::parse(&format!("wss://localhost:{}/device/v1", listener.local_addr().expect("listener address").port())).expect("gateway URL");
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind WSS listener");
+    let url = Url::parse(&format!(
+        "wss://localhost:{}/device/v1",
+        listener.local_addr().expect("listener address").port()
+    ))
+    .expect("gateway URL");
     let fixture = runtime_fixture(url, ServerPin::Required).await;
     let command = signed_read_command(&fixture, 90);
     let server_config = Arc::clone(&fixture.server_config);
@@ -165,62 +171,149 @@ async fn real_mtls_wss_executes_and_acknowledges_workspace_read_without_regressi
     let server = tokio::spawn(async move {
         let mut socket = accept_wss(&listener, server_config).await;
         let hello = receive_hello(&mut socket).await;
-        assert_eq!(hello.capabilities, vec!["workspace.list_top_level.v0", "workspace.read_file.v0"]);
-        socket.send(Message::text(serde_json::to_string(&welcome(&hello, 1)).expect("welcome"))).await.expect("send welcome");
-        socket.send(Message::text(serde_json::to_string(&command_for_server.command).expect("read command"))).await.expect("send read");
+        assert_eq!(
+            hello.capabilities,
+            vec!["workspace.list_top_level.v0", "workspace.read_file.v0"]
+        );
+        socket
+            .send(Message::text(
+                serde_json::to_string(&welcome(&hello, 1)).expect("welcome"),
+            ))
+            .await
+            .expect("send welcome");
+        socket
+            .send(Message::text(
+                serde_json::to_string(&command_for_server.command).expect("read command"),
+            ))
+            .await
+            .expect("send read");
         let accepted = receive_read_event(&mut socket).await;
         let terminal = receive_read_event(&mut socket).await;
         assert_eq!(read_sequence(&accepted), 1);
         assert_eq!(read_sequence(&terminal), 2);
-        let DeviceFilesystemReadEvent::Completed { data, .. } = &terminal else { panic!("completed read required"); };
+        let DeviceFilesystemReadEvent::Completed { data, .. } = &terminal else {
+            panic!("completed read required");
+        };
         assert_eq!(data.result.content, "alpha");
-        socket.send(Message::text(serde_json::to_string(&read_ack(&terminal, 2)).expect("read ACK"))).await.expect("send read ACK");
-        socket.send(Message::Ping(vec![7].into())).await.expect("send ping");
-        while !matches!(socket.next().await.expect("pong").expect("read pong"), Message::Pong(_)) {}
+        socket
+            .send(Message::text(
+                serde_json::to_string(&read_ack(&terminal, 2)).expect("read ACK"),
+            ))
+            .await
+            .expect("send read ACK");
+        socket
+            .send(Message::Ping(vec![7].into()))
+            .await
+            .expect("send ping");
+        while !matches!(
+            socket.next().await.expect("pong").expect("read pong"),
+            Message::Pong(_)
+        ) {}
         socket.close(None).await.expect("close");
     });
     let socket = fixture.runtime.connect_socket().await.expect("connect");
-    run_socket_with_ready(Arc::clone(&fixture.runtime.state), socket, &|_| {}).await.expect("run read session");
+    run_socket_with_ready(Arc::clone(&fixture.runtime.state), socket, &|_| {})
+        .await
+        .expect("run read session");
     server.await.expect("server");
-    let execution = fixture.runtime.state.journal.get_filesystem_read(&command.command.execution_id).await.expect("load read").expect("read execution");
+    let execution = fixture
+        .runtime
+        .state
+        .journal
+        .get_filesystem_read(&command.command.execution_id)
+        .await
+        .expect("load read")
+        .expect("read execution");
     assert_eq!(execution.acknowledged_through, 2);
 }
 
 #[tokio::test]
 async fn read_crash_recovery_and_terminal_replay_never_reread_the_file() {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind WSS listener");
-    let url = Url::parse(&format!("wss://localhost:{}/device/v1", listener.local_addr().expect("listener address").port())).expect("gateway URL");
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind WSS listener");
+    let url = Url::parse(&format!(
+        "wss://localhost:{}/device/v1",
+        listener.local_addr().expect("listener address").port()
+    ))
+    .expect("gateway URL");
     let fixture = runtime_fixture(url, ServerPin::Required).await;
     let crash_command = signed_read_command(&fixture, 91);
     let crash_accepted = read_accepted_event(&crash_command, 1);
-    fixture.runtime.state.journal.prepare_filesystem_read(&crash_command, &crash_accepted).await.expect("seed accepted-only read");
+    fixture
+        .runtime
+        .state
+        .journal
+        .prepare_filesystem_read(&crash_command, &crash_accepted)
+        .await
+        .expect("seed accepted-only read");
     let replay_command = signed_read_command(&fixture, 92);
     let replay_accepted = read_accepted_event(&replay_command, 1);
     let replay_terminal = read_completed_event(&replay_command, &replay_accepted, "journal-value");
-    fixture.runtime.state.journal.prepare_filesystem_read(&replay_command, &replay_accepted).await.expect("seed replay accepted");
-    fixture.runtime.state.journal.record_filesystem_read_terminal(&replay_terminal).await.expect("seed replay terminal");
+    fixture
+        .runtime
+        .state
+        .journal
+        .prepare_filesystem_read(&replay_command, &replay_accepted)
+        .await
+        .expect("seed replay accepted");
+    fixture
+        .runtime
+        .state
+        .journal
+        .record_filesystem_read_terminal(&replay_terminal)
+        .await
+        .expect("seed replay terminal");
     let server_config = Arc::clone(&fixture.server_config);
     let server_crash = crash_command.command.clone();
     let server_replay = replay_command.command.clone();
     let server = tokio::spawn(async move {
         let mut socket = accept_wss(&listener, server_config).await;
         let hello = receive_hello(&mut socket).await;
-        socket.send(Message::text(serde_json::to_string(&welcome(&hello, 2)).expect("welcome"))).await.expect("send welcome");
+        socket
+            .send(Message::text(
+                serde_json::to_string(&welcome(&hello, 2)).expect("welcome"),
+            ))
+            .await
+            .expect("send welcome");
         let _crash_replay = receive_read_event(&mut socket).await;
         let _terminal_accepted_replay = receive_read_event(&mut socket).await;
-        let DeviceFilesystemReadEvent::Completed { data, .. } = receive_read_event(&mut socket).await else { panic!("completed reconnect replay required"); };
+        let DeviceFilesystemReadEvent::Completed { data, .. } =
+            receive_read_event(&mut socket).await
+        else {
+            panic!("completed reconnect replay required");
+        };
         assert_eq!(data.result.content, "journal-value");
-        socket.send(Message::text(serde_json::to_string(&server_crash).expect("crash command"))).await.expect("send crash command");
+        socket
+            .send(Message::text(
+                serde_json::to_string(&server_crash).expect("crash command"),
+            ))
+            .await
+            .expect("send crash command");
         let _accepted = receive_read_event(&mut socket).await;
-        assert!(matches!(receive_read_event(&mut socket).await, DeviceFilesystemReadEvent::UnknownOutcome { .. }));
-        socket.send(Message::text(serde_json::to_string(&server_replay).expect("replay command"))).await.expect("send replay command");
+        assert!(matches!(
+            receive_read_event(&mut socket).await,
+            DeviceFilesystemReadEvent::UnknownOutcome { .. }
+        ));
+        socket
+            .send(Message::text(
+                serde_json::to_string(&server_replay).expect("replay command"),
+            ))
+            .await
+            .expect("send replay command");
         let _accepted = receive_read_event(&mut socket).await;
-        let DeviceFilesystemReadEvent::Completed { data, .. } = receive_read_event(&mut socket).await else { panic!("completed replay required"); };
+        let DeviceFilesystemReadEvent::Completed { data, .. } =
+            receive_read_event(&mut socket).await
+        else {
+            panic!("completed replay required");
+        };
         assert_eq!(data.result.content, "journal-value");
         socket.close(None).await.expect("close");
     });
     let socket = fixture.runtime.connect_socket().await.expect("connect");
-    run_socket_with_ready(Arc::clone(&fixture.runtime.state), socket, &|_| {}).await.expect("run recovery session");
+    run_socket_with_ready(Arc::clone(&fixture.runtime.state), socket, &|_| {})
+        .await
+        .expect("run recovery session");
     server.await.expect("server");
 }
 
@@ -420,7 +513,10 @@ async fn subscribe_before_snapshot_delivers_terminal_committed_after_snapshot() 
     let snapshot = collect_replay_events(&fixture.runtime.state)
         .await
         .expect("snapshot replay");
-    assert_eq!(snapshot, vec![RuntimeEvent::WorkspaceList(accepted.clone())]);
+    assert_eq!(
+        snapshot,
+        vec![RuntimeEvent::WorkspaceList(accepted.clone())]
+    );
     let (outbound, mut wire) = tokio::sync::mpsc::channel(4);
     enqueue_replay_events(&outbound, &snapshot)
         .await
@@ -568,10 +664,24 @@ where
         .expect("parse event")
 }
 
-async fn receive_read_event<Stream>(socket: &mut tokio_tungstenite::WebSocketStream<Stream>) -> DeviceFilesystemReadEvent
-where Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin {
-    let Message::Text(text) = socket.next().await.expect("read event frame").expect("read event") else { panic!("text event required"); };
-    parse_device_filesystem_read_event(serde_json::from_str(text.as_str()).expect("read event JSON")).expect("parse read event")
+async fn receive_read_event<Stream>(
+    socket: &mut tokio_tungstenite::WebSocketStream<Stream>,
+) -> DeviceFilesystemReadEvent
+where
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let Message::Text(text) = socket
+        .next()
+        .await
+        .expect("read event frame")
+        .expect("read event")
+    else {
+        panic!("text event required");
+    };
+    parse_device_filesystem_read_event(
+        serde_json::from_str(text.as_str()).expect("read event JSON"),
+    )
+    .expect("parse read event")
 }
 
 fn read_sequence(event: &DeviceFilesystemReadEvent) -> u64 {
@@ -626,7 +736,9 @@ fn runtime_event_sequence(event: &RuntimeEvent) -> u64 {
             | crewon_device_protocol::DeviceFilesystemReadEvent::Completed { envelope, .. }
             | crewon_device_protocol::DeviceFilesystemReadEvent::Failed { envelope, .. }
             | crewon_device_protocol::DeviceFilesystemReadEvent::Canceled { envelope, .. }
-            | crewon_device_protocol::DeviceFilesystemReadEvent::UnknownOutcome { envelope, .. } => envelope.sequence,
+            | crewon_device_protocol::DeviceFilesystemReadEvent::UnknownOutcome {
+                envelope, ..
+            } => envelope.sequence,
         },
     }
 }

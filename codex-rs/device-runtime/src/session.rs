@@ -4,15 +4,15 @@ use std::sync::atomic::Ordering;
 use chrono::SecondsFormat;
 use chrono::Utc;
 use crewon_device::NativeDeviceConnection;
-use crewon_device_journal::WorkspaceJournalListQuery;
 use crewon_device_journal::FilesystemReadJournalListQuery;
+use crewon_device_journal::WorkspaceJournalListQuery;
 use crewon_device_protocol::DEVICE_PROTOCOL_VERSION;
 use crewon_device_protocol::DeviceAcknowledgedExecution;
+use crewon_device_protocol::DeviceFilesystemReadAck;
 use crewon_device_protocol::DeviceHello;
 use crewon_device_protocol::DeviceWorkspaceListAck;
-use crewon_device_protocol::DeviceFilesystemReadAck;
-use crewon_device_protocol::parse_device_filesystem_read_ack;
 use crewon_device_protocol::parse_device_execution_cancel;
+use crewon_device_protocol::parse_device_filesystem_read_ack;
 use crewon_device_protocol::parse_device_gateway_welcome;
 use crewon_device_protocol::parse_device_workspace_list_ack;
 use futures::SinkExt as _;
@@ -37,9 +37,9 @@ use crate::runtime::DeviceRuntimeState;
 use crate::runtime::MAX_ACKNOWLEDGED_EXECUTIONS;
 use crate::runtime::MAX_SOCKET_MESSAGE_BYTES;
 use crate::runtime::MAX_UNACKNOWLEDGED_EXECUTIONS;
+use crate::runtime::RuntimeEvent;
 use crate::runtime::WORKSPACE_LIST_CAPABILITY;
 use crate::runtime::WORKSPACE_READ_CAPABILITY;
-use crate::runtime::RuntimeEvent;
 
 const OUTBOUND_CAPACITY: usize = 256;
 const DISPATCH_QUEUE_CAPACITY: usize = 32;
@@ -102,13 +102,19 @@ where
                 Outbound::Event(event) => match event.as_ref() {
                     RuntimeEvent::WorkspaceList(event) => serde_json::to_string(event),
                     RuntimeEvent::FilesystemRead(event) => serde_json::to_string(event),
-                }.map_or_else(|_| {
-                    let _ = writer_fatal.send(true);
-                    None
-                }, |event| Some(Message::text(event))),
+                }
+                .map_or_else(
+                    |_| {
+                        let _ = writer_fatal.send(true);
+                        None
+                    },
+                    |event| Some(Message::text(event)),
+                ),
                 Outbound::Pong(payload) => Some(Message::Pong(payload.into())),
             };
-            let Some(message) = message else { return; };
+            let Some(message) = message else {
+                return;
+            };
             if writer.send(message).await.is_err() {
                 let _ = writer_fatal.send(true);
                 return;
@@ -234,18 +240,30 @@ async fn build_hello(
     }
     let mut cursor = None;
     loop {
-        let page = state.journal.list_filesystem_read_acknowledgements(&FilesystemReadJournalListQuery {
-            after_execution_id: cursor,
-            limit: 100,
-        }).await.map_err(|error| DeviceRuntimeError::with_source("device_runtime_journal_invalid", error))?;
+        let page = state
+            .journal
+            .list_filesystem_read_acknowledgements(&FilesystemReadJournalListQuery {
+                after_execution_id: cursor,
+                limit: 100,
+            })
+            .await
+            .map_err(|error| {
+                DeviceRuntimeError::with_source("device_runtime_journal_invalid", error)
+            })?;
         if last_acknowledged.len() + page.acknowledgements.len() > MAX_ACKNOWLEDGED_EXECUTIONS {
-            return Err(DeviceRuntimeError::new("device_runtime_acknowledgement_capacity_exceeded"));
+            return Err(DeviceRuntimeError::new(
+                "device_runtime_acknowledgement_capacity_exceeded",
+            ));
         }
-        last_acknowledged.extend(page.acknowledgements.into_iter().map(|acknowledgement| DeviceAcknowledgedExecution {
-            execution_id: acknowledgement.execution_id,
-            sequence: acknowledgement.through_sequence,
+        last_acknowledged.extend(page.acknowledgements.into_iter().map(|acknowledgement| {
+            DeviceAcknowledgedExecution {
+                execution_id: acknowledgement.execution_id,
+                sequence: acknowledgement.through_sequence,
+            }
         }));
-        let Some(next_cursor) = page.next_cursor else { break; };
+        let Some(next_cursor) = page.next_cursor else {
+            break;
+        };
         cursor = Some(next_cursor);
     }
     Ok(DeviceHello {
@@ -295,18 +313,28 @@ async fn collect_replay_events(
     }
     let mut cursor = None;
     loop {
-        let page = state.read_orchestrator.reconnect_page(&FilesystemReadJournalListQuery {
-            after_execution_id: cursor,
-            limit: 100,
-        }).await.map_err(|error| DeviceRuntimeError::with_source("device_runtime_journal_invalid", error))?;
+        let page = state
+            .read_orchestrator
+            .reconnect_page(&FilesystemReadJournalListQuery {
+                after_execution_id: cursor,
+                limit: 100,
+            })
+            .await
+            .map_err(|error| {
+                DeviceRuntimeError::with_source("device_runtime_journal_invalid", error)
+            })?;
         execution_count += page.items.len();
         if execution_count > MAX_UNACKNOWLEDGED_EXECUTIONS {
-            return Err(DeviceRuntimeError::new("device_runtime_replay_capacity_exceeded"));
+            return Err(DeviceRuntimeError::new(
+                "device_runtime_replay_capacity_exceeded",
+            ));
         }
         for item in page.items {
             events.extend(item.events.into_iter().map(RuntimeEvent::FilesystemRead));
         }
-        let Some(next_cursor) = page.next_cursor else { break; };
+        let Some(next_cursor) = page.next_cursor else {
+            break;
+        };
         cursor = Some(next_cursor);
     }
     Ok(events)
@@ -359,9 +387,13 @@ async fn handle_text_frame(
                 DeviceRuntimeError::with_source("device_runtime_ack_invalid", error)
             })?;
             validate_read_ack_device(state, &ack)?;
-            state.read_orchestrator.acknowledge(&ack).await.map_err(|error| {
-                DeviceRuntimeError::with_source("device_runtime_ack_rejected", error)
-            })?;
+            state
+                .read_orchestrator
+                .acknowledge(&ack)
+                .await
+                .map_err(|error| {
+                    DeviceRuntimeError::with_source("device_runtime_ack_rejected", error)
+                })?;
             Ok(())
         }
         "crewon.device-cancel.v0" => {
@@ -374,7 +406,10 @@ async fn handle_text_frame(
     }
 }
 
-fn validate_read_ack_device(state: &DeviceRuntimeState, ack: &DeviceFilesystemReadAck) -> Result<(), DeviceRuntimeError> {
+fn validate_read_ack_device(
+    state: &DeviceRuntimeState,
+    ack: &DeviceFilesystemReadAck,
+) -> Result<(), DeviceRuntimeError> {
     if ack.device_id != state.device_id {
         return Err(DeviceRuntimeError::new("device_runtime_ack_invalid"));
     }
