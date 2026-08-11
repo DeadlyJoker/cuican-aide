@@ -5,13 +5,17 @@ use crewon_device_protocol::canonical_device_filesystem_read_command_digest;
 use crewon_device_protocol::parse_device_filesystem_read_ack;
 use crewon_device_protocol::parse_device_filesystem_read_command;
 use crewon_device_protocol::parse_device_filesystem_read_event;
-use sha2::Digest as _;
-use sha2::Sha256;
 use sqlx::Row as _;
 
 use crate::DeviceJournalError;
 use crate::DeviceWorkspaceJournal;
 use crate::authority;
+use crate::filesystem_read_codec::encode_ack;
+use crate::filesystem_read_codec::encode_command;
+use crate::filesystem_read_codec::encode_event;
+use crate::filesystem_read_codec::fingerprint;
+use crate::filesystem_read_codec::row_i64;
+use crate::filesystem_read_codec::valid_execution_id;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FilesystemReadJournalExecution {
@@ -149,7 +153,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             .await?
             .ok_or_else(|| authority("device_journal_filesystem_read_execution_missing"))?;
         validate_ack(&execution, ack)?;
-        if ack.through_sequence <= execution.acknowledged_through {
+        if ack.through_sequence < execution.acknowledged_through {
+            return Err(authority("device_journal_filesystem_read_ack_backward"));
+        }
+        let prior = load_latest_ack(&mut tx, &execution).await?;
+        validate_ack_time(&execution, ack, prior.as_ref())?;
+        if ack.through_sequence == execution.acknowledged_through {
+            let prior = prior.ok_or_else(|| authority("device_journal_authority_corrupt"))?;
+            if !same_ack_identity(&prior, ack) {
+                return Err(authority("device_journal_filesystem_read_ack_conflict"));
+            }
             tx.rollback().await?;
             return Ok(AcknowledgeFilesystemReadOutcome::Replayed(execution));
         }
@@ -177,12 +190,17 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         &self,
         execution_id: &str,
     ) -> Result<Option<FilesystemReadJournalExecution>, DeviceJournalError> {
-        let mut connection = self.pool.acquire().await?;
-        load(&mut connection, execution_id).await
+        if !valid_execution_id(execution_id) {
+            return Err(authority("device_journal_execution_id_invalid"));
+        }
+        let mut tx = self.pool.begin().await?;
+        let execution = load(&mut tx, execution_id).await?;
+        tx.commit().await?;
+        Ok(execution)
     }
 }
 
-async fn load(
+pub(super) async fn load(
     connection: &mut sqlx::SqliteConnection,
     execution_id: &str,
 ) -> Result<Option<FilesystemReadJournalExecution>, DeviceJournalError> {
@@ -257,7 +275,7 @@ async fn load(
         terminal: events.pop(),
         acknowledged_through,
     };
-    let ack_rows = sqlx::query("SELECT through_sequence, ack_json, ack_fingerprint FROM filesystem_read_acks WHERE execution_id = ? ORDER BY through_sequence")
+    let ack_rows = sqlx::query("SELECT through_sequence, ack_json, ack_fingerprint, acknowledged_at FROM filesystem_read_acks WHERE execution_id = ? ORDER BY through_sequence")
         .bind(execution_id).fetch_all(&mut *connection).await?;
     let mut sequences = Vec::with_capacity(ack_rows.len());
     for ack_row in ack_rows {
@@ -275,6 +293,9 @@ async fn load(
             != i64::try_from(ack.through_sequence)
                 .map_err(|_| authority("device_journal_authority_corrupt"))?
         {
+            return Err(authority("device_journal_authority_corrupt"));
+        }
+        if ack_row.try_get::<String, _>("acknowledged_at")? != ack.acknowledged_at {
             return Err(authority("device_journal_authority_corrupt"));
         }
         sequences.push(ack.through_sequence);
@@ -374,6 +395,68 @@ fn validate_ack(
     Ok(())
 }
 
+async fn load_latest_ack(
+    connection: &mut sqlx::SqliteConnection,
+    execution: &FilesystemReadJournalExecution,
+) -> Result<Option<DeviceFilesystemReadAck>, DeviceJournalError> {
+    if execution.acknowledged_through == 0 {
+        return Ok(None);
+    }
+    let json: Option<String> = sqlx::query_scalar(
+        "SELECT ack_json FROM filesystem_read_acks WHERE execution_id = ? AND through_sequence = ?",
+    )
+    .bind(&execution.command.command.execution_id)
+    .bind(
+        i64::try_from(execution.acknowledged_through)
+            .map_err(|_| authority("device_journal_authority_corrupt"))?,
+    )
+    .fetch_optional(&mut *connection)
+    .await?;
+    json.map(|json| {
+        parse_device_filesystem_read_ack(
+            serde_json::from_str(&json)
+                .map_err(|_| authority("device_journal_authority_corrupt"))?,
+        )
+        .map_err(|_| authority("device_journal_authority_corrupt"))
+    })
+    .transpose()
+}
+
+fn validate_ack_time(
+    execution: &FilesystemReadJournalExecution,
+    ack: &DeviceFilesystemReadAck,
+    prior: Option<&DeviceFilesystemReadAck>,
+) -> Result<(), DeviceJournalError> {
+    let event = if ack.through_sequence == 1 {
+        &execution.accepted
+    } else {
+        execution
+            .terminal
+            .as_ref()
+            .ok_or_else(|| authority("device_journal_filesystem_read_ack_event_missing"))?
+    };
+    let acknowledged_at = chrono::DateTime::parse_from_rfc3339(&ack.acknowledged_at)
+        .map_err(|_| authority("device_journal_filesystem_read_ack_time_invalid"))?;
+    let event_at = chrono::DateTime::parse_from_rfc3339(&envelope(event).0.observed_at)
+        .map_err(|_| authority("device_journal_authority_corrupt"))?;
+    let prior_at = prior
+        .map(|prior| chrono::DateTime::parse_from_rfc3339(&prior.acknowledged_at))
+        .transpose()
+        .map_err(|_| authority("device_journal_authority_corrupt"))?;
+    if acknowledged_at < event_at || prior_at.is_some_and(|prior| acknowledged_at < prior) {
+        return Err(authority("device_journal_filesystem_read_ack_time_invalid"));
+    }
+    Ok(())
+}
+
+fn same_ack_identity(left: &DeviceFilesystemReadAck, right: &DeviceFilesystemReadAck) -> bool {
+    let mut left = left.clone();
+    let mut right = right.clone();
+    left.acknowledged_at.clear();
+    right.acknowledged_at.clear();
+    left == right
+}
+
 fn validate_event_time(
     accepted: &DeviceFilesystemReadEvent,
     terminal: &DeviceFilesystemReadEvent,
@@ -409,21 +492,4 @@ fn envelope(
             (envelope, "workspace_read.unknown_outcome")
         }
     }
-}
-
-fn encode_command(value: &DeviceFilesystemReadCommand) -> Result<String, DeviceJournalError> {
-    serde_json::to_string(&value.command)
-        .map_err(|_| authority("device_journal_filesystem_read_invalid"))
-}
-fn encode_event(value: &DeviceFilesystemReadEvent) -> Result<String, DeviceJournalError> {
-    serde_json::to_string(value).map_err(|_| authority("device_journal_filesystem_read_invalid"))
-}
-fn encode_ack(value: &DeviceFilesystemReadAck) -> Result<String, DeviceJournalError> {
-    serde_json::to_string(value).map_err(|_| authority("device_journal_filesystem_read_invalid"))
-}
-fn fingerprint(value: &str) -> String {
-    format!("sha256:{:x}", Sha256::digest(value.as_bytes()))
-}
-fn row_i64(row: &sqlx::sqlite::SqliteRow, name: &str) -> Result<i64, DeviceJournalError> {
-    Ok(row.try_get(name)?)
 }

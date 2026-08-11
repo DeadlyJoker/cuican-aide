@@ -126,7 +126,101 @@ async fn rejects_command_terminal_and_ack_identity_drift() {
     );
 }
 
-fn fixture() -> (
+#[tokio::test]
+async fn rejects_backward_ack_time_regression_and_redundant_column_corruption() {
+    let directory = tempfile::tempdir().expect("temporary journal directory");
+    let path = directory.path().join("device.sqlite");
+    let (command, accepted, terminal, mut ack) = fixture();
+    let journal = DeviceWorkspaceJournal::open(&path)
+        .await
+        .expect("open journal");
+    journal
+        .prepare_filesystem_read(&command, &accepted)
+        .await
+        .expect("prepare");
+    journal
+        .record_filesystem_read_terminal(&terminal)
+        .await
+        .expect("terminal");
+    ack.acknowledged_at = "2026-08-08T00:00:02Z".to_string();
+    assert_eq!(
+        journal
+            .acknowledge_filesystem_read(&ack)
+            .await
+            .expect_err("ACK before event")
+            .code(),
+        "device_journal_filesystem_read_ack_time_invalid"
+    );
+    ack.acknowledged_at = "2026-08-08T00:00:05Z".to_string();
+    journal
+        .acknowledge_filesystem_read(&ack)
+        .await
+        .expect("ACK terminal");
+    let mut backward = ack.clone();
+    backward.through_sequence = 1;
+    assert_eq!(
+        journal
+            .acknowledge_filesystem_read(&backward)
+            .await
+            .expect_err("backward ACK")
+            .code(),
+        "device_journal_filesystem_read_ack_backward"
+    );
+    let mut drift = ack.clone();
+    drift.receipt_id = "other-receipt".to_string();
+    assert_eq!(
+        journal
+            .acknowledge_filesystem_read(&drift)
+            .await
+            .expect_err("same sequence drift")
+            .code(),
+        "device_journal_filesystem_read_ack_invalid"
+    );
+    journal.close().await;
+
+    let options = sqlx::sqlite::SqliteConnectOptions::new().filename(&path);
+    let pool = sqlx::SqlitePool::connect_with(options)
+        .await
+        .expect("raw pool");
+    sqlx::query("UPDATE filesystem_read_acks SET acknowledged_at = ? WHERE execution_id = ?")
+        .bind("2026-08-08T00:00:06Z")
+        .bind(&command.command.execution_id)
+        .execute(&pool)
+        .await
+        .expect("corrupt redundant ACK time");
+    pool.close().await;
+    let journal = DeviceWorkspaceJournal::open(&path)
+        .await
+        .expect("reopen schema");
+    assert_eq!(
+        journal
+            .get_filesystem_read(&command.command.execution_id)
+            .await
+            .expect_err("redundant column corruption")
+            .code(),
+        "device_journal_authority_corrupt"
+    );
+}
+
+#[tokio::test]
+async fn rejects_unbounded_or_path_like_execution_lookup() {
+    let directory = tempfile::tempdir().expect("temporary journal directory");
+    let journal = DeviceWorkspaceJournal::open(directory.path().join("device.sqlite"))
+        .await
+        .expect("open journal");
+    for invalid in ["../escape", &"x".repeat(513)] {
+        assert_eq!(
+            journal
+                .get_filesystem_read(invalid)
+                .await
+                .expect_err("invalid execution id")
+                .code(),
+            "device_journal_execution_id_invalid",
+        );
+    }
+}
+
+pub(crate) fn fixture() -> (
     crewon_device_protocol::DeviceFilesystemReadCommand,
     DeviceFilesystemReadEvent,
     DeviceFilesystemReadEvent,
@@ -151,7 +245,7 @@ fn fixture() -> (
     )
 }
 
-fn event_envelope_mut(
+pub(crate) fn event_envelope_mut(
     event: &mut DeviceFilesystemReadEvent,
 ) -> &mut crewon_device_protocol::DeviceFilesystemReadEventEnvelope {
     match event {

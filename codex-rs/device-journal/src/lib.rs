@@ -6,6 +6,8 @@
 
 mod codec;
 mod filesystem_read;
+mod filesystem_read_codec;
+mod filesystem_read_listing;
 mod journal;
 mod listing;
 mod records;
@@ -19,6 +21,8 @@ pub use filesystem_read::AcknowledgeFilesystemReadOutcome;
 pub use filesystem_read::FilesystemReadJournalExecution;
 pub use filesystem_read::PrepareFilesystemReadOutcome;
 pub use filesystem_read::RecordFilesystemReadTerminalOutcome;
+pub use filesystem_read_listing::FilesystemReadJournalListQuery;
+pub use filesystem_read_listing::FilesystemReadJournalPage;
 pub use journal::DeviceWorkspaceJournal;
 
 pub const MAX_JOURNAL_PAGE_SIZE: u16 = 100;
@@ -146,3 +150,11 @@ mod temporal_tests;
 #[cfg(test)]
 #[path = "filesystem_read_tests.rs"]
 mod filesystem_read_tests;
+
+#[cfg(test)]
+#[path = "filesystem_read_listing_tests.rs"]
+mod filesystem_read_listing_tests;
+
+#[cfg(test)]
+#[path = "filesystem_read_migration_tests.rs"]
+mod filesystem_read_migration_tests;
