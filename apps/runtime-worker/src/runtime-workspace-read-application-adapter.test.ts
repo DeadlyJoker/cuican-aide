@@ -96,7 +96,15 @@ test("possibly-sent execute is fenced and only passive reconcile settles it", as
   );
   assert.deepEqual(
     await fixture.adapter.reconcile(
-      fixture.command,
+      {
+        ...fixture.command,
+        executionLease: {
+          ...fixture.command.executionLease,
+          leaseId: "lease-recovery-2",
+          leaseEpoch: 5,
+          expiresAt: "2026-08-12T16:05:00.000Z",
+        },
+      },
       ["README.md"],
       signal(),
     ),

@@ -232,7 +232,14 @@ export class RuntimeWorkspaceReadApplicationAdapter
         canonicalJson({
           schemaVersion: "crewon.workspace-read-file-tool-operation.v0",
           phase,
-          command,
+          command: {
+            ...command,
+            executionLease: {
+              workItemId: command.executionLease.workItemId,
+              stepId: command.executionLease.stepId,
+              attemptId: command.executionLease.attemptId,
+            },
+          },
           relativePathSegments,
         }),
       ),
