@@ -101,7 +101,12 @@ export class InMemoryDeviceConnectionRouteStore
     if (prior === undefined || !sameFence(prior, input)) {
       return false;
     }
-    this.#routes.delete(input.deviceId);
+    const now = this.#validNow();
+    this.#routes.set(input.deviceId, {
+      ...prior,
+      leaseExpiresAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
     return true;
   }
 

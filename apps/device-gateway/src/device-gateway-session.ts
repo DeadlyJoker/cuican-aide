@@ -13,12 +13,20 @@ import {
   type DeviceGatewayDispatchResolution,
   type DeviceGatewayWelcome,
   type DeviceHello,
+  type DeviceWorkspaceListCommand,
+  type DeviceWorkspaceListDispatchResolution,
 } from "@crewon/contracts";
 import WebSocket, { type RawData } from "ws";
 
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 import type { DeviceCommandAuthorizationVerifierPort } from "./device-command-authorization-verifier.ts";
 import type { AuthenticatedDeviceIdentity } from "./device-identity.ts";
+import {
+  DeviceGatewayWorkspaceSession,
+  WORKSPACE_LIST_CAPABILITY,
+  type WorkspaceSessionEventCommitter,
+  type WorkspaceSessionExecutionMode,
+} from "./device-gateway-workspace-session.ts";
 
 const MAX_DEVICE_FRAME_BYTES = 128 * 1024;
 const MAX_EXECUTION_EVENTS = 4_096;
@@ -51,6 +59,7 @@ export class DeviceGatewaySession {
   readonly #socket: WebSocket;
   readonly #now: () => Date;
   readonly #authorizationVerifier: DeviceCommandAuthorizationVerifierPort;
+  readonly #workspace: DeviceGatewayWorkspaceSession;
   readonly #starting = new Map<string, StartingExecution>();
   readonly #pending = new Map<string, PendingExecution>();
   #closed = false;
@@ -67,6 +76,12 @@ export class DeviceGatewaySession {
     this.hello = structuredClone(config.hello);
     this.#now = config.now;
     this.#authorizationVerifier = config.authorizationVerifier;
+    this.#workspace = new DeviceGatewayWorkspaceSession({
+      deviceId: this.identity.deviceId,
+      lastAcknowledged: this.hello.lastAcknowledged,
+      now: this.#now,
+      send: (value) => this.#send(value),
+    });
     this.#socket.on("message", this.#onMessage);
     this.#socket.on("close", this.#onClose);
     this.#socket.on("error", this.#onError);
@@ -213,6 +228,43 @@ export class DeviceGatewaySession {
     return acknowledged?.sequence ?? null;
   }
 
+  supportsWorkspaceList(): boolean {
+    return this.hello.capabilities.includes(WORKSPACE_LIST_CAPABILITY);
+  }
+
+  executeWorkspaceList(
+    command: DeviceWorkspaceListCommand,
+    connectionEpoch: number,
+    mode: WorkspaceSessionExecutionMode,
+    signal: AbortSignal,
+    commit: WorkspaceSessionEventCommitter,
+  ): Promise<DeviceWorkspaceListDispatchResolution> {
+    if (!this.supportsWorkspaceList()) {
+      throw new DeviceGatewayError("device_capability_unavailable");
+    }
+    return this.#workspace.execute(
+      command,
+      connectionEpoch,
+      mode,
+      signal,
+      commit,
+    );
+  }
+
+  workspaceAcknowledgedSequence(executionId: string): number | null {
+    return this.#workspace.acknowledgedSequence(executionId);
+  }
+
+  requestWorkspaceCancel(executionId: string, reasonCode: string): void {
+    this.#workspace.requestCancel(executionId, reasonCode);
+  }
+
+  setWorkspaceOrphanEventCommitter(
+    committer: WorkspaceSessionEventCommitter | null,
+  ): void {
+    this.#workspace.setOrphanCommitter(committer);
+  }
+
   isClosed(): boolean {
     return this.#closed || this.#socket.readyState !== WebSocket.OPEN;
   }
@@ -294,6 +346,7 @@ export class DeviceGatewaySession {
         cause: error,
       });
     }
+    if (await this.#workspace.handleFrame(decoded)) return;
     const event = parseDeviceExecutionEvent(decoded);
     if (event.deviceId !== this.identity.deviceId) {
       throw new DeviceGatewayError("device_event_identity_mismatch");
@@ -471,6 +524,7 @@ export class DeviceGatewaySession {
     this.#socket.off("message", this.#onMessage);
     this.#socket.off("close", this.#onClose);
     this.#socket.off("error", this.#onError);
+    this.#workspace.close();
     for (const executionId of [...this.#pending.keys()]) {
       this.#finishUnknown(executionId);
     }

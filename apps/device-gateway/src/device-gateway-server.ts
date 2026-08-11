@@ -15,6 +15,13 @@ import {
 } from "./device-gateway-dispatch-router.ts";
 import type { DeviceCommandAuthorizationVerifierPort } from "./device-command-authorization-verifier.ts";
 import { DeviceGatewayDispatchService } from "./device-gateway-dispatch-service.ts";
+import { DeviceGatewayWorkspaceDispatchService } from "./device-gateway-workspace-dispatch-service.ts";
+import {
+  DeviceGatewayWorkspaceDispatchRouter,
+  type DeviceGatewayWorkspacePeerDispatchPort,
+} from "./device-gateway-workspace-dispatch-router.ts";
+import { DeviceGatewayWorkspacePeerApi } from "./device-gateway-workspace-peer-api.ts";
+import { DeviceGatewayWorkspaceWorkerApi } from "./device-gateway-workspace-worker-api.ts";
 import type { DeviceDispatchStorePort } from "./device-dispatch-store.ts";
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 import { DeviceGatewayPeerApi } from "./device-gateway-peer-api.ts";
@@ -22,6 +29,9 @@ import { DeviceGatewayWorkerApi } from "./device-gateway-worker-api.ts";
 import type { DeviceIdentityVerifierPort } from "./device-identity.ts";
 import type { GatewayIdentityVerifierPort } from "./gateway-identity.ts";
 import type { WorkerIdentityVerifierPort } from "./worker-identity.ts";
+import type { WorkspaceCommandAuthorizationVerifierPort } from "./workspace-command-authorization-verifier.ts";
+import type { WorkspaceDispatchStorePort } from "./workspace-dispatch-store.ts";
+import type { WorkspaceWorkerRuntimeAuthorizerPort } from "./workspace-worker-runtime-authorizer.ts";
 
 const DEVICE_PATH = "/device/v1";
 
@@ -36,6 +46,11 @@ export class DeviceGatewayServer {
   readonly #dispatch: DeviceGatewayDispatchService;
   readonly #dispatchStore: DeviceDispatchStorePort;
   readonly #workerApi: DeviceGatewayWorkerApi;
+  readonly #workspaceDispatch: DeviceGatewayWorkspaceDispatchService | null;
+  readonly #workspaceStore: WorkspaceDispatchStorePort | null;
+  readonly #workspaceWorkerApi: DeviceGatewayWorkspaceWorkerApi | null;
+  readonly #workspacePeerApi: DeviceGatewayWorkspacePeerApi | null;
+  readonly #workspacePeerDispatch: DeviceGatewayWorkspacePeerDispatchPort | null;
   readonly #peerApi: DeviceGatewayPeerApi | null;
   readonly #peerDispatch: DeviceGatewayPeerDispatchPort | null;
   readonly #server: HttpsServer;
@@ -49,6 +64,11 @@ export class DeviceGatewayServer {
     workerIdentityVerifier: WorkerIdentityVerifierPort;
     authorizationVerifier: DeviceCommandAuthorizationVerifierPort;
     dispatchStore: DeviceDispatchStorePort;
+    workspaceDispatchStore?: WorkspaceDispatchStorePort;
+    workspaceAuthorizationVerifier?: WorkspaceCommandAuthorizationVerifierPort;
+    workspaceWorkerAuthorizer?: WorkspaceWorkerRuntimeAuthorizerPort;
+    workspacePeerDispatch?: DeviceGatewayWorkspacePeerDispatchPort;
+    workspaceRouteTopology?: "standalone" | "team";
     connectionRoutes?: DeviceGatewayConnectionRouteConfig;
     peerDispatch?: DeviceGatewayPeerDispatchPort;
     gatewayIdentityVerifier?: GatewayIdentityVerifierPort;
@@ -87,6 +107,75 @@ export class DeviceGatewayServer {
       identityVerifier: config.workerIdentityVerifier,
       dispatch: workerDispatch,
     });
+    const workspaceParts = [
+      config.workspaceDispatchStore,
+      config.workspaceAuthorizationVerifier,
+      config.workspaceWorkerAuthorizer,
+    ].filter((value) => value !== undefined).length;
+    if (workspaceParts !== 0 && workspaceParts !== 3) {
+      throw new DeviceGatewayError("workspace_dispatch_config_invalid");
+    }
+    this.#workspaceStore = config.workspaceDispatchStore ?? null;
+    this.#workspaceDispatch =
+      this.#workspaceStore === null
+        ? null
+        : new DeviceGatewayWorkspaceDispatchService({
+            sessions: this.#gateway,
+            authorizationVerifier:
+              config.workspaceAuthorizationVerifier as WorkspaceCommandAuthorizationVerifierPort,
+            workerAuthorizer:
+              config.workspaceWorkerAuthorizer as WorkspaceWorkerRuntimeAuthorizerPort,
+            store: this.#workspaceStore,
+            now: config.now,
+          });
+    const workspaceRouteConfigured =
+      this.#workspaceDispatch !== null && config.connectionRoutes !== undefined;
+    const workspaceRouteTopology = config.workspaceRouteTopology ?? "team";
+    if (
+      (config.workspaceRouteTopology !== undefined &&
+        !workspaceRouteConfigured) ||
+      (workspaceRouteConfigured &&
+        workspaceRouteTopology === "team" &&
+        (config.workspacePeerDispatch === undefined ||
+          config.gatewayIdentityVerifier === undefined)) ||
+      (workspaceRouteTopology === "standalone" &&
+        (config.workspacePeerDispatch !== undefined ||
+          config.gatewayIdentityVerifier !== undefined)) ||
+      (!workspaceRouteConfigured && config.workspacePeerDispatch !== undefined)
+    ) {
+      throw new DeviceGatewayError("workspace_peer_config_invalid");
+    }
+    const workspaceRouter =
+      this.#workspaceDispatch === null ||
+      config.connectionRoutes === undefined ||
+      workspaceRouteTopology === "standalone"
+        ? null
+        : new DeviceGatewayWorkspaceDispatchRouter({
+            gatewayId: config.connectionRoutes.gatewayId,
+            routes: config.connectionRoutes.store,
+            local: this.#workspaceDispatch,
+            peers:
+              config.workspacePeerDispatch ?? unavailableWorkspacePeerDispatch,
+          });
+    this.#workspaceWorkerApi =
+      this.#workspaceDispatch === null
+        ? null
+        : new DeviceGatewayWorkspaceWorkerApi({
+            identityVerifier: config.workerIdentityVerifier,
+            dispatch: workspaceRouter ?? this.#workspaceDispatch,
+          });
+    this.#workspacePeerApi =
+      workspaceRouter === null || config.gatewayIdentityVerifier === undefined
+        ? null
+        : new DeviceGatewayWorkspacePeerApi({
+            gatewayId: config.connectionRoutes!.gatewayId,
+            identityVerifier: config.gatewayIdentityVerifier,
+            routes: config.connectionRoutes!.store,
+            workerAuthorizer:
+              config.workspaceWorkerAuthorizer as WorkspaceWorkerRuntimeAuthorizerPort,
+            dispatch: this.#workspaceDispatch!,
+          });
+    this.#workspacePeerDispatch = config.workspacePeerDispatch ?? null;
     this.#peerApi =
       router === null || config.gatewayIdentityVerifier === undefined
         ? null
@@ -105,10 +194,20 @@ export class DeviceGatewayServer {
       (request, response) => {
         void this.#workerApi
           .handle(request, response)
-          .then(async (handled) =>
+          .then((handled) =>
+            handled || this.#workspaceWorkerApi === null
+              ? handled
+              : this.#workspaceWorkerApi.handle(request, response),
+          )
+          .then((handled) =>
             handled || this.#peerApi === null
               ? handled
               : this.#peerApi.handle(request, response),
+          )
+          .then((handled) =>
+            handled || this.#workspacePeerApi === null
+              ? handled
+              : this.#workspacePeerApi.handle(request, response),
           )
           .then((handled) => {
             if (!handled && !response.headersSent) {
@@ -172,7 +271,10 @@ export class DeviceGatewayServer {
       throw new Error("device_gateway_server_state_invalid");
     }
     validateListenAddress(host, port);
-    await this.#dispatchStore.ready();
+    await Promise.all([
+      this.#dispatchStore.ready(),
+      this.#workspaceStore?.ready(),
+    ]);
     await new Promise<void>((resolve, reject) => {
       const onError = (error: Error) => {
         this.#server.off("listening", onListening);
@@ -200,6 +302,7 @@ export class DeviceGatewayServer {
     }
     this.#closed = true;
     const dispatchClosed = this.#dispatch.close();
+    const workspaceDispatchClosed = this.#workspaceDispatch?.close();
     const gatewayClosed = this.#gateway.close();
     for (const client of this.#webSocketServer.clients) {
       client.terminate();
@@ -222,13 +325,18 @@ export class DeviceGatewayServer {
     });
     const shutdown = await Promise.allSettled([
       dispatchClosed,
+      workspaceDispatchClosed,
       gatewayClosed,
       webSocketClosed,
       serverClosed,
     ]);
-    const storeClosed = await Promise.allSettled([this.#dispatchStore.close()]);
+    const storeClosed = await Promise.allSettled([
+      this.#dispatchStore.close(),
+      this.#workspaceStore?.close(),
+    ]);
     const peerClosed = await Promise.allSettled([
       Promise.resolve(this.#peerDispatch?.close?.()),
+      Promise.resolve(this.#workspacePeerDispatch?.close?.()),
     ]);
     this.#listening = false;
     const failure = [...shutdown, ...storeClosed, ...peerClosed].find(
@@ -245,6 +353,13 @@ const unavailablePeerDispatch: DeviceGatewayPeerDispatchPort = {
     throw new DeviceGatewayError("device_gateway_peer_unavailable");
   },
 };
+
+const unavailableWorkspacePeerDispatch: DeviceGatewayWorkspacePeerDispatchPort =
+  {
+    async dispatch() {
+      throw new DeviceGatewayError("workspace_dispatch_route_unavailable");
+    },
+  };
 
 function validateListenAddress(host: string, port: number): void {
   if (

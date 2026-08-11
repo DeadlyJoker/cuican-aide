@@ -1,6 +1,7 @@
 import type { IncomingMessage } from "node:http";
 
 import { DEVICE_PROTOCOL_VERSION } from "@crewon/contracts";
+import type { DeviceWorkspaceListPeerRoute } from "@crewon/contracts";
 import type WebSocket from "ws";
 
 import {
@@ -13,6 +14,7 @@ import {
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 import type { DeviceCommandAuthorizationVerifierPort } from "./device-command-authorization-verifier.ts";
 import { DeviceGatewaySession } from "./device-gateway-session.ts";
+import type { WorkspaceSessionEventCommitter } from "./device-gateway-workspace-session.ts";
 import type { DeviceIdentityVerifierPort } from "./device-identity.ts";
 
 const DEFAULT_CONNECTION_LEASE_MS = 30_000;
@@ -45,6 +47,7 @@ export class DeviceGateway {
   readonly #connectionLeaseMs: number;
   readonly #heartbeatScheduler: DeviceGatewayHeartbeatScheduler;
   readonly #sessions = new Map<string, SessionEntry>();
+  #workspaceOrphanCommitter: WorkspaceSessionEventCommitter | null = null;
 
   constructor(
     identityVerifier: DeviceIdentityVerifierPort,
@@ -134,6 +137,7 @@ export class DeviceGateway {
         });
       }
     }
+    session.setWorkspaceOrphanEventCommitter(this.#workspaceOrphanCommitter);
     const existing = this.#sessions.get(session.identity.deviceId);
     if (existing !== undefined) {
       if (route === null) {
@@ -160,6 +164,33 @@ export class DeviceGateway {
 
   session(deviceId: string): DeviceGatewaySession | null {
     return this.#sessions.get(validateDeviceId(deviceId))?.session ?? null;
+  }
+
+  workspaceSession(deviceId: string): Readonly<{
+    session: DeviceGatewaySession;
+    route: DeviceWorkspaceListPeerRoute;
+  }> | null {
+    const entry = this.#sessions.get(validateDeviceId(deviceId));
+    if (entry === undefined || entry.route === null) return null;
+    return {
+      session: entry.session,
+      route: {
+        deviceId: entry.route.deviceId,
+        gatewayId: entry.route.gatewayId,
+        connectionId: entry.route.connectionId,
+        connectionEpoch: entry.route.epoch,
+        leaseExpiresAt: entry.route.leaseExpiresAt,
+      },
+    };
+  }
+
+  setWorkspaceOrphanEventCommitter(
+    committer: WorkspaceSessionEventCommitter | null,
+  ): void {
+    this.#workspaceOrphanCommitter = committer;
+    for (const entry of this.#sessions.values()) {
+      entry.session.setWorkspaceOrphanEventCommitter(committer);
+    }
   }
 
   async close(): Promise<void> {
