@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { ChildProcessByStdio } from "node:child_process";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { request as httpsRequest } from "node:https";
 import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -13,8 +14,15 @@ import {
   parseDeviceExecutionCancel,
   parseDeviceExecutionCommand,
   parseDeviceGatewayWelcome,
+  parseDeviceWorkspaceListAck,
+  parseDeviceWorkspaceListCommand,
+  parseDeviceWorkspaceListWorkerDispatchResponse,
   type DeviceExecutionCommand,
   type DeviceExecutionEvent,
+  type DeviceWorkspaceListCommand,
+  type DeviceWorkspaceListDispatchReference,
+  type DeviceWorkspaceListEvent,
+  type DeviceWorkspaceListWorkerDispatchRequest,
 } from "@crewon/contracts";
 import {
   DeviceDispatchClientError,
@@ -38,6 +46,11 @@ if (postgresUrl === undefined) {
   test("recovers reconcile and cancel without repeating side effects after owner SIGKILL", async () => {
     for (const operation of ["reconcile", "cancel"] as const) {
       await exerciseOwnerKill(postgresUrl, operation);
+    }
+  });
+  test("recovers Workspace reconcile and cancel after owner SIGKILL without repeating the listing", async () => {
+    for (const operation of ["reconcile", "cancel"] as const) {
+      await exerciseWorkspaceOwnerKill(postgresUrl, operation);
     }
   });
 }
@@ -135,6 +148,99 @@ async function exerciseOwnerKill(
   }
 }
 
+async function exerciseWorkspaceOwnerKill(
+  connectionString: string,
+  operation: "reconcile" | "cancel",
+): Promise<void> {
+  const schema = `workspace_process_${operation}_${randomUUID().replaceAll("-", "")}`;
+  let target: GatewayProcess | null = null;
+  let source: GatewayProcess | null = null;
+  let interrupted: WorkspaceInterruptedDevice | null = null;
+  let recovered: WebSocket | null = null;
+  try {
+    target = await startGatewayProcess({
+      gatewayId: "gateway-2",
+      connectionString,
+      schema,
+      inboundGatewayId: "gateway-1",
+      workspace: true,
+    });
+    source = await startGatewayProcess({
+      gatewayId: "gateway-1",
+      connectionString,
+      schema,
+      peer: {
+        gatewayId: "gateway-2",
+        endpoint: `https://127.0.0.1:${target.port}`,
+      },
+      workspace: true,
+    });
+    const command = workspaceProcessCommand(operation);
+    let sideEffectStarts = 0;
+    let journalAttaches = 0;
+    interrupted = await connectInterruptedWorkspaceDevice(
+      target.port,
+      command,
+      () => {
+        sideEffectStarts += 1;
+      },
+    );
+    const initial = workspaceWorkerRequest(source.port, {
+      schemaVersion: "crewon.device-workspace-list-dispatch-request.v0",
+      apiVersion: 1,
+      operation: "execute",
+      command,
+    }).then(
+      (resolution) => ({ status: "resolved" as const, resolution }),
+      (error: unknown) => ({ status: "rejected" as const, error }),
+    );
+    await interrupted.acceptedAcknowledged;
+    await target.stop("SIGKILL");
+    assert.equal((await initial).status, "rejected");
+    await expireDeviceRoute(connectionString, schema);
+    recovered = await connectRecoveringWorkspaceDevice(
+      source.port,
+      command,
+      interrupted.connectionEpoch,
+      interrupted.receiptId,
+      operation,
+      () => {
+        journalAttaches += 1;
+      },
+    );
+    const resolution = await workspaceWorkerRequest(source.port, {
+      schemaVersion: "crewon.device-workspace-list-dispatch-request.v0",
+      apiVersion: 1,
+      operation,
+      reference: workspaceReference(command, interrupted.receiptId),
+    });
+    assert.deepEqual(
+      resolution,
+      operation === "cancel"
+        ? workspaceCanceledResolution(
+            command,
+            interrupted.connectionEpoch,
+            interrupted.receiptId,
+          )
+        : workspaceCompletedResolution(
+            command,
+            interrupted.connectionEpoch,
+            interrupted.receiptId,
+          ),
+    );
+    assert.deepEqual(
+      { sideEffectStarts, journalAttaches },
+      { sideEffectStarts: 1, journalAttaches: 1 },
+    );
+  } finally {
+    recovered?.terminate();
+    interrupted?.socket.terminate();
+    await source?.stop("SIGTERM");
+    await target?.stop("SIGKILL");
+    await dropSchema(connectionString, schema);
+  }
+}
+
 type GatewayProcess = Readonly<{
   port: number;
   stop(signal: "SIGTERM" | "SIGKILL"): Promise<void>;
@@ -148,6 +254,7 @@ async function startGatewayProcess(config: {
   schema: string;
   peer?: Readonly<{ gatewayId: string; endpoint: string }>;
   inboundGatewayId?: string;
+  workspace?: boolean;
 }): Promise<GatewayProcess> {
   const child = spawn(
     process.execPath,
@@ -175,6 +282,9 @@ async function startGatewayProcess(config: {
           : {
               CREWON_TEST_INBOUND_GATEWAY_ID: config.inboundGatewayId,
             }),
+        ...(config.workspace === true
+          ? { CREWON_TEST_WORKSPACE_ENABLED: "1" }
+          : {}),
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -260,6 +370,13 @@ type InterruptedDevice = Readonly<{
   acceptedAcknowledged: Promise<void>;
 }>;
 
+type WorkspaceInterruptedDevice = Readonly<{
+  socket: WebSocket;
+  acceptedAcknowledged: Promise<void>;
+  connectionEpoch: number;
+  receiptId: string;
+}>;
+
 async function connectInterruptedDevice(
   port: number,
   expectedCommand: DeviceExecutionCommand,
@@ -290,6 +407,57 @@ async function connectInterruptedDevice(
   });
   await openDeviceSocket(socket, "connection-interrupted", []);
   return { socket, acceptedAcknowledged };
+}
+
+async function connectInterruptedWorkspaceDevice(
+  port: number,
+  expectedCommand: DeviceWorkspaceListCommand,
+  onSideEffectStart: () => void,
+): Promise<WorkspaceInterruptedDevice> {
+  const socket = deviceSocket(port);
+  const receiptId = `workspace-receipt-${expectedCommand.executionId}`;
+  let connectionEpoch = 0;
+  let resolveAccepted: () => void = () => undefined;
+  const acceptedAcknowledged = new Promise<void>((resolve) => {
+    resolveAccepted = resolve;
+  });
+  socket.on("message", (data: RawData) => {
+    const frame = decodeFrame(data);
+    if (frame.schemaVersion === "crewon.device-welcome.v0") {
+      connectionEpoch = parseDeviceGatewayWelcome(frame).connectionEpoch;
+      return;
+    }
+    if (frame.schemaVersion === "crewon.device-workspace-list-command.v0") {
+      assert.deepEqual(parseDeviceWorkspaceListCommand(frame), expectedCommand);
+      onSideEffectStart();
+      socket.send(
+        JSON.stringify(
+          workspaceAccepted(expectedCommand, connectionEpoch, receiptId),
+        ),
+      );
+      return;
+    }
+    if (
+      frame.schemaVersion === "crewon.device-workspace-list-ack.v0" &&
+      parseDeviceWorkspaceListAck(frame).throughSequence === 1
+    ) {
+      resolveAccepted();
+    }
+  });
+  await openDeviceSocket(
+    socket,
+    `workspace-interrupted-${expectedCommand.executionId}`,
+    [],
+    ["workspace.list_top_level.v0"],
+  );
+  return {
+    socket,
+    acceptedAcknowledged,
+    get connectionEpoch() {
+      return connectionEpoch;
+    },
+    receiptId,
+  };
 }
 
 async function connectRecoveringDevice(
@@ -348,6 +516,77 @@ async function connectRecoveringDevice(
   return socket;
 }
 
+async function connectRecoveringWorkspaceDevice(
+  port: number,
+  expectedCommand: DeviceWorkspaceListCommand,
+  acceptedConnectionEpoch: number,
+  receiptId: string,
+  operation: "reconcile" | "cancel",
+  onJournalAttach: () => void,
+): Promise<WebSocket> {
+  const socket = deviceSocket(port);
+  let acceptedAcknowledged = false;
+  let cancelReceived = operation === "reconcile";
+  let terminalSent = false;
+  const sendTerminalWhenReady = () => {
+    if (terminalSent || !acceptedAcknowledged || !cancelReceived) return;
+    terminalSent = true;
+    socket.send(
+      JSON.stringify(
+        operation === "cancel"
+          ? workspaceCanceled(
+              expectedCommand,
+              acceptedConnectionEpoch,
+              receiptId,
+            )
+          : workspaceCompleted(
+              expectedCommand,
+              acceptedConnectionEpoch,
+              receiptId,
+            ),
+      ),
+    );
+  };
+  socket.on("message", (data: RawData) => {
+    const frame = decodeFrame(data);
+    if (frame.schemaVersion === "crewon.device-workspace-list-command.v0") {
+      assert.deepEqual(parseDeviceWorkspaceListCommand(frame), expectedCommand);
+      onJournalAttach();
+      socket.send(
+        JSON.stringify(
+          workspaceAccepted(
+            expectedCommand,
+            acceptedConnectionEpoch,
+            receiptId,
+          ),
+        ),
+      );
+      return;
+    }
+    if (frame.schemaVersion === "crewon.device-cancel.v0") {
+      const cancel = parseDeviceExecutionCancel(frame);
+      assert.equal(cancel.executionId, expectedCommand.executionId);
+      cancelReceived = true;
+      sendTerminalWhenReady();
+      return;
+    }
+    if (
+      frame.schemaVersion === "crewon.device-workspace-list-ack.v0" &&
+      parseDeviceWorkspaceListAck(frame).throughSequence === 1
+    ) {
+      acceptedAcknowledged = true;
+      sendTerminalWhenReady();
+    }
+  });
+  await openDeviceSocket(
+    socket,
+    `workspace-recovered-${operation}`,
+    [{ executionId: expectedCommand.executionId, sequence: 1 }],
+    ["workspace.list_top_level.v0"],
+  );
+  return socket;
+}
+
 function deviceSocket(port: number): WebSocket {
   const socket = new WebSocket(`wss://127.0.0.1:${port}/device/v1`, {
     key: TEST_DEVICE_KEY,
@@ -367,6 +606,7 @@ async function openDeviceSocket(
     executionId: string;
     sequence: number;
   }>,
+  capabilities: readonly string[] = ["workspace.read"],
 ): Promise<void> {
   let resolveWelcome: () => void = () => undefined;
   const welcomed = new Promise<void>((resolve) => {
@@ -388,7 +628,7 @@ async function openDeviceSocket(
       supportedProtocolVersions: [DEVICE_PROTOCOL_VERSION],
       deviceId: "device-1",
       connectionId,
-      capabilities: ["workspace.read"],
+      capabilities,
       lastAcknowledged,
       sentAt: new Date().toISOString(),
     }),
@@ -444,6 +684,219 @@ function processCommand(
       signature: "A".repeat(86),
     },
   };
+}
+
+function workspaceProcessCommand(
+  operation: "reconcile" | "cancel",
+): DeviceWorkspaceListCommand {
+  return {
+    schemaVersion: "crewon.device-workspace-list-command.v0",
+    protocolVersion: DEVICE_PROTOCOL_VERSION,
+    commandKind: "workspaceList",
+    deviceId: "device-1",
+    executionId: `workspace-execution-${operation}`,
+    leaseId: `workspace-lease-${operation}`,
+    leaseEpoch: 1,
+    expiresAt: "2099-08-09T01:00:00.000Z",
+    workspaceBindingId: "workspace-binding-1",
+    incarnationId: "incarnation-1",
+    deviceBindingId: "device-binding-1",
+    runtimeBindingId: "runtime-binding-1",
+    policySnapshotId: "policy-1",
+    operation: "listTopLevel",
+    limits: {
+      depth: 0,
+      maxEntries: 200,
+      maxNameBytes: 255,
+      maxOutputBytes: 64 * 1024,
+      maxScannedEntries: 10_000,
+      maxScannedNameBytes: 1024 * 1024,
+      timeoutMs: 30_000,
+    },
+    actionDigest: `sha256:${"a".repeat(64)}`,
+    commandDigest: `sha256:${"b".repeat(64)}`,
+    idempotencyKey: `workspace-process-${operation}`,
+    traceContext: { traceparent: null, tracestate: null },
+    authorization: {
+      schemaVersion: "crewon.device-authorization.v0",
+      scheme: "ed25519",
+      keyId: "control-key-1",
+      issuedAt: "2026-08-09T00:00:00.000Z",
+      expiresAt: "2099-08-09T00:30:00.000Z",
+      approvalProof: null,
+      signature: "A".repeat(86),
+    },
+  };
+}
+
+function workspaceReference(
+  command: DeviceWorkspaceListCommand,
+  receiptId: string,
+): DeviceWorkspaceListDispatchReference {
+  return {
+    deviceId: command.deviceId,
+    executionId: command.executionId,
+    workspaceBindingId: command.workspaceBindingId,
+    incarnationId: command.incarnationId,
+    deviceBindingId: command.deviceBindingId,
+    runtimeBindingId: command.runtimeBindingId,
+    actionDigest: command.actionDigest,
+    commandDigest: command.commandDigest,
+    receiptId,
+  };
+}
+
+function workspaceAccepted(
+  command: DeviceWorkspaceListCommand,
+  connectionEpoch: number,
+  receiptId: string,
+): Extract<DeviceWorkspaceListEvent, { type: "workspace_list.accepted" }> {
+  return {
+    ...workspaceEventEnvelope(command, connectionEpoch, receiptId, 1),
+    type: "workspace_list.accepted",
+    data: {
+      leaseId: command.leaseId,
+      leaseEpoch: command.leaseEpoch,
+      expiresAt: command.expiresAt,
+      policySnapshotId: command.policySnapshotId,
+    },
+  };
+}
+
+function workspaceCompleted(
+  command: DeviceWorkspaceListCommand,
+  connectionEpoch: number,
+  receiptId: string,
+): Extract<DeviceWorkspaceListEvent, { type: "workspace_list.completed" }> {
+  return {
+    ...workspaceEventEnvelope(command, connectionEpoch, receiptId, 2),
+    type: "workspace_list.completed",
+    data: {
+      result: {
+        schemaVersion: "crewon.workspace-list-result.v0",
+        executionId: command.executionId,
+        actionDigest: command.actionDigest,
+        commandDigest: command.commandDigest,
+        entries: [{ name: "durable.txt", kind: "file" }],
+        truncated: false,
+      },
+    },
+  };
+}
+
+function workspaceCanceled(
+  command: DeviceWorkspaceListCommand,
+  connectionEpoch: number,
+  receiptId: string,
+): Extract<DeviceWorkspaceListEvent, { type: "workspace_list.canceled" }> {
+  return {
+    ...workspaceEventEnvelope(command, connectionEpoch, receiptId, 2),
+    type: "workspace_list.canceled",
+    data: { reasonCode: "worker_cancel_requested" },
+  };
+}
+
+function workspaceCompletedResolution(
+  command: DeviceWorkspaceListCommand,
+  connectionEpoch: number,
+  receiptId: string,
+) {
+  return {
+    status: "completed" as const,
+    executionId: command.executionId,
+    receiptId,
+    terminal: workspaceCompleted(command, connectionEpoch, receiptId),
+  };
+}
+
+function workspaceCanceledResolution(
+  command: DeviceWorkspaceListCommand,
+  connectionEpoch: number,
+  receiptId: string,
+) {
+  return {
+    status: "canceled" as const,
+    executionId: command.executionId,
+    receiptId,
+    terminal: workspaceCanceled(command, connectionEpoch, receiptId),
+  };
+}
+
+function workspaceEventEnvelope(
+  command: DeviceWorkspaceListCommand,
+  connectionEpoch: number,
+  receiptId: string,
+  sequence: 1 | 2,
+) {
+  return {
+    schemaVersion: "crewon.device-workspace-list-event.v0" as const,
+    protocolVersion: DEVICE_PROTOCOL_VERSION,
+    commandKind: "workspaceList" as const,
+    deviceId: command.deviceId,
+    executionId: command.executionId,
+    receiptId,
+    connectionEpoch,
+    workspaceBindingId: command.workspaceBindingId,
+    incarnationId: command.incarnationId,
+    deviceBindingId: command.deviceBindingId,
+    runtimeBindingId: command.runtimeBindingId,
+    actionDigest: command.actionDigest,
+    commandDigest: command.commandDigest,
+    sequence,
+    observedAt: `2099-08-09T00:00:0${sequence}.000Z`,
+  };
+}
+
+async function workspaceWorkerRequest(
+  port: number,
+  input: DeviceWorkspaceListWorkerDispatchRequest,
+) {
+  const body = Buffer.from(JSON.stringify(input), "utf8");
+  const response = await new Promise<
+    Readonly<{ statusCode: number; body: unknown }>
+  >((resolve, reject) => {
+    const request = httpsRequest(
+      {
+        host: "127.0.0.1",
+        port,
+        method: "POST",
+        path: "/worker/v1/device-workspace-list-dispatch",
+        key: TEST_DEVICE_KEY,
+        cert: TEST_DEVICE_CERT,
+        ca: TEST_CA_CERT,
+        servername: "localhost",
+        minVersion: "TLSv1.3",
+        rejectUnauthorized: true,
+        headers: {
+          "content-length": String(body.byteLength),
+          "content-type": "application/json; charset=utf-8",
+        },
+      },
+      (incoming) => {
+        const chunks: Buffer[] = [];
+        incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+        incoming.once("end", () => {
+          try {
+            resolve({
+              statusCode: incoming.statusCode ?? 0,
+              body: JSON.parse(Buffer.concat(chunks).toString("utf8")),
+            });
+          } catch (error) {
+            reject(error);
+          }
+        });
+      },
+    );
+    request.once("error", reject);
+    request.end(body);
+  });
+  if (response.statusCode !== 200) {
+    throw new Error(
+      `workspace_worker_http_${response.statusCode}_${JSON.stringify(response.body)}`,
+    );
+  }
+  return parseDeviceWorkspaceListWorkerDispatchResponse(response.body, input)
+    .resolution;
 }
 
 function accepted(command: DeviceExecutionCommand): DeviceExecutionEvent {
