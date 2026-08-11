@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type MutableRefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type MutableRefObject,
+} from "react";
 import type { ControlApiClient } from "@crewon/control-client";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
@@ -29,6 +35,7 @@ export function useControlThreadRuntime(params: {
   showArchivedThreadsRef: MutableRefObject<boolean>;
 }): Readonly<{
   connected: boolean;
+  rehydrateThreadAuthority: (threadId: string) => Promise<void>;
   runtime: ControlThreadRuntime | null;
 }> {
   const runtime = useMemo(() => {
@@ -97,6 +104,20 @@ export function useControlThreadRuntime(params: {
     return control;
   }, [params.client]);
   const [connected, setConnected] = useState(false);
+  const rehydrateThreadAuthority = useCallback(
+    async (threadId: string) => {
+      if (runtime === null) {
+        throw new Error("control_thread_runtime_unavailable");
+      }
+      const thread = await runtime.readThread(threadId);
+      params.setThreads((current) => upsertThread(current, thread));
+      const goal = await runtime.selectThreadGoal(threadId);
+      if (params.selectedThreadIdRef.current === threadId) {
+        params.setThreadGoal(goal?.goal ?? null);
+      }
+    },
+    [runtime],
+  );
 
   useEffect(() => {
     if (runtime === null) {
@@ -155,5 +176,9 @@ export function useControlThreadRuntime(params: {
     };
   }, [connected, params.selectedThreadId, runtime]);
 
-  return { connected, runtime };
+  return {
+    connected,
+    rehydrateThreadAuthority,
+    runtime,
+  };
 }
