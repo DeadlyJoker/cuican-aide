@@ -140,6 +140,26 @@ type PostTerminalFixture = Readonly<{
   >;
 }>;
 
+type TopLevelErrorFixture = Readonly<{
+  caseId: string;
+  cases: ReadonlyArray<
+    Readonly<{
+      name: string;
+      events: readonly Readonly<Record<string, unknown>>[];
+      expected: Readonly<{
+        stableEvents: readonly string[];
+        terminal: "failed";
+        errorCategory: "provider";
+        retryable: boolean;
+        partialOutput: string;
+        completedHistory: readonly ModelInputItem[];
+        usage: null;
+        responseId: null;
+      }>;
+    }>
+  >;
+}>;
+
 const postTerminalFixture = JSON.parse(
   readFileSync(
     new URL(
@@ -149,6 +169,54 @@ const postTerminalFixture = JSON.parse(
     "utf8",
   ),
 ) as PostTerminalFixture;
+
+const topLevelErrorFixture = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../test-contracts/fixtures/responses-top-level-error.reference.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as TopLevelErrorFixture;
+
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(`${topLevelErrorFixture.caseId}: ${sequencePolicy} terminal provider error`, () => {
+    for (const fixtureCase of topLevelErrorFixture.cases) {
+      const decoder = new ResponsesProtocolDecoder({
+        sequencePolicy,
+        completedCheckpoint: () => null,
+      });
+      const events = [];
+      for (const event of fixtureCase.events) {
+        events.push(...decoder.accept(event));
+        if (decoder.terminal) {
+          break;
+        }
+      }
+      decoder.finish();
+      const failure = events.find((event) => event.type === "failed");
+
+      assert.deepEqual(
+        {
+          stableEvents: events.map((event) => event.type),
+          terminal: failure?.type ?? null,
+          errorCategory: failure?.type === "failed" ? "provider" : null,
+          retryable: failure?.type === "failed" ? failure.retryable : null,
+          partialOutput: events
+            .filter((event) => event.type === "output.delta")
+            .map((event) => event.delta)
+            .join(""),
+          completedHistory: decoder.completedHistoryItems,
+          usage: events.find((event) => event.type === "usage") ?? null,
+          responseId: decoder.completedResponseId,
+        },
+        fixtureCase.expected,
+        fixtureCase.name,
+      );
+    }
+  });
+}
 
 for (const sequencePolicy of ["required", "whenPresent"] as const) {
   test(`${postTerminalFixture.caseId}: ${sequencePolicy} first failure cutoff`, () => {

@@ -166,6 +166,9 @@ pub struct ResponsesStreamEvent {
     headers: Option<Value>,
     metadata: Option<Value>,
     response: Option<Value>,
+    error: Option<Value>,
+    code: Option<String>,
+    message: Option<String>,
     item: Option<Value>,
     item_id: Option<String>,
     call_id: Option<String>,
@@ -344,27 +347,7 @@ pub fn process_responses_event(
                 if let Some(error) = resp_val.get("error")
                     && let Ok(error) = serde_json::from_value::<Error>(error.clone())
                 {
-                    if is_context_window_error(&error) {
-                        response_error = ApiError::ContextWindowExceeded;
-                    } else if is_quota_exceeded_error(&error) {
-                        response_error = ApiError::QuotaExceeded;
-                    } else if is_usage_not_included(&error) {
-                        response_error = ApiError::UsageNotIncluded;
-                    } else if is_cyber_policy_error(&error) {
-                        let message = cyber_policy_message(error.message);
-                        response_error = ApiError::CyberPolicy { message };
-                    } else if is_invalid_prompt_error(&error) {
-                        let message = error
-                            .message
-                            .unwrap_or_else(|| "Invalid request.".to_string());
-                        response_error = ApiError::InvalidRequest { message };
-                    } else if is_server_overloaded_error(&error) {
-                        response_error = ApiError::ServerOverloaded;
-                    } else {
-                        let delay = try_parse_retry_after(&error);
-                        let message = error.message.unwrap_or_default();
-                        response_error = ApiError::Retryable { message, delay };
-                    }
+                    response_error = classify_provider_error(error);
                 }
                 return Err(ResponsesEventError::Api(response_error));
             }
@@ -383,6 +366,20 @@ pub fn process_responses_event(
             let reason = reason.unwrap_or("unknown");
             let message = format!("Incomplete response returned, reason: {reason}");
             return Err(ResponsesEventError::Api(ApiError::Stream(message)));
+        }
+        "error" => {
+            let error = event
+                .error
+                .and_then(|error| serde_json::from_value::<Error>(error).ok())
+                .unwrap_or(Error {
+                    r#type: None,
+                    code: event.code,
+                    message: event.message,
+                    plan_type: None,
+                    resets_at: None,
+                });
+            let response_error = classify_provider_error(error);
+            return Err(ResponsesEventError::Api(response_error));
         }
         "response.completed" => {
             if let Some(resp_val) = event.response {
@@ -431,6 +428,30 @@ pub fn process_responses_event(
     }
 
     Ok(None)
+}
+
+fn classify_provider_error(error: Error) -> ApiError {
+    if is_context_window_error(&error) {
+        ApiError::ContextWindowExceeded
+    } else if is_quota_exceeded_error(&error) {
+        ApiError::QuotaExceeded
+    } else if is_usage_not_included(&error) {
+        ApiError::UsageNotIncluded
+    } else if is_cyber_policy_error(&error) {
+        let message = cyber_policy_message(error.message);
+        ApiError::CyberPolicy { message }
+    } else if is_invalid_prompt_error(&error) {
+        let message = error
+            .message
+            .unwrap_or_else(|| "Invalid request.".to_string());
+        ApiError::InvalidRequest { message }
+    } else if is_server_overloaded_error(&error) {
+        ApiError::ServerOverloaded
+    } else {
+        let delay = try_parse_retry_after(&error);
+        let message = error.message.unwrap_or_default();
+        ApiError::Retryable { message, delay }
+    }
 }
 
 pub async fn process_sse(
@@ -743,6 +764,100 @@ mod tests {
         name: String,
         events: Vec<Value>,
         expected: Value,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct TopLevelErrorFixture {
+        case_id: String,
+        cases: Vec<TopLevelErrorCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct TopLevelErrorCase {
+        name: String,
+        events: Vec<Value>,
+        expected: Value,
+    }
+
+    #[tokio::test]
+    async fn top_level_error_is_terminal_from_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-top-level-error.reference.json"
+        )
+        .expect("top-level error fixture must exist");
+        let fixture: TopLevelErrorFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("top-level error fixture must be readable"),
+        )
+        .expect("top-level error fixture must parse");
+
+        for case in fixture.cases {
+            let body = case
+                .events
+                .into_iter()
+                .map(|event| {
+                    let kind = event["type"].as_str().expect("fixture event type");
+                    format!("event: {kind}\ndata: {event}\n\n")
+                })
+                .collect::<String>();
+            let events = collect_events(&[body.as_bytes()]).await;
+            let mut stable_events = Vec::new();
+            let mut output = String::new();
+            let mut completed_history = Vec::new();
+            let mut usage = None;
+            let mut response_id = None;
+            let mut error_category = None;
+            let mut retryable = None;
+            for event in events {
+                match event {
+                    Ok(ResponseEvent::OutputTextDelta(delta)) => {
+                        stable_events.push("output.delta");
+                        output.push_str(&delta);
+                    }
+                    Ok(ResponseEvent::OutputItemDone(item)) => {
+                        stable_events.push("output.item.completed");
+                        completed_history.push(serde_json::to_value(item).expect("serialize item"));
+                    }
+                    Ok(ResponseEvent::Completed {
+                        response_id: id,
+                        token_usage,
+                        ..
+                    }) => {
+                        stable_events.push("completed");
+                        response_id = Some(id);
+                        usage = token_usage;
+                    }
+                    Err(ApiError::Retryable { .. }) => {
+                        stable_events.push("failed");
+                        error_category = Some("provider");
+                        retryable = Some(true);
+                    }
+                    Err(ApiError::InvalidRequest { .. }) => {
+                        stable_events.push("failed");
+                        error_category = Some("provider");
+                        retryable = Some(false);
+                    }
+                    event => panic!("unexpected top-level error event: {event:?}"),
+                }
+            }
+            let terminal = stable_events.last().copied();
+            let observed = json!({
+                "stableEvents": stable_events,
+                "terminal": terminal,
+                "errorCategory": error_category,
+                "retryable": retryable,
+                "partialOutput": output,
+                "completedHistory": completed_history,
+                "usage": usage,
+                "responseId": response_id,
+            });
+
+            assert_eq!(
+                observed, case.expected,
+                "{} / {}",
+                fixture.case_id, case.name
+            );
+        }
     }
 
     #[tokio::test]
