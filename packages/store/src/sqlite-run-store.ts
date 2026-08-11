@@ -5215,6 +5215,203 @@ export class SqliteRunStore implements DomainStore {
     );
   }
 
+  #loadAutomationRecord(
+    automationId: string,
+  ): AutomationDefinitionRecord | null {
+    const row = this.#database
+      .prepare(
+        `SELECT tenant_id, space_id, automation_id, thread_id, revision,
+                definition_digest, definition_json, updated_at
+         FROM automations WHERE automation_id = ?`,
+      )
+      .get(automationId) as AutomationRow | undefined;
+    return row === undefined ? null : parseSqliteAutomationRow(row);
+  }
+
+  #loadAutomationRecordInSpace(
+    locator: AutomationLocator,
+  ): AutomationDefinitionRecord | null {
+    const row = this.#database
+      .prepare(
+        `SELECT tenant_id, space_id, automation_id, thread_id, revision,
+                definition_digest, definition_json, updated_at
+         FROM automations
+         WHERE tenant_id = ? AND space_id = ? AND automation_id = ?`,
+      )
+      .get(locator.tenantId, locator.spaceId, locator.automationId) as
+      | AutomationRow
+      | undefined;
+    return row === undefined ? null : parseSqliteAutomationRow(row);
+  }
+
+  #loadAutomationCreateReceipt(
+    tenantId: string,
+    idempotency: CommitAutomationCreateInput["idempotency"],
+  ): StoredAutomationCreateReceipt | null {
+    automationReceiptKey(tenantId, idempotency);
+    const row = this.#database
+      .prepare(
+        `SELECT tenant_id, automation_id, fingerprint, result_json
+         FROM automation_create_receipts
+         WHERE tenant_id = ? AND scope = ? AND idempotency_key = ?`,
+      )
+      .get(tenantId, idempotency.scope, idempotency.key) as
+      | AutomationReceiptRow
+      | undefined;
+    if (row === undefined) return null;
+    return {
+      tenantId: row.tenant_id,
+      automationId: row.automation_id,
+      fingerprint: row.fingerprint,
+      result: parseStoredJson<AutomationCreateResult>(
+        row.result_json,
+        "automation_create_receipt_invalid",
+      ),
+    };
+  }
+
+  #loadAutomationInvocationReceipt(
+    tenantId: string,
+    idempotency: CommitAutomationInvocationInput["idempotency"],
+  ): StoredAutomationInvocationReceipt | null {
+    automationReceiptKey(tenantId, idempotency);
+    const row = this.#database
+      .prepare(
+        `SELECT tenant_id, automation_id, run_id, fingerprint, result_json
+         FROM automation_invocation_receipts
+         WHERE tenant_id = ? AND scope = ? AND idempotency_key = ?`,
+      )
+      .get(tenantId, idempotency.scope, idempotency.key) as
+      | AutomationReceiptRow
+      | undefined;
+    if (row === undefined) return null;
+    if (typeof row.run_id !== "string") {
+      throw new RunStoreError("automation_invocation_receipt_invalid");
+    }
+    return {
+      tenantId: row.tenant_id,
+      automationId: row.automation_id,
+      runId: row.run_id,
+      fingerprint: row.fingerprint,
+      result: parseStoredJson<AutomationInvocationResult>(
+        row.result_json,
+        "automation_invocation_receipt_invalid",
+      ),
+    };
+  }
+
+  #validateAutomationCreateAuthority(
+    receipt: StoredAutomationCreateReceipt,
+  ): void {
+    validateAutomationCreateReceiptAuthority(
+      receipt,
+      this.#loadAutomationRecord(receipt.automationId),
+    );
+  }
+
+  #validateAutomationInvocationAuthority(
+    receipt: StoredAutomationInvocationReceipt,
+  ): void {
+    const result = receipt.result;
+    const threadId = result.record.definition.threadId;
+    const locator = { tenantId: receipt.tenantId, threadId };
+    const threadEvents = (
+      this.#database
+        .prepare(
+          `SELECT tenant_id, thread_id, sequence, event_id, event_json
+           FROM thread_events WHERE tenant_id = ? AND thread_id = ?
+           ORDER BY sequence ASC`,
+        )
+        .all(receipt.tenantId, threadId) as unknown as ThreadEventRow[]
+    ).map((row) =>
+      decodeStoredThreadEvent(
+        {
+          tenantId: row.tenant_id,
+          threadId: row.thread_id,
+          sequence: row.sequence,
+          eventId: row.event_id,
+          eventJson: row.event_json,
+        },
+        locator,
+      ),
+    );
+    const messageRow = this.#database
+      .prepare(
+        `SELECT messages.tenant_id, messages.thread_id, messages.sequence,
+                messages.message_id, messages.role, messages.content,
+                messages.content_digest, messages.created_at,
+                messages.message_json, invalidations.rollback_id,
+                invalidations.marker_item_id, invalidations.history_sequence,
+                invalidations.invalidated_at
+         FROM messages
+         LEFT JOIN message_invalidations AS invalidations
+           ON invalidations.tenant_id = messages.tenant_id
+          AND invalidations.thread_id = messages.thread_id
+          AND invalidations.message_sequence = messages.sequence
+         WHERE messages.tenant_id = ? AND messages.message_id = ?`,
+      )
+      .get(receipt.tenantId, result.message.messageId) as
+      | MessageRow
+      | undefined;
+    const historyRow = this.#database
+      .prepare(
+        `SELECT tenant_id, thread_id, sequence, item_id, run_id, segment_id,
+                item_type, item_json, created_at
+         FROM model_history_items WHERE tenant_id = ? AND item_id = ?`,
+      )
+      .get(receipt.tenantId, result.historyItem.itemId) as
+      | ModelHistoryRow
+      | undefined;
+    const runEvents = (
+      this.#database
+        .prepare(
+          `SELECT tenant_id, run_id, sequence, event_id, event_json
+           FROM run_events WHERE tenant_id = ? AND run_id = ?
+           ORDER BY sequence ASC`,
+        )
+        .all(receipt.tenantId, receipt.runId) as unknown as EventRow[]
+    ).map((row) =>
+      decodeStoredEvent(row, {
+        tenantId: receipt.tenantId,
+        runId: receipt.runId,
+      }),
+    );
+    const outboxRow = this.#database
+      .prepare(
+        `SELECT message_id, tenant_id, run_id, topic, created_at, message_json
+         FROM outbox WHERE tenant_id = ? AND message_id = ?`,
+      )
+      .get(receipt.tenantId, result.outbox.messageId) as OutboxRow | undefined;
+    const workItemRow = this.#database
+      .prepare(
+        `SELECT work_item_id, tenant_id, run_id, kind, created_at,
+                work_item_json
+         FROM work_items WHERE tenant_id = ? AND work_item_id = ?`,
+      )
+      .get(receipt.tenantId, result.workItem.workItemId) as
+      | WorkItemRow
+      | undefined;
+    validateAutomationInvocationReceiptAuthority(receipt, {
+      record: this.#loadAutomationRecord(receipt.automationId),
+      thread: this.#loadThread(locator),
+      threadEvents,
+      message:
+        messageRow === undefined
+          ? null
+          : decodeStoredMessage(messageRow, locator, "audit"),
+      historyItem:
+        historyRow === undefined
+          ? null
+          : decodeStoredModelHistoryItem(historyRow, locator),
+      run: this.#loadRun({ tenantId: receipt.tenantId, runId: receipt.runId }),
+      runEvents,
+      outbox:
+        outboxRow === undefined ? null : decodeStoredOutboxMessage(outboxRow),
+      workItem:
+        workItemRow === undefined ? null : decodeStoredWorkItem(workItemRow),
+    });
+  }
+
   #writeSnapshot(
     current: RunState | null,
     next: RunState,
@@ -6253,6 +6450,30 @@ function parseStoredJson<T>(json: string, code: string): T {
   } catch (error) {
     throw new RunStoreError(code, { cause: error });
   }
+}
+
+function parseSqliteAutomationRow(
+  row: AutomationRow,
+): AutomationDefinitionRecord {
+  const record = {
+    definition: parseStoredJson<AutomationDefinitionRecord["definition"]>(
+      row.definition_json,
+      "automation_record_invalid",
+    ),
+    definitionDigest: row.definition_digest,
+  };
+  validateAutomationRecord(record);
+  if (
+    row.tenant_id !== record.definition.tenantId ||
+    row.space_id !== record.definition.spaceId ||
+    row.automation_id !== record.definition.automationId ||
+    row.thread_id !== record.definition.threadId ||
+    row.revision !== record.definition.revision ||
+    row.updated_at !== record.definition.updatedAt
+  ) {
+    throw new RunStoreError("automation_record_invalid");
+  }
+  return record;
 }
 
 function decodeSqliteAgentVersion(row: AgentVersionRow): AgentVersionAsset {
