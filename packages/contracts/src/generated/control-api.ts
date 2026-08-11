@@ -336,6 +336,87 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/threads/{threadId}/workspace-list": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listWorkspaceOperations"];
+    put?: never;
+    post: operations["createWorkspaceList"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/workspace-list/{executionId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getWorkspaceOperation"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/workspace-list/{executionId}:reconcile": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["reconcileWorkspaceOperation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/workspace-list/{executionId}:cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["cancelWorkspaceOperation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/workspace-list/{executionId}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Resume this independent durable stream with Last-Event-ID. The server may close the stream after delivering a terminal operation. */
+    get: operations["streamWorkspaceOperationEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/agent-versions": {
     parameters: {
       query?: never;
@@ -674,6 +755,103 @@ export interface components {
     ListThreadMessagesResponse: {
       data: components["schemas"]["MessageView"][];
       nextCursor: string | null;
+    };
+    CreateWorkspaceListRequest: {
+      expectedThreadRevision: number;
+      maxEntries: number;
+    };
+    WorkspaceOperationActionRequest: {
+      expectedOperationRevision: number;
+    };
+    WorkspaceListEntryView: {
+      /** @description A redacted direct-child name of at most 255 UTF-8 bytes; never a path. */
+      name: string;
+      /** @enum {string} */
+      kind: "file" | "directory";
+    };
+    WorkspaceCompletedResultView: {
+      /** @constant */
+      status: "completed";
+      /** @description Entries in strict raw UTF-8 byte order. */
+      entries: components["schemas"]["WorkspaceListEntryView"][];
+      truncated: boolean;
+    };
+    WorkspaceFailedResultView: {
+      /** @constant */
+      status: "failed";
+      code: string;
+      retryable: boolean;
+    };
+    /** @description Redacted Workspace operation projection. No provider, device, binding, lease, path, principal, policy, or digest internals are exposed. */
+    WorkspaceOperationView:
+      | {
+          threadId: string;
+          executionId: string;
+          revision: number;
+          /** @constant */
+          status: "pending";
+          result: null;
+        }
+      | {
+          threadId: string;
+          executionId: string;
+          revision: number;
+          /** @constant */
+          status: "completed";
+          result: components["schemas"]["WorkspaceCompletedResultView"];
+        }
+      | {
+          threadId: string;
+          executionId: string;
+          revision: number;
+          /** @constant */
+          status: "failed";
+          result: components["schemas"]["WorkspaceFailedResultView"];
+        }
+      | {
+          threadId: string;
+          executionId: string;
+          revision: number;
+          /** @constant */
+          status: "canceled";
+          result: null;
+        }
+      | {
+          threadId: string;
+          executionId: string;
+          revision: number;
+          /** @constant */
+          status: "unknownOutcome";
+          result: null;
+        };
+    WorkspaceOperationMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      /** @description Exactly equal to operation.revision. */
+      eventSequence: number;
+      operation: components["schemas"]["WorkspaceOperationView"];
+    };
+    GetWorkspaceOperationResponse: {
+      operation: components["schemas"]["WorkspaceOperationView"];
+      /** @description Atomic cursor exactly equal to operation.revision. */
+      eventSequence: number;
+    };
+    ListWorkspaceOperationsResponse: {
+      data: components["schemas"]["WorkspaceOperationView"][];
+      nextAfterExecutionId: string | null;
+    };
+    WorkspaceOperationEventView: {
+      /** @constant */
+      schemaVersion: "crewon.workspace-operation-event.v0";
+      threadId: string;
+      executionId: string;
+      /** @description Exactly equal to data.operation.revision. */
+      sequence: number;
+      /** @constant */
+      type: "workspace.operation.replaced";
+      data: {
+        operation: components["schemas"]["WorkspaceOperationView"];
+      };
     };
     CreateRunRequest: {
       threadId: string;
@@ -1244,6 +1422,9 @@ export interface components {
   parameters: {
     ThreadId: string;
     RunId: string;
+    WorkspaceExecutionId: string;
+    WorkspaceAfterExecutionId: string | null;
+    WorkspaceOperationLimit: number;
     ApprovalId: string;
     AgentVersionId: string;
     ArtifactId: string;
@@ -2165,6 +2346,206 @@ export interface operations {
       403: components["responses"]["Error"];
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listWorkspaceOperations: {
+    parameters: {
+      query?: {
+        afterExecutionId?: components["parameters"]["WorkspaceAfterExecutionId"];
+        limit?: components["parameters"]["WorkspaceOperationLimit"];
+      };
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Workspace list operations ordered lexicographically by executionId */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkspaceOperationsResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  createWorkspaceList: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateWorkspaceListRequest"];
+      };
+    };
+    responses: {
+      /** @description A committed or idempotently replayed Workspace list operation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceOperationMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getWorkspaceOperation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+        executionId: components["parameters"]["WorkspaceExecutionId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Atomic Workspace operation and event sequence snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetWorkspaceOperationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  reconcileWorkspaceOperation: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+        executionId: components["parameters"]["WorkspaceExecutionId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkspaceOperationActionRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or idempotently replayed Workspace reconciliation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceOperationMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  cancelWorkspaceOperation: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+        executionId: components["parameters"]["WorkspaceExecutionId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkspaceOperationActionRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or idempotently replayed Workspace cancellation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceOperationMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  streamWorkspaceOperationEvents: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Decimal durable event sequence last processed by the client; each event resource has an independent sequence. */
+        "Last-Event-ID"?: components["parameters"]["LastEventId"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+        executionId: components["parameters"]["WorkspaceExecutionId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Durable catch-up followed by live Workspace operation replacement events */
+      200: {
+        headers: {
+          "Cache-Control"?: "no-cache";
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
       500: components["responses"]["Error"];
     };
   };
