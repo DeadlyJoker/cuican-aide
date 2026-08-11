@@ -61,6 +61,12 @@ import {
   commitThreadRollbackFixture,
   registerThreadRollbackStoreConformance,
 } from "./thread-rollback-store-conformance.test-support.ts";
+import { registerAutomationStoreConformance } from "./automation-store-conformance.test-support.ts";
+
+registerAutomationStoreConformance(
+  "SqliteRunStore Automation authority (:memory:)",
+  () => new SqliteRunStore(":memory:"),
+);
 
 registerRunStoreConformance(
   "SqliteRunStore (:memory:)",
@@ -1110,6 +1116,9 @@ test("configures WAL and foreign keys and applies the current schema once", (con
       { name: "agent_version_release_activations" },
       { name: "agent_version_release_bundles" },
       { name: "agent_versions" },
+      { name: "automation_create_receipts" },
+      { name: "automation_invocation_receipts" },
+      { name: "automations" },
       { name: "idempotency_receipts" },
       { name: "message_invalidations" },
       { name: "messages" },

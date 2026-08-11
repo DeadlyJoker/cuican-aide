@@ -7,6 +7,12 @@ import { InMemoryRunStore } from "./in-memory-run-store.ts";
 import { registerTurnStartStoreConformance } from "./turn-start-store-conformance.test-support.ts";
 import { registerThreadGoalMutationStoreConformance } from "./thread-goal-mutation-store-conformance.test-support.ts";
 import { registerThreadRollbackStoreConformance } from "./thread-rollback-store-conformance.test-support.ts";
+import { registerAutomationStoreConformance } from "./automation-store-conformance.test-support.ts";
+
+registerAutomationStoreConformance(
+  "InMemoryRunStore Automation authority",
+  () => new InMemoryRunStore(),
+);
 
 registerRunStoreConformance(
   "InMemoryRunStore",
