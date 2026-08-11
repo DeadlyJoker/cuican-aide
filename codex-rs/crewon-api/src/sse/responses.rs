@@ -167,8 +167,7 @@ pub struct ResponsesStreamEvent {
     metadata: Option<Value>,
     response: Option<Value>,
     error: Option<Value>,
-    code: Option<String>,
-    message: Option<String>,
+    code: Option<Value>,
     item: Option<Value>,
     item_id: Option<String>,
     call_id: Option<String>,
@@ -368,16 +367,7 @@ pub fn process_responses_event(
             return Err(ResponsesEventError::Api(ApiError::Stream(message)));
         }
         "error" => {
-            let error = event
-                .error
-                .and_then(|error| serde_json::from_value::<Error>(error).ok())
-                .unwrap_or(Error {
-                    r#type: None,
-                    code: event.code,
-                    message: event.message,
-                    plan_type: None,
-                    resets_at: None,
-                });
+            let error = top_level_provider_error(event.error, event.code);
             let response_error = classify_provider_error(error);
             return Err(ResponsesEventError::Api(response_error));
         }
@@ -428,6 +418,30 @@ pub fn process_responses_event(
     }
 
     Ok(None)
+}
+
+fn top_level_provider_error(nested: Option<Value>, flat_code: Option<Value>) -> Error {
+    let code = nested
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|nested| nested.get("code"))
+        .or(flat_code.as_ref())
+        .and_then(Value::as_str)
+        .filter(|code| {
+            !code.is_empty()
+                && code.len() <= 96
+                && code
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        })
+        .map(str::to_string);
+    Error {
+        r#type: None,
+        code,
+        message: None,
+        plan_type: None,
+        resets_at: None,
+    }
 }
 
 fn classify_provider_error(error: Error) -> ApiError {
@@ -770,6 +784,8 @@ mod tests {
     #[serde(rename_all = "camelCase")]
     struct TopLevelErrorFixture {
         case_id: String,
+        #[serde(default)]
+        fatal_provider_codes: Vec<String>,
         cases: Vec<TopLevelErrorCase>,
     }
 
@@ -964,6 +980,68 @@ mod tests {
                 observed, case.expected,
                 "{} / {}",
                 fixture.case_id, case.name
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn malformed_top_level_error_payload_uses_terminal_provider_semantics() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-top-level-error-payload.reference.json"
+        )
+        .expect("top-level error payload fixture must exist");
+        let fixture: TopLevelErrorFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("top-level error payload fixture must be readable"),
+        )
+        .expect("top-level error payload fixture must parse");
+
+        for provider_code in &fixture.fatal_provider_codes {
+            let body = format!(
+                "event: error\ndata: {}\n\n",
+                json!({
+                    "type": "error",
+                    "error": {
+                        "code": provider_code,
+                        "message": "sensitive provider copy",
+                    },
+                })
+            );
+            let events = collect_events(&[body.as_bytes()]).await;
+            let error = events
+                .into_iter()
+                .next()
+                .expect("one fatal terminal event")
+                .expect_err("denylisted top-level error must fail");
+            assert!(
+                !crate::map_api_error(error).is_retryable(),
+                "{provider_code} must remain fatal",
+            );
+        }
+
+        for case in fixture.cases {
+            let expected_retryable = case.expected["retryable"]
+                .as_bool()
+                .expect("fixture retryability");
+            let body = case
+                .events
+                .into_iter()
+                .map(|event| {
+                    let kind = event["type"].as_str().expect("fixture event type");
+                    format!("event: {kind}\ndata: {event}\n\n")
+                })
+                .collect::<String>();
+            let events = collect_events(&[body.as_bytes()]).await;
+            assert_eq!(events.len(), 1, "{} / poisoned tail cutoff", case.name);
+            let error = events
+                .into_iter()
+                .next()
+                .expect("one terminal event")
+                .expect_err("top-level error must fail");
+            assert_eq!(
+                crate::map_api_error(error).is_retryable(),
+                expected_retryable,
+                "{} / retry classification",
+                case.name,
             );
         }
     }

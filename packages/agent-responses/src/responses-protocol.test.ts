@@ -160,6 +160,32 @@ type TopLevelErrorFixture = Readonly<{
   >;
 }>;
 
+type TopLevelErrorPayloadFixture = Readonly<{
+  caseId: string;
+  fatalProviderCodes: readonly string[];
+  cases: ReadonlyArray<
+    Readonly<{
+      name: string;
+      events: readonly Readonly<Record<string, unknown>>[];
+      expected: Readonly<{
+        stableEvents: readonly string[];
+        terminal: "failed";
+        errorCategory: "provider";
+        code: string;
+        retryable: boolean;
+        durableRetryProjection: Readonly<{
+          sampling: "retry" | "fail";
+          afterBudgetExhausted: "fail";
+        }>;
+        partialOutput: string;
+        completedHistory: readonly ModelInputItem[];
+        usage: null;
+        checkpoint: null;
+      }>;
+    }>
+  >;
+}>;
+
 type GenericTerminalFixture = Readonly<{
   caseId: string;
   cases: ReadonlyArray<
@@ -204,6 +230,88 @@ const topLevelErrorFixture = JSON.parse(
     "utf8",
   ),
 ) as TopLevelErrorFixture;
+
+const topLevelErrorPayloadFixture = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../test-contracts/fixtures/responses-top-level-error-payload.reference.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as TopLevelErrorPayloadFixture;
+
+test(`${topLevelErrorPayloadFixture.caseId}: fatal denylist is explicit and stable`, () => {
+  assert.deepEqual(topLevelErrorPayloadFixture.fatalProviderCodes, [
+    "context_length_exceeded",
+    "insufficient_quota",
+    "usage_not_included",
+    "invalid_prompt",
+    "cyber_policy",
+    "server_is_overloaded",
+    "slow_down",
+  ]);
+  for (const providerCode of topLevelErrorPayloadFixture.fatalProviderCodes) {
+    const decoder = new ResponsesProtocolDecoder({
+      sequencePolicy: "required",
+      completedCheckpoint: () => null,
+    });
+    assert.deepEqual(decoder.accept({
+      type: "error",
+      sequence_number: 0,
+      error: { code: providerCode, message: "sensitive provider copy" },
+    }), [
+      {
+        type: "failed",
+        code: `responses_provider_${providerCode}`,
+        retryable: false,
+      },
+    ]);
+  }
+});
+
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(`${topLevelErrorPayloadFixture.caseId}: ${sequencePolicy} malformed and future payloads`, () => {
+    for (const fixtureCase of topLevelErrorPayloadFixture.cases) {
+      const decoder = new ResponsesProtocolDecoder({
+        sequencePolicy,
+        completedCheckpoint: () => null,
+      });
+      const events = [];
+      for (const event of fixtureCase.events) {
+        events.push(...decoder.accept(event));
+        if (decoder.terminal) break;
+      }
+      decoder.finish();
+      const failure = events.find((event) => event.type === "failed");
+      assert.deepEqual(
+        {
+          stableEvents: events.map((event) => event.type),
+          terminal: failure?.type ?? null,
+          errorCategory: failure?.type === "failed" ? "provider" : null,
+          code: failure?.type === "failed" ? failure.code : null,
+          retryable: failure?.type === "failed" ? failure.retryable : null,
+          durableRetryProjection: {
+            sampling:
+              failure?.type === "failed" && failure.retryable
+                ? "retry"
+                : "fail",
+            afterBudgetExhausted: "fail",
+          },
+          partialOutput: events
+            .filter((event) => event.type === "output.delta")
+            .map((event) => event.delta)
+            .join(""),
+          completedHistory: decoder.completedHistoryItems,
+          usage: events.find((event) => event.type === "usage") ?? null,
+          checkpoint: null,
+        },
+        fixtureCase.expected,
+        fixtureCase.name,
+      );
+    }
+  });
+}
 
 const genericTerminalFixture = JSON.parse(
   readFileSync(

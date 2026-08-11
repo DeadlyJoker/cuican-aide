@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "crewon.responses-top-level-error-payload.v0",
+  "caseId": "AR-040-responses-top-level-error-payload",
+  "fatalProviderCodes": [
+    "context_length_exceeded",
+    "insufficient_quota",
+    "usage_not_included",
+    "invalid_prompt",
+    "cyber_policy",
+    "server_is_overloaded",
+    "slow_down"
+  ],
+  "cases": [
+    {
+      "name": "missing error payload",
+      "events": [
+        { "type": "error", "sequence_number": 0 },
+        { "type": "response.completed", "sequence_number": 1, "response": { "id": "resp-poison", "status": "completed" } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"], "terminal": "failed", "errorCategory": "provider",
+        "code": "responses_provider_failed", "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "", "completedHistory": [], "usage": null, "checkpoint": null
+      }
+    },
+    {
+      "name": "malformed nested payload wins over flat fields",
+      "events": [
+        { "type": "error", "sequence_number": 0, "error": { "code": 429, "message": ["secret"] }, "code": "invalid_prompt", "message": "poison" },
+        { "type": "response.created", "sequence_number": 1, "response": { "id": "resp-poison" } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"], "terminal": "failed", "errorCategory": "provider",
+        "code": "responses_provider_failed", "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "", "completedHistory": [], "usage": null, "checkpoint": null
+      }
+    },
+    {
+      "name": "malformed non-object nested and flat payload",
+      "events": [
+        { "type": "error", "sequence_number": 0, "error": "broken", "code": ["server_error"], "message": { "secret": "provider copy" } },
+        { "type": "response.output_text.delta", "sequence_number": 1, "delta": "poison" }
+      ],
+      "expected": {
+        "stableEvents": ["failed"], "terminal": "failed", "errorCategory": "provider",
+        "code": "responses_provider_failed", "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "", "completedHistory": [], "usage": null, "checkpoint": null
+      }
+    },
+    {
+      "name": "future provider code is retryable",
+      "events": [
+        { "type": "error", "sequence_number": 0, "error": { "code": "provider_future_terminal_v2", "message": "sensitive provider message" } },
+        { "type": "response.completed", "sequence_number": 1, "response": { "id": "resp-poison", "status": "completed", "usage": { "input_tokens": 1, "output_tokens": 1, "total_tokens": 2 } } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"], "terminal": "failed", "errorCategory": "provider",
+        "code": "responses_provider_provider_future_terminal_v2", "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "", "completedHistory": [], "usage": null, "checkpoint": null
+      }
+    },
+    {
+      "name": "fatal provider code does not sample retry",
+      "events": [
+        { "type": "error", "sequence_number": 0, "code": "invalid_prompt", "message": "sensitive rejection" },
+        { "type": "response.created", "sequence_number": 1, "response": { "id": "resp-poison" } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"], "terminal": "failed", "errorCategory": "provider",
+        "code": "responses_provider_invalid_prompt", "retryable": false,
+        "durableRetryProjection": { "sampling": "fail", "afterBudgetExhausted": "fail" },
+        "partialOutput": "", "completedHistory": [], "usage": null, "checkpoint": null
+      }
+    }
+  ]
+}

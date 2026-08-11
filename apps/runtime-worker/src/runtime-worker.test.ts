@@ -2965,6 +2965,84 @@ test("projects AR-039 generic Responses terminals through the durable retry boun
   }
 });
 
+test("projects AR-040 top-level error payloads through the durable retry boundary", async (context) => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../packages/test-contracts/fixtures/responses-top-level-error-payload.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as Readonly<{
+    cases: readonly Readonly<{
+      name: string;
+      events: readonly Readonly<Record<string, unknown>>[];
+      expected: Readonly<{
+        code: string;
+        durableRetryProjection: Readonly<{
+          sampling: "retry" | "fail";
+          afterBudgetExhausted: "fail";
+        }>;
+      }>;
+    }>[];
+  }>;
+
+  for (const fixtureCase of reference.cases) {
+    const fixture = await createFixture(
+      context,
+      (clock) => new InMemoryRunStore({ clock }),
+    );
+    const transport = new DirectResponsesTransport(
+      {
+        endpoint: "https://provider.example/v1/responses",
+        model: "provider-model",
+      },
+      {
+        fetch: async () =>
+          new Response(
+            fixtureCase.events
+              .map(
+                (event) =>
+                  `event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`,
+              )
+              .join(""),
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      },
+    );
+    const worker = fixture.worker({ transport, streamMaxRetries: 0 });
+
+    assert.deepEqual(await worker.wake(), {
+      kind: "failed",
+      runId: fixture.runId,
+      code: fixtureCase.expected.code,
+    });
+    assert.deepEqual((await fixture.attempts()).map(attemptSummary), [
+      {
+        attemptNumber: 1,
+        retryOfAttemptId: null,
+        status: "failed",
+        failure: { code: fixtureCase.expected.code, retryable: false },
+      },
+    ]);
+    assert.deepEqual((await fixture.loadRun()).failure, {
+      code: fixtureCase.expected.code,
+      retryable: false,
+    });
+    assert.equal((await fixture.step())?.status, "failed");
+    assert.equal(
+      await fixture.store.claimNextWorkItem({
+        ownerId: `after-ar-040-${fixtureCase.name}`,
+        leaseId: `after-ar-040-${fixtureCase.name}`,
+        leaseDurationMs: 1_000,
+      }),
+      null,
+    );
+    await worker.close();
+  }
+});
+
 test("persists the AR-008 usage-limit snapshot and releases the Run without sampling retry", async (context) => {
   const reference = JSON.parse(
     readFileSync(
