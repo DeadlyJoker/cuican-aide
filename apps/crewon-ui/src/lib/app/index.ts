@@ -3,6 +3,11 @@ export { createAppShellActionHandlers } from "./handlers/appShellActionHandlers"
 export { createAppThreadRuntimeHandlers } from "./handlers/appThreadRuntimeHandlers";
 export { createAppWorkspaceCapabilityHandlers } from "./handlers/appWorkspaceCapabilityHandlers";
 export {
+  isLegacyWorkspacePanelItem,
+  workspaceCapabilityHandlersForAuthority,
+  workspaceCwdForAuthority,
+} from "./workspaceUiAuthority";
+export {
   useAppChromeEffects,
   useAppConnectionEffects,
   useAppDocumentPreferenceEffects,
