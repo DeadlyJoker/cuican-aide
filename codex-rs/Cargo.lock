@@ -2895,6 +2895,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "crewon-device-journal",
  "crewon-device-protocol",
  "crewon-utils-cargo-bin",
  "ed25519-dalek",
@@ -2904,6 +2905,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
  "windows-sys 0.61.2",
 ]

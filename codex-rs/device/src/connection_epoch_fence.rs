@@ -13,6 +13,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use crewon_device_protocol::DeviceExecutionCommand;
 use crewon_device_protocol::DeviceGatewayWelcome;
+use crewon_device_protocol::DeviceWorkspaceListCommand;
 use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
@@ -40,11 +41,13 @@ pub struct AcceptedGatewayConnection {
 #[derive(Debug)]
 #[must_use = "hold the permit until the native side effect has started"]
 pub(crate) struct ConnectionEpochPermit<'a> {
+    #[cfg(test)]
     connection: AcceptedGatewayConnection,
     _state: MutexGuard<'a, FenceState>,
 }
 
 impl ConnectionEpochPermit<'_> {
+    #[cfg(test)]
     fn connection(&self) -> &AcceptedGatewayConnection {
         &self.connection
     }
@@ -135,18 +138,50 @@ impl ConnectionEpochFence {
         connection: &AcceptedGatewayConnection,
         command: &DeviceExecutionCommand,
     ) -> Result<ConnectionEpochPermit<'a>, ConnectionEpochFenceError> {
+        self.authorize_device_identity(connection, &command.device_id)
+    }
+
+    /// Acquires the same epoch permit without converting the independent
+    /// workspace command into a Run execution command.
+    pub(crate) fn authorize_workspace_list<'a>(
+        &'a self,
+        connection: &AcceptedGatewayConnection,
+        command: &DeviceWorkspaceListCommand,
+    ) -> Result<ConnectionEpochPermit<'a>, ConnectionEpochFenceError> {
+        self.authorize_device_identity(connection, &command.device_id)
+    }
+
+    pub(crate) fn validate_accepted_connection(
+        &self,
+        connection: &AcceptedGatewayConnection,
+    ) -> Result<(), ConnectionEpochFenceError> {
         let state = self.lock_state()?;
         if state.accepted.as_ref() != Some(connection) {
             return Err(ConnectionEpochFenceError::new(
                 "device_connection_epoch_stale",
             ));
         }
-        if command.device_id != self.device_id {
+        Ok(())
+    }
+
+    fn authorize_device_identity<'a>(
+        &'a self,
+        connection: &AcceptedGatewayConnection,
+        command_device_id: &str,
+    ) -> Result<ConnectionEpochPermit<'a>, ConnectionEpochFenceError> {
+        let state = self.lock_state()?;
+        if state.accepted.as_ref() != Some(connection) {
+            return Err(ConnectionEpochFenceError::new(
+                "device_connection_epoch_stale",
+            ));
+        }
+        if command_device_id != self.device_id {
             return Err(ConnectionEpochFenceError::new(
                 "device_connection_command_identity_mismatch",
             ));
         }
         Ok(ConnectionEpochPermit {
+            #[cfg(test)]
             connection: connection.clone(),
             _state: state,
         })

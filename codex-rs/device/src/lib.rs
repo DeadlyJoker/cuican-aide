@@ -5,7 +5,14 @@
 
 mod connection_epoch_fence;
 mod native_connection;
+mod native_runtime_binding;
 mod workspace_directory;
+mod workspace_list_dispatcher;
+mod workspace_list_journal_events;
+mod workspace_list_journal_orchestrator;
+
+#[cfg(test)]
+mod workspace_list_journal_test_support;
 
 pub use connection_epoch_fence::AcceptedGatewayConnection;
 pub use connection_epoch_fence::ConnectionEpochFence;
@@ -15,6 +22,8 @@ pub use native_connection::NativeDeviceAdmissionError;
 pub use native_connection::NativeDeviceConnection;
 pub use native_connection::TrustedDeviceCommandKey;
 pub use native_connection::VerifiedDeviceCommand;
+pub use native_connection::VerifiedDeviceWorkspaceListCommand;
+pub use native_runtime_binding::NativeDeviceRuntimeBinding;
 pub use workspace_directory::MAX_WORKSPACE_LIST_ENTRIES;
 pub use workspace_directory::MAX_WORKSPACE_LIST_TIMEOUT;
 pub use workspace_directory::MAX_WORKSPACE_NAME_BYTES;
@@ -31,3 +40,8 @@ pub use workspace_directory::WorkspaceListCancellation;
 pub use workspace_directory::WorkspaceListLimits;
 pub use workspace_directory::WorkspaceListPage;
 pub use workspace_directory::WorkspaceListPageRequest;
+pub use workspace_list_dispatcher::DeviceWorkspaceListResult;
+pub use workspace_list_journal_orchestrator::NativeWorkspaceListDispatchOutcome;
+pub use workspace_list_journal_orchestrator::NativeWorkspaceListOrchestrator;
+pub use workspace_list_journal_orchestrator::NativeWorkspaceReconnectItem;
+pub use workspace_list_journal_orchestrator::NativeWorkspaceReconnectPage;
