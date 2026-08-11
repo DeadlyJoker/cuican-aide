@@ -1,7 +1,10 @@
 import type { DeviceDispatchStorePort } from "./device-dispatch-store.ts";
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 import { PostgresDeviceDispatchStore } from "./postgres-device-dispatch-store.ts";
+import { PostgresWorkspaceDispatchStore } from "./postgres-workspace-dispatch-store.ts";
 import { SqliteDeviceDispatchStore } from "./sqlite-device-dispatch-store.ts";
+import { SqliteWorkspaceDispatchStore } from "./sqlite-workspace-dispatch-store.ts";
+import type { WorkspaceDispatchStorePort } from "./workspace-dispatch-store.ts";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -31,6 +34,34 @@ export function createDeviceDispatchStoreFromEnvironment(
     });
   }
   return new SqliteDeviceDispatchStore(sqlitePath as string);
+}
+
+/** Selects the Workspace authority colocated with the Device dispatch DB. */
+export function createWorkspaceDispatchStoreFromEnvironment(
+  environment: Environment,
+): WorkspaceDispatchStorePort {
+  const sqlitePath = optionalEnvironment(
+    environment,
+    "CREWON_DEVICE_GATEWAY_DATABASE_PATH",
+  );
+  const postgresUrl = optionalEnvironment(
+    environment,
+    "CREWON_DEVICE_GATEWAY_DATABASE_URL",
+  );
+  if ((sqlitePath === null) === (postgresUrl === null)) {
+    throw new DeviceGatewayError("device_dispatch_database_config_invalid");
+  }
+  if (postgresUrl !== null) {
+    return new PostgresWorkspaceDispatchStore({
+      connectionString: postgresUrl,
+      schema:
+        optionalEnvironment(
+          environment,
+          "CREWON_DEVICE_GATEWAY_DATABASE_SCHEMA",
+        ) ?? undefined,
+    });
+  }
+  return new SqliteWorkspaceDispatchStore(sqlitePath as string);
 }
 
 function optionalEnvironment(

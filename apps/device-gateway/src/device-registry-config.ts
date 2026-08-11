@@ -18,6 +18,7 @@ export type WorkerRegistration = Readonly<{
   workerId: string;
   credentialId: string;
   fingerprint256: string;
+  allowedRuntimeBindingIds?: readonly string[];
 }>;
 
 export type GatewayRegistration = Readonly<{
@@ -91,7 +92,16 @@ export function parseDeviceRegistryConfig(
   const workerIds = new Set<string>();
   const workers = root.workers.map((inputWorker) => {
     const worker = requireObject(inputWorker, "worker_registration_invalid");
-    requireExactKeys(worker, ["credentialId", "fingerprint256", "workerId"]);
+    const hasRuntimeBindings = Object.hasOwn(
+      worker,
+      "allowedRuntimeBindingIds",
+    );
+    requireExactKeys(worker, [
+      ...(hasRuntimeBindings ? ["allowedRuntimeBindingIds"] : []),
+      "credentialId",
+      "fingerprint256",
+      "workerId",
+    ]);
     requireOpaqueId(worker.workerId, "worker_registration_invalid");
     requireOpaqueId(worker.credentialId, "worker_registration_invalid");
     if (
@@ -103,6 +113,9 @@ export function parseDeviceRegistryConfig(
     ) {
       throw new DeviceGatewayError("worker_registration_invalid");
     }
+    const allowedRuntimeBindingIds = parseAllowedRuntimeBindingIds(
+      hasRuntimeBindings ? worker.allowedRuntimeBindingIds : [],
+    );
     workerIds.add(worker.workerId);
     credentialIds.add(worker.credentialId);
     fingerprints.add(worker.fingerprint256);
@@ -110,6 +123,7 @@ export function parseDeviceRegistryConfig(
       workerId: worker.workerId,
       credentialId: worker.credentialId,
       fingerprint256: worker.fingerprint256,
+      allowedRuntimeBindingIds,
     };
   });
   const gatewayIds = new Set<string>();
@@ -170,6 +184,21 @@ export function parseDeviceRegistryConfig(
     gateways,
     commandSigningKeys,
   };
+}
+
+function parseAllowedRuntimeBindingIds(value: unknown): readonly string[] {
+  if (!Array.isArray(value) || value.length > 256) {
+    throw new DeviceGatewayError("worker_registration_invalid");
+  }
+  const seen = new Set<string>();
+  return value.map((runtimeBindingId) => {
+    requireOpaqueId(runtimeBindingId, "worker_registration_invalid");
+    if (seen.has(runtimeBindingId)) {
+      throw new DeviceGatewayError("worker_registration_invalid");
+    }
+    seen.add(runtimeBindingId);
+    return runtimeBindingId;
+  });
 }
 
 function requireGatewayEndpoint(value: unknown): string {
