@@ -179,6 +179,36 @@ Gate 报告为通过。
 - 命令完成后 route 仍为 epoch 7，没有因 heartbeat 或普通命令重连。
 - 对 GUI 发送 `SIGKILL` 后 guardian 清理全部 bundle 子进程，端口 3210 与 6176 均释放。
 
+## `workspace.read_file.v0` internal runtime / Gateway 纵切
+
+- Rust Native：`973548e7d..fb7b620c1` 将已有 strict read command 与 stable-handle primitive 接入
+  `crewon-device-runtime`。当前 runtime 只在完整 dispatcher/journal/ACK 路径安装后 advertise
+  `workspace.read_file.v0`；accepted sequence 1 在 handle acquisition 和文件读取前持久化，潜在阻塞 I/O 在 epoch permit 与
+  journal writer transaction 之外执行，terminal sequence 2 先持久化再发布。accepted-only 重启结算为 deterministic
+  `unknownOutcome`，terminal replay 只读 journal、不重新读取文件；Hello、reconnect 与 cumulative ACK 同时覆盖 Workspace list 和 read。
+- 并发修复：fresh same-execution 的 admission、accepted 与 in-process reservation 现在绑定在同一
+  `BEGIN IMMEDIATE` 获胜事务中，避免 replay 把仍在执行的 accepted command 误判为 crash。确定性 barrier 回归证明 admission 只由
+  winner 执行一次。
+- Gateway：`3b1190165..4b047e6d1` 增加独立 `workspaceRead` execution kind、strict event/ACK、socket session 和 internal
+  service。fresh prepare 将 command 与认证得到的完整 device/runtime route fence 一起 canonicalize 并 durable freeze；accepted 与
+  terminal receipt/epoch/digest/sequence 均严格绑定，ACK 只在 durable commit 后发送。expired signed command 的 durable replay 使用独立
+  transport deadline，caller abort 区分 `notSent` / `possiblySent`。
+- SQLite schema v3 与 PostgreSQL schema v4 增加 read authority；SQL adapter 不保留长期可变内存快照。每次 prepare/commit 都在数据库
+  transaction 中锁定 execution kind 和当前 record、strict parse、应用 transition、写入并 commit 后才返回。SQLite write failure 会 rollback
+  且不留下 phantom authority；PostgreSQL 两个独立 Pool 的 same-command convergence、identity/terminal conflict、跨副本可见性测试已写入
+  条件套件。当前环境没有 `CREWON_TEST_POSTGRES_URL`，因此这 7 条 PostgreSQL 条件测试未实跑、不得算作通过。
+- Agent Runtime：`c3b108eba` 为 AR-031 增加独立 Rust/TS shared fixture。manual / `storeResponses=false` 的
+  `end_turn=false` mixed completed assistant→Tool 路径会保留 assistant/call/result、只执行并 receipt Tool 一次、累计两段 usage，且不计为
+  sampling retry。assistant-only continuation 因缺 durable intermediate sample recovery boundary 继续 fail closed；stored checkpoint chain
+  也保持 fail closed，因此 AR-031 仍为 `PARTIAL`。
+- 本纵切合入后的统一验证：Contracts `73/73`、Device Gateway `101 pass + 7 PostgreSQL-unconfigured skip`、Agent Kernel
+  `23/23`、Runtime Worker `178 pass + 1 PostgreSQL-unconfigured skip`；对应四个 package typecheck 全部通过。Rust
+  `crewon-device-journal 21/21`、`crewon-device 30/30`、`crewon-device-runtime 21/21`，以及 normal mixed / AR-031 两条
+  `crewon-core` focused reference 各 `1/1`。`just bazel-lock-update` 未产生 `MODULE.bazel.lock` 漂移，
+  `just bazel-lock-check` 通过。
+- 能力边界：本阶段没有增加 Control/public API。Runtime Worker/Application 尚未生成并提交 read command，也没有 private Worker HTTP
+  admission、跨 Gateway peer read router 或 packaged read smoke；所以该能力仍是 internal-only，不能宣告用户可用。
+
 ## 尚未关闭的完整迁移 Gate
 
 - Windows real-host：stable directory handle / UTF-16 / reparse rejection、Job Object 全树清理、NSIS 与 packaged smoke。
