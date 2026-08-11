@@ -102,16 +102,16 @@ Codex worktree，不以主目录的 dirty state 作为通过依据。
 最终 clean-tree 复验对象为 commit `7c4ca001fa0076cba2512742d2f75be587c81615`、tree
 `addcadd9b0fa3f1ae6cbeeaabf2eeeec7f993c93`。7 个 TypeScript package typecheck 全部通过；测试结果如下：
 
-| 包 | Tests | Pass | Fail | Skipped |
-| --- | ---: | ---: | ---: | ---: |
-| Contracts | 70 | 70 | 0 | 0 |
-| Domain | 80 | 80 | 0 | 0 |
-| Agent Kernel | 20 | 20 | 0 | 0 |
-| Agent Responses | 33 | 33 | 0 | 0 |
-| Application | 112 | 112 | 0 | 0 |
-| Store | 312 | 267 | 0 | 45 |
-| Runtime Worker | 169 | 168 | 0 | 1 |
-| **合计** | **796** | **750** | **0** | **46** |
+| 包              |   Tests |    Pass |  Fail | Skipped |
+| --------------- | ------: | ------: | ----: | ------: |
+| Contracts       |      70 |      70 |     0 |       0 |
+| Domain          |      80 |      80 |     0 |       0 |
+| Agent Kernel    |      20 |      20 |     0 |       0 |
+| Agent Responses |      33 |      33 |     0 |       0 |
+| Application     |     112 |     112 |     0 |       0 |
+| Store           |     312 |     267 |     0 |      45 |
+| Runtime Worker  |     169 |     168 |     0 |       1 |
+| **合计**        | **796** | **750** | **0** |  **46** |
 
 46 个 skip 全部来自未配置 `CREWON_TEST_POSTGRES_URL` 的条件测试，未计为通过。Rust focused 的
 `crewon-device-protocol`、`crewon-device`、`crewon-device-runtime` 三条 `just test -p` 命令均以 0 退出；未运行仓库级完整
@@ -148,15 +148,15 @@ Codex worktree，不以主目录的 dirty state 作为通过依据。
 
 合入主工作树后，6 个 TypeScript package typecheck 全部通过；测试结果如下：
 
-| 包 | Tests | Pass | Fail | Skipped |
-| --- | ---: | ---: | ---: | ---: |
-| Contracts | 73 | 73 | 0 | 0 |
-| Agent Kernel | 22 | 22 | 0 | 0 |
-| Agent Responses | 34 | 34 | 0 | 0 |
-| Application | 116 | 116 | 0 | 0 |
-| Store | 313 | 267 | 0 | 46 |
-| Runtime Worker | 179 | 178 | 0 | 1 |
-| **合计** | **737** | **690** | **0** | **47** |
+| 包              |   Tests |    Pass |  Fail | Skipped |
+| --------------- | ------: | ------: | ----: | ------: |
+| Contracts       |      73 |      73 |     0 |       0 |
+| Agent Kernel    |      22 |      22 |     0 |       0 |
+| Agent Responses |      34 |      34 |     0 |       0 |
+| Application     |     116 |     116 |     0 |       0 |
+| Store           |     313 |     267 |     0 |      46 |
+| Runtime Worker  |     179 |     178 |     0 |       1 |
+| **合计**        | **737** | **690** | **0** |  **47** |
 
 47 个 skip 全部来自未配置 `CREWON_TEST_POSTGRES_URL` 的条件测试，未计为通过。Rust focused 验证为
 `crewon-device-protocol` 3 / 3、`crewon-device-journal` 20 / 20、`crewon-core provider_end_turn` 1 / 1；后者另有
