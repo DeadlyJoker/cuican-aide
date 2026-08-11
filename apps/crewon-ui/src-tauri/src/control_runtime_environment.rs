@@ -1,6 +1,8 @@
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::path::Path;
 
+use serde::Serialize;
 use zeroize::Zeroizing;
 
 use super::RuntimePaths;
@@ -8,9 +10,12 @@ use super::SessionMaterial;
 use super::ARTIFACT_KEY_ID;
 use super::CONTROL_API_PORT;
 use super::DESKTOP_ORIGIN;
+use super::PROVIDER_PROBE_ORIGIN;
+use super::PROVIDER_PROBE_PORT;
 use crate::provider_credentials::ActiveProviderBinding;
 use crate::provider_credentials::ActiveProviderRuntime;
 use crate::provider_credentials::ProviderCredentialKind;
+use crate::workspace_native::RuntimeRouteProjection;
 
 const DEFAULT_DESKTOP_MODEL_ID: &str = "gpt-5.6";
 
@@ -79,6 +84,9 @@ const WORKER_CONFIG_ENV: &[&str] = &[
 pub(super) fn control_environment(
     paths: &RuntimePaths,
     session: &SessionMaterial,
+    workspace_worker: Option<&WorkspaceWorkerEnvironment<'_>>,
+    route: &RuntimeRouteProjection,
+    admission: ControlAdmissionMode,
 ) -> ChildEnvironment {
     let mut environment = child_environment();
     environment.extend(shared_runtime_environment(paths));
@@ -86,19 +94,85 @@ pub(super) fn control_environment(
         env("CREWON_CONTROL_ALLOWED_ORIGINS", DESKTOP_ORIGIN),
         secret_env("CREWON_CONTROL_CSRF_TOKEN", session.csrf_token.as_str()),
         env("CREWON_CONTROL_PORT", CONTROL_API_PORT.to_string()),
+        env("CREWON_PROVIDER_PROBE_WORKER_ORIGIN", PROVIDER_PROBE_ORIGIN),
+        secret_env(
+            "CREWON_PROVIDER_PROBE_WORKER_TOKEN",
+            session.provider_probe_token.as_str(),
+        ),
         secret_env(
             "CREWON_CONTROL_SESSION_TOKEN",
             session.session_token.as_str(),
         ),
     ]);
+    apply_agent_version_id(&mut environment, route);
+    if let Some(workspace_worker) = workspace_worker {
+        environment.extend([
+            env("CREWON_WORKSPACE_WORKER_ORIGIN", workspace_worker.origin),
+            secret_env("CREWON_WORKSPACE_WORKER_TOKEN", workspace_worker.token),
+            env(
+                "CREWON_WORKSPACE_WORKER_DEADLINE_MS",
+                workspace_worker.deadline_ms.to_string(),
+            ),
+        ]);
+    }
+    if admission == ControlAdmissionMode::Paused {
+        environment.push(env("CREWON_CONTROL_PAUSED_ADMISSION", "1"));
+    }
     environment
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ControlAdmissionMode {
+    Active,
+    Paused,
+}
+
+pub(super) struct WorkspaceWorkerEnvironment<'a> {
+    pub(super) origin: &'a str,
+    pub(super) token: &'a str,
+    pub(super) deadline_ms: u32,
+}
+
+pub(super) struct GatewayEnvironment<'a> {
+    pub(super) database_path: &'a Path,
+    pub(super) gateway_id: &'a str,
+    pub(super) registry_path: &'a Path,
+    pub(super) tls_key_path: &'a Path,
+    pub(super) tls_certificate_path: &'a Path,
+    pub(super) tls_ca_path: &'a Path,
+}
+
+pub(super) fn gateway_environment(config: GatewayEnvironment<'_>) -> ChildEnvironment {
+    let mut environment = child_environment();
+    environment.extend([
+        env("CREWON_DEVICE_GATEWAY_DATABASE_PATH", config.database_path),
+        env("CREWON_DEVICE_GATEWAY_HOST", "127.0.0.1"),
+        env(
+            "CREWON_DEVICE_GATEWAY_LOCAL_WORKSPACE_GATEWAY_ID",
+            config.gateway_id,
+        ),
+        env("CREWON_DEVICE_GATEWAY_PORT", "0"),
+        env("CREWON_DEVICE_REGISTRY_PATH", config.registry_path),
+        env("CREWON_DEVICE_GATEWAY_TLS_CA_PATH", config.tls_ca_path),
+        env(
+            "CREWON_DEVICE_GATEWAY_TLS_CERT_PATH",
+            config.tls_certificate_path,
+        ),
+        env("CREWON_DEVICE_GATEWAY_TLS_KEY_PATH", config.tls_key_path),
+    ]);
+    environment
+}
+
+pub(super) fn device_environment() -> ChildEnvironment {
+    child_environment()
 }
 
 pub(super) fn release_environment(
     paths: &RuntimePaths,
     provider: Option<&ActiveProviderBinding>,
+    route: &RuntimeRouteProjection,
 ) -> ChildEnvironment {
-    let mut environment = worker_environment(paths, None);
+    let mut environment = worker_environment(paths, None, route);
     if let Some(provider) = provider {
         set_env(
             &mut environment,
@@ -109,9 +183,16 @@ pub(super) fn release_environment(
     environment
 }
 
+pub(super) fn coordinator_environment(paths: &RuntimePaths) -> ChildEnvironment {
+    let mut environment = child_environment();
+    environment.extend(shared_runtime_environment(paths));
+    environment
+}
+
 pub(super) fn worker_environment(
     paths: &RuntimePaths,
     provider: Option<&ActiveProviderRuntime>,
+    route: &RuntimeRouteProjection,
 ) -> ChildEnvironment {
     let mut environment = child_environment();
     for name in WORKER_CONFIG_ENV {
@@ -123,6 +204,7 @@ pub(super) fn worker_environment(
         environment.push(env("CREWON_MODEL_ID", DEFAULT_DESKTOP_MODEL_ID));
     }
     environment.extend(shared_runtime_environment(paths));
+    apply_runtime_route(&mut environment, route);
     // Endpoint and credential authority are always explicit on packaged PC.
     // Ambient parent values are intentionally not copied into the child.
     if let Some(provider) = provider {
@@ -131,18 +213,131 @@ pub(super) fn worker_environment(
     environment
 }
 
+fn apply_runtime_route(environment: &mut ChildEnvironment, route: &RuntimeRouteProjection) {
+    apply_agent_version_id(environment, route);
+    set_env(
+        environment,
+        "CREWON_RUNTIME_GENERATION",
+        route.runtime_generation(),
+    );
+    set_env(
+        environment,
+        "CREWON_POLICY_SNAPSHOT_ID",
+        route.policy_snapshot_id(),
+    );
+    match route.workspace_binding_id() {
+        Some(workspace_binding_id) => set_env(
+            environment,
+            "CREWON_WORKSPACE_BINDING_ID",
+            workspace_binding_id,
+        ),
+        None => remove_env(environment, "CREWON_WORKSPACE_BINDING_ID"),
+    }
+}
+
+fn apply_agent_version_id(environment: &mut ChildEnvironment, route: &RuntimeRouteProjection) {
+    let configured = std::env::var("CREWON_AGENT_VERSION_ID")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    set_env(
+        environment,
+        "CREWON_AGENT_VERSION_ID",
+        configured
+            .as_deref()
+            .unwrap_or_else(|| route.agent_version_id()),
+    );
+}
+
 fn apply_provider_runtime(environment: &mut ChildEnvironment, provider: &ActiveProviderRuntime) {
     set_env(
         environment,
         "CREWON_RESPONSES_ENDPOINT",
         responses_endpoint(&provider.binding.endpoint),
     );
-    match (provider.binding.credential_kind, provider.secret.as_deref()) {
-        (ProviderCredentialKind::None, _) | (_, None) => {}
-        (ProviderCredentialKind::Environment | ProviderCredentialKind::Keychain, Some(secret)) => {
-            set_secret_env(environment, "CREWON_MODEL_API_KEY", secret);
-        }
+    set_env(
+        environment,
+        "CREWON_PROVIDER_RUNTIME_BINDING_ID",
+        &provider.binding.runtime_binding_id,
+    );
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkerBootstrap<'a> {
+    schema_version: &'static str,
+    provider: Option<WorkerProviderBinding<'a>>,
+    api_key: Option<&'a str>,
+    probe: WorkerProbeBootstrap<'a>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkerProviderBinding<'a> {
+    credential_kind: ProviderCredentialKind,
+    endpoint: &'a str,
+    environment_variable: Option<&'a str>,
+    provider_id: &'a str,
+    runtime_binding_id: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkerProbeBootstrap<'a> {
+    port: u16,
+    token: &'a str,
+}
+
+pub(super) fn worker_bootstrap_input(
+    provider: Option<&ActiveProviderRuntime>,
+    session: &SessionMaterial,
+) -> Result<Zeroizing<Vec<u8>>, ()> {
+    serialize_worker_bootstrap(provider, session, "crewon.worker-native-bootstrap.v1")
+}
+
+pub(super) fn worker_bootstrap_input_with_workspace(
+    provider: Option<&ActiveProviderRuntime>,
+    session: &SessionMaterial,
+    workspace_json: &[u8],
+) -> Result<Zeroizing<Vec<u8>>, ()> {
+    if workspace_json.is_empty() {
+        return Err(());
     }
+    let mut bootstrap =
+        serialize_worker_bootstrap(provider, session, "crewon.worker-native-bootstrap.v2")?;
+    if bootstrap.pop() != Some(b'}') {
+        return Err(());
+    }
+    bootstrap.extend_from_slice(b",\"workspace\":");
+    bootstrap.extend_from_slice(workspace_json);
+    bootstrap.push(b'}');
+    Ok(bootstrap)
+}
+
+fn serialize_worker_bootstrap(
+    provider: Option<&ActiveProviderRuntime>,
+    session: &SessionMaterial,
+    schema_version: &'static str,
+) -> Result<Zeroizing<Vec<u8>>, ()> {
+    serde_json::to_vec(&WorkerBootstrap {
+        schema_version,
+        provider: provider.map(|runtime| WorkerProviderBinding {
+            credential_kind: runtime.binding.credential_kind,
+            endpoint: &runtime.binding.endpoint,
+            environment_variable: runtime.binding.environment_variable.as_deref(),
+            provider_id: &runtime.binding.provider_id,
+            runtime_binding_id: &runtime.binding.runtime_binding_id,
+        }),
+        api_key: provider
+            .and_then(|runtime| runtime.secret.as_deref())
+            .map(String::as_str),
+        probe: WorkerProbeBootstrap {
+            port: PROVIDER_PROBE_PORT,
+            token: session.provider_probe_token.as_str(),
+        },
+    })
+    .map(Zeroizing::new)
+    .map_err(|_| ())
 }
 
 fn responses_endpoint(base_url: &str) -> String {
@@ -152,11 +347,6 @@ fn responses_endpoint(base_url: &str) -> String {
 fn set_env(environment: &mut ChildEnvironment, key: &'static str, value: impl Into<OsString>) {
     remove_env(environment, key);
     environment.push(env(key, value));
-}
-
-fn set_secret_env(environment: &mut ChildEnvironment, key: &'static str, value: &str) {
-    remove_env(environment, key);
-    environment.push(secret_env(key, value));
 }
 
 fn remove_env(environment: &mut ChildEnvironment, key: &str) {
