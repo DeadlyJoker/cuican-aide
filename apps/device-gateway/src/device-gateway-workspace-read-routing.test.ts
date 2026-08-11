@@ -21,6 +21,7 @@ import { InMemoryDeviceConnectionRouteStore } from "./device-connection-route-st
 import { DeviceGatewayError } from "./device-gateway-error.ts";
 import {
   InMemoryWorkspaceReadDispatchStore,
+  type WorkspaceReadDispatchStorePort,
   type WorkspaceReadRouteFence,
 } from "./workspace-read-dispatch-store.ts";
 import {
@@ -142,6 +143,70 @@ test("cancel validates accepted lease and never replays the command", async () =
   assert.equal(cancels, 1);
 });
 
+test("abort during load, verification, or prepare sends no read command", async () => {
+  for (const stage of ["load", "verify", "prepare"] as const) {
+    const reached = deferred<void>();
+    const release = deferred<void>();
+    const backing = new InMemoryWorkspaceReadDispatchStore({
+      now: () => new Date("2026-08-08T00:00:05Z"),
+      currentRoute: () => route,
+    });
+    const store: WorkspaceReadDispatchStorePort = {
+      ready: () => backing.ready(),
+      close: () => backing.close(),
+      commit: (input) => backing.commit(input),
+      async load(executionId) {
+        if (stage === "load") {
+          reached.resolve();
+          await release.promise;
+        }
+        return backing.load(executionId);
+      },
+      async prepare(input, readRoute, at) {
+        if (stage === "prepare") {
+          reached.resolve();
+          await release.promise;
+        }
+        return backing.prepare(input, readRoute, at);
+      },
+    };
+    let sends = 0;
+    const session = {
+      supportsWorkspaceRead: () => true,
+      executeWorkspaceRead: () => {
+        sends += 1;
+        throw new Error("read command must not be sent");
+      },
+    } as unknown as DeviceGatewaySession;
+    const service = new DeviceGatewayWorkspaceReadService({
+      sessions: { workspaceReadSession: () => ({ session, route }) },
+      workers: { authorize() {} },
+      verifier: {
+        async verify() {
+          if (stage === "verify") {
+            reached.resolve();
+            await release.promise;
+          }
+        },
+      },
+      store,
+    });
+    const controller = new AbortController();
+    const executing = service.execute(
+      worker,
+      intent,
+      command,
+      controller.signal,
+    );
+    await reached.promise;
+    controller.abort("caller_aborted");
+    release.resolve();
+    await assert.rejects(executing, /workspace_read_not_sent/);
+    assert.equal(sends, 0, stage);
+    await service.close();
+  }
+});
+
 test("peer route accepts heartbeat lease extension without weakening its epoch fence", () => {
   const renewed = { ...route, leaseExpiresAt: "2026-08-08T00:02:00Z" };
   assert.equal(sameWorkspaceReadPeerRoute(renewed, route), true);
@@ -229,4 +294,12 @@ function reference(receiptId: string | null) {
 }
 function digestUtf8(value: string) {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }

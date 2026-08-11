@@ -91,12 +91,14 @@ export class DeviceGatewayWorkspaceReadService {
     this.#workers.authorize(worker, runtimeBindingId);
     if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
     const prior = await this.#store.load(command.executionId);
+    requireNotAborted(signal);
     if (prior !== null) {
       this.#requireMatch(prior, command);
       if (prior.resolution !== null) return structuredClone(prior.resolution);
       return this.#start(prior, true, intent, signal);
     }
     await this.#verifier.verify(command);
+    requireNotAborted(signal);
     const target = this.#sessions.workspaceReadSession(
       command.deviceId,
       intent,
@@ -112,6 +114,7 @@ export class DeviceGatewayWorkspaceReadService {
       target.route,
       this.#timestamp(),
     );
+    requireNotAborted(signal);
     if (prepared.record.resolution !== null)
       return structuredClone(prepared.record.resolution);
     return this.#start(
@@ -204,6 +207,7 @@ export class DeviceGatewayWorkspaceReadService {
     intentInput: string | DeviceFilesystemReadRouteIntent,
     signal: AbortSignal,
   ): Promise<WorkspaceReadResolution> {
+    requireNotAborted(signal);
     const existing = this.#active.get(record.executionId);
     if (existing !== undefined) {
       if (existing.fingerprint !== record.fingerprint)
@@ -325,6 +329,10 @@ function readIntent(
 
 function digestUtf8(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function requireNotAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw new DeviceGatewayError("workspace_read_not_sent");
 }
 
 function unknown(
