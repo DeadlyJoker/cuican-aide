@@ -12,6 +12,9 @@ use sqlx::sqlite::SqliteSynchronous;
 use crate::DeviceJournalError;
 use crate::authority;
 
+#[path = "filesystem_read_schema.rs"]
+mod filesystem_read_schema;
+
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 pub(crate) async fn open_pool(path: &Path) -> Result<SqlitePool, DeviceJournalError> {
@@ -45,7 +48,7 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
         .await?;
     if rows.len() != 1
         || rows[0].try_get::<i64, _>("singleton")? != 1
-        || rows[0].try_get::<i64, _>("version")? != 2
+        || rows[0].try_get::<i64, _>("version")? != 3
     {
         return Err(authority("device_journal_schema_unsupported"));
     }
@@ -123,51 +126,6 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
         ],
     )
     .await?;
-    assert_columns(
-        pool,
-        "filesystem_read_executions",
-        &[
-            ("execution_id", 1),
-            ("command_fingerprint", 0),
-            ("command_json", 0),
-            ("device_id", 0),
-            ("lease_id", 0),
-            ("lease_epoch", 0),
-            ("workspace_binding_id", 0),
-            ("incarnation_id", 0),
-            ("command_digest", 0),
-            ("acknowledged_through", 0),
-            ("created_at", 0),
-        ],
-    )
-    .await?;
-    assert_columns(
-        pool,
-        "filesystem_read_events",
-        &[
-            ("execution_id", 1),
-            ("sequence", 2),
-            ("event_type", 0),
-            ("event_fingerprint", 0),
-            ("event_json", 0),
-            ("receipt_id", 0),
-            ("connection_epoch", 0),
-            ("observed_at", 0),
-        ],
-    )
-    .await?;
-    assert_columns(
-        pool,
-        "filesystem_read_acks",
-        &[
-            ("execution_id", 1),
-            ("through_sequence", 2),
-            ("ack_fingerprint", 0),
-            ("ack_json", 0),
-            ("acknowledged_at", 0),
-        ],
-    )
-    .await?;
     assert_table_sql(
         pool,
         "device_journal_schema",
@@ -223,44 +181,6 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
         ],
     )
     .await?;
-    assert_table_sql(
-        pool,
-        "filesystem_read_executions",
-        &[
-            "strict",
-            "json_valid(command_json)",
-            "check (lease_epoch >= 1)",
-            "check (acknowledged_through between 0 and 2)",
-        ],
-    )
-    .await?;
-    assert_table_sql(
-        pool,
-        "filesystem_read_events",
-        &[
-            "strict",
-            "primary key (execution_id, sequence)",
-            "references filesystem_read_executions(execution_id) on delete restrict",
-            "json_valid(event_json)",
-            "check (sequence in (1, 2))",
-            "workspace_read.accepted",
-            "workspace_read.completed",
-            "workspace_read.unknown_outcome",
-        ],
-    )
-    .await?;
-    assert_table_sql(
-        pool,
-        "filesystem_read_acks",
-        &[
-            "strict",
-            "primary key (execution_id, through_sequence)",
-            "references filesystem_read_events(execution_id, sequence) on delete restrict",
-            "json_valid(ack_json)",
-            "check (through_sequence in (1, 2))",
-        ],
-    )
-    .await?;
     assert_foreign_key(
         pool,
         "workspace_events",
@@ -278,33 +198,7 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
         ],
     )
     .await?;
-    assert_foreign_key(
-        pool,
-        "filesystem_read_events",
-        "filesystem_read_executions",
-        &[("execution_id", "execution_id")],
-    )
-    .await?;
-    assert_foreign_key(
-        pool,
-        "filesystem_read_acks",
-        "filesystem_read_events",
-        &[
-            ("execution_id", "execution_id"),
-            ("through_sequence", "sequence"),
-        ],
-    )
-    .await?;
-    let read_index_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'index' AND name IN (?, ?)",
-    )
-    .bind("filesystem_read_executions_unacknowledged_idx")
-    .bind("filesystem_read_events_accepted_receipt_idx")
-    .fetch_one(pool)
-    .await?;
-    if read_index_count != 2 {
-        return Err(authority("device_journal_schema_corrupt"));
-    }
+    filesystem_read_schema::assert_authority(pool).await?;
     let index_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'index' AND name IN (?, ?) AND tbl_name IN (?, ?)",
     )
@@ -389,11 +283,6 @@ async fn assert_columns(
         "workspace_executions" => sqlx::query("PRAGMA table_info(workspace_executions)"),
         "workspace_events" => sqlx::query("PRAGMA table_info(workspace_events)"),
         "workspace_acks" => sqlx::query("PRAGMA table_info(workspace_acks)"),
-        "filesystem_read_executions" => {
-            sqlx::query("PRAGMA table_info(filesystem_read_executions)")
-        }
-        "filesystem_read_events" => sqlx::query("PRAGMA table_info(filesystem_read_events)"),
-        "filesystem_read_acks" => sqlx::query("PRAGMA table_info(filesystem_read_acks)"),
         _ => return Err(authority("device_journal_schema_corrupt")),
     }
     .fetch_all(pool)
@@ -422,12 +311,6 @@ fn expected_column_type(table: &str, column: &str) -> &'static str {
             )
             | ("workspace_events", "sequence" | "connection_epoch")
             | ("workspace_acks", "through_sequence" | "connection_epoch")
-            | (
-                "filesystem_read_executions",
-                "lease_epoch" | "acknowledged_through"
-            )
-            | ("filesystem_read_events", "sequence" | "connection_epoch")
-            | ("filesystem_read_acks", "through_sequence")
     ) {
         "INTEGER"
     } else {
@@ -468,8 +351,6 @@ async fn assert_foreign_key(
     let rows = match table {
         "workspace_events" => sqlx::query("PRAGMA foreign_key_list(workspace_events)"),
         "workspace_acks" => sqlx::query("PRAGMA foreign_key_list(workspace_acks)"),
-        "filesystem_read_events" => sqlx::query("PRAGMA foreign_key_list(filesystem_read_events)"),
-        "filesystem_read_acks" => sqlx::query("PRAGMA foreign_key_list(filesystem_read_acks)"),
         _ => return Err(authority("device_journal_schema_corrupt")),
     }
     .fetch_all(pool)
