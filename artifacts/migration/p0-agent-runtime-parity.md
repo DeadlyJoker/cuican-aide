@@ -78,6 +78,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-031 | `provider_end_turn.rs` + `stream_no_completed.rs::end_turn_false_completed_assistant_and_tool_continue_same_turn` | Provider `end_turn=false` 的 completed response 在同 Turn 继续 sampling           | PARITY       | manual/stored empty、assistant-only、Tool 与 mixed assistant→Tool 均有 shared trace、原子持久化和 crash recovery evidence |
 | AR-032 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | Provider usage 必须非负、cached≤input 且 total=input+output；异常计量 fail closed | PARITY       | Rust+TS shared malformed-usage fixture                                                                                    |
 | AR-033 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | completed response 可缺省/null usage；成功终态不得伪造零 usage                    | PARITY       | Rust+TS shared completed-without-usage fixture，覆盖 HTTP/SSE 与 WebSocket framing                                        |
+| AR-034 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | completed response 可缺省冗余 final output snapshot；已有 output 仍严格一致       | PARITY       | Rust+TS shared completed-without-output fixture，覆盖 completed item、usage、HTTP/SSE 与 WebSocket framing                |
 
 ## 已有证据映射
 
@@ -175,6 +176,9 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 - `responses-completed-without-usage.reference.json` 冻结 AR-033：Rust `ResponseCompleted.usage: Option<_>` 在 usage 缺失或显式
   `null` 时仍产生 `Completed { token_usage: None }`；TS decoder 现在产生唯一 completed 事件且不伪造 usage 事件。`required` sequence policy
   覆盖 HTTP/SSE，`whenPresent` 覆盖 WebSocket；已有 usage 的严格非负、cached 与 total 一致性校验保持不变。
+- `responses-completed-without-output.reference.json` 冻结 AR-034：Rust `ResponseCompleted` 不要求重复携带最终 `response.output`
+  snapshot；TS decoder 在该字段缺省时保留 streamed delta、matching completed assistant item、usage、response ID 与成功终态。
+  `required` / `whenPresent` framing 共用同一 decoder；字段存在时仍必须与 streamed output 精确一致，mismatch 继续 fail closed。
 
 ## Goal runtime focused parity gate（2026-08-09）
 

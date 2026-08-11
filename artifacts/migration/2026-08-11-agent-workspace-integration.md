@@ -220,6 +220,10 @@ Gate 报告为通过。
 - Agent Runtime AR-033：`731e43a89` 对齐 Rust 的 optional usage 终态。合法 `response.completed` 在 usage 缺失或显式 `null` 时仍成功完成，
   TS 不再误报 protocol failure，也不伪造零 usage；HTTP/SSE 与 WebSocket 继续复用同一 decoder。Rust/TS shared fixture 同时覆盖两种
   framing policy，Rust `crewon-api` 124/124、TS Agent Responses 38/38 通过。
+- Agent Runtime AR-034：`f20ecbcda` 对齐 Rust 对冗余 final output snapshot 的处理。合法 `response.completed` 可缺省
+  `response.output`，同时保留 streamed delta、matching `response.output_item.done`、usage、response identity 与成功终态；字段存在时
+  仍严格比较 streamed output，不一致继续返回 non-retryable protocol failure。共享 fixture 同时驱动 HTTP/SSE `required` 与
+  WebSocket `whenPresent` framing，Rust `crewon-api` 125/125、TS Agent Responses 41/41 与 typecheck 通过。
 - Runtime Worker read command / client：`78d6bbeec`、`5dc2472a8` 生成并签名 `workspace.read_file.v0`，canonical action digest
   绑定 tenant/space/thread、Run/Step/Attempt/execution、lease、Workspace/Device/Runtime、policy、路径和固定 limits。`8564a679b`、
   `ff96099c9` 增加 strict private Gateway execute/reconcile/cancel client：共享 parser 深校验请求、错误与 terminal receipt，HTTPS/mTLS
