@@ -20,7 +20,9 @@ Required production environment:
 - `CREWON_DEVICE_GATEWAY_TLS_CERT_PATH`
 - `CREWON_DEVICE_GATEWAY_TLS_CA_PATH`
 - `CREWON_DEVICE_REGISTRY_PATH`
-- Standalone: `CREWON_DEVICE_GATEWAY_DATABASE_PATH`
+- Standalone Tool-only: `CREWON_DEVICE_GATEWAY_DATABASE_PATH`
+- Standalone local Workspace: `CREWON_DEVICE_GATEWAY_DATABASE_PATH` and the
+  explicit `CREWON_DEVICE_GATEWAY_LOCAL_WORKSPACE_GATEWAY_ID`
 - Team: `CREWON_DEVICE_GATEWAY_DATABASE_URL`, `CREWON_DEVICE_GATEWAY_ID`,
   `CREWON_DEVICE_GATEWAY_PEER_TLS_KEY_PATH` and
   `CREWON_DEVICE_GATEWAY_PEER_TLS_CERT_PATH`
@@ -30,6 +32,13 @@ never falls back. Team may set `CREWON_DEVICE_GATEWAY_DATABASE_SCHEMA`
 (default `crewon_device_gateway`) and
 `CREWON_DEVICE_CONNECTION_LEASE_MS` (default 30000). The PostgreSQL authority
 must migrate successfully before the listener opens.
+
+The local Workspace Gateway ID is a single-process SQLite route identity. It
+causes Device Hello to receive a fenced welcome/epoch and lets Workspace
+accepted events validate against the same SQLite authority. It never enables
+Gateway peer ingress or egress and must not be used as a multi-Gateway or Team
+substitute. Without that explicit ID, the historical Standalone Tool path is
+unchanged and Workspace dispatch remains unavailable.
 
 The registry is `crewon.device-registry.v0`. `devices`, `workers` and optional
 `gateways` contain role-separated identities with unique IDs, credentials and
