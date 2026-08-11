@@ -328,6 +328,30 @@ Gate 报告为通过。
   Rust journal 均有 sequence 1/2 与 ACK 1/2、`acknowledged_through=2`。后续重启将 persisted route 推进到 epoch 12；当前 bundle
   子进程均已退出且端口 3210/6176 已释放。
 
+## AR-037 terminal cutoff 与 MCP mutation receipt gate
+
+- `fb6eab811` 关闭 Rust transport 自身的不一致：HTTP/SSE 原先在 `response.failed` / `response.incomplete` 后暂存错误并继续读取，
+  异常 Provider 随后发送 `response.completed` 时甚至可能转为成功；Responses WebSocket 与 TS decoder 则在首个 failure 立即终结。
+  现在 Rust HTTP/SSE 同样以首个分类错误为 cutoff，保留原 retry/category，后续第二个 failure、output、usage、metadata、identity、
+  checkpoint 与 completed 均不可见。`AR-037-responses-post-terminal` shared fixture 同时驱动 Rust HTTP dispatch 与 TS
+  `required` / `whenPresent` framing；依赖 legacy failure→completed 的异常 HTTP stream 会从成功变为首个错误，这是有意的兼容性修正。
+- `85034322f` 为 AR-019 intentional redesign 落地 mutation receipt gate，但没有恢复 legacy “server opt-in 即并发 mutation”。只有显式
+  `mutation + reconcilable` policy 且 MCP client 提供 execute/reconcile/cancel provider contract 时才进入 catalog，并强制 serial；未审计 Tool
+  与没有 reconciliation contract 的 mutation 继续不可用。Tool Broker 的完整 policy validator 成为 read-only/mutation 共用唯一入口，
+  configured policy 在 admission 时验证并深拷贝；provider 收到原始 MCP tool name、稳定 execution identity 与完整已验证
+  `ToolExecutionCommand`，包括 action digest/intent、approval proof 和当前 lease。adapter resolution 使用 exact-shape、bounded receipt 和
+  result parser，不能注入额外 authority 字段或绕过 output cap。
+- Runtime Worker 继续复用既有 durable `tool_execution_receipts`，没有新增平行状态机。真实文件 SQLite 在 Provider mutation 已完成、
+  本地 receipt commit 前模拟进程丢失并 close；重开 Store 和新 MCP runtime 后只以相同 execution identity 调用 reconcile，`executeCount=1`，
+  最终 Tool result 按原 call order 唯一提交。外部 policy 对象和 `executionPolicy()` 返回快照的后续修改均不能改变 runtime authority。
+- 最新主工作层 focused Gate 使用官方 Node 24：Tool Broker `12/12`、MCP Runtime `5/5`、Agent Responses `51/51`、Runtime Worker
+  `221 pass + 1 PostgreSQL-unconfigured skip`，四个 typecheck 全部通过；Rust `crewon-api 129/129`，`just bazel-lock-check` 通过。
+  合计 418 pass、1 个环境条件 skip、0 fail。原 `runtime-worker.test.ts` Automation 草稿在集成前后 stable patch-id 均为
+  `892bc077d80d3488046a317b67486aa6c465f7c5`，证明本阶段没有改写该并行工作。
+- 本阶段只提供严格 adapter contract、admission 与 durable recovery 证据；生产级 remote MCP mutation transport、真实远端 receipt service、
+  plugin/skill composition 与跨网络 crash/timeout/partition 验收仍未实现，不能据此宣称 remote mutation 已对用户开放。AR-037 WebSocket
+  证据由 shared dispatcher 与既有 `run_websocket_response_stream` 的 `Err => return` 组合构成，尚未新增完整异常 Provider socket harness。
+
 ## 尚未关闭的完整迁移 Gate
 
 - Windows real-host：stable directory handle / UTF-16 / reparse rejection、Job Object 全树清理、NSIS 与 packaged smoke。
