@@ -35,6 +35,7 @@ import {
   type AgentVersionReleaseBundle,
   type BeginRunAttemptInput,
   type BeginRunAttemptResult,
+  type CheckpointRunAttemptInput,
   type CommitLeasedRunTerminalInput,
   type CommitContextCompactionInput,
   type CommitContextCompactionResult,
@@ -151,6 +152,7 @@ import {
 import { configureAndMigrateSqlite, rollback } from "./sqlite-schema.ts";
 import {
   beginSqliteRunAttempt,
+  checkpointSqliteRunAttempt,
   finishSqliteRunAttempt,
   listSqliteRunAttempts,
   loadSqliteRunAttempt,
@@ -2392,6 +2394,38 @@ export class SqliteRunStore implements DomainStore {
         throw new RunStoreError("run_not_running_conflict");
       }
       const result = beginSqliteRunAttempt(this.#database, input);
+      this.#database.exec("COMMIT");
+      return clone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async checkpointRunAttempt(input: CheckpointRunAttemptInput) {
+    this.#assertOpen();
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.#validateExecutionLease(
+        input.tenantId,
+        input.runId,
+        input.lease,
+        readLeaseClock(this.#clock),
+      );
+      const result = checkpointSqliteRunAttempt(
+        this.#database,
+        { tenantId: input.tenantId, runId: input.runId, ...input.attempt },
+        input.lease.workItemId,
+        input.lease.leaseEpoch,
+        input.checkpoint,
+        input.checkpointedAt,
+      );
+      this.#validateExecutionLease(
+        input.tenantId,
+        input.runId,
+        input.lease,
+        readLeaseClock(this.#clock),
+      );
       this.#database.exec("COMMIT");
       return clone(result);
     } catch (error) {

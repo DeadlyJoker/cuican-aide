@@ -126,6 +126,40 @@ export class InMemoryExecutionAuthority {
     this.#steps.set(result.step.stepId, clone(result.step));
     this.#attempts.set(result.attempt.attemptId, clone(result.attempt));
   }
+
+  checkpoint(
+    locator: RunAttemptLocator,
+    workItemId: string,
+    leaseEpoch: number,
+    checkpoint: RunAttemptState["providerCheckpoint"],
+    checkpointedAt: string,
+  ): RunAttemptState {
+    const attempt = this.#attempts.get(locator.attemptId);
+    if (
+      attempt?.tenantId !== locator.tenantId ||
+      attempt.runId !== locator.runId ||
+      attempt.stepId !== locator.stepId ||
+      attempt.status !== "running"
+    ) {
+      throw new RunStoreError("run_attempt_not_running");
+    }
+    if (
+      attempt.workItemId !== workItemId ||
+      attempt.leaseEpoch !== leaseEpoch
+    ) {
+      throw new RunStoreError("stale_attempt_epoch");
+    }
+    if (attempt.providerCheckpoint !== null) {
+      throw new RunStoreError("attempt_provider_checkpoint_conflict");
+    }
+    const next = {
+      ...attempt,
+      providerCheckpoint: clone(checkpoint),
+      updatedAt: checkpointedAt,
+    };
+    this.#attempts.set(next.attemptId, clone(next));
+    return clone(next);
+  }
 }
 
 function terminalInput(

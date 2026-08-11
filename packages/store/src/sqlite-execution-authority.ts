@@ -8,6 +8,7 @@ import {
   type RunStepState,
 } from "@crewon/domain";
 import {
+  parseExecutionProviderCheckpoint,
   RunStoreError,
   type BeginRunAttemptInput,
   type BeginRunAttemptResult,
@@ -316,6 +317,33 @@ function updateRunAttempt(
   }
 }
 
+export function checkpointSqliteRunAttempt(
+  database: DatabaseSync,
+  locator: RunAttemptLocator,
+  workItemId: string,
+  leaseEpoch: number,
+  checkpoint: RunAttemptState["providerCheckpoint"],
+  checkpointedAt: string,
+): RunAttemptState {
+  const attempt = loadSqliteRunAttempt(database, locator);
+  if (attempt === null || attempt.status !== "running") {
+    throw new RunStoreError("run_attempt_not_running");
+  }
+  if (attempt.workItemId !== workItemId || attempt.leaseEpoch !== leaseEpoch) {
+    throw new RunStoreError("stale_attempt_epoch");
+  }
+  if (attempt.providerCheckpoint !== null) {
+    throw new RunStoreError("attempt_provider_checkpoint_conflict");
+  }
+  const next = {
+    ...attempt,
+    providerCheckpoint: checkpoint,
+    updatedAt: checkpointedAt,
+  };
+  updateRunAttempt(database, next);
+  return next;
+}
+
 function runStepValues(step: RunStepState): readonly SQLInputValue[] {
   return [
     step.tenantId,
@@ -390,7 +418,11 @@ function decodeRunAttempt(
   row: RunAttemptRow,
   locator: RunAttemptLocator,
 ): RunAttemptState {
-  const state = parseState<RunAttemptState>(row.state_json);
+  const parsed = parseState<RunAttemptState>(row.state_json);
+  const state = {
+    ...parsed,
+    providerCheckpoint: parsed.providerCheckpoint ?? null,
+  };
   if (
     !isRecord(state) ||
     state.schemaVersion !== "crewon.run-attempt.v0" ||
@@ -418,6 +450,7 @@ function decodeRunAttempt(
     !Number.isSafeInteger(state.leaseEpoch) ||
     state.leaseEpoch < 1 ||
     !validCheckpointDigest(state.checkpointDigest) ||
+    !validProviderCheckpoint(state.providerCheckpoint) ||
     !validAttemptFailure(state.status, state.failure) ||
     !isTimestamp(state.startedAt) ||
     !isTimestamp(state.updatedAt) ||
@@ -427,6 +460,16 @@ function decodeRunAttempt(
     throw new RunStoreError("stored_run_attempt_invalid");
   }
   return state;
+}
+
+function validProviderCheckpoint(value: unknown): boolean {
+  if (value === null) return true;
+  try {
+    parseExecutionProviderCheckpoint(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function parseState<T>(json: string): T {

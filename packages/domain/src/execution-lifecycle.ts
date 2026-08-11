@@ -51,6 +51,7 @@ export type RunAttemptState = Readonly<{
   leaseEpoch: number;
   status: RunAttemptStatus;
   checkpointDigest: string | null;
+  providerCheckpoint: import("@crewon/contracts").ProviderCheckpoint | null;
   failure: Readonly<{ code: string; retryable: boolean }> | null;
   startedAt: string;
   updatedAt: string;
@@ -128,6 +129,7 @@ export function startRunAttempt(
     leaseEpoch: input.leaseEpoch,
     status: "running",
     checkpointDigest: null,
+    providerCheckpoint: null,
     failure: null,
     startedAt: input.startedAt,
     updatedAt: input.startedAt,

@@ -70,6 +70,50 @@ export function registerRunExecutionStoreConformance(
       );
     });
 
+    test("atomically fences the durable provider response checkpoint to its Attempt lease", async (context) => {
+      const fixture = await executionFixture(context, createStore);
+      const claim = await claimWork(fixture.store, "worker-1", "lease-1");
+      const started = await fixture.store.beginRunAttempt(
+        beginInput(claim, "attempt-1", "2026-08-08T00:01:01Z"),
+      );
+      const checkpoint = {
+        schemaVersion: "crewon.provider-checkpoint.v0",
+        adapterName: "direct-responses",
+        adapterVersion: "1",
+        modelId: "provider-model",
+        opaquePayload: { responseId: "resp-created" },
+      } as const;
+      const input = {
+        tenantId: STEP.tenantId,
+        lease: beginInput(claim, "unused", "2026-08-08T00:01:01Z").lease,
+        runId: STEP.runId,
+        attempt: {
+          stepId: started.step.stepId,
+          attemptId: started.attempt.attemptId,
+        },
+        checkpoint,
+        checkpointedAt: "2026-08-08T00:01:02Z",
+      };
+      assert.deepEqual(await fixture.store.checkpointRunAttempt(input), {
+        ...started.attempt,
+        providerCheckpoint: checkpoint,
+        updatedAt: input.checkpointedAt,
+      });
+      await assert.rejects(
+        fixture.store.checkpointRunAttempt(input),
+        hasStoreCode("attempt_provider_checkpoint_conflict"),
+      );
+      assert.deepEqual(
+        (
+          await fixture.store.loadRunAttempt({
+            ...STEP,
+            attemptId: "attempt-1",
+          })
+        )?.providerCheckpoint,
+        checkpoint,
+      );
+    });
+
     test("fences stale epochs and links a reclaimed lease to an abandoned Attempt", async (context) => {
       const fixture = await executionFixture(context, createStore);
       const firstClaim = await claimWork(
@@ -3198,6 +3242,7 @@ function firstAttemptResult(
       leaseEpoch: 1,
       status: "running",
       checkpointDigest: null,
+      providerCheckpoint: null,
       failure: null,
       startedAt,
       updatedAt: startedAt,

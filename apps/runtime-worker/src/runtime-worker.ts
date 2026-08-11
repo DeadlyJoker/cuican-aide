@@ -127,6 +127,7 @@ export type RuntimeWorkerConfig = Readonly<{
   maxToolRounds?: number;
   afterRunStarted?: (() => Promise<void>) | undefined;
   afterAttemptStarted?: (() => Promise<void>) | undefined;
+  afterProviderResponseCheckpointed?: (() => Promise<void>) | undefined;
   afterToolDispatched?:
     | ((receipt: ToolExecutionReceiptState) => Promise<void>)
     | undefined;
@@ -202,6 +203,9 @@ export class RuntimeWorker {
   readonly #maxToolRounds: number;
   readonly #afterRunStarted: (() => Promise<void>) | undefined;
   readonly #afterAttemptStarted: (() => Promise<void>) | undefined;
+  readonly #afterProviderResponseCheckpointed:
+    | (() => Promise<void>)
+    | undefined;
   readonly #afterToolDispatched:
     | ((receipt: ToolExecutionReceiptState) => Promise<void>)
     | undefined;
@@ -377,6 +381,8 @@ export class RuntimeWorker {
     );
     this.#afterRunStarted = config.afterRunStarted;
     this.#afterAttemptStarted = config.afterAttemptStarted;
+    this.#afterProviderResponseCheckpointed =
+      config.afterProviderResponseCheckpointed;
     this.#afterToolDispatched = config.afterToolDispatched;
     this.#afterToolProviderResolved = config.afterToolProviderResolved;
     this.#afterToolReceiptCommitted = config.afterToolReceiptCommitted;
@@ -852,6 +858,13 @@ export class RuntimeWorker {
                     continuation.newHistoryStartIndex,
                 }
               : continuation,
+          ...(attemptResult.abandonedAttempt?.providerCheckpoint === null ||
+          attemptResult.abandonedAttempt?.providerCheckpoint === undefined
+            ? {}
+            : {
+                reconcileCheckpoint:
+                  attemptResult.abandonedAttempt.providerCheckpoint,
+              }),
           budget: { maxOutputBytes: 32 * 1024 },
         },
         controller.signal,
@@ -863,8 +876,18 @@ export class RuntimeWorker {
           return this.#cancel(claim, attempt);
         }
         lastAgentSequence = event.sequence;
+        if (event.type === "segment.provider_response_created") {
+          providerCheckpoint = event.data.checkpoint;
+          await this.#execution.checkpointModelAttempt(
+            claim,
+            attempt,
+            event.data.checkpoint,
+          );
+          await this.#afterProviderResponseCheckpointed?.();
+          continue;
+        }
         if (event.type === "segment.checkpointed") {
-          if (providerCheckpoint !== null || checkpointSequence !== null) {
+          if (checkpointSequence !== null) {
             throw new AgentKernelError("segment_checkpoint_duplicate", false);
           }
           providerCheckpoint = event.data.checkpoint;

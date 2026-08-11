@@ -6903,6 +6903,83 @@ function registerRuntimeWorkerConformance(
       assert.deepEqual(await fixture.store.listPendingWorkItems(10), []);
       await recovered.close();
     });
+
+    test("retrieves a durable provider response after lease-loss without resampling", async (context) => {
+      const fixture = await createFixture(context, createStore);
+      const checkpoint = {
+        schemaVersion: "crewon.provider-checkpoint.v0",
+        adapterName: "recoverable",
+        adapterVersion: "1",
+        modelId: "recoverable-model",
+        opaquePayload: { responseId: "resp-lost" },
+      } as const;
+      let samples = 0;
+      let retrieves = 0;
+      const transport: ModelTransportPort = {
+        adapterName: checkpoint.adapterName,
+        adapterVersion: checkpoint.adapterVersion,
+        modelId: checkpoint.modelId,
+        supportsResponseRetrieve: true,
+        async *stream(request) {
+          if (request.reconcileCheckpoint !== undefined) {
+            retrieves += 1;
+            assert.deepEqual(request.reconcileCheckpoint, checkpoint);
+            yield { type: "response.created", checkpoint };
+            yield { type: "output.delta", delta: "done" };
+            yield {
+              type: "output.item.completed",
+              item: { type: "message", role: "assistant", content: "done" },
+            };
+            yield {
+              type: "usage",
+              inputTokens: 1,
+              outputTokens: 1,
+              totalTokens: 2,
+            };
+            yield { type: "completed", checkpoint };
+            return;
+          }
+          samples += 1;
+          yield { type: "response.created", checkpoint };
+          await new Promise(() => undefined);
+        },
+      };
+      const lost = fixture.worker({
+        transport,
+        afterProviderResponseCheckpointed: async () => {
+          fixture.leaseClock.advance(10_000);
+          throw new Error("simulated_worker_loss");
+        },
+      });
+      assert.deepEqual(await lost.wake(), {
+        kind: "leaseLost",
+        runId: fixture.runId,
+      });
+      await lost.close();
+
+      const recovered = fixture.worker({ transport });
+      assert.deepEqual(await recovered.wake(), {
+        kind: "completed",
+        runId: fixture.runId,
+      });
+      assert.equal(samples, 1);
+      assert.equal(retrieves, 1);
+      assert.deepEqual((await fixture.attempts()).map(attemptSummary), [
+        {
+          attemptNumber: 1,
+          retryOfAttemptId: null,
+          status: "abandoned",
+          failure: null,
+        },
+        {
+          attemptNumber: 2,
+          retryOfAttemptId: "attempt-1",
+          status: "completed",
+          failure: null,
+        },
+      ]);
+      await recovered.close();
+    });
   });
 }
 
@@ -7022,6 +7099,7 @@ async function createFixture(
       toolRuntime?: ToolRuntimePort;
       artifacts?: ToolOutputArtifactPort;
       afterRunStarted?: () => Promise<void>;
+      afterProviderResponseCheckpointed?: () => Promise<void>;
       afterToolDispatched?: RuntimeWorkerConfig["afterToolDispatched"];
       afterToolProviderResolved?: RuntimeWorkerConfig["afterToolProviderResolved"];
       afterToolReceiptCommitted?: RuntimeWorkerConfig["afterToolReceiptCommitted"];
@@ -7066,6 +7144,8 @@ async function createFixture(
           autoCompactAtTokens: options.autoCompactAtTokens,
           modelContextWindowTokens: options.modelContextWindowTokens,
           afterRunStarted: options.afterRunStarted,
+          afterProviderResponseCheckpointed:
+            options.afterProviderResponseCheckpointed,
           afterToolDispatched: options.afterToolDispatched,
           afterToolProviderResolved: options.afterToolProviderResolved,
           afterToolReceiptCommitted: options.afterToolReceiptCommitted,

@@ -1,4 +1,5 @@
 import {
+  parseExecutionProviderCheckpoint,
   RunStoreError,
   type BeginRunAttemptInput,
   type BeginRunAttemptResult,
@@ -277,6 +278,34 @@ async function updateRunAttempt(
   }
 }
 
+export async function checkpointPostgresRunAttempt(
+  client: PoolClient,
+  schema: string,
+  locator: RunAttemptLocator,
+  workItemId: string,
+  leaseEpoch: number,
+  checkpoint: RunAttemptState["providerCheckpoint"],
+  checkpointedAt: string,
+): Promise<RunAttemptState> {
+  const attempt = await loadPostgresRunAttempt(client, schema, locator, true);
+  if (attempt === null || attempt.status !== "running") {
+    throw new RunStoreError("run_attempt_not_running");
+  }
+  if (attempt.workItemId !== workItemId || attempt.leaseEpoch !== leaseEpoch) {
+    throw new RunStoreError("stale_attempt_epoch");
+  }
+  if (attempt.providerCheckpoint !== null) {
+    throw new RunStoreError("attempt_provider_checkpoint_conflict");
+  }
+  const next = {
+    ...attempt,
+    providerCheckpoint: checkpoint,
+    updatedAt: checkpointedAt,
+  };
+  await updateRunAttempt(client, schema, next);
+  return next;
+}
+
 function decodeRunStep(row: RunStepRow, locator: RunStepLocator): RunStepState {
   const state = stateObject<RunStepState>(row.state_json);
   if (
@@ -305,7 +334,11 @@ function decodeRunAttempt(
   row: RunAttemptRow,
   locator: RunAttemptLocator,
 ): RunAttemptState {
-  const state = stateObject<RunAttemptState>(row.state_json);
+  const parsed = stateObject<RunAttemptState>(row.state_json);
+  const state = {
+    ...parsed,
+    providerCheckpoint: parsed.providerCheckpoint ?? null,
+  };
   if (
     state.schemaVersion !== "crewon.run-attempt.v0" ||
     state.tenantId !== row.tenant_id ||
@@ -321,6 +354,7 @@ function decodeRunAttempt(
     state.retryOfAttemptId !== row.retry_of_attempt_id ||
     state.leaseEpoch !== safeInteger(row.lease_epoch) ||
     state.status !== row.status ||
+    !validProviderCheckpoint(state.providerCheckpoint) ||
     !sameTimestamp(state.startedAt, row.started_at) ||
     !sameTimestamp(state.updatedAt, row.updated_at) ||
     !sameNullableTimestamp(state.terminalAt, row.terminal_at)
@@ -328,6 +362,16 @@ function decodeRunAttempt(
     throw new RunStoreError("stored_run_attempt_invalid");
   }
   return structuredClone(state);
+}
+
+function validProviderCheckpoint(value: unknown): boolean {
+  if (value === null) return true;
+  try {
+    parseExecutionProviderCheckpoint(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function stepValues(step: RunStepState): unknown[] {

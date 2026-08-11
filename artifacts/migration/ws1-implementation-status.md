@@ -620,8 +620,11 @@ HTTP 创建 Run -> Worker 大 Tool 输出 -> 加密落盘 -> HTTP 读回完整�
   已进入 SQLite Model History，并在关闭重开后的下一 Run 请求中通过 shared Rust/TS fixture。
 - transport 收到 AbortSignal 后会主动终止 blocked fetch/body；SQLite durable cancel watcher 已落地，但仍是 bounded
   polling，不代表 PostgreSQL LISTEN/NOTIFY、跨节点低延迟或进程级强杀均已验收。
-- `previous_response_id` 已通过 atomic Thread continuation 跨 SQLite 重开；显式 Run Step/Attempt history 和 attempt lease
-  transition 已落地，中途 response retrieve/reconcile 尚未落地。
+- `previous_response_id` 已通过 atomic Thread continuation 跨 SQLite 重开；显式 Run Step/Attempt history、attempt lease
+  transition 与中途 response retrieve/reconcile 已落地。`response.created` checkpoint 先以当前 lease/epoch fence 原子写入
+  Attempt；同进程 stream 中断改为 GET 同一 response，crash reclaim 从 abandoned Attempt retrieve，绝不重新 POST sampling。
+  pending 保持可恢复，只有严格验证的 completed/failed/incomplete terminal 才推进 Run；不支持 retrieve 的 Provider fail closed。
+  共享 fixture 明确 Rust source pointer 只冻结 retry/incomplete safety，Rust 当前没有对应的跨进程 durable retrieve authority。
 - 当前 Agent trace 覆盖 text-only、AR-002 early/partial-close retry、AR-003 error release、AR-004–006 WebSocket fallback/sticky/visibility、
   AR-007 Responses Lite、AR-008 usage limit、AR-009 content filter、AR-010/011 canonical/incremental history 与 AR-013–022
   Tool 主路径、AR-023–025 compaction、AR-026/027 legacy resume/fork 与 AR-030 policy failure；AR-012/029 也已完成 shared

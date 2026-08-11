@@ -2218,6 +2218,19 @@ export class InMemoryRunStore implements DomainStore {
     return this.#executionAuthority.begin(input);
   }
 
+  async checkpointRunAttempt(
+    input: import("@crewon/application").CheckpointRunAttemptInput,
+  ) {
+    this.#validateExecutionLease(input.tenantId, input.runId, input.lease);
+    return this.#executionAuthority.checkpoint(
+      { tenantId: input.tenantId, runId: input.runId, ...input.attempt },
+      input.lease.workItemId,
+      input.lease.leaseEpoch,
+      input.checkpoint,
+      input.checkpointedAt,
+    );
+  }
+
   async loadToolExecutionReceipt(
     locator: ToolExecutionReceiptLocator,
   ): Promise<ToolExecutionReceiptState | null> {

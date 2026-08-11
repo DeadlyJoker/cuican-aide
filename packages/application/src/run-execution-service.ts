@@ -11,6 +11,7 @@ import type {
   ProposedPlan,
   GoalRunTerminalOutcome,
   RunLifecycleEvent,
+  RunAttemptState,
   RunState,
   ThreadGoal,
   ThreadLifecycleEvent,
@@ -1506,6 +1507,27 @@ export class RunExecutionService {
           finishedAt: this.#now(),
           checkpointDigest,
         },
+      });
+    } catch (error) {
+      throw mapExecutionError(error);
+    }
+  }
+
+  async checkpointModelAttempt(
+    claim: WorkItemClaim,
+    attempt: RunAttemptIdentity,
+    checkpoint: import("@crewon/contracts").ProviderCheckpoint,
+  ): Promise<RunAttemptState> {
+    const state = await this.loadRun(claim);
+    const parsed = parseProviderCheckpoint(checkpoint);
+    try {
+      return await this.#store.checkpointRunAttempt({
+        tenantId: state.tenantId,
+        lease: leaseInput(claim),
+        runId: state.runId,
+        attempt,
+        checkpoint: parsed,
+        checkpointedAt: this.#now(),
       });
     } catch (error) {
       throw mapExecutionError(error);

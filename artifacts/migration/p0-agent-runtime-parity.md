@@ -111,7 +111,9 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 - `legacy-rollout-resume-fork.reference.json` 同时驱动 Rust resume、Rust compact/resume/fork 与 import-only TS importer；
   importer 从 response/replacement history 重建模型视图、从 event_msg 重建客户端历史，以一个 Thread transaction 写入，
   SQLite 关闭重开后的 resume 与真实 fork transaction 保持相同 model-visible prefix。无法无损表达的旧 model item fail closed。
-- Direct HTTP/SSE parser、idle timeout、caller abort 和 provider checkpoint tests 是 AR-001 shared full-Turn trace 之外的补充分支证据。
+- Direct HTTP/SSE parser、idle timeout、caller abort、provider checkpoint 与 durable response reconcile tests 是 AR-001 shared
+  full-Turn trace 之外的补充分支证据。`provider-response-reconcile.reference.json` 记录 Rust retry/incomplete source pointer 和
+  intentional TS durable recovery：POST 获得 response ID 后只 GET 同一 response，pending 不终结，unsupported fail closed。
 - `websocket-transport.reference.json` 现在同时驱动 Rust 与 TS：AR-004 冻结 initial + 2 retry 后切 HTTP，AR-005 冻结
   下一 Turn sticky HTTP 且不重复 fallback，AR-011 冻结单连接复用、`previous_response_id=resp-1` 和仅发送新增 user suffix。
   Rust focused fallback `4/4`、incremental `1/1` 与 TS Agent Responses `26/26` 通过。TS 另保留 HTTP 获得独立 retry budget、

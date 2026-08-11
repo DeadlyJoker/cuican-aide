@@ -2,6 +2,7 @@ import {
   RunStoreError,
   type BeginRunAttemptInput,
   type BeginRunAttemptResult,
+  type CheckpointRunAttemptInput,
   type CommitLeasedRunInput,
   type CommitLeasedRunTerminalInput,
   type CommitLeasedRunTerminalResult,
@@ -26,6 +27,7 @@ import { type PoolClient } from "pg";
 
 import {
   beginPostgresRunAttempt,
+  checkpointPostgresRunAttempt,
   finishPostgresRunAttempt,
   listPostgresRunAttempts,
   loadPostgresRunAttempt,
@@ -218,6 +220,44 @@ export class PostgresAttemptStore extends PostgresRunStore {
       ...input.attempt,
       status: "completed",
     });
+  }
+
+  async checkpointRunAttempt(
+    input: CheckpointRunAttemptInput,
+  ): Promise<RunAttemptState> {
+    this.assertOpen();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
+      const result = await checkpointPostgresRunAttempt(
+        client,
+        this.schemaSql(),
+        { tenantId: input.tenantId, runId: input.runId, ...input.attempt },
+        input.lease.workItemId,
+        input.lease.leaseEpoch,
+        input.checkpoint,
+        input.checkpointedAt,
+      );
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await rollbackPostgres(client);
+      throw normalizePostgresError(error);
+    } finally {
+      client.release();
+    }
   }
 
   async commitLeasedRun(input: CommitLeasedRunInput): Promise<CommitRunResult> {
