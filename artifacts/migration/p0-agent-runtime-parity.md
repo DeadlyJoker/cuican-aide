@@ -313,3 +313,17 @@ response identity 整对象 deep-equal。
 
 每完成一个 case，必须同时留下 Rust source pointer、shared fixture、TS candidate test 和差分结果；只新增 TS snapshot 或只引用
 Rust 测试名称都不能把状态改成 `PARITY`。
+
+### AR-039 Responses generic failure terminal
+
+`response.failed` 缺失或无法分类 `error`、以及 `response.incomplete` 缺失或无法分类 `incomplete_details` 时，provider 已明确发送终态，
+不能因诊断字段不完整而在 TS 中升级成 non-retryable 客户端协议错误。规范选择 generic provider terminal 为 retryable：failed 使用稳定、
+有界且不包含 provider message 的 `responses_provider_failed`，incomplete 使用 `responses_incomplete_unknown`；可分类的 quota、policy、
+invalid prompt、max output tokens 与 content filter 语义保持不变。Rust HTTP/SSE 既有 `ApiError::Stream` / core sampling retry 与 TS 现在一致；
+HTTP/SSE 的 `required` 和 WebSocket 的 `whenPresent` framing 共用同一 TS decoder，因此 WS 也采用相同终态。retryability 只允许 sampling
+budget 内重试，预算耗尽后 durable Attempt/Run 原子投影为同 code、`retryable: false`，不会无限释放 Work Item。
+
+`responses-generic-terminal.reference.json` 的四个 poisoned stream 由 Rust `collect_events`、TS `ResponsesProtocolDecoder` 和 Runtime Worker
+经真实 `DirectResponsesTransport` 共同消费；冻结首个终态 cutoff、空 partial output/history/usage/checkpoint、分类、retryability 与 durable
+budget-exhausted projection。created identity 可继续作为本次流内校验基线，但 generic failure 不产生 completed checkpoint；终态后的 output、
+completed item、usage、identity 与 completed 均不可见。

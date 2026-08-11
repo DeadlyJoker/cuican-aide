@@ -107,7 +107,7 @@ type CreatedWithoutIdFixture = Readonly<{
         terminal: "completed" | "failed";
         errorCategory: "provider" | "incomplete" | null;
         retryable: boolean | null;
-        responseId: string | null;
+        checkpoint: null;
       }>;
     }>
   >;
@@ -160,6 +160,31 @@ type TopLevelErrorFixture = Readonly<{
   >;
 }>;
 
+type GenericTerminalFixture = Readonly<{
+  caseId: string;
+  cases: ReadonlyArray<
+    Readonly<{
+      name: string;
+      events: readonly Readonly<Record<string, unknown>>[];
+      expected: Readonly<{
+        stableEvents: readonly string[];
+        terminal: "failed";
+        errorCategory: "provider" | "incomplete";
+        code: string;
+        retryable: true;
+        durableRetryProjection: Readonly<{
+          sampling: "retry";
+          afterBudgetExhausted: "fail";
+        }>;
+        partialOutput: string;
+        completedHistory: readonly ModelInputItem[];
+        usage: null;
+        responseId: string | null;
+      }>;
+    }>
+  >;
+}>;
+
 const postTerminalFixture = JSON.parse(
   readFileSync(
     new URL(
@@ -179,6 +204,63 @@ const topLevelErrorFixture = JSON.parse(
     "utf8",
   ),
 ) as TopLevelErrorFixture;
+
+const genericTerminalFixture = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../test-contracts/fixtures/responses-generic-terminal.reference.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as GenericTerminalFixture;
+
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(`${genericTerminalFixture.caseId}: ${sequencePolicy} generic terminal`, () => {
+    for (const fixtureCase of genericTerminalFixture.cases) {
+      const decoder = new ResponsesProtocolDecoder({
+        sequencePolicy,
+        completedCheckpoint: () => null,
+      });
+      const events = [];
+      for (const event of fixtureCase.events) {
+        events.push(...decoder.accept(event));
+        if (decoder.terminal) break;
+      }
+      decoder.finish();
+      const failure = events.find((event) => event.type === "failed");
+      assert.deepEqual(
+        {
+          stableEvents: events.map((event) => event.type),
+          terminal: failure?.type ?? null,
+          errorCategory:
+            failure?.type === "failed" &&
+            failure.code.startsWith("responses_provider_")
+              ? "provider"
+              : "incomplete",
+          code: failure?.type === "failed" ? failure.code : null,
+          retryable: failure?.type === "failed" ? failure.retryable : null,
+          durableRetryProjection: {
+            sampling:
+              failure?.type === "failed" && failure.retryable
+                ? "retry"
+                : "fail",
+            afterBudgetExhausted: "fail",
+          },
+          partialOutput: events
+            .filter((event) => event.type === "output.delta")
+            .map((event) => event.delta)
+            .join(""),
+          completedHistory: decoder.completedHistoryItems,
+          usage: events.find((event) => event.type === "usage") ?? null,
+          checkpoint: null,
+        },
+        fixtureCase.expected,
+        fixtureCase.name,
+      );
+    }
+  });
+}
 
 for (const sequencePolicy of ["required", "whenPresent"] as const) {
   test(`${topLevelErrorFixture.caseId}: ${sequencePolicy} terminal provider error`, () => {

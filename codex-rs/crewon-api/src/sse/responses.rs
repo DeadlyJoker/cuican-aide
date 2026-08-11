@@ -780,6 +780,107 @@ mod tests {
         expected: Value,
     }
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct GenericTerminalFixture {
+        case_id: String,
+        cases: Vec<GenericTerminalCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct GenericTerminalCase {
+        name: String,
+        events: Vec<Value>,
+        expected: Value,
+    }
+
+    #[tokio::test]
+    async fn generic_terminal_is_retryable_and_cuts_off_poisoned_tail_from_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-generic-terminal.reference.json"
+        )
+        .expect("generic terminal fixture must exist");
+        let fixture: GenericTerminalFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("generic terminal fixture must be readable"),
+        )
+        .expect("generic terminal fixture must parse");
+
+        for case in fixture.cases {
+            let terminal_kind = case
+                .events
+                .iter()
+                .find_map(|event| match event["type"].as_str() {
+                    Some(kind @ ("response.failed" | "response.incomplete")) => {
+                        Some(kind.to_string())
+                    }
+                    _ => None,
+                })
+                .expect("fixture terminal kind");
+            let body = case
+                .events
+                .into_iter()
+                .map(|event| {
+                    let kind = event["type"].as_str().expect("fixture event type");
+                    format!("event: {kind}\ndata: {event}\n\n")
+                })
+                .collect::<String>();
+            let events = collect_events(&[body.as_bytes()]).await;
+            let mut stable_events = Vec::new();
+            let mut output = String::new();
+            let mut completed_history = Vec::new();
+            let mut usage = None;
+            let mut retryable = None;
+
+            for event in events {
+                match event {
+                    Ok(ResponseEvent::Created) => {}
+                    Ok(ResponseEvent::OutputTextDelta(delta)) => output.push_str(&delta),
+                    Ok(ResponseEvent::OutputItemDone(item)) => {
+                        completed_history.push(serde_json::to_value(item).expect("serialize item"));
+                    }
+                    Ok(ResponseEvent::Completed { token_usage, .. }) => usage = token_usage,
+                    Err(error @ ApiError::Stream(_)) => {
+                        stable_events.push("failed");
+                        retryable = Some(crate::map_api_error(error).is_retryable());
+                    }
+                    event => panic!("unexpected generic terminal event: {event:?}"),
+                }
+            }
+
+            let category = if terminal_kind == "response.failed" {
+                "provider"
+            } else {
+                "incomplete"
+            };
+            let code = if terminal_kind == "response.failed" {
+                "responses_provider_failed"
+            } else {
+                "responses_incomplete_unknown"
+            };
+            assert_eq!(
+                json!({
+                    "stableEvents": stable_events,
+                    "terminal": "failed",
+                    "errorCategory": category,
+                    "code": code,
+                    "retryable": retryable,
+                    "durableRetryProjection": {
+                        "sampling": "retry",
+                        "afterBudgetExhausted": "fail",
+                    },
+                    "partialOutput": output,
+                    "completedHistory": completed_history,
+                    "usage": usage,
+                    "checkpoint": null,
+                }),
+                case.expected,
+                "{} / {}",
+                fixture.case_id,
+                case.name,
+            );
+        }
+    }
+
     #[tokio::test]
     async fn top_level_error_is_terminal_from_shared_fixture() {
         let fixture_path = crewon_utils_cargo_bin::find_resource!(

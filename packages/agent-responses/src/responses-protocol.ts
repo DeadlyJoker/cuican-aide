@@ -437,19 +437,19 @@ function parseStreamFailure(response: Readonly<Record<string, unknown>>): {
   code: string;
   retryable: boolean;
 } {
-  const error = requireObject(response.error, "responses_failed_error_invalid");
-  return providerFailure(error.code);
+  return providerFailure(
+    isPlainObject(response.error) ? response.error.code : undefined,
+  );
 }
 
 function parseIncomplete(response: Readonly<Record<string, unknown>>): {
   code: string;
   retryable: boolean;
 } {
-  const details = requireObject(
-    response.incomplete_details,
-    "responses_incomplete_details_invalid",
-  );
-  const reason = safeProviderCode(details.reason);
+  const details = isPlainObject(response.incomplete_details)
+    ? response.incomplete_details
+    : {};
+  const reason = safeProviderCode(details.reason, "unknown");
   return {
     code: `responses_incomplete_${reason}`,
     retryable: reason !== "max_output_tokens" && reason !== "content_filter",
@@ -472,6 +472,7 @@ function providerFailure(value: unknown): {
   return {
     code: `responses_provider_${providerCode}`,
     retryable: [
+      "failed",
       "server_error",
       "rate_limit_exceeded",
       "temporarily_unavailable",
@@ -481,10 +482,10 @@ function providerFailure(value: unknown): {
   };
 }
 
-function safeProviderCode(value: unknown): string {
+function safeProviderCode(value: unknown, fallback = "failed"): string {
   return typeof value === "string" && /^[a-z0-9_]{1,96}$/.test(value)
     ? value
-    : "failed";
+    : fallback;
 }
 
 function boundedNonEmpty(
