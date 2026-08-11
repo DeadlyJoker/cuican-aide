@@ -60,6 +60,9 @@ jobs:
       - name: Test the Device Gateway
         run: pnpm --filter @crewon/device-gateway test
 
+      - name: Test desktop sidecar staging contract
+        run: node --test scripts/stage-app-server-sidecar.test.mjs
+
       - name: Ensure root README.md contains only ASCII and certain Unicode code points
         run: ./scripts/asciicheck.py README.md
       - name: Check root README ToC
