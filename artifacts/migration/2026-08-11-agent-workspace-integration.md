@@ -224,6 +224,11 @@ Gate 报告为通过。
   `response.output`，同时保留 streamed delta、matching `response.output_item.done`、usage、response identity 与成功终态；字段存在时
   仍严格比较 streamed output，不一致继续返回 non-retryable protocol failure。共享 fixture 同时驱动 HTTP/SSE `required` 与
   WebSocket `whenPresent` framing，Rust `crewon-api` 125/125、TS Agent Responses 41/41 与 typecheck 通过。
+- Agent Runtime AR-035：`f54488de6` 对齐 Rust 的 failure-first terminal。带可分类 `error` / `incomplete_details` 的
+  `response.failed` / `response.incomplete` 可作为首个且唯一 terminal，不要求冗余 `response.created`、`id` 或 `status`；字段出现时仍
+  执行 bounded identity、已有 created identity match 与 exact status 校验，`response.completed` 的 created/id/status 严格性不变。
+  shared fixture 从实际事件与 decoder 状态比较 category/retryability、history、usage 与 response identity；TS Agent Responses
+  `45/45`、typecheck 与 Rust `crewon-api 126/126` 通过。完全缺失 response/error/details 的 generic failure 和其 retry 决策仍未外推。
 - Provider private probe foundation：`c4af42230` 提取 Control→Worker 的认证、有界 transport 与 process-local replay authority。
   Worker 只监听 loopback，以 constant-time bearer 校验、byte-level token/request cap、64 KiB response cap 和 peer-disconnect abort
   保护 secret lease；Control client 限制 loopback HTTP / HTTPS、总 deadline、caller abort、bounded JSON，并核对 Provider、catalog
