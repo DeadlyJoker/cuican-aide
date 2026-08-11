@@ -228,7 +228,7 @@ test("fails closed on end_turn=false stored-response recovery", async () => {
   assert.equal(requests, 1);
 });
 
-test("fails closed on end_turn=false assistant-only output", async () => {
+test("returns a durable boundary for end_turn=false assistant-only output", async () => {
   const transport: ModelTransportPort = {
     adapterName: "end-turn-output",
     adapterVersion: "1",
@@ -247,18 +247,23 @@ test("fails closed on end_turn=false assistant-only output", async () => {
     },
   };
 
-  await assert.rejects(
-    collect(
-      new CrewONAgentKernel({ transport }).runSegment(
-        segmentContract(),
-        new AbortController().signal,
-      ),
+  const events = await collect(
+    new CrewONAgentKernel({ transport }).runSegment(
+      segmentContract(),
+      new AbortController().signal,
     ),
-    (error) =>
-      error instanceof AgentKernelError &&
-      error.code === "model_end_turn_false_output_unsupported" &&
-      !error.retryable,
   );
+  assert.deepEqual(events.at(-1), {
+    schemaVersion: "crewon.agent-event.v0",
+    runId: "run-1",
+    segmentId: "segment-1",
+    sequence: 3,
+    type: "segment.continuation_requested",
+    data: {
+      output: "still working",
+      completedAssistantItems: ["still working"],
+    },
+  });
 });
 
 test("returns control at the Tool boundary without executing or resampling", async () => {

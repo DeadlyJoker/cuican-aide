@@ -170,6 +170,22 @@ export type CommitContextCompactionResult = Readonly<{
   attempt: RunAttemptState;
 }>;
 
+/** Atomic nonterminal boundary between provider-requested samples in one Turn. */
+export type CommitAssistantSampleContinuationInput = Readonly<{
+  lease: WorkItemLeaseInput;
+  commit: CommitRunInput;
+  history: ModelHistoryAppend;
+  modelState: ThreadModelState;
+  attempt: RunAttemptIdentity & Readonly<{ finishedAt: string }>;
+  sampleIndex: number;
+}>;
+
+export type CommitAssistantSampleContinuationResult = Readonly<{
+  run: CommitRunResult;
+  step: RunStepState;
+  attempt: RunAttemptState;
+}>;
+
 export type ThreadModelState = Readonly<{
   schemaVersion: "crewon.thread-model-state.v0";
   tenantId: string;
@@ -301,6 +317,9 @@ export interface RunExecutionStore {
   commitContextCompaction(
     input: CommitContextCompactionInput,
   ): Promise<CommitContextCompactionResult>;
+  commitAssistantSampleContinuation(
+    input: CommitAssistantSampleContinuationInput,
+  ): Promise<CommitAssistantSampleContinuationResult>;
   commitTextRunCompletion(
     input: CommitTextRunCompletionInput,
   ): Promise<CommitTextRunCompletionResult>;

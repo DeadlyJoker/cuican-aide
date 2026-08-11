@@ -136,6 +136,13 @@ export type KernelAgentEvent =
       data: Readonly<{ output: string }>;
     })
   | (KernelEventBase & {
+      type: "segment.continuation_requested";
+      data: Readonly<{
+        output: string;
+        completedAssistantItems: string[];
+      }>;
+    })
+  | (KernelEventBase & {
       type: "segment.failed";
       data: Readonly<{ code: string; retryable: boolean }>;
     });

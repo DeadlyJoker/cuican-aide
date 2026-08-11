@@ -39,6 +39,8 @@ import {
   type BeginRunAttemptResult,
   type CommitLeasedRunTerminalInput,
   type CommitContextCompactionInput,
+  type CommitAssistantSampleContinuationInput,
+  type CommitAssistantSampleContinuationResult,
   type CommitContextCompactionResult,
   type CommitToolExecutionCompletionInput,
   type CommitToolExecutionCompletionResult,
@@ -203,6 +205,7 @@ import {
   stableJson,
   validateCommitInput,
   validateContextCompactionInput,
+  validateAssistantSampleContinuationInput,
   validateContextCompactionReplay,
   validateContextCompactionRunAuthority,
   validateToolExecutionCompletionInput,
@@ -3212,6 +3215,63 @@ export class InMemoryRunStore implements DomainStore {
     }
     this.#executionAuthority.apply(execution);
     return clone({ run, step: execution.step, attempt: execution.attempt });
+  }
+
+  async commitAssistantSampleContinuation(
+    input: CommitAssistantSampleContinuationInput,
+  ): Promise<CommitAssistantSampleContinuationResult> {
+    const runId = validateAssistantSampleContinuationInput(input);
+    const receiptKey = stableJson([
+      input.commit.idempotency.scope,
+      input.commit.idempotency.key,
+    ]);
+    const prior = this.#idempotency.get(receiptKey);
+    if (prior !== undefined) {
+      if (prior.tenantId !== input.commit.tenantId) {
+        throw new RunStoreError("tenant_id_mismatch");
+      }
+      if (prior.fingerprint !== input.commit.idempotency.requestFingerprint) {
+        throw new RunStoreError("idempotency_conflict");
+      }
+      const step = this.#executionAuthority.loadStep({
+        tenantId: input.commit.tenantId,
+        runId,
+        stepId: input.attempt.stepId,
+      });
+      const attempt = this.#executionAuthority.loadAttempt({
+        tenantId: input.commit.tenantId,
+        runId,
+        ...input.attempt,
+      });
+      if (step === null || attempt?.status !== "completed") {
+        throw new RunStoreError("assistant_sample_replay_conflict");
+      }
+      return clone({
+        run: { ...prior.result, disposition: "replayed" },
+        step,
+        attempt,
+      });
+    }
+    const now = readLeaseClock(this.#clock);
+    this.#validateExecutionLease(input.commit.tenantId, runId, input.lease, now);
+    const execution = this.#executionAuthority.finish(
+      input.commit.tenantId,
+      runId,
+      input.lease.workItemId,
+      input.lease.leaseEpoch,
+      { ...input.attempt, status: "completed", checkpointDigest: null },
+    );
+    const run = this.#commitRun(input.commit, input.history);
+    this.#executionAuthority.apply(execution);
+    this.#threadModelStates.set(
+      stableJson([input.modelState.tenantId, input.modelState.threadId]),
+      clone(input.modelState),
+    );
+    return clone({
+      run,
+      step: execution.step,
+      attempt: execution.attempt,
+    });
   }
 
   async commitTextRunCompletion(

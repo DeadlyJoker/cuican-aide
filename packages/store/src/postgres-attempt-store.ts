@@ -8,6 +8,8 @@ import {
   type CommitLeasedRunTerminalResult,
   type CommitContextCompactionInput,
   type CommitContextCompactionResult,
+  type CommitAssistantSampleContinuationInput,
+  type CommitAssistantSampleContinuationResult,
   type CommitRunResult,
   type CompleteRunAttemptInput,
   type RetryRunAttemptInput,
@@ -53,12 +55,14 @@ import {
   rollbackPostgres,
 } from "./postgres-store-support.ts";
 import { writePostgresModelHistory } from "./postgres-thread-writer.ts";
+import { writePostgresThreadModelState } from "./postgres-thread-model-state.ts";
 import { type PostgresThreadStoreOptions } from "./postgres-thread-store.ts";
 import {
   stableJson,
   validateBeginRunAttemptInput,
   validateCompleteRunAttemptInput,
   validateContextCompactionInput,
+  validateAssistantSampleContinuationInput,
   validateContextCompactionReplay,
   validateContextCompactionRunAuthority,
   validateLeasedRunTerminalInput,
@@ -573,6 +577,79 @@ export class PostgresAttemptStore extends PostgresRunStore {
           input.lease,
         );
       }
+      await client.query("COMMIT");
+      return structuredClone({
+        run,
+        step: execution.step,
+        attempt: execution.attempt,
+      });
+    } catch (error) {
+      await rollbackPostgres(client);
+      throw normalizePostgresError(error);
+    } finally {
+      client.release();
+    }
+  }
+
+  async commitAssistantSampleContinuation(
+    input: CommitAssistantSampleContinuationInput,
+  ): Promise<CommitAssistantSampleContinuationResult> {
+    this.assertOpen();
+    const runId = validateAssistantSampleContinuationInput(input);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await advisoryLock(
+        client,
+        `idempotency:${input.commit.idempotency.scope}:${input.commit.idempotency.key}`,
+      );
+      const prior = await this.loadRunReceiptWithin(client, input.commit);
+      if (prior !== null) {
+        const run = {
+          ...decodePostgresRunReceipt(prior),
+          disposition: "replayed" as const,
+        };
+        const step = await loadPostgresRunStep(
+          client,
+          this.schemaSql(),
+          { tenantId: input.commit.tenantId, runId, stepId: input.attempt.stepId },
+          true,
+        );
+        const attempt = await loadPostgresRunAttempt(
+          client,
+          this.schemaSql(),
+          { tenantId: input.commit.tenantId, runId, ...input.attempt },
+          true,
+        );
+        if (step === null || attempt?.status !== "completed") {
+          throw new RunStoreError("assistant_sample_replay_conflict");
+        }
+        await client.query("COMMIT");
+        return structuredClone({
+          run,
+          step,
+          attempt,
+        });
+      }
+      await advisoryLock(client, `run:${input.commit.tenantId}:${runId}`);
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.commit.tenantId,
+        runId,
+        input.lease,
+      );
+      const execution = await finishPostgresRunAttempt(client, this.schemaSql(), {
+        tenantId: input.commit.tenantId,
+        runId,
+        workItemId: input.lease.workItemId,
+        leaseEpoch: input.lease.leaseEpoch,
+        attempt: { ...input.attempt, status: "completed", checkpointDigest: null },
+      });
+      const run = await this.commitRunWithin(client, input.commit, {
+        executionLease: input.lease,
+        history: input.history,
+      });
+      await writePostgresThreadModelState(client, this.schemaSql(), input.modelState);
       await client.query("COMMIT");
       return structuredClone({
         run,

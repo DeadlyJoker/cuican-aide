@@ -49,6 +49,8 @@ import {
   type CommitLeasedRunTerminalInput,
   type CommitContextCompactionInput,
   type CommitContextCompactionResult,
+  type CommitAssistantSampleContinuationInput,
+  type CommitAssistantSampleContinuationResult,
   type CommitToolExecutionCompletionInput,
   type CommitToolExecutionCompletionResult,
   type CommitToolExecutionUnknownOutcomeInput,
@@ -225,6 +227,7 @@ import {
   validateBeginRunAttemptInput,
   validateCommitInput,
   validateContextCompactionInput,
+  validateAssistantSampleContinuationInput,
   validateContextCompactionReplay,
   validateContextCompactionRunAuthority,
   validateToolExecutionCompletionInput,
@@ -3535,6 +3538,80 @@ export class SqliteRunStore implements DomainStore {
       }
       this.#database.exec("COMMIT");
       return clone({ run, step: execution.step, attempt: execution.attempt });
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async commitAssistantSampleContinuation(
+    input: CommitAssistantSampleContinuationInput,
+  ): Promise<CommitAssistantSampleContinuationResult> {
+    this.#assertOpen();
+    const runId = validateAssistantSampleContinuationInput(input);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const prior = this.#loadReceipt(
+        input.commit.idempotency.scope,
+        input.commit.idempotency.key,
+      );
+      if (prior !== null) {
+        if (prior.tenant_id !== input.commit.tenantId) {
+          throw new RunStoreError("tenant_id_mismatch");
+        }
+        if (prior.fingerprint !== input.commit.idempotency.requestFingerprint) {
+          throw new RunStoreError("idempotency_conflict");
+        }
+        const storedRun = normalizeStoredRunResult(
+          parseStoredJson<CommitRunResult>(prior.result_json, "idempotency_receipt_invalid"),
+        );
+        const step = loadSqliteRunStep(this.#database, {
+          tenantId: input.commit.tenantId,
+          runId,
+          stepId: input.attempt.stepId,
+        });
+        const attempt = loadSqliteRunAttempt(this.#database, {
+          tenantId: input.commit.tenantId,
+          runId,
+          ...input.attempt,
+        });
+        if (step === null || attempt?.status !== "completed") {
+          throw new RunStoreError("assistant_sample_replay_conflict");
+        }
+        this.#database.exec("COMMIT");
+        return clone({
+          run: { ...storedRun, disposition: "replayed" },
+          step,
+          attempt,
+        });
+      }
+      const now = readLeaseClock(this.#clock);
+      this.#validateExecutionLease(input.commit.tenantId, runId, input.lease, now);
+      const execution = finishSqliteRunAttempt(this.#database, {
+        tenantId: input.commit.tenantId,
+        runId,
+        workItemId: input.lease.workItemId,
+        leaseEpoch: input.lease.leaseEpoch,
+        attempt: { ...input.attempt, status: "completed", checkpointDigest: null },
+      });
+      const run = this.#commitRun(input.commit, input.lease, input.history, true);
+      this.#database.prepare(
+        `INSERT INTO thread_model_states (tenant_id, thread_id, state_json, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (tenant_id, thread_id) DO UPDATE SET
+           state_json = excluded.state_json, updated_at = excluded.updated_at`,
+      ).run(
+        input.modelState.tenantId,
+        input.modelState.threadId,
+        stableJson(input.modelState),
+        input.modelState.updatedAt,
+      );
+      this.#database.exec("COMMIT");
+      return clone({
+        run,
+        step: execution.step,
+        attempt: execution.attempt,
+      });
     } catch (error) {
       rollback(this.#database);
       throw normalizeSqliteError(error);

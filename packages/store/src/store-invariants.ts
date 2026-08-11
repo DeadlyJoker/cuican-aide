@@ -45,6 +45,7 @@ import {
   type BeginRunAttemptInput,
   type CommitLeasedRunTerminalInput,
   type CommitContextCompactionInput,
+  type CommitAssistantSampleContinuationInput,
   type CommitToolExecutionCompletionInput,
   type CommitToolExecutionUnknownOutcomeInput,
   type CompleteRunAttemptInput,
@@ -708,6 +709,59 @@ export function validateContextCompactionRunAuthority(
   ) {
     throw new RunStoreError("manual_compaction_run_authority_mismatch");
   }
+}
+
+export function validateAssistantSampleContinuationInput(
+  input: CommitAssistantSampleContinuationInput,
+): string {
+  const runId = validateCommitInput(input.commit);
+  validateQueueLease(input.lease, input.lease.workItemId, "work_item_id_invalid");
+  if (!Number.isSafeInteger(input.sampleIndex) || input.sampleIndex < 1) {
+    throw new RunStoreError("assistant_sample_index_invalid");
+  }
+  const history = input.history.items[0];
+  const lastHistory = input.history.items.at(-1);
+  const completed = input.commit.events.at(-1);
+  const completedSegmentId =
+    completed?.type === "segment.provider_continuation"
+      ? completed.data.segmentId
+      : null;
+  if (
+    input.history.items.length === 0 ||
+    input.history.items.some(
+      (item, index) =>
+        item.type !== "message" ||
+        item.role !== "assistant" ||
+        item.source !== "assistant_completion" ||
+        item.tenantId !== input.commit.tenantId ||
+        item.threadId !== input.modelState.threadId ||
+        item.runId !== runId ||
+        item.segmentId !== completedSegmentId ||
+        item.sequence !== input.history.expectedLastSequence + index + 1,
+    ) ||
+    history?.type !== "message" ||
+    history.role !== "assistant" ||
+    history.source !== "assistant_completion" ||
+    history.runId !== runId ||
+    completed?.type !== "segment.provider_continuation" ||
+    completed.data.sampleIndex !== input.sampleIndex ||
+    completed.data.throughHistorySequence !== lastHistory?.sequence ||
+    completed.data.segmentId !== history.segmentId ||
+    input.attempt.finishedAt !== completed.occurredAt ||
+    input.commit.workItems.length !== 0 ||
+    input.modelState.tenantId !== input.commit.tenantId ||
+    input.modelState.threadId !== history.threadId ||
+    input.modelState.throughHistorySequence !== lastHistory?.sequence
+  ) {
+    throw new RunStoreError("assistant_sample_continuation_mismatch");
+  }
+  validateThreadModelState(input.modelState);
+  validateRunAttemptMutation(input.commit.tenantId, runId, input.lease, {
+    ...input.attempt,
+    status: "completed",
+    checkpointDigest: null,
+  });
+  return runId;
 }
 
 export function validateToolExecutionCompletionReplay(

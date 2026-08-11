@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "crewon.provider-end-turn-assistant-continuation.v0",
+  "caseId": "AR-031-provider-end-turn-false-assistant-continuation",
+  "providerEndTurn": false,
+  "completedAssistantOutput": "working",
+  "expectedRequests": [
+    [{ "type": "message", "role": "user", "content": "hello" }],
+    [
+      { "type": "message", "role": "user", "content": "hello" },
+      { "type": "message", "role": "assistant", "content": "working" }
+    ],
+    [
+      { "type": "message", "role": "user", "content": "hello" },
+      { "type": "message", "role": "assistant", "content": "working" },
+      { "type": "message", "role": "assistant", "content": "still working" }
+    ]
+  ],
+  "finalOutput": "done",
+  "finalState": {
+    "requestCount": 3,
+    "samplingRetries": 0,
+    "terminalMessages": 1,
+    "usage": { "inputTokens": 15, "outputTokens": 4, "totalTokens": 19 }
+  }
+}

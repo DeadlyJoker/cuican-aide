@@ -52,6 +52,7 @@ import type { GoalToolName } from "./goal-tool.ts";
 import type { GoalToolExecutionResult } from "./goal-tool-store-port.ts";
 import type {
   BeginRunAttemptResult,
+  CommitAssistantSampleContinuationResult,
   CommitContextCompactionResult,
   CommitTextRunCompletionInput,
   CommitTextRunCompletionResult,
@@ -1705,6 +1706,127 @@ export class RunExecutionService {
       { kind: "agent.event", event: canonicalEvent },
       history,
     );
+  }
+
+  async commitAssistantSampleContinuation(
+    claim: WorkItemClaim,
+    attempt: RunAttemptIdentity,
+    input: Readonly<{
+      sampleIndex: number;
+      segmentId: string;
+      output: string;
+      completedAssistantItems: readonly string[];
+      events: readonly CanonicalAgentEvent[];
+      identity: Omit<ThreadContinuationLocator, "tenantId" | "threadId">;
+      contextRevision: string;
+      modelPolicy: Readonly<{
+        contextWindowTokens: number;
+        autoCompactAtTokens: number | null;
+      }>;
+      latestUsage: ThreadModelState["latestUsage"];
+    }>,
+  ): Promise<CommitAssistantSampleContinuationResult> {
+    requirePositiveInteger(input.sampleIndex, "assistant_sample_index_invalid");
+    requireBoundedContent(input.output);
+    validateModelIdentity(input.identity);
+    const state = await this.loadRun(claim);
+    if (state.status !== "running" || state.cancelRequested) {
+      throw new ApplicationError("conflict", "run_not_running");
+    }
+    const occurredAt = this.#now();
+    const head = await this.#modelHistoryHead(state);
+    if (
+      input.completedAssistantItems.length === 0 ||
+      input.completedAssistantItems.join("") !== input.output
+    ) {
+      throw new ApplicationError("validation", "assistant_sample_items_invalid");
+    }
+    const historyItems: ModelHistoryItem[] = input.completedAssistantItems.map(
+      (content, index) => ({
+        schemaVersion: "crewon.model-history-item.v0",
+        itemId: this.#nextId("modelHistoryItem"),
+        tenantId: state.tenantId,
+        threadId: state.threadId,
+        sequence: head.lastSequence + index + 1,
+        runId: state.runId,
+        segmentId: input.segmentId,
+        createdAt: occurredAt,
+        type: "message",
+        role: "assistant",
+        source: "assistant_completion",
+        content,
+        contentDigest: this.#digest(content),
+      }),
+    );
+    const events: RunLifecycleEvent[] = input.events.map((event, index) =>
+      mapAgentEvent(
+        event,
+        state.lastSequence + index + 1,
+        this.#nextId("runEvent"),
+        occurredAt,
+        (checkpoint) => this.#digest(canonicalJson(checkpoint)),
+      ),
+    );
+    events.push({
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: state.runId },
+      eventId: this.#nextId("runEvent"),
+      sequence: state.lastSequence + events.length + 1,
+      occurredAt,
+      type: "segment.provider_continuation",
+      data: {
+        segmentId: input.segmentId,
+        segmentSequence: (input.events.at(-1)?.sequence ?? 0) + 1,
+        sampleIndex: input.sampleIndex,
+        throughHistorySequence: historyItems.at(-1)!.sequence,
+      },
+    });
+    const modelState: ThreadModelState = {
+      schemaVersion: "crewon.thread-model-state.v0",
+      tenantId: state.tenantId,
+      threadId: state.threadId,
+      ...input.identity,
+      contextWindowTokens: input.modelPolicy.contextWindowTokens,
+      autoCompactAtTokens: input.modelPolicy.autoCompactAtTokens,
+      throughHistorySequence: historyItems.at(-1)!.sequence,
+      contextRevision: input.contextRevision,
+      latestUsage: input.latestUsage,
+      updatedAt: occurredAt,
+    };
+    try {
+      return await this.#store.commitAssistantSampleContinuation({
+        lease: leaseInput(claim),
+        commit: {
+          tenantId: state.tenantId,
+          expectedRevision: state.revision,
+          idempotency: executionIdempotency(
+            state,
+            claim.workItem,
+            `assistant-sample-continuation:${input.sampleIndex}`,
+            {
+              sampleIndex: input.sampleIndex,
+              output: input.output,
+              completedAssistantItems: input.completedAssistantItems,
+              events: input.events,
+              identity: input.identity,
+              contextRevision: input.contextRevision,
+              modelPolicy: input.modelPolicy,
+              latestUsage: input.latestUsage,
+              attempt,
+            },
+          ),
+          events,
+          outbox: events.map((event) => this.#outbox(state.tenantId, event)),
+          workItems: [],
+        },
+        history: { expectedLastSequence: head.lastSequence, items: historyItems },
+        modelState,
+        attempt: { ...attempt, finishedAt: occurredAt },
+        sampleIndex: input.sampleIndex,
+      });
+    } catch (error) {
+      throw mapExecutionError(error);
+    }
   }
 
   async executeGoalTool(

@@ -228,6 +228,15 @@ export type RunLifecycleEvent =
       }>;
     })
   | (RunEventBase & {
+      type: "segment.provider_continuation";
+      data: Readonly<{
+        segmentId: string;
+        segmentSequence: number;
+        sampleIndex: number;
+        throughHistorySequence: number;
+      }>;
+    })
+  | (RunEventBase & {
       type: "segment.failed";
       data: Readonly<{
         segmentId: string;
@@ -586,6 +595,15 @@ export function reduceRunLifecycleEvent(
     case "segment.completed":
       requireStatus(state, event.type, ["running"]);
       validateSegmentIdentity(event.data);
+      return next;
+    case "segment.provider_continuation":
+      requireStatus(state, event.type, ["running"]);
+      validateSegmentIdentity(event.data);
+      requirePositiveInteger(event.data.sampleIndex, "provider_sample_index_invalid");
+      requirePositiveInteger(
+        event.data.throughHistorySequence,
+        "provider_history_sequence_invalid",
+      );
       return next;
     case "segment.failed":
       requireStatus(state, event.type, ["running"]);

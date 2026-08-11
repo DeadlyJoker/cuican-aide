@@ -129,6 +129,8 @@ export type RuntimeWorkerConfig = Readonly<{
   afterRunStarted?: (() => Promise<void>) | undefined;
   afterAttemptStarted?: (() => Promise<void>) | undefined;
   afterProviderResponseCheckpointed?: (() => Promise<void>) | undefined;
+  beforeAssistantSampleCommitted?: (() => Promise<void>) | undefined;
+  afterAssistantSampleCommitted?: (() => Promise<void>) | undefined;
   afterToolDispatched?:
     | ((receipt: ToolExecutionReceiptState) => Promise<void>)
     | undefined;
@@ -207,6 +209,8 @@ export class RuntimeWorker {
   readonly #afterProviderResponseCheckpointed:
     | (() => Promise<void>)
     | undefined;
+  readonly #beforeAssistantSampleCommitted: (() => Promise<void>) | undefined;
+  readonly #afterAssistantSampleCommitted: (() => Promise<void>) | undefined;
   readonly #afterToolDispatched:
     | ((receipt: ToolExecutionReceiptState) => Promise<void>)
     | undefined;
@@ -382,6 +386,8 @@ export class RuntimeWorker {
     );
     this.#afterRunStarted = config.afterRunStarted;
     this.#afterAttemptStarted = config.afterAttemptStarted;
+    this.#beforeAssistantSampleCommitted = config.beforeAssistantSampleCommitted;
+    this.#afterAssistantSampleCommitted = config.afterAssistantSampleCommitted;
     this.#afterProviderResponseCheckpointed =
       config.afterProviderResponseCheckpointed;
     this.#afterToolDispatched = config.afterToolDispatched;
@@ -745,6 +751,7 @@ export class RuntimeWorker {
       }
     }
     const completedToolRounds = pendingTools.completedToolRounds;
+    const completedAssistantSamples = pendingTools.providerContinuationSamples;
     if (completedToolRounds >= runtime.maxToolRounds) {
       throw new PermanentWorkerError("model_tool_round_limit_exceeded");
     }
@@ -805,10 +812,10 @@ export class RuntimeWorker {
     }
     const attemptResult = await this.#execution.beginModelAttempt(
       claim,
-      completedToolRounds === 0
+      completedToolRounds === 0 && completedAssistantSamples === 0
         ? undefined
         : {
-            stepId: `model:${claim.workItem.workItemId}:${completedToolRounds + 1}`,
+            stepId: `model:${claim.workItem.workItemId}:${completedToolRounds + completedAssistantSamples + 1}`,
           },
     );
     const attempt = attemptIdentity(attemptResult);
@@ -864,6 +871,14 @@ export class RuntimeWorker {
     >[] = [];
     let toolBoundaryCompleted = false;
     let toolBoundaryOutcome: RuntimeWorkerOutcome | null = null;
+    const bufferedEvents: Exclude<
+      KernelAgentEvent,
+      { type: "segment.continuation_requested" }
+    >[] = [];
+    let assistantContinuation: Extract<
+      KernelAgentEvent,
+      { type: "segment.continuation_requested" }
+    > | null = null;
     try {
       for await (const event of runtime.kernel.runSegment(
         {
@@ -931,8 +946,19 @@ export class RuntimeWorker {
           completedSequence = event.sequence;
           continue;
         }
-        const persisted = await this.#execution.recordAgentEvent(claim, event);
-        run = persisted.state;
+        if (event.type === "segment.continuation_requested") {
+          assistantContinuation = event;
+          continue;
+        }
+        if (
+          event.type === "segment.started" ||
+          event.type === "rate_limit.updated"
+        ) {
+          const persisted = await this.#execution.recordAgentEvent(claim, event);
+          run = persisted.state;
+          continue;
+        }
+        bufferedEvents.push(event);
         if (event.type === "tool.requested") {
           requestedTools.push(event);
         }
@@ -947,27 +973,49 @@ export class RuntimeWorker {
         } else if (event.type === "usage.recorded") {
           latestUsage = event.data;
         } else if (event.type === "segment.failed") {
+          break;
+        }
+      }
+      if (assistantContinuation !== null) {
+        if (
+          assistantContinuation.data.completedAssistantItems.join("") !==
+          assistantContinuation.data.output
+        ) {
+          throw new AgentKernelError("segment_output_mismatch", false);
+        }
+        await this.#beforeAssistantSampleCommitted?.();
+        await this.#execution.commitAssistantSampleContinuation(
+          claim,
+          attempt,
+          {
+            sampleIndex: completedAssistantSamples + 1,
+            segmentId,
+            output: assistantContinuation.data.output,
+            completedAssistantItems:
+              assistantContinuation.data.completedAssistantItems,
+            events: bufferedEvents,
+            identity: modelIdentity,
+            contextRevision: context.revision,
+            modelPolicy: {
+              contextWindowTokens: runtime.modelContextWindowTokens,
+              autoCompactAtTokens: runtime.autoCompactAtTokens,
+            },
+            latestUsage,
+          },
+        );
+        await this.#afterAssistantSampleCommitted?.();
+        toolBoundaryCompleted = true;
+      } else {
+        for (const event of bufferedEvents) {
+          const persisted = await this.#execution.recordAgentEvent(claim, event);
+          run = persisted.state;
+          if (event.type !== "segment.failed") continue;
           if (event.data.retryable) {
             await this.#retry(claim, event.data.code);
-            return {
-              kind: "retried",
-              runId: run.runId,
-              code: event.data.code,
-            };
+            return { kind: "retried", runId: run.runId, code: event.data.code };
           }
-          await this.#execution.failRun(
-            claim,
-            {
-              code: event.data.code,
-              retryable: event.data.retryable,
-            },
-            attempt,
-          );
-          return {
-            kind: "failed",
-            runId: run.runId,
-            code: event.data.code,
-          };
+          await this.#execution.failRun(claim, event.data, attempt);
+          return { kind: "failed", runId: run.runId, code: event.data.code };
         }
       }
       if (!completed && requestedTools.length > 0) {
@@ -1533,6 +1581,7 @@ export class RuntimeWorker {
       events: readonly Extract<KernelAgentEvent, { type: "tool.requested" }>[];
       lastSegmentSequence: number;
       completedToolRounds: number;
+      providerContinuationSamples: number;
       latestUsageTotalTokens: number | null;
     }>
   > {
@@ -1555,6 +1604,7 @@ export class RuntimeWorker {
       Extract<RunLifecycleEvent, { type: "tool.requested" }>
     >();
     const completedToolSegments = new Set<string>();
+    let providerContinuationSamples = 0;
     let latestUsageTotalTokens: number | null = null;
     for (const event of all) {
       if (event.type === "context.compacted") {
@@ -1566,6 +1616,11 @@ export class RuntimeWorker {
       } else if (event.type === "tool.completed") {
         pending.delete(event.data.callId);
         completedToolSegments.add(event.data.segmentId);
+      } else if (event.type === "segment.provider_continuation") {
+        if (event.data.sampleIndex !== providerContinuationSamples + 1) {
+          throw new PermanentWorkerError("provider_continuation_sequence_invalid");
+        }
+        providerContinuationSamples = event.data.sampleIndex;
       }
     }
     const segmentIds = new Set(
@@ -1600,6 +1655,7 @@ export class RuntimeWorker {
       })),
       lastSegmentSequence,
       completedToolRounds: completedToolSegments.size,
+      providerContinuationSamples,
       latestUsageTotalTokens,
     };
   }

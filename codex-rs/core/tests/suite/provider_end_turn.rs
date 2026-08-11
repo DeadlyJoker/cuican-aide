@@ -138,3 +138,107 @@ async fn end_turn_false_empty_response_continues_same_turn() {
     );
     assert_eq!(candidate["finalState"], reference["finalState"]);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn end_turn_false_assistant_items_continue_same_turn() {
+    skip_if_no_network!();
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/provider-end-turn-assistant-continuation.reference.json"
+    )
+    .expect("resolve assistant AR-031 fixture");
+    let reference: Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read assistant AR-031 fixture"),
+    )
+    .expect("parse assistant AR-031 fixture");
+    let server = responses::start_mock_server().await;
+    let response = |id: &str, message_id: &str, text: &str, input, output, end_turn| {
+        sse(vec![
+            ev_response_created(id),
+            ev_message_item_added(message_id, ""),
+            ev_output_text_delta(text),
+            ev_assistant_message(message_id, text),
+            completed(id, input, output, end_turn),
+        ])
+    };
+    let mock = mount_sse_sequence(
+        &server,
+        vec![
+            response("resp-1", "msg-1", "working", 4, 1, Some(false)),
+            response("resp-2", "msg-2", "still working", 6, 2, Some(false)),
+            response("resp-3", "msg-3", "done", 5, 1, None),
+        ],
+    )
+    .await;
+    let test = test_crewon()
+        .build(&server)
+        .await
+        .expect("build assistant AR-031 runtime");
+    test.crewon
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "hello".to_string(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await
+        .expect("submit assistant AR-031 input");
+
+    let mut total_usage = None;
+    let mut terminal_messages = 0;
+    let output = loop {
+        let event = test
+            .crewon
+            .next_event()
+            .await
+            .expect("receive AR-031 event");
+        match event.msg {
+            EventMsg::TokenCount(event) => {
+                if let Some(info) = event.info {
+                    total_usage = Some(json!({
+                        "inputTokens": info.total_token_usage.input_tokens,
+                        "outputTokens": info.total_token_usage.output_tokens,
+                        "totalTokens": info.total_token_usage.total_tokens
+                    }));
+                }
+            }
+            EventMsg::TurnComplete(event) => {
+                terminal_messages += 1;
+                break event.last_agent_message.expect("terminal assistant output");
+            }
+            _ => {}
+        }
+    };
+    let requests = mock.requests();
+    let histories = requests
+        .iter()
+        .map(|request| {
+            let mut items = request
+                .message_input_texts("user")
+                .into_iter()
+                .map(|content| json!({"type":"message","role":"user","content":content}))
+                .collect::<Vec<_>>();
+            items.extend(
+                request
+                    .message_input_texts("assistant")
+                    .into_iter()
+                    .map(|content| json!({"type":"message","role":"assistant","content":content})),
+            );
+            items
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(histories, reference["expectedRequests"]);
+    assert_eq!(requests.len(), reference["finalState"]["requestCount"]);
+    assert_eq!(output, reference["finalOutput"]);
+    assert_eq!(
+        terminal_messages,
+        reference["finalState"]["terminalMessages"]
+    );
+    assert_eq!(
+        total_usage.expect("cumulative usage"),
+        reference["finalState"]["usage"]
+    );
+}

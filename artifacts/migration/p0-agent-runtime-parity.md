@@ -75,7 +75,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-028 | `context_manager/history_tests.rs::normalize_removes_orphan_function_call_output`                     | orphan Tool output fail-safe normalization                             | PARITY       | Rust+TS shared normalization fixture  |
 | AR-029 | `governed_context.rs::governed_context_reaches_responses_with_roles_bounds_and_incremental_stability` | context role、bounds、增量稳定性                                       | PARITY       | shared role/bounds/stability fixture  |
 | AR-030 | `safety_check_downgrade.rs::cyber_policy_response_emits_typed_error_without_retry`                    | typed policy failure 不进入 retry loop                                 | PARITY       | Rust+TS typed policy fixture          |
-| AR-031 | `provider_end_turn.rs` + `stream_no_completed.rs::end_turn_false_completed_assistant_and_tool_continue_same_turn` | Provider `end_turn=false` 的 completed response 在同 Turn 继续 sampling | PARTIAL      | manual 空响应与 mixed completed assistant→Tool 分支已 PARITY；assistant-only/store chain 仍缺 shared durable evidence |
+| AR-031 | `provider_end_turn.rs` + `stream_no_completed.rs::end_turn_false_completed_assistant_and_tool_continue_same_turn` | Provider `end_turn=false` 的 completed response 在同 Turn 继续 sampling | PARTIAL      | manual assistant-only durable continuation 与 mixed assistant→Tool 已有 shared evidence；stored-response/checkpoint 仍 fail closed |
 
 ## 已有证据映射
 

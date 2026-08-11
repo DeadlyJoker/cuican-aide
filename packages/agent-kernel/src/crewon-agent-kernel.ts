@@ -362,15 +362,6 @@ export class CrewONAgentKernel implements AgentKernelPort {
               );
             }
             if (
-              toolCalls.length === 0 &&
-              (output.length > 0 || completedItems.length > 0)
-            ) {
-              throw new AgentKernelError(
-                "model_end_turn_false_output_unsupported",
-                false,
-              );
-            }
-            if (
               request.reconcileCheckpoint !== undefined ||
               createdCheckpoint !== null ||
               completedCheckpoint !== null
@@ -383,18 +374,29 @@ export class CrewONAgentKernel implements AgentKernelPort {
             completedCheckpoint = null;
             createdCheckpoint = null;
             retries = 0;
+            const assistantItems = completedItems
+              .filter(
+                (item): item is Extract<ModelInputItem, { type: "message" }> =>
+                  item.type === "message",
+              )
+              .map((item) => item.content);
             if (toolCalls.length > 0) {
               completedOutput = output;
               completedToolCalls = toolCalls;
-              completedAssistantItems = completedItems
-                .filter(
-                  (
-                    item,
-                  ): item is Extract<ModelInputItem, { type: "message" }> =>
-                    item.type === "message",
-                )
-                .map((item) => item.content);
+              completedAssistantItems = assistantItems;
               break;
+            }
+            if (output.length > 0 || assistantItems.length > 0) {
+              sequence += 1;
+              yield {
+                schemaVersion: "crewon.agent-event.v0",
+                runId: contract.runId,
+                segmentId: contract.segmentId,
+                sequence,
+                type: "segment.continuation_requested",
+                data: { output, completedAssistantItems: assistantItems },
+              };
+              return;
             }
             continue;
           }

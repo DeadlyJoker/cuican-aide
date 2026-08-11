@@ -119,11 +119,11 @@ test("completes a durable Run through the Direct Responses transport", async (co
   await worker.close();
 });
 
-test("matches AR-031 end_turn=false continuation through the durable Worker", async (context) => {
+test("durably continues AR-031 assistant output without a phantom Message", async (context) => {
   const reference = JSON.parse(
     readFileSync(
       new URL(
-        "../../../packages/test-contracts/fixtures/provider-end-turn-continuation.reference.json",
+        "../../../packages/test-contracts/fixtures/provider-end-turn-assistant-continuation.reference.json",
         import.meta.url,
       ),
       "utf8",
@@ -146,12 +146,37 @@ test("matches AR-031 end_turn=false continuation through the durable Worker", as
       requests.push(structuredClone(request));
       sampling += 1;
       if (sampling === 1) {
+        yield { type: "output.delta", delta: "working" };
+        yield {
+          type: "output.item.completed",
+          item: { type: "message", role: "assistant", content: "working" },
+        };
         yield {
           type: "usage",
           inputTokens: 4,
           cachedInputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 4,
+          outputTokens: 1,
+          totalTokens: 5,
+        };
+        yield { type: "completed", checkpoint: null, endTurn: false };
+        return;
+      }
+      if (sampling === 2) {
+        yield { type: "output.delta", delta: "still working" };
+        yield {
+          type: "output.item.completed",
+          item: {
+            type: "message",
+            role: "assistant",
+            content: "still working",
+          },
+        };
+        yield {
+          type: "usage",
+          inputTokens: 6,
+          cachedInputTokens: 0,
+          outputTokens: 2,
+          totalTokens: 8,
         };
         yield { type: "completed", checkpoint: null, endTurn: false };
         return;
@@ -167,18 +192,32 @@ test("matches AR-031 end_turn=false continuation through the durable Worker", as
       yield { type: "completed", checkpoint: null };
     },
   };
+  const crashed = fixture.worker({
+    transport,
+    retryAfterMs: 0,
+    afterAssistantSampleCommitted: async () => {
+      throw new Error("crash_after_assistant_sample_commit");
+    },
+  });
+  assert.deepEqual(await crashed.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "crash_after_assistant_sample_commit",
+  });
+  await crashed.close();
+  assert.deepEqual(
+    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    [{ role: "user", content: "hello" }],
+  );
   const worker = fixture.worker({ transport });
 
-  assert.deepEqual(await worker.wake(), {
+  const outcome = await worker.wake();
+  assert.deepEqual(outcome, {
     kind: "completed",
     runId: fixture.runId,
   });
   assert.deepEqual(
-    requests.map((request) =>
-      request.input.items.filter(
-        (item) => item.type === "message" && item.role === "user",
-      ),
-    ),
+    requests.map((request) => request.input.items),
     reference.expectedRequests,
   );
   assert.deepEqual((await fixture.loadRun()).usage, {
@@ -7480,6 +7519,8 @@ async function createFixture(
       afterRunStarted?: () => Promise<void>;
       afterAttemptStarted?: RuntimeWorkerConfig["afterAttemptStarted"];
       afterProviderResponseCheckpointed?: () => Promise<void>;
+      beforeAssistantSampleCommitted?: RuntimeWorkerConfig["beforeAssistantSampleCommitted"];
+      afterAssistantSampleCommitted?: RuntimeWorkerConfig["afterAssistantSampleCommitted"];
       afterToolDispatched?: RuntimeWorkerConfig["afterToolDispatched"];
       afterToolProviderResolved?: RuntimeWorkerConfig["afterToolProviderResolved"];
       afterToolReceiptCommitted?: RuntimeWorkerConfig["afterToolReceiptCommitted"];
@@ -7528,6 +7569,8 @@ async function createFixture(
           afterAttemptStarted: options.afterAttemptStarted,
           afterProviderResponseCheckpointed:
             options.afterProviderResponseCheckpointed,
+          beforeAssistantSampleCommitted: options.beforeAssistantSampleCommitted,
+          afterAssistantSampleCommitted: options.afterAssistantSampleCommitted,
           afterToolDispatched: options.afterToolDispatched,
           afterToolProviderResolved: options.afterToolProviderResolved,
           afterToolReceiptCommitted: options.afterToolReceiptCommitted,
