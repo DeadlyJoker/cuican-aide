@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
+use sha2::Digest as _;
+use sha2::Sha256;
 
 use crate::DEVICE_PROTOCOL_VERSION;
 use crate::DeviceProtocolError;
@@ -155,6 +157,10 @@ pub fn parse_device_filesystem_read_event(
         "device_filesystem_read_event_invalid",
     )?;
     validate_envelope(object, "crewon.device-filesystem-read-event.v0")?;
+    require_timestamp(
+        field_value(object, "observedAt", "device_event_timestamp_invalid")?,
+        "device_event_timestamp_invalid",
+    )?;
     let event_type = field_value(object, "type", "device_filesystem_read_event_invalid")?
         .as_str()
         .ok_or_else(|| error("device_filesystem_read_event_invalid"))?;
@@ -368,6 +374,10 @@ fn validate_result(value: &Value) -> Result<(), DeviceProtocolError> {
     }
     let output_digest = field_value(result, "outputDigest", "device_output_digest_invalid")?;
     require_digest(output_digest, "device_output_digest_invalid")?;
+    let actual_digest = format!("sha256:{:x}", Sha256::digest(content.as_bytes()));
+    if output_digest.as_str() != Some(&actual_digest) {
+        return Err(error("device_output_digest_mismatch"));
+    }
     bounded_json(
         value,
         crate::MAX_DEVICE_FILESYSTEM_READ_BYTES as usize,

@@ -99,6 +99,23 @@ fn matches_typescript_device_protocol_reference_and_fail_closed_codes() {
         .expect("serialize filesystem read ACK"),
         fixture.valid.filesystem_read_ack,
     );
+    let mut bad_time = fixture.valid.filesystem_read_events[0].clone();
+    bad_time["observedAt"] = Value::String("not-a-timestamp".to_string());
+    assert_eq!(
+        parse_device_filesystem_read_event(bad_time)
+            .expect_err("reject invalid observedAt")
+            .code,
+        "device_event_timestamp_invalid",
+    );
+    let mut digest_drift = fixture.valid.filesystem_read_events[1].clone();
+    digest_drift["data"]["result"]["content"] = Value::String("changed".to_string());
+    digest_drift["data"]["result"]["byteLength"] = Value::from(7);
+    assert_eq!(
+        parse_device_filesystem_read_event(digest_drift)
+            .expect_err("reject content digest drift")
+            .code,
+        "device_output_digest_mismatch",
+    );
 
     assert_eq!(
         serde_json::to_value(

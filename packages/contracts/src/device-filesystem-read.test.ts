@@ -47,6 +47,15 @@ test("parses durable read events and cumulative ACK from the shared fixture", ()
     () => parseDeviceFilesystemReadEvent(drift),
     /device_filesystem_read_event_invalid/,
   );
+  const badTime = structuredClone(fixture.valid.filesystemReadEvents[0]) as any;
+  badTime.observedAt = "not-a-timestamp";
+  assert.throws(() => parseDeviceFilesystemReadEvent(badTime));
+  const digestDrift = structuredClone(
+    fixture.valid.filesystemReadEvents[1],
+  ) as any;
+  digestDrift.data.result.content = "changed";
+  digestDrift.data.result.byteLength = 7;
+  assert.throws(() => parseDeviceFilesystemReadEvent(digestDrift));
 });
 
 test("parses the shared UTF-8 result under its serialized output cap", () => {

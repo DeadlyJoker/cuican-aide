@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { ContractValidationError } from "./contract-validation-error.ts";
 import {
   parseDeviceExecutionCommand,
@@ -70,6 +72,7 @@ export function parseDeviceFilesystemReadEvent(
   const event = record(input);
   keys(event, eventKeys);
   envelope(event, "crewon.device-filesystem-read-event.v0");
+  timestamp(event.observedAt);
   const data = record(event.data);
   switch (event.type) {
     case "workspace_read.accepted":
@@ -154,7 +157,8 @@ function completed(input: unknown): void {
     result.encoding !== "utf8" ||
     typeof result.content !== "string" ||
     result.byteLength !== new TextEncoder().encode(result.content).length ||
-    !/^sha256:[0-9a-f]{64}$/.test(String(result.outputDigest)) ||
+    result.outputDigest !==
+      `sha256:${createHash("sha256").update(result.content, "utf8").digest("hex")}` ||
     new TextEncoder().encode(JSON.stringify(result)).length >
       DEVICE_FILESYSTEM_READ_MAX_BYTES
   )
