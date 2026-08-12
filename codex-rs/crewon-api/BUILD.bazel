@@ -6,6 +6,7 @@ crewon_rust_crate(
     test_data_extra = [
         "//:packages/test-contracts/fixtures/provider-usage-validation.reference.json",
         "//:packages/test-contracts/fixtures/provider-turn-state.reference.json",
+        "//:packages/test-contracts/fixtures/agent-segment-reduction.reference.json",
         "//:packages/test-contracts/fixtures/responses-created-without-id.reference.json",
         "//:packages/test-contracts/fixtures/responses-generic-terminal.reference.json",
         "//:packages/test-contracts/fixtures/responses-completed-without-output.reference.json",

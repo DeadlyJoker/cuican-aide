@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "crewon.agent-segment-reduction-reference.v0",
+  "initialProviderTurnState": "prior-state",
+  "checkpoint": {
+    "schemaVersion": "crewon.provider-checkpoint.v0",
+    "adapterName": "reference-adapter",
+    "adapterVersion": "v1",
+    "modelId": "reference-model",
+    "opaquePayload": { "responseId": "response-1" }
+  },
+  "trace": [
+    { "sequence": 1, "type": "provider_response_created" },
+    { "sequence": 2, "type": "output_delta", "delta": "discarded" },
+    { "sequence": 3, "type": "transport_fallback", "discardedOutput": true },
+    { "sequence": 4, "type": "output_delta", "delta": "final" },
+    { "sequence": 5, "type": "checkpointed" },
+    {
+      "sequence": 6,
+      "type": "tool_requested",
+      "providerTurnState": "next-state"
+    },
+    {
+      "sequence": 7,
+      "type": "continuation_requested",
+      "output": "final",
+      "completedAssistantItems": ["final"]
+    }
+  ],
+  "expected": {
+    "output": "final",
+    "lastSequence": 7,
+    "checkpointSequence": 5,
+    "providerTurnState": "next-state",
+    "requestedToolSequences": [6],
+    "continuationSequence": 7
+  },
+  "invalid": {
+    "duplicateCheckpointError": "segment_checkpoint_duplicate",
+    "outputMismatchError": "segment_output_mismatch",
+    "sequenceMismatchError": "segment_sequence_mismatch"
+  }
+}
