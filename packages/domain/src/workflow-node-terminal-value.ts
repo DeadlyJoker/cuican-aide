@@ -9,6 +9,7 @@ import type {
   WorkflowNodeDefinition,
 } from "./workflow-version.ts";
 import { WorkflowVersionError } from "./workflow-version-error.ts";
+import type { ModelDispatchTerminalOutcome } from "./model-dispatch-receipt.ts";
 
 /** Immutable WorkflowVersion and node identity that authorizes one output value. */
 export type WorkflowNodeValueAuthority = Readonly<{
@@ -144,6 +145,25 @@ export function validateWorkflowNodeTerminalEvidence(input: {
   const expected = createWorkflowNodeTerminalEvidence({ ...input, outcome });
   if (canonicalJson(record) !== canonicalJson(expected)) invalid();
   return expected;
+}
+
+/** Requires provider dispatch terminal evidence to describe the same node outcome. */
+export function validateWorkflowDispatchTerminalCorrelation(input: {
+  dispatch: ModelDispatchTerminalOutcome;
+  evidence: WorkflowNodeTerminalEvidence;
+}): void {
+  const { dispatch, evidence } = input;
+  if (
+    dispatch.kind !== evidence.status ||
+    (evidence.status === "completed"
+      ? dispatch.code !== null || dispatch.certainty !== "responseObserved"
+      : dispatch.certainty !== evidence.certainty ||
+        (evidence.status === "failed"
+          ? dispatch.code !== evidence.failureCode
+          : dispatch.code === null || dispatch.code.trim().length === 0))
+  ) {
+    invalid();
+  }
 }
 
 function valueAuthority(

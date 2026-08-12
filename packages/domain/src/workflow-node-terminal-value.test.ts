@@ -6,6 +6,7 @@ import type { WorkflowObjectSchema } from "./workflow-schema.ts";
 import type { WorkflowSchemaValue } from "./workflow-schema-value.ts";
 import {
   createWorkflowNodeTerminalEvidence,
+  validateWorkflowDispatchTerminalCorrelation,
   validateWorkflowNodeTerminalEvidence,
 } from "./workflow-node-terminal-value.ts";
 import { compileWorkflowVersion } from "./workflow-version.ts";
@@ -141,6 +142,47 @@ test("represents completed, failed and canceled certainty without possiblySent t
       }),
     invalid,
   );
+});
+
+test("correlates exact provider dispatch terminal evidence", () => {
+  const workflow = compile(schema({ value: stringSchema(32) }));
+  const completedEvidence = completed(workflow, { value: "ok" });
+  const failedEvidence = createWorkflowNodeTerminalEvidence({
+    workflow,
+    nodeId: "node",
+    outcome: {
+      status: "failed",
+      certainty: "notSent",
+      failureCode: "provider_timeout",
+    },
+    digester: { sha256 },
+  });
+  validateWorkflowDispatchTerminalCorrelation({
+    dispatch: { kind: "completed", code: null, certainty: "responseObserved" },
+    evidence: completedEvidence,
+  });
+  validateWorkflowDispatchTerminalCorrelation({
+    dispatch: {
+      kind: "failed",
+      code: "provider_timeout",
+      certainty: "notSent",
+    },
+    evidence: failedEvidence,
+  });
+  for (const dispatch of [
+    { kind: "failed", code: "provider_timeout", certainty: "responseObserved" },
+    { kind: "failed", code: "different", certainty: "notSent" },
+    { kind: "completed", code: null, certainty: "notSent" },
+  ] as const)
+    assert.throws(
+      () =>
+        validateWorkflowDispatchTerminalCorrelation({
+          dispatch,
+          evidence:
+            dispatch.kind === "completed" ? completedEvidence : failedEvidence,
+        }),
+      invalid,
+    );
 });
 
 function completed(
