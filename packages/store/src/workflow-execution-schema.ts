@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { RunStoreError } from "@crewon/application";
 import type { PoolClient } from "pg";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
   database.exec(`CREATE TABLE IF NOT EXISTS workflow_execution_schema (
@@ -16,6 +16,7 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
     throw new RunStoreError("workflow_execution_schema_too_new");
   if (!stored) {
     database.exec(sqliteTables);
+    database.exec(sqliteCompositionTables);
     database
       .prepare("INSERT INTO workflow_execution_schema VALUES (1, ?)")
       .run(SCHEMA_VERSION);
@@ -27,7 +28,20 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
       .prepare(
         "UPDATE workflow_execution_schema SET version=? WHERE singleton=1",
       )
-      .run(SCHEMA_VERSION);
+      .run(2);
+    database.exec(sqliteCompositionTables);
+    database
+      .prepare(
+        "UPDATE workflow_execution_schema SET version=3 WHERE singleton=1",
+      )
+      .run();
+  } else if (stored.version === 2) {
+    database.exec(sqliteCompositionTables);
+    database
+      .prepare(
+        "UPDATE workflow_execution_schema SET version=3 WHERE singleton=1",
+      )
+      .run();
   }
   assertSqliteShape(database);
 }
@@ -58,7 +72,16 @@ export async function migratePostgresWorkflowExecutions(
     );
     await client.query(
       `UPDATE ${schema}.workflow_execution_schema SET version=$1 WHERE singleton=true`,
-      [SCHEMA_VERSION],
+      [2],
+    );
+    await client.query(postgresCompositionTables(schema));
+    await client.query(
+      `UPDATE ${schema}.workflow_execution_schema SET version=3 WHERE singleton=true`,
+    );
+  } else if (version === 2) {
+    await client.query(postgresCompositionTables(schema));
+    await client.query(
+      `UPDATE ${schema}.workflow_execution_schema SET version=3 WHERE singleton=true`,
     );
   }
   const columns = await client.query<{
@@ -66,7 +89,8 @@ export async function migratePostgresWorkflowExecutions(
     column_name: string;
   }>(
     `SELECT table_name,column_name FROM information_schema.columns
-     WHERE table_schema=$1 AND table_name IN ('workflow_executions','workflow_execution_receipts')`,
+     WHERE table_schema=$1 AND table_name IN
+       ('workflow_executions','workflow_execution_receipts','workflow_composition_receipts','workflow_gate_requests')`,
     [schema],
   );
   const actual = columns.rows
@@ -93,6 +117,37 @@ CREATE TABLE workflow_execution_receipts (
   result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
   PRIMARY KEY (tenant_id, run_id, operation_id),
   FOREIGN KEY (tenant_id, run_id) REFERENCES workflow_executions(tenant_id, run_id)
+) STRICT;`;
+
+const sqliteCompositionTables = `CREATE TABLE workflow_composition_receipts (
+  tenant_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  operation_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('admit','settleNode','publishGate','settleGate','scheduleReconciliation')),
+  fingerprint TEXT NOT NULL,
+  result_json TEXT NOT NULL CHECK (json_valid(result_json)),
+  PRIMARY KEY (tenant_id, run_id, operation_id),
+  FOREIGN KEY (tenant_id, run_id) REFERENCES workflow_executions(tenant_id, run_id)
+) STRICT;
+CREATE TABLE workflow_gate_requests (
+  tenant_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  node_id TEXT NOT NULL,
+  gate_request_id TEXT NOT NULL UNIQUE,
+  claim_id TEXT NOT NULL,
+  claim_epoch INTEGER NOT NULL CHECK (claim_epoch >= 1),
+  step_id TEXT NOT NULL,
+  approval_policy_id TEXT NOT NULL,
+  input_digest TEXT NOT NULL,
+  publication_outbox_message_id TEXT NOT NULL UNIQUE,
+  approval_resume_work_item_id TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL CHECK (status IN ('published','completed','failed')),
+  state_json TEXT NOT NULL CHECK (json_valid(state_json)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, run_id, node_id),
+  FOREIGN KEY (tenant_id, run_id) REFERENCES workflow_executions(tenant_id, run_id),
+  FOREIGN KEY (tenant_id, run_id, step_id) REFERENCES run_steps(tenant_id, run_id, step_id)
 ) STRICT;`;
 
 function assertSqliteShape(database: DatabaseSync): void {
@@ -122,6 +177,31 @@ const sqliteColumns = {
     "state_json",
     "result_json",
   ],
+  workflow_composition_receipts: [
+    "tenant_id",
+    "run_id",
+    "operation_id",
+    "kind",
+    "fingerprint",
+    "result_json",
+  ],
+  workflow_gate_requests: [
+    "tenant_id",
+    "run_id",
+    "node_id",
+    "gate_request_id",
+    "claim_id",
+    "claim_epoch",
+    "step_id",
+    "approval_policy_id",
+    "input_digest",
+    "publication_outbox_message_id",
+    "approval_resume_work_item_id",
+    "status",
+    "state_json",
+    "created_at",
+    "updated_at",
+  ],
 } as const;
 
 function postgresTables(schema: string): string {
@@ -133,10 +213,37 @@ function postgresTables(schema: string): string {
     tenant_id text NOT NULL, run_id text NOT NULL, operation_id text NOT NULL,
     fingerprint text NOT NULL, state_json jsonb NOT NULL, result_json jsonb,
     PRIMARY KEY (tenant_id, run_id, operation_id),
-    FOREIGN KEY (tenant_id, run_id) REFERENCES ${schema}.workflow_executions(tenant_id,run_id));`;
+    FOREIGN KEY (tenant_id, run_id) REFERENCES ${schema}.workflow_executions(tenant_id,run_id));
+  ${postgresCompositionTables(schema)}`;
+}
+
+function postgresCompositionTables(schema: string): string {
+  return `CREATE TABLE ${schema}.workflow_composition_receipts (
+    tenant_id text NOT NULL, run_id text NOT NULL, operation_id text NOT NULL,
+    kind text NOT NULL CHECK (kind IN ('admit','settleNode','publishGate','settleGate','scheduleReconciliation')),
+    fingerprint text NOT NULL, result_json jsonb NOT NULL,
+    PRIMARY KEY (tenant_id,run_id,operation_id),
+    FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.workflow_executions(tenant_id,run_id));
+  CREATE TABLE ${schema}.workflow_gate_requests (
+    tenant_id text NOT NULL, run_id text NOT NULL, node_id text NOT NULL,
+    gate_request_id text NOT NULL UNIQUE, claim_id text NOT NULL, claim_epoch bigint NOT NULL,
+    step_id text NOT NULL, approval_policy_id text NOT NULL, input_digest text NOT NULL,
+    publication_outbox_message_id text NOT NULL UNIQUE,
+    approval_resume_work_item_id text NOT NULL UNIQUE,
+    status text NOT NULL CHECK (status IN ('published','completed','failed')),
+    state_json jsonb NOT NULL, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id,run_id,node_id),
+    FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.workflow_executions(tenant_id,run_id),
+    FOREIGN KEY (tenant_id,run_id,step_id) REFERENCES ${schema}.run_steps(tenant_id,run_id,step_id));`;
 }
 
 const postgresColumns = [
+  "workflow_composition_receipts.fingerprint",
+  "workflow_composition_receipts.kind",
+  "workflow_composition_receipts.operation_id",
+  "workflow_composition_receipts.result_json",
+  "workflow_composition_receipts.run_id",
+  "workflow_composition_receipts.tenant_id",
   "workflow_execution_receipts.fingerprint",
   "workflow_execution_receipts.operation_id",
   "workflow_execution_receipts.result_json",
@@ -148,4 +255,19 @@ const postgresColumns = [
   "workflow_executions.state_json",
   "workflow_executions.tenant_id",
   "workflow_executions.updated_at",
+  "workflow_gate_requests.approval_policy_id",
+  "workflow_gate_requests.approval_resume_work_item_id",
+  "workflow_gate_requests.claim_epoch",
+  "workflow_gate_requests.claim_id",
+  "workflow_gate_requests.created_at",
+  "workflow_gate_requests.gate_request_id",
+  "workflow_gate_requests.input_digest",
+  "workflow_gate_requests.node_id",
+  "workflow_gate_requests.publication_outbox_message_id",
+  "workflow_gate_requests.run_id",
+  "workflow_gate_requests.state_json",
+  "workflow_gate_requests.status",
+  "workflow_gate_requests.step_id",
+  "workflow_gate_requests.tenant_id",
+  "workflow_gate_requests.updated_at",
 ] as const;

@@ -106,8 +106,8 @@ export class SqliteWorkflowRunCompositionStore
       );
       const receipt = this.#database
         .prepare(
-          `SELECT fingerprint,result_json FROM workflow_execution_receipts
-           WHERE tenant_id=? AND run_id=? AND operation_id=?`,
+          `SELECT fingerprint,result_json FROM workflow_composition_receipts
+           WHERE tenant_id=? AND run_id=? AND operation_id=? AND kind='admit'`,
         )
         .get(input.tenantId, input.runId, input.schedulerOperationId) as
         | { fingerprint: string; result_json: string | null }
@@ -265,16 +265,15 @@ export class SqliteWorkflowRunCompositionStore
             };
       this.#database
         .prepare(
-          `INSERT INTO workflow_execution_receipts
-           (tenant_id,run_id,operation_id,fingerprint,state_json,result_json)
-           VALUES (?,?,?,?,?,?)`,
+          `INSERT INTO workflow_composition_receipts
+           (tenant_id,run_id,operation_id,kind,fingerprint,result_json)
+           VALUES (?,?,?,'admit',?,?)`,
         )
         .run(
           input.tenantId,
           input.runId,
           input.schedulerOperationId,
           fingerprint,
-          stableJson(execution),
           stableJson(result),
         );
       this.#validateLease(input, readLeaseClock(this.#clock));

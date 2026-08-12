@@ -133,8 +133,8 @@ export class PostgresWorkflowRunCompositionStore
         result_json: unknown | null;
       }>(
         `SELECT fingerprint,result_json
-         FROM ${this.schemaSql()}.workflow_execution_receipts
-         WHERE tenant_id=$1 AND run_id=$2 AND operation_id=$3`,
+         FROM ${this.schemaSql()}.workflow_composition_receipts
+         WHERE tenant_id=$1 AND run_id=$2 AND operation_id=$3 AND kind='admit'`,
         [input.tenantId, input.runId, input.schedulerOperationId],
       );
       const receipt = receiptResult.rows[0];
@@ -319,15 +319,14 @@ export class PostgresWorkflowRunCompositionStore
               reconciliationClaims: recovery,
             };
       await client.query(
-        `INSERT INTO ${this.schemaSql()}.workflow_execution_receipts
-         (tenant_id,run_id,operation_id,fingerprint,state_json,result_json)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+        `INSERT INTO ${this.schemaSql()}.workflow_composition_receipts
+         (tenant_id,run_id,operation_id,kind,fingerprint,result_json)
+         VALUES ($1,$2,$3,'admit',$4,$5)`,
         [
           input.tenantId,
           input.runId,
           input.schedulerOperationId,
           fingerprint,
-          execution,
           result,
         ],
       );
