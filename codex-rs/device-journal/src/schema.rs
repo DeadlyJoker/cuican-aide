@@ -326,6 +326,9 @@ async fn assert_columns(
         "workspace_executions" => sqlx::query("PRAGMA table_info(workspace_executions)"),
         "workspace_events" => sqlx::query("PRAGMA table_info(workspace_events)"),
         "workspace_acks" => sqlx::query("PRAGMA table_info(workspace_acks)"),
+        "tool_executions" => sqlx::query("PRAGMA table_info(tool_executions)"),
+        "tool_events" => sqlx::query("PRAGMA table_info(tool_events)"),
+        "tool_acks" => sqlx::query("PRAGMA table_info(tool_acks)"),
         _ => return Err(authority("device_journal_schema_corrupt")),
     }
     .fetch_all(pool)
@@ -354,6 +357,9 @@ fn expected_column_type(table: &str, column: &str) -> &'static str {
             )
             | ("workspace_events", "sequence" | "connection_epoch")
             | ("workspace_acks", "through_sequence" | "connection_epoch")
+            | ("tool_executions", "lease_epoch" | "acknowledged_through")
+            | ("tool_events", "sequence")
+            | ("tool_acks", "through_sequence")
     ) {
         "INTEGER"
     } else {

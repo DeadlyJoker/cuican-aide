@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import test from "node:test";
 
@@ -10,6 +11,10 @@ import {
   parseDeviceExecutionAck,
   parseDeviceExecutionCancel,
   parseDeviceExecutionCommand,
+  parseDeviceFilesystemReadAck,
+  parseDeviceFilesystemReadCommand,
+  type DeviceFilesystemReadCommand,
+  type DeviceFilesystemReadEvent,
   type DeviceExecutionCommand,
   type DeviceExecutionEvent,
   type UnsignedDeviceExecutionCommand,
@@ -25,6 +30,7 @@ import type {
   AuthenticatedDeviceIdentity,
   DeviceIdentityVerifierPort,
 } from "./device-identity.ts";
+import { InMemoryWorkspaceReadDispatchStore } from "./workspace-read-dispatch-store.ts";
 
 const digest = `sha256:${"a".repeat(64)}`;
 const commandSigningKey = generateKeyPairSync("ed25519");
@@ -34,6 +40,73 @@ const commandSigningPublicKeyPem = commandSigningKey.publicKey
     format: "pem",
   })
   .toString();
+const protocolReference = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../packages/test-contracts/fixtures/device-protocol.reference.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
+const sharedReadCommand = parseDeviceFilesystemReadCommand(
+  protocolReference.valid.filesystemReadCommand,
+);
+const sharedReadEvents = protocolReference.valid
+  .filesystemReadEvents as DeviceFilesystemReadEvent[];
+
+test("accepts the shared Native workspace-read wire and ACKs only after durable commit", async (context) => {
+  const fixture = await openFixture();
+  context.after(() => fixture[Symbol.asyncDispose]());
+  const route = {
+    deviceId: "device-1",
+    gatewayId: "gateway-1",
+    connectionId: "connection-1",
+    connectionEpoch: 7,
+    deviceBindingId: "device-binding-1",
+    runtimeBindingId: "runtime-binding-1",
+    capability: "workspace.read_file.v0" as const,
+    leaseExpiresAt: "2026-08-08T01:00:00Z",
+  };
+  const store = new InMemoryWorkspaceReadDispatchStore({
+    now: () => new Date("2026-08-08T00:00:03Z"),
+    currentRoute: () => route,
+  });
+  await store.prepare(sharedReadCommand, route, "2026-08-08T00:00:02Z");
+  const committed: DeviceFilesystemReadEvent[] = [];
+  const resolution = fixture.session.executeWorkspaceRead(
+    sharedReadCommand,
+    7,
+    false,
+    new AbortController().signal,
+    async (event) => {
+      committed.push(event);
+      return store.commit({ command: sharedReadCommand, route, event });
+    },
+  );
+  assert.deepEqual(
+    parseDeviceFilesystemReadCommand(
+      await fixture.inbox.next("crewon.device-command.v0"),
+    ),
+    sharedReadCommand,
+  );
+  fixture.send(sharedReadEvents[0]);
+  assert.equal(
+    parseDeviceFilesystemReadAck(
+      await fixture.inbox.next("crewon.device-filesystem-read-ack.v0"),
+    ).throughSequence,
+    1,
+  );
+  assert.equal(committed.length, 1);
+  fixture.send(sharedReadEvents[1]);
+  const [ack, resolved] = await Promise.all([
+    fixture.inbox.next("crewon.device-filesystem-read-ack.v0"),
+    resolution,
+  ]);
+  assert.equal(parseDeviceFilesystemReadAck(ack).throughSequence, 2);
+  assert.equal(committed.length, 2);
+  assert.equal(resolved.status, "completed");
+});
 
 test("runs a real WebSocket Device execution and acknowledges every sequence", async (context) => {
   const fixture = await openFixture();
@@ -222,7 +295,7 @@ test("resumes an acknowledged execution on a new Device connection without repea
       supportedProtocolVersions: [DEVICE_PROTOCOL_VERSION],
       deviceId: "device-1",
       connectionId: "connection-2",
-      capabilities: ["workspace.read"],
+      capabilities: ["workspace.read", "workspace.read_file.v0"],
       lastAcknowledged: [{ executionId: "execution-1", sequence: 1 }],
       sentAt: "2026-08-08T00:00:02.000Z",
     }),
@@ -503,7 +576,7 @@ async function beginFixture(helloDeviceId: string) {
       supportedProtocolVersions: [DEVICE_PROTOCOL_VERSION],
       deviceId: helloDeviceId,
       connectionId: "connection-1",
-      capabilities: ["workspace.read"],
+      capabilities: ["workspace.read", "workspace.read_file.v0"],
       lastAcknowledged: [],
       sentAt: "2026-08-08T00:00:00.000Z",
     }),

@@ -2,13 +2,11 @@ use std::sync::Arc;
 
 use chrono::SecondsFormat;
 use chrono::Utc;
-use crewon_device_protocol::DeviceExecutionAck;
 use crewon_device_protocol::DeviceExecutionCancel;
-use crewon_device_protocol::DeviceExecutionEvent;
+use crewon_device_protocol::DeviceFilesystemReadAck;
 use crewon_device_protocol::DeviceFilesystemReadEvent;
 use crewon_device_protocol::DeviceHello;
 use crewon_device_protocol::DeviceWorkspaceListEvent;
-use crewon_device_protocol::parse_device_execution_event;
 use crewon_device_protocol::parse_device_filesystem_read_event;
 use crewon_device_protocol::parse_device_hello;
 use crewon_device_protocol::parse_device_workspace_list_event;
@@ -189,17 +187,17 @@ async fn real_mtls_wss_executes_and_acknowledges_workspace_read_without_regressi
             ))
             .await
             .expect("send read");
-        let accepted = receive_tool_event(&mut socket).await;
-        let terminal = receive_tool_event(&mut socket).await;
-        assert_eq!(tool_sequence(&accepted), 1);
-        assert_eq!(tool_sequence(&terminal), 2);
-        let DeviceExecutionEvent::Completed { data, .. } = &terminal else {
+        let accepted = receive_read_event(&mut socket).await;
+        let terminal = receive_read_event(&mut socket).await;
+        assert_eq!(read_sequence(&accepted), 1);
+        assert_eq!(read_sequence(&terminal), 2);
+        let DeviceFilesystemReadEvent::Completed { data, .. } = &terminal else {
             panic!("completed read required");
         };
-        assert_eq!(data.output.as_deref(), Some("alpha"));
+        assert_eq!(data.result.content, "alpha");
         socket
             .send(Message::text(
-                serde_json::to_string(&tool_ack(&terminal, 2)).expect("read ACK"),
+                serde_json::to_string(&read_ack(&terminal, 2)).expect("read ACK"),
             ))
             .await
             .expect("send read ACK");
@@ -222,17 +220,15 @@ async fn real_mtls_wss_executes_and_acknowledges_workspace_read_without_regressi
         .runtime
         .state
         .journal
-        .list_unacknowledged_tools(&crewon_device_journal::ToolJournalListQuery {
-            after_execution_id: None,
-            limit: 10,
-        })
+        .get_filesystem_read(&command.command.execution_id)
         .await
-        .expect("load tools");
-    assert!(execution.executions.is_empty());
+        .expect("load read")
+        .expect("read execution");
+    assert_eq!(execution.acknowledged_through, 2);
 }
 
 #[tokio::test]
-async fn legacy_read_recovery_coexists_with_independent_raw_tool_dispatch() {
+async fn read_crash_recovery_and_terminal_replay_never_reread_the_file() {
     let listener = TcpListener::bind(("127.0.0.1", 0))
         .await
         .expect("bind WSS listener");
@@ -294,24 +290,24 @@ async fn legacy_read_recovery_coexists_with_independent_raw_tool_dispatch() {
             ))
             .await
             .expect("send crash command");
-        let _accepted = receive_tool_event(&mut socket).await;
-        let DeviceExecutionEvent::Completed { data, .. } = receive_tool_event(&mut socket).await
-        else {
-            panic!("raw Tool completion required");
-        };
-        assert_eq!(data.output.as_deref(), Some("alpha"));
+        let _accepted = receive_read_event(&mut socket).await;
+        assert!(matches!(
+            receive_read_event(&mut socket).await,
+            DeviceFilesystemReadEvent::UnknownOutcome { .. }
+        ));
         socket
             .send(Message::text(
                 serde_json::to_string(&server_replay).expect("replay command"),
             ))
             .await
             .expect("send replay command");
-        let _accepted = receive_tool_event(&mut socket).await;
-        let DeviceExecutionEvent::Completed { data, .. } = receive_tool_event(&mut socket).await
+        let _accepted = receive_read_event(&mut socket).await;
+        let DeviceFilesystemReadEvent::Completed { data, .. } =
+            receive_read_event(&mut socket).await
         else {
             panic!("completed replay required");
         };
-        assert_eq!(data.output.as_deref(), Some("alpha"));
+        assert_eq!(data.result.content, "journal-value");
         socket.close(None).await.expect("close");
     });
     let socket = fixture.runtime.connect_socket().await.expect("connect");
@@ -688,49 +684,35 @@ where
     .expect("parse read event")
 }
 
-async fn receive_tool_event<Stream>(
-    socket: &mut tokio_tungstenite::WebSocketStream<Stream>,
-) -> DeviceExecutionEvent
-where
-    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-{
-    let Message::Text(text) = socket
-        .next()
-        .await
-        .expect("tool event frame")
-        .expect("tool event")
-    else {
-        panic!("text event required");
-    };
-    parse_device_execution_event(serde_json::from_str(text.as_str()).expect("tool event JSON"))
-        .expect("parse tool event")
-}
-
-fn tool_sequence(event: &DeviceExecutionEvent) -> u64 {
+fn read_sequence(event: &DeviceFilesystemReadEvent) -> u64 {
     match event {
-        DeviceExecutionEvent::Accepted { envelope, .. }
-        | DeviceExecutionEvent::Output { envelope, .. }
-        | DeviceExecutionEvent::Completed { envelope, .. }
-        | DeviceExecutionEvent::Failed { envelope, .. }
-        | DeviceExecutionEvent::Canceled { envelope, .. }
-        | DeviceExecutionEvent::UnknownOutcome { envelope, .. } => envelope.sequence,
+        DeviceFilesystemReadEvent::Accepted { envelope, .. }
+        | DeviceFilesystemReadEvent::Completed { envelope, .. }
+        | DeviceFilesystemReadEvent::Failed { envelope, .. }
+        | DeviceFilesystemReadEvent::Canceled { envelope, .. }
+        | DeviceFilesystemReadEvent::UnknownOutcome { envelope, .. } => envelope.sequence,
     }
 }
 
-fn tool_ack(event: &DeviceExecutionEvent, through_sequence: u64) -> DeviceExecutionAck {
+fn read_ack(event: &DeviceFilesystemReadEvent, through_sequence: u64) -> DeviceFilesystemReadAck {
     let envelope = match event {
-        DeviceExecutionEvent::Accepted { envelope, .. }
-        | DeviceExecutionEvent::Output { envelope, .. }
-        | DeviceExecutionEvent::Completed { envelope, .. }
-        | DeviceExecutionEvent::Failed { envelope, .. }
-        | DeviceExecutionEvent::Canceled { envelope, .. }
-        | DeviceExecutionEvent::UnknownOutcome { envelope, .. } => envelope,
+        DeviceFilesystemReadEvent::Accepted { envelope, .. }
+        | DeviceFilesystemReadEvent::Completed { envelope, .. }
+        | DeviceFilesystemReadEvent::Failed { envelope, .. }
+        | DeviceFilesystemReadEvent::Canceled { envelope, .. }
+        | DeviceFilesystemReadEvent::UnknownOutcome { envelope, .. } => envelope,
     };
-    DeviceExecutionAck {
-        schema_version: "crewon.device-ack.v0".to_string(),
+    DeviceFilesystemReadAck {
+        schema_version: "crewon.device-filesystem-read-ack.v0".to_string(),
         protocol_version: envelope.protocol_version,
+        command_kind: envelope.command_kind.clone(),
         device_id: envelope.device_id.clone(),
         execution_id: envelope.execution_id.clone(),
+        receipt_id: envelope.receipt_id.clone(),
+        connection_epoch: envelope.connection_epoch,
+        workspace_binding_id: envelope.workspace_binding_id.clone(),
+        incarnation_id: envelope.incarnation_id.clone(),
+        command_digest: envelope.command_digest.clone(),
         through_sequence,
         acknowledged_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
     }
@@ -748,7 +730,6 @@ fn event_sequence(event: &DeviceWorkspaceListEvent) -> u64 {
 
 fn runtime_event_sequence(event: &RuntimeEvent) -> u64 {
     match event {
-        RuntimeEvent::Tool(event) => tool_sequence(event),
         RuntimeEvent::WorkspaceList(event) => event_sequence(event),
         RuntimeEvent::FilesystemRead(event) => match event {
             crewon_device_protocol::DeviceFilesystemReadEvent::Accepted { envelope, .. }

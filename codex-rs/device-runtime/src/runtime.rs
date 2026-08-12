@@ -10,7 +10,6 @@ use crewon_device::ConnectionEpochFence;
 use crewon_device::DeviceCommandAuthorizer;
 use crewon_device::NativeDeviceRuntimeBinding;
 use crewon_device::NativeFilesystemReadOrchestrator;
-use crewon_device::NativeToolOrchestrator;
 use crewon_device::NativeWorkspaceListOrchestrator;
 use crewon_device::WorkspaceDirectoryRegistry;
 use crewon_device::WorkspaceListCancellation;
@@ -66,7 +65,6 @@ pub(crate) struct DeviceRuntimeState {
     pub journal: DeviceWorkspaceJournal,
     pub orchestrator: NativeWorkspaceListOrchestrator,
     pub read_orchestrator: NativeFilesystemReadOrchestrator,
-    pub tool_orchestrator: NativeToolOrchestrator,
     pub registry: Arc<WorkspaceDirectoryRegistry>,
     pub fence: Arc<ConnectionEpochFence>,
     pub authorizer: Arc<DeviceCommandAuthorizer>,
@@ -78,7 +76,6 @@ pub(crate) struct DeviceRuntimeState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RuntimeEvent {
-    Tool(crewon_device_protocol::DeviceExecutionEvent),
     WorkspaceList(crewon_device_protocol::DeviceWorkspaceListEvent),
     FilesystemRead(crewon_device_protocol::DeviceFilesystemReadEvent),
 }
@@ -137,7 +134,6 @@ impl DeviceRuntime {
         })?;
         let orchestrator = NativeWorkspaceListOrchestrator::new(journal.clone());
         let read_orchestrator = NativeFilesystemReadOrchestrator::new(journal.clone());
-        let tool_orchestrator = NativeToolOrchestrator::new(journal.clone());
         let (events, _) = tokio::sync::broadcast::channel(256);
         Ok(Self {
             state: Arc::new(DeviceRuntimeState {
@@ -147,7 +143,6 @@ impl DeviceRuntime {
                 journal,
                 orchestrator,
                 read_orchestrator,
-                tool_orchestrator,
                 registry,
                 fence: Arc::new(fence),
                 authorizer: Arc::new(authorizer),
