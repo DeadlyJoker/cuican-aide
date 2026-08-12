@@ -416,6 +416,7 @@ export function settleWorkflowClaim(input: {
       : input.execution.cancelRequested && !active
         ? "canceled"
         : nodes.some((node) => node.status === "waitingHuman") &&
+            !nodes.some((node) => node.status === "failed") &&
             !nodes.some((node) =>
               ["queued", "running", "unknown"].includes(node.status),
             )

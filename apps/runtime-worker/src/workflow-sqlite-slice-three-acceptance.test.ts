@@ -209,19 +209,19 @@ test("SQLite Slice 4 completes checkpoint-only reconciliation without resampling
 
   const reconciled = await runtime.worker.wake();
   assert.deepEqual(reconciled, { kind: "workflowRecovery", runId,
-    code: "workflow_reconciliation_evidence_insufficient" });
+    code: "workflow_reconciliation_settled" });
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
   assert.deepEqual(inspectReconciliation(path, runId), {
-    dispatchStatus: "responseObserved", continuationCount: 0,
-    terminalEventCount: 0, nodeStatus: "unknown", reconcilePending: 0,
+    dispatchStatus: "terminal", continuationCount: 0,
+    terminalEventCount: 0, nodeStatus: "failed", reconcilePending: 0,
   });
 
   const replay = await runtime.worker.wake();
   assert.notEqual(replay.kind, "workflowRecovery");
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
   assert.deepEqual(inspectReconciliation(path, runId), {
-    dispatchStatus: "responseObserved", continuationCount: 0,
-    terminalEventCount: 0, nodeStatus: "unknown", reconcilePending: 0,
+    dispatchStatus: "terminal", continuationCount: 0,
+    terminalEventCount: 0, nodeStatus: "failed", reconcilePending: 0,
   });
 });
 

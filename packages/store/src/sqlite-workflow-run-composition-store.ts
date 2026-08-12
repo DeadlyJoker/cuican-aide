@@ -45,6 +45,7 @@ import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
 import {
   loadSqliteModelDispatchReceipt,
   migrateSqliteModelDispatchEvidence,
+  terminateSqliteModelDispatch,
 } from "./sqlite-model-dispatch-evidence.ts";
 import {
   assertExecutionBinding,
@@ -565,11 +566,25 @@ export class SqliteWorkflowRunCompositionStore
         throw new RunStoreError("workflow_reconciliation_evidence_missing");
       const evidenceStatus = dispatch.status === "prepared"
         ? "notDispatched" as const : dispatch.status;
-      if (dispatch.status === "terminal" &&
-          dispatch.terminalOutcome?.kind !== "completed") {
-        const outcome = dispatch.terminalOutcome!.kind === "failed"
+      if ((dispatch.status === "terminal" &&
+          dispatch.terminalOutcome?.kind !== "completed") ||
+          dispatch.status === "responseObserved") {
+        const terminalDispatch = dispatch.status === "responseObserved"
+          ? terminateSqliteModelDispatch(this.#database, {
+              tenantId: input.tenantId, runId: input.runId,
+              lease: { workItemId: attempt.workItemId,
+                ownerId: input.lease.ownerId, leaseId: input.lease.leaseId,
+                leaseEpoch: attempt.leaseEpoch },
+              attempt: { stepId: input.nodeId, attemptId: attempt.attemptId },
+              operationId: dispatch.operationId,
+              requestSequence: dispatch.requestSequence,
+              expectedRevision: dispatch.revision, transitionedAt: now,
+              outcome: { kind: "failed", certainty: "responseObserved",
+                code: "workflow_response_evidence_unavailable" },
+            }) : dispatch;
+        const outcome = terminalDispatch.terminalOutcome!.kind === "failed"
           ? { status: "failed" as const,
-              failureCode: dispatch.terminalOutcome!.code ?? "model_dispatch_failed" }
+              failureCode: terminalDispatch.terminalOutcome!.code ?? "model_dispatch_failed" }
           : { status: "canceled" as const };
         const next = settleWorkflowClaim({ execution: execution!, ...input,
           outcome, now });
@@ -577,7 +592,7 @@ export class SqliteWorkflowRunCompositionStore
           runId: input.runId, workItemId: attempt.workItemId,
           leaseEpoch: attempt.leaseEpoch,
           attempt: { stepId: input.nodeId, attemptId: attempt.attemptId,
-            finishedAt: now, checkpointDigest: dispatch.responseCheckpointDigest,
+            finishedAt: now, checkpointDigest: terminalDispatch.responseCheckpointDigest,
             ...(outcome.status === "failed"
               ? { status: "failed" as const,
                   failure: { code: outcome.failureCode, retryable: false } }
