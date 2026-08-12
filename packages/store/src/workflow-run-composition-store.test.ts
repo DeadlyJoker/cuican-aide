@@ -80,191 +80,22 @@ const lease = {
   leaseEpoch: 1,
 };
 
-test("SQLite atomically admits stable node authority and replays after reopen", async (context) => {
-  const directory = await mkdtemp(
-    join(tmpdir(), "crewon-workflow-composition-"),
-  );
-  context.after(() => rm(directory, { recursive: true, force: true }));
-  const path = join(directory, "authority.sqlite");
-  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
-  let store = new SqliteWorkflowRunCompositionStore(path, { digester, clock });
-  await seed(path, clock.nowEpochMilliseconds() + 60_000);
-
-  const first = await store.admitWorkflowNodes(admissionInput());
-  assert.equal(first.disposition, "fresh");
-  assert.deepEqual(
-    first.admissions.map((item) => ({
-      nodeId: item.claim.node.nodeId,
-      frozenAgentVersionId: first.execution.nodes.find(
-        (node) => node.nodeId === item.claim.node.nodeId,
-      )?.agentVersionId,
-      stepKind: item.step.kind,
-      hasAttempt: item.attempt !== null,
-    })),
-    [
-      {
-        nodeId: "agent",
-        frozenAgentVersionId: "agent-v1",
-        stepKind: "agent",
-        hasAttempt: true,
-      },
-      {
-        nodeId: "gate",
-        frozenAgentVersionId: null,
-        stepKind: "gate",
-        hasAttempt: false,
-      },
-    ],
-  );
-  assert.equal(
-    first.execution.nodes.find((node) => node.nodeId === "verify")
-      ?.agentVersionId,
-    "verifier-v1",
-  );
-  await store.close();
-
-  store = new SqliteWorkflowRunCompositionStore(path, { digester, clock });
-  assert.deepEqual(await store.admitWorkflowNodes(admissionInput()), {
-    disposition: "replay",
-    execution: first.execution,
-    admissions: [],
-    reconciliationClaims: [],
-  });
-  await store.close();
-});
-
-test("SQLite dual connections converge and a reclaimed lease fences replay", async (context) => {
-  const directory = await mkdtemp(
-    join(tmpdir(), "crewon-workflow-composition-race-"),
-  );
-  context.after(() => rm(directory, { recursive: true, force: true }));
-  const path = join(directory, "authority.sqlite");
-  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
-  const first = new SqliteWorkflowRunCompositionStore(path, {
-    digester,
-    clock,
-  });
-  await seed(path, clock.nowEpochMilliseconds() + 60_000);
-  const second = new SqliteWorkflowRunCompositionStore(path, {
-    digester,
-    clock,
-  });
-  const [left, right] = await Promise.all([
-    first.admitWorkflowNodes(admissionInput()),
-    second.admitWorkflowNodes(admissionInput()),
-  ]);
-  assert.deepEqual(right, {
-    disposition: "replay",
-    execution: left.execution,
-    admissions: [],
-    reconciliationClaims: [],
-  });
-
-  const database = new DatabaseSync(path);
-  database
-    .prepare(
-      `UPDATE work_items SET lease_owner_id='worker-2',lease_id='lease-2',
-       lease_epoch=2,lease_expires_at_ms=? WHERE work_item_id='work-1'`,
-    )
-    .run(clock.nowEpochMilliseconds() + 60_000);
-  database.close();
-  await assert.rejects(
-    second.admitWorkflowNodes(admissionInput()),
-    /stale_lease/u,
-  );
-  await first.close();
-  await second.close();
-});
-
-test("SQLite expired running node becomes unknown without a second Attempt", async () => {
-  const database = new DatabaseSync(":memory:");
-  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
-  const store = new SqliteWorkflowRunCompositionStore(database, {
-    digester,
-    clock,
-  });
-  await seed(database, clock.nowEpochMilliseconds() + 60_000);
-  const first = await store.admitWorkflowNodes(admissionInput());
-  const original = first.execution.nodes.find(
-    (node) => node.nodeId === "agent",
-  )!;
-  clock.set(Date.parse("2026-08-12T00:00:06.000Z"));
-  const reclaimedLease = {
-    workItemId: "work-1",
-    ownerId: "worker-2",
-    leaseId: "lease-2",
-    leaseEpoch: 2,
-  };
-  database
-    .prepare(
-      `UPDATE work_items SET lease_owner_id=?,lease_id=?,lease_epoch=?,lease_expires_at_ms=?
-       WHERE work_item_id=?`,
-    )
-    .run(
-      reclaimedLease.ownerId,
-      reclaimedLease.leaseId,
-      reclaimedLease.leaseEpoch,
-      clock.nowEpochMilliseconds() + 60_000,
-      reclaimedLease.workItemId,
-    );
-  const recovered = await store.admitWorkflowNodes({
-    ...admissionInput(),
-    lease: reclaimedLease,
-    schedulerOperationId: "scheduler-operation-2",
-  });
-  const unknown = recovered.execution.nodes.find(
-    (node) => node.nodeId === "agent",
-  )!;
-  assert.deepEqual(recovered.admissions, []);
-  assert.equal(recovered.disposition, "reconcileRequired");
-  assert.deepEqual(recovered.reconciliationClaims, [
-    first.admissions[0]!.claim,
-  ]);
-  assert.deepEqual(unknown, {
-    ...original,
-    status: "unknown",
-    leaseExpiresAt: null,
-  });
-  assert.equal(
-    database.prepare("SELECT count(*) AS count FROM run_attempts").get()?.count,
-    1,
-  );
-});
-
-test("SQLite rejects expired lease and frozen binding drift without partial DAG state", async () => {
-  const database = new DatabaseSync(":memory:");
-  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
-  const store = new SqliteWorkflowRunCompositionStore(database, {
-    digester,
-    clock,
-  });
-  await seed(database, clock.nowEpochMilliseconds());
-  await assert.rejects(
-    store.admitWorkflowNodes(admissionInput()),
-    /lease_expired/u,
-  );
-  assert.equal(
-    database.prepare("SELECT count(*) AS count FROM workflow_executions").get()
-      ?.count,
-    0,
-  );
-  database
-    .prepare(
-      "UPDATE work_items SET lease_expires_at_ms=? WHERE work_item_id='work-1'",
-    )
-    .run(clock.nowEpochMilliseconds() + 60_000);
-  await assert.rejects(
-    store.admitWorkflowNodes({
-      ...admissionInput(),
-      binding: { ...binding, workflowVersionId: "substituted-version" },
-    }),
-    /run_authority_mismatch/u,
-  );
-  assert.equal(
-    database.prepare("SELECT count(*) AS count FROM workflow_executions").get()
-      ?.count,
-    0,
-  );
+test("SQLite composition prototype exposes only the current Store contract", () => {
+  const prototype = SqliteWorkflowRunCompositionStore.prototype as unknown as
+    Record<string, unknown>;
+  assert.equal(prototype.admitWorkflowNodes, undefined);
+  for (const method of [
+    "scheduleWorkflowNodes",
+    "admitWorkflowNodeWork",
+    "settleWorkflowNode",
+    "recordWorkflowHumanGateDecision",
+    "settleWorkflowHumanGate",
+    "scheduleWorkflowReconciliation",
+    "reconcileWorkflowNode",
+    "cancelWorkflowExecution",
+  ]) {
+    assert.equal(typeof prototype[method], "function", method);
+  }
 });
 
 test("SQLite fanout atomically queues agent work and publishes a sibling gate", async () => {
@@ -416,17 +247,6 @@ if (postgresUrl === undefined) {
       await store.close();
     }
   });
-}
-
-function admissionInput() {
-  return {
-    tenantId: "tenant-1",
-    runId: "run-1",
-    lease,
-    binding,
-    schedulerOperationId: "scheduler-operation-1",
-    leaseDurationMs: 5_000,
-  } as const;
 }
 
 async function seed(
