@@ -1153,8 +1153,13 @@ if (postgresUrl === undefined) {
       };
       const settled = await store.settleWorkflowHumanGate(settlement);
       assert.equal(settled.disposition, "settled");
-      assert.equal(settled.runDisposition, "terminalConverged");
-      assert.equal(settled.execution.status, "failed");
+      assert.equal(settled.runDisposition, "nonTerminal");
+      assert.equal(settled.execution.status, "running");
+      assert.equal(
+        settled.execution.nodes.find((node) => node.nodeId === gate.nodeId)
+          ?.status,
+        "failed",
+      );
       const reopened = new PostgresWorkflowRunCompositionStore({
         pool,
         schema,
@@ -1171,7 +1176,7 @@ if (postgresUrl === undefined) {
         WHERE r.run_id='run-1' AND w.work_item_id=$1`,
         [recorded.approvalResumeWorkItemId],
       );
-      assert.equal(authority.rows[0]?.run.status, "failed");
+      assert.equal(authority.rows[0]?.run.status, "running");
       assert.deepEqual(
         [
           authority.rows[0]?.status,
