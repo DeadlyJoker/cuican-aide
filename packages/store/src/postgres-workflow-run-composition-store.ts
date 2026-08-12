@@ -122,7 +122,8 @@ export class PostgresWorkflowRunCompositionStore
         input,
         candidateRoute,
         this.#digester,
-        (commit) => this.commitRunWithin(client, commit),
+        (commit, beforeWrite) =>
+          this.commitRunWithin(client, commit, { beforeWrite }),
       );
       await client.query("COMMIT");
       return result;

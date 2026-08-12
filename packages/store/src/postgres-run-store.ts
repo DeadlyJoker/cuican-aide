@@ -1109,6 +1109,13 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     options: Readonly<{
       executionLease?: WorkItemLeaseInput;
       history?: ModelHistoryAppend;
+      beforeWrite?: (
+        authority: Readonly<{
+          current: RunState | null;
+          next: RunState;
+          thread: ThreadState;
+        }>,
+      ) => Promise<void>;
     }> = {},
   ): Promise<CommitRunResult> {
     const runId = validateCommitInput(input);
@@ -1238,6 +1245,7 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
       (id) => workItemIds.has(id),
       input.threadAdmission === undefined ? "default" : "manualCompaction",
     );
+    await options.beforeWrite?.({ current, next, thread });
     await writePostgresRunSnapshot(
       client,
       this.schemaSql(),
