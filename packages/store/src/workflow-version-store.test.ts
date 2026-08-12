@@ -48,7 +48,7 @@ else {
 test("SQLite migration fails closed without replacing a newer authority", () => {
   const database = new DatabaseSync(":memory:");
   database.exec(
-    "CREATE TABLE workflow_version_schema(singleton INTEGER PRIMARY KEY, version INTEGER); INSERT INTO workflow_version_schema VALUES(1,2); CREATE TABLE sentinel(value TEXT); INSERT INTO sentinel VALUES('preserve')",
+    `${sqliteAuthoritySql(2)}; CREATE TABLE sentinel(value TEXT); INSERT INTO sentinel VALUES('preserve')`,
   );
   const before = sqliteState(database);
   assert.throws(
@@ -56,6 +56,24 @@ test("SQLite migration fails closed without replacing a newer authority", () => 
     /workflow_version_schema_unsupported/,
   );
   assert.deepEqual(sqliteState(database), before);
+});
+
+test("SQLite partial authority and invalid singleton registry fail closed", () => {
+  for (const setup of [
+    "CREATE TABLE workflow_versions(value TEXT)",
+    "CREATE TABLE workflow_version_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL)",
+    `${sqliteAuthoritySql(1)}; PRAGMA ignore_check_constraints=ON; INSERT INTO workflow_version_schema VALUES(2,1)`,
+    `${sqliteAuthoritySql(1).replace(" CHECK(singleton=1)", "")}`,
+  ]) {
+    const database = new DatabaseSync(":memory:");
+    database.exec(setup);
+    const before = sqliteMaster(database);
+    assert.throws(
+      () => new SqliteWorkflowVersionStore(database, digester),
+      /workflow_version_schema_corrupt/,
+    );
+    assert.deepEqual(sqliteMaster(database), before);
+  }
 });
 
 test("SQLite v1 shape corruption fails closed without repair writes", () => {
@@ -84,8 +102,9 @@ if (postgresUrl)
     const schema = `workflow_newer_${randomUUID().replaceAll("-", "")}`;
     const pool = new Pool({ connectionString: postgresUrl });
     try {
-      await pool.query(`CREATE SCHEMA ${schema}; CREATE TABLE ${schema}.workflow_version_schema
-      (singleton boolean PRIMARY KEY, version integer); INSERT INTO ${schema}.workflow_version_schema VALUES(true,2)`);
+      await pool.query(
+        `CREATE SCHEMA ${schema}; ${postgresAuthoritySql(schema, 2)}`,
+      );
       const before = await postgresTables(pool, schema);
       const client = await pool.connect();
       try {
@@ -103,6 +122,41 @@ if (postgresUrl)
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
       await pool.end();
+    }
+  });
+
+if (postgresUrl)
+  test("PostgreSQL partial authority and invalid singleton registry fail closed", async () => {
+    for (const setup of [
+      (schema: string) =>
+        `CREATE TABLE ${schema}.workflow_versions(value text)`,
+      (schema: string) =>
+        `CREATE TABLE ${schema}.workflow_version_schema(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), version integer NOT NULL)`,
+      (schema: string) =>
+        `${postgresAuthoritySql(schema, 1)}; ALTER TABLE ${schema}.workflow_version_schema DROP CONSTRAINT workflow_version_schema_singleton_check; INSERT INTO ${schema}.workflow_version_schema VALUES(false,1)`,
+    ]) {
+      const schema = `workflow_partial_${randomUUID().replaceAll("-", "")}`;
+      const pool: Pool = new Pool({ connectionString: postgresUrl });
+      try {
+        await pool.query(`CREATE SCHEMA ${schema}; ${setup(schema)}`);
+        const before = await postgresTables(pool, schema);
+        const client = await pool.connect();
+        try {
+          await assert.rejects(
+            import("./workflow-version-store.ts").then(
+              ({ migratePostgresWorkflowVersions }) =>
+                migratePostgresWorkflowVersions(client, schema),
+            ),
+            /workflow_version_schema_corrupt/,
+          );
+        } finally {
+          client.release();
+        }
+        assert.deepEqual(await postgresTables(pool, schema), before);
+      } finally {
+        await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+        await pool.end();
+      }
     }
   });
 
@@ -246,6 +300,20 @@ async function postgresTables(pool: Pool, schema: string) {
       [schema],
     )
   ).rows;
+}
+function sqliteAuthoritySql(version: number) {
+  return `CREATE TABLE workflow_version_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL);
+    INSERT INTO workflow_version_schema VALUES(1,${version});
+    CREATE TABLE workflow_versions (tenant_id TEXT NOT NULL, workflow_id TEXT NOT NULL,
+      workflow_version_id TEXT NOT NULL, content_digest TEXT NOT NULL, definition_json TEXT NOT NULL CHECK(json_valid(definition_json)),
+      created_at TEXT NOT NULL, PRIMARY KEY(tenant_id, workflow_version_id)) STRICT`;
+}
+function postgresAuthoritySql(schema: string, version: number) {
+  return `CREATE TABLE ${schema}.workflow_version_schema(singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), version integer NOT NULL);
+    INSERT INTO ${schema}.workflow_version_schema VALUES(true,${version});
+    CREATE TABLE ${schema}.workflow_versions(tenant_id text NOT NULL, workflow_id text NOT NULL,
+      workflow_version_id text NOT NULL, content_digest text NOT NULL, definition_json text NOT NULL, created_at timestamptz NOT NULL,
+      PRIMARY KEY(tenant_id,workflow_version_id))`;
 }
 
 function asset(tenantId: string, workflowVersionId: string) {
