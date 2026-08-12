@@ -170,6 +170,13 @@ export class ProductionWorkflowRuntimeDispatcher
         reconciliationOperationId: payload.reconciliationOperationId,
       });
       switch (reconciled.disposition) {
+        case "retryScheduled":
+          if (reconciled.handoff.currentWorkItem !== "completed" ||
+              reconciled.handoff.kind !== "node" ||
+              reconciled.handoff.nextWorkItemId === null)
+            throw new Error("workflow_reconciliation_retry_handoff_invalid");
+          return { kind: "recovery", runId: input.run.runId,
+            code: "workflow_reconciliation_retry_scheduled" };
         case "evidenceInsufficient":
           assertCompletedHandoff(reconciled.handoff);
           return { kind: "recovery", runId: input.run.runId,

@@ -45,7 +45,7 @@ export type WorkflowGatePublicationAuthority = Readonly<{
 export type WorkflowAtomicHandoff = Readonly<{
   currentWorkItem: "completed" | "retained";
   nextWorkItemId: string | null;
-  kind: "none" | "scheduler" | "reconcile";
+  kind: "none" | "scheduler" | "reconcile" | "node";
 }>;
 
 export type WorkflowRunDisposition = "nonTerminal" | "terminalConverged";
@@ -220,7 +220,7 @@ export interface WorkflowRunCompositionStore {
     reconciliationOperationId: string;
   }): Promise<
     Readonly<{
-      disposition: "retryRequired" | "evidenceInsufficient" | "settled" | "replay";
+      disposition: "retryScheduled" | "retryRequired" | "evidenceInsufficient" | "settled" | "replay";
       evidenceStatus: WorkflowDispatchEvidenceStatus;
       execution: WorkflowExecutionState;
       handoff: WorkflowAtomicHandoff;

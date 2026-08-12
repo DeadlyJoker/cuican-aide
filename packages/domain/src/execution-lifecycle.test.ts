@@ -33,6 +33,22 @@ test("creates a retryOf Attempt and abandons a stale running Attempt", () => {
   assert.equal(retried.abandonedAttempt?.status, "abandoned");
 });
 
+test("starts a new WorkItem Attempt at its independent first lease epoch", () => {
+  const first = startRunAttempt(null, null, startInput("attempt-1", 1));
+  const failed = finishRunAttempt(first.step, first.attempt, {
+    status: "failed", finishedAt: "2026-08-08T00:00:02Z",
+    checkpointDigest: null,
+    failure: { code: "not_dispatched", retryable: true },
+  });
+  const retried = startRunAttempt(failed.step, failed.attempt, {
+    ...startInput("attempt-2", 1), workItemId: "work-item-2",
+    startedAt: "2026-08-08T00:00:03Z",
+  });
+
+  assert.equal(retried.attempt.leaseEpoch, 1);
+  assert.equal(retried.attempt.retryOfAttemptId, "attempt-1");
+});
+
 test("moves retryable failure to ready and rejects stale terminal writes", () => {
   const started = startRunAttempt(null, null, startInput("attempt-1", 1));
   const failed = finishRunAttempt(started.step, started.attempt, {

@@ -594,9 +594,49 @@ export class SqliteWorkflowRunCompositionStore
         this.#database.exec("COMMIT");
         return structuredClone(result);
       }
+      if (evidenceStatus === "notDispatched") {
+        finishSqliteRunAttempt(this.#database, { tenantId: input.tenantId,
+          runId: input.runId, workItemId: attempt.workItemId,
+          leaseEpoch: attempt.leaseEpoch, attempt: { stepId: input.nodeId,
+            attemptId: attempt.attemptId, status: "failed", finishedAt: now,
+            checkpointDigest: null, failure: {
+              code: "workflow_model_not_dispatched", retryable: true } } });
+        const claimEpoch = input.claimEpoch + 1;
+        const claimAuthority = { tenantId: input.tenantId, runId: input.runId,
+          binding: input.binding, nodeId: input.nodeId, claimEpoch,
+          reconciliationOperationId: input.reconciliationOperationId };
+        const claimId = workflowAuthorityId(
+          "claim", claimAuthority, this.#digester);
+        const workAuthority = { ...claimAuthority, claimId,
+          schedulerOperationId: input.reconciliationOperationId };
+        const workItemId = workflowAuthorityId(
+          "node", workAuthority, this.#digester);
+        const next = { ...execution!, revision: execution!.revision + 1,
+          nodes: execution!.nodes.map((candidate) => candidate.nodeId === input.nodeId
+            ? { ...candidate, status: "queued" as const, claimId,
+                claimOperationId: input.reconciliationOperationId,
+                claimEpoch, leaseExpiresAt: null, gateRequestId: null,
+                resultDigest: null, failureCode: null }
+            : candidate), updatedAt: now };
+        this.#writeExecution(next, now);
+        this.#insertWorkflowWorkItem(workItemId, input, {
+          schemaVersion: "crewon.workflow-node-work-item.v0",
+          trigger: "workflowNode", binding: input.binding,
+          nodeId: input.nodeId, claimId, claimEpoch,
+          schedulerOperationId: input.reconciliationOperationId,
+        }, now, nowMs);
+        const result = { disposition: "retryScheduled" as const,
+          evidenceStatus, execution: next, handoff: {
+            currentWorkItem: "completed" as const,
+            nextWorkItemId: workItemId, kind: "node" as const },
+          runDisposition: "nonTerminal" as const };
+        this.#insertReceipt(receiptInput, "reconcileNode", fingerprint, result);
+        this.#completeLease(input, nowMs);
+        this.#database.exec("COMMIT");
+        return structuredClone(result);
+      }
       const completePossiblySent = evidenceStatus === "possiblySent";
-      const result = { disposition: evidenceStatus === "notDispatched"
-          ? "retryRequired" as const : "evidenceInsufficient" as const,
+      const result = { disposition: "evidenceInsufficient" as const,
         evidenceStatus, execution: execution!, handoff: {
           currentWorkItem: completePossiblySent
             ? "completed" as const : "retained" as const,
@@ -1475,6 +1515,16 @@ export class SqliteWorkflowRunCompositionStore
     const valueDigest = this.#digester.sha256(valueJson);
     if (valueDigest !== executionNode(input, this.#loadExecution(input.tenantId, input.runId)).inputDigest)
       throw new RunStoreError("workflow_execution_value_digest_mismatch");
+    const existing = this.#loadExecutionValue(
+      input.tenantId, input.runId, "nodeInput", input.nodeId);
+    if (existing !== null) {
+      if (existing.valueDigest !== valueDigest ||
+          canonicalJson(existing.value) !== valueJson)
+        throw new RunStoreError("workflow_execution_value_conflict");
+      return { schemaVersion: "crewon.workflow-execution-value.v0",
+        valueId: existing.valueId, valueDigest: existing.valueDigest,
+        value: structuredClone(existing.value) as import("@crewon/contracts").JsonValue };
+    }
     const authority = { schemaVersion: "crewon.workflow-execution-value.v0" as const,
       valueId: workflowAuthorityId("value", { tenantId: input.tenantId,
         runId: input.runId, nodeId: input.nodeId, claimId: input.claimId,

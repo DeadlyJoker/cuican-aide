@@ -228,7 +228,8 @@ function validateCurrent(
   }
   if (
     (attempt.status !== "running" && attempt.status !== "failed") ||
-    input.leaseEpoch <= attempt.leaseEpoch
+    (input.workItemId === attempt.workItemId &&
+      input.leaseEpoch <= attempt.leaseEpoch)
   ) {
     throw new ExecutionLifecycleError("attempt_epoch_not_advanced");
   }
