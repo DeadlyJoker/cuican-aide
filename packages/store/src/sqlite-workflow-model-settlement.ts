@@ -44,6 +44,7 @@ export function settleSqliteWorkflowNodeModelTerminalWithinTransaction(
     ? context.receipt(settlement, "settleNode", fingerprint) : null;
   if (replay !== null) {
     validateReplay(context, input, settlement, replay, candidateId);
+    context.validateNodeTerminalReplay(settlement);
     return structuredClone({ ...(replay as Result), disposition: "replay" });
   }
   validateInputAuthority(context, input, source);

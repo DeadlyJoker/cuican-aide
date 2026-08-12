@@ -1282,12 +1282,16 @@ export class SqliteWorkflowRunCompositionStore
       receipt: (value, kind, hash) => this.#receipt(value, kind, hash),
       validateTerminalReplay: (value, replay) =>
         this.#validateTerminalReplay(value, replay),
+      validateNodeTerminalReplay: (value) =>
+        this.#validateNodeTerminalReplay(value),
       validateLease: (value, clock) => this.#validateLease(value, clock),
       assertCanonicalRun,
       loadRun: (tenantId, runId) => this.#loadRun(tenantId, runId),
       loadExecution: (tenantId, runId) => this.#loadExecution(tenantId, runId),
       loadWorkflow: (value) => this.#loadWorkflow(value),
       insertExecutionValue: (value) => this.#insertExecutionValue(value),
+      appendNodeTerminalEvent: (value, digest, timestamp, clock) =>
+        this.#appendNodeTerminalEvent(value, digest, timestamp, clock),
       writeExecution: (value, timestamp) => this.#writeExecution(value, timestamp),
       convergeTerminalRun: (value, workflow, execution, timestamp, clock) =>
         this.#convergeTerminalRun(value, workflow, execution, timestamp, clock),
@@ -1739,6 +1743,118 @@ export class SqliteWorkflowRunCompositionStore
     ).run(messageId, input.tenantId, input.runId, message.topic,
       stableJson(message), now, nowMs);
     return "terminalConverged";
+  }
+
+  #appendNodeTerminalEvent(
+    input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
+    resultDigest: string | null,
+    now: string,
+    nowMs: number,
+  ): void {
+    if (input.outcome.status === "unknown")
+      throw new RunStoreError("workflow_composition_unknown_not_terminal");
+    const current = this.#loadRun(input.tenantId, input.runId);
+    assertCanonicalRun(current, input.binding);
+    const eventId = workflowAuthorityId("run-event", {
+      ...input, lifecycle: "workflow.node.terminal",
+    }, this.#digester);
+    const event = {
+      schemaVersion: "crewon.run-event.v0" as const,
+      identity: { runId: input.runId }, eventId,
+      sequence: current!.lastSequence + 1, occurredAt: now,
+      type: "workflow.node.terminal" as const,
+      data: { binding: input.binding, nodeId: input.nodeId,
+        claimId: input.claimId, claimEpoch: input.claimEpoch,
+        stepId: input.stepId, attemptId: input.attemptId,
+        status: input.outcome.status,
+        resultDigest,
+        failureCode: input.outcome.status === "failed"
+          ? input.outcome.failureCode : null },
+    };
+    const next = reduceRunLifecycleEvent(current, event);
+    const updated = this.#database.prepare(
+      `UPDATE run_snapshots SET revision=?,last_sequence=?,state_json=?,updated_at=?
+       WHERE tenant_id=? AND run_id=? AND revision=?`,
+    ).run(next.revision, next.lastSequence, stableJson(next), now,
+      input.tenantId, input.runId, current!.revision);
+    if (updated.changes !== 1) throw new RunStoreError("revision_conflict");
+    this.#database.prepare(
+      `INSERT INTO run_events(tenant_id,run_id,sequence,event_id,event_json)
+       VALUES (?,?,?,?,?)`,
+    ).run(input.tenantId, input.runId, event.sequence, eventId, stableJson(event));
+    const messageId = workflowAuthorityId("run-outbox", {
+      ...input, lifecycle: "workflow.node.terminal",
+    }, this.#digester);
+    const message = { messageId, tenantId: input.tenantId, runId: input.runId,
+      topic: "run.updated", payload: { eventId, eventType: event.type,
+        throughSequence: event.sequence }, createdAt: now };
+    this.#database.prepare(
+      `INSERT INTO outbox(message_id,tenant_id,run_id,topic,message_json,created_at,
+       status,available_at_ms,lease_epoch,attempt_count)
+       VALUES (?,?,?,?,?,?,'pending',?,0,0)`,
+    ).run(messageId, input.tenantId, input.runId, message.topic,
+      stableJson(message), now, nowMs);
+  }
+
+  #validateNodeTerminalReplay(
+    input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
+  ): void {
+    if (input.outcome.status === "unknown") return;
+    const eventId = workflowAuthorityId("run-event", {
+      ...input, lifecycle: "workflow.node.terminal",
+    }, this.#digester);
+    const messageId = workflowAuthorityId("run-outbox", {
+      ...input, lifecycle: "workflow.node.terminal",
+    }, this.#digester);
+    const events = this.#database.prepare(
+      "SELECT event_json FROM run_events WHERE tenant_id=? AND run_id=? AND event_id=?",
+    ).all(input.tenantId, input.runId, eventId) as { event_json: string }[];
+    const outbox = this.#database.prepare(
+      "SELECT message_json FROM outbox WHERE message_id=?",
+    ).all(messageId) as { message_json: string }[];
+    if (events.length !== 1 || outbox.length !== 1)
+      throw new RunStoreError("workflow_node_terminal_lifecycle_corrupt");
+    try {
+      const event = JSON.parse(events[0]!.event_json) as
+        import("@crewon/domain").RunLifecycleEvent;
+      const message = JSON.parse(outbox[0]!.message_json) as Record<string, unknown>;
+      const run = this.#loadRun(input.tenantId, input.runId);
+      const execution = this.#loadExecution(input.tenantId, input.runId);
+      const node = execution?.nodes.find((value) => value.nodeId === input.nodeId);
+      const attempt = loadSqliteRunAttempt(this.#database, input);
+      const step = loadSqliteRunStep(this.#database, input);
+      const eventRows = this.#database.prepare(
+        `SELECT event_json FROM run_events WHERE tenant_id=? AND run_id=? ORDER BY sequence`,
+      ).all(input.tenantId, input.runId) as { event_json: string }[];
+      const history = eventRows.map((row) => JSON.parse(row.event_json)) as
+        import("@crewon/domain").RunLifecycleEvent[];
+      const expectedData = { binding: input.binding, nodeId: input.nodeId,
+        claimId: input.claimId, claimEpoch: input.claimEpoch,
+        stepId: input.stepId, attemptId: input.attemptId,
+        status: input.outcome.status,
+        resultDigest: input.outcome.status === "completed" ? node?.resultDigest : null,
+        failureCode: input.outcome.status === "failed" ? input.outcome.failureCode : null };
+      const expectedMessage = { messageId, tenantId: input.tenantId, runId: input.runId,
+        topic: "run.updated", payload: { eventId, eventType: event.type,
+          throughSequence: event.sequence }, createdAt: event.occurredAt };
+      if (event.schemaVersion !== "crewon.run-event.v0" ||
+          event.identity.runId !== input.runId || event.eventId !== eventId ||
+          event.type !== "workflow.node.terminal" ||
+          event.occurredAt !== attempt?.terminalAt ||
+          node === undefined || node.claimId !== input.claimId ||
+          node.claimEpoch !== input.claimEpoch || node.status !== input.outcome.status ||
+          attempt?.status !== input.outcome.status || attempt.stepId !== input.stepId ||
+          attempt.attemptId !== input.attemptId || attempt.updatedAt !== event.occurredAt ||
+          step?.status !== input.outcome.status || step.stepId !== input.stepId ||
+          step.currentAttemptId !== input.attemptId || step.updatedAt !== event.occurredAt ||
+          stableJson(event.data) !== stableJson(expectedData) ||
+          stableJson(message) !== stableJson(expectedMessage) ||
+          run === null || stableJson(replayRunLifecycle(history)) !== stableJson(run))
+        throw new Error("lifecycle mismatch");
+    } catch (error) {
+      throw new RunStoreError("workflow_node_terminal_lifecycle_corrupt", {
+        cause: error instanceof Error ? error : undefined });
+    }
   }
 
   #validateTerminalReplay(

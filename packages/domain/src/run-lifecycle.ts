@@ -122,6 +122,20 @@ export type RunLifecycleEvent =
       data: Readonly<{ handoffId: string }>;
     })
   | (RunEventBase & {
+      type: "workflow.node.terminal";
+      data: Readonly<{
+        binding: FrozenWorkflowVersionBinding;
+        nodeId: string;
+        claimId: string;
+        claimEpoch: number;
+        stepId: string;
+        attemptId: string;
+        status: "completed" | "failed" | "canceled";
+        resultDigest: string | null;
+        failureCode: string | null;
+      }>;
+    })
+  | (RunEventBase & {
       type: "segment.started";
       data: Readonly<{
         segmentId: string;
@@ -473,6 +487,30 @@ export function reduceRunLifecycleEvent(
           ),
         ),
       };
+    case "workflow.node.terminal":
+      requireStatus(state, event.type, ["running"]);
+      if (Object.keys(event.data).sort().join(",") !==
+          "attemptId,binding,claimEpoch,claimId,failureCode,nodeId,resultDigest,status,stepId")
+        throw new RunLifecycleError("workflow_node_terminal_shape_invalid");
+      parseFrozenWorkflowVersionBinding(event.data.binding);
+      for (const value of [event.data.nodeId, event.data.claimId,
+        event.data.stepId, event.data.attemptId])
+        requireBoundedNonEmpty(value, 512, "workflow_node_terminal_authority_invalid");
+      requirePositiveInteger(event.data.claimEpoch, "workflow_node_claim_epoch_invalid");
+      if (event.data.status === "completed") {
+        if (event.data.resultDigest === null || event.data.failureCode !== null)
+          throw new RunLifecycleError("workflow_node_terminal_result_invalid");
+        requireDigest(event.data.resultDigest);
+      } else if (event.data.status === "failed") {
+        if (event.data.resultDigest !== null || event.data.failureCode === null)
+          throw new RunLifecycleError("workflow_node_terminal_result_invalid");
+        requireBoundedNonEmpty(event.data.failureCode, 128,
+          "workflow_node_terminal_failure_invalid");
+      } else if (event.data.status === "canceled") {
+        if (event.data.resultDigest !== null || event.data.failureCode !== null)
+          throw new RunLifecycleError("workflow_node_terminal_result_invalid");
+      } else throw new RunLifecycleError("workflow_node_terminal_status_invalid");
+      return next;
     case "segment.started":
       requireStatus(state, event.type, ["running"]);
       validateSegmentIdentity(event.data);

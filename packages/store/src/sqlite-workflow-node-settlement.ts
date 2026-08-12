@@ -33,6 +33,7 @@ export type SqliteWorkflowNodeSettlementContext = Readonly<{
   digester: WorkflowContentDigester;
   receipt(input: Input, kind: string, fingerprint: string): unknown | null;
   validateTerminalReplay(input: Input, replay: unknown): void;
+  validateNodeTerminalReplay(input: Input): void;
   validateLease(input: Input, nowMs: number): void;
   assertCanonicalRun(run: RunState | null, binding: Input["binding"]): void;
   loadRun(tenantId: string, runId: string): RunState | null;
@@ -42,6 +43,8 @@ export type SqliteWorkflowNodeSettlementContext = Readonly<{
     tenantId: string; runId: string; valueId: string; role: string;
     nodeId: string | null; valueDigest: string; valueJson: string; now: string;
   }): void;
+  appendNodeTerminalEvent(input: Input, resultDigest: string | null,
+    now: string, nowMs: number): void;
   writeExecution(execution: WorkflowExecutionState, now: string): void;
   convergeTerminalRun(
     input: Input,
@@ -79,6 +82,7 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
   const replay = context.receipt(input, "settleNode", fingerprint);
   if (replay !== null) {
     context.validateTerminalReplay(input, replay);
+    context.validateNodeTerminalReplay(input);
     return structuredClone({
       ...(replay as object),
       disposition: "replay",
@@ -121,6 +125,7 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
   }
   const next = settleWorkflowClaim({ execution, ...input, resultDigest, now });
   if (input.outcome.status !== "unknown") {
+    context.appendNodeTerminalEvent(input, resultDigest ?? null, now, nowMs);
     finishSqliteRunAttempt(context.database, {
       tenantId: input.tenantId,
       runId: input.runId,

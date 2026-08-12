@@ -289,6 +289,13 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
     (error: unknown) => error instanceof RunStoreError &&
       error.code === "workflow_composition_idempotency_conflict",
   );
+  database.prepare(`UPDATE run_events SET event_json=json_set(event_json,
+    '$.data.claimEpoch',99) WHERE json_extract(event_json,'$.type')='workflow.node.terminal'`).run();
+  await assert.rejects(
+    store.settlePreparedWorkflowNodeTerminal(terminalInput),
+    (error: unknown) => error instanceof RunStoreError &&
+      error.code === "workflow_node_terminal_lifecycle_corrupt",
+  );
 });
 
 const postgresUrl = process.env.CREWON_TEST_POSTGRES_URL;
@@ -923,6 +930,21 @@ async function seed(
       JSON.stringify(run),
       run.updatedAt,
     );
+  const created = { schemaVersion: "crewon.run-event.v0", identity: { runId: "run-1" },
+    eventId: "seed-run-created", sequence: 1, occurredAt: run.createdAt,
+    type: "run.created", data: { threadId: run.threadId, tenantId: run.tenantId,
+      spaceId: run.spaceId, createdByActorId: run.createdByActorId,
+      authorityId: run.authorityId, runtimeGeneration: run.runtimeGeneration,
+      agentVersionId: run.agentVersionId, policySnapshotId: run.policySnapshotId,
+      workspaceBindingId: null, workflowVersionBinding: binding,
+      collaborationMode: "default", goalBinding: null, purpose: "workflow", origin: null } };
+  const started = { schemaVersion: "crewon.run-event.v0", identity: { runId: "run-1" },
+    eventId: "seed-run-started", sequence: 2, occurredAt: run.updatedAt,
+    type: "run.started", data: {} };
+  const insertEvent = database.prepare(`INSERT INTO run_events
+    (tenant_id,run_id,sequence,event_id,event_json) VALUES ('tenant-1','run-1',?,?,?)`);
+  insertEvent.run(1, created.eventId, JSON.stringify(created));
+  insertEvent.run(2, started.eventId, JSON.stringify(started));
   database
     .prepare(
       `INSERT INTO work_items
@@ -984,6 +1006,7 @@ function runState(): RunState {
     collaborationMode: "default",
     purpose: "workflow",
     workflowVersionBinding: binding,
+    origin: null,
     goalBinding: null,
     goalAccounting: null,
     usage: {

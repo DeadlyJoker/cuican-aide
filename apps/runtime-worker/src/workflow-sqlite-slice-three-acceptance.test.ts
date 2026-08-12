@@ -287,7 +287,14 @@ test("SQLite Slice 4 restart settles a Store-owned terminal candidate once", asy
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
   assert.deepEqual(inspectReconciliation(path, runId), {
     dispatchStatus: "terminal", continuationCount: 0,
-    terminalEventCount: 0, nodeStatus: "completed", reconcilePending: 0 });
+    terminalEventCount: 1, nodeStatus: "completed", reconcilePending: 0 });
+  assert.deepEqual(inspectCandidateTerminal(path, runId), {
+    attemptStatus: "completed", stepStatus: "completed",
+    nodeWorkCompleted: 1, reconcileWorkCompleted: 1,
+    nodeEventCount: 1, nodeOutboxCount: 1,
+    valueDigestMatches: true, runStatus: "running",
+    snapshotThroughEvents: true,
+  });
   const after = await runtime.worker.wake();
   assert.notEqual(after.kind, "workflowRecovery");
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
@@ -460,11 +467,42 @@ function inspectReconciliation(path: string, runId: string) {
         "SELECT count(*) count FROM workflow_node_continuations WHERE run_id=?",
       ).get(runId)!.count,
       terminalEventCount: database.prepare(`SELECT count(*) count FROM run_events WHERE run_id=?
-        AND json_extract(event_json,'$.type')='workflow.node.completed'`).get(runId)!.count,
+        AND json_extract(event_json,'$.type')='workflow.node.terminal'
+        AND json_extract(event_json,'$.data.status')='completed'`).get(runId)!.count,
       nodeStatus: execution.nodes.find((node: { nodeId: string }) => node.nodeId === "agent")?.status,
       reconcilePending: database.prepare(`SELECT count(*) count FROM work_items WHERE run_id=?
         AND status='pending' AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`)
         .get(runId)!.count };
+  } finally { database.close(); }
+}
+function inspectCandidateTerminal(path: string, runId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const scalar = (sql: string) => database.prepare(sql).get(runId) as Record<string, unknown>;
+    const execution = JSON.parse(String(scalar(
+      "SELECT state_json FROM workflow_executions WHERE run_id=?").state_json));
+    const node = execution.nodes.find((value: { nodeId: string }) => value.nodeId === "agent");
+    const snapshot = JSON.parse(String(scalar(
+      "SELECT state_json FROM run_snapshots WHERE run_id=?").state_json));
+    const maxSequence = scalar("SELECT max(sequence) value FROM run_events WHERE run_id=?").value;
+    return {
+      attemptStatus: scalar("SELECT status FROM run_attempts WHERE run_id=? AND step_id='agent'").status,
+      stepStatus: scalar("SELECT status FROM run_steps WHERE run_id=? AND step_id='agent'").status,
+      nodeWorkCompleted: scalar(`SELECT count(*) count FROM work_items WHERE run_id=?
+        AND status='completed' AND json_extract(work_item_json,'$.payload.trigger')='workflowNode'`).count,
+      reconcileWorkCompleted: scalar(`SELECT count(*) count FROM work_items WHERE run_id=?
+        AND status='completed' AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`).count,
+      nodeEventCount: scalar(`SELECT count(*) count FROM run_events WHERE run_id=?
+        AND json_extract(event_json,'$.type')='workflow.node.terminal'`).count,
+      nodeOutboxCount: scalar(`SELECT count(*) count FROM outbox WHERE run_id=?
+        AND json_extract(message_json,'$.payload.eventType')='workflow.node.terminal'`).count,
+      valueDigestMatches: scalar(`SELECT count(*) count FROM workflow_execution_values WHERE run_id=?
+        AND role='nodeOutput' AND node_id='agent'`).count === 1 &&
+        node.resultDigest === scalar(`SELECT value_digest FROM workflow_execution_values WHERE run_id=?
+          AND role='nodeOutput' AND node_id='agent'`).value_digest,
+      runStatus: snapshot.status,
+      snapshotThroughEvents: snapshot.lastSequence === maxSequence,
+    };
   } finally { database.close(); }
 }
 function inspectTerminalRecovery(path: string, runId: string) {

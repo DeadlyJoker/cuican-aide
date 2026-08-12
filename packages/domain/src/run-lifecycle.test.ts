@@ -566,6 +566,29 @@ test("binds Workflow purpose to one exact immutable version provenance", () => {
   );
 });
 
+test("records bounded Workflow node terminal authority without terminating the Run", () => {
+  const binding = { workflowId: "workflow-1", workflowVersionId: "workflow-version-1",
+    contentDigest: `sha256:${"a".repeat(64)}` };
+  const base = created();
+  const createdWorkflow = { ...base,
+    data: { ...base.data, purpose: "workflow" as const,
+      workflowVersionBinding: binding } } as RunLifecycleEvent;
+  const running = reduceRunLifecycleEvent(
+    reduceRunLifecycleEvent(null, createdWorkflow), event(2, "run.started", {}));
+  const next = reduceRunLifecycleEvent(running, event(3, "workflow.node.terminal", {
+    binding, nodeId: "agent", claimId: "claim-1", claimEpoch: 1,
+    stepId: "agent", attemptId: "attempt-1", status: "completed",
+    resultDigest: `sha256:${"b".repeat(64)}`, failureCode: null,
+  }));
+  assert.equal(next.status, "running");
+  assert.equal(next.lastSequence, 3);
+  assert.throws(() => reduceRunLifecycleEvent(running,
+    event(3, "workflow.node.terminal", { binding, nodeId: "agent",
+      claimId: "claim-1", claimEpoch: 1, stepId: "agent", attemptId: "attempt-1",
+      status: "failed", resultDigest: null, failureCode: "x".repeat(129) })),
+  hasCode("workflow_node_terminal_failure_invalid"));
+});
+
 function stableState(state: RunState): TraceObject {
   return {
     runId: state.runId,

@@ -235,6 +235,11 @@ test("SQLite Slice 1 converges Agent to Verification without replay authority or
     0,
   );
   assert.equal(events.at(-1)?.type, "run.completed");
+  assert.deepEqual(events.slice(-2).map((event) => event.type), [
+    "workflow.node.terminal", "run.completed",
+  ]);
+  assert.equal(events.every((event, index) => event.sequence === index + 1), true);
+  assert.equal(events.filter((event) => event.type === "workflow.node.terminal").length, 2);
   assert.equal(
     database
       .prepare(
