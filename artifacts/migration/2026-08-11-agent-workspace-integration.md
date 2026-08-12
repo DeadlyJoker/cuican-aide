@@ -554,3 +554,32 @@ Gate 报告为通过。
   response state 的独立 packaged 场景。
 
 因此本轮证明的是基础 Agent P0 completed-item 边界和 Native Workspace 四进程纵切已在当前分支落地，而不是完整产品迁移或生产发布已经完成。
+
+## Immutable WorkflowVersion、frozen Run provenance 与 durable DAG authority
+
+- `b8023f9e5`、`56e491247` 将 Workflow Run 的版本来源冻结为唯一三元组
+  `{ workflowId, workflowVersionId, contentDigest }`。`purpose=workflow` 必须携带完整 binding，缺失或显式 `null` 都 fail closed；普通
+  Agent/legacy Run 不持久化该字段。Runtime loader 会重新核对 immutable version 的 workflow ID、version ID 与 digest，不能用同 ID 的新内容
+  覆盖已经启动的 Run。
+- `712babace`、`9312628f5`、`f15c607ca` 将 immutable WorkflowVersion 接入 standalone/PostgreSQL Control composition，提供 publish/get/list
+  API、RunView frozen binding 投影与 Control Client。list 只返回有硬上限的 summary，不携带 definition JSON、DAG nodes 或 schema；cursor、ID、
+  name、description 与时间字段均有协议上限。主工作树与同时存在的 Provider、Automation、Workspace 和 Run parser 改动做过组合验证，而不是只在
+  隔离 worktree 中通过。
+- `24b87adee`、`13dc8f220`、`241e18bda` 建立 durable DAG execution authority 及 Memory/SQLite/PostgreSQL persistence。ready node 按
+  frozen `executionOrder` 稳定 claim；operation receipt 支持 commit-before-return 重放；租约过期且副作用不明确时进入 `unknown` 并等待
+  reconcile；terminal settlement 冲突、binding 漂移、corrupt durable bytes 全部 fail closed。取消、并行分支、Human gate、SQLite 双连接、关闭重开
+  与 crash replay 均有覆盖。
+- 每个 agent/verification node 的执行身份来自 immutable WorkflowVersion，并复制到 durable
+  `WorkflowExecutionNodeState.agentVersionId`；root Run 的 `agentVersionId` 只是既有 admission/control 兼容字段，不能成为节点执行身份。
+  通用 `RunStepState` / `RunAttemptState` 当前不含 agent identity，因此后续 production composition 必须把 DAG state 与对应 step/attempt 作为同一
+  事务 admission 返回，不能用进程内 side map 或 root identity 补齐。
+- `1bcad8f16`、`ccecda1ac` 保持 production gate 诚实：`WorkflowDagExecutor` 与 experimental composition adapter 不从 released Runtime
+  Worker package 导出，ordinary Run 也没有 Workflow 路由。当前缺失的是 `WorkflowRunCompositionStore` 的真实实现：它必须在一个数据库事务中
+  校验 WorkItem lease、锁定 canonical Workflow Run、核对 frozen binding、从 immutable version authority 加载 DAG、写 claim receipt，并创建或重放
+  节点 RunStep/RunAttempt。该边界接通前，不把内部 DAG authority 宣告为 production Workflow 执行能力。
+- 本阶段主工作树组合证据为 Domain `97/97`、Application `121/121`、Contracts `79/79`、Control API
+  `105 pass + 3 PostgreSQL-unconfigured skip`、Control Client `64/64`、Runtime Worker `279 pass + 1 skip`；Store 完整套件及所有相关
+  typecheck、OpenAPI generation consistency 均通过。PostgreSQL 实现只获得编译和条件测试覆盖，没有真实双连接数据库证据。
+- 最新 packaged recovery 证明加入 frozen binding、Control projection 与内部 DAG 代码后，没有破坏既有四进程 Workspace 纵切；smoke 发起的仍是
+  Workspace list，而不是 Workflow start。Control Workflow start admission、production Worker dispatcher、Agent node runtime adapter、Human approval
+  恢复入口和真实 Workflow packaged crash-replay 仍是下一阶段纵切，不能由现有 Workspace smoke 外推。
