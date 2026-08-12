@@ -13,6 +13,8 @@ import {
   ThreadCompactionApplicationService,
   ModelProviderSettingsApplicationService,
   WorkflowVersionApplicationService,
+  WorkflowRunApplicationService,
+  WorkflowHumanGateApplicationService,
   type ArtifactStorePort,
   type AutomationAuthorizationPort,
   type AutomationStore,
@@ -37,7 +39,6 @@ import {
   UuidV7ApplicationIdGenerator,
 } from "./standalone-adapters.ts";
 import type { StandaloneControlApiRuntime } from "./standalone-composition.ts";
-import { selectWorkflowRunStartFactory } from "./workflow-production-composition-gate.ts";
 import {
   ControlProviderProbeService,
   TenantRoutedProviderProbeWorker,
@@ -212,13 +213,32 @@ async function composeProductionControlApi(
       approvals,
       agentVersions,
       workflowVersions,
-      // PostgreSQL Workflow commands remain fail closed until the Control and
-      // Worker processes receive one explicit, complete cross-process
-      // certification. SQLite admission completeness does not certify the
-      // PostgreSQL or packaged composition.
-      workflowRuns:
-        selectWorkflowRunStartFactory({ status: "disabled" })?.() ?? null,
-      workflowHumanGates: null,
+      workflowRuns: new WorkflowRunApplicationService({
+        store,
+        authorization: config.authorization,
+        clock,
+        ids,
+        workflowDigester: digester,
+        routeResolver,
+      }),
+      workflowHumanGates: new WorkflowHumanGateApplicationService({
+        store: {
+          async loadRun(input) {
+            const run = await store.loadRun(input);
+            if (run === null) return null;
+            return {
+              ...run,
+              purpose: run.purpose ?? "turn",
+              workflowVersionBinding:
+                run.workflowVersionBinding ?? undefined,
+            };
+          },
+          recordWorkflowHumanGateDecision: (input) =>
+            store.recordWorkflowHumanGateDecision(input),
+        },
+        authorization: config.authorization,
+        digester,
+      }),
       agentVersionCatalogs,
       artifacts,
       automations,

@@ -213,7 +213,20 @@ export async function createStandaloneRuntimeWorker(
     return await composeRuntimeWorker(
       store,
       workspaceReadStore,
-      config,
+      {
+        ...config,
+        workflowComposition: config.workflowComposition ?? {
+          certification: {
+            schemaVersion: "crewon.workflow-runtime-certification.v0",
+            capabilities: WORKFLOW_RUNTIME_CAPABILITIES,
+          },
+          versions: store.workflowVersionStore(
+            new NodeSha256ContentDigester(),
+          ),
+          store,
+          close: () => store.close(),
+        },
+      },
       releasePlan,
     );
   } catch (error) {
@@ -259,7 +272,20 @@ export async function createPostgresRuntimeWorker(
     return await composeRuntimeWorker(
       store,
       workspaceReadStore,
-      config,
+      {
+        ...config,
+        workflowComposition: config.workflowComposition ?? {
+          certification: {
+            schemaVersion: "crewon.workflow-runtime-certification.v0",
+            capabilities: WORKFLOW_RUNTIME_CAPABILITIES,
+          },
+          versions: store.workflowVersionStore(
+            new NodeSha256ContentDigester(),
+          ),
+          store,
+          close: () => store.close(),
+        },
+      },
       releasePlan,
     );
   } catch (error) {

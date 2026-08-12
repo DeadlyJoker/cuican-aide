@@ -56,15 +56,13 @@ test("production composition rejects missing security authorities before opening
   );
 });
 
-test("production keeps Workflow commands disabled without cross-process certification", () => {
+test("production composes Workflow commands from the single PostgreSQL Store", () => {
   const source = readFileSync(
     new URL("./production-composition.ts", import.meta.url),
     "utf8",
   );
-  assert.match(
-    source,
-    /selectWorkflowRunStartFactory\(\{ status: "disabled" \}\)/u,
-  );
-  assert.doesNotMatch(source, /new WorkflowRunApplicationService/u);
+  assert.doesNotMatch(source, /selectWorkflowRunStartFactory/u);
+  assert.match(source, /new WorkflowRunApplicationService/u);
+  assert.match(source, /new WorkflowHumanGateApplicationService/u);
   assert.match(source, /await workflowVersionStore\.migrate\(\)/u);
 });

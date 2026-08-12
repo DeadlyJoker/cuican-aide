@@ -263,14 +263,16 @@ function composeControlApi(
       store,
       authorization,
     });
-    const workflowStore = store instanceof SqliteRunStore ? store : null;
+    const workflowStore = store;
     const workflowCandidate =
       config.workflowComposition === undefined || workflowStore === null
         ? null
         : {
             status: "candidate" as const,
             candidate: {
-              backend: "sqlite" as const,
+              backend: store instanceof SqliteRunStore
+                ? "sqlite" as const
+                : "postgres" as const,
               ...config.workflowComposition.certification,
               createWorkflowRunStartService: () =>
                 new WorkflowRunApplicationService({
