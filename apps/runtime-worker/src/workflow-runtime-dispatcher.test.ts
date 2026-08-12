@@ -231,13 +231,32 @@ class CompositionFixture implements WorkflowRunCompositionStore {
     WorkflowRunCompositionStore["settleWorkflowHumanGate"]
   >[0][] = [];
 
-  async admitWorkflowNodes() {
-    return {
-      disposition: this.admissionDisposition,
-      execution: executionState("running", this.admissions),
-      admissions: this.admissions,
-      reconciliationClaims: [],
-    };
+  admitWorkflowNodes(): ReturnType<
+    WorkflowRunCompositionStore["admitWorkflowNodes"]
+  > {
+    const execution = executionState("running", this.admissions);
+    if (this.admissionDisposition === "fresh") {
+      return Promise.resolve({
+        disposition: "fresh",
+        execution,
+        admissions: this.admissions,
+        reconciliationClaims: [],
+      });
+    }
+    if (this.admissionDisposition === "replay") {
+      return Promise.resolve({
+        disposition: "replay",
+        execution,
+        admissions: [],
+        reconciliationClaims: [],
+      });
+    }
+    return Promise.resolve({
+      disposition: "reconcileRequired",
+      execution,
+      admissions: [],
+      reconciliationClaims: this.admissions.map(({ claim }) => claim),
+    });
   }
 
   async settleWorkflowNode(

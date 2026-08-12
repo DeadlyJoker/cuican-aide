@@ -37,14 +37,24 @@ export interface WorkflowRunCompositionStore {
     schedulerOperationId: string;
     leaseDurationMs: number;
   }): Promise<
-    Readonly<{
-      disposition: "fresh" | "replay" | "reconcileRequired";
-      execution: WorkflowExecutionState;
-      /** Non-empty execution authority is legal only for `fresh`. */
-      admissions: readonly WorkflowNodeAttemptAdmission[];
-      /** Stable identities are legal only for `reconcileRequired`. */
-      reconciliationClaims: readonly WorkflowNodeClaim[];
-    }>
+    | Readonly<{
+        disposition: "fresh";
+        execution: WorkflowExecutionState;
+        admissions: readonly WorkflowNodeAttemptAdmission[];
+        reconciliationClaims: readonly [];
+      }>
+    | Readonly<{
+        disposition: "replay";
+        execution: WorkflowExecutionState;
+        admissions: readonly [];
+        reconciliationClaims: readonly [];
+      }>
+    | Readonly<{
+        disposition: "reconcileRequired";
+        execution: WorkflowExecutionState;
+        admissions: readonly [];
+        reconciliationClaims: readonly WorkflowNodeClaim[];
+      }>
   >;
 
   /**
