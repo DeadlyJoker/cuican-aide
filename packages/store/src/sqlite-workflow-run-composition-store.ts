@@ -319,6 +319,7 @@ export class SqliteWorkflowRunCompositionStore {
       this.#database.exec("BEGIN IMMEDIATE");
       const replay = this.#receipt(input, "settleNode", fingerprint);
       if (replay !== null) {
+        this.#validateTerminalReplay(input, replay);
         this.#database.exec("COMMIT");
         return structuredClone({
           ...(replay as object),
@@ -457,9 +458,9 @@ export class SqliteWorkflowRunCompositionStore {
     const now = new Date(nowMs).toISOString();
     const fingerprint = this.#fingerprint("settleGate", input);
     try {
-      this.#database.exec("BEGIN IMMEDIATE");
       const replay = this.#receipt(input, "settleGate", fingerprint);
       if (replay !== null) {
+        this.#validateTerminalReplay(input, replay);
         this.#database.exec("COMMIT");
         return structuredClone({
           ...(replay as object),
@@ -1631,6 +1632,41 @@ export class SqliteWorkflowRunCompositionStore {
     ).run(messageId, input.tenantId, input.runId, message.topic,
       stableJson(message), now, nowMs);
     return "terminalConverged";
+  }
+
+  #validateTerminalReplay(
+    input: { tenantId: string; runId: string; operationId: string },
+    replay: unknown,
+  ): void {
+    const result = replay as { runDisposition?: unknown; execution?: unknown };
+    if (result.runDisposition !== "terminalConverged") return;
+    const execution = result.execution as import("@crewon/application").WorkflowExecutionState;
+    validateWorkflowExecutionState(execution);
+    const run = this.#loadRun(input.tenantId, input.runId);
+    const eventId = workflowAuthorityId("run-event", input, this.#digester);
+    const messageId = workflowAuthorityId("run-outbox", input, this.#digester);
+    const eventRow = this.#database.prepare(
+      `SELECT event_json FROM run_events WHERE tenant_id=? AND run_id=? AND event_id=?`,
+    ).get(input.tenantId, input.runId, eventId) as { event_json: string } | undefined;
+    const outboxRow = this.#database.prepare(
+      `SELECT message_json FROM outbox WHERE tenant_id=? AND run_id=? AND message_id=?`,
+    ).get(input.tenantId, input.runId, messageId) as { message_json: string } | undefined;
+    if (run === null || eventRow === undefined || outboxRow === undefined ||
+        run.lastSequence < 1 || run.status !== execution.status)
+      throw new RunStoreError("workflow_composition_terminal_replay_corrupt");
+    const event = JSON.parse(eventRow.event_json) as { eventId?: unknown; sequence?: unknown; type?: unknown };
+    const outbox = JSON.parse(outboxRow.message_json) as { messageId?: unknown; payload?: Record<string, unknown> };
+    if (event.eventId !== eventId || event.sequence !== run.lastSequence ||
+        outbox.messageId !== messageId || outbox.payload?.eventId !== eventId ||
+        outbox.payload?.throughSequence !== event.sequence)
+      throw new RunStoreError("workflow_composition_terminal_replay_corrupt");
+    if (execution.status === "completed") {
+      const output = this.#loadExecutionValue(input.tenantId, input.runId,
+        "workflowOutput", null);
+      if (output === null || run.outputRef !== output.valueId ||
+          this.#digester.sha256(canonicalJson(output.value)) !== output.valueDigest)
+        throw new RunStoreError("workflow_composition_terminal_replay_corrupt");
+    }
   }
 }
 
