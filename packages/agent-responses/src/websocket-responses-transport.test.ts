@@ -291,6 +291,103 @@ test("falls back after the Rust-aligned WebSocket budget and gives HTTP a fresh 
   );
 });
 
+test("marks reasoning-only WebSocket partials discarded before successful HTTP fallback", async (context) => {
+  const httpBodies: Readonly<Record<string, unknown>>[] = [];
+  const fixture = await websocketFixture(context, async (request, response) => {
+    httpBodies.push(
+      JSON.parse(await requestBody(request)) as Readonly<
+        Record<string, unknown>
+      >,
+    );
+    sendHttpCompleted(response, "resp-http-reasoning-fallback", "done");
+  });
+  fixture.webSocketServer.on("connection", (socket) => {
+    socket.once("message", () => {
+      for (const event of [
+        {
+          type: "response.created",
+          sequence_number: 0,
+          response: { id: "resp-ws-reasoning-partial" },
+        },
+        {
+          type: "response.reasoning_summary_part.added",
+          sequence_number: 1,
+          summary_index: 0,
+        },
+        {
+          type: "response.reasoning_summary_text.delta",
+          sequence_number: 2,
+          summary_index: 0,
+          delta: "discarded summary",
+        },
+        {
+          type: "response.reasoning_text.delta",
+          sequence_number: 3,
+          content_index: 0,
+          delta: "provider-private",
+        },
+      ]) {
+        socket.send(JSON.stringify(event));
+      }
+      socket.close();
+    });
+  });
+  const transport = new ResilientResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+    websocketMaxRetries: 0,
+  });
+  context.after(() => transport.close());
+  const events = await collect(
+    new CrewONAgentKernel({ transport }).runSegment(
+      segmentContract("run-reasoning-fallback", "hello"),
+      signal(),
+    ),
+  );
+
+  assert.deepEqual(
+    events
+      .filter(
+        (event) =>
+          event.type === "model.reasoning.summary" ||
+          event.type === "model.transport.fallback" ||
+          event.type === "segment.completed",
+      )
+      .map((event) => ({ type: event.type, data: event.data })),
+    [
+      {
+        type: "model.reasoning.summary",
+        data: { kind: "partAdded", summaryIndex: 0 },
+      },
+      {
+        type: "model.reasoning.summary",
+        data: {
+          kind: "delta",
+          summaryIndex: 0,
+          delta: "discarded summary",
+        },
+      },
+      {
+        type: "model.transport.fallback",
+        data: {
+          fromTransport: "websocket",
+          toTransport: "http",
+          code: "responses_websocket_closed",
+          discardedOutput: true,
+        },
+      },
+      { type: "segment.completed", data: { output: "done" } },
+    ],
+  );
+  assert.deepEqual(
+    events
+      .filter((event) => event.type === "model.output.delta")
+      .map((event) => event.data.delta),
+    ["done"],
+  );
+  assert.deepEqual(httpBodies[0]?.input, [{ role: "user", content: "hello" }]);
+});
+
 test("matches the shared Rust fallback and sticky transport decisions", async (context) => {
   let websocketConnections = 0;
   let httpRequests = 0;
@@ -575,6 +672,14 @@ function sendCompleted(
   for (const event of completedEvents(responseId, output)) {
     socket.send(JSON.stringify(event));
   }
+}
+
+async function requestBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function sendHttpCompleted(

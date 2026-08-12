@@ -391,11 +391,15 @@ export class ResilientResponsesTransport implements ModelTransportPort {
       yield* this.#http.stream(request, signal);
       return;
     }
-    let emittedOutput = false;
+    let emittedObservation = false;
     try {
       for await (const event of this.#websocket.stream(request, signal)) {
-        if (event.type === "output.delta") {
-          emittedOutput = true;
+        if (
+          event.type === "output.delta" ||
+          event.type === "reasoning.delta" ||
+          event.type === "reasoning.part.added"
+        ) {
+          emittedObservation = true;
         }
         if (event.type === "failed" && event.retryable) {
           throw transportError("unavailable", event.code, true);
@@ -410,7 +414,12 @@ export class ResilientResponsesTransport implements ModelTransportPort {
           error instanceof ModelTransportError &&
           error.code === "responses_websocket_upgrade_required"
         ) {
-          yield* this.#fallback(request, signal, error.code, emittedOutput);
+          yield* this.#fallback(
+            request,
+            signal,
+            error.code,
+            emittedObservation,
+          );
           return;
         }
         throw error;
@@ -419,7 +428,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
       if (this.#websocketFailures <= this.#websocketMaxRetries) {
         throw error;
       }
-      yield* this.#fallback(request, signal, error.code, emittedOutput);
+      yield* this.#fallback(request, signal, error.code, emittedObservation);
     }
   }
 

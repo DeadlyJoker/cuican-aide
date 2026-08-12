@@ -301,7 +301,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 });
                 break;
               case "transport.fallback": {
-                const discardedOutput = output.length > 0;
+                const discardedOutput = output.length > 0 || reasoningObserved;
                 if (event.discardedOutput !== discardedOutput) {
                   throw new AgentKernelError(
                     "model_transport_fallback_discard_invalid",
@@ -330,6 +330,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
                   },
                 );
                 output = "";
+                reasoningObserved = false;
                 usageSeen = false;
                 toolCalls.length = 0;
                 retries = 0;

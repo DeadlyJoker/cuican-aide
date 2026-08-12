@@ -1223,7 +1223,12 @@ test("resets the sampling budget and discarded output on a transport fallback", 
     async *stream() {
       requests += 1;
       if (requests === 1) {
-        yield { type: "output.delta", delta: "discarded" };
+        yield {
+          type: "reasoning.delta",
+          channel: "summary",
+          index: 0,
+          delta: "discarded",
+        };
         yield {
           type: "transport.fallback",
           fromTransport: "websocket",
@@ -1254,7 +1259,7 @@ test("resets the sampling budget and discarded output on a transport fallback", 
     events.map(({ sequence, type }) => ({ sequence, type })),
     [
       { sequence: 1, type: "segment.started" },
-      { sequence: 2, type: "model.output.delta" },
+      { sequence: 2, type: "model.reasoning.summary" },
       { sequence: 3, type: "model.transport.fallback" },
       { sequence: 4, type: "model.sampling.retry" },
       { sequence: 5, type: "model.output.delta" },
