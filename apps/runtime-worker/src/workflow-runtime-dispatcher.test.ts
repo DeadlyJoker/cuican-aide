@@ -86,7 +86,7 @@ test("node admission replay performs zero duplicate side effects", async () => {
   assert.equal(fixture.settlements, 0);
 });
 
-test("fresh sibling node WorkItems execute and settle independently in reverse order", async () => {
+test("fresh node admission fails closed before digest-only execution", async () => {
   const left = composition();
   const right = composition();
   const order: string[] = [];
@@ -98,27 +98,17 @@ test("fresh sibling node WorkItems execute and settle independently in reverse o
       order.push(node.claimId);
       return { status: "completed", resultDigest: digest(node.claimId) };
     }).dispatch(input("node", claimId));
-  await run(right, "claim-right");
-  await run(left, "claim-left");
-  assert.deepEqual(order, ["claim-right", "claim-left"]);
-  assert.equal(left.settlements, 1);
-  assert.equal(right.settlements, 1);
-});
-
-test("uncertain settlement does not issue a second mutation under the node lease", async () => {
-  const fixture = composition();
-  fixture.failSettlement = true;
-  const dispatcher = create(fixture.store, async () => ({
-    status: "completed",
-    resultDigest: digest("x"),
-  }));
-  assert.deepEqual(await dispatcher.dispatch(input("node")), {
-    kind: "recovery",
-    runId: "r",
-    code: "workflow_settlement_result_unknown",
-  });
-  assert.equal(fixture.settlements, 1);
-  assert.equal(fixture.reconciliations, 0);
+  await assert.rejects(
+    run(right, "claim-right"),
+    /workflow_node_value_authority_unavailable/,
+  );
+  await assert.rejects(
+    run(left, "claim-left"),
+    /workflow_node_value_authority_unavailable/,
+  );
+  assert.deepEqual(order, []);
+  assert.equal(left.settlements, 0);
+  assert.equal(right.settlements, 0);
 });
 
 function composition() {
