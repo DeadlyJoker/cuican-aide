@@ -98,12 +98,12 @@ by a different Store instance. No fake adapter may be used to claim an end-to-en
 | --- | --- | --- |
 | transaction contract | 通过 | this protocol plus discriminated Application ports |
 | Workflow Start | 通过（SQLite Slice 1） | real Application Start plus exact receipt replay; replay performs no route resolution or ID generation |
-| Scheduler fan-out | 通过（SQLite Slice 1） | real Worker persists `run.started`, then scheduler creates independent Agent and Verification WorkItems |
-| Node admission | 通过（SQLite Slice 1） | real certified Worker admits each node under its own WorkItem/Attempt; mock adversarial suite separately covers replay and response-loss fencing |
-| Node settlement | 通过（SQLite Slice 1） | real Agent and Verification dispatch evidence and terminal receipts settle atomically; both nodes sample once |
+| Scheduler fan-out | 通过（SQLite Slices 1–2） | real Worker persists `run.started`; two-connection Slice 2 creates frozen-order sibling WorkItems with distinct claims and no scheduler Attempt |
+| Node admission | 通过（SQLite Slices 1–2） | two real Workers hold distinct sibling leases and simultaneously running Steps/Attempts; mock adversarial suite separately covers replay and response-loss fencing |
+| Node settlement | 通过（SQLite Slices 1–2） | siblings settle right-before-left without authority reuse; Verification appears only after both dependencies terminate and receives frozen-order input |
 | Human Gate | 实现中 | isolated Store behavior exists; Slice 3 not accepted |
-| Reconciliation | 实现中 | SQLite partial; Worker/PG production path incomplete |
-| Terminal convergence | 通过（SQLite Slice 1） | real two-node Run reaches canonical `completed`; event replay deep-equals the stored Run and no Attempt remains running |
+| Reconciliation | 实现中 | SQLite partial; admitted lease expiry/crash behavior remains a mandatory Slice 4 gate; Worker/PG production path incomplete |
+| Terminal convergence | 通过（SQLite Slices 1–2 success path） | single and parallel success Runs reach canonical `completed` with one sample per node; sibling failure/cancel convergence remains a mandatory Slice 5 gate |
 | PostgreSQL real-host | 未验证 | focused real-host checks passed, but Slice 6 dual-process acceptance has not |
 | Packaged crash recovery | 未验证 | no packaged Workflow vertical acceptance |
 | Rust compatibility | 未验证 | base Agent parity evidence exists; W01 protocol/runtime compatibility pending |
