@@ -6,6 +6,7 @@ import {
   type CommitWorkflowToolContinuationInput,
   type WorkflowNodeContinuationCheckpoint,
   type CommitWorkflowAssistantContinuationInput,
+  type WorkflowNodeContinuationStore,
   type WorkflowRunCompositionStore,
 } from "@crewon/application";
 import {
@@ -58,6 +59,8 @@ import {
 } from "./workflow-run-composition-support.ts";
 import { SqliteWorkflowNodeContinuationAuthority } from "./sqlite-workflow-node-continuation.ts";
 import { settleSqliteWorkflowNodeWithinTransaction } from "./sqlite-workflow-node-settlement.ts";
+import { settleSqliteWorkflowNodeModelTerminalWithinTransaction } from "./sqlite-workflow-model-settlement.ts";
+import type { SqliteWorkflowNodeSettlementContext } from "./sqlite-workflow-node-settlement.ts";
 
 type Dependencies = Readonly<{
   digester: WorkflowContentDigester;
@@ -123,6 +126,26 @@ export class SqliteWorkflowRunCompositionStore
     return this.#continuations.commitTool(input);
   }
 
+  async settleWorkflowNodeModelTerminal(
+    input: Parameters<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]>[0],
+  ): ReturnType<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]> {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    const fingerprint = this.#fingerprint("settleNode", input);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const result = settleSqliteWorkflowNodeModelTerminalWithinTransaction(
+        this.#nodeSettlementContext(), input, fingerprint, now, nowMs,
+      );
+      this.#database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      rollback(this.#database);
+      if (!(error instanceof RunStoreError)) throw error;
+      throw normalizeCompositionError(error);
+    }
+  }
+
   async settleWorkflowNode(
     input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
   ): ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]> {
@@ -131,28 +154,9 @@ export class SqliteWorkflowRunCompositionStore
     const fingerprint = this.#fingerprint("settleNode", input);
     try {
       this.#database.exec("BEGIN IMMEDIATE");
-      const result = settleSqliteWorkflowNodeWithinTransaction({
-        database: this.#database,
-        digester: this.#digester,
-        receipt: (value, kind, hash) => this.#receipt(value, kind, hash),
-        validateTerminalReplay: (value, replay) =>
-          this.#validateTerminalReplay(value, replay),
-        validateLease: (value, clock) => this.#validateLease(value, clock),
-        assertCanonicalRun,
-        loadRun: (tenantId, runId) => this.#loadRun(tenantId, runId),
-        loadExecution: (tenantId, runId) => this.#loadExecution(tenantId, runId),
-        loadWorkflow: (value) => this.#loadWorkflow(value),
-        insertExecutionValue: (value) => this.#insertExecutionValue(value),
-        writeExecution: (value, timestamp) => this.#writeExecution(value, timestamp),
-        convergeTerminalRun: (value, workflow, execution, timestamp, clock) =>
-          this.#convergeTerminalRun(value, workflow, execution, timestamp, clock),
-        insertWorkflowWorkItem: (id, value, payload, timestamp, clock) =>
-          this.#insertWorkflowWorkItem(id, value, payload, timestamp, clock),
-        rootInputRef: (value) => this.#rootInputRef(value),
-        insertReceipt: (value, kind, hash, receipt) =>
-          this.#insertReceipt(value, kind, hash, receipt),
-        completeLease: (value, clock) => this.#completeLease(value, clock),
-      }, input, fingerprint, now, nowMs);
+      const result = settleSqliteWorkflowNodeWithinTransaction(
+        this.#nodeSettlementContext(), input, fingerprint, now, nowMs,
+      );
       this.#database.exec("COMMIT");
       return result;
     } catch (error) {
@@ -1069,6 +1073,31 @@ export class SqliteWorkflowRunCompositionStore
       row.lease_expires_at_ms <= nowMs
     )
       throw new RunStoreError("lease_expired");
+  }
+
+  #nodeSettlementContext(): SqliteWorkflowNodeSettlementContext {
+    return {
+      database: this.#database,
+      digester: this.#digester,
+      receipt: (value, kind, hash) => this.#receipt(value, kind, hash),
+      validateTerminalReplay: (value, replay) =>
+        this.#validateTerminalReplay(value, replay),
+      validateLease: (value, clock) => this.#validateLease(value, clock),
+      assertCanonicalRun,
+      loadRun: (tenantId, runId) => this.#loadRun(tenantId, runId),
+      loadExecution: (tenantId, runId) => this.#loadExecution(tenantId, runId),
+      loadWorkflow: (value) => this.#loadWorkflow(value),
+      insertExecutionValue: (value) => this.#insertExecutionValue(value),
+      writeExecution: (value, timestamp) => this.#writeExecution(value, timestamp),
+      convergeTerminalRun: (value, workflow, execution, timestamp, clock) =>
+        this.#convergeTerminalRun(value, workflow, execution, timestamp, clock),
+      insertWorkflowWorkItem: (id, value, payload, timestamp, clock) =>
+        this.#insertWorkflowWorkItem(id, value, payload, timestamp, clock),
+      rootInputRef: (value) => this.#rootInputRef(value),
+      insertReceipt: (value, kind, hash, receipt) =>
+        this.#insertReceipt(value, kind, hash, receipt),
+      completeLease: (value, clock) => this.#completeLease(value, clock),
+    };
   }
 
   #loadRun(tenantId: string, runId: string): RunState | null {

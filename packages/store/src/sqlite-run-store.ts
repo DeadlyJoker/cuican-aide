@@ -606,9 +606,9 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
     return this.#workflow().commitWorkflowToolContinuation(input);
   }
   async settleWorkflowNodeModelTerminal(
-    _input: Parameters<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]>[0],
+    input: Parameters<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]>[0],
   ): ReturnType<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]> {
-    throw new RunStoreError("workflow_composition_contract_incomplete");
+    return this.#workflow().settleWorkflowNodeModelTerminal(input);
   }
 
   constructor(path: string, options: {

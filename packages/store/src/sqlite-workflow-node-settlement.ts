@@ -24,7 +24,9 @@ import {
 } from "./workflow-run-composition-support.ts";
 
 type Input = Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0];
-type Result = Awaited<ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]>>;
+export type SqliteWorkflowNodeSettlementResult = Awaited<
+  ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]>
+>;
 
 export type SqliteWorkflowNodeSettlementContext = Readonly<{
   database: DatabaseSync;
@@ -61,12 +63,17 @@ export type SqliteWorkflowNodeSettlementContext = Readonly<{
 }>;
 
 /** Executes ordinary node settlement inside an already-open SQLite transaction. */
-export function settleSqliteWorkflowNodeWithinTransaction(
+export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflowNodeSettlementResult>(
   context: SqliteWorkflowNodeSettlementContext,
   input: Input,
   fingerprint: string,
   now: string,
   nowMs: number,
+  options: Readonly<{
+    attemptCheckpointDigest?: string | null;
+    beforeReceipt?(result: SqliteWorkflowNodeSettlementResult): void;
+    mapResult?(result: SqliteWorkflowNodeSettlementResult): Result;
+  }> = {},
 ): Result {
   const replay = context.receipt(input, "settleNode", fingerprint);
   if (replay !== null) {
@@ -117,7 +124,11 @@ export function settleSqliteWorkflowNodeWithinTransaction(
       runId: input.runId,
       workItemId: input.lease.workItemId,
       leaseEpoch: input.lease.leaseEpoch,
-      attempt: terminalAttempt(input, now),
+      attempt: terminalAttempt(
+        input,
+        now,
+        options.attemptCheckpointDigest ?? null,
+      ),
     });
   }
   context.writeExecution(next, now);
@@ -182,17 +193,19 @@ export function settleSqliteWorkflowNodeWithinTransaction(
     },
     runDisposition,
   };
-  context.insertReceipt(input, "settleNode", fingerprint, result);
+  options.beforeReceipt?.(result);
+  const returned = options.mapResult?.(result) ?? result as Result;
+  context.insertReceipt(input, "settleNode", fingerprint, returned);
   context.completeLease(input, nowMs);
-  return structuredClone(result);
+  return structuredClone(returned);
 }
 
-function terminalAttempt(input: Input, now: string) {
+function terminalAttempt(input: Input, now: string, checkpointDigest: string | null) {
   const common = {
     stepId: input.stepId,
     attemptId: input.attemptId,
     finishedAt: now,
-    checkpointDigest: null,
+    checkpointDigest,
   };
   switch (input.outcome.status) {
     case "completed":

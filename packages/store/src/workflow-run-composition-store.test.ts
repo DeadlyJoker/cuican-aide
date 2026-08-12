@@ -17,6 +17,11 @@ import {
 import type { LeaseClock } from "./lease-clock.ts";
 import { PostgresWorkflowRunCompositionStore } from "./postgres-workflow-run-composition-store.ts";
 import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
+import {
+  markSqliteModelDispatchPossiblySent,
+  observeSqliteModelDispatchResponse,
+  prepareSqliteModelDispatch,
+} from "./sqlite-model-dispatch-evidence.ts";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 
 const digester = {
@@ -92,6 +97,7 @@ test("SQLite composition prototype exposes only the current Store contract", () 
     "scheduleWorkflowNodes",
     "admitWorkflowNodeWork",
     "settleWorkflowNode",
+    "settleWorkflowNodeModelTerminal",
     "recordWorkflowHumanGateDecision",
     "settleWorkflowHumanGate",
     "scheduleWorkflowReconciliation",
@@ -173,6 +179,12 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
   const replayDatabase = new DatabaseSync(":memory:");
   replayDatabase.close();
   const work = scheduled.nodeWorkItems[0]!;
+  const nodeLease = {
+    workItemId: work.workItemId,
+    ownerId: "node-worker",
+    leaseId: "node-lease",
+    leaseEpoch: 1,
+  };
   database
     .prepare(
       `UPDATE work_items SET status='leased',lease_owner_id='node-worker',lease_id='node-lease',
@@ -182,12 +194,7 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
   const admitted = await store.admitWorkflowNodeWork({
     tenantId: "tenant-1",
     runId: "run-1",
-    lease: {
-      workItemId: work.workItemId,
-      ownerId: "node-worker",
-      leaseId: "node-lease",
-      leaseEpoch: 1,
-    },
+    lease: nodeLease,
     binding,
     nodeId: work.nodeId,
     claimId: work.claimId,
@@ -205,12 +212,7 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
   const replay = await store.admitWorkflowNodeWork({
     tenantId: "tenant-1",
     runId: "run-1",
-    lease: {
-      workItemId: work.workItemId,
-      ownerId: "node-worker",
-      leaseId: "node-lease",
-      leaseEpoch: 1,
-    },
+    lease: nodeLease,
     binding,
     nodeId: work.nodeId,
     claimId: work.claimId,
@@ -225,6 +227,67 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
     database.prepare("SELECT count(*) AS count FROM run_attempts").get()?.count,
     1,
   );
+  const authority = {
+    tenantId: "tenant-1", runId: "run-1", workItemId: work.workItemId,
+    leaseEpoch: 1, nodeId: work.nodeId, nodeKind: "agent" as const,
+    claimId: work.claimId, claimEpoch: work.claimEpoch,
+    agentVersionId: "agent-v1",
+    attempt: { stepId: work.nodeId,
+      attemptId: admitted.admission!.attempt.attemptId },
+  };
+  const prepared = prepareSqliteModelDispatch(database, {
+    tenantId: "tenant-1", runId: "run-1", lease: nodeLease,
+    attempt: authority.attempt, operationId: "dispatch-agent-1",
+    requestSequence: 1, operation: "dispatch",
+    requestDigest: digester.sha256("request"),
+    provider: { agentVersionId: "agent-v1", adapterName: "responses",
+      adapterVersion: "1", modelId: "model-1" },
+    preparedAt: "2026-08-12T00:00:01.000Z",
+  });
+  const sent = markSqliteModelDispatchPossiblySent(database, {
+    tenantId: "tenant-1", runId: "run-1", lease: nodeLease,
+    attempt: authority.attempt, operationId: prepared.operationId,
+    requestSequence: 1, expectedRevision: prepared.revision,
+    transitionedAt: "2026-08-12T00:00:02.000Z",
+  });
+  const observed = observeSqliteModelDispatchResponse(database, {
+    tenantId: "tenant-1", runId: "run-1", lease: nodeLease,
+    attempt: authority.attempt, operationId: prepared.operationId,
+    requestSequence: 1, expectedRevision: sent.revision,
+    checkpointDigest: digester.sha256("checkpoint"),
+    transitionedAt: "2026-08-12T00:00:03.000Z",
+  });
+  await store.commitWorkflowAssistantContinuation({
+    lease: nodeLease, authority, expectedContinuationRevision: null,
+    next: { schemaVersion: "crewon.workflow-node-continuation.v0",
+      authority, segmentId: "segment-1", modelSampleIndex: 0,
+      toolRoundsConsumed: 0, providerCheckpoint: null,
+      providerTurnState: null, activeDispatch: {
+        operationId: observed.operationId, requestSequence: 1,
+        expectedRevision: observed.revision, status: "responseObserved",
+      }, history: [] },
+    committedAt: "2026-08-12T00:00:03.000Z",
+  });
+  clock.set(Date.parse("2026-08-12T00:00:04.000Z"));
+  const evidence = createWorkflowNodeTerminalEvidence({
+    workflow, nodeId: work.nodeId, outcome: { status: "completed", value: {} },
+    digester,
+  });
+  const terminalInput = {
+    binding, nodeId: work.nodeId, operationId: "settle-agent-model-1",
+    evidence, lease: nodeLease, authority,
+    dispatch: { operationId: observed.operationId, requestSequence: 1,
+      expectedRevision: observed.revision, status: "responseObserved" as const },
+    dispatchTerminalOutcome: { kind: "completed" as const, code: null,
+      certainty: "responseObserved" as const },
+  };
+  const settled = await store.settleWorkflowNodeModelTerminal(terminalInput);
+  assert.equal(settled.disposition, "settled");
+  assert.equal(settled.continuation, null);
+  assert.equal(await store.loadWorkflowNodeContinuation(authority), null);
+  assert.deepEqual(await store.settleWorkflowNodeModelTerminal(terminalInput), {
+    ...settled, disposition: "replay",
+  });
 });
 
 const postgresUrl = process.env.CREWON_TEST_POSTGRES_URL;
