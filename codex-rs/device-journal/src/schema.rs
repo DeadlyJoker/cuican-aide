@@ -14,6 +14,8 @@ use crate::authority;
 
 #[path = "filesystem_read_schema.rs"]
 mod filesystem_read_schema;
+#[path = "tool_journal_schema.rs"]
+mod tool_journal_schema;
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
@@ -126,49 +128,6 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
         ],
     )
     .await?;
-    assert_columns(
-        pool,
-        "tool_executions",
-        &[
-            ("execution_id", 1),
-            ("command_json", 0),
-            ("command_fingerprint", 0),
-            ("device_id", 0),
-            ("capability", 0),
-            ("lease_id", 0),
-            ("lease_epoch", 0),
-            ("action_digest", 0),
-            ("acknowledged_through", 0),
-            ("created_at", 0),
-        ],
-    )
-    .await?;
-    assert_columns(
-        pool,
-        "tool_events",
-        &[
-            ("execution_id", 1),
-            ("sequence", 2),
-            ("event_json", 0),
-            ("event_fingerprint", 0),
-            ("event_type", 0),
-            ("receipt_id", 0),
-            ("observed_at", 0),
-        ],
-    )
-    .await?;
-    assert_columns(
-        pool,
-        "tool_acks",
-        &[
-            ("execution_id", 1),
-            ("through_sequence", 2),
-            ("ack_json", 0),
-            ("ack_fingerprint", 0),
-            ("acknowledged_at", 0),
-        ],
-    )
-    .await?;
     assert_table_sql(
         pool,
         "device_journal_schema",
@@ -242,6 +201,7 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
     )
     .await?;
     filesystem_read_schema::assert_authority(pool).await?;
+    tool_journal_schema::assert_authority(pool).await?;
     let index_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'index' AND name IN (?, ?) AND tbl_name IN (?, ?)",
     )
@@ -326,9 +286,6 @@ async fn assert_columns(
         "workspace_executions" => sqlx::query("PRAGMA table_info(workspace_executions)"),
         "workspace_events" => sqlx::query("PRAGMA table_info(workspace_events)"),
         "workspace_acks" => sqlx::query("PRAGMA table_info(workspace_acks)"),
-        "tool_executions" => sqlx::query("PRAGMA table_info(tool_executions)"),
-        "tool_events" => sqlx::query("PRAGMA table_info(tool_events)"),
-        "tool_acks" => sqlx::query("PRAGMA table_info(tool_acks)"),
         _ => return Err(authority("device_journal_schema_corrupt")),
     }
     .fetch_all(pool)
@@ -357,9 +314,6 @@ fn expected_column_type(table: &str, column: &str) -> &'static str {
             )
             | ("workspace_events", "sequence" | "connection_epoch")
             | ("workspace_acks", "through_sequence" | "connection_epoch")
-            | ("tool_executions", "lease_epoch" | "acknowledged_through")
-            | ("tool_events", "sequence")
-            | ("tool_acks", "through_sequence")
     ) {
         "INTEGER"
     } else {

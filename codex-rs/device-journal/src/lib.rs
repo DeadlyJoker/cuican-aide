@@ -14,6 +14,8 @@ mod listing;
 mod records;
 mod schema;
 mod tool_journal;
+mod tool_journal_codec;
+mod tool_journal_validation;
 
 use crewon_device_protocol::DeviceWorkspaceListCommand;
 use crewon_device_protocol::DeviceWorkspaceListEvent;

@@ -1,15 +1,23 @@
 use crewon_device_protocol::DeviceExecutionAck;
 use crewon_device_protocol::DeviceExecutionCommand;
 use crewon_device_protocol::DeviceExecutionEvent;
-use crewon_device_protocol::parse_device_execution_ack;
-use crewon_device_protocol::parse_device_execution_command;
-use crewon_device_protocol::parse_device_execution_event;
-use sha2::Digest as _;
-use sha2::Sha256;
+use sqlx::Row as _;
 
 use crate::DeviceJournalError;
 use crate::DeviceWorkspaceJournal;
 use crate::authority;
+use crate::tool_journal_codec::decode_ack;
+use crate::tool_journal_codec::decode_command;
+use crate::tool_journal_codec::decode_event;
+use crate::tool_journal_codec::encode_ack;
+use crate::tool_journal_codec::encode_command;
+use crate::tool_journal_codec::encode_event;
+use crate::tool_journal_codec::event_envelope;
+use crate::tool_journal_validation::same_ack_identity;
+use crate::tool_journal_validation::validate_accepted;
+use crate::tool_journal_validation::validate_ack;
+use crate::tool_journal_validation::validate_ack_time;
+use crate::tool_journal_validation::validate_terminal;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolJournalExecution {
@@ -73,25 +81,33 @@ impl DeviceWorkspaceJournal {
         if execution_id.is_empty() || execution_id.len() > 512 {
             return Err(authority("device_tool_execution_id_invalid"));
         }
-        let mut connection = self.pool.acquire().await?;
-        load(&mut connection, execution_id).await
+        let mut tx = self.pool.begin().await?;
+        let execution = load(&mut tx, execution_id).await?;
+        tx.commit().await?;
+        Ok(execution)
     }
 
     pub async fn list_tool_acknowledgements(
         &self,
     ) -> Result<Vec<ToolJournalAcknowledgement>, DeviceJournalError> {
-        use sqlx::Row as _;
-        let rows = sqlx::query("SELECT execution_id, acknowledged_through FROM tool_executions WHERE acknowledged_through > 0 ORDER BY execution_id")
-            .fetch_all(&self.pool).await?;
-        rows.into_iter()
-            .map(|row| {
-                Ok(ToolJournalAcknowledgement {
-                    execution_id: row.try_get("execution_id")?,
-                    through_sequence: u64::try_from(row.try_get::<i64, _>("acknowledged_through")?)
-                        .map_err(|_| authority("device_journal_authority_corrupt"))?,
-                })
-            })
-            .collect()
+        let mut tx = self.pool.begin().await?;
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT execution_id FROM tool_executions WHERE acknowledged_through > 0 ORDER BY execution_id",
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+        let mut acknowledgements = Vec::with_capacity(ids.len());
+        for execution_id in ids {
+            let execution = load(&mut tx, &execution_id)
+                .await?
+                .ok_or_else(|| authority("device_journal_authority_corrupt"))?;
+            acknowledgements.push(ToolJournalAcknowledgement {
+                execution_id,
+                through_sequence: execution.acknowledged_through,
+            });
+        }
+        tx.commit().await?;
+        Ok(acknowledgements)
     }
 
     pub async fn prepare_tool_with_admission<T, E>(
@@ -99,8 +115,7 @@ impl DeviceWorkspaceJournal {
         command: &DeviceExecutionCommand,
         admit: impl FnOnce() -> Result<(DeviceExecutionEvent, T), E>,
     ) -> Result<PrepareToolOutcome<T>, PrepareToolError<E>> {
-        let command_json = encode_command(command).map_err(PrepareToolError::Journal)?;
-        let fingerprint = fingerprint(&command_json);
+        let encoded_command = encode_command(command).map_err(PrepareToolError::Journal)?;
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
@@ -128,10 +143,23 @@ impl DeviceWorkspaceJournal {
         }
         let (accepted, admitted) = admit().map_err(PrepareToolError::Admission)?;
         validate_accepted(command, &accepted).map_err(PrepareToolError::Journal)?;
-        let accepted_json = encode_event(&accepted).map_err(PrepareToolError::Journal)?;
-        let envelope = envelope(&accepted);
+        let accepted_record = encode_event(&accepted).map_err(PrepareToolError::Journal)?;
+        let envelope = event_envelope(&accepted_record.record);
+        let receipt_owner: Option<String> = sqlx::query_scalar(
+            "SELECT execution_id FROM tool_events WHERE receipt_id = ? AND sequence = 1",
+        )
+        .bind(&envelope.receipt_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(DeviceJournalError::from)
+        .map_err(PrepareToolError::Journal)?;
+        if receipt_owner.is_some() {
+            return Err(PrepareToolError::Journal(authority(
+                "device_tool_receipt_conflict",
+            )));
+        }
         let inserted = sqlx::query("INSERT INTO tool_executions (execution_id, command_json, command_fingerprint, device_id, capability, lease_id, lease_epoch, action_digest, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            .bind(&command.execution_id).bind(command_json).bind(fingerprint)
+            .bind(&command.execution_id).bind(encoded_command.json).bind(encoded_command.fingerprint)
             .bind(&command.device_id).bind(&command.capability).bind(&command.lease_id)
             .bind(i64::try_from(command.lease_epoch).map_err(|_| authority("device_tool_command_invalid")).map_err(PrepareToolError::Journal)?)
             .bind(&command.action_digest).bind(&envelope.observed_at)
@@ -141,7 +169,7 @@ impl DeviceWorkspaceJournal {
                 "device_journal_authority_corrupt",
             )));
         }
-        insert_event(&mut tx, &accepted, &accepted_json)
+        insert_event(&mut tx, &accepted_record)
             .await
             .map_err(PrepareToolError::Journal)?;
         let execution = load(&mut tx, &command.execution_id)
@@ -164,7 +192,7 @@ impl DeviceWorkspaceJournal {
         &self,
         terminal: &DeviceExecutionEvent,
     ) -> Result<RecordToolTerminalOutcome, DeviceJournalError> {
-        if envelope(terminal).sequence != 2
+        if event_envelope(terminal).sequence != 2
             || matches!(
                 terminal,
                 DeviceExecutionEvent::Accepted { .. } | DeviceExecutionEvent::Output { .. }
@@ -172,7 +200,7 @@ impl DeviceWorkspaceJournal {
         {
             return Err(authority("device_tool_terminal_invalid"));
         }
-        let execution_id = envelope(terminal).execution_id.clone();
+        let execution_id = event_envelope(terminal).execution_id.clone();
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let existing = load(&mut tx, &execution_id)
             .await?
@@ -185,8 +213,8 @@ impl DeviceWorkspaceJournal {
             tx.rollback().await?;
             return Ok(RecordToolTerminalOutcome::Replayed(existing));
         }
-        let json = encode_event(terminal)?;
-        insert_event(&mut tx, terminal, &json).await?;
+        let encoded = encode_event(terminal)?;
+        insert_event(&mut tx, &encoded).await?;
         let committed = load(&mut tx, &execution_id)
             .await?
             .ok_or_else(|| authority("device_journal_authority_corrupt"))?;
@@ -198,48 +226,39 @@ impl DeviceWorkspaceJournal {
         &self,
         ack: &DeviceExecutionAck,
     ) -> Result<AcknowledgeToolOutcome, DeviceJournalError> {
-        let json = encode_ack(ack)?;
-        let parsed = parse_device_execution_ack(
-            serde_json::from_str(&json).map_err(|_| authority("device_tool_ack_invalid"))?,
-        )
-        .map_err(|_| authority("device_tool_ack_invalid"))?;
+        let encoded = encode_ack(ack)?;
+        let parsed = &encoded.record;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let existing = load(&mut tx, &parsed.execution_id)
             .await?
             .ok_or_else(|| authority("device_tool_execution_missing"))?;
-        if parsed.device_id != existing.command.device_id
-            || !(1..=2).contains(&parsed.through_sequence)
-            || parsed.through_sequence > if existing.terminal.is_some() { 2 } else { 1 }
-        {
-            return Err(authority("device_tool_ack_identity_mismatch"));
-        }
+        validate_ack(&existing, parsed)?;
         if parsed.through_sequence < existing.acknowledged_through {
             return Err(authority("device_tool_ack_backward"));
         }
+        let prior = load_latest_ack(&mut tx, &existing).await?;
+        validate_ack_time(&existing, parsed, prior.as_ref())?;
         if parsed.through_sequence == existing.acknowledged_through {
-            let prior: Option<String> = sqlx::query_scalar(
-                "SELECT ack_json FROM tool_acks WHERE execution_id = ? AND through_sequence = ?",
-            )
-            .bind(&parsed.execution_id)
-            .bind(
-                i64::try_from(parsed.through_sequence)
-                    .map_err(|_| authority("device_tool_ack_invalid"))?,
-            )
-            .fetch_optional(&mut *tx)
-            .await?;
-            if prior.as_deref() != Some(&json) {
+            let prior = prior.ok_or_else(|| authority("device_journal_authority_corrupt"))?;
+            if !same_ack_identity(&prior, parsed) {
                 return Err(authority("device_tool_ack_conflict"));
             }
             tx.rollback().await?;
             return Ok(AcknowledgeToolOutcome::Replayed(existing));
         }
-        sqlx::query("INSERT INTO tool_acks (execution_id, through_sequence, ack_json, ack_fingerprint, acknowledged_at) VALUES (?, ?, ?, ?, ?)")
+        let inserted = sqlx::query("INSERT INTO tool_acks (execution_id, through_sequence, ack_json, ack_fingerprint, acknowledged_at) VALUES (?, ?, ?, ?, ?)")
             .bind(&parsed.execution_id).bind(i64::try_from(parsed.through_sequence).map_err(|_| authority("device_tool_ack_invalid"))?)
-            .bind(&json).bind(fingerprint(&json)).bind(&parsed.acknowledged_at).execute(&mut *tx).await?;
-        sqlx::query("UPDATE tool_executions SET acknowledged_through = ? WHERE execution_id = ? AND acknowledged_through = ?")
+            .bind(encoded.json).bind(encoded.fingerprint).bind(&parsed.acknowledged_at).execute(&mut *tx).await?;
+        if inserted.rows_affected() != 1 {
+            return Err(authority("device_journal_authority_corrupt"));
+        }
+        let updated = sqlx::query("UPDATE tool_executions SET acknowledged_through = ? WHERE execution_id = ? AND acknowledged_through = ?")
             .bind(i64::try_from(parsed.through_sequence).map_err(|_| authority("device_tool_ack_invalid"))?)
             .bind(&parsed.execution_id).bind(i64::try_from(existing.acknowledged_through).map_err(|_| authority("device_journal_authority_corrupt"))?)
             .execute(&mut *tx).await?;
+        if updated.rows_affected() != 1 {
+            return Err(authority("device_journal_authority_corrupt"));
+        }
         let advanced = load(&mut tx, &parsed.execution_id)
             .await?
             .ok_or_else(|| authority("device_journal_authority_corrupt"))?;
@@ -255,19 +274,20 @@ impl DeviceWorkspaceJournal {
             return Err(authority("device_tool_page_invalid"));
         }
         let after = query.after_execution_id.as_deref().unwrap_or("");
+        let mut tx = self.pool.begin().await?;
         let ids: Vec<String> = sqlx::query_scalar("SELECT execution_id FROM tool_executions WHERE execution_id > ? AND acknowledged_through < CASE WHEN EXISTS (SELECT 1 FROM tool_events e WHERE e.execution_id = tool_executions.execution_id AND e.sequence = 2) THEN 2 ELSE 1 END ORDER BY execution_id LIMIT ?")
-            .bind(after).bind(i64::from(query.limit) + 1).fetch_all(&self.pool).await?;
+            .bind(after).bind(i64::from(query.limit) + 1).fetch_all(&mut *tx).await?;
         let has_more = ids.len() > usize::from(query.limit);
         let selected = &ids[..ids.len().min(usize::from(query.limit))];
         let mut executions = Vec::with_capacity(selected.len());
         for id in selected {
-            let mut connection = self.pool.acquire().await?;
             executions.push(
-                load(&mut connection, id)
+                load(&mut tx, id)
                     .await?
                     .ok_or_else(|| authority("device_journal_authority_corrupt"))?,
             );
         }
+        tx.commit().await?;
         Ok(ToolJournalPage {
             next_cursor: has_more.then(|| selected.last().cloned()).flatten(),
             executions,
@@ -279,17 +299,10 @@ async fn load(
     connection: &mut sqlx::SqliteConnection,
     execution_id: &str,
 ) -> Result<Option<ToolJournalExecution>, DeviceJournalError> {
-    use sqlx::Row as _;
-    let Some(row) = sqlx::query("SELECT command_json, command_fingerprint, device_id, capability, lease_id, lease_epoch, action_digest, acknowledged_through FROM tool_executions WHERE execution_id = ?").bind(execution_id).fetch_optional(&mut *connection).await? else { return Ok(None); };
+    let Some(row) = sqlx::query("SELECT command_json, command_fingerprint, device_id, capability, lease_id, lease_epoch, action_digest, acknowledged_through, created_at FROM tool_executions WHERE execution_id = ?").bind(execution_id).fetch_optional(&mut *connection).await? else { return Ok(None); };
     let command_json: String = row.try_get("command_json")?;
-    if fingerprint(&command_json) != row.try_get::<String, _>("command_fingerprint")? {
-        return Err(authority("device_journal_authority_corrupt"));
-    }
-    let command = parse_device_execution_command(
-        serde_json::from_str(&command_json)
-            .map_err(|_| authority("device_journal_authority_corrupt"))?,
-    )
-    .map_err(|_| authority("device_journal_authority_corrupt"))?;
+    let command_fingerprint: String = row.try_get("command_fingerprint")?;
+    let command = decode_command(&command_json, &command_fingerprint)?.record;
     if command.execution_id != execution_id
         || row.try_get::<String, _>("device_id")? != command.device_id
         || row.try_get::<String, _>("capability")? != command.capability
@@ -301,55 +314,39 @@ async fn load(
     {
         return Err(authority("device_journal_authority_corrupt"));
     }
-    let event_rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT event_json, event_fingerprint FROM tool_events WHERE execution_id = ? ORDER BY sequence",
-    )
-    .bind(execution_id)
-    .fetch_all(&mut *connection)
-    .await?;
+    let event_rows = sqlx::query("SELECT sequence, event_json, event_fingerprint, event_type, receipt_id, observed_at FROM tool_events WHERE execution_id = ? ORDER BY sequence")
+        .bind(execution_id).fetch_all(&mut *connection).await?;
     if event_rows.is_empty() || event_rows.len() > 2 {
         return Err(authority("device_journal_authority_corrupt"));
     }
-    let mut events = event_rows
-        .into_iter()
-        .map(|(json, stored_fingerprint)| {
-            if fingerprint(&json) != stored_fingerprint {
-                return Err(authority("device_journal_authority_corrupt"));
-            }
-            parse_device_execution_event(
-                serde_json::from_str(&json)
-                    .map_err(|_| authority("device_journal_authority_corrupt"))?,
-            )
-            .map_err(|_| authority("device_journal_authority_corrupt"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut events = Vec::with_capacity(event_rows.len());
+    for row in event_rows {
+        let json: String = row.try_get("event_json")?;
+        let stored_fingerprint: String = row.try_get("event_fingerprint")?;
+        let stored_type: String = row.try_get("event_type")?;
+        let event = decode_event(&json, &stored_fingerprint, &stored_type)
+            .map_err(|_| authority("device_journal_authority_corrupt"))?
+            .record;
+        let envelope = event_envelope(&event);
+        if row.try_get::<i64, _>("sequence")?
+            != i64::try_from(envelope.sequence)
+                .map_err(|_| authority("device_journal_authority_corrupt"))?
+            || row.try_get::<String, _>("receipt_id")? != envelope.receipt_id
+            || row.try_get::<String, _>("observed_at")? != envelope.observed_at
+        {
+            return Err(authority("device_journal_authority_corrupt"));
+        }
+        events.push(event);
+    }
     let accepted = events.remove(0);
     validate_accepted(&command, &accepted)
         .map_err(|_| authority("device_journal_authority_corrupt"))?;
     let terminal = events.pop();
-    let acknowledged_through = u64::try_from(row.try_get::<i64, _>("acknowledged_through")?)
-        .map_err(|_| authority("device_journal_authority_corrupt"))?;
-    let ack_count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM tool_acks WHERE execution_id = ?")
-            .bind(execution_id)
-            .fetch_one(&mut *connection)
-            .await?;
-    let ack_head: Option<i64> =
-        sqlx::query_scalar("SELECT max(through_sequence) FROM tool_acks WHERE execution_id = ?")
-            .bind(execution_id)
-            .fetch_one(&mut *connection)
-            .await?;
-    if (acknowledged_through == 0 && ack_count != 0)
-        || (acknowledged_through > 0
-            && (!(1..=2).contains(&ack_count)
-                || ack_head
-                    != Some(
-                        i64::try_from(acknowledged_through)
-                            .map_err(|_| authority("device_journal_authority_corrupt"))?,
-                    )))
-    {
+    if row.try_get::<String, _>("created_at")? != event_envelope(&accepted).observed_at {
         return Err(authority("device_journal_authority_corrupt"));
     }
+    let acknowledged_through = u64::try_from(row.try_get::<i64, _>("acknowledged_through")?)
+        .map_err(|_| authority("device_journal_authority_corrupt"))?;
     let execution = ToolJournalExecution {
         command,
         accepted,
@@ -364,81 +361,73 @@ async fn load(
     {
         return Err(authority("device_journal_authority_corrupt"));
     }
+    let ack_rows = sqlx::query("SELECT through_sequence, ack_json, ack_fingerprint, acknowledged_at FROM tool_acks WHERE execution_id = ? ORDER BY through_sequence")
+        .bind(execution_id).fetch_all(&mut *connection).await?;
+    let mut sequences = Vec::with_capacity(ack_rows.len());
+    let mut prior = None;
+    for row in ack_rows {
+        let json: String = row.try_get("ack_json")?;
+        let fingerprint: String = row.try_get("ack_fingerprint")?;
+        let ack = decode_ack(&json, &fingerprint)
+            .map_err(|_| authority("device_journal_authority_corrupt"))?
+            .record;
+        validate_ack(&execution, &ack)
+            .map_err(|_| authority("device_journal_authority_corrupt"))?;
+        validate_ack_time(&execution, &ack, prior.as_ref())
+            .map_err(|_| authority("device_journal_authority_corrupt"))?;
+        if row.try_get::<i64, _>("through_sequence")?
+            != i64::try_from(ack.through_sequence)
+                .map_err(|_| authority("device_journal_authority_corrupt"))?
+            || row.try_get::<String, _>("acknowledged_at")? != ack.acknowledged_at
+        {
+            return Err(authority("device_journal_authority_corrupt"));
+        }
+        sequences.push(ack.through_sequence);
+        prior = Some(ack);
+    }
+    if !matches!(
+        (execution.acknowledged_through, sequences.as_slice()),
+        (0, []) | (1, [1]) | (2, [2]) | (2, [1, 2])
+    ) {
+        return Err(authority("device_journal_authority_corrupt"));
+    }
     Ok(Some(execution))
 }
 
 async fn insert_event(
     connection: &mut sqlx::SqliteConnection,
-    event: &DeviceExecutionEvent,
-    json: &str,
+    encoded: &crate::tool_journal_codec::EncodedEvent,
 ) -> Result<(), DeviceJournalError> {
-    let e = envelope(event);
-    let event_type = match event {
-        DeviceExecutionEvent::Accepted { .. } => "execution.accepted",
-        DeviceExecutionEvent::Completed { .. } => "execution.completed",
-        DeviceExecutionEvent::Failed { .. } => "execution.failed",
-        DeviceExecutionEvent::Canceled { .. } => "execution.canceled",
-        DeviceExecutionEvent::UnknownOutcome { .. } => "execution.unknown_outcome",
-        DeviceExecutionEvent::Output { .. } => return Err(authority("device_tool_event_invalid")),
-    };
-    sqlx::query("INSERT INTO tool_events (execution_id, sequence, event_json, event_fingerprint, event_type, receipt_id, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .bind(&e.execution_id).bind(i64::try_from(e.sequence).map_err(|_| authority("device_tool_event_invalid"))?).bind(json).bind(fingerprint(json)).bind(event_type).bind(&e.receipt_id).bind(&e.observed_at).execute(connection).await?;
-    Ok(())
-}
-
-fn validate_accepted(
-    command: &DeviceExecutionCommand,
-    event: &DeviceExecutionEvent,
-) -> Result<(), DeviceJournalError> {
-    let DeviceExecutionEvent::Accepted { envelope, data } = event else {
-        return Err(authority("device_tool_accepted_invalid"));
-    };
-    if envelope.sequence != 1
-        || envelope.device_id != command.device_id
-        || envelope.execution_id != command.execution_id
-        || data.lease_epoch != command.lease_epoch
-        || data.action_digest != command.action_digest
-    {
-        return Err(authority("device_tool_accepted_invalid"));
+    let envelope = event_envelope(&encoded.record);
+    let inserted = sqlx::query("INSERT INTO tool_events (execution_id, sequence, event_json, event_fingerprint, event_type, receipt_id, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(&envelope.execution_id).bind(i64::try_from(envelope.sequence).map_err(|_| authority("device_tool_event_invalid"))?)
+        .bind(&encoded.json).bind(&encoded.fingerprint).bind(encoded.event_type)
+        .bind(&envelope.receipt_id).bind(&envelope.observed_at).execute(connection).await?;
+    if inserted.rows_affected() != 1 {
+        return Err(authority("device_journal_authority_corrupt"));
     }
     Ok(())
 }
 
-fn validate_terminal(
+async fn load_latest_ack(
+    connection: &mut sqlx::SqliteConnection,
     execution: &ToolJournalExecution,
-    terminal: &DeviceExecutionEvent,
-) -> Result<(), DeviceJournalError> {
-    let accepted = envelope(&execution.accepted);
-    let terminal = envelope(terminal);
-    if terminal.sequence != 2
-        || terminal.device_id != accepted.device_id
-        || terminal.execution_id != accepted.execution_id
-        || terminal.receipt_id != accepted.receipt_id
-    {
-        return Err(authority("device_tool_terminal_invalid"));
+) -> Result<Option<DeviceExecutionAck>, DeviceJournalError> {
+    if execution.acknowledged_through == 0 {
+        return Ok(None);
     }
-    Ok(())
-}
-
-fn envelope(event: &DeviceExecutionEvent) -> &crewon_device_protocol::DeviceExecutionEventEnvelope {
-    match event {
-        DeviceExecutionEvent::Accepted { envelope, .. }
-        | DeviceExecutionEvent::Output { envelope, .. }
-        | DeviceExecutionEvent::Completed { envelope, .. }
-        | DeviceExecutionEvent::Failed { envelope, .. }
-        | DeviceExecutionEvent::Canceled { envelope, .. }
-        | DeviceExecutionEvent::UnknownOutcome { envelope, .. } => envelope,
-    }
-}
-fn encode_command(value: &DeviceExecutionCommand) -> Result<String, DeviceJournalError> {
-    serde_json::to_string(value).map_err(|_| authority("device_tool_record_invalid"))
-}
-fn encode_event(value: &DeviceExecutionEvent) -> Result<String, DeviceJournalError> {
-    serde_json::to_string(value).map_err(|_| authority("device_tool_record_invalid"))
-}
-fn encode_ack(value: &DeviceExecutionAck) -> Result<String, DeviceJournalError> {
-    serde_json::to_string(value).map_err(|_| authority("device_tool_record_invalid"))
-}
-fn fingerprint(value: &str) -> String {
-    format!("sha256:{:x}", Sha256::digest(value.as_bytes()))
+    let row = sqlx::query("SELECT ack_json, ack_fingerprint, acknowledged_at FROM tool_acks WHERE execution_id = ? AND through_sequence = ?")
+        .bind(&execution.command.execution_id)
+        .bind(i64::try_from(execution.acknowledged_through).map_err(|_| authority("device_journal_authority_corrupt"))?)
+        .fetch_optional(&mut *connection).await?;
+    row.map(|row| {
+        let json: String = row.try_get("ack_json")?;
+        let fingerprint: String = row.try_get("ack_fingerprint")?;
+        let ack = decode_ack(&json, &fingerprint)?.record;
+        if row.try_get::<String, _>("acknowledged_at")? != ack.acknowledged_at {
+            return Err(authority("device_journal_authority_corrupt"));
+        }
+        Ok(ack)
+    })
+    .transpose()
 }
