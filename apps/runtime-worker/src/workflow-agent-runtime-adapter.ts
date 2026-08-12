@@ -43,6 +43,7 @@ import {
 } from "./workflow-node-execution-policy.ts";
 
 export interface WorkflowAdmittedAgentExecutionEngine {
+  readonly workflowStore: import("@crewon/application").WorkflowRuntimeStore;
   execute(input: {
     runtime: AgentVersionRuntime;
     authority: {
@@ -79,6 +80,10 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
   readonly #store: WorkflowExecutionStore;
   readonly #leaseDurationMs: number;
   readonly #segments = new AgentSegmentExecutionEngine();
+
+  get workflowStore(): WorkflowRuntimeStore {
+    return this.#store;
+  }
 
   constructor(dependencies: {
     execution: RunExecutionService;
@@ -667,6 +672,10 @@ export class WorkflowAgentRuntimeAdapter implements WorkflowAgentNodePort {
   }) {
     this.#runtimes = dependencies.runtimes;
     this.#engine = dependencies.engine;
+  }
+
+  get workflowStore(): WorkflowRuntimeStore {
+    return this.#engine.workflowStore;
   }
 
   async execute(

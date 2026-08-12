@@ -98,7 +98,7 @@ test("settlement commit-before-return replay executes the Agent exactly once", a
   let executeCount = 0;
   const dispatcher = create(fixture.store, async () => {
     executeCount += 1;
-    return { status: "completed", value: {} };
+    return terminal({ status: "completed", value: {} });
   });
 
   assert.deepEqual(await dispatcher.dispatch(input("node")), {
@@ -112,7 +112,28 @@ test("settlement commit-before-return replay executes the Agent exactly once", a
     code: "workflow_node_admission_replayed",
   });
   assert.equal(executeCount, 1);
-  assert.equal(fixture.settlements, 1);
+  assert.equal(fixture.atomicSettlements, 1);
+});
+
+test("node reconcileRequired admission performs zero execution", async () => {
+  const fixture = composition();
+  fixture.nodeDisposition = "reconcileRequired";
+  let executions = 0;
+  await create(fixture.store, async () => {
+    executions += 1;
+    return { status: "unknown" };
+  }).dispatch(input("node"));
+  assert.equal(executions, 0);
+  assert.equal(fixture.settlements + fixture.atomicSettlements, 0);
+});
+
+test("rejects a split Workflow Store identity", () => {
+  const fixture = composition();
+  assert.throws(
+    () => create(fixture.store, async () => ({ status: "unknown" }),
+      {} as WorkflowRuntimeStore),
+    /workflow_runtime_store_identity_mismatch/u,
+  );
 });
 
 test("fresh sibling admissions pass actual values and settle independently", async () => {
@@ -125,23 +146,59 @@ test("fresh sibling admissions pass actual values and settle independently", asy
   ) =>
     create(fixture.store, async (node) => {
       order.push(node.claimId);
-      return { status: "completed", value: { claimId: node.claimId } };
+      return terminal({ status: "completed", value: {} });
     }).dispatch(input("node", claimId));
   await run(right, "claim-right");
   await run(left, "claim-left");
   assert.deepEqual(order, ["claim-right", "claim-left"]);
-  assert.equal(left.settlements, 1);
-  assert.equal(right.settlements, 1);
+  assert.equal(left.atomicSettlements, 1);
+  assert.equal(right.atomicSettlements, 1);
+  const exact = left.atomicInputs[0] as Record<string, unknown>;
+  assert.equal(exact.nodeId, "a");
+  assert.equal((exact.authority as { workItemId: string }).workItemId,
+    "work-claim-left");
+  assert.deepEqual((exact.dispatch as object), {
+    operationId: "dispatch-1", requestSequence: 1,
+    expectedRevision: 3, status: "responseObserved",
+  });
 });
 
-test("settles deterministic execution errors as nonretryable failures", async () => {
+test("commit-response loss retries through nonfresh recovery without execution", async () => {
   const fixture = composition();
-  await create(fixture.store, async () => {
+  fixture.failSettlement = true;
+  let executions = 0;
+  const dispatcher = create(fixture.store, async () => {
+    executions += 1;
+    return terminal({ status: "completed", value: {} });
+  });
+  assert.equal((await dispatcher.dispatch(input("node"))).kind, "recovery");
+  fixture.nodeDisposition = "replay";
+  assert.equal((await dispatcher.dispatch(input("node"))).kind, "recovery");
+  assert.equal(executions, 1);
+  assert.equal(fixture.atomicSettlements, 1);
+});
+
+test("reports completed only for terminalConverged Store authority", async () => {
+  const fixture = composition();
+  fixture.atomicRunDisposition = "nonTerminal";
+  const dispatcher = create(fixture.store, async () =>
+    terminal({ status: "completed", value: {} }));
+  assert.equal((await dispatcher.dispatch(input("node"))).kind, "recovery");
+  fixture.nodeDisposition = "fresh";
+  fixture.atomicRunDisposition = "terminalConverged";
+  assert.equal((await dispatcher.dispatch(input("node", "claim-2"))).kind,
+    "completed");
+});
+
+test("deterministic execution errors without model authority do not settle", async () => {
+  const fixture = composition();
+  const outcome = await create(fixture.store, async () => {
     throw new Error("workflow_node_output_json_invalid");
   }).dispatch(input("node"));
-  assert.deepEqual(fixture.outcomes, [
-    { status: "failed", failureCode: "workflow_node_output_json_invalid" },
-  ]);
+  assert.deepEqual(outcome, { kind: "recovery", runId: "r",
+    code: "workflow_model_terminal_authority_unavailable" });
+  assert.equal(fixture.settlements, 0);
+  assert.equal(fixture.atomicSettlements, 0);
 });
 
 test("approval handoff remains non-settling until durable composition support exists", async () => {
@@ -217,14 +274,18 @@ function composition() {
   const fixture = {
     schedules: 0,
     settlements: 0,
+    atomicSettlements: 0,
+    atomicInputs: [] as unknown[],
     reconciliations: 0,
     cancellations: 0,
     outcomes: [] as unknown[],
     workflowInputs: [] as unknown[],
-    nodeDisposition: "fresh" as "fresh" | "replay",
+    nodeDisposition: "fresh" as "fresh" | "replay" | "reconcileRequired",
     failSettlement: false,
     loseFirstSettlementResponse: false,
     settlementCommitted: false,
+    atomicRunDisposition: "terminalConverged" as
+      "terminalConverged" | "nonTerminal",
     store: null as unknown as WorkflowRuntimeStore,
   };
   fixture.store = {
@@ -249,16 +310,28 @@ function composition() {
       };
     },
     async admitWorkflowNodeWork(input) {
-      if (fixture.nodeDisposition === "replay" || fixture.settlementCommitted)
+      if (fixture.nodeDisposition === "reconcileRequired")
         return {
-          disposition: "replay",
+          disposition: "reconcileRequired" as const,
           execution: state(),
           admission: null,
+          reconciliationClaim: {
+            node: workflow.nodes[0]!, claimId: input.claimId,
+            claimEpoch: input.claimEpoch, gateRequestId: null,
+            inputDigest: digest("input"),
+          },
           handoff: {
             currentWorkItem: "completed",
-            nextWorkItemId: null,
-            kind: "none",
+            nextWorkItemId: "reconcile-1",
+            kind: "reconcile" as const,
           },
+        };
+      if (fixture.nodeDisposition === "replay" || fixture.settlementCommitted)
+        return {
+          disposition: "replay" as const,
+          execution: state(), admission: null,
+          handoff: { currentWorkItem: "completed" as const,
+            nextWorkItemId: null, kind: "none" as const },
         };
       const claim = {
         node: workflow.nodes[0]!,
@@ -344,35 +417,47 @@ function composition() {
         runDisposition: "terminalConverged",
       };
     },
-    async loadWorkflowNodeContinuation() {
-      return null;
+    async loadWorkflowNodeContinuation() { return null; },
+    async commitWorkflowToolContinuation() { throw new Error("unused"); },
+    async commitWorkflowAssistantContinuation() { throw new Error("unused"); },
+    async settleWorkflowNodeModelTerminal(input) {
+      fixture.atomicSettlements += 1;
+      fixture.atomicInputs.push(input);
+      if (fixture.failSettlement) throw new Error("commit unknown");
+      fixture.settlementCommitted = true;
+      if (fixture.loseFirstSettlementResponse)
+        throw new Error("response lost after commit");
+      return { disposition: "settled", continuation: null,
+        handoff: { currentWorkItem: "completed", nextWorkItemId: null,
+        kind: "none" }, runDisposition: fixture.atomicRunDisposition,
+        evidence: input.evidence };
     },
-    async commitWorkflowToolContinuation() {
-      throw new Error("unused");
-    },
-    async commitWorkflowAssistantContinuation() {
-      throw new Error("unused");
-    },
-    async settleWorkflowNodeModelTerminal() {
-      throw new Error("unused");
-    },
-    async loadModelDispatchReceipt() {
-      return null;
-    },
-    async prepareModelDispatch() {
-      throw new Error("unused");
-    },
-    async markModelDispatchPossiblySent() {
-      throw new Error("unused");
-    },
-    async observeModelDispatchResponse() {
-      throw new Error("unused");
-    },
-    async terminateModelDispatch() {
-      throw new Error("unused");
-    },
+    async loadModelDispatchReceipt() { return null; },
+    async prepareModelDispatch() { throw new Error("unused"); },
+    async markModelDispatchPossiblySent() { throw new Error("unused"); },
+    async observeModelDispatchResponse() { throw new Error("unused"); },
+    async terminateModelDispatch() { throw new Error("unused"); },
   };
   return fixture;
+}
+
+function terminal<T extends
+  | { status: "completed"; value: unknown }
+  | { status: "failed"; failureCode: string }
+  | { status: "canceled" }>(outcome: T) {
+  return {
+    ...outcome,
+    modelTerminal: {
+      dispatch: { operationId: "dispatch-1", requestSequence: 1,
+        expectedRevision: 3, status: "responseObserved" as const },
+      dispatchTerminalOutcome: {
+        kind: outcome.status,
+        code: outcome.status === "failed" ? outcome.failureCode
+          : outcome.status === "canceled" ? "workflow_node_canceled" : null,
+        certainty: "responseObserved" as const,
+      },
+    },
+  };
 }
 
 function create(
@@ -380,6 +465,7 @@ function create(
   execute: ConstructorParameters<
     typeof ProductionWorkflowRuntimeDispatcher
   >[0]["agent"]["execute"],
+  agentStore: WorkflowRuntimeStore = store,
 ) {
   return new ProductionWorkflowRuntimeDispatcher({
     versions: {
@@ -401,9 +487,9 @@ function create(
         throw new Error();
       },
     },
-    composition: store,
+    store,
     digester: { sha256: digest },
-    agent: { execute },
+    agent: { workflowStore: agentStore, execute },
     leaseDurationMs: 30_000,
   });
 }

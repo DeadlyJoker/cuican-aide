@@ -393,7 +393,7 @@ async function composeRuntimeWorker(
       ? undefined
       : new ProductionWorkflowRuntimeDispatcher({
           versions: workflow.versions,
-          composition: workflow.store,
+          store: workflow.store,
           digester,
           agent: new WorkflowAgentRuntimeAdapter({
             runtimes: runtimeResolver,

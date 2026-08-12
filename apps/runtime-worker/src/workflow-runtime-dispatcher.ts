@@ -10,6 +10,7 @@ import type {
   WorkflowContentDigester,
   WorkflowSchemaValue,
 } from "@crewon/domain";
+import { createWorkflowNodeTerminalEvidence } from "@crewon/domain";
 import { loadFrozenWorkflowVersion } from "./workflow-version-runtime.ts";
 import { parseWorkflowWorkItemPayload } from "./workflow-work-item-payload.ts";
 
@@ -28,6 +29,7 @@ export type WorkflowModelTerminalAuthority = Readonly<{
 }>;
 
 export interface WorkflowAgentNodePort {
+  readonly workflowStore: WorkflowRuntimeStore;
   execute(input: {
     tenantId: string;
     runId: string;
@@ -71,20 +73,22 @@ export class ProductionWorkflowRuntimeDispatcher
   implements WorkflowRuntimeDispatcherPort
 {
   readonly #versions: WorkflowVersionStore;
-  readonly #composition: WorkflowRuntimeStore;
+  readonly #store: WorkflowRuntimeStore;
   readonly #digester: WorkflowContentDigester;
   readonly #agent: WorkflowAgentNodePort;
   readonly #leaseDurationMs: number;
 
   constructor(dependencies: {
     versions: WorkflowVersionStore;
-    composition: WorkflowRuntimeStore;
+    store: WorkflowRuntimeStore;
     digester: WorkflowContentDigester;
     agent: WorkflowAgentNodePort;
     leaseDurationMs: number;
   }) {
     this.#versions = dependencies.versions;
-    this.#composition = dependencies.composition;
+    if (dependencies.agent.workflowStore !== dependencies.store)
+      throw new Error("workflow_runtime_store_identity_mismatch");
+    this.#store = dependencies.store;
     this.#digester = dependencies.digester;
     this.#agent = dependencies.agent;
     this.#leaseDurationMs = dependencies.leaseDurationMs;
@@ -107,7 +111,7 @@ export class ProductionWorkflowRuntimeDispatcher
       digester: this.#digester,
     });
     if (payload.trigger === "workflowScheduler") {
-      const scheduled = await this.#composition.scheduleWorkflowNodes({
+      const scheduled = await this.#store.scheduleWorkflowNodes({
         tenantId: input.run.tenantId,
         runId: input.run.runId,
         lease: leaseInput(input.claim),
@@ -130,7 +134,7 @@ export class ProductionWorkflowRuntimeDispatcher
     if (payload.trigger === "workflowNode")
       return this.#executeNode(input, payload, workflow);
     if (payload.trigger === "workflowGateResume") {
-      const settled = await this.#composition.settleWorkflowHumanGate({
+      const settled = await this.#store.settleWorkflowHumanGate({
         tenantId: input.run.tenantId,
         runId: input.run.runId,
         lease: leaseInput(input.claim),
@@ -164,7 +168,7 @@ export class ProductionWorkflowRuntimeDispatcher
     const binding = input.run.workflowVersionBinding;
     if (input.run.purpose !== "workflow" || binding === undefined)
       throw new Error("workflow_runtime_cancel_invalid");
-    const canceled = await this.#composition.cancelWorkflowExecution({
+    const canceled = await this.#store.cancelWorkflowExecution({
       tenantId: input.run.tenantId,
       runId: input.run.runId,
       lease: leaseInput(input.claim),
@@ -191,7 +195,7 @@ export class ProductionWorkflowRuntimeDispatcher
     workflow: Awaited<ReturnType<typeof loadFrozenWorkflowVersion>>,
   ): Promise<WorkflowRuntimeDispatchOutcome> {
     const binding = input.run.workflowVersionBinding!;
-    const admitted = await this.#composition.admitWorkflowNodeWork({
+    const admitted = await this.#store.admitWorkflowNodeWork({
       tenantId: input.run.tenantId,
       runId: input.run.runId,
       lease: leaseInput(input.claim),
@@ -278,8 +282,16 @@ export class ProductionWorkflowRuntimeDispatcher
               failureCode: deterministicNodeFailureCode(error),
             };
     }
+    if (outcome.status !== "unknown" && outcome.modelTerminal === undefined) {
+      return {
+        kind: "recovery",
+        runId: input.run.runId,
+        code: "workflow_model_terminal_authority_unavailable",
+      };
+    }
     try {
-      const settled = await this.#composition.settleWorkflowNode({
+      const settled = outcome.status === "unknown"
+        ? await this.#store.settleWorkflowNode({
         tenantId: input.run.tenantId,
         runId: input.run.runId,
         lease: leaseInput(input.claim),
@@ -291,7 +303,43 @@ export class ProductionWorkflowRuntimeDispatcher
         attemptId: admitted.admission.attempt.attemptId,
         operationId: `node-settle:${payload.claimId}`,
         outcome,
-      });
+      })
+        : await this.#store.settleWorkflowNodeModelTerminal({
+            binding,
+            nodeId: payload.nodeId,
+            operationId: `node-model-terminal:${payload.claimId}`,
+            evidence: createWorkflowNodeTerminalEvidence({
+              workflow,
+              nodeId: payload.nodeId,
+              outcome: outcome.status === "completed"
+                ? { status: "completed", value: outcome.value }
+                : outcome.status === "failed"
+                  ? { status: "failed", failureCode: outcome.failureCode,
+                      certainty: outcome.modelTerminal!.dispatchTerminalOutcome.certainty }
+                  : { status: "canceled",
+                      certainty: outcome.modelTerminal!.dispatchTerminalOutcome.certainty },
+              digester: this.#digester,
+            }),
+            lease: leaseInput(input.claim),
+            authority: {
+              tenantId: input.run.tenantId,
+              runId: input.run.runId,
+              workItemId: input.claim.workItem.workItemId,
+              leaseEpoch: input.claim.lease.epoch,
+              nodeId: payload.nodeId,
+              nodeKind: node.kind === "agent" ? "agent" : "verification",
+              claimId: payload.claimId,
+              claimEpoch: payload.claimEpoch,
+              agentVersionId,
+              attempt: {
+                stepId: admitted.admission.step.stepId,
+                attemptId: admitted.admission.attempt.attemptId,
+              },
+            },
+            dispatch: outcome.modelTerminal!.dispatch,
+            dispatchTerminalOutcome:
+              outcome.modelTerminal!.dispatchTerminalOutcome,
+          });
       assertCompletedHandoff(settled.handoff);
       return settled.runDisposition === "terminalConverged"
         ? { kind: "completed", runId: input.run.runId }

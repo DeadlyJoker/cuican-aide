@@ -25,6 +25,7 @@ test("resolves the frozen node runtime and preserves admitted authority and actu
       },
     },
     engine: {
+      workflowStore: {} as never,
       async execute(input) {
         received = input;
         return { status: "completed", value: { answer: 42 } };
@@ -67,6 +68,7 @@ test("fails closed instead of substituting the root Agent runtime", async () => 
       },
     },
     engine: {
+      workflowStore: {} as never,
       async execute() {
         throw new Error("must not execute");
       },
