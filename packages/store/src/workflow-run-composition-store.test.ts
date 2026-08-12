@@ -1319,6 +1319,58 @@ if (postgresUrl === undefined) {
       await store.close();
     }
   });
+
+  test("PostgreSQL cancellation retains possibly-sent reconciliation authority", async () => {
+    const schema = `workflow_cancel_unknown_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
+    try {
+      await seedPostgresComposition(pool, schema);
+      const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+        lease, binding, schedulerOperationId: "schedule-fanout-1",
+        workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+      const work = scheduled.nodeWorkItems[0]!;
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',lease_owner_id='node-worker',
+        lease_id='node-lease',lease_epoch=1,lease_expires_at=clock_timestamp()+interval '1 minute'
+        WHERE work_item_id=$1`, [work.workItemId]);
+      const nodeLease = { workItemId: work.workItemId, ownerId: "node-worker",
+        leaseId: "node-lease", leaseEpoch: 1 } as const;
+      const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, binding, nodeId: work.nodeId, claimId: work.claimId,
+        claimEpoch: work.claimEpoch, schedulerOperationId: "schedule-fanout-1",
+        admissionOperationId: "admit-unknown", attemptLeaseDurationMs: 30_000 });
+      const attempt = admitted.admission!.attempt;
+      const prepared = await store.prepareModelDispatch({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, attempt: { stepId: attempt.stepId, attemptId: attempt.attemptId },
+        operationId: "dispatch-unknown", requestSequence: 1, operation: "dispatch",
+        requestDigest: digester.sha256("request"), provider: { agentVersionId: "agent-v1",
+          adapterName: "responses", adapterVersion: "1", modelId: "model-1" },
+        preparedAt: "2026-08-13T00:00:00.000Z" });
+      await store.markModelDispatchPossiblySent({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, attempt: prepared, operationId: prepared.operationId,
+        requestSequence: 1, expectedRevision: prepared.revision,
+        transitionedAt: "2026-08-13T00:00:01.000Z" });
+      const run = await pool.query<{ state_json: Record<string, unknown> }>(
+        `SELECT state_json FROM ${schema}.run_snapshots WHERE run_id='run-1'`);
+      await pool.query(`UPDATE ${schema}.run_snapshots SET state_json=$1 WHERE run_id='run-1'`,
+        [{ ...run.rows[0]!.state_json, cancelRequested: true }]);
+      const input = { tenantId: "tenant-1", runId: "run-1", lease: nodeLease, binding,
+        operationId: "cancel-unknown", reasonCode: "user_requested" } as const;
+      const canceled = await store.cancelWorkflowExecution(input);
+      assert.deepEqual([canceled.disposition, canceled.runDisposition, canceled.execution.status],
+        ["reconciliationScheduled", "nonTerminal", "running"]);
+      assert.equal(canceled.execution.nodes.find((node) => node.nodeId === work.nodeId)?.status,
+        "unknown");
+      const reconciliation = await pool.query(`SELECT status,work_item_json->'payload' payload
+        FROM ${schema}.work_items WHERE work_item_id=$1`, [canceled.handoff.nextWorkItemId]);
+      assert.equal(reconciliation.rows[0]?.status, "pending");
+      assert.equal(reconciliation.rows[0]?.payload.trigger, "workflowReconcile");
+      assert.equal((await store.cancelWorkflowExecution(input)).disposition, "replay");
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
 }
 
 async function seedPostgresComposition(
