@@ -39,6 +39,7 @@ import {
   parseSetThreadGoalRequest,
   parseStartTurnRequest,
   parseStartWorkflowRunRequest,
+  parseDecideWorkflowHumanGateRequest,
   parseThreadId,
   parseThreadHistoryView,
   parseThreadListQuery,
@@ -100,6 +101,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/threads/{threadId}:unarchive",
     "/api/v1/tool-approvals/{approvalId}",
     "/api/v1/tool-approvals/{approvalId}:decide",
+    "/api/v1/workflow-gates:decide",
     "/api/v1/workflow-runs",
     "/api/v1/workflow-versions",
     "/api/v1/workflow-versions/{workflowVersionId}",
@@ -151,6 +153,16 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
       JSON.stringify(openApi.components.schemas.RunView).includes(forbidden),
       false,
     );
+  }
+});
+
+test("accepts only public Workflow Human Gate decision authority", () => {
+  const input = { runId: "run-1", nodeId: "gate", claimId: "claim-1",
+    claimEpoch: 1, gateRequestId: "gate-request-1", decision: "approve" as const };
+  assert.deepEqual(parseDecideWorkflowHumanGateRequest(input), input);
+  for (const injected of ["binding", "decisionReceiptId", "failureCode", "tenantId"]) {
+    assert.throws(() => parseDecideWorkflowHumanGateRequest({ ...input, [injected]: "forged" }),
+      /workflow_gate_fields_invalid/u);
   }
 });
 

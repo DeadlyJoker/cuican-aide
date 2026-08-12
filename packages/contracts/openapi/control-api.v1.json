@@ -1059,6 +1059,40 @@
         }
       }
     },
+    "/api/v1/workflow-gates:decide": {
+      "post": {
+        "operationId": "decideWorkflowHumanGate",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DecideWorkflowHumanGateRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A durable Human Gate decision or its exact replay",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/WorkflowHumanGateDecisionResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/v1/runs/{runId}": {
       "get": {
         "operationId": "getRun",
@@ -3239,6 +3273,31 @@
           },
           "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "input": { "$ref": "#/components/schemas/WorkflowInput" }
+        }
+      },
+      "DecideWorkflowHumanGateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["runId", "nodeId", "claimId", "claimEpoch", "gateRequestId", "decision"],
+        "properties": {
+          "runId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "nodeId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "claimId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "claimEpoch": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+          "gateRequestId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "decision": { "type": "string", "enum": ["approve", "reject"] }
+        }
+      },
+      "WorkflowHumanGateDecisionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "runId", "nodeId", "gateRequestId", "resumeWorkItemId"],
+        "properties": {
+          "disposition": { "type": "string", "enum": ["recorded", "replay"] },
+          "runId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "nodeId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "gateRequestId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "resumeWorkItemId": { "type": "string", "minLength": 1, "maxLength": 512 }
         }
       },
       "StartTurnRequest": {

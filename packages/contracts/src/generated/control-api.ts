@@ -352,6 +352,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/workflow-gates:decide": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["decideWorkflowHumanGate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/runs/{runId}": {
     parameters: {
       query?: never;
@@ -1109,6 +1125,23 @@ export interface components {
       workflowVersionId: string;
       threadId: string;
       input: components["schemas"]["WorkflowInput"];
+    };
+    DecideWorkflowHumanGateRequest: {
+      runId: string;
+      nodeId: string;
+      claimId: string;
+      claimEpoch: number;
+      gateRequestId: string;
+      /** @enum {string} */
+      decision: "approve" | "reject";
+    };
+    WorkflowHumanGateDecisionResponse: {
+      /** @enum {string} */
+      disposition: "recorded" | "replay";
+      runId: string;
+      nodeId: string;
+      gateRequestId: string;
+      resumeWorkItemId: string;
     };
     StartTurnRequest: {
       expectedRevision: number;
@@ -2775,6 +2808,41 @@ export interface operations {
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
+    };
+  };
+  decideWorkflowHumanGate: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DecideWorkflowHumanGateRequest"];
+      };
+    };
+    responses: {
+      /** @description A durable Human Gate decision or its exact replay */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowHumanGateDecisionResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
   getRun: {

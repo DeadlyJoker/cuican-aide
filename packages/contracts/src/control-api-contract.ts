@@ -66,6 +66,10 @@ export type ListThreadMessagesResponse =
 export type CreateRunRequest = components["schemas"]["CreateRunRequest"];
 export type StartWorkflowRunRequest =
   components["schemas"]["StartWorkflowRunRequest"];
+export type DecideWorkflowHumanGateRequest =
+  components["schemas"]["DecideWorkflowHumanGateRequest"];
+export type WorkflowHumanGateDecisionResponse =
+  components["schemas"]["WorkflowHumanGateDecisionResponse"];
 export type StartTurnRequest = components["schemas"]["StartTurnRequest"];
 export type CompactThreadRequest =
   components["schemas"]["CompactThreadRequest"];
@@ -562,6 +566,26 @@ export function parseStartWorkflowRunRequest(
     workflowVersionId: parseWorkflowVersionId(input.workflowVersionId),
     threadId: parseThreadId(input.threadId),
     input: workflowInput,
+  };
+}
+
+export function parseDecideWorkflowHumanGateRequest(
+  input: unknown,
+): DecideWorkflowHumanGateRequest {
+  if (!hasExactKeys(input, [
+    "claimEpoch", "claimId", "decision", "gateRequestId", "nodeId", "runId",
+  ])) throw new ContractValidationError("workflow_gate_fields_invalid");
+  if (!Number.isSafeInteger(input.claimEpoch) || Number(input.claimEpoch) < 1)
+    throw new ContractValidationError("workflow_gate_claim_epoch_invalid");
+  if (input.decision !== "approve" && input.decision !== "reject")
+    throw new ContractValidationError("workflow_gate_decision_invalid");
+  return {
+    runId: parseRunId(input.runId),
+    nodeId: requireBoundedString(input.nodeId, 512, "workflow_gate_node_id_invalid"),
+    claimId: requireBoundedString(input.claimId, 512, "workflow_gate_claim_id_invalid"),
+    claimEpoch: Number(input.claimEpoch),
+    gateRequestId: requireBoundedString(input.gateRequestId, 512, "workflow_gate_request_id_invalid"),
+    decision: input.decision,
   };
 }
 
