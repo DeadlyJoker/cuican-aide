@@ -17,7 +17,8 @@ export type WorkflowNodeOutcome =
   | Readonly<{ status: "completed"; value: WorkflowSchemaValue }>
   | Readonly<{ status: "failed"; failureCode: string }>
   | Readonly<{ status: "canceled" }>
-  | Readonly<{ status: "unknown" }>;
+  | Readonly<{ status: "unknown" }>
+  | Readonly<{ status: "approvalHandoffRequired" }>;
 
 export interface WorkflowAgentNodePort {
   execute(input: {
@@ -248,6 +249,13 @@ export class ProductionWorkflowRuntimeDispatcher
         attemptId: admitted.admission.attempt.attemptId,
         workItemClaim: input.claim,
       });
+      if (outcome.status === "approvalHandoffRequired") {
+        return {
+          kind: "recovery",
+          runId: input.run.runId,
+          code: "workflow_tool_approval_handoff_required",
+        };
+      }
       if (
         outcome.status === "completed" &&
         new TextEncoder().encode(canonicalJson(outcome.value)).length >

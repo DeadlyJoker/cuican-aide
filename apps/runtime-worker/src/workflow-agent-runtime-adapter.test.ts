@@ -478,6 +478,50 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
   assert.equal(committedToolAttempt, "tool-attempt-1");
 });
 
+test("workflow Tool round limit counts Tool batches instead of model samples", async () => {
+  const pure = await runToolLimitScenario(0, 0);
+  assert.equal(pure.outcome.status, "completed");
+  assert.equal(pure.toolBegins, 0);
+
+  const zero = await runToolLimitScenario(0, 1);
+  assert.deepEqual(zero.outcome, {
+    status: "failed",
+    failureCode: "model_tool_round_limit_exceeded",
+  });
+  assert.equal(zero.toolBegins, 0);
+
+  const one = await runToolLimitScenario(1, 1);
+  assert.equal(one.outcome.status, "completed");
+  assert.equal(one.toolBegins, 1);
+
+  const exceeded = await runToolLimitScenario(1, 2);
+  assert.deepEqual(exceeded.outcome, {
+    status: "failed",
+    failureCode: "model_tool_round_limit_exceeded",
+  });
+  assert.equal(exceeded.toolBegins, 1);
+});
+
+test("completed Tool receipt replay performs no recovery, execute, reconcile, or new Attempt", async () => {
+  const counters = {
+    recovery: 0,
+    execute: 0,
+    reconcile: 0,
+    begins: 0,
+  };
+  const result = await runToolLimitScenario(1, 1, {
+    completedReplay: true,
+    counters,
+  });
+  assert.equal(result.outcome.status, "completed");
+  assert.deepEqual(counters, {
+    recovery: 0,
+    execute: 0,
+    reconcile: 0,
+    begins: 0,
+  });
+});
+
 function agentNode() {
   return {
     nodeId: "node-1",
@@ -648,4 +692,150 @@ function toolReceipt(status: "prepared" | "dispatched") {
       name: "read_file",
     },
   } as never;
+}
+
+async function runToolLimitScenario(
+  maxToolRounds: number,
+  requestedToolRounds: number,
+  options?: {
+    completedReplay: boolean;
+    counters: {
+      recovery: number;
+      execute: number;
+      reconcile: number;
+      begins: number;
+    };
+  },
+) {
+  let modelSamples = 0;
+  let toolBegins = 0;
+  const dependencies = workflowEngineDependencies({
+    loadRun: async () => ({ cancelRequested: false }),
+    renew: async () => undefined,
+  });
+  const completed = {
+    ...((toolReceipt("dispatched") as unknown) as Record<string, unknown>),
+    status: "completed",
+    providerReceiptId: "provider-receipt-1",
+    result: {
+      output: "tool output",
+      isError: false,
+      artifactRef: null,
+    },
+  } as never;
+  const execution = {
+    ...((dependencies.execution as unknown) as Record<string, unknown>),
+    async beginToolExecution() {
+      if (options?.completedReplay) {
+        return {
+          disposition: "existing",
+          attempt: null,
+          receipt: completed,
+        };
+      }
+      toolBegins += 1;
+      options && (options.counters.begins += 1);
+      return {
+        disposition: "prepared",
+        attempt: {
+          step: {},
+          abandonedAttempt: null,
+          attempt: {
+            stepId: `tool-step-${toolBegins}`,
+            attemptId: `tool-attempt-${toolBegins}`,
+          },
+        },
+        receipt: toolReceipt("prepared"),
+      };
+    },
+    async beginToolRecovery() {
+      if (options) options.counters.recovery += 1;
+      throw new Error("unexpected recovery");
+    },
+    async dispatchToolExecution() {
+      return toolReceipt("dispatched");
+    },
+    async commitToolExecutionCompletion() {
+      return {};
+    },
+  } as never;
+  const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
+    execution,
+    store: dependencies.store,
+    leaseDurationMs: 30_000,
+  });
+  const input = workflowEngineInput(async function* () {
+    modelSamples += 1;
+    yield kernelEvent(1, "segment.started", { attempt: 1, model: "model" });
+    if (modelSamples <= requestedToolRounds) {
+      yield kernelEvent(2, "tool.requested", {
+        callId: `call-${modelSamples}`,
+        kind: "function",
+        name: "read_file",
+        input: "{}",
+      });
+      return;
+    }
+    yield kernelEvent(2, "model.output.delta", { delta: "{}" });
+    yield kernelEvent(3, "segment.completed", { output: "{}" });
+  });
+  const base = input.runtime as unknown as { kernel: unknown };
+  input.runtime = {
+    kernel: base.kernel,
+    version: {
+      agentVersionId: "node-agent",
+      policySnapshotId: "node-policy",
+      execution: { maxToolRounds },
+      tools: [
+        {
+          schemaVersion: "crewon.tool-definition.v0",
+          kind: "function",
+          name: "read_file",
+          description: "Read",
+          execution: "serial",
+          inputSchema: {},
+        },
+      ],
+    },
+    toolRuntime: {
+      executionPolicy: () => ({
+        effect: "readOnly",
+        recovery: "replaySafe",
+        resourceBindingId: null,
+        credentialBindingId: null,
+        executionTarget: { kind: "control", bindingId: "read" },
+        capability: "workspace.read",
+        approvalRequirement: "none",
+        limits: {
+          timeoutMs: 1_000,
+          maxOutputBytes: 1_024,
+          maxArtifactBytes: 1_024,
+        },
+      }),
+      async execute() {
+        if (options) options.counters.execute += 1;
+        return toolResolution();
+      },
+      async reconcile() {
+        if (options) options.counters.reconcile += 1;
+        return toolResolution();
+      },
+    },
+  } as never;
+  return { outcome: await engine.execute(input), toolBegins };
+}
+
+function toolResolution() {
+  return {
+    status: "completed" as const,
+    executionId: "tool-execution-1",
+    providerReceiptId: "provider-receipt-1",
+    result: {
+      schemaVersion: "crewon.tool-result.v0" as const,
+      callId: "call-1",
+      output: "tool output",
+      isError: false,
+      artifactRef: null,
+    },
+  };
 }

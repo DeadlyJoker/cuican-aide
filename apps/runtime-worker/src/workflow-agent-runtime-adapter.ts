@@ -125,14 +125,14 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       throw new Error("workflow_node_attempt_not_running");
     }
     await this.#execution.loadRun(authority.workItemClaim);
-    const round = internal.continuationState?.round ?? 0;
-    if (round >= runtime.version.execution.maxToolRounds) {
-      return { status: "failed", failureCode: "model_tool_round_limit_exceeded" };
-    }
+    const modelSampleIndex =
+      internal.continuationState?.modelSampleIndex ?? 0;
+    const toolRoundsConsumed =
+      internal.continuationState?.toolRoundsConsumed ?? 0;
     const segmentId =
-      round === 0
+      modelSampleIndex === 0
         ? `segment:${authority.attemptId}`
-        : `segment:${authority.attemptId}:round:${round + 1}`;
+        : `segment:${authority.attemptId}:round:${modelSampleIndex + 1}`;
     const dispatchStore = modelDispatchStore(runtime, this.#store);
     let dispatch: ModelDispatchReceipt | null = null;
     let effectCertainty: WorkflowNodeEffectCertainty = "notSent";
@@ -306,6 +306,15 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       ) {
         throw new Error("workflow_node_continuation_not_settled");
       }
+      if (
+        executed.segment.requestedTools.length > 0 &&
+        toolRoundsConsumed >= runtime.version.execution.maxToolRounds
+      ) {
+        return {
+          status: "failed",
+          failureCode: "model_tool_round_limit_exceeded",
+        };
+      }
       const toolHistory =
         executed.segment.requestedTools.length === 0
           ? []
@@ -337,7 +346,10 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       return this.execute({
         ...input,
         continuationState: {
-          round: round + 1,
+          modelSampleIndex: modelSampleIndex + 1,
+          toolRoundsConsumed:
+            toolRoundsConsumed +
+            (executed.segment.requestedTools.length > 0 ? 1 : 0),
           history: [
             ...priorHistory,
             ...(executed.segment.assistantContinuation === null
@@ -364,6 +376,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       }
       if (error instanceof WorkflowNodeSideEffectUncertainError) {
         return { status: "unknown" };
+      }
+      if (error instanceof WorkflowToolApprovalHandoffError) {
+        return { status: "approvalHandoffRequired" };
       }
       return decideWorkflowNodeExecutionError({
         error,
@@ -400,7 +415,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         throw new Error("tool_execution_policy_missing");
       }
       if (policy.approvalRequirement === "perAction") {
-        throw new Error("workflow_tool_approval_handoff_required");
+        throw new WorkflowToolApprovalHandoffError();
       }
       if (input.node.kind === "humanGate") {
         throw new Error("workflow_human_gate_model_execution_forbidden");
@@ -428,17 +443,20 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
           agentVersionId: input.authority.agentVersionId,
         },
       );
-      const toolAttempt =
-        prepared.attempt ??
-        (await this.#execution.beginToolRecovery(
-          input.authority.workItemClaim,
-          prepared.receipt,
-        ));
       let receipt = prepared.receipt;
+      let toolAttempt:
+        | Awaited<ReturnType<RunExecutionService["beginToolRecovery"]>>
+        | null = null;
       let resolution: ToolExecutionResolution;
       if (receipt.status === "completed") {
         resolution = completedToolResolution(receipt);
       } else {
+        toolAttempt =
+          prepared.attempt ??
+          (await this.#execution.beginToolRecovery(
+            input.authority.workItemClaim,
+            prepared.receipt,
+          ));
         const shouldExecute = receipt.status === "prepared";
         if (shouldExecute) {
           receipt = await this.#execution.dispatchToolExecution(
@@ -488,6 +506,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         },
       };
       if (receipt.status !== "completed") {
+        if (toolAttempt === null) {
+          throw new Error("workflow_tool_attempt_missing");
+        }
         await this.#execution.commitToolExecutionCompletion(
           input.authority.workItemClaim,
           receipt,
@@ -520,10 +541,17 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
 }
 
 type WorkflowAgentContinuationState = Readonly<{
-  round: number;
+  modelSampleIndex: number;
+  toolRoundsConsumed: number;
   history: readonly import("@crewon/agent-kernel").AgentHistoryItem[];
   continuation: import("@crewon/agent-kernel").AgentContinuation;
 }>;
+
+class WorkflowToolApprovalHandoffError extends Error {
+  constructor() {
+    super("workflow_tool_approval_handoff_required");
+  }
+}
 
 /** Resolves the frozen node AgentVersion and delegates only to an admitted execution engine. */
 export class WorkflowAgentRuntimeAdapter implements WorkflowAgentNodePort {

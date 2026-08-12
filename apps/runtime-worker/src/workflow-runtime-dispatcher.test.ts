@@ -121,6 +121,19 @@ test("settles deterministic execution errors as nonretryable failures", async ()
   ]);
 });
 
+test("approval handoff remains non-settling until durable composition support exists", async () => {
+  const fixture = composition();
+  const outcome = await create(fixture.store, async () => ({
+    status: "approvalHandoffRequired",
+  })).dispatch(input("node"));
+  assert.deepEqual(outcome, {
+    kind: "recovery",
+    runId: "r",
+    code: "workflow_tool_approval_handoff_required",
+  });
+  assert.equal(fixture.settlements, 0);
+});
+
 test("uses unknown only when node side effects may have been sent", async () => {
   const fixture = composition();
   await create(fixture.store, async () => {
