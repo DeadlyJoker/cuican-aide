@@ -246,7 +246,10 @@ function sameAuthority(
     receipt.workItemId === input.workItemId &&
     receipt.leaseEpoch === input.leaseEpoch &&
     receipt.requestDigest === input.requestDigest &&
-    JSON.stringify(receipt.provider) === JSON.stringify(input.provider)
+    receipt.provider.agentVersionId === input.provider.agentVersionId &&
+    receipt.provider.adapterName === input.provider.adapterName &&
+    receipt.provider.adapterVersion === input.provider.adapterVersion &&
+    receipt.provider.modelId === input.provider.modelId
   );
 }
 

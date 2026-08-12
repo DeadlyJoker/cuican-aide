@@ -86,6 +86,7 @@ import {
   type InvalidatedMessage,
   type ModelProviderSettingsCatalog,
   type ModelProviderSettingsState,
+  type ObserveModelDispatchResponseInput,
   type ModelHistoryAppend,
   type OutboxClaim,
   type OutboxLeaseInput,
@@ -114,6 +115,7 @@ import {
   type WorkItemLeaseInput,
   type WorkItemRenewInput,
   type WorkItemRetryInput,
+  type PrepareModelDispatchInput,
   type PrepareToolExecutionInput,
   type DecideToolApprovalInput,
   type ExpireToolApprovalInput,
@@ -130,6 +132,8 @@ import {
   validateToolApprovalReplacementCommit,
   validateToolApprovalReplacementReplay,
   type TransitionToolExecutionInput,
+  type TransitionModelDispatchInput,
+  type TerminateModelDispatchInput,
   type TurnStartReceiptQuery,
   evaluateGoalToolCall,
   type GoalToolExecutionInput,
@@ -223,6 +227,13 @@ import {
   loadSqliteToolExecutionReceiptByAction,
   updateSqliteToolExecutionReceipt,
 } from "./sqlite-tool-execution-receipts.ts";
+import {
+  loadSqliteModelDispatchReceipt,
+  markSqliteModelDispatchPossiblySent,
+  observeSqliteModelDispatchResponse,
+  prepareSqliteModelDispatch,
+  terminateSqliteModelDispatch,
+} from "./sqlite-model-dispatch-evidence.ts";
 import {
   requireNonEmpty,
   stableJson,
@@ -2672,6 +2683,67 @@ export class SqliteRunStore implements DomainStore {
         input.checkpointDigest,
         input.checkpointedAt,
       );
+      this.#validateExecutionLease(
+        input.tenantId,
+        input.runId,
+        input.lease,
+        readLeaseClock(this.#clock),
+      );
+      this.#database.exec("COMMIT");
+      return clone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async loadModelDispatchReceipt(locator: RunAttemptLocator) {
+    this.#assertOpen();
+    try {
+      return clone(loadSqliteModelDispatchReceipt(this.#database, locator));
+    } catch (error) {
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async prepareModelDispatch(input: PrepareModelDispatchInput) {
+    return this.#mutateModelDispatch(input, () =>
+      prepareSqliteModelDispatch(this.#database, input),
+    );
+  }
+
+  async markModelDispatchPossiblySent(input: TransitionModelDispatchInput) {
+    return this.#mutateModelDispatch(input, () =>
+      markSqliteModelDispatchPossiblySent(this.#database, input),
+    );
+  }
+
+  async observeModelDispatchResponse(input: ObserveModelDispatchResponseInput) {
+    return this.#mutateModelDispatch(input, () =>
+      observeSqliteModelDispatchResponse(this.#database, input),
+    );
+  }
+
+  async terminateModelDispatch(input: TerminateModelDispatchInput) {
+    return this.#mutateModelDispatch(input, () =>
+      terminateSqliteModelDispatch(this.#database, input),
+    );
+  }
+
+  async #mutateModelDispatch(
+    input: PrepareModelDispatchInput | TransitionModelDispatchInput,
+    mutation: () => import("@crewon/domain").ModelDispatchReceipt,
+  ) {
+    this.#assertOpen();
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.#validateExecutionLease(
+        input.tenantId,
+        input.runId,
+        input.lease,
+        readLeaseClock(this.#clock),
+      );
+      const result = mutation();
       this.#validateExecutionLease(
         input.tenantId,
         input.runId,
