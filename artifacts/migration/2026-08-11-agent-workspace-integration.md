@@ -530,4 +530,27 @@ Gate 报告为通过。
   kill/restart 仍作为 packaged production acceptance 保留，但 transport Map 已不再是恢复 authority。
 - Rust core 只运行了与本轮变更对应的 focused suite；仓库级完整 `just test` 仍须按仓库规则单独获准后运行。
 
+## Durable Workflow / AR-043 合入后的 packaged recovery
+
+- 使用官方 redistributable Node `v24.18.1`
+  (`f480e325ee0ca9cb9eef00b5ca6057a2a104807a1b073f1bc373a55c67facff5`) 重新 staging sidecars。四个 native
+  staged/bundled SHA-256 全量一致：app-server `1738dba048cd333dda51c7f35a71f881a6464339a0ab4b4221a66b588fbf6479`、Device
+  `f9a54fea5e97520fe0c906fb87aa2e9fd2bc53d386e95e921e4e4529a12844c5`、guardian
+  `83fc5ab3741117383ff98ed172ab8284e7311ca31bf40b5a6f96d70aa74ac884`、Node `f480e325...facff5`。五个 runtime bundle
+  也逐字节一致：Control `ac03ea1b...4c034`、Gateway `2fb01f67...097e`、Provider coordinator `58e101db...4666`、Release
+  `583b81ac...4fda`、Worker `aa786e84...e2c3`。`.app` 与 updater tarball 均已生成；Tauri 仍只在此后因缺少
+  `TAURI_SIGNING_PRIVATE_KEY` 返回 1，没有绕过发布签名 Gate。
+- 最新 packaged smoke 复用隔离 HOME `/private/tmp/crewon-packaged-smoke.LxwDwe`。首次启动将 persisted route 从 epoch 19 精确推进到
+  20，heartbeat 保持 connection `native-connection-d2906562-a5f3-4237-9e96-9f3900c70428` 不变，只延长 lease。idempotency key
+  `packaged-stage-workflow-ar043-v1` 返回 `201 completed`，结果为 UTF-8 byte order 的 `README.md`、`alpha`、`beta`、
+  `truncated=false`。Control operation revision 2、Gateway accepted/terminal sequence 1/2、Device event 1/2 和 ACK 1/2 全部绑定 epoch 20，
+  execution 的 `acknowledged_through=2`；命令没有触发 route 重连。
+- 对 GUI 根进程发送 `SIGKILL` 后，guardian 清理全部 bundle 进程，端口 3210/6176 均释放。同一 HOME 再启动后 route 精确推进到 epoch 21，
+  新 connection `native-connection-f27637d2-416b-43ab-8215-9eb6570f1b6e` 下使用
+  `packaged-stage-workflow-ar043-recovery-v1` 再次 `201 completed`。第二条命令的 Control/Gateway/Device authority 仍为 completed、sequence
+  1/2、ACK 1/2，route 保持 epoch 21。最终正常 `SIGTERM` 后约 0.5 秒内进程树和两个端口再次清零。
+- 这轮 packaged smoke 证明最新 Workflow foundation 与 AR-043 Worker bundle 没有破坏四进程 Workspace 纵切和 crash recovery；它没有连接真实
+  Responses provider，因此不外推为 AR-043 真实 provider turn state 的 OS-process kill acceptance。该项仍需受控 provider endpoint 和可观测
+  response state 的独立 packaged 场景。
+
 因此本轮证明的是基础 Agent P0 completed-item 边界和 Native Workspace 四进程纵切已在当前分支落地，而不是完整产品迁移或生产发布已经完成。
