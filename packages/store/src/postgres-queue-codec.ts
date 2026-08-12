@@ -62,9 +62,15 @@ export function decodePostgresWorkItem(row: PostgresQueueItemRow): WorkItem {
           ? "automationInvocation"
           : value.payload.trigger === "workflowScheduler"
             ? "workflowScheduler"
-        : value.payload.trigger === "manualCompaction"
-          ? "manualCompaction"
-          : "default",
+            : value.payload.trigger === "workflowCancel"
+              ? "workflowCancel"
+              : value.payload.trigger === "workflowNode"
+                ? "workflowNode"
+                : value.payload.trigger === "workflowReconcile"
+                  ? "workflowReconcile"
+                  : value.payload.trigger === "manualCompaction"
+                    ? "manualCompaction"
+                    : "default",
   );
   if (
     value.kind !== row.kind ||

@@ -3021,6 +3021,8 @@ export function validateWorkItems(
     | "automationInvocation"
     | "workflowScheduler"
     | "workflowCancel"
+    | "workflowNode"
+    | "workflowReconcile"
     | "manualCompaction" = "default",
 ): void {
   const workItemIds = new Set<string>();
@@ -3033,7 +3035,8 @@ export function validateWorkItems(
     const payloadKeys = Object.keys(workItem.payload).sort();
     const payloadValid =
       payloadKind === "workflowScheduler"
-        ? stableJson(payloadKeys) === stableJson([
+        ? stableJson(payloadKeys) ===
+          stableJson([
             "binding",
             "schedulerOperationId",
             "schemaVersion",
@@ -3041,55 +3044,122 @@ export function validateWorkItems(
             "workflowInput",
           ])
         : payloadKind === "workflowCancel"
-          ? stableJson(payloadKeys) === stableJson([
-              "binding", "cancellationOperationId", "schemaVersion", "trigger"])
-        : payloadKind === "default"
-        ? stableJson(payloadKeys) === stableJson(["throughSequence"])
-        : payloadKind === "goalContinuation"
           ? stableJson(payloadKeys) ===
             stableJson([
-              "goalId",
-              "goalRevision",
-              "previousRunId",
-              "throughSequence",
+              "binding",
+              "cancellationOperationId",
+              "schemaVersion",
               "trigger",
             ])
-          : payloadKind === "goalActivation"
+          : payloadKind === "workflowNode"
             ? stableJson(payloadKeys) ===
               stableJson([
-                "goalId",
-                "goalRevision",
-                "throughSequence",
+                "binding",
+                "claimEpoch",
+                "claimId",
+                "nodeId",
+                "schedulerOperationId",
+                "schemaVersion",
                 "trigger",
               ])
-            : payloadKind === "automationInvocation"
+            : payloadKind === "workflowReconcile"
               ? stableJson(payloadKeys) ===
                 stableJson([
                   "binding",
+                  "claimEpoch",
+                  "claimId",
+                  "nodeId",
+                  "reconciliationOperationId",
                   "schemaVersion",
-                  "throughSequence",
                   "trigger",
                 ])
-              : stableJson(payloadKeys) ===
-                stableJson([
-                  "expectedHistorySequence",
-                  "schemaVersion",
-                  "throughSequence",
-                  "trigger",
-                ]);
-    if (!payloadValid || (!["workflowScheduler", "workflowCancel"].includes(payloadKind) &&
-        workItem.payload.throughSequence !== throughSequence)) {
+              : payloadKind === "default"
+                ? stableJson(payloadKeys) === stableJson(["throughSequence"])
+                : payloadKind === "goalContinuation"
+                  ? stableJson(payloadKeys) ===
+                    stableJson([
+                      "goalId",
+                      "goalRevision",
+                      "previousRunId",
+                      "throughSequence",
+                      "trigger",
+                    ])
+                  : payloadKind === "goalActivation"
+                    ? stableJson(payloadKeys) ===
+                      stableJson([
+                        "goalId",
+                        "goalRevision",
+                        "throughSequence",
+                        "trigger",
+                      ])
+                    : payloadKind === "automationInvocation"
+                      ? stableJson(payloadKeys) ===
+                        stableJson([
+                          "binding",
+                          "schemaVersion",
+                          "throughSequence",
+                          "trigger",
+                        ])
+                      : stableJson(payloadKeys) ===
+                        stableJson([
+                          "expectedHistorySequence",
+                          "schemaVersion",
+                          "throughSequence",
+                          "trigger",
+                        ]);
+    if (
+      !payloadValid ||
+      (![
+        "workflowScheduler",
+        "workflowCancel",
+        "workflowNode",
+        "workflowReconcile",
+      ].includes(payloadKind) &&
+        workItem.payload.throughSequence !== throughSequence)
+    ) {
       throw new RunStoreError("work_item_payload_invalid");
     }
-    if (payloadKind === "workflowCancel" &&
-        (workItem.payload.schemaVersion !== "crewon.workflow-cancel-work-item.v0" ||
-         workItem.payload.trigger !== "workflowCancel" ||
-         typeof workItem.payload.cancellationOperationId !== "string" ||
-         workItem.payload.cancellationOperationId.trim().length === 0))
+    if (
+      payloadKind === "workflowCancel" &&
+      (workItem.payload.schemaVersion !==
+        "crewon.workflow-cancel-work-item.v0" ||
+        workItem.payload.trigger !== "workflowCancel" ||
+        typeof workItem.payload.cancellationOperationId !== "string" ||
+        workItem.payload.cancellationOperationId.trim().length === 0)
+    )
       throw new RunStoreError("work_item_payload_invalid");
     if (payloadKind === "workflowCancel") {
-      try { parseFrozenWorkflowVersionBinding(workItem.payload.binding); }
-      catch { throw new RunStoreError("work_item_payload_invalid"); }
+      try {
+        parseFrozenWorkflowVersionBinding(workItem.payload.binding);
+      } catch {
+        throw new RunStoreError("work_item_payload_invalid");
+      }
+    }
+    if (payloadKind === "workflowNode" || payloadKind === "workflowReconcile") {
+      const payload = workItem.payload;
+      const operationId =
+        payloadKind === "workflowNode"
+          ? payload.schedulerOperationId
+          : payload.reconciliationOperationId;
+      if (
+        payload.schemaVersion !==
+          (payloadKind === "workflowNode"
+            ? "crewon.workflow-node-work-item.v0"
+            : "crewon.workflow-reconcile-work-item.v0") ||
+        payload.trigger !== payloadKind ||
+        ![payload.nodeId, payload.claimId, operationId].every(
+          (value) => typeof value === "string" && value.trim().length > 0,
+        ) ||
+        typeof payload.claimEpoch !== "number" ||
+        !Number.isSafeInteger(payload.claimEpoch) ||
+        payload.claimEpoch <= 0
+      )
+        throw new RunStoreError("work_item_payload_invalid");
+      try {
+        parseFrozenWorkflowVersionBinding(payload.binding);
+      } catch {
+        throw new RunStoreError("work_item_payload_invalid");
+      }
     }
     if (
       payloadKind === "goalContinuation" &&
