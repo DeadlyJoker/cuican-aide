@@ -239,6 +239,21 @@ test("routes cancellation through composition authority", async () => {
   assert.equal(fixture.cancellations, 1);
 });
 
+test("routes cancel-requested reconciliation without invoking cancellation", async () => {
+  const fixture = composition();
+  fixture.store.reconcileWorkflowNode = async () => ({
+    disposition: "retryRequired", evidenceStatus: "possiblySent",
+    execution: {} as never, handoff: { currentWorkItem: "retained",
+      nextWorkItemId: null, kind: "none" }, runDisposition: "nonTerminal",
+  });
+  const outcome = await create(fixture.store, async () => {
+    throw new Error("agent must not execute");
+  }).cancel(input("reconcile"));
+  assert.deepEqual(outcome, { kind: "recovery", runId: "r",
+    code: "workflow_reconciliation_retry_required" });
+  assert.equal(fixture.cancellations, 0);
+});
+
 function composition() {
   const state = (status: "running" | "completed" = "running") => ({
     schemaVersion: "crewon.workflow-execution.v0" as const,

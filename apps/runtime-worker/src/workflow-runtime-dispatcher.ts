@@ -211,6 +211,7 @@ export class ProductionWorkflowRuntimeDispatcher
     const payload = parseWorkflowWorkItemPayload(input.claim.workItem.payload);
     if (canonicalJson(payload.binding) !== canonicalJson(binding))
       throw new Error("workflow_work_item_binding_mismatch");
+    if (payload.trigger === "workflowReconcile") return this.dispatch(input);
     const cancelOperationId = payload.trigger === "workflowCancel"
       ? payload.cancellationOperationId
       : operationId ?? `workflow-cancel:${input.claim.workItem.workItemId}`;
