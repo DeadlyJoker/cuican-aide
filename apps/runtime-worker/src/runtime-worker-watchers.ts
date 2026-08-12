@@ -20,6 +20,7 @@ export class CancellationWatcher {
   #cancelTimer: (() => void) | null = null;
   #inFlight: Promise<void> | null = null;
   #failure: unknown = null;
+  #cancellationRequested = false;
 
   constructor(
     intervalMs: number,
@@ -41,6 +42,10 @@ export class CancellationWatcher {
 
   failure(): unknown {
     return this.#failure;
+  }
+
+  cancellationRequested(): boolean {
+    return this.#cancellationRequested;
   }
 
   async close(): Promise<void> {
@@ -72,6 +77,7 @@ export class CancellationWatcher {
     try {
       const run = await this.#loadRun();
       if (run.cancelRequested) {
+        this.#cancellationRequested = true;
         this.#controller.abort("durable_cancel_requested");
       }
     } catch (error) {

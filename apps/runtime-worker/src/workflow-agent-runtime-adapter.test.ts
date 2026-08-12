@@ -271,12 +271,48 @@ test("workflow lifecycle renews a stalled segment and aborts it on durable cance
   assert.equal(kernelAborted, true);
   assert.ok(renewals > 0);
   assert.deepEqual(outcome, {
-    status: "failed",
-    failureCode: "workflow_node_segment_incomplete",
+    status: "canceled",
   });
   const settledRenewals = renewals;
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.equal(renewals, settledRenewals, "heartbeat timer must be closed");
+});
+
+test("workflow heartbeat failure aborts a stalled segment without becoming canceled", async () => {
+  let renewals = 0;
+  let kernelAborted = false;
+  const dependencies = workflowEngineDependencies({
+    loadRun: async () => ({ cancelRequested: false }),
+    renew: async () => {
+      renewals += 1;
+      throw new Error("lease_renewal_failed");
+    },
+  });
+  const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
+    ...dependencies,
+    leaseDurationMs: 18,
+  });
+  await assert.rejects(
+    engine.execute(
+      workflowEngineInput(async function* (_contract, signal) {
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              kernelAborted = true;
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      }),
+    ),
+    /lease_renewal_failed/,
+  );
+  assert.equal(kernelAborted, true);
+  assert.equal(renewals, 1);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(renewals, 1, "failed heartbeat timer must be closed");
 });
 
 test("workflow Direct dispatch fails closed before kernel when evidence Store is missing", async () => {

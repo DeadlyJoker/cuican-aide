@@ -112,7 +112,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     ) {
       throw new Error("workflow_node_attempt_not_running");
     }
-    const run = await this.#execution.loadRun(authority.workItemClaim);
+    await this.#execution.loadRun(authority.workItemClaim);
     const segmentId = `segment:${authority.attemptId}`;
     const dispatchStore = modelDispatchStore(runtime, this.#store);
     let dispatch: ModelDispatchReceipt | null = null;
@@ -169,7 +169,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             (await this.#execution.loadRun(authority.workItemClaim))
               .cancelRequested,
           checkpointProviderResponse: async (checkpoint) => {
-            if (dispatchStore !== null && dispatch === null) {
+            if (dispatch === null) {
               throw new AgentKernelError(
                 "model_dispatch_preparation_missing",
                 false,
@@ -189,7 +189,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             );
             effectCertainty = "responseObserved";
             if (dispatch !== null) {
-              dispatch = await dispatchStore!.loadModelDispatchReceipt({
+              dispatch = await dispatchStore.loadModelDispatchReceipt({
                 tenantId: authority.tenantId,
                 runId: authority.runId,
                 ...attempt,
@@ -212,7 +212,6 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         },
         controlSink: {
           modelRequestPrepared: async (evidence) => {
-            if (dispatchStore === null) return;
             dispatch = await dispatchStore.prepareModelDispatch({
               tenantId: authority.tenantId,
               runId: authority.runId,
@@ -227,7 +226,6 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             });
           },
           dispatchBoundaryCrossed: async (evidence) => {
-            if (dispatchStore === null) return;
             if (
               dispatch === null ||
               dispatch.operationId !== evidence.operationId ||
@@ -252,6 +250,13 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
           },
         },
       });
+      if (heartbeat.failure() !== null) throw heartbeat.failure();
+      if (cancellationWatcher.failure() !== null) {
+        throw cancellationWatcher.failure();
+      }
+      if (executed.canceled || cancellationWatcher.cancellationRequested()) {
+        return { status: "canceled" };
+      }
       for (const event of executed.segment.bufferedEvents) {
         await this.#execution.recordAgentEvent(authority.workItemClaim, event);
       }
@@ -275,6 +280,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       if (heartbeat.failure() !== null) throw heartbeat.failure();
       if (cancellationWatcher.failure() !== null) {
         throw cancellationWatcher.failure();
+      }
+      if (cancellationWatcher.cancellationRequested()) {
+        return { status: "canceled" };
       }
       return decideWorkflowNodeExecutionError({
         error,
@@ -335,7 +343,7 @@ export class WorkflowAgentRuntimeAdapter implements WorkflowAgentNodePort {
 function modelDispatchStore(
   runtime: AgentVersionRuntime,
   store: WorkflowExecutionStore,
-): ModelDispatchEvidenceStore | null {
+): ModelDispatchEvidenceStore {
   if (
     runtime.kernel.supportsModelDispatchEvidence !== true ||
     typeof store.prepareModelDispatch !== "function" ||
