@@ -366,7 +366,7 @@ async function validateSettleReplay(
   const result = stored as Awaited<
     ReturnType<WorkflowRunCompositionStore["settleWorkflowHumanGate"]>
   >;
-  await loadPostgresWorkflowAuthorities(client, schema, input, digester);
+  await loadPostgresWorkflowAuthorities(client, schema, input, digester, true);
   const gate = await loadGate(client, schema, input, true);
   const execution = await loadPostgresWorkflowExecution(
     client,
@@ -387,6 +387,10 @@ async function validateSettleReplay(
     !["completed", "failed"].includes(step.status) ||
     gate.decisionReceiptId !== input.decisionReceiptId
   )
+    replayCorrupt();
+  const expectedKind = result.schedulerContinuationWorkItemId === null ? "none" : "scheduler";
+  if (result.handoff.currentWorkItem !== "completed" || result.handoff.kind !== expectedKind ||
+      result.handoff.nextWorkItemId !== result.schedulerContinuationWorkItemId)
     replayCorrupt();
   const work = await client.query<{
     status: string;

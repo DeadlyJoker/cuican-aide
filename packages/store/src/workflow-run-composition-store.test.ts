@@ -491,6 +491,140 @@ if (postgresUrl === undefined) {
       await store.close();
     }
   });
+
+  test("PostgreSQL gate decision and settlement are atomic and replay exact", async () => {
+    const schema = `workflow_gate_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({
+      pool,
+      schema,
+      digester,
+    });
+    try {
+      await seedPostgresComposition(pool, schema);
+      const scheduled = await store.scheduleWorkflowNodes({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease,
+        binding,
+        schedulerOperationId: "schedule-fanout-1",
+        workflowInput: {
+          valueId: "root-value-1",
+          valueDigest: digester.sha256("{}"),
+        },
+      });
+      const gate = scheduled.gatePublications[0]!;
+      const decision = {
+        tenantId: "tenant-1",
+        runId: "run-1",
+        binding,
+        nodeId: gate.nodeId,
+        claimId: gate.claimId,
+        claimEpoch: gate.claimEpoch,
+        gateRequestId: gate.gateRequestId,
+        decisionReceiptId: "decision-1",
+        outcome: { status: "failed" as const, failureCode: "denied" },
+      };
+      const recorded = await store.recordWorkflowHumanGateDecision(decision);
+      assert.equal(recorded.disposition, "recorded");
+      assert.deepEqual(await store.recordWorkflowHumanGateDecision(decision), {
+        ...recorded,
+        disposition: "replay",
+      });
+      await assert.rejects(
+        store.recordWorkflowHumanGateDecision({
+          ...decision,
+          outcome: { status: "completed" },
+        }),
+        /idempotency_conflict/u,
+      );
+      await pool.query(
+        `UPDATE ${schema}.work_items SET status='leased',
+        lease_owner_id='gate-worker',lease_id='gate-lease',lease_epoch=1,
+        lease_expires_at=clock_timestamp()+interval '1 minute'
+        WHERE work_item_id=$1`,
+        [recorded.approvalResumeWorkItemId],
+      );
+      const settlement = {
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: {
+          workItemId: recorded.approvalResumeWorkItemId,
+          ownerId: "gate-worker",
+          leaseId: "gate-lease",
+          leaseEpoch: 1,
+        },
+        binding,
+        nodeId: gate.nodeId,
+        claimId: gate.claimId,
+        claimEpoch: gate.claimEpoch,
+        gateRequestId: gate.gateRequestId,
+        decisionReceiptId: "decision-1",
+        operationId: "settle-gate-1",
+      };
+      const settled = await store.settleWorkflowHumanGate(settlement);
+      assert.equal(settled.disposition, "settled");
+      assert.equal(settled.runDisposition, "terminalConverged");
+      assert.equal(settled.execution.status, "failed");
+      const reopened = new PostgresWorkflowRunCompositionStore({
+        pool,
+        schema,
+        digester,
+      });
+      assert.equal(
+        (await reopened.settleWorkflowHumanGate(settlement)).disposition,
+        "replay",
+      );
+      const authority = await pool.query(
+        `SELECT r.state_json AS run,
+        w.status,w.lease_owner_id,w.lease_id,w.lease_expires_at
+        FROM ${schema}.run_snapshots r JOIN ${schema}.work_items w ON w.run_id=r.run_id
+        WHERE r.run_id='run-1' AND w.work_item_id=$1`,
+        [recorded.approvalResumeWorkItemId],
+      );
+      assert.equal(authority.rows[0]?.run.status, "failed");
+      assert.deepEqual(
+        [
+          authority.rows[0]?.status,
+          authority.rows[0]?.lease_owner_id,
+          authority.rows[0]?.lease_id,
+          authority.rows[0]?.lease_expires_at,
+        ],
+        ["completed", null, null, null],
+      );
+      await pool.query(`UPDATE ${schema}.workflow_composition_receipts
+        SET result_json=jsonb_set(result_json,'{handoff,kind}','"scheduler"')
+        WHERE operation_id='settle-gate-1'`);
+      await assert.rejects(
+        reopened.settleWorkflowHumanGate(settlement),
+        /receipt_corrupt/u,
+      );
+
+      await seedPostgresSchedulerWork(
+        pool,
+        schema,
+        "stale-gate",
+        "stale-gate",
+        "-1 second",
+      );
+      const before = await pool.query(`SELECT count(*)::int AS count
+        FROM ${schema}.workflow_composition_receipts`);
+      await assert.rejects(
+        store.settleWorkflowHumanGate({
+          ...settlement,
+          lease: { ...settlement.lease, workItemId: "stale-gate" },
+          operationId: "stale-settle",
+        }),
+        /stale_lease|work_item_mismatch/u,
+      );
+      const after = await pool.query(`SELECT count(*)::int AS count
+        FROM ${schema}.workflow_composition_receipts`);
+      assert.equal(after.rows[0]?.count, before.rows[0]?.count);
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
 }
 
 async function seedPostgresComposition(

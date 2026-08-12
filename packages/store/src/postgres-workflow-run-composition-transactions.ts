@@ -489,6 +489,7 @@ export async function loadPostgresWorkflowAuthorities(
     binding: ScheduleInput["binding"];
   },
   digester: WorkflowContentDigester,
+  allowTerminalRun = false,
 ) {
   const runResult = await client.query<{ state_json: RunState }>(
     `SELECT state_json FROM ${schema}.run_snapshots WHERE tenant_id=$1 AND run_id=$2 FOR UPDATE`,
@@ -505,7 +506,7 @@ export async function loadPostgresWorkflowAuthorities(
     throw new RunStoreError("workflow_composition_run_not_found");
   if (
     run.purpose !== "workflow" ||
-    run.status !== "running" ||
+    (!allowTerminalRun && run.status !== "running") ||
     stableJson(run.workflowVersionBinding) !== stableJson(input.binding)
   )
     throw new RunStoreError("workflow_composition_run_authority_mismatch");
