@@ -1,15 +1,20 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   compileWorkflowVersion,
+  createWorkflowNodeTerminalEvidence,
   replayRunLifecycle,
   serializeCompiledWorkflowVersion,
   type RunLifecycleEvent,
 } from "@crewon/domain";
 
 import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
+import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 
 const digester = {
@@ -253,6 +258,218 @@ test("SQLite Slice 1 converges Agent to Verification without replay authority or
     { ...terminal, disposition: "replay" },
   );
 });
+
+test("D1 public SQLite runtime atomically settles model terminal evidence", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-d1-model-terminal-"));
+  const path = join(directory, "runtime.sqlite");
+  t.after(async () => rm(directory, { recursive: true, force: true }));
+  const nowMs = Date.parse("2026-08-12T00:00:10.000Z");
+  const fixtureDatabase = new DatabaseSync(path);
+  const fixtureStore = new SqliteWorkflowRunCompositionStore(fixtureDatabase, {
+    digester,
+    clock: { nowEpochMilliseconds: () => nowMs },
+  });
+  await seed(fixtureDatabase, nowMs + 60_000);
+  await fixtureStore.close();
+  fixtureDatabase.close();
+
+  const store = new SqliteRunStore(path, {
+    workflowDigester: digester,
+    clock: { nowEpochMilliseconds: () => nowMs },
+  });
+  t.after(async () => store.close());
+  const scheduled = await store.scheduleWorkflowNodes(
+    schedulerInput("scheduler-initial", "scheduler-work"),
+  );
+  const agent = scheduled.nodeWorkItems[0]!;
+  const agentLease = leasePath(path, agent.workItemId, "agent-worker", nowMs);
+  const admitted = await store.admitWorkflowNodeWork(
+    admissionInput(agent, agentLease, "scheduler-initial", "admit-agent"),
+  );
+  assert.equal(admitted.disposition, "fresh");
+  const authority = {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    workItemId: agent.workItemId,
+    leaseEpoch: agent.claimEpoch,
+    nodeId: agent.nodeId,
+    nodeKind: "agent" as const,
+    claimId: agent.claimId,
+    claimEpoch: agent.claimEpoch,
+    agentVersionId: "agent-v1",
+    attempt: {
+      stepId: admitted.admission!.step.stepId,
+      attemptId: admitted.admission!.attempt.attemptId,
+    },
+  };
+  const prepared = await store.prepareModelDispatch({
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: agentLease,
+    attempt: authority.attempt,
+    operationId: "dispatch-agent",
+    requestSequence: 1,
+    operation: "dispatch",
+    requestDigest: digester.sha256("agent-request"),
+    provider: {
+      agentVersionId: "agent-v1",
+      adapterName: "responses",
+      adapterVersion: "1",
+      modelId: "model-1",
+    },
+    preparedAt: "2026-08-12T00:00:01.000Z",
+  });
+  const sent = await store.markModelDispatchPossiblySent({
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: agentLease,
+    attempt: authority.attempt,
+    operationId: prepared.operationId,
+    requestSequence: prepared.requestSequence,
+    expectedRevision: prepared.revision,
+    transitionedAt: "2026-08-12T00:00:02.000Z",
+  });
+  const observed = await store.observeModelDispatchResponse({
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: agentLease,
+    attempt: authority.attempt,
+    operationId: sent.operationId,
+    requestSequence: sent.requestSequence,
+    expectedRevision: sent.revision,
+    checkpointDigest: digester.sha256("agent-checkpoint"),
+    transitionedAt: "2026-08-12T00:00:03.000Z",
+  });
+  const settlement = {
+    binding,
+    nodeId: agent.nodeId,
+    operationId: "model-terminal-agent",
+    evidence: createWorkflowNodeTerminalEvidence({
+      workflow,
+      nodeId: agent.nodeId,
+      outcome: { status: "completed" as const, value: {} },
+      digester,
+    }),
+    lease: agentLease,
+    authority,
+    dispatch: {
+      operationId: observed.operationId,
+      requestSequence: observed.requestSequence,
+      expectedRevision: observed.revision,
+      status: "responseObserved" as const,
+    },
+    dispatchTerminalOutcome: {
+      kind: "completed" as const,
+      code: null,
+      certainty: "responseObserved" as const,
+    },
+  };
+
+  const fresh = await store.settleWorkflowNodeModelTerminal(settlement);
+  assert.equal(fresh.disposition, "settled");
+  assert.equal(fresh.runDisposition, "nonTerminal");
+  assert.equal(fresh.continuation, null);
+  assert.equal(fresh.handoff.kind, "scheduler");
+  const afterFresh = inspectD1(path, "agent", agent.workItemId);
+  assert.deepEqual(afterFresh.terminalAuthorities, {
+    dispatch: "terminal",
+    attempt: "completed",
+    step: "completed",
+    dag: "completed",
+    workItem: "completed",
+  });
+  assert.equal(afterFresh.continuationCount, 0);
+  assert.equal(afterFresh.schedulerCount, 1);
+
+  assert.deepEqual(await store.settleWorkflowNodeModelTerminal(settlement), {
+    ...fresh,
+    disposition: "replay",
+  });
+  assert.deepEqual(inspectD1(path, "agent", agent.workItemId), afterFresh);
+  await assert.rejects(
+    store.settleWorkflowNodeModelTerminal({
+      ...settlement,
+      dispatchTerminalOutcome: {
+        ...settlement.dispatchTerminalOutcome,
+        code: "drift",
+      },
+    }),
+    /idempotency_conflict/u,
+  );
+
+  const schedulerId = fresh.handoff.nextWorkItemId!;
+  const schedulerLease = leasePath(path, schedulerId, "scheduler-worker", nowMs);
+  const verificationSchedule = await store.scheduleWorkflowNodes(
+    schedulerInput(schedulerId, schedulerId, schedulerLease),
+  );
+  assert.deepEqual(
+    verificationSchedule.nodeWorkItems.map(({ nodeId }) => nodeId),
+    ["verification"],
+  );
+});
+
+function inspectD1(path: string, nodeId: string, workItemId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const dispatch = database
+      .prepare("SELECT status FROM model_dispatch_receipts WHERE step_id=?")
+      .get(nodeId)?.status;
+    const attempt = database
+      .prepare("SELECT status FROM run_attempts WHERE step_id=?")
+      .get(nodeId)?.status;
+    const step = database
+      .prepare("SELECT status FROM run_steps WHERE step_id=?")
+      .get(nodeId)?.status;
+    const execution = JSON.parse(
+      database.prepare("SELECT state_json FROM workflow_executions").get()!
+        .state_json as string,
+    );
+    const workItem = database
+      .prepare("SELECT status FROM work_items WHERE work_item_id=?")
+      .get(workItemId)?.status;
+    return {
+      terminalAuthorities: {
+        dispatch,
+        attempt,
+        step,
+        dag: execution.nodes.find(
+          (node: { nodeId: string }) => node.nodeId === nodeId,
+        )?.status,
+        workItem,
+      },
+      continuationCount: database
+        .prepare("SELECT count(*) AS count FROM workflow_node_continuations")
+        .get()!.count,
+      schedulerCount: database
+        .prepare(
+          `SELECT count(*) AS count FROM work_items
+           WHERE json_extract(work_item_json,'$.payload.trigger')='workflowScheduler'
+             AND status='pending'`,
+        )
+        .get()!.count,
+      receiptCount: database
+        .prepare(
+          "SELECT count(*) AS count FROM workflow_composition_receipts WHERE operation_id='model-terminal-agent'",
+        )
+        .get()!.count,
+      run: database.prepare("SELECT state_json FROM run_snapshots").get()!
+        .state_json,
+      events: database.prepare("SELECT event_json FROM run_events ORDER BY sequence").all(),
+      outbox: database.prepare("SELECT message_json FROM outbox ORDER BY message_id").all(),
+    };
+  } finally {
+    database.close();
+  }
+}
+
+function leasePath(path: string, workItemId: string, ownerId: string, nowMs: number) {
+  const database = new DatabaseSync(path);
+  try {
+    return lease(database, workItemId, ownerId, nowMs);
+  } finally {
+    database.close();
+  }
+}
 
 function schedulerInput(
   schedulerOperationId: string,
