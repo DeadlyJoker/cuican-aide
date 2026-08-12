@@ -199,13 +199,14 @@ export interface WorkflowRunCompositionStore {
     claimEpoch: number;
     reconciliationOperationId: string;
     dispatchOperationId: string;
+    observedStatus: WorkflowDispatchEvidenceStatus;
   }): Promise<
     Readonly<{
-      disposition: "evidenceInsufficient";
+      disposition: "retryRequired" | "evidenceInsufficient" | "settled" | "replay";
       evidenceStatus: WorkflowDispatchEvidenceStatus;
       execution: WorkflowExecutionState;
       handoff: WorkflowAtomicHandoff;
-      runDisposition: "nonTerminal";
+      runDisposition: WorkflowRunDisposition;
     }>
   >;
 

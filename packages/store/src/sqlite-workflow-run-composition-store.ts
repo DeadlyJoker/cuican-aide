@@ -554,8 +554,19 @@ export class SqliteWorkflowRunCompositionStore
     input: Parameters<WorkflowRunCompositionStore["reconcileWorkflowNode"]>[0],
   ): ReturnType<WorkflowRunCompositionStore["reconcileWorkflowNode"]> {
     const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    const fingerprint = this.#fingerprint("reconcileNode", input);
     try {
       this.#database.exec("BEGIN IMMEDIATE");
+      const receiptInput = { ...input,
+        operationId: input.reconciliationOperationId };
+      const replay = this.#receipt(
+        receiptInput, "settleNode", fingerprint);
+      if (replay !== null) {
+        this.#database.exec("COMMIT");
+        return structuredClone({ ...(replay as object), disposition: "replay" } as
+          Awaited<ReturnType<WorkflowRunCompositionStore["reconcileWorkflowNode"]>>);
+      }
       this.#validateLease(input, nowMs);
       assertCanonicalRun(this.#loadRun(input.tenantId, input.runId), input.binding);
       const expectedPayload = {
@@ -591,11 +602,42 @@ export class SqliteWorkflowRunCompositionStore
         throw new RunStoreError("workflow_reconciliation_evidence_missing");
       const evidenceStatus = dispatch.status === "prepared"
         ? "notDispatched" as const : dispatch.status;
-      const result = { disposition: "evidenceInsufficient" as const,
-        evidenceStatus, execution: execution!,
-        handoff: { currentWorkItem: "retained" as const,
-          nextWorkItemId: null, kind: "none" as const },
-        runDisposition: "nonTerminal" as const };
+      if (input.observedStatus !== evidenceStatus)
+        throw new RunStoreError("workflow_reconciliation_observation_forged");
+      if (dispatch.status === "terminal" &&
+          dispatch.terminalOutcome?.kind !== "completed") {
+        const outcome = dispatch.terminalOutcome!.kind === "failed"
+          ? { status: "failed" as const,
+              failureCode: dispatch.terminalOutcome!.code ?? "model_dispatch_failed" }
+          : { status: "canceled" as const };
+        const next = settleWorkflowClaim({ execution: execution!, ...input,
+          outcome, now });
+        finishSqliteRunAttempt(this.#database, { tenantId: input.tenantId,
+          runId: input.runId, workItemId: attempt.workItemId,
+          leaseEpoch: attempt.leaseEpoch,
+          attempt: { stepId: input.nodeId, attemptId: attempt.attemptId,
+            finishedAt: now, checkpointDigest: dispatch.responseCheckpointDigest,
+            ...(outcome.status === "failed"
+              ? { status: "failed" as const,
+                  failure: { code: outcome.failureCode, retryable: false } }
+              : { status: "canceled" as const }) } });
+        this.#writeExecution(next, now);
+        const runDisposition = this.#convergeTerminalRun(
+          receiptInput, this.#loadWorkflow(input), next, now, nowMs);
+        const result = { disposition: "settled" as const, evidenceStatus,
+          execution: next, handoff: { currentWorkItem: "completed" as const,
+            nextWorkItemId: null, kind: "none" as const }, runDisposition };
+        this.#insertReceipt(
+          receiptInput, "settleNode", fingerprint, result);
+        this.#completeLease(input, nowMs);
+        this.#database.exec("COMMIT");
+        return structuredClone(result);
+      }
+      const result = { disposition: evidenceStatus === "notDispatched"
+          ? "retryRequired" as const : "evidenceInsufficient" as const,
+        evidenceStatus, execution: execution!, handoff: {
+          currentWorkItem: "retained" as const, nextWorkItemId: null,
+          kind: "none" as const }, runDisposition: "nonTerminal" as const };
       this.#database.exec("COMMIT");
       return structuredClone(result);
     } catch (error) {
