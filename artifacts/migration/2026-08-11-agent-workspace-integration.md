@@ -439,6 +439,46 @@ Gate 报告为通过。
   rotation、远端 network partition/chaos 仍需独立环境证据。PostgreSQL 条件套件、Windows real-host、发布签名/notarization 和仓库级完整
   `just test` 也仍按未验证处理。
 
+## AR-042、Remote MCP TLS 1.3 与 raw Native Tool authority foundation
+
+- AR-042 由 `a186f452f`、`656c7ecdf` 对齐 Rust 已知 reasoning event。TS transport 严格解析 summary/content delta 与 summary part，
+  Kernel 只把 summary 投影到既有 canonical `model.reasoning.summary`；raw reasoning content 不进入 Model History、下一次 request 或 durable
+  Worker history。TS trust boundary 另加单 delta 16 KiB、单 response 64 KiB 总上限。WebSocket 已观察 partial reasoning 后切 HTTP 时会设置
+  `discardedOutput=true`，replacement request 只包含原 canonical history；retry、cancel 和 first-terminal 后的 reasoning 均 fail closed。
+- `d3765d12d` 将 released Remote MCP production transport 的最低 TLS 版本固定为 TLS 1.3。真实受控 HTTPS server 使用测试 CA/证书并保留
+  hostname、SNI 与完整证书校验；测试端口映射只存在于 test wrapper，released manifest/environment 不含 loopback 或 redirect authority。
+  远端 receipt 已提交、TLS socket 随后中断时，首次调用稳定结算 `possiblySent`；新 runtime 只 reconcile，同一 execution 的远端
+  `executeCount=1`。request/response 上限与 bearer redaction 同时验证。
+- raw Native Tool foundation 以 `ff79f4ce5`、`51b12c952`、`750bce0a6`、`0a9e5577c`、`40949f5d4` 阶段集成，但 production route
+  仍保持关闭。
+  现有 `workspace.read_file.v0` 继续使用 dedicated command/event/ACK wire；`crewon-device-runtime`、Hello 和 reconnect 没有广告或路由 raw
+  Tool。raw dispatcher 只在 journal transaction 内做 bounded metadata admission 与 single-flight reserve；accepted durable 后才在 current
+  epoch permit 下获取 stable handle并立即释放 permit，阻塞 primitive 在 permit 外执行，结束后再做 continuation fence。高 epoch takeover
+  不会被旧读取阻塞，旧结果或旧错误只能结算 unknown，不能伪装 completed/failed。
+- Device journal v4 的 raw Tool command/event/ACK authority 使用 canonical JSON + SHA-256 fingerprint，DDL 强制完整 lowercase
+  `sha256:` 形状；启动复核三张表的 columns/CHECK、FK、accepted receipt unique partial index 与 unacknowledged index。所有 get/list
+  projection 都在单一 read transaction 深验 command、冗余 event/ACK columns、receipt、protocol identity、created/observed/acknowledged
+  时间单调性和 cumulative ACK 集合；conditional ACK update 必须恰好命中一行。未使用、一次返回全部 ACK 的公开 projection 已删除，后续
+  reconnect 只能复用有硬上限与 cursor 的 authority 页。直接篡改 fingerprint、event/ACK 冗余字段、时间或索引会 fail closed。raw Tool
+  schema 在 packaged journal 中存在，但执行/event/ACK 行数均为 0，证明本阶段没有把 foundation 偷接到 production wire。
+- 最新主工作树组合 Gate 使用官方 Node `v24.18.1`
+  (`f480e325ee0ca9cb9eef00b5ca6057a2a104807a1b073f1bc373a55c67facff5`)。Agent Responses `67/67`、Kernel `27/27`、Domain
+  `80/80`、Application `116/116`、Runtime Worker `270 pass + 1 PostgreSQL-unconfigured skip`、MCP Runtime `24/24`、Gateway
+  `110 pass + 7 PostgreSQL-unconfigured skip`；Rust `crewon-api 134/134`、device-journal `28/28`、device `33/33`、device-runtime
+  `21/21`。合计 910 pass、8 个环境条件 skip、0 fail；七个 TypeScript package typecheck 全部通过。
+- 2026-08-12 10:08:29 +0800 重建的 `Crewon.app` 与 staged input 逐字节一致。native SHA-256：app-server
+  `ab871c0b6ed7d14f3c0fc36031dbfed208d699f22933dd6d780cd3d6bb1a99e5`、Device
+  `4541ef7d52c67addde43df466b6269eb00eecabff0ff01c932c2418ec76b2f05`、guardian
+  `83fc5ab3741117383ff98ed172ab8284e7311ca31bf40b5a6f96d70aa74ac884`、Node `f480e325...facff5`。runtime bundle：Control
+  `8357d97c...7981c`、Worker `e15b17ac...94f18`、Release `766c468e...7a56a`、Provider coordinator `c6bd82f5...c6873`、
+  Gateway `9a0c8967...106d`。`.app` 与 updater tarball 已生成；build 只在此后因缺少 `TAURI_SIGNING_PRIVATE_KEY` 返回 1。
+- 最新 packaged smoke 复用隔离 HOME `/private/tmp/crewon-packaged-smoke.LxwDwe`。首轮 route 从 epoch 17 推进到 18；idempotency key
+  `packaged-native-tool-foundation-v1` 返回 `201 completed`，Workspace list 为 `README.md`、`alpha`、`beta`、`truncated=false`。
+  Gateway record 有 accepted/terminal/resolution，Device journal v4 有 sequence 1/2、ACK 1/2、`acknowledged_through=2`，命令后 route
+  connection/epoch 不变。对 GUI 根进程 `SIGKILL` 后全部 guardian/app-server/Gateway/Device/Worker/Control 退出，3210/6176 释放；同一 HOME
+  重启后 route 精确推进到 epoch 19，新 connection 下 `packaged-native-tool-foundation-v2` 再次 `201 completed`。最终正常 SIGTERM 后进程树
+  与端口再次全部清理。
+
 ## 尚未关闭的完整迁移 Gate
 
 - Windows real-host：stable directory handle / UTF-16 / reparse rejection、Job Object 全树清理、NSIS 与 packaged smoke。
