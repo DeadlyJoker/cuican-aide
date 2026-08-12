@@ -99,6 +99,9 @@ export class ProductionWorkflowRuntimeDispatcher
         code: "workflow_reconciliation_scheduled",
       };
     }
+    if (admitted.admissions.length > 1) {
+      throw new Error("workflow_multiple_admissions_per_lease_forbidden");
+    }
 
     let execution = admitted.execution;
     for (const admission of admitted.admissions) {

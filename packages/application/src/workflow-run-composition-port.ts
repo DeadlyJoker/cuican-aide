@@ -40,6 +40,7 @@ export interface WorkflowRunCompositionStore {
     | Readonly<{
         disposition: "fresh";
         execution: WorkflowExecutionState;
+        /** At most one execution authority, selected by stable executionOrder. */
         admissions: readonly WorkflowNodeAttemptAdmission[];
         reconciliationClaims: readonly [];
       }>

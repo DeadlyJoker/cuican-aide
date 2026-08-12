@@ -214,6 +214,36 @@ test("approval resume atomically settles the gate Step and DAG under its WorkIte
   );
 });
 
+test("fails closed when a Store grants multiple admissions under one WorkItem lease", async () => {
+  const store = new CompositionFixture();
+  store.admissions = [
+    agentAdmission(),
+    {
+      ...agentAdmission(),
+      claim: {
+        ...agentAdmission().claim,
+        claimId: "claim-agent-2",
+      },
+      step: { stepId: "step-agent-2" } as never,
+      attempt: { attemptId: "attempt-agent-2" } as never,
+    },
+  ];
+  let executions = 0;
+  const dispatcher = createDispatcher(store, {
+    async execute() {
+      executions += 1;
+      return { status: "completed", resultDigest: digest("result") };
+    },
+  });
+
+  await assert.rejects(
+    dispatcher.dispatch(dispatchInput()),
+    /workflow_multiple_admissions_per_lease_forbidden/,
+  );
+  assert.equal(executions, 0);
+  assert.equal(store.settlements.length, 0);
+});
+
 class CompositionFixture implements WorkflowRunCompositionStore {
   admissionDisposition: "fresh" | "replay" | "reconcileRequired" = "fresh";
   admissions: readonly WorkflowNodeAttemptAdmission[] = [];
