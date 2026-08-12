@@ -21,6 +21,7 @@ export type WorkflowRunAdmissionAuthority = Readonly<{
 export type WorkflowRunRouteAuthority = Readonly<{
   workflowVersion: WorkflowVersionAsset;
   activeRelease: ActiveAgentVersionRelease;
+  defaultDeployment: AgentVersionDeployment;
   deployments: readonly AgentVersionDeployment[];
 }>;
 

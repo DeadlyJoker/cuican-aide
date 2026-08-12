@@ -3505,18 +3505,35 @@ export class SqliteRunStore implements DomainStore {
           throw new RunStoreError("workflow_agent_deployment_mismatch");
         return deployment;
       });
-      const route = input.resolveRoute({ workflowVersion, activeRelease, deployments });
-      const defaultDeployment = deployments.find((item) =>
-        item.agentVersionId === activeRelease.bundle.defaultAgentVersionId);
-      if (defaultDeployment === undefined || route.agentVersionId !== defaultDeployment.agentVersionId ||
+      const defaultId = activeRelease.bundle.defaultAgentVersionId;
+      const defaultDeployment = this.#loadAgentVersionDeployment({ tenantId: input.tenantId,
+        agentVersionId: defaultId });
+      const defaultAsset = this.#loadAgentVersion({ tenantId: input.tenantId,
+        agentVersionId: defaultId });
+      const defaultCandidate = activeRelease.bundle.deployments.find(
+        (item) => item.agentVersionId === defaultId);
+      if (defaultDeployment === null || defaultAsset === null || defaultCandidate === undefined ||
+          defaultDeployment.contentDigest !== defaultAsset.contentDigest ||
+          !sameAgentVersionDeploymentCandidate(defaultCandidate, defaultDeployment))
+        throw new RunStoreError("workflow_agent_deployment_mismatch");
+      const route = input.resolveRoute({ workflowVersion, activeRelease,
+        defaultDeployment, deployments });
+      if (route.agentVersionId !== defaultDeployment.agentVersionId ||
           route.authorityId !== defaultDeployment.authorityId ||
           route.workspaceBindingId !== defaultDeployment.workspaceBindingId)
         throw new RunStoreError("workflow_run_route_mismatch");
       const prepared = input.prepare({ workflowVersion, route });
       const rootJson = canonicalJson(prepared.workflowInputValue.value);
-      if (new TextEncoder().encode(rootJson).byteLength > MAX_WORKFLOW_VALUE_BYTES ||
+      if (prepared.workflowInputValue.schemaVersion !==
+          "crewon.workflow-execution-value.v0" ||
+          !/^[-A-Za-z0-9:._]{1,200}$/u.test(prepared.workflowInputValue.valueId) ||
+          !/^sha256:[a-f0-9]{64}$/u.test(prepared.workflowInputValue.valueDigest) ||
+          rootJson !== canonicalJson(input.workflowInput) ||
+          new TextEncoder().encode(rootJson).byteLength > MAX_WORKFLOW_VALUE_BYTES ||
           this.#workflowDigester.sha256(rootJson) !== prepared.workflowInputValue.valueDigest)
         throw new RunStoreError("workflow_execution_value_invalid");
+      this.#validateWorkflowPreparedCommit(input, prepared.commit,
+        workflowVersion, route, prepared.workflowInputValue);
       const run = this.#commitRun(prepared.commit, null, null, true);
       const work = run.workItems[0];
       const ref = { valueId: prepared.workflowInputValue.valueId,
@@ -5325,6 +5342,41 @@ export class SqliteRunStore implements DomainStore {
         canonicalJson(JSON.parse(root.value_json)) !== root.value_json ||
         this.#workflowDigester.sha256(root.value_json) !== root.value_digest)
       throw new RunStoreError("workflow_run_admission_receipt_corrupt");
+  }
+
+  #validateWorkflowPreparedCommit(
+    input: CommitWorkflowRunStartInput,
+    commit: CommitRunInput,
+    workflowVersion: import("@crewon/application").WorkflowVersionAsset,
+    route: import("@crewon/application").RunRoute,
+    root: import("@crewon/application").WorkflowRunInputAuthority,
+  ): void {
+    const event = commit.events[0];
+    const outbox = commit.outbox[0];
+    const work = commit.workItems[0];
+    if (commit.tenantId !== input.tenantId || commit.expectedRevision !== 0 ||
+        commit.events.length !== 1 || event?.type !== "run.created" ||
+        event.sequence !== 1 || event.data.tenantId !== input.tenantId ||
+        event.data.spaceId !== input.spaceId || event.data.threadId !== input.threadId ||
+        event.data.purpose !== "workflow" || event.data.goalBinding !== null ||
+        event.data.authorityId !== route.authorityId ||
+        event.data.runtimeGeneration !== route.runtimeGeneration ||
+        event.data.agentVersionId !== route.agentVersionId ||
+        event.data.policySnapshotId !== route.policySnapshotId ||
+        event.data.workspaceBindingId !== route.workspaceBindingId ||
+        stableJson(event.data.workflowVersionBinding) !== stableJson({
+          workflowId: workflowVersion.workflowId,
+          workflowVersionId: workflowVersion.workflowVersionId,
+          contentDigest: workflowVersion.contentDigest }) ||
+        commit.outbox.length !== 1 || outbox?.topic !== "run.updated" ||
+        outbox.tenantId !== input.tenantId || outbox.runId !== event.identity.runId ||
+        stableJson(outbox.payload) !== stableJson({ eventId: event.eventId,
+          eventType: event.type, throughSequence: 1 }) ||
+        commit.workItems.length !== 1 || work?.kind !== "run.execute" ||
+        work.tenantId !== input.tenantId || work.runId !== event.identity.runId ||
+        stableJson((work.payload as Record<string, unknown>).workflowInput) !==
+          stableJson({ valueId: root.valueId, valueDigest: root.valueDigest }))
+      throw new RunStoreError("workflow_run_prepare_invalid");
   }
 
   #loadThreadReceipt(
