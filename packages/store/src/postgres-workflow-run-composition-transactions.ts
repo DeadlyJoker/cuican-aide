@@ -613,8 +613,15 @@ async function validateScheduleReplay(
     workflow,
   );
   const current = await loadExecution(client, schema, input, true);
+  if (current === null) replayCorrupt();
+  assertExecutionBinding(
+    current,
+    input.tenantId,
+    input.runId,
+    input.binding,
+    workflow,
+  );
   if (
-    current === null ||
     current.revision < result.execution.revision ||
     !Array.isArray(result.nodeWorkItems) ||
     !Array.isArray(result.gatePublications) ||
@@ -741,6 +748,16 @@ async function validateAdmissionReplay(
     input.binding,
     workflow,
   );
+  const current = await loadExecution(client, schema, input, true);
+  if (current === null) replayCorrupt();
+  assertExecutionBinding(
+    current,
+    input.tenantId,
+    input.runId,
+    input.binding,
+    workflow,
+  );
+  if (current.revision < result.execution.revision) replayCorrupt();
   const admission = result.admission;
   if (
     result.disposition !== "fresh" ||
