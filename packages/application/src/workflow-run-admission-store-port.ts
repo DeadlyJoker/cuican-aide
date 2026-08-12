@@ -6,6 +6,7 @@ import type {
   CommitRunResult,
   IdempotencyDescriptor,
 } from "./run-store-port.ts";
+import type { WorkflowRunInputAuthority } from "./durable-queue-port.ts";
 import type { WorkflowVersionAsset } from "./workflow-version-store-port.ts";
 
 export type WorkflowRunAdmissionAuthority = Readonly<{
@@ -20,7 +21,10 @@ export type CommitWorkflowRunStartInput = Readonly<{
   workflowVersionId: string;
   workflowInput: JsonValue;
   idempotency: IdempotencyDescriptor;
-  prepare: (authority: WorkflowRunAdmissionAuthority) => CommitRunInput;
+  prepare: (authority: WorkflowRunAdmissionAuthority) => Readonly<{
+    commit: CommitRunInput;
+    workflowInputValue: WorkflowRunInputAuthority;
+  }>;
 }>;
 
 export type CommitWorkflowRunStartResult = Readonly<{
@@ -37,8 +41,10 @@ export type CommitWorkflowRunStartResult = Readonly<{
  * transaction, implementations must validate the tenant/space Thread, load
  * the immutable tenant WorkflowVersion, resolve the server-owned execution
  * route, invoke `prepare` exactly once while the transaction remains open,
- * and commit the receipt, Run event,
- * outbox message, and `run.execute` WorkItem. Implementations must fail closed
+ * and atomically persist the returned immutable root input value with the
+ * receipt, Run event, outbox message, and `run.execute` WorkItem. The Store
+ * must verify the scheduler payload's exact `{valueId,valueDigest}` reference
+ * against that value authority. Implementations must fail closed
  * rather than invoke `prepare` when any scope or authority check fails. The
  * callback parses and digest-verifies `definitionJson` and validates input
  * against its frozen `inputSchema`; an exception from it must roll back every

@@ -6,6 +6,7 @@ import {
   reduceRunLifecycleEvent,
   serializeCompiledWorkflowVersion,
   type RunState,
+  type WorkflowObjectSchema,
 } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
@@ -38,8 +39,39 @@ test("atomically freezes WorkflowVersion provenance and enqueues bounded input w
   assert.equal(event.data.collaborationMode, "default");
   assert.equal(event.data.goalBinding, null);
   assert.deepEqual(commit.workItems[0]?.payload, {
-    throughSequence: 1,
-    workflowInput: { topic: "safe" },
+    schemaVersion: "crewon.workflow-scheduler-work-item.v1",
+    trigger: "workflowScheduler",
+    binding: event.data.workflowVersionBinding,
+    schedulerOperationId: "scheduler-1",
+    workflowInput: {
+      valueId: "value-1",
+      valueDigest: sha256('{"topic":"safe"}'),
+    },
+  });
+  assert.deepEqual(store.lastPreparation?.workflowInputValue, {
+    schemaVersion: "crewon.workflow-execution-value.v0",
+    valueId: "value-1",
+    value: { topic: "safe" },
+    valueDigest: sha256('{"topic":"safe"}'),
+  });
+});
+
+test("canonicalizes prototype-like input keys into one digest-bound scheduler authority", async () => {
+  const store = new RecordingStore();
+  store.authority = workflowAuthority(prototypeSchema());
+  const input = Object.fromEntries([
+    ["__proto__", true],
+    ["constructor", "safe"],
+  ]);
+  await service(store).startWorkflowRun(actor(), {
+    ...command(),
+    input,
+  } as never);
+  assert.deepEqual(store.lastPreparation?.workflowInputValue, {
+    schemaVersion: "crewon.workflow-execution-value.v0",
+    valueId: "value-1",
+    value: input,
+    valueDigest: sha256('{"__proto__":true,"constructor":"safe"}'),
   });
 });
 
@@ -58,6 +90,19 @@ test("uses caller input in the receipt fingerprint and maps conflict before prep
     store.inputs[0]?.idempotency.requestFingerprint,
     store.inputs[1]?.idempotency.requestFingerprint,
   );
+});
+
+test("receipt-replays the exact scheduler and input authority without new IDs", async () => {
+  const store = new RecordingStore();
+  const app = service(store);
+  const first = await app.startWorkflowRun(actor(), command());
+  const replay = await app.startWorkflowRun(actor(), command());
+  assert.deepEqual(replay, {
+    ...first,
+    run: { ...first.run, disposition: "replayed" },
+  });
+  assert.equal(store.prepareCalls, 1);
+  assert.equal(store.writeCount, 1);
 });
 
 test("rejects oversized, overly deep and non-finite input before authorization or Store", async () => {
@@ -116,21 +161,41 @@ test("rejects corrupt and digest-drift WorkflowVersions with zero writes", async
 
 class RecordingStore implements WorkflowRunAdmissionStore {
   readonly inputs: CommitWorkflowRunStartInput[] = [];
-  lastCommit: ReturnType<CommitWorkflowRunStartInput["prepare"]> | null = null;
+  lastPreparation: ReturnType<CommitWorkflowRunStartInput["prepare"]> | null =
+    null;
+  lastCommit:
+    | ReturnType<CommitWorkflowRunStartInput["prepare"]>["commit"]
+    | null = null;
   error: Error | null = null;
   writeCount = 0;
-  readonly authority = workflowAuthority();
+  prepareCalls = 0;
+  authority = workflowAuthority();
+  receipt: Awaited<
+    ReturnType<WorkflowRunAdmissionStore["commitWorkflowRunStart"]>
+  > | null = null;
+  receiptFingerprint: string | null = null;
   async commitWorkflowRunStart(input: CommitWorkflowRunStartInput) {
     this.inputs.push(input);
     if (this.error) throw this.error;
-    const commit = input.prepare(this.authority);
+    if (this.receipt !== null) {
+      if (this.receiptFingerprint !== input.idempotency.requestFingerprint)
+        throw new RunStoreError("idempotency_conflict");
+      return {
+        ...this.receipt,
+        run: { ...this.receipt.run, disposition: "replayed" as const },
+      };
+    }
+    this.prepareCalls += 1;
+    const preparation = input.prepare(this.authority);
+    this.lastPreparation = preparation;
+    const commit = preparation.commit;
     this.lastCommit = commit;
     this.writeCount += 1;
     let state: RunState | null = null;
     for (const event of commit.events)
       state = reduceRunLifecycleEvent(state, event);
     if (!state) throw new Error("missing state");
-    return {
+    const result = {
       authority: this.authority,
       run: {
         disposition: "committed" as const,
@@ -140,6 +205,9 @@ class RecordingStore implements WorkflowRunAdmissionStore {
         workItems: commit.workItems,
       },
     };
+    this.receipt = result;
+    this.receiptFingerprint = input.idempotency.requestFingerprint;
+    return result;
   }
 }
 
@@ -155,7 +223,14 @@ function service(
   store: RecordingStore,
   authorization: AuthorizationPort = new RecordingAuthorization(),
 ) {
-  const ids = ["run-1", "event-1", "outbox-1", "work-1"];
+  const ids = [
+    "value-1",
+    "scheduler-1",
+    "run-1",
+    "event-1",
+    "outbox-1",
+    "work-1",
+  ];
   return new WorkflowRunApplicationService({
     store,
     authorization,
@@ -165,7 +240,7 @@ function service(
   });
 }
 
-function workflowAuthority() {
+function workflowAuthority(inputSchema: WorkflowObjectSchema = objectSchema()) {
   const workflow = compileWorkflowVersion(
     {
       schemaVersion: "crewon.workflow-version-source.v0",
@@ -173,7 +248,7 @@ function workflowAuthority() {
       workflowVersionId: "version-1",
       name: "Workflow",
       description: "Workflow admission fixture",
-      inputSchema: objectSchema(),
+      inputSchema,
       outputSchema: objectSchema(),
       entryNodeIds: ["node-1"],
       outputNodeIds: ["verify-1"],
@@ -184,7 +259,7 @@ function workflowAuthority() {
           title: "Node",
           instruction: "Execute",
           dependsOn: [],
-          inputSchema: objectSchema(),
+          inputSchema,
           outputSchema: objectSchema(),
           agentVersionId: "node-agent-version",
         },
@@ -219,6 +294,18 @@ function workflowAuthority() {
       policySnapshotId: "policy-1",
       workspaceBindingId: "workspace-1",
     },
+  };
+}
+
+function prototypeSchema() {
+  return {
+    type: "object" as const,
+    properties: Object.fromEntries([
+      ["__proto__", { type: "boolean" as const }],
+      ["constructor", { type: "string" as const, maxLength: 8, enum: null }],
+    ]),
+    required: ["__proto__", "constructor"],
+    additionalProperties: false as const,
   };
 }
 
