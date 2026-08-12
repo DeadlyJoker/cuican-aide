@@ -185,6 +185,7 @@ test("reports completed only for terminalConverged Store authority", async () =>
     terminal({ status: "completed", value: {} }));
   assert.equal((await dispatcher.dispatch(input("node"))).kind, "recovery");
   fixture.nodeDisposition = "fresh";
+  fixture.settlementCommitted = false;
   fixture.atomicRunDisposition = "terminalConverged";
   assert.equal((await dispatcher.dispatch(input("node", "claim-2"))).kind,
     "completed");
