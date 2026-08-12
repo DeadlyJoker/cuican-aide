@@ -365,6 +365,36 @@ test("D1 public SQLite runtime atomically settles model terminal evidence", asyn
     },
   };
 
+  mutateDatabase(
+    path,
+    `CREATE TRIGGER d1_after_dispatch_transition
+     BEFORE UPDATE ON run_attempts WHEN OLD.status='running'
+     BEGIN SELECT RAISE(ABORT,'d1_after_dispatch_transition'); END`,
+  );
+  const beforeInjectedFailure = inspectD1(path, "agent", agent.workItemId);
+  await assert.rejects(
+    store.settleWorkflowNodeModelTerminal({
+      ...settlement,
+      operationId: "model-terminal-agent-injected-failure",
+    }),
+    /d1_after_dispatch_transition/u,
+  );
+  assert.deepEqual(
+    inspectD1(path, "agent", agent.workItemId),
+    beforeInjectedFailure,
+  );
+  assert.deepEqual(beforeInjectedFailure.terminalAuthorities, {
+    dispatch: "responseObserved",
+    attempt: "running",
+    step: "running",
+    dag: "running",
+    workItem: "leased",
+  });
+  assert.equal(beforeInjectedFailure.receiptCount, 0);
+  assert.equal(beforeInjectedFailure.continuationCount, 0);
+  assert.equal(beforeInjectedFailure.schedulerCount, 0);
+  mutateDatabase(path, "DROP TRIGGER d1_after_dispatch_transition");
+
   const fresh = await store.settleWorkflowNodeModelTerminal(settlement);
   assert.equal(fresh.disposition, "settled");
   assert.equal(fresh.runDisposition, "nonTerminal");
@@ -450,27 +480,6 @@ test("D1 public SQLite runtime atomically settles model terminal evidence", asyn
     restoreDatabase(path, before);
   }
 
-  const beforeRollback = inspectD1(path, "agent", agent.workItemId);
-  if (settlement.evidence.status !== "completed")
-    throw new Error("test_terminal_evidence_invalid");
-  await assert.rejects(
-    store.settleWorkflowNodeModelTerminal({
-      ...settlement,
-      operationId: "model-terminal-invalid-output",
-      evidence: {
-        ...settlement.evidence,
-        value: { forbidden: true },
-        canonicalValueJson: '{"forbidden":true}',
-        valueRef: {
-          ...settlement.evidence.valueRef,
-          valueDigest: digester.sha256('{"forbidden":true}'),
-        },
-      },
-    }),
-    /schema|invalid/u,
-  );
-  assert.deepEqual(inspectD1(path, "agent", agent.workItemId), beforeRollback);
-
   const schedulerId = fresh.handoff.nextWorkItemId!;
   const schedulerLease = leasePath(path, schedulerId, "scheduler-worker", nowMs);
   const verificationSchedule = await store.scheduleWorkflowNodes(
@@ -480,7 +489,180 @@ test("D1 public SQLite runtime atomically settles model terminal evidence", asyn
     verificationSchedule.nodeWorkItems.map(({ nodeId }) => nodeId),
     ["verification"],
   );
+  const verification = verificationSchedule.nodeWorkItems[0]!;
+  const verificationLease = leasePath(
+    path,
+    verification.workItemId,
+    "verification-worker",
+    nowMs,
+  );
+  const verificationAdmission = await store.admitWorkflowNodeWork(
+    admissionInput(
+      verification,
+      verificationLease,
+      schedulerId,
+      "admit-verification-model",
+    ),
+  );
+  assert.equal(verificationAdmission.disposition, "fresh");
+  const verificationAuthority = {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    workItemId: verification.workItemId,
+    leaseEpoch: verification.claimEpoch,
+    nodeId: verification.nodeId,
+    nodeKind: "verification" as const,
+    claimId: verification.claimId,
+    claimEpoch: verification.claimEpoch,
+    agentVersionId: "verification-v1",
+    attempt: {
+      stepId: verificationAdmission.admission!.step.stepId,
+      attemptId: verificationAdmission.admission!.attempt.attemptId,
+    },
+  };
+  const verificationDispatch = await observeDispatch(
+    store,
+    verificationLease,
+    verificationAuthority.attempt,
+    "verification",
+    "verification-v1",
+  );
+  const verificationSettlement = {
+    binding,
+    nodeId: verification.nodeId,
+    operationId: "model-terminal-verification",
+    evidence: createWorkflowNodeTerminalEvidence({
+      workflow,
+      nodeId: verification.nodeId,
+      outcome: { status: "completed" as const, value: {} },
+      digester,
+    }),
+    lease: verificationLease,
+    authority: verificationAuthority,
+    dispatch: {
+      operationId: verificationDispatch.operationId,
+      requestSequence: verificationDispatch.requestSequence,
+      expectedRevision: verificationDispatch.revision,
+      status: "responseObserved" as const,
+    },
+    dispatchTerminalOutcome: {
+      kind: "completed" as const,
+      code: null,
+      certainty: "responseObserved" as const,
+    },
+  };
+  const terminal = await store.settleWorkflowNodeModelTerminal(
+    verificationSettlement,
+  );
+  assert.equal(terminal.disposition, "settled");
+  assert.equal(terminal.runDisposition, "terminalConverged");
+  assert.equal(terminal.continuation, null);
+  assert.deepEqual(terminal.handoff, {
+    currentWorkItem: "completed",
+    nextWorkItemId: null,
+    kind: "none",
+  });
+  const terminalState = inspectD1(
+    path,
+    "verification",
+    verification.workItemId,
+  );
+  const terminalRun = JSON.parse(terminalState.run as string);
+  const terminalEvents = terminalState.events.map((row) =>
+    JSON.parse(row.event_json as string),
+  ) as RunLifecycleEvent[];
+  const terminalOutbox = terminalState.outbox.map((row) =>
+    JSON.parse(row.message_json as string),
+  );
+  assert.equal(terminalRun.status, "completed");
+  assert.equal(typeof terminalRun.outputRef, "string");
+  assert.deepEqual(terminalRun, replayRunLifecycle(terminalEvents));
+  assert.deepEqual(terminalEvents.at(-1), {
+    ...terminalEvents.at(-1),
+    type: "run.completed",
+    data: { outputRef: terminalRun.outputRef },
+  });
+  assert.deepEqual(terminalOutbox.at(-1)?.payload, {
+    eventId: terminalEvents.at(-1)?.eventId,
+    eventType: "run.completed",
+    throughSequence: terminalRun.lastSequence,
+  });
+  assert.deepEqual(
+    await store.settleWorkflowNodeModelTerminal(verificationSettlement),
+    { ...terminal, disposition: "replay" },
+  );
+
+  const terminalTamperMatrix = [
+    {
+      name: "continuation resurrection",
+      mutate: `INSERT INTO workflow_node_continuations
+        (tenant_id,run_id,step_id,attempt_id,revision,checkpoint_json,updated_at)
+        VALUES ('tenant-1','run-1','verification','${verificationAuthority.attempt.attemptId}',
+        1,'{}','2026-08-12T00:00:09.000Z')`,
+    },
+    {
+      name: "completed WorkItem status authority",
+      mutate: `UPDATE work_items SET status='leased',lease_owner_id='forged',
+        lease_id='forged',lease_expires_at_ms=9999999999999,completed_at_ms=NULL
+        WHERE work_item_id='${verification.workItemId}'`,
+    },
+    {
+      name: "terminal Run event",
+      mutate: `UPDATE run_events SET event_json=json_set(event_json,'$.data.outputRef','forged')
+        WHERE json_extract(event_json,'$.type')='run.completed'`,
+    },
+    {
+      name: "terminal Run outbox",
+      mutate: `UPDATE outbox SET message_json=json_set(message_json,
+        '$.payload.eventType','run.failed')
+        WHERE json_extract(message_json,'$.payload.eventType')='run.completed'`,
+    },
+    {
+      name: "terminal Run snapshot",
+      mutate: `UPDATE run_snapshots SET state_json=json_set(state_json,
+        '$.outputRef','forged') WHERE run_id='run-1'`,
+    },
+  ] as const;
+  for (const tamper of terminalTamperMatrix) {
+    const before = snapshotDatabase(path);
+    mutateDatabase(path, tamper.mutate);
+    const corrupted = snapshotDatabase(path);
+    await assert.rejects(
+      store.settleWorkflowNodeModelTerminal(verificationSettlement),
+      /corrupt|mismatch|conflict/u,
+      tamper.name,
+    );
+    assert.deepEqual(snapshotDatabase(path), corrupted, tamper.name);
+    restoreDatabase(path, before);
+  }
 });
+
+async function observeDispatch(
+  store: SqliteRunStore,
+  nodeLease: ReturnType<typeof lease>,
+  attempt: Readonly<{ stepId: string; attemptId: string }>,
+  suffix: string,
+  agentVersionId: string,
+) {
+  const prepared = await store.prepareModelDispatch({
+    tenantId: "tenant-1", runId: "run-1", lease: nodeLease, attempt,
+    operationId: `dispatch-${suffix}`, requestSequence: 1, operation: "dispatch",
+    requestDigest: digester.sha256(`${suffix}-request`),
+    provider: { agentVersionId, adapterName: "responses", adapterVersion: "1", modelId: "model-1" },
+    preparedAt: "2026-08-12T00:00:04.000Z",
+  });
+  const sent = await store.markModelDispatchPossiblySent({
+    tenantId: "tenant-1", runId: "run-1", lease: nodeLease, attempt,
+    operationId: prepared.operationId, requestSequence: prepared.requestSequence,
+    expectedRevision: prepared.revision, transitionedAt: "2026-08-12T00:00:05.000Z",
+  });
+  return store.observeModelDispatchResponse({
+    tenantId: "tenant-1", runId: "run-1", lease: nodeLease, attempt,
+    operationId: sent.operationId, requestSequence: sent.requestSequence,
+    expectedRevision: sent.revision, checkpointDigest: digester.sha256(`${suffix}-checkpoint`),
+    transitionedAt: "2026-08-12T00:00:06.000Z",
+  });
+}
 
 function inspectD1(path: string, nodeId: string, workItemId: string) {
   const database = new DatabaseSync(path);
