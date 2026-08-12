@@ -155,7 +155,7 @@ export async function settlePostgresWorkflowNode(
       attempt: terminalAttempt(input, now),
     });
   await writePostgresWorkflowExecution(client, schema, next, now);
-  const runDisposition = await convergeRun(
+  const runDisposition = await convergePostgresWorkflowRun(
     client,
     schema,
     input,
@@ -324,10 +324,16 @@ async function validateReplay(
       replayCorrupt();
   }
   if (result.runDisposition === "terminalConverged")
-    await validateTerminalRun(client, schema, input, result, digester);
+    await validatePostgresTerminalWorkflowRun(
+      client,
+      schema,
+      input,
+      result,
+      digester,
+    );
   return { ...structuredClone(result), disposition: "replay" };
 }
-async function convergeRun(
+export async function convergePostgresWorkflowRun(
   client: PoolClient,
   schema: string,
   input: Input,
@@ -463,7 +469,7 @@ async function convergeRun(
   );
   return "terminalConverged";
 }
-async function validateTerminalRun(
+export async function validatePostgresTerminalWorkflowRun(
   client: PoolClient,
   schema: string,
   input: Input,
