@@ -123,7 +123,7 @@ const sqliteCompositionTables = `CREATE TABLE workflow_composition_receipts (
   tenant_id TEXT NOT NULL,
   run_id TEXT NOT NULL,
   operation_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('admit','settleNode','publishGate','settleGate','scheduleReconciliation')),
+  kind TEXT NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation')),
   fingerprint TEXT NOT NULL,
   result_json TEXT NOT NULL CHECK (json_valid(result_json)),
   PRIMARY KEY (tenant_id, run_id, operation_id),
@@ -220,7 +220,7 @@ function postgresTables(schema: string): string {
 function postgresCompositionTables(schema: string): string {
   return `CREATE TABLE ${schema}.workflow_composition_receipts (
     tenant_id text NOT NULL, run_id text NOT NULL, operation_id text NOT NULL,
-    kind text NOT NULL CHECK (kind IN ('admit','settleNode','publishGate','settleGate','scheduleReconciliation')),
+    kind text NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation')),
     fingerprint text NOT NULL, result_json jsonb NOT NULL,
     PRIMARY KEY (tenant_id,run_id,operation_id),
     FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.workflow_executions(tenant_id,run_id));

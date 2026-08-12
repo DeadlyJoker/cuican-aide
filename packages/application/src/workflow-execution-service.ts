@@ -93,6 +93,17 @@ export class WorkflowExecutionService {
     operationId: string;
   }): Promise<readonly WorkflowNodeClaim[]> {
     requirePositiveDuration(input.leaseDurationMs);
+    const existing = await this.#storeCall(() =>
+      this.#store.loadWorkflowExecution({
+        tenantId: input.tenantId,
+        runId: input.runId,
+      }),
+    );
+    if (existing?.nodes.some((node) => node.status === "queued"))
+      throw new ApplicationError(
+        "conflict",
+        "workflow_execution_composition_required",
+      );
     const replay = await this.#storeCall(() =>
       this.#store.loadWorkflowExecutionReceipt({
         tenantId: input.tenantId,
@@ -422,7 +433,10 @@ function projectState(
   updatedAt: string,
 ): WorkflowExecutionState {
   const active = nodes.some(
-    (node) => node.status === "running" || node.status === "unknown",
+    (node) =>
+      node.status === "queued" ||
+      node.status === "running" ||
+      node.status === "unknown",
   );
   const status =
     current.cancelRequested && !active
@@ -434,7 +448,9 @@ function projectState(
           : nodes.some((node) => node.status === "waitingHuman") &&
               !nodes.some(
                 (node) =>
-                  node.status === "running" || node.status === "unknown",
+                  node.status === "queued" ||
+                  node.status === "running" ||
+                  node.status === "unknown",
               )
             ? "waitingHuman"
             : "running";

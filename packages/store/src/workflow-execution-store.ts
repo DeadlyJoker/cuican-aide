@@ -409,7 +409,10 @@ export function validateWorkflowExecutionState(
     throw new RunStoreError("workflow_execution_state_invalid");
   for (const node of state.nodes) validateNode(node);
   const active = state.nodes.some(
-    (node) => node.status === "running" || node.status === "unknown",
+    (node) =>
+      node.status === "queued" ||
+      node.status === "running" ||
+      node.status === "unknown",
   );
   const projected =
     state.cancelRequested && !active
@@ -552,15 +555,41 @@ function validNodeTransition(
   if (stableJson(current) === stableJson(next)) return true;
   if (current.status === "pending")
     return (
-      next.status === "running" ||
+      next.status === "queued" ||
+      (next.status === "running" && !next.claimId?.startsWith("wf1:claim:")) ||
       next.status === "waitingHuman" ||
       next.status === "canceled"
     );
+  if (current.status === "queued")
+    return (
+      (next.status === "running" || next.status === "canceled") &&
+      sameClaimAuthority(current, next)
+    );
   if (current.status === "running")
-    return ["completed", "failed", "canceled", "unknown"].includes(next.status);
+    return (
+      ["completed", "failed", "canceled", "unknown"].includes(next.status) &&
+      sameClaimAuthority(current, next)
+    );
   if (current.status === "waitingHuman" || current.status === "unknown")
-    return ["completed", "failed", "canceled", "unknown"].includes(next.status);
+    return (
+      ["completed", "failed", "canceled", "unknown"].includes(next.status) &&
+      sameClaimAuthority(current, next)
+    );
   return false;
+}
+
+function sameClaimAuthority(
+  current: WorkflowExecutionState["nodes"][number],
+  next: WorkflowExecutionState["nodes"][number],
+): boolean {
+  return (
+    current.claimId === next.claimId &&
+    current.claimOperationId === next.claimOperationId &&
+    current.claimEpoch === next.claimEpoch &&
+    current.inputDigest === next.inputDigest &&
+    current.gateRequestId === next.gateRequestId &&
+    current.agentVersionId === next.agentVersionId
+  );
 }
 
 function assertCreateReplay(
