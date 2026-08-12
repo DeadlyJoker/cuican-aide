@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { createServer, type RequestListener, type Server } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import type { TLSSocket } from "node:tls";
 import test, { type TestContext } from "node:test";
+
+import {
+  TEST_CA_CERT,
+  TEST_SERVER_CERT,
+  TEST_SERVER_KEY,
+} from "../../device-gateway/src/mtls-test-certificates.test-support.ts";
 
 import {
   ProductionNetworkEgressPolicy,
@@ -81,6 +89,65 @@ test("transport pins and sends a bounded POST body", async (t) => {
   assert.deepEqual(JSON.parse(new TextDecoder().decode(response.body)), {
     ok: true,
   });
+});
+
+test("HTTPS transport requires TLS 1.3 and validates the admitted hostname", async (t) => {
+  const protocols: Array<string | null> = [];
+  const serverNames: Array<string | false | null> = [];
+  const server = createHttpsServer(
+    {
+      key: TEST_SERVER_KEY,
+      cert: TEST_SERVER_CERT,
+      minVersion: "TLSv1.3",
+      maxVersion: "TLSv1.3",
+    },
+    (request, response) => {
+      const socket = request.socket as TLSSocket;
+      protocols.push(socket.getProtocol());
+      serverNames.push(socket.servername);
+      response.end("ok");
+    },
+  );
+  await listenServer(t, server);
+  const address = server.address();
+  if (address === null || typeof address === "string")
+    throw new Error("invalid_address");
+  const transport = new PinnedNodeHttpTransport({
+    certificateAuthority: TEST_CA_CERT,
+  });
+  const response = await transport.request(
+    {
+      method: "GET",
+      target: {
+        endpoint: new URL(`https://localhost:${address.port}/`),
+        address: "127.0.0.1",
+        family: 4,
+      },
+      maxRequestBytes: 0,
+      maxResponseBytes: 2,
+    },
+    new AbortController().signal,
+  );
+  assert.equal(new TextDecoder().decode(response.body), "ok");
+  assert.deepEqual(protocols, ["TLSv1.3"]);
+  assert.deepEqual(serverNames, ["localhost"]);
+
+  await assert.rejects(
+    transport.request(
+      {
+        method: "GET",
+        target: {
+          endpoint: new URL(`https://wrong.example:${address.port}/`),
+          address: "127.0.0.1",
+          family: 4,
+        },
+        maxRequestBytes: 0,
+        maxResponseBytes: 2,
+      },
+      new AbortController().signal,
+    ),
+    /transport_failed/u,
+  );
 });
 
 test("production adapter cannot bypass baseline egress policy", async () => {
@@ -341,6 +408,19 @@ async function listen(
       }),
   );
   return server;
+}
+
+async function listenServer(t: TestContext, server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
+  );
 }
 
 function origin(server: Server): string {

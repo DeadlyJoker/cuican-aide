@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createHttpsServer, type Server } from "node:https";
 import { inspect } from "node:util";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { TLSSocket } from "node:tls";
 import test, { type TestContext } from "node:test";
 
 import { compileAgentVersion } from "@crewon/agent-version";
@@ -19,13 +21,19 @@ import {
   takeRuntimeNativeBootstrap,
 } from "./runtime-native-bootstrap.ts";
 import { createRuntimeNativeRemoteMcpOwner } from "./runtime-native-remote-mcp.ts";
-import type { PinnedHttpPort, PinnedHttpRequest } from "./pinned-node-http.ts";
+import type { PinnedHttpPort } from "./pinned-node-http.ts";
+import { PinnedNodeHttpTransport } from "./pinned-node-http.ts";
+import {
+  TEST_CA_CERT,
+  TEST_SERVER_CERT,
+  TEST_SERVER_KEY,
+} from "../../device-gateway/src/mtls-test-certificates.test-support.ts";
 
 const SECRET = "remote-mcp-production-secret-sentinel";
 
 test("released production composition transport gate reconciles a remote receipt exactly once", async (t) => {
-  const remote = new HermeticRemoteReceiptTransport();
-  const paths = releasedManifests(t, "https://mcp.example:8443/mutations");
+  const remote = await ControlledTlsRemoteReceiptServer.listen(t);
+  const paths = releasedManifests(t, remote.endpoint.href);
   const identities = loadRemoteMcpManifestBindings(paths.bindingPath);
   assert.equal(identities.length, 1);
 
@@ -54,7 +62,7 @@ test("released production composition transport gate reconciles a remote receipt
       dns: {
         resolveAll: async () => [{ address: "8.8.8.8", family: 4 as const }],
       },
-      transport: remote,
+      transport: remote.transport,
     }),
   };
   const version = compileAgentVersion(agentSource(), { sha256 });
@@ -116,78 +124,148 @@ test("released production composition transport gate reconciles a remote receipt
     readFileSync(paths.remotePath, "utf8"),
     new RegExp(SECRET, "u"),
   );
+  for (const path of [paths.bindingPath, paths.remotePath]) {
+    const released = readFileSync(path, "utf8");
+    assert.doesNotMatch(released, /8\.8\.8\.8|127\.0\.0\.1/u);
+  }
+  assert.deepEqual(remote.protocols, ["TLSv1.3", "TLSv1.3"]);
+  assert.deepEqual(remote.serverNames, ["localhost", "localhost"]);
+  assert.deepEqual(remote.admittedPorts, [
+    remote.endpoint.port,
+    remote.endpoint.port,
+  ]);
+  assert.deepEqual(remote.admittedAddresses, ["8.8.8.8", "8.8.8.8"]);
 });
 
-class HermeticRemoteReceiptTransport implements PinnedHttpPort {
+class ControlledTlsRemoteReceiptServer {
   readonly #receipts = new Map<string, string>();
+  readonly #server: Server;
+  readonly endpoint: URL;
+  readonly transport: PinnedHttpPort;
   readonly phases: string[] = [];
   readonly authorizations: string[] = [];
   readonly idempotencyKeys: string[] = [];
   readonly bodies: unknown[] = [];
+  readonly protocols: Array<string | null> = [];
+  readonly serverNames: Array<string | false | null> = [];
+  readonly admittedPorts: string[] = [];
+  readonly admittedAddresses: string[] = [];
   executeCount = 0;
 
-  async request(input: PinnedHttpRequest): Promise<{
-    status: number;
-    headers: Readonly<Record<string, string>>;
-    body: Uint8Array;
-  }> {
-    assert.equal(input.method, "POST");
-    assert.equal(
-      input.target.endpoint.href,
-      "https://mcp.example:8443/mutations",
-    );
-    assert.equal(input.target.endpoint.pathname, "/mutations");
-    assert.deepEqual(input.target, {
-      endpoint: new URL("https://mcp.example:8443/mutations"),
-      address: "8.8.8.8",
-      family: 4,
+  private constructor(server: Server, endpoint: URL) {
+    this.#server = server;
+    this.endpoint = endpoint;
+    const network = new PinnedNodeHttpTransport({
+      certificateAuthority: TEST_CA_CERT,
     });
-    assert.equal(input.maxRequestBytes, 256 * 1024);
-    assert.equal(input.maxResponseBytes, 256 * 1024);
-    assert.equal(input.headers?.accept, "application/json");
-    assert.equal(
-      input.headers?.["content-type"],
-      "application/json; charset=utf-8",
-    );
-    assert.ok((input.body?.byteLength ?? 0) <= input.maxRequestBytes);
-    const body = JSON.parse(new TextDecoder().decode(input.body)) as {
-      phase: "execute" | "reconcile";
-      providerExecutionId: string;
-      toolName: string;
+    this.transport = {
+      request: (input, signal) => {
+        this.admittedPorts.push(input.target.endpoint.port);
+        this.admittedAddresses.push(input.target.address);
+        assert.equal(input.target.endpoint.href, this.endpoint.href);
+        assert.equal(input.target.endpoint.pathname, "/mutations");
+        assert.equal(input.target.address, "8.8.8.8");
+        assert.equal(input.target.family, 4);
+        assert.equal(input.maxRequestBytes, 256 * 1024);
+        assert.equal(input.maxResponseBytes, 256 * 1024);
+        return network.request(
+          {
+            ...input,
+            target: { ...input.target, address: "127.0.0.1" },
+          },
+          signal,
+        );
+      },
     };
-    this.phases.push(body.phase);
-    this.bodies.push(body);
-    this.authorizations.push(input.headers?.authorization ?? "");
-    this.idempotencyKeys.push(String(input.headers?.["idempotency-key"]));
-    if (body.phase === "execute") {
-      this.executeCount += 1;
-      this.#receipts.set(
-        body.providerExecutionId,
-        `receipt:${body.providerExecutionId}`,
+  }
+
+  static async listen(
+    t: TestContext,
+  ): Promise<ControlledTlsRemoteReceiptServer> {
+    let fixture: ControlledTlsRemoteReceiptServer | undefined;
+    const server = createHttpsServer(
+      {
+        key: TEST_SERVER_KEY,
+        cert: TEST_SERVER_CERT,
+        minVersion: "TLSv1.3",
+        maxVersion: "TLSv1.3",
+      },
+      (request, response) => fixture?.handle(request, response),
+    );
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    if (address === null || typeof address === "string")
+      throw new Error("remote_mcp_tls_test_address_invalid");
+    fixture = new ControlledTlsRemoteReceiptServer(
+      server,
+      new URL(`https://localhost:${address.port}/mutations`),
+    );
+    t.after(() => fixture?.close());
+    return fixture;
+  }
+
+  private handle(
+    request: import("node:http").IncomingMessage,
+    response: import("node:http").ServerResponse,
+  ): void {
+    assert.equal(request.method, "POST");
+    const socket = request.socket as TLSSocket;
+    this.protocols.push(socket.getProtocol());
+    this.serverNames.push(socket.servername);
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const encoded = Buffer.concat(chunks);
+      assert.ok(encoded.byteLength <= 256 * 1024);
+      const body = JSON.parse(encoded.toString("utf8")) as {
+        phase: "execute" | "reconcile";
+        providerExecutionId: string;
+        toolName: string;
+      };
+      this.phases.push(body.phase);
+      this.bodies.push(body);
+      this.authorizations.push(request.headers.authorization ?? "");
+      this.idempotencyKeys.push(String(request.headers["idempotency-key"]));
+      if (body.phase === "execute") {
+        this.executeCount += 1;
+        this.#receipts.set(
+          body.providerExecutionId,
+          `receipt:${body.providerExecutionId}`,
+        );
+        socket.destroy();
+        return;
+      }
+      const providerReceiptId = this.#receipts.get(body.providerExecutionId);
+      assert.ok(providerReceiptId !== undefined);
+      const responseBody = Buffer.from(
+        JSON.stringify({
+          schemaVersion: "crewon.remote-mcp-mutation.v1",
+          phase: body.phase,
+          providerExecutionId: body.providerExecutionId,
+          toolName: body.toolName,
+          resolution: {
+            status: "completed",
+            providerReceiptId,
+            result: { structuredContent: { created: true } },
+          },
+        }),
       );
-      throw new Error("simulated_crash_after_remote_receipt_commit");
-    }
-    const providerReceiptId = this.#receipts.get(body.providerExecutionId);
-    assert.ok(providerReceiptId !== undefined);
-    const responseBody = Buffer.from(
-      JSON.stringify({
-        schemaVersion: "crewon.remote-mcp-mutation.v1",
-        phase: body.phase,
-        providerExecutionId: body.providerExecutionId,
-        toolName: body.toolName,
-        resolution: {
-          status: "completed",
-          providerReceiptId,
-          result: { structuredContent: { created: true } },
-        },
-      }),
-    );
-    assert.ok(responseBody.byteLength <= input.maxResponseBytes);
-    return {
-      status: 200,
-      headers: { "content-type": "application/json" },
-      body: responseBody,
-    };
+      assert.ok(responseBody.byteLength <= 256 * 1024);
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "content-length": responseBody.byteLength,
+      });
+      response.end(responseBody);
+    });
+  }
+
+  private async close(): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      this.#server.close((error) => (error ? reject(error) : resolve()));
+    });
   }
 }
 

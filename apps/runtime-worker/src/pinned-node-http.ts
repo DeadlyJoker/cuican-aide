@@ -86,6 +86,7 @@ export class PinnedNodeHttpTransport implements PinnedHttpPort {
           const hostname = unbracket(input.target.endpoint.hostname);
           options.servername = isIP(hostname) === 0 ? hostname : undefined;
           options.ca = this.#certificateAuthority;
+          options.minVersion = "TLSv1.3";
         }
         const request = (
           input.target.endpoint.protocol === "https:"
