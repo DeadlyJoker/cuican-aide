@@ -362,13 +362,8 @@ test(`${unknownEventFixture.caseId}: framing and fail-closed boundaries remain s
   );
 });
 
-test(`${unknownEventFixture.caseId}: Rust-known events without TS projections remain unsupported`, () => {
-  const unsupportedRustKnownEvents = [
-    {
-      type: "response.custom_tool_call_input.delta",
-      delta: "{}",
-      item_id: "item-1",
-    },
+test(`${unknownEventFixture.caseId}: reasoning stays unsupported while authoritative-done framing remains a no-op`, () => {
+  const unsupportedReasoningEvents = [
     {
       type: "response.reasoning_summary_text.delta",
       delta: "summary",
@@ -380,16 +375,12 @@ test(`${unknownEventFixture.caseId}: Rust-known events without TS projections re
       content_index: 0,
     },
     {
-      type: "response.output_item.added",
-      item: { type: "message", role: "assistant", content: [] },
-    },
-    {
       type: "response.reasoning_summary_part.added",
       summary_index: 0,
     },
   ] as const;
 
-  for (const [index, event] of unsupportedRustKnownEvents.entries()) {
+  for (const [index, event] of unsupportedReasoningEvents.entries()) {
     const decoder = new ResponsesProtocolDecoder({
       sequencePolicy: "required",
       completedCheckpoint: () => null,
@@ -403,6 +394,29 @@ test(`${unknownEventFixture.caseId}: Rust-known events without TS projections re
       event.type,
     );
   }
+
+  const decoder = new ResponsesProtocolDecoder({
+    sequencePolicy: "required",
+    completedCheckpoint: () => null,
+  });
+  decoder.accept(unknownEventFixture.events[1]);
+  assert.deepEqual(
+    decoder.accept({
+      type: "response.output_item.added",
+      sequence_number: 2,
+      item: { type: "message", role: "assistant", content: [] },
+    }),
+    [],
+  );
+  assert.deepEqual(
+    decoder.accept({
+      type: "response.custom_tool_call_input.delta",
+      sequence_number: 3,
+      delta: "{}",
+      item_id: "item-1",
+    }),
+    [],
+  );
 });
 
 test(`${topLevelErrorPayloadFixture.caseId}: fatal denylist is explicit and stable`, () => {

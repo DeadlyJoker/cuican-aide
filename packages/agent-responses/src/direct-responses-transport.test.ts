@@ -1225,13 +1225,19 @@ test("maps AR-009 content-filter incomplete output to the shared non-retryable t
   const transport = createTransport([
     createdEvent(0),
     {
-      type: "response.output_text.delta",
+      type: "response.output_item.added",
       sequence_number: 1,
+      output_index: 0,
+      item: { id: "msg-incomplete", type: "message", content: [] },
+    },
+    {
+      type: "response.output_text.delta",
+      sequence_number: 2,
       delta: "continued chunk",
     },
     {
       type: "response.incomplete",
-      sequence_number: 2,
+      sequence_number: 3,
       response: {
         id: "resp-1",
         status: "incomplete",
