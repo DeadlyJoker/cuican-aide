@@ -28,6 +28,7 @@ export interface WorkflowAgentNodePort {
     claimEpoch: number;
     stepId: string;
     attemptId: string;
+    workItemClaim: WorkItemClaim;
   }): Promise<WorkflowNodeOutcome>;
 }
 
@@ -220,6 +221,7 @@ export class ProductionWorkflowRuntimeDispatcher
         claimEpoch: payload.claimEpoch,
         stepId: admitted.admission.step.stepId,
         attemptId: admitted.admission.attempt.attemptId,
+        workItemClaim: input.claim,
       });
       if (
         outcome.status === "completed" &&
