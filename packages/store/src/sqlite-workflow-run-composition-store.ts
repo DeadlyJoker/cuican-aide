@@ -6,6 +6,8 @@ import {
 } from "@crewon/application";
 import {
   composeWorkflowNodeInput,
+  composeWorkflowOutput,
+  reduceRunLifecycleEvent,
   validateWorkflowSchemaValue,
   workflowNodeInputSchema,
   type RunState,
@@ -370,6 +372,7 @@ export class SqliteWorkflowRunCompositionStore {
         });
       }
       this.#writeExecution(next, now);
+      const runDisposition = this.#convergeTerminalRun(input, workflow, next, now, nowMs);
       let schedulerContinuationWorkItemId: string | null = null;
       let reconciliationWorkItemId: string | null = null;
       if (input.outcome.status === "unknown") {
@@ -409,10 +412,11 @@ export class SqliteWorkflowRunCompositionStore {
           schedulerContinuationWorkItemId,
           input,
           {
-            schemaVersion: "crewon.workflow-scheduler-work-item.v0",
+            schemaVersion: "crewon.workflow-scheduler-work-item.v1",
             trigger: "workflowScheduler",
             binding: input.binding,
             schedulerOperationId: schedulerContinuationWorkItemId,
+            workflowInput: this.#rootInputRef(input),
           },
           now,
           nowMs,
@@ -432,7 +436,7 @@ export class SqliteWorkflowRunCompositionStore {
             ? "reconcile" as const
             : schedulerContinuationWorkItemId === null ? "none" as const : "scheduler" as const,
         },
-        runDisposition: "nonTerminal" as const,
+        runDisposition,
       };
       this.#insertReceipt(input, "settleNode", fingerprint, result);
       this.#completeLease(input, nowMs);
@@ -516,12 +520,24 @@ export class SqliteWorkflowRunCompositionStore {
         );
       const node = execution.nodes.find((candidate) => candidate.nodeId === input.nodeId);
       if (node === undefined) throw new RunStoreError("workflow_composition_gate_mismatch");
+      let gateValue: WorkflowSchemaValue | undefined;
+      if (outcome.status === "completed") {
+        const inputAuthority = this.#composeNodeInputValue({
+          ...input, schedulerOperationId: node.claimOperationId!,
+          admissionOperationId: input.operationId, attemptLeaseDurationMs: 1,
+        }, this.#loadWorkflow(input), now);
+        gateValue = inputAuthority.value as WorkflowSchemaValue;
+        this.#insertExecutionValue({ ...input,
+          valueId: workflowAuthorityId("value", { tenantId: input.tenantId,
+            runId: input.runId, nodeId: input.nodeId, claimId: input.claimId,
+            claimEpoch: input.claimEpoch, resultDigest: inputAuthority.valueDigest }, this.#digester),
+          role: "nodeOutput", nodeId: input.nodeId,
+          valueDigest: inputAuthority.valueDigest,
+          valueJson: canonicalJson(gateValue), now });
+      }
       const next = settleWorkflowClaim({ execution, ...input,
         outcome: outcome.status === "completed"
-          ? { status: "completed", value: this.#composeNodeInputValue({
-              ...input, schedulerOperationId: node.claimOperationId!,
-              admissionOperationId: input.operationId, attemptLeaseDurationMs: 1,
-            }, this.#loadWorkflow(input)).value as WorkflowSchemaValue }
+          ? { status: "completed", value: gateValue! }
           : outcome,
         resultDigest: outcome.status === "completed" ? node.inputDigest! : undefined, now });
       this.#writeExecution(next, now);
@@ -547,10 +563,11 @@ export class SqliteWorkflowRunCompositionStore {
           schedulerContinuationWorkItemId,
           input,
           {
-            schemaVersion: "crewon.workflow-scheduler-work-item.v0",
+            schemaVersion: "crewon.workflow-scheduler-work-item.v1",
             trigger: "workflowScheduler",
             binding: input.binding,
             schedulerOperationId: schedulerContinuationWorkItemId,
+            workflowInput: this.#rootInputRef(input),
           },
           now,
           nowMs,
@@ -991,7 +1008,7 @@ export class SqliteWorkflowRunCompositionStore {
         gateRequestId: null,
         inputDigest: node.inputDigest!,
       };
-      const inputValue = this.#composeNodeInputValue(input, workflow);
+      const inputValue = this.#composeNodeInputValue(input, workflow, now);
       const result = {
         disposition: "fresh" as const,
         execution: next,
@@ -1382,6 +1399,7 @@ export class SqliteWorkflowRunCompositionStore {
   #composeNodeInputValue(
     input: Parameters<WorkflowRunCompositionStore["admitWorkflowNodeWork"]>[0],
     workflow: import("@crewon/domain").CompiledWorkflowVersion,
+    now?: string,
   ): import("@crewon/application").WorkflowExecutionValue {
     const root = this.#loadExecutionValue(input.tenantId, input.runId, "rootInput", null);
     const node = workflow.nodes.find((candidate) => candidate.nodeId === input.nodeId);
@@ -1401,11 +1419,15 @@ export class SqliteWorkflowRunCompositionStore {
     const valueDigest = this.#digester.sha256(valueJson);
     if (valueDigest !== executionNode(input, this.#loadExecution(input.tenantId, input.runId)).inputDigest)
       throw new RunStoreError("workflow_execution_value_digest_mismatch");
-    return { schemaVersion: "crewon.workflow-execution-value.v0",
+    const authority = { schemaVersion: "crewon.workflow-execution-value.v0" as const,
       valueId: workflowAuthorityId("value", { tenantId: input.tenantId,
         runId: input.runId, nodeId: input.nodeId, claimId: input.claimId,
         claimEpoch: input.claimEpoch, valueDigest }, this.#digester),
       value: structuredClone(value) as import("@crewon/contracts").JsonValue, valueDigest };
+    if (now !== undefined) this.#insertExecutionValue({ ...input,
+      valueId: authority.valueId, role: "nodeInput", nodeId: input.nodeId,
+      valueDigest, valueJson, now });
+    return authority;
   }
 
   #nodeInputDigest(
@@ -1441,12 +1463,94 @@ export class SqliteWorkflowRunCompositionStore {
 
   #insertExecutionValue(input: { tenantId: string; runId: string; valueId: string;
     role: string; nodeId: string | null; valueDigest: string; valueJson: string; now: string }): void {
+    const existing = this.#database.prepare(
+      `SELECT role,node_id,value_digest,value_json FROM workflow_execution_values
+       WHERE tenant_id=? AND run_id=? AND value_id=?`,
+    ).get(input.tenantId, input.runId, input.valueId) as Record<string, unknown> | undefined;
+    if (existing !== undefined) {
+      if (existing.role !== input.role || existing.node_id !== input.nodeId ||
+          existing.value_digest !== input.valueDigest || existing.value_json !== input.valueJson)
+        throw new RunStoreError("workflow_execution_value_conflict");
+      return;
+    }
     this.#database.prepare(
       `INSERT INTO workflow_execution_values
        (tenant_id,run_id,value_id,role,node_id,value_digest,value_json,created_at)
        VALUES (?,?,?,?,?,?,?,?)`,
     ).run(input.tenantId, input.runId, input.valueId, input.role, input.nodeId,
       input.valueDigest, input.valueJson, input.now);
+  }
+
+  #rootInputRef(input: { tenantId: string; runId: string }) {
+    const root = this.#loadExecutionValue(input.tenantId, input.runId, "rootInput", null);
+    if (root === null) throw new RunStoreError("workflow_execution_value_not_found");
+    return { valueId: root.valueId, valueDigest: root.valueDigest };
+  }
+
+  #convergeTerminalRun(
+    input: { tenantId: string; runId: string; operationId: string },
+    workflow: import("@crewon/domain").CompiledWorkflowVersion,
+    execution: import("@crewon/application").WorkflowExecutionState,
+    now: string,
+    nowMs: number,
+  ): import("@crewon/application").WorkflowRunDisposition {
+    if (!["completed", "failed", "canceled"].includes(execution.status))
+      return "nonTerminal";
+    const current = this.#loadRun(input.tenantId, input.runId);
+    if (current === null || current.goalBinding !== null)
+      throw new RunStoreError("workflow_composition_run_authority_mismatch");
+    let outputRef: string | null = null;
+    if (execution.status === "completed") {
+      const outputValues = workflow.outputNodeIds.map((nodeId) => {
+        const authority = this.#loadExecutionValue(input.tenantId, input.runId,
+          "nodeOutput", nodeId);
+        if (authority === null) throw new RunStoreError("workflow_execution_value_not_found");
+        return { nodeId, value: authority.value };
+      });
+      const value = validateWorkflowSchemaValue(
+        composeWorkflowOutput({ workflow, outputValues }), workflow.outputSchema);
+      const valueJson = canonicalJson(value);
+      const valueDigest = this.#digester.sha256(valueJson);
+      outputRef = workflowAuthorityId("value", { tenantId: input.tenantId,
+        runId: input.runId, role: "workflowOutput", valueDigest }, this.#digester);
+      this.#insertExecutionValue({ ...input, valueId: outputRef,
+        role: "workflowOutput", nodeId: null, valueDigest, valueJson, now });
+    }
+    const eventId = workflowAuthorityId("run-event", input, this.#digester);
+    const event = {
+      schemaVersion: "crewon.run-event.v0" as const,
+      identity: { runId: input.runId }, eventId,
+      sequence: current.lastSequence + 1, occurredAt: now,
+      ...(execution.status === "completed"
+        ? { type: "run.completed" as const, data: { outputRef } }
+        : execution.status === "failed"
+          ? { type: "run.failed" as const,
+              data: { code: "workflow_node_failed", retryable: false } }
+          : { type: "run.canceled" as const,
+              data: { reasonCode: "workflow_canceled" } }),
+    };
+    const next = reduceRunLifecycleEvent(current, event);
+    const updated = this.#database.prepare(
+      `UPDATE run_snapshots SET revision=?,last_sequence=?,state_json=?,updated_at=?
+       WHERE tenant_id=? AND run_id=? AND revision=?`,
+    ).run(next.revision, next.lastSequence, stableJson(next), now,
+      input.tenantId, input.runId, current.revision);
+    if (updated.changes !== 1) throw new RunStoreError("revision_conflict");
+    this.#database.prepare(
+      `INSERT INTO run_events(tenant_id,run_id,sequence,event_id,event_json)
+       VALUES (?,?,?,?,?)`,
+    ).run(input.tenantId, input.runId, event.sequence, eventId, stableJson(event));
+    const messageId = workflowAuthorityId("run-outbox", input, this.#digester);
+    const message = { messageId, tenantId: input.tenantId, runId: input.runId,
+      topic: "run.updated", payload: { eventId, eventType: event.type,
+        throughSequence: event.sequence }, createdAt: now };
+    this.#database.prepare(
+      `INSERT INTO outbox(message_id,tenant_id,run_id,topic,message_json,created_at,
+       status,available_at_ms,lease_epoch,attempt_count)
+       VALUES (?,?,?,?,?,?,'pending',?,0,0)`,
+    ).run(messageId, input.tenantId, input.runId, message.topic,
+      stableJson(message), now, nowMs);
+    return "terminalConverged";
   }
 }
 

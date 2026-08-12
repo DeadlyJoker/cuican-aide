@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { RunStoreError } from "@crewon/application";
 import type { PoolClient } from "pg";
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
   database.exec(`CREATE TABLE IF NOT EXISTS workflow_execution_schema (
@@ -47,6 +47,16 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
     database.exec(sqliteValueTable);
     database
       .prepare("UPDATE workflow_execution_schema SET version=4 WHERE singleton=1")
+      .run();
+  }
+  if (stored?.version === 4) {
+    database.exec("ALTER TABLE workflow_execution_values RENAME TO workflow_execution_values_v4");
+    database.exec(sqliteValueTable);
+    database.exec(`INSERT INTO workflow_execution_values
+      SELECT * FROM workflow_execution_values_v4;
+      DROP TABLE workflow_execution_values_v4`);
+    database
+      .prepare("UPDATE workflow_execution_schema SET version=5 WHERE singleton=1")
       .run();
   }
   assertSqliteShape(database);
@@ -96,6 +106,18 @@ export async function migratePostgresWorkflowExecutions(
       `UPDATE ${schema}.workflow_execution_schema SET version=4 WHERE singleton=true`,
     );
   }
+  if (version === 4) {
+    await client.query(
+      `ALTER TABLE ${schema}.workflow_execution_values RENAME TO workflow_execution_values_v4`,
+    );
+    await client.query(postgresValueTable(schema));
+    await client.query(`INSERT INTO ${schema}.workflow_execution_values
+      SELECT * FROM ${schema}.workflow_execution_values_v4`);
+    await client.query(`DROP TABLE ${schema}.workflow_execution_values_v4`);
+    await client.query(
+      `UPDATE ${schema}.workflow_execution_schema SET version=5 WHERE singleton=true`,
+    );
+  }
   const columns = await client.query<{
     table_name: string;
     column_name: string;
@@ -133,10 +155,11 @@ CREATE TABLE workflow_execution_receipts (
 
 const sqliteValueTable = `CREATE TABLE workflow_execution_values (
   tenant_id TEXT NOT NULL, run_id TEXT NOT NULL, value_id TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('rootInput','nodeOutput','workflowOutput')),
+  role TEXT NOT NULL CHECK (role IN ('rootInput','nodeInput','nodeOutput','workflowOutput')),
   node_id TEXT, value_digest TEXT NOT NULL,
   value_json TEXT NOT NULL CHECK (json_valid(value_json)), created_at TEXT NOT NULL,
   PRIMARY KEY (tenant_id,run_id,value_id),
+  UNIQUE (tenant_id,run_id,role,node_id),
   FOREIGN KEY (tenant_id,run_id) REFERENCES run_snapshots(tenant_id,run_id)
 ) STRICT;`;
 
@@ -273,10 +296,11 @@ function postgresCompositionTables(schema: string): string {
 function postgresValueTable(schema: string): string {
   return `CREATE TABLE ${schema}.workflow_execution_values (
     tenant_id text NOT NULL, run_id text NOT NULL, value_id text NOT NULL,
-    role text NOT NULL CHECK (role IN ('rootInput','nodeOutput','workflowOutput')),
+    role text NOT NULL CHECK (role IN ('rootInput','nodeInput','nodeOutput','workflowOutput')),
     node_id text, value_digest text NOT NULL, value_json jsonb NOT NULL,
     created_at timestamptz NOT NULL,
     PRIMARY KEY (tenant_id,run_id,value_id),
+    UNIQUE (tenant_id,run_id,role,node_id),
     FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.run_snapshots(tenant_id,run_id));`;
 }
 

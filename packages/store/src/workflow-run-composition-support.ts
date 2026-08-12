@@ -395,7 +395,9 @@ export function workflowAuthorityId(
     | "gate-outbox"
     | "gate-resume"
     | "scheduler"
-    | "reconcile",
+    | "reconcile"
+    | "run-event"
+    | "run-outbox",
   authority: unknown,
   digester: WorkflowContentDigester,
 ): string {
