@@ -59,6 +59,13 @@ export type CompiledWorkflowVersion = Readonly<{
   executionOrder: readonly string[];
 }>;
 
+/** Immutable WorkflowVersion identity frozen into a durable Run. */
+export type FrozenWorkflowVersionBinding = Readonly<{
+  workflowId: string;
+  workflowVersionId: string;
+  contentDigest: string;
+}>;
+
 export interface WorkflowContentDigester {
   sha256(content: string): string;
 }
