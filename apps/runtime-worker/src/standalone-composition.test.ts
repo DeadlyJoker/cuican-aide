@@ -229,6 +229,29 @@ test("requires exact explicit Workflow certification and closes rejected resourc
   assert.equal(closes, 1);
 });
 
+test("rejects split or injected Workflow Store authorities", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = runtimeConfig();
+  await activateRelease(databasePath, config);
+  for (const injected of [
+    { composition: {} },
+    { modelDispatchEvidence: {} },
+    { continuationStore: {} },
+  ])
+    await assert.rejects(
+      createStandaloneRuntimeWorker({
+        ...config,
+        databasePath,
+        scanIntervalMs: null,
+        workflowComposition: {
+          ...workflowCandidate(WORKFLOW_RUNTIME_CAPABILITIES, () => {}),
+          ...injected,
+        } as never,
+      }),
+      /workflow_runtime_composition_not_certified/u,
+    );
+});
+
 test("closes an explicitly certified Workflow candidate without changing ordinary startup", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   const config = runtimeConfig();
@@ -473,8 +496,7 @@ function workflowCandidate(
       capabilities,
     },
     versions: {} as never,
-    composition: {} as never,
-    modelDispatchEvidence: {} as never,
+    store: {} as never,
     async close() {
       close();
     },

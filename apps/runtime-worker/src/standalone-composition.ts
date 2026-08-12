@@ -13,10 +13,9 @@ import {
   type ArtifactStorePort,
   type DomainStore,
   type ModelProviderSettingsStore,
-  type ModelDispatchEvidenceStore,
   type RunRoute,
   type WorkflowExecutionStore,
-  type WorkflowRunCompositionStore,
+  type WorkflowRuntimeStore,
   type WorkflowVersionStore,
 } from "@crewon/application";
 import {
@@ -162,8 +161,7 @@ export type WorkflowRuntimeCompositionCandidate = Readonly<{
     capabilities: typeof WORKFLOW_RUNTIME_CAPABILITIES;
   }>;
   versions: WorkflowVersionStore;
-  composition: WorkflowRunCompositionStore & WorkflowExecutionStore;
-  modelDispatchEvidence: ModelDispatchEvidenceStore;
+  store: WorkflowRuntimeStore & DomainStore & WorkflowExecutionStore;
   close(): Promise<void>;
 }>;
 
@@ -388,21 +386,21 @@ async function composeRuntimeWorker(
     digester,
     ...(workflow === null
       ? {}
-      : { workflowExecutions: workflow.composition }),
+      : { workflowExecutions: workflow.store }),
   });
   const workflowDispatcher =
     workflow === null
       ? undefined
       : new ProductionWorkflowRuntimeDispatcher({
           versions: workflow.versions,
-          composition: workflow.composition,
+          composition: workflow.store,
           digester,
           agent: new WorkflowAgentRuntimeAdapter({
             runtimes: runtimeResolver,
             engine: new SharedWorkflowAdmittedAgentExecutionEngine({
               execution,
-              store,
-              dispatchEvidence: workflow.modelDispatchEvidence,
+              store: workflow.store,
+              dispatchEvidence: workflow.store,
               leaseDurationMs: config.leaseDurationMs ?? 30_000,
             }),
           }),
@@ -547,6 +545,8 @@ function certifyWorkflowComposition(
 ): WorkflowRuntimeCompositionCandidate | null {
   if (candidate === undefined) return null;
   if (
+    !hasExactKeys(candidate, ["certification", "close", "store", "versions"]) ||
+    !hasExactKeys(candidate.certification, ["capabilities", "schemaVersion"]) ||
     candidate.certification.schemaVersion !==
       "crewon.workflow-runtime-certification.v0" ||
     candidate.certification.capabilities.length !==
@@ -559,6 +559,20 @@ function certifyWorkflowComposition(
     throw new Error("workflow_runtime_composition_not_certified");
   }
   return candidate;
+}
+
+function hasExactKeys(
+  value: unknown,
+  expected: readonly string[],
+): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return false;
+  const keys = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return (
+    keys.length === sortedExpected.length &&
+    keys.every((key, index) => key === sortedExpected[index])
+  );
 }
 
 function validateWorkspaceDeployment(
