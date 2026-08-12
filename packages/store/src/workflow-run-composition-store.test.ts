@@ -318,6 +318,120 @@ test("SQLite cancellation retains possibly-sent node reconciliation", async (t) 
     json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`).get()!.count, 1);
   database.close();
 });
+
+test("SQLite cancellation wins over a late response terminal candidate", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-cancel-candidate-"));
+  const path = join(directory, "cancel.sqlite");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  t.after(() => store.close());
+  await new ThreadApplicationService({ store,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    ids: { nextId: () => "thread-1" }, digester }).createThread({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
+      kind: "thread.create", idempotencyKey: "candidate-thread", title: "Candidate cancel" });
+  await seed(path, clock.nowEpochMilliseconds() + 60_000);
+  const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+    lease, binding, schedulerOperationId: "cancel-schedule", workflowInput: {
+      valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+  const work = scheduled.nodeWorkItems[0]!;
+  const claim = await store.claimNextWorkItem({ ownerId: "node-worker",
+    leaseId: "node-lease", leaseDurationMs: 60_000 });
+  const nodeLease = { workItemId: work.workItemId, ownerId: "node-worker",
+    leaseId: "node-lease", leaseEpoch: claim!.lease.epoch };
+  const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+    lease: nodeLease, binding, nodeId: work.nodeId, claimId: work.claimId,
+    claimEpoch: work.claimEpoch, schedulerOperationId: "cancel-schedule",
+    admissionOperationId: "admit-candidate", attemptLeaseDurationMs: 60_000 });
+  const attempt = admitted.admission!.attempt;
+  const authority = { tenantId: "tenant-1", runId: "run-1", workItemId: work.workItemId,
+    leaseEpoch: nodeLease.leaseEpoch, nodeId: work.nodeId, nodeKind: "agent" as const,
+    claimId: work.claimId, claimEpoch: work.claimEpoch, agentVersionId: "agent-v1",
+    attempt: { stepId: attempt.stepId, attemptId: attempt.attemptId } };
+  const dispatchDatabase = new DatabaseSync(path);
+  const prepared = prepareSqliteModelDispatch(dispatchDatabase, { tenantId: "tenant-1",
+    runId: "run-1", lease: nodeLease, attempt, operationId: "candidate-dispatch",
+    requestSequence: 1, operation: "dispatch", requestDigest: digester.sha256("request"),
+    provider: { agentVersionId: "agent-v1", adapterName: "responses", adapterVersion: "1",
+      modelId: "model" }, preparedAt: "2026-08-12T00:00:00.000Z" });
+  const sent = markSqliteModelDispatchPossiblySent(dispatchDatabase, { tenantId: "tenant-1",
+    runId: "run-1", lease: nodeLease, attempt, operationId: prepared.operationId,
+    requestSequence: 1, expectedRevision: prepared.revision,
+    transitionedAt: "2026-08-12T00:00:00.000Z" });
+  const observed = observeSqliteModelDispatchResponse(dispatchDatabase, { tenantId: "tenant-1",
+    runId: "run-1", lease: nodeLease, attempt, operationId: prepared.operationId,
+    requestSequence: 1, expectedRevision: sent.revision,
+    checkpointDigest: digester.sha256("checkpoint"),
+    transitionedAt: "2026-08-12T00:00:00.000Z" });
+  dispatchDatabase.close();
+  const continuation = await store.commitWorkflowAssistantContinuation({ lease: nodeLease, authority,
+    expectedContinuationRevision: null, next: {
+      schemaVersion: "crewon.workflow-node-continuation.v0", authority, segmentId: "segment-1",
+      modelSampleIndex: 0, toolRoundsConsumed: 0, providerCheckpoint: null,
+      providerTurnState: null, activeDispatch: { operationId: observed.operationId,
+        requestSequence: 1, expectedRevision: observed.revision, status: "responseObserved" },
+      history: [] }, committedAt: "2026-08-12T00:00:00.000Z",
+    terminalResult: { status: "completed", output: "{}" } });
+  const candidateId = continuation.terminalCandidate!.candidateId;
+  const unknown = await store.settleWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+    lease: nodeLease, binding, nodeId: work.nodeId, claimId: work.claimId,
+    claimEpoch: work.claimEpoch, stepId: attempt.stepId, attemptId: attempt.attemptId,
+    operationId: "settle-candidate-unknown", outcome: { status: "unknown" } });
+  await new RunApplicationService({ store,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    ids: { nextId: (kind) => `candidate-${kind}` } }).transitionRun({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
+      kind: "run.requestCancel", runId: "run-1", expectedRevision: 2,
+      idempotencyKey: "request-candidate-cancel" });
+  clock.set(Date.parse("2026-08-12T00:00:02.000Z"));
+  const reconcileClaim = await store.claimNextWorkItem({ ownerId: "reconcile-worker",
+    leaseId: "reconcile-lease", leaseDurationMs: 60_000 });
+  assert.equal(reconcileClaim?.workItem.workItemId, unknown.handoff.nextWorkItemId);
+  const reconcilePayload = reconcileClaim!.workItem.payload as Record<string, unknown>;
+  const reconcileInput = { tenantId: "tenant-1", runId: "run-1", binding,
+    lease: { workItemId: reconcileClaim!.workItem.workItemId, ownerId: "reconcile-worker",
+      leaseId: "reconcile-lease", leaseEpoch: reconcileClaim!.lease.epoch },
+    nodeId: work.nodeId, claimId: work.claimId, claimEpoch: work.claimEpoch,
+    reconciliationOperationId: String(reconcilePayload.reconciliationOperationId) };
+  const reconciled = await store.reconcileWorkflowNode(reconcileInput);
+  assert.equal(reconciled.disposition, "settled");
+  assert.equal(reconciled.execution.nodes[0]!.status, "canceled");
+  const database = new DatabaseSync(path);
+  const terminal = loadSqliteModelDispatchReceipt(database, { tenantId: "tenant-1", runId: "run-1",
+    stepId: "agent", attemptId: attempt.attemptId, operationId: "candidate-dispatch" });
+  assert.deepEqual(terminal?.terminalOutcome,
+    { kind: "completed", code: null, certainty: "responseObserved" });
+  const retainedCandidate = JSON.parse(String(database.prepare(
+    "SELECT checkpoint_json FROM workflow_node_continuations").get()!.checkpoint_json));
+  assert.equal(retainedCandidate.terminalCandidate.candidateId, candidateId);
+  assert.deepEqual({ ...database.prepare("SELECT status FROM run_attempts WHERE attempt_id=?").get(
+    attempt.attemptId) }, { status: "canceled" });
+  database.close();
+  assert.equal((await store.reconcileWorkflowNode(reconcileInput)).disposition, "replay");
+  const cancelClaim = await store.claimNextWorkItem({ ownerId: "cancel-worker",
+    leaseId: "cancel-lease", leaseDurationMs: 60_000 });
+  assert.equal(cancelClaim?.workItem.payload.trigger, "workflowCancel");
+  const final = await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+    binding, operationId: String(cancelClaim!.workItem.payload.cancellationOperationId),
+    reasonCode: "user_requested", lease: { workItemId: cancelClaim!.workItem.workItemId,
+      ownerId: "cancel-worker", leaseId: "cancel-lease", leaseEpoch: cancelClaim!.lease.epoch } });
+  assert.equal(final.runDisposition, "terminalConverged");
+  const finalDatabase = new DatabaseSync(path);
+  assert.equal(JSON.parse(String(finalDatabase.prepare(
+    "SELECT state_json FROM run_snapshots WHERE run_id='run-1'").get()!.state_json)).status,
+  "canceled");
+  assert.equal(finalDatabase.prepare(`SELECT count(*) count FROM work_items WHERE status='pending'
+    AND json_extract(work_item_json,'$.payload.trigger')='workflowScheduler'`).get()!.count, 0);
+  finalDatabase.prepare(`UPDATE workflow_node_continuations SET checkpoint_json=json_set(
+    checkpoint_json,'$.terminalCandidate.candidateId','sha256:forged')`).run();
+  finalDatabase.close();
+  await assert.rejects(store.reconcileWorkflowNode(reconcileInput),
+    (error: unknown) => error instanceof RunStoreError &&
+      error.code === "workflow_reconciliation_replay_corrupt");
+});
 const fanInSchema = {
   type: "object" as const,
   properties: { agent: objectSchema, gate: objectSchema },

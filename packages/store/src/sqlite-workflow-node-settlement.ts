@@ -78,6 +78,7 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
     beforeReceipt?(result: SqliteWorkflowNodeSettlementResult): void;
     mapResult?(result: SqliteWorkflowNodeSettlementResult): Result;
     deferOuterSettlement?: boolean;
+    suppressContinuation?: boolean;
   }> = {},
 ): Result {
   const replay = context.receipt(input, "settleNode", fingerprint);
@@ -165,6 +166,7 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
       reconciliationOperationId: input.operationId,
     }, now, nowMs);
   } else if (
+    !options.suppressContinuation &&
     !next.nodes.some((node) =>
       ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
     ) &&
