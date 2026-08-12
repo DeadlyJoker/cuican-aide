@@ -7,6 +7,29 @@
 
 ## 已落地
 
+### 2026-08-12 Native raw Tool WSS dispatcher 纵切
+
+- production `crewon-device-runtime` 的 mTLS WSS session 现在把原始
+  `crewon.device-command.v0` 交给独立 raw Tool dispatcher，不再把 Tool command
+  转换成 Workspace command，也不再用 Workspace filesystem-read event/ACK 冒充 Tool receipt。
+- Native Tool admission 在 accepted receipt 前严格完成 bounded wire parse、Ed25519、Device identity、显式
+  capability registry、`workspace.read_file.v0` 参数 schema（workspace incarnation、canonical path segments、encoding）、
+  limits、stable-handle metadata 和 current connection epoch 检查。accepted durable 后、primitive 调用前再次获取
+  current-epoch permit；takeover 会落 `execution.unknown_outcome`，不会提交旧 epoch completion。
+- SQLite device journal v4 新增独立 Tool command/event/ACK authority。新命令先事务持久化
+  `execution.accepted`，terminal 持久化后才允许 cumulative ACK；exact duplicate 返回 accepted-in-flight 或 terminal replay，
+  changed binding/action digest fail closed。进程重启发现 accepted-only 时只持久化并重放 unknown outcome，绝不重新执行
+  primitive；WSS Hello 和 reconnect projection 同时包含 raw Tool ACK/replay cursor。
+- 当前 capability registry 只 advertise 已有安全 primitive `workspace.read_file.v0`；它由专用 wire schema 无损绑定 path、
+  limits 和 action digest。没有 advertise shell/process mutation，也没有用 capability/name string convention 偷渡参数。
+  shared TS/Rust `device-protocol.reference.json` 继续作为 command/signature/filesystem-read wire fixture；新增 dedicated
+  `tool_journal_tests.rs` 与 `native_tool_dispatcher_tests.rs` 覆盖 takeover、duplicate/replay、changed digest/binding、
+  terminal-before-ACK 和 accepted-only restart。focused 验证：device-journal `24/24`、device `32/32`、device-runtime
+  `21/21`。
+- 仍未开放：shell/process execution、任意 payload/artifact mutation primitive、UDS transport、HSM/KMS、跨机器长断线授权续期，
+  以及能对外部有副作用 Tool 做 authoritative reconcile/cancel 的 provider receipt authority。新增有副作用 capability 前必须
+  注入显式 executor/reconciler，并证明 durable provider terminal identity；不能沿用 accepted-only -> retry。
+
 ### 2026-08-09 append-only Thread rollback Control cutover
 
 - `thread.rollback` 现在由独立 Application/Store Port 持有，不再把“回退”实现成删除或重写 Message/Model History。命令使用

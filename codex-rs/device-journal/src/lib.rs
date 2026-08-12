@@ -13,6 +13,7 @@ mod journal;
 mod listing;
 mod records;
 mod schema;
+mod tool_journal;
 
 use crewon_device_protocol::DeviceWorkspaceListCommand;
 use crewon_device_protocol::DeviceWorkspaceListEvent;
@@ -27,6 +28,14 @@ pub use filesystem_read_admission::PrepareFilesystemReadWithAdmissionOutcome;
 pub use filesystem_read_listing::FilesystemReadJournalListQuery;
 pub use filesystem_read_listing::FilesystemReadJournalPage;
 pub use journal::DeviceWorkspaceJournal;
+pub use tool_journal::AcknowledgeToolOutcome;
+pub use tool_journal::PrepareToolError;
+pub use tool_journal::PrepareToolOutcome;
+pub use tool_journal::RecordToolTerminalOutcome;
+pub use tool_journal::ToolJournalAcknowledgement;
+pub use tool_journal::ToolJournalExecution;
+pub use tool_journal::ToolJournalListQuery;
+pub use tool_journal::ToolJournalPage;
 
 pub const MAX_JOURNAL_PAGE_SIZE: u16 = 100;
 
@@ -161,3 +170,7 @@ mod filesystem_read_listing_tests;
 #[cfg(test)]
 #[path = "filesystem_read_migration_tests.rs"]
 mod filesystem_read_migration_tests;
+
+#[cfg(test)]
+#[path = "tool_journal_tests.rs"]
+mod tool_journal_tests;

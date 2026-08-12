@@ -48,7 +48,7 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
         .await?;
     if rows.len() != 1
         || rows[0].try_get::<i64, _>("singleton")? != 1
-        || rows[0].try_get::<i64, _>("version")? != 3
+        || rows[0].try_get::<i64, _>("version")? != 4
     {
         return Err(authority("device_journal_schema_unsupported"));
     }
@@ -122,6 +122,49 @@ async fn assert_authority(pool: &SqlitePool) -> Result<(), DeviceJournalError> {
             ("runtime_binding_id", 0),
             ("action_digest", 0),
             ("command_digest", 0),
+            ("acknowledged_at", 0),
+        ],
+    )
+    .await?;
+    assert_columns(
+        pool,
+        "tool_executions",
+        &[
+            ("execution_id", 1),
+            ("command_json", 0),
+            ("command_fingerprint", 0),
+            ("device_id", 0),
+            ("capability", 0),
+            ("lease_id", 0),
+            ("lease_epoch", 0),
+            ("action_digest", 0),
+            ("acknowledged_through", 0),
+            ("created_at", 0),
+        ],
+    )
+    .await?;
+    assert_columns(
+        pool,
+        "tool_events",
+        &[
+            ("execution_id", 1),
+            ("sequence", 2),
+            ("event_json", 0),
+            ("event_fingerprint", 0),
+            ("event_type", 0),
+            ("receipt_id", 0),
+            ("observed_at", 0),
+        ],
+    )
+    .await?;
+    assert_columns(
+        pool,
+        "tool_acks",
+        &[
+            ("execution_id", 1),
+            ("through_sequence", 2),
+            ("ack_json", 0),
+            ("ack_fingerprint", 0),
             ("acknowledged_at", 0),
         ],
     )

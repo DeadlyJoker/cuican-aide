@@ -11,6 +11,7 @@ use crewon_device_protocol::DeviceAcknowledgedExecution;
 use crewon_device_protocol::DeviceFilesystemReadAck;
 use crewon_device_protocol::DeviceHello;
 use crewon_device_protocol::DeviceWorkspaceListAck;
+use crewon_device_protocol::parse_device_execution_ack;
 use crewon_device_protocol::parse_device_execution_cancel;
 use crewon_device_protocol::parse_device_filesystem_read_ack;
 use crewon_device_protocol::parse_device_gateway_welcome;
@@ -30,7 +31,7 @@ use crate::DeviceRuntimeError;
 use crate::dispatch::DispatchRequest;
 use crate::dispatch::apply_cancel;
 use crate::dispatch::enqueue_command;
-use crate::dispatch::enqueue_filesystem_read;
+use crate::dispatch::enqueue_tool;
 use crate::dispatch::run_dispatch_scheduler;
 use crate::runtime::DeviceRuntimeReady;
 use crate::runtime::DeviceRuntimeState;
@@ -100,6 +101,7 @@ where
         while let Some(outbound) = outbound_rx.recv().await {
             let message = match outbound {
                 Outbound::Event(event) => match event.as_ref() {
+                    RuntimeEvent::Tool(event) => serde_json::to_string(event),
                     RuntimeEvent::WorkspaceList(event) => serde_json::to_string(event),
                     RuntimeEvent::FilesystemRead(event) => serde_json::to_string(event),
                 }
@@ -210,6 +212,20 @@ async fn build_hello(
     connection_id: &str,
 ) -> Result<DeviceHello, DeviceRuntimeError> {
     let mut last_acknowledged = Vec::new();
+    last_acknowledged.extend(
+        state
+            .journal
+            .list_tool_acknowledgements()
+            .await
+            .map_err(|error| {
+                DeviceRuntimeError::with_source("device_runtime_journal_invalid", error)
+            })?
+            .into_iter()
+            .map(|acknowledgement| DeviceAcknowledgedExecution {
+                execution_id: acknowledgement.execution_id,
+                sequence: acknowledgement.through_sequence,
+            }),
+    );
     let mut cursor = None;
     loop {
         let page = state
@@ -285,6 +301,35 @@ async fn collect_replay_events(
 ) -> Result<Vec<RuntimeEvent>, DeviceRuntimeError> {
     let mut events = Vec::new();
     let mut execution_count = 0_usize;
+    let mut cursor = None;
+    loop {
+        let items = state
+            .tool_orchestrator
+            .reconnect(&crewon_device_journal::ToolJournalListQuery {
+                after_execution_id: cursor,
+                limit: 100,
+            })
+            .await
+            .map_err(|error| {
+                DeviceRuntimeError::with_source("device_runtime_journal_invalid", error)
+            })?;
+        execution_count += items.len();
+        if execution_count > MAX_UNACKNOWLEDGED_EXECUTIONS {
+            return Err(DeviceRuntimeError::new(
+                "device_runtime_replay_capacity_exceeded",
+            ));
+        }
+        if items.is_empty() {
+            break;
+        }
+        cursor = items.last().map(|item| item.execution_id.clone());
+        for item in items {
+            events.extend(item.events.into_iter().map(RuntimeEvent::Tool));
+        }
+        if cursor.is_none() {
+            break;
+        }
+    }
     let mut cursor = None;
     loop {
         let page = state
@@ -367,7 +412,23 @@ async fn handle_text_frame(
         "crewon.device-workspace-list-command.v0" => {
             enqueue_command(state, frame, value, dispatch_tx)
         }
-        "crewon.device-command.v0" => enqueue_filesystem_read(state, frame, value, dispatch_tx),
+        "crewon.device-command.v0" => enqueue_tool(state, frame, value, dispatch_tx),
+        "crewon.device-ack.v0" => {
+            let ack = parse_device_execution_ack(value).map_err(|error| {
+                DeviceRuntimeError::with_source("device_runtime_ack_invalid", error)
+            })?;
+            if ack.device_id != state.device_id {
+                return Err(DeviceRuntimeError::new("device_runtime_ack_invalid"));
+            }
+            state
+                .tool_orchestrator
+                .acknowledge(&ack)
+                .await
+                .map_err(|error| {
+                    DeviceRuntimeError::with_source("device_runtime_ack_rejected", error)
+                })?;
+            Ok(())
+        }
         "crewon.device-workspace-list-ack.v0" => {
             let ack = parse_device_workspace_list_ack(value).map_err(|error| {
                 DeviceRuntimeError::with_source("device_runtime_ack_invalid", error)

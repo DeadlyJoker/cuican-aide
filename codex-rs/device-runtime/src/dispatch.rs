@@ -2,15 +2,14 @@ use std::sync::Arc;
 
 use crewon_device::AcceptedGatewayConnection;
 use crewon_device::NativeDeviceConnection;
-use crewon_device::NativeFilesystemReadDispatchOutcome;
+use crewon_device::NativeToolDispatchOutcome;
 use crewon_device::NativeWorkspaceListDispatchOutcome;
 use crewon_device::WorkspaceListCancellation;
 use crewon_device_protocol::DeviceExecutionCancel;
-use crewon_device_protocol::DeviceFilesystemReadCommand;
-use crewon_device_protocol::DeviceFilesystemReadEvent;
+use crewon_device_protocol::DeviceExecutionCommand;
 use crewon_device_protocol::DeviceWorkspaceListCommand;
 use crewon_device_protocol::DeviceWorkspaceListEvent;
-use crewon_device_protocol::parse_device_filesystem_read_command;
+use crewon_device_protocol::parse_device_execution_command;
 use crewon_device_protocol::parse_device_workspace_list_command;
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -32,7 +31,7 @@ pub(crate) struct DispatchRequest {
 
 enum DispatchCommand {
     WorkspaceList(DeviceWorkspaceListCommand),
-    FilesystemRead(DeviceFilesystemReadCommand),
+    Tool(DeviceExecutionCommand),
 }
 
 pub(crate) fn enqueue_command(
@@ -65,27 +64,27 @@ pub(crate) fn enqueue_command(
     Ok(())
 }
 
-pub(crate) fn enqueue_filesystem_read(
+pub(crate) fn enqueue_tool(
     state: &Arc<DeviceRuntimeState>,
     frame: &[u8],
     value: Value,
     dispatch_tx: &mpsc::Sender<DispatchRequest>,
 ) -> Result<(), DeviceRuntimeError> {
-    let command = parse_device_filesystem_read_command(value).map_err(|error| {
+    let command = parse_device_execution_command(value).map_err(|error| {
         DeviceRuntimeError::with_source("device_runtime_command_invalid", error)
     })?;
-    if command.command.device_id != state.device_id {
+    if command.device_id != state.device_id {
         return Err(DeviceRuntimeError::new("device_runtime_command_invalid"));
     }
     let (cancellation, owns_cancellation) = register_identity(
         state,
-        &command.command.execution_id,
-        &command.command.lease_id,
-        command.command.lease_epoch,
+        &command.execution_id,
+        &command.lease_id,
+        command.lease_epoch,
     )?;
     let request = DispatchRequest {
         command_frame: frame.to_vec(),
-        command: DispatchCommand::FilesystemRead(command.clone()),
+        command: DispatchCommand::Tool(command.clone()),
         cancellation,
         owns_cancellation,
     };
@@ -93,9 +92,9 @@ pub(crate) fn enqueue_filesystem_read(
         if owns_cancellation {
             remove_owned_identity(
                 state,
-                &command.command.execution_id,
-                &command.command.lease_id,
-                command.command.lease_epoch,
+                &command.execution_id,
+                &command.lease_id,
+                command.lease_epoch,
             );
         }
         return Err(DeviceRuntimeError::new(
@@ -169,9 +168,9 @@ fn dispatch_blocking(
                         },
                     ),
             )
-            .map(DispatchOutcome::WorkspaceList),
-        DispatchCommand::FilesystemRead(_) => handle
-            .block_on(state.read_orchestrator.dispatch_with_accepted_observer(
+            .map(|outcome| DispatchOutcome::WorkspaceList(Box::new(outcome))),
+        DispatchCommand::Tool(_) => handle
+            .block_on(state.tool_orchestrator.dispatch_filesystem_read(
                 &connection,
                 &request.command_frame,
                 &state.registry,
@@ -179,20 +178,20 @@ fn dispatch_blocking(
                 move |accepted| {
                     let _ = observer_state
                         .events
-                        .send(RuntimeEvent::FilesystemRead(accepted.clone()));
+                        .send(RuntimeEvent::Tool(accepted.clone()));
                 },
             ))
-            .map(DispatchOutcome::FilesystemRead),
+            .map(|outcome| DispatchOutcome::Tool(Box::new(outcome))),
     }
     .map_err(|error| DeviceRuntimeError::with_source("device_runtime_dispatch_failed", error));
     if request.owns_cancellation {
         match &request.command {
             DispatchCommand::WorkspaceList(command) => remove_owned_cancellation(&state, command),
-            DispatchCommand::FilesystemRead(command) => remove_owned_identity(
+            DispatchCommand::Tool(command) => remove_owned_identity(
                 &state,
-                &command.command.execution_id,
-                &command.command.lease_id,
-                command.command.lease_epoch,
+                &command.execution_id,
+                &command.lease_id,
+                command.lease_epoch,
             ),
         }
     }
@@ -200,20 +199,33 @@ fn dispatch_blocking(
 }
 
 enum DispatchOutcome {
-    WorkspaceList(NativeWorkspaceListDispatchOutcome),
-    FilesystemRead(NativeFilesystemReadDispatchOutcome),
+    Tool(Box<NativeToolDispatchOutcome>),
+    WorkspaceList(Box<NativeWorkspaceListDispatchOutcome>),
 }
 
 fn outcome_events(outcome: DispatchOutcome) -> Vec<RuntimeEvent> {
     match outcome {
-        DispatchOutcome::FilesystemRead(outcome) => read_outcome_events(outcome)
+        DispatchOutcome::Tool(outcome) => tool_outcome_events(*outcome)
             .into_iter()
-            .map(RuntimeEvent::FilesystemRead)
+            .map(RuntimeEvent::Tool)
             .collect(),
-        DispatchOutcome::WorkspaceList(outcome) => workspace_outcome_events(outcome)
+        DispatchOutcome::WorkspaceList(outcome) => workspace_outcome_events(*outcome)
             .into_iter()
             .map(RuntimeEvent::WorkspaceList)
             .collect(),
+    }
+}
+
+fn tool_outcome_events(
+    outcome: NativeToolDispatchOutcome,
+) -> Vec<crewon_device_protocol::DeviceExecutionEvent> {
+    match outcome {
+        NativeToolDispatchOutcome::FreshResolved { terminal, .. } => vec![terminal],
+        NativeToolDispatchOutcome::AcceptedInFlight { accepted } => vec![accepted],
+        NativeToolDispatchOutcome::RecoveredUnknownOutcome { accepted, terminal }
+        | NativeToolDispatchOutcome::TerminalReplay { accepted, terminal } => {
+            vec![accepted, terminal]
+        }
     }
 }
 
@@ -225,19 +237,6 @@ fn workspace_outcome_events(
         NativeWorkspaceListDispatchOutcome::AcceptedInFlight { accepted } => vec![accepted],
         NativeWorkspaceListDispatchOutcome::RecoveredUnknownOutcome { accepted, terminal }
         | NativeWorkspaceListDispatchOutcome::TerminalReplay { accepted, terminal } => {
-            vec![accepted, terminal]
-        }
-    }
-}
-
-fn read_outcome_events(
-    outcome: NativeFilesystemReadDispatchOutcome,
-) -> Vec<DeviceFilesystemReadEvent> {
-    match outcome {
-        NativeFilesystemReadDispatchOutcome::FreshResolved { terminal, .. } => vec![terminal],
-        NativeFilesystemReadDispatchOutcome::AcceptedInFlight { accepted } => vec![accepted],
-        NativeFilesystemReadDispatchOutcome::RecoveredUnknownOutcome { accepted, terminal }
-        | NativeFilesystemReadDispatchOutcome::TerminalReplay { accepted, terminal } => {
             vec![accepted, terminal]
         }
     }
@@ -360,6 +359,22 @@ pub(crate) async fn apply_cancel(
         && (execution.command.command.device_id != cancel.device_id
             || execution.command.command.lease_id != cancel.lease_id
             || execution.command.command.lease_epoch != cancel.lease_epoch)
+    {
+        return Err(DeviceRuntimeError::new(
+            "device_runtime_cancel_identity_mismatch",
+        ));
+    }
+    let tool = state
+        .journal
+        .get_tool(&cancel.execution_id)
+        .await
+        .map_err(|error| {
+            DeviceRuntimeError::with_source("device_runtime_journal_invalid", error)
+        })?;
+    if let Some(execution) = tool
+        && (execution.command.device_id != cancel.device_id
+            || execution.command.lease_id != cancel.lease_id
+            || execution.command.lease_epoch != cancel.lease_epoch)
     {
         return Err(DeviceRuntimeError::new(
             "device_runtime_cancel_identity_mismatch",
