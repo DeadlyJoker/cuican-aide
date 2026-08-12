@@ -124,6 +124,8 @@ function runView(overrides: Partial<RunView> = {}): RunView {
     cancelRequested: false,
     waitingApproval: null,
     collaborationMode: "default",
+    purpose: "turn",
+    workflowVersionBinding: null,
     goalBinding: null,
     outputRef: null,
     failure: null,
