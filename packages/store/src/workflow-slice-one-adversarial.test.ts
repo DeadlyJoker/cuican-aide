@@ -397,6 +397,80 @@ test("D1 public SQLite runtime atomically settles model terminal evidence", asyn
     /idempotency_conflict/u,
   );
 
+  const tamperMatrix = [
+    {
+      name: "dispatch terminal revision",
+      mutate: "UPDATE model_dispatch_receipts SET revision=revision+1 WHERE operation_id='dispatch-agent'",
+    },
+    {
+      name: "Attempt terminal authority",
+      mutate: "UPDATE run_attempts SET state_json=json_set(state_json,'$.status','failed') WHERE step_id='agent'",
+    },
+    {
+      name: "Step terminal authority",
+      mutate: "UPDATE run_steps SET state_json=json_set(state_json,'$.status','failed') WHERE step_id='agent'",
+    },
+    {
+      name: "DAG claim",
+      mutate: "UPDATE workflow_executions SET state_json=json_set(state_json,'$.nodes[0].claimId','forged')",
+    },
+    {
+      name: "DAG AgentVersion",
+      mutate: "UPDATE workflow_executions SET state_json=json_set(state_json,'$.nodes[0].agentVersionId','forged')",
+    },
+    {
+      name: "completed WorkItem authority",
+      mutate: `UPDATE work_items SET work_item_json=json_set(work_item_json,
+        '$.payload.claimId','forged') WHERE work_item_id='${agent.workItemId}'`,
+    },
+    {
+      name: "receipt result",
+      mutate: `UPDATE workflow_composition_receipts SET result_json=json_set(
+        result_json,'$.handoff.nextWorkItemId','forged')
+        WHERE operation_id='model-terminal-agent'`,
+    },
+    {
+      name: "scheduler item",
+      mutate: `UPDATE work_items SET work_item_json=json_set(work_item_json,
+        '$.payload.schedulerOperationId','forged')
+        WHERE json_extract(work_item_json,'$.payload.trigger')='workflowScheduler'
+          AND status='pending'`,
+    },
+  ] as const;
+  for (const tamper of tamperMatrix) {
+    const before = snapshotDatabase(path);
+    mutateDatabase(path, tamper.mutate);
+    const corrupted = snapshotDatabase(path);
+    await assert.rejects(
+      store.settleWorkflowNodeModelTerminal(settlement),
+      /corrupt|mismatch|conflict/u,
+      tamper.name,
+    );
+    assert.deepEqual(snapshotDatabase(path), corrupted, tamper.name);
+    restoreDatabase(path, before);
+  }
+
+  const beforeRollback = inspectD1(path, "agent", agent.workItemId);
+  if (settlement.evidence.status !== "completed")
+    throw new Error("test_terminal_evidence_invalid");
+  await assert.rejects(
+    store.settleWorkflowNodeModelTerminal({
+      ...settlement,
+      operationId: "model-terminal-invalid-output",
+      evidence: {
+        ...settlement.evidence,
+        value: { forbidden: true },
+        canonicalValueJson: '{"forbidden":true}',
+        valueRef: {
+          ...settlement.evidence.valueRef,
+          valueDigest: digester.sha256('{"forbidden":true}'),
+        },
+      },
+    }),
+    /schema|invalid/u,
+  );
+  assert.deepEqual(inspectD1(path, "agent", agent.workItemId), beforeRollback);
+
   const schedulerId = fresh.handoff.nextWorkItemId!;
   const schedulerLease = leasePath(path, schedulerId, "scheduler-worker", nowMs);
   const verificationSchedule = await store.scheduleWorkflowNodes(
@@ -466,6 +540,66 @@ function leasePath(path: string, workItemId: string, ownerId: string, nowMs: num
   const database = new DatabaseSync(path);
   try {
     return lease(database, workItemId, ownerId, nowMs);
+  } finally {
+    database.close();
+  }
+}
+
+function snapshotDatabase(path: string) {
+  const database = new DatabaseSync(path);
+  try {
+    return Object.fromEntries(
+      [
+        "model_dispatch_receipts",
+        "run_attempts",
+        "run_steps",
+        "workflow_executions",
+        "work_items",
+        "workflow_composition_receipts",
+        "workflow_node_continuations",
+        "run_events",
+        "outbox",
+        "run_snapshots",
+      ].map((table) => [
+        table,
+        database.prepare(`SELECT * FROM ${table}`).all().map((row) => ({ ...row })),
+      ]),
+    );
+  } finally {
+    database.close();
+  }
+}
+
+function mutateDatabase(path: string, statement: string) {
+  const database = new DatabaseSync(path);
+  try {
+    database.prepare(statement).run();
+  } finally {
+    database.close();
+  }
+}
+
+function restoreDatabase(path: string, snapshot: ReturnType<typeof snapshotDatabase>) {
+  const database = new DatabaseSync(path);
+  try {
+    database.exec("PRAGMA foreign_keys=OFF; BEGIN IMMEDIATE");
+    for (const [table, rows] of Object.entries(snapshot)) {
+      database.prepare(`DELETE FROM ${table}`).run();
+      for (const row of rows) {
+        const columns = Object.keys(row);
+        database
+          .prepare(
+            `INSERT INTO ${table} (${columns.join(",")}) VALUES (${columns
+              .map(() => "?")
+              .join(",")})`,
+          )
+          .run(...columns.map((column) => row[column]));
+      }
+    }
+    database.exec("COMMIT; PRAGMA foreign_keys=ON");
+  } catch (error) {
+    database.exec("ROLLBACK; PRAGMA foreign_keys=ON");
+    throw error;
   } finally {
     database.close();
   }
