@@ -30,7 +30,6 @@ import type {
   WorkflowRunAdmissionAuthority,
   WorkflowRunAdmissionStore,
 } from "./workflow-run-admission-store-port.ts";
-import type { RunRouteResolverPort } from "./run-commands.ts";
 
 export const MAX_WORKFLOW_INPUT_BYTES = 32_768;
 export const MAX_WORKFLOW_INPUT_DEPTH = 8;
