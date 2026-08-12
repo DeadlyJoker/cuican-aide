@@ -92,6 +92,16 @@ test(
         "committed",
         "replayed",
       ]);
+      assert.equal(
+        (
+          await second.prepareWorkspaceReadFile({
+            ...locator,
+            idempotency: idempotency("same-frozen-new-receipt"),
+            frozen: frozen(),
+          })
+        ).disposition,
+        "replayed",
+      );
       await assert.rejects(() =>
         second.prepareWorkspaceReadFile({
           ...locator,
