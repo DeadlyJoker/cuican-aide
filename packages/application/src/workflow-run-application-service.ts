@@ -96,7 +96,10 @@ export class WorkflowRunApplicationService {
     workflowInput: JsonValue,
     idempotency: IdempotencyDescriptor,
     authority: WorkflowRunAdmissionAuthority,
-  ): CommitRunInput {
+  ): Readonly<{
+    commit: CommitRunInput;
+    workflowInputValue: WorkflowRunInputAuthority;
+  }> {
     let workflow;
     try {
       workflow = parseCompiledWorkflowVersion(
@@ -143,11 +146,13 @@ export class WorkflowRunApplicationService {
     }
     const occurredAt = this.#now();
     const canonicalWorkflowInput = canonicalJson(validatedWorkflowInput);
-    const contentDigest = this.#workflowDigester.sha256(canonicalWorkflowInput);
+    const valueId = this.#nextId("workflowExecutionValue");
+    const valueDigest = this.#workflowDigester.sha256(canonicalWorkflowInput);
     const workflowInputAuthority: WorkflowRunInputAuthority = {
-      schemaVersion: "crewon.workflow-run-input.v0",
+      schemaVersion: "crewon.workflow-execution-value.v0",
+      valueId,
       value: validatedWorkflowInput,
-      contentDigest,
+      valueDigest,
     };
     const schedulerOperationId = this.#nextId("workflowSchedulerOperation");
     const runId = this.#nextId("run");
@@ -175,7 +180,7 @@ export class WorkflowRunApplicationService {
         goalBinding: null,
       },
     };
-    return {
+    const commit: CommitRunInput = {
       tenantId: actor.tenantId,
       idempotency,
       expectedRevision: 0,
@@ -201,16 +206,17 @@ export class WorkflowRunApplicationService {
           runId,
           kind: "run.execute",
           payload: {
-            schemaVersion: "crewon.workflow-scheduler-work-item.v0",
+            schemaVersion: "crewon.workflow-scheduler-work-item.v1",
             trigger: "workflowScheduler",
             binding,
             schedulerOperationId,
-            workflowInput: workflowInputAuthority,
+            workflowInput: { valueId, valueDigest },
           } satisfies WorkflowSchedulerWorkItemPayload,
           createdAt: occurredAt,
         },
       ],
     };
+    return { commit, workflowInputValue: workflowInputAuthority };
   }
 
   async #authorize(actor: ActorContext, threadId: string): Promise<void> {

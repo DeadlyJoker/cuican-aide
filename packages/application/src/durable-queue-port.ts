@@ -5,27 +5,26 @@ import type {
 } from "@crewon/domain";
 
 export type WorkflowExecutionValue = Readonly<{
-  schemaVersion: "crewon.workflow-run-input.v0";
+  schemaVersion: "crewon.workflow-execution-value.v0";
+  valueId: string;
   value: JsonValue;
-  contentDigest: string;
+  valueDigest: string;
 }>;
 
 /** Root Workflow input authority persisted exactly once with start admission. */
 export type WorkflowRunInputAuthority = WorkflowExecutionValue;
 
-export type WorkflowSchedulerWorkItemPayload = Readonly<{
-  schemaVersion: "crewon.workflow-scheduler-work-item.v0";
-  trigger: "workflowScheduler";
-  binding: FrozenWorkflowVersionBinding;
-  schedulerOperationId: string;
-  workflowInput: WorkflowRunInputAuthority;
+export type WorkflowRunInputRef = Readonly<{
+  valueId: string;
+  valueDigest: string;
 }>;
 
-export type WorkflowSchedulerContinuationWorkItemPayload = Readonly<{
-  schemaVersion: "crewon.workflow-scheduler-work-item.v0";
+export type WorkflowSchedulerWorkItemPayload = Readonly<{
+  schemaVersion: "crewon.workflow-scheduler-work-item.v1";
   trigger: "workflowScheduler";
   binding: FrozenWorkflowVersionBinding;
   schedulerOperationId: string;
+  workflowInput: WorkflowRunInputRef;
 }>;
 
 export type AutomationInvocationWorkItemPayload = Readonly<{

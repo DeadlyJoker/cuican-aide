@@ -4,6 +4,7 @@ export type ApplicationIdKind =
   | "outboxMessage"
   | "workItem"
   | "workflowSchedulerOperation"
+  | "workflowExecutionValue"
   | "outboxLease"
   | "thread"
   | "threadEvent"

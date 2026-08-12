@@ -39,15 +39,20 @@ test("atomically freezes WorkflowVersion provenance and enqueues bounded input w
   assert.equal(event.data.collaborationMode, "default");
   assert.equal(event.data.goalBinding, null);
   assert.deepEqual(commit.workItems[0]?.payload, {
-    schemaVersion: "crewon.workflow-scheduler-work-item.v0",
+    schemaVersion: "crewon.workflow-scheduler-work-item.v1",
     trigger: "workflowScheduler",
     binding: event.data.workflowVersionBinding,
     schedulerOperationId: "scheduler-1",
     workflowInput: {
-      schemaVersion: "crewon.workflow-run-input.v0",
-      value: { topic: "safe" },
-      contentDigest: sha256('{"topic":"safe"}'),
+      valueId: "value-1",
+      valueDigest: sha256('{"topic":"safe"}'),
     },
+  });
+  assert.deepEqual(store.lastPreparation?.workflowInputValue, {
+    schemaVersion: "crewon.workflow-execution-value.v0",
+    valueId: "value-1",
+    value: { topic: "safe" },
+    valueDigest: sha256('{"topic":"safe"}'),
   });
 });
 
@@ -62,10 +67,11 @@ test("canonicalizes prototype-like input keys into one digest-bound scheduler au
     ...command(),
     input,
   } as never);
-  assert.deepEqual(store.lastCommit?.workItems[0]?.payload.workflowInput, {
-    schemaVersion: "crewon.workflow-run-input.v0",
+  assert.deepEqual(store.lastPreparation?.workflowInputValue, {
+    schemaVersion: "crewon.workflow-execution-value.v0",
+    valueId: "value-1",
     value: input,
-    contentDigest: sha256('{"__proto__":true,"constructor":"safe"}'),
+    valueDigest: sha256('{"__proto__":true,"constructor":"safe"}'),
   });
 });
 
@@ -155,7 +161,11 @@ test("rejects corrupt and digest-drift WorkflowVersions with zero writes", async
 
 class RecordingStore implements WorkflowRunAdmissionStore {
   readonly inputs: CommitWorkflowRunStartInput[] = [];
-  lastCommit: ReturnType<CommitWorkflowRunStartInput["prepare"]> | null = null;
+  lastPreparation: ReturnType<CommitWorkflowRunStartInput["prepare"]> | null =
+    null;
+  lastCommit:
+    | ReturnType<CommitWorkflowRunStartInput["prepare"]>["commit"]
+    | null = null;
   error: Error | null = null;
   writeCount = 0;
   prepareCalls = 0;
@@ -176,7 +186,9 @@ class RecordingStore implements WorkflowRunAdmissionStore {
       };
     }
     this.prepareCalls += 1;
-    const commit = input.prepare(this.authority);
+    const preparation = input.prepare(this.authority);
+    this.lastPreparation = preparation;
+    const commit = preparation.commit;
     this.lastCommit = commit;
     this.writeCount += 1;
     let state: RunState | null = null;
@@ -211,7 +223,14 @@ function service(
   store: RecordingStore,
   authorization: AuthorizationPort = new RecordingAuthorization(),
 ) {
-  const ids = ["scheduler-1", "run-1", "event-1", "outbox-1", "work-1"];
+  const ids = [
+    "value-1",
+    "scheduler-1",
+    "run-1",
+    "event-1",
+    "outbox-1",
+    "work-1",
+  ];
   return new WorkflowRunApplicationService({
     store,
     authorization,
