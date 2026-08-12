@@ -11,7 +11,10 @@ import {
   type WorkflowVersionSource,
 } from "@crewon/domain";
 
-import { SqliteWorkflowExecutionStore } from "./workflow-execution-store.ts";
+import {
+  SqliteWorkflowExecutionStore,
+  validateWorkflowExecutionState,
+} from "./workflow-execution-store.ts";
 import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts";
 
 const schema = {
@@ -82,6 +85,36 @@ const binding = {
   contentDigest: workflow.contentDigest,
 };
 const completedDigest = `sha256:${"1".repeat(64)}`;
+
+test("keeps a failed sibling running while a Human Gate remains active", () => {
+  const node = (nodeId: string, kind: "agent" | "humanGate") => ({
+    nodeId, kind, agentVersionId: kind === "agent" ? "agent-1" : null,
+    claimId: `claim-${nodeId}`, claimOperationId: "claim-operation",
+    claimEpoch: 1, leaseExpiresAt: null,
+    gateRequestId: kind === "humanGate" ? "gate-request" : null,
+    inputDigest: `sha256:${"2".repeat(64)}`, resultDigest: null,
+    failureCode: kind === "agent" ? "agent_failed" : null,
+    status: kind === "agent" ? "failed" as const : "waitingHuman" as const,
+  });
+  const execution = { schemaVersion: "crewon.workflow-execution.v0" as const,
+    tenantId: "tenant-1", runId: "run-1", workflowId: "workflow-1",
+    workflowVersionId: "workflow-version-1", contentDigest: binding.contentDigest,
+    revision: 3, status: "running" as const, cancelRequested: false,
+    nodes: [node("agent", "agent"), node("gate", "humanGate")],
+    updatedAt: "2026-08-12T00:00:00.000Z" };
+  assert.doesNotThrow(() => validateWorkflowExecutionState(execution));
+  assert.doesNotThrow(() => validateWorkflowExecutionState({ ...execution,
+    cancelRequested: true }));
+  assert.doesNotThrow(() => validateWorkflowExecutionState({ ...execution,
+    status: "failed", nodes: execution.nodes.map((item) => item.nodeId === "gate"
+      ? { ...item, status: "failed" as const, gateRequestId: "gate-request",
+        failureCode: "gate_rejected" } : item) }));
+  assert.doesNotThrow(() => validateWorkflowExecutionState({ ...execution,
+    status: "canceled", cancelRequested: true,
+    nodes: execution.nodes.map((item) => item.nodeId === "gate"
+      ? { ...item, status: "canceled" as const, gateRequestId: "gate-request" }
+      : item) }));
+});
 
 test("persists stable parallel claims and frozen node identities across reopen", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-dag-"));

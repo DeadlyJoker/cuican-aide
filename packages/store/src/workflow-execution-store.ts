@@ -412,6 +412,11 @@ export function validateWorkflowExecutionState(
     (node) =>
       node.status === "queued" ||
       node.status === "running" ||
+      node.status === "waitingHuman" ||
+      node.status === "unknown",
+  );
+  const executableActive = state.nodes.some(
+    (node) => node.status === "queued" || node.status === "running" ||
       node.status === "unknown",
   );
   const projected =
@@ -422,7 +427,8 @@ export function validateWorkflowExecutionState(
         : state.nodes.every((node) => node.status === "completed")
           ? "completed"
           : state.nodes.some((node) => node.status === "waitingHuman") &&
-              !active
+              !state.nodes.some((node) => node.status === "failed") &&
+              !executableActive
             ? "waitingHuman"
             : "running";
   if (state.status !== projected)
