@@ -550,6 +550,7 @@ export class RunExecutionService {
     claim: WorkItemClaim,
     call: ToolExecutionCall,
     policy: ToolActionPolicy,
+    options: Readonly<{ suppliedAttempt?: RunAttemptIdentity }> = {},
   ): Promise<BeginToolExecutionResult> {
     const state = await this.loadRun(claim);
     if (state.cancelRequested) {
@@ -573,22 +574,44 @@ export class RunExecutionService {
         this.#validateToolActionIntent(existing, actionIntent);
         return { disposition: "existing", receipt: existing, attempt: null };
       }
-      const stepId = `tool:${actionDigest.slice("sha256:".length)}`;
-      const attempt = await this.#store.beginRunAttempt({
-        tenantId: state.tenantId,
-        lease: leaseInput(claim),
-        runId: state.runId,
-        stepId,
-        kind: "tool",
-        attemptId: this.#nextId("attempt"),
-        startedAt: this.#now(),
-      });
+      const suppliedAttempt = options.suppliedAttempt;
+      const attempt =
+        suppliedAttempt === undefined
+          ? await this.#store.beginRunAttempt({
+              tenantId: state.tenantId,
+              lease: leaseInput(claim),
+              runId: state.runId,
+              stepId: `tool:${actionDigest.slice("sha256:".length)}`,
+              kind: "tool",
+              attemptId: this.#nextId("attempt"),
+              startedAt: this.#now(),
+            })
+          : null;
+      const exactAttempt =
+        attempt?.attempt ??
+        (await this.#store.loadRunAttempt({
+          tenantId: state.tenantId,
+          runId: state.runId,
+          ...suppliedAttempt!,
+        }));
+      if (
+        exactAttempt === null ||
+        exactAttempt.status !== "running" ||
+        exactAttempt.workItemId !== claim.workItem.workItemId ||
+        exactAttempt.leaseEpoch !== claim.lease.epoch
+      ) {
+        throw new ApplicationError(
+          "conflict",
+          "tool_supplied_attempt_not_current",
+        );
+      }
+      const stepId = exactAttempt.stepId;
       const receipt = prepareToolExecutionReceipt({
         receiptId: this.#nextId("toolReceipt"),
         tenantId: state.tenantId,
         runId: state.runId,
         stepId,
-        attemptId: attempt.attempt.attemptId,
+        attemptId: exactAttempt.attemptId,
         workItemId: claim.workItem.workItemId,
         executionId: this.#nextId("toolExecution"),
         idempotencyKey: `${state.runId}/tool/${actionDigest.slice("sha256:".length)}`,
@@ -603,7 +626,7 @@ export class RunExecutionService {
         },
         effect: policy.effect,
         recovery: policy.recovery,
-        preparedAt: attempt.attempt.startedAt,
+        preparedAt: exactAttempt.startedAt,
       });
       return {
         disposition: "prepared",

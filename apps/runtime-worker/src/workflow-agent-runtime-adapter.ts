@@ -7,6 +7,11 @@ import type {
 } from "@crewon/application";
 import type { ModelDispatchReceipt, WorkflowSchemaValue } from "@crewon/domain";
 import { AgentSegmentExecutionEngine } from "./agent-segment-execution-engine.ts";
+import {
+  CancellationWatcher,
+  LeaseHeartbeat,
+  systemRuntimeWorkerScheduler,
+} from "./runtime-worker-watchers.ts";
 import type {
   AgentVersionRuntime,
   AgentVersionRuntimeResolverPort,
@@ -90,7 +95,21 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       runId: authority.runId,
       ...attempt,
     });
-    if (storedAttempt?.status !== "running") {
+    const storedStep = await this.#store.loadRunStep({
+      tenantId: authority.tenantId,
+      runId: authority.runId,
+      stepId: authority.stepId,
+    });
+    if (
+      storedAttempt?.status !== "running" ||
+      storedAttempt.tenantId !== authority.tenantId ||
+      storedAttempt.runId !== authority.runId ||
+      storedAttempt.stepId !== authority.stepId ||
+      storedAttempt.workItemId !== authority.workItemClaim.workItem.workItemId ||
+      storedAttempt.leaseEpoch !== authority.workItemClaim.lease.epoch ||
+      storedStep?.status !== "running" ||
+      storedStep.currentAttemptId !== authority.attemptId
+    ) {
       throw new Error("workflow_node_attempt_not_running");
     }
     const run = await this.#execution.loadRun(authority.workItemClaim);
@@ -99,6 +118,25 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     let dispatch: ModelDispatchReceipt | null = null;
     let effectCertainty: WorkflowNodeEffectCertainty = "notSent";
     const controller = new AbortController();
+    const renewLease = async () => {
+      await this.#store.renewWorkItemLease({
+        ...leaseInput(authority.workItemClaim),
+        leaseDurationMs: this.#leaseDurationMs,
+      });
+    };
+    const heartbeat = new LeaseHeartbeat(
+      Math.max(1, Math.floor(this.#leaseDurationMs / 3)),
+      renewLease,
+      controller,
+    );
+    const cancellationWatcher = new CancellationWatcher(
+      Math.max(1, Math.floor(this.#leaseDurationMs / 6)),
+      () => this.#execution.loadRun(authority.workItemClaim),
+      controller,
+      systemRuntimeWorkerScheduler,
+    );
+    heartbeat.start();
+    cancellationWatcher.start();
     try {
       const executed = await this.#segments.execute({
         kernel: runtime.kernel,
@@ -126,12 +164,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         signal: controller.signal,
         providerTurnState: storedAttempt.providerTurnState,
         authority: {
-          renewLease: async () => {
-            await this.#store.renewWorkItemLease({
-              ...leaseInput(authority.workItemClaim),
-              leaseDurationMs: this.#leaseDurationMs,
-            });
-          },
+          renewLease,
           cancellationRequested: async () =>
             (await this.#execution.loadRun(authority.workItemClaim))
               .cancelRequested,
@@ -239,10 +272,17 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       if (decision.kind === "settle") return decision.outcome;
       throw new Error("workflow_node_continuation_not_settled");
     } catch (error) {
+      if (heartbeat.failure() !== null) throw heartbeat.failure();
+      if (cancellationWatcher.failure() !== null) {
+        throw cancellationWatcher.failure();
+      }
       return decideWorkflowNodeExecutionError({
         error,
         effectCertainty,
       }).outcome;
+    } finally {
+      await cancellationWatcher.close();
+      await heartbeat.close();
     }
   }
 }
@@ -296,10 +336,15 @@ function modelDispatchStore(
   runtime: AgentVersionRuntime,
   store: WorkflowExecutionStore,
 ): ModelDispatchEvidenceStore | null {
-  return runtime.kernel.supportsModelDispatchEvidence === true &&
-    typeof store.prepareModelDispatch === "function"
-    ? (store as ModelDispatchEvidenceStore)
-    : null;
+  if (
+    runtime.kernel.supportsModelDispatchEvidence !== true ||
+    typeof store.prepareModelDispatch !== "function" ||
+    typeof store.markModelDispatchPossiblySent !== "function" ||
+    typeof store.loadModelDispatchReceipt !== "function"
+  ) {
+    throw new Error("model_dispatch_evidence_store_missing");
+  }
+  return store as ModelDispatchEvidenceStore;
 }
 
 function leaseInput(claim: Parameters<WorkflowAgentNodePort["execute"]>[0]["workItemClaim"]) {
