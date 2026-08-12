@@ -6,6 +6,7 @@ import {
   parseCompiledWorkflowVersion,
   type CompiledWorkflowVersion,
   type FrozenWorkflowVersionBinding,
+  type RunAttemptState,
   type RunStepState,
   type WorkflowContentDigester,
 } from "@crewon/domain";
@@ -19,6 +20,7 @@ export type WorkflowCompositionDependencies = Readonly<{
 }>;
 
 export type WorkflowCompositionResult = Readonly<{
+  disposition: "committed" | "replayed";
   execution: WorkflowExecutionState;
   admissions: readonly WorkflowNodeAttemptAdmission[];
 }>;
@@ -145,7 +147,7 @@ export function claimReadyNodes(input: {
     node.status === "running" &&
     node.leaseExpiresAt !== null &&
     Date.parse(node.leaseExpiresAt) <= nowMs
-      ? { ...node, status: "pending" as const, leaseExpiresAt: null }
+      ? { ...node, status: "unknown" as const, leaseExpiresAt: null }
       : node,
   );
   if (input.execution.cancelRequested || input.execution.status !== "running") {
@@ -247,6 +249,44 @@ export function gateStep(input: {
     updatedAt: input.now,
     terminalAt: null,
   };
+}
+
+export function assertAdmissionReplayAuthority(
+  admission: WorkflowNodeAttemptAdmission,
+  step: RunStepState | null,
+  attempt: RunAttemptState | null,
+): void {
+  const historicalStep = admission.step;
+  if (
+    step === null ||
+    step.tenantId !== historicalStep.tenantId ||
+    step.runId !== historicalStep.runId ||
+    step.stepId !== historicalStep.stepId ||
+    step.kind !== historicalStep.kind ||
+    step.createdAt !== historicalStep.createdAt ||
+    step.revision < historicalStep.revision ||
+    step.attemptCount < historicalStep.attemptCount
+  )
+    throw new RunStoreError("workflow_composition_receipt_corrupt");
+  const historicalAttempt = admission.attempt;
+  if (historicalAttempt === null) {
+    if (attempt !== null || step.attemptCount !== 0)
+      throw new RunStoreError("workflow_composition_receipt_corrupt");
+    return;
+  }
+  if (
+    attempt === null ||
+    attempt.tenantId !== historicalAttempt.tenantId ||
+    attempt.runId !== historicalAttempt.runId ||
+    attempt.stepId !== historicalAttempt.stepId ||
+    attempt.attemptId !== historicalAttempt.attemptId ||
+    attempt.workItemId !== historicalAttempt.workItemId ||
+    attempt.attemptNumber !== historicalAttempt.attemptNumber ||
+    attempt.retryOfAttemptId !== historicalAttempt.retryOfAttemptId ||
+    attempt.leaseEpoch !== historicalAttempt.leaseEpoch ||
+    attempt.startedAt !== historicalAttempt.startedAt
+  )
+    throw new RunStoreError("workflow_composition_receipt_corrupt");
 }
 
 export function compositionFingerprint(input: {

@@ -32,6 +32,8 @@ export interface WorkflowRunCompositionStore {
     leaseDurationMs: number;
   }): Promise<
     Readonly<{
+      /** `replayed` is historical authority and MUST NOT dispatch side effects again. */
+      disposition: "committed" | "replayed";
       execution: WorkflowExecutionState;
       admissions: readonly WorkflowNodeAttemptAdmission[];
     }>

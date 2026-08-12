@@ -26,6 +26,7 @@ import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts"
 import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
 import {
   assertExecutionBinding,
+  assertAdmissionReplayAuthority,
   attemptId,
   claimReadyNodes,
   compositionFingerprint,
@@ -131,12 +132,11 @@ export class SqliteWorkflowRunCompositionStore
                   ...locator,
                   attemptId: admission.attempt.attemptId,
                 });
-          if (step === null || (admission.attempt !== null && attempt === null))
-            throw new RunStoreError("workflow_composition_receipt_corrupt");
+          assertAdmissionReplayAuthority(admission, step, attempt);
         }
         this.#validateLease(input, nowMs);
         this.#database.exec("COMMIT");
-        return structuredClone(result);
+        return structuredClone({ ...result, disposition: "replayed" as const });
       }
 
       let execution = this.#loadExecution(input.tenantId, input.runId);
@@ -243,6 +243,7 @@ export class SqliteWorkflowRunCompositionStore
           input.runId,
         );
       const result = {
+        disposition: "committed" as const,
         execution,
         admissions,
       } satisfies WorkflowCompositionResult;

@@ -21,6 +21,7 @@ import { migratePostgresWorkflowExecutions } from "./workflow-execution-schema.t
 import { migratePostgresWorkflowVersions } from "./workflow-version-schema.ts";
 import {
   assertExecutionBinding,
+  assertAdmissionReplayAuthority,
   attemptId,
   claimReadyNodes,
   compositionFingerprint,
@@ -171,8 +172,7 @@ export class PostgresWorkflowRunCompositionStore
                   { ...locator, attemptId: admission.attempt.attemptId },
                   true,
                 );
-          if (step === null || (admission.attempt !== null && attempt === null))
-            throw new RunStoreError("workflow_composition_receipt_corrupt");
+          assertAdmissionReplayAuthority(admission, step, attempt);
         }
         await this.validateExecutionLeaseWithin(
           client,
@@ -181,7 +181,7 @@ export class PostgresWorkflowRunCompositionStore
           input.lease,
         );
         await client.query("COMMIT");
-        return structuredClone(result);
+        return structuredClone({ ...result, disposition: "replayed" as const });
       }
 
       const nowResult = await client.query<{ now: Date | string }>(
@@ -298,6 +298,7 @@ export class PostgresWorkflowRunCompositionStore
         [execution.revision, execution, now, input.tenantId, input.runId],
       );
       const result = {
+        disposition: "committed" as const,
         execution,
         admissions,
       } satisfies WorkflowCompositionResult;

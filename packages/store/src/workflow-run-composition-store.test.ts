@@ -84,6 +84,7 @@ test("SQLite atomically admits stable node authority and replays after reopen", 
   await seed(path, clock.nowEpochMilliseconds() + 60_000);
 
   const first = await store.admitWorkflowNodes(admissionInput());
+  assert.equal(first.disposition, "committed");
   assert.deepEqual(
     first.admissions.map((item) => ({
       nodeId: item.claim.node.nodeId,
@@ -116,7 +117,10 @@ test("SQLite atomically admits stable node authority and replays after reopen", 
   await store.close();
 
   store = new SqliteWorkflowRunCompositionStore(path, { digester, clock });
-  assert.deepEqual(await store.admitWorkflowNodes(admissionInput()), first);
+  assert.deepEqual(await store.admitWorkflowNodes(admissionInput()), {
+    ...first,
+    disposition: "replayed",
+  });
   await store.close();
 });
 
@@ -140,7 +144,7 @@ test("SQLite dual connections converge and a reclaimed lease fences replay", asy
     first.admitWorkflowNodes(admissionInput()),
     second.admitWorkflowNodes(admissionInput()),
   ]);
-  assert.deepEqual(right, left);
+  assert.deepEqual(right, { ...left, disposition: "replayed" });
 
   const database = new DatabaseSync(path);
   database
@@ -156,6 +160,57 @@ test("SQLite dual connections converge and a reclaimed lease fences replay", asy
   );
   await first.close();
   await second.close();
+});
+
+test("SQLite expired running node becomes unknown without a second Attempt", async () => {
+  const database = new DatabaseSync(":memory:");
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteWorkflowRunCompositionStore(database, {
+    digester,
+    clock,
+  });
+  await seed(database, clock.nowEpochMilliseconds() + 60_000);
+  const first = await store.admitWorkflowNodes(admissionInput());
+  const original = first.execution.nodes.find(
+    (node) => node.nodeId === "agent",
+  )!;
+  clock.set(Date.parse("2026-08-12T00:00:06.000Z"));
+  const reclaimedLease = {
+    workItemId: "work-1",
+    ownerId: "worker-2",
+    leaseId: "lease-2",
+    leaseEpoch: 2,
+  };
+  database
+    .prepare(
+      `UPDATE work_items SET lease_owner_id=?,lease_id=?,lease_epoch=?,lease_expires_at_ms=?
+       WHERE work_item_id=?`,
+    )
+    .run(
+      reclaimedLease.ownerId,
+      reclaimedLease.leaseId,
+      reclaimedLease.leaseEpoch,
+      clock.nowEpochMilliseconds() + 60_000,
+      reclaimedLease.workItemId,
+    );
+  const recovered = await store.admitWorkflowNodes({
+    ...admissionInput(),
+    lease: reclaimedLease,
+    schedulerOperationId: "scheduler-operation-2",
+  });
+  const unknown = recovered.execution.nodes.find(
+    (node) => node.nodeId === "agent",
+  )!;
+  assert.deepEqual(recovered.admissions, []);
+  assert.deepEqual(unknown, {
+    ...original,
+    status: "unknown",
+    leaseExpiresAt: null,
+  });
+  assert.equal(
+    database.prepare("SELECT count(*) AS count FROM run_attempts").get()?.count,
+    1,
+  );
 });
 
 test("SQLite rejects expired lease and frozen binding drift without partial DAG state", async () => {
@@ -337,6 +392,14 @@ function runState(): RunState {
   };
 }
 
-function mutableClock(initial: number): LeaseClock {
-  return { nowEpochMilliseconds: () => initial };
+type MutableClock = LeaseClock & { set(value: number): void };
+
+function mutableClock(initial: number): MutableClock {
+  let now = initial;
+  return {
+    nowEpochMilliseconds: () => now,
+    set(value) {
+      now = value;
+    },
+  };
 }
