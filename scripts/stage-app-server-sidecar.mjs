@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // Stages every executable/resource required by the packaged desktop runtime.
 //
-// `crewon-app-server` remains a native Rust sidecar for the compatibility path.
-// The final Control API and runtime-worker are bundled as self-contained ESM
+// The Control API and runtime-worker are bundled as self-contained ESM
 // resources and run under an explicitly supplied, open-source Node 24 binary.
 // A release build must attest the Node target and digest; copying the developer's
 // Homebrew installation is allowed only by an explicit local-smoke override.
@@ -121,40 +120,6 @@ function resolveNodeRuntime(target) {
   return binary;
 }
 
-function stageAppServer(target, release) {
-  const exeSuffix = target.includes("windows") ? ".exe" : "";
-  const cargoArgs = [
-    "build",
-    "--manifest-path",
-    join(repoRoot, "codex-rs", "Cargo.toml"),
-    "-p",
-    "crewon-app-server",
-    "--bin",
-    "crewon-app-server",
-    "--target",
-    target,
-  ];
-  if (release) {
-    cargoArgs.push("--release");
-  }
-
-  console.log(`building crewon-app-server for ${target}`);
-  run("cargo", cargoArgs, { stdio: "inherit" });
-
-  const built = join(
-    repoRoot,
-    "codex-rs",
-    "target",
-    target,
-    release ? "release" : "debug",
-    `crewon-app-server${exeSuffix}`,
-  );
-  const staged = join(outDir, `crewon-app-server-${target}${exeSuffix}`);
-  mkdirSync(outDir, { recursive: true });
-  copyExecutable(built, staged);
-  console.log(`staged ${staged}`);
-}
-
 function pnpmExecutable() {
   return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 }
@@ -217,10 +182,6 @@ function stageControlRuntime(target) {
 
 function main() {
   const target = process.env.CREWON_SIDECAR_TARGET || hostTriple();
-  const release = process.env.CREWON_SIDECAR_PROFILE !== "debug";
-  if (process.env.CREWON_STAGE_APP_SERVER !== "0") {
-    stageAppServer(target, release);
-  }
   stageControlRuntime(target);
 }
 
