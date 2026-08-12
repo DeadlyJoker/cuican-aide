@@ -77,10 +77,24 @@ export async function migratePostgresModelDispatchEvidence(
     "model_dispatch_evidence",
     1,
   );
+  const current = await client.query<{ version: number }>(
+    `SELECT version FROM ${schema}.schema_migrations WHERE component='model_dispatch_evidence'`,
+  );
+  if (current.rows[0] !== undefined) {
+    await assertPhysicalSchema(client, schema, current.rows[0].version);
+  }
   await client.query(postgresModelDispatchEvidenceSchemaSql(schema));
   const result = await client.query<{ version: number }>(
     `SELECT version FROM ${schema}.schema_migrations WHERE component='model_dispatch_evidence'`,
   );
+  await assertPhysicalSchema(client, schema, result.rows[0]?.version);
+}
+
+async function assertPhysicalSchema(
+  client: PoolClient,
+  schema: string,
+  version: number | undefined,
+): Promise<void> {
   const columns = await client.query<{ column_name: string }>(
     `SELECT column_name FROM information_schema.columns
      WHERE table_schema=$1 AND table_name='model_dispatch_receipts'
@@ -88,7 +102,7 @@ export async function migratePostgresModelDispatchEvidence(
     [schema.replaceAll('"', "")],
   );
   if (
-    result.rows[0]?.version !== 1 ||
+    version !== 1 ||
     columns.rows.map((row) => row.column_name).join(",") !==
       COLUMNS.replace(/\s/gu, "").split(",").join(",")
   )
@@ -275,8 +289,8 @@ function decode(
     parsed.requestDigest !== row.request_digest ||
     parsed.status !== row.status ||
     parsed.revision !== integer(row.revision) ||
-    parsed.preparedAt !== timestamp(row.prepared_at) ||
-    parsed.updatedAt !== timestamp(row.updated_at)
+    timestamp(parsed.preparedAt) !== timestamp(row.prepared_at) ||
+    timestamp(parsed.updatedAt) !== timestamp(row.updated_at)
   )
     throw new RunStoreError("stored_model_dispatch_receipt_invalid");
   return parsed;
