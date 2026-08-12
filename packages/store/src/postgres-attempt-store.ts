@@ -56,6 +56,7 @@ import {
   normalizePostgresError,
   rollbackPostgres,
 } from "./postgres-store-support.ts";
+import { transitionPostgresModelDispatch } from "./postgres-model-dispatch-evidence.ts";
 import { writePostgresModelHistory } from "./postgres-thread-writer.ts";
 import { writePostgresThreadModelState } from "./postgres-thread-model-state.ts";
 import { type PostgresThreadStoreOptions } from "./postgres-thread-store.ts";
@@ -270,6 +271,24 @@ export class PostgresAttemptStore extends PostgresRunStore {
         input.checkpointDigest,
         input.checkpointedAt,
       );
+      if (input.modelDispatch !== undefined) {
+        await transitionPostgresModelDispatch(
+          client,
+          this.schemaSql(),
+          {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            lease: input.lease,
+            attempt: input.attempt,
+            operationId: input.modelDispatch.operationId,
+            requestSequence: input.modelDispatch.requestSequence,
+            expectedRevision: input.modelDispatch.expectedRevision,
+            checkpointDigest: input.checkpointDigest,
+            transitionedAt: input.checkpointedAt,
+          },
+          "responseObserved",
+        );
+      }
       await this.validateExecutionLeaseWithin(
         client,
         input.tenantId,

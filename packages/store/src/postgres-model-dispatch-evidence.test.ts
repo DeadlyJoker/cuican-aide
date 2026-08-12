@@ -83,6 +83,66 @@ test(
 );
 
 test(
+  "PostgreSQL checkpoints an Attempt and response evidence atomically",
+  { skip: postgresUrl === undefined },
+  async (context) => {
+    const fixture = await receiptFixture(context);
+    const prepared = await fixture.store.prepareModelDispatch(fixture.prepare);
+    const sent = await fixture.store.markModelDispatchPossiblySent({
+      tenantId: fixture.prepare.tenantId,
+      runId: fixture.prepare.runId,
+      lease: fixture.prepare.lease,
+      attempt: fixture.prepare.attempt,
+      operationId: fixture.prepare.operationId,
+      requestSequence: fixture.prepare.requestSequence,
+      expectedRevision: prepared.revision,
+      transitionedAt: "2026-08-08T00:01:02Z",
+    });
+    const checkpoint = {
+      schemaVersion: "crewon.provider-checkpoint.v0" as const,
+      adapterName: "responses",
+      adapterVersion: "1",
+      modelId: "gpt-test",
+      opaquePayload: { responseId: "response-1" },
+    };
+
+    const attempt = await fixture.store.checkpointRunAttempt({
+      tenantId: fixture.prepare.tenantId,
+      runId: fixture.prepare.runId,
+      lease: fixture.prepare.lease,
+      attempt: fixture.prepare.attempt,
+      checkpoint,
+      checkpointDigest: CHECKPOINT_DIGEST,
+      checkpointedAt: "2026-08-08T00:01:03Z",
+      modelDispatch: {
+        operationId: fixture.prepare.operationId,
+        requestSequence: fixture.prepare.requestSequence,
+        expectedRevision: sent.revision,
+      },
+    });
+
+    assert.deepEqual(attempt.providerCheckpoint, checkpoint);
+    assert.equal(attempt.checkpointDigest, CHECKPOINT_DIGEST);
+    assert.deepEqual(
+      await fixture.store.loadModelDispatchReceipt({
+        tenantId: fixture.prepare.tenantId,
+        runId: fixture.prepare.runId,
+        ...fixture.prepare.attempt,
+        operationId: fixture.prepare.operationId,
+      }),
+      {
+        ...sent,
+        status: "responseObserved",
+        revision: sent.revision + 1,
+        responseObservedAt: "2026-08-08T00:01:03Z",
+        responseCheckpointDigest: CHECKPOINT_DIGEST,
+        updatedAt: "2026-08-08T00:01:03Z",
+      },
+    );
+  },
+);
+
+test(
   "PostgreSQL model dispatch rejects stale leases and indexed/JSON tampering",
   { skip: postgresUrl === undefined },
   async (context) => {
