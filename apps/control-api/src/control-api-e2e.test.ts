@@ -36,10 +36,12 @@ import type {
 } from "@crewon/contracts";
 import type { FastifyInstance } from "fastify";
 import { Pool } from "pg";
+import { SqliteRunStore } from "@crewon/store";
 import {
   activateStandaloneRuntimeAgentVersionRelease,
   ConfiguredAgentVersionRuntimeFactory,
   createStandaloneRuntimeWorker,
+  WORKFLOW_RUNTIME_CAPABILITIES,
 } from "@crewon/runtime-worker";
 import { InMemoryToolBroker, type ToolRuntimePort } from "@crewon/tool-broker";
 
@@ -49,10 +51,15 @@ import {
   type PostgresControlApiConfig,
   type StandaloneControlApiConfig,
 } from "./standalone-composition.ts";
+import { WORKFLOW_PRODUCTION_STORE_CAPABILITIES } from "./workflow-production-composition-gate.ts";
 
 const SESSION_TOKEN = "e2e-session-token-32-bytes-minimum-1";
 const CSRF_TOKEN = "e2e-csrf-token-32-bytes-minimum-val1";
 const ORIGIN = "http://127.0.0.1:5175";
+const digest = {
+  sha256: (value: string) =>
+    `sha256:${createHash("sha256").update(value).digest("hex")}`,
+};
 
 test("fails closed over real HTTP before Workflow Store/Worker composition is certified", async (context) => {
   const databasePath = temporaryDatabasePath(context);
@@ -87,6 +94,145 @@ test("fails closed over real HTTP before Workflow Store/Worker composition is ce
     0,
   );
 });
+
+for (const decision of ["approve", "reject"] as const)
+  test(`runs a certified SQLite Agent + Human Gate Workflow to ${decision} terminal over Control HTTP`, async (context) => {
+    const databasePath = temporaryDatabasePath(context);
+    await activateSqliteReleaseProcess(databasePath);
+    const controlConfig = config(
+      databasePath,
+      new InMemoryArtifactStore(),
+      true,
+    );
+    const control = createStandaloneControlApi(controlConfig);
+    context.after(() => closeIfListening(control.app));
+    await control.app.listen({ host: "127.0.0.1", port: 0 });
+    const client = new ControlApiClient({
+      baseUrl: serverBaseUrl(control.app),
+      accessToken: SESSION_TOKEN,
+      csrfToken: CSRF_TOKEN,
+      origin: ORIGIN,
+    });
+    const verifierSource = {
+      ...selectedAgentVersionSource(),
+      agentVersionId: `workflow-verifier-${decision}`,
+      instructions: "Verify empty JSON.",
+    };
+    const verifier = compileAgentVersion(verifierSource, digest);
+    await client.publishAgentVersion(verifierSource);
+    const runtimeFactory = new ConfiguredAgentVersionRuntimeFactory([
+      {
+        tenantId: "tenant-e2e-1",
+        agentVersionId: verifier.agentVersionId,
+        contentDigest: verifier.contentDigest,
+        authorityId: `workflow-verifier-authority-${decision}`,
+        workspaceBindingId: null,
+        materializationDigest: digest.sha256(`materialization:${decision}`),
+        createTransport: workflowModelTransport,
+        createToolRuntime: () => new InMemoryToolBroker(),
+      },
+    ]);
+    await activateStandaloneRelease({
+      databasePath,
+      route: controlConfig.route,
+      transport: workflowModelTransport(),
+      agentVersionDeployments:
+        runtimeFactory.deploymentBindings("tenant-e2e-1"),
+      activationId: `workflow-${decision}-activation`,
+    });
+    const thread = await client.createThread(
+      { title: `Workflow ${decision}` },
+      `workflow-${decision}-thread`,
+    );
+    const published = await client.publishWorkflowVersion(
+      workflowGateSource(decision),
+    );
+    assert.equal(published.disposition, "registered");
+    const started = await client.startWorkflowRun(
+      {
+        workflowVersionId: `workflow-gate-${decision}-v1`,
+        threadId: thread.thread.threadId,
+        input: {},
+      },
+      `workflow-${decision}-start`,
+    );
+    assert.equal(started.run.purpose, "workflow");
+    assert.equal(started.run.status, "queued");
+
+    const workflowStore = new SqliteRunStore(databasePath, {
+      workflowDigester: digest,
+    });
+    const worker = await createStandaloneRuntimeWorker({
+      databasePath,
+      runtimeTenantId: "tenant-e2e-1",
+      route: controlConfig.route,
+      transport: workflowModelTransport(),
+      agentVersionRuntimeFactory: runtimeFactory,
+      agentVersionDeployments:
+        runtimeFactory.deploymentBindings("tenant-e2e-1"),
+      scanIntervalMs: null,
+      workflowComposition: {
+        certification: {
+          schemaVersion: "crewon.workflow-runtime-certification.v0",
+          capabilities: WORKFLOW_RUNTIME_CAPABILITIES,
+        },
+        versions: workflowStore.workflowVersionStore(digest),
+        store: workflowStore as never,
+        close: () => workflowStore.close(),
+      },
+    });
+    context.after(() => worker.close());
+    await wakeUntil(
+      worker.worker,
+      () => readGate(databasePath, started.run.runId) !== null,
+    );
+    await control.outboxDispatcher.wake();
+    assert.equal(
+      (await client.getRun(started.run.runId)).run.status,
+      "running",
+    );
+    const gate = readGate(databasePath, started.run.runId);
+    assert.ok(gate);
+    const decided = await client.decideWorkflowHumanGate(
+      {
+        runId: started.run.runId,
+        nodeId: "gate",
+        claimId: gate.claimId,
+        claimEpoch: gate.claimEpoch,
+        gateRequestId: gate.gateRequestId,
+        decision,
+      },
+      `workflow-${decision}-decision`,
+    );
+    assert.deepEqual(decided, {
+      disposition: "recorded",
+      runId: started.run.runId,
+      nodeId: "gate",
+      gateRequestId: gate.gateRequestId,
+    });
+    await wakeUntil(worker.worker, async () => {
+      const status = (await client.getRun(started.run.runId)).run.status;
+      return status === "completed" || status === "failed";
+    });
+    await control.outboxDispatcher.wake();
+    const terminal = (await client.getRun(started.run.runId)).run;
+    assert.equal(
+      terminal.status,
+      decision === "approve" ? "completed" : "failed",
+    );
+    assert.ok(terminal.terminalAt);
+    const eventResponse = await client.openRunEventStream({
+      runId: terminal.runId,
+      afterSequence: 0,
+      view: "audit",
+    });
+    const eventText = await eventResponse.text();
+    assert.match(eventText, /event: run.created/u);
+    assert.match(
+      eventText,
+      decision === "approve" ? /event: run.completed/u : /event: run.failed/u,
+    );
+  });
 
 test("streams durable SQLite Run events over real loopback HTTP and resumes after restart", async (context) => {
   const databasePath = temporaryDatabasePath(context);
@@ -1141,6 +1287,7 @@ function requiredBody(response: Response): ReadableStream<Uint8Array> {
 function config(
   databasePath: string,
   artifactStore: ArtifactStorePort = new InMemoryArtifactStore(),
+  certifyWorkflow = false,
 ): StandaloneControlApiConfig & Readonly<{ route: RunRoute }> {
   return {
     databasePath,
@@ -1165,7 +1312,127 @@ function config(
     allowedOrigins: [ORIGIN],
     heartbeatIntervalMs: null,
     outboxScanIntervalMs: null,
+    ...(certifyWorkflow
+      ? {
+          workflowComposition: {
+            certification: {
+              storeCapabilities: WORKFLOW_PRODUCTION_STORE_CAPABILITIES,
+              modelDispatchEvidence: "durable" as const,
+              agentRuntime: "WorkflowAgentRuntimeAdapter" as const,
+            },
+          },
+        }
+      : {}),
   };
+}
+
+function workflowGateSource(decision: "approve" | "reject") {
+  const empty = {
+    type: "object" as const,
+    properties: {},
+    required: [],
+    additionalProperties: false as const,
+  };
+  return {
+    schemaVersion: "crewon.workflow-version-source.v0" as const,
+    workflowId: `workflow-gate-${decision}`,
+    workflowVersionId: `workflow-gate-${decision}-v1`,
+    name: `Gate ${decision}`,
+    description: "Control HTTP Workflow gate acceptance",
+    inputSchema: empty,
+    outputSchema: empty,
+    entryNodeIds: ["agent", "gate"],
+    outputNodeIds: ["verification"],
+    nodes: [
+      {
+        nodeId: "agent",
+        title: "Agent",
+        instruction: "Return empty JSON",
+        kind: "agent" as const,
+        agentVersionId: "agent-version-e2e-1",
+        dependsOn: [],
+        inputSchema: empty,
+        outputSchema: empty,
+      },
+      {
+        nodeId: "gate",
+        title: "Gate",
+        instruction: "Approve",
+        kind: "humanGate" as const,
+        approvalPolicyId: "approval-policy-1",
+        dependsOn: [],
+        inputSchema: empty,
+        outputSchema: empty,
+      },
+      {
+        nodeId: "verification",
+        title: "Verification",
+        instruction: "Verify",
+        kind: "verification" as const,
+        verifierAgentVersionId: `workflow-verifier-${decision}`,
+        dependsOn: ["agent", "gate"],
+        inputSchema: {
+          type: "object" as const,
+          properties: { agent: empty, gate: empty },
+          required: ["agent", "gate"],
+          additionalProperties: false as const,
+        },
+        outputSchema: empty,
+      },
+    ],
+  };
+}
+
+function workflowModelTransport(): ModelTransportPort {
+  return {
+    adapterName: "deterministic-fake",
+    adapterVersion: "1",
+    modelId: "fake-model",
+    supportsModelDispatchEvidence: true,
+    async *stream(_request, _signal, options) {
+      if (options?.dispatchEvidence !== undefined)
+        await options.controlSink?.dispatchBoundaryCrossed?.(options.dispatchEvidence);
+      const checkpoint = { schemaVersion: "crewon.provider-checkpoint.v0" as const,
+        adapterName: "deterministic-fake", adapterVersion: "1", modelId: "fake-model",
+        opaquePayload: { responseId: randomUUID() } };
+      yield { type: "response.created" as const, checkpoint };
+      yield { type: "output.delta" as const, delta: "{}" };
+      yield { type: "completed" as const, checkpoint };
+    },
+  };
+}
+
+function readGate(databasePath: string, runId: string) {
+  const database = new DatabaseSync(databasePath);
+  try {
+    const row = database
+      .prepare(
+        `SELECT gate_request_id gateRequestId,claim_id claimId,
+      claim_epoch claimEpoch FROM workflow_gate_requests WHERE run_id=?`,
+      )
+      .get(runId);
+    return row === undefined
+      ? null
+      : {
+          gateRequestId: String(row.gateRequestId),
+          claimId: String(row.claimId),
+          claimEpoch: Number(row.claimEpoch),
+        };
+  } finally {
+    database.close();
+  }
+}
+
+async function wakeUntil(
+  worker: { wake(): Promise<unknown> },
+  done: () => boolean | Promise<boolean>,
+): Promise<void> {
+  const results: unknown[] = [];
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (await done()) return;
+    results.push(await worker.wake());
+  }
+  assert.fail(`workflow did not reach expected durable state: ${JSON.stringify(results)}`);
 }
 
 async function activateStandaloneRelease(input: {
