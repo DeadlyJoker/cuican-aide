@@ -109,7 +109,7 @@ if (postgresUrl)
       const client = await pool.connect();
       try {
         await assert.rejects(
-          import("./workflow-version-store.ts").then(
+          import("./workflow-version-schema.ts").then(
             ({ migratePostgresWorkflowVersions }) =>
               migratePostgresWorkflowVersions(client, schema),
           ),
@@ -143,7 +143,7 @@ if (postgresUrl)
         const client = await pool.connect();
         try {
           await assert.rejects(
-            import("./workflow-version-store.ts").then(
+            import("./workflow-version-schema.ts").then(
               ({ migratePostgresWorkflowVersions }) =>
                 migratePostgresWorkflowVersions(client, schema),
             ),
@@ -172,7 +172,7 @@ if (postgresUrl)
       const client = await pool.connect();
       try {
         await assert.rejects(
-          import("./workflow-version-store.ts").then(
+          import("./workflow-version-schema.ts").then(
             ({ migratePostgresWorkflowVersions }) =>
               migratePostgresWorkflowVersions(client, schema),
           ),
@@ -197,7 +197,7 @@ test("PostgreSQL migration entry rejects unsafe schema identifiers", async () =>
     },
   } as never;
   const { migratePostgresWorkflowVersions } = await import(
-    "./workflow-version-store.ts"
+    "./workflow-version-schema.ts"
   );
   await assert.rejects(
     migratePostgresWorkflowVersions(client, "public;DROP SCHEMA public"),
