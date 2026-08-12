@@ -446,6 +446,22 @@ pub(crate) async fn apply_cancel(
             "device_runtime_cancel_identity_mismatch",
         ));
     }
+    let tool = state
+        .journal
+        .get_tool(&cancel.execution_id)
+        .await
+        .map_err(|error| {
+            DeviceRuntimeError::with_source("device_runtime_journal_invalid", error)
+        })?;
+    if let Some(execution) = tool
+        && (execution.command.device_id != cancel.device_id
+            || execution.command.lease_id != cancel.lease_id
+            || execution.command.lease_epoch != cancel.lease_epoch)
+    {
+        return Err(DeviceRuntimeError::new(
+            "device_runtime_cancel_identity_mismatch",
+        ));
+    }
     Ok(CancelDisposition::IgnoredInactive)
 }
 
