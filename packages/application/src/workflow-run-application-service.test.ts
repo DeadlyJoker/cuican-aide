@@ -103,6 +103,7 @@ test("receipt-replays the exact scheduler and input authority without new IDs", 
   });
   assert.equal(store.prepareCalls, 1);
   assert.equal(store.writeCount, 1);
+  assert.equal(store.routeCalls, 1);
 });
 
 test("rejects oversized, overly deep and non-finite input before authorization or Store", async () => {
@@ -169,8 +170,8 @@ class RecordingStore implements WorkflowRunAdmissionStore {
   error: Error | null = null;
   writeCount = 0;
   prepareCalls = 0;
+  routeCalls = 0;
   authority = workflowAuthority();
-  routeAuthority = workflowRouteAuthority();
   receipt: Awaited<
     ReturnType<WorkflowRunAdmissionStore["commitWorkflowRunStart"]>
   > | null = null;
@@ -186,10 +187,12 @@ class RecordingStore implements WorkflowRunAdmissionStore {
         run: { ...this.receipt.run, disposition: "replayed" as const },
       };
     }
+    this.routeCalls += 1;
+    const route = await input.resolveCandidateRoute();
     this.prepareCalls += 1;
     const authority = {
       workflowVersion: this.authority.workflowVersion,
-      route: input.resolveRoute(this.routeAuthority),
+      route,
     };
     const preparation = input.prepare(authority);
     this.lastPreparation = preparation;
@@ -242,57 +245,17 @@ function service(
     clock: { now: () => "2026-08-12T00:00:00Z" },
     ids: { nextId: () => ids.shift()! },
     workflowDigester: { sha256 },
-    resolveRoute: (_actor, _threadId, authority) => {
-      assert.deepEqual(authority, store.routeAuthority);
-      return store.authority.route;
+    routeResolver: {
+      async resolveRoute(input) {
+        assert.deepEqual(input, {
+          actor: actor(),
+          threadId: "thread-1",
+          agentVersionId: null,
+        });
+        return store.authority.route;
+      },
     },
   });
-}
-
-function workflowRouteAuthority() {
-  const authority = workflowAuthority();
-  const deployments = [
-    ["root-version", "root-authority"],
-    ["node-agent-version", "node-authority"],
-    ["verifier-version", "verifier-authority"],
-  ].map(([agentVersionId, authorityId]) => ({
-    schemaVersion: "crewon.agent-version-deployment.v0" as const,
-    tenantId: "tenant-1",
-    agentVersionId: agentVersionId!,
-    contentDigest: `sha256:${agentVersionId!.padEnd(64, "0").slice(0, 64)}`,
-    materializationDigest: `sha256:${authorityId!.padEnd(64, "0").slice(0, 64)}`,
-    authorityId: authorityId!,
-    workspaceBindingId: "workspace-1",
-    deployedAt: "2026-08-12T00:00:00Z",
-  }));
-  return {
-    workflowVersion: authority.workflowVersion,
-    activeRelease: {
-      bundle: {
-        schemaVersion: "crewon.agent-version-release-bundle.v0" as const,
-        tenantId: "tenant-1",
-        releaseId: "release-1",
-        manifestDigest: `sha256:${"a".repeat(64)}`,
-        defaultAgentVersionId: "root-version",
-        deployments: deployments.map(({ deployedAt: _, ...deployment }) =>
-          deployment),
-      },
-      activation: {
-        schemaVersion: "crewon.agent-version-release-activation.v0" as const,
-        tenantId: "tenant-1",
-        releaseId: "release-1",
-        activationId: "activation-1",
-        previousReleaseId: null,
-        operator: {
-          principalId: "principal-1",
-          actorId: "actor-1",
-          spaceId: "space-1",
-        },
-        activatedAt: "2026-08-12T00:00:00Z",
-      },
-    },
-    deployments,
-  };
 }
 
 function workflowAuthority(inputSchema: WorkflowObjectSchema = objectSchema()) {

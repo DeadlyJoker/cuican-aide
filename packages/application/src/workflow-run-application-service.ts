@@ -28,9 +28,8 @@ import type {
   CommitWorkflowRunStartResult,
   WorkflowRunAdmissionAuthority,
   WorkflowRunAdmissionStore,
-  WorkflowRunRouteAuthority,
 } from "./workflow-run-admission-store-port.ts";
-import type { RunRoute } from "./run-commands.ts";
+import type { RunRouteResolverPort } from "./run-commands.ts";
 
 export const MAX_WORKFLOW_INPUT_BYTES = 32_768;
 export const MAX_WORKFLOW_INPUT_DEPTH = 8;
@@ -52,11 +51,7 @@ export class WorkflowRunApplicationService {
   readonly #clock: ApplicationClock;
   readonly #ids: ApplicationIdGenerator;
   readonly #workflowDigester: WorkflowContentDigester;
-  readonly #resolveRoute: (
-    actor: ActorContext,
-    threadId: string,
-    authority: WorkflowRunRouteAuthority,
-  ) => RunRoute;
+  readonly #routeResolver: RunRouteResolverPort;
 
   constructor(dependencies: {
     store: WorkflowRunAdmissionStore;
@@ -64,18 +59,14 @@ export class WorkflowRunApplicationService {
     clock: ApplicationClock;
     ids: ApplicationIdGenerator;
     workflowDigester: WorkflowContentDigester;
-    resolveRoute: (
-      actor: ActorContext,
-      threadId: string,
-      authority: WorkflowRunRouteAuthority,
-    ) => RunRoute;
+    routeResolver: RunRouteResolverPort;
   }) {
     this.#store = dependencies.store;
     this.#authorization = dependencies.authorization;
     this.#clock = dependencies.clock;
     this.#ids = dependencies.ids;
     this.#workflowDigester = dependencies.workflowDigester;
-    this.#resolveRoute = dependencies.resolveRoute;
+    this.#routeResolver = dependencies.routeResolver;
   }
 
   async startWorkflowRun(
@@ -95,8 +86,12 @@ export class WorkflowRunApplicationService {
         workflowVersionId: command.workflowVersionId,
         workflowInput,
         idempotency,
-        resolveRoute: (authority) =>
-          this.#resolveRoute(actor, command.threadId, authority),
+        resolveCandidateRoute: () =>
+          this.#routeResolver.resolveRoute({
+            actor,
+            threadId: command.threadId,
+            agentVersionId: null,
+          }),
         prepare: (authority) =>
           this.#prepare(actor, command, workflowInput, idempotency, authority),
       });
