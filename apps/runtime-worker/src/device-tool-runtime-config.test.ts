@@ -17,14 +17,29 @@ test("loads a strict Device Tool deployment with open mTLS and Ed25519 adapters"
   const runtime = loadDeviceToolRuntime(fixture.config);
 
   assert.deepEqual(runtime.definitions(), [config.tools[0]?.definition]);
-  assert.deepEqual(
-    runtime.executionPolicy("function", "workspace_write"),
-    config.tools[0]?.policy,
-  );
+  assert.deepEqual(runtime.executionPolicy("function", "read_file"), config.tools[0]?.policy);
   await runtime.close?.();
 });
 
-test("rejects ambient fields, unknown bindings and unapproved mutations", () => {
+test("binds the native Tool definition to the released AgentVersion catalog", async (context) => {
+  const fixture = files(context);
+  const config = validConfig(fixture);
+  writeFileSync(fixture.config, JSON.stringify(config), "utf8");
+
+  assert.throws(
+    () =>
+      loadDeviceToolRuntime(fixture.config, [
+        { ...config.tools[0]!.definition, description: "catalog drift" },
+      ]),
+    hasMessage("device_tool_agent_version_mismatch"),
+  );
+  const runtime = loadDeviceToolRuntime(fixture.config, [
+    config.tools[0]!.definition,
+  ]);
+  await runtime.close?.();
+});
+
+test("rejects ambient fields, unknown bindings and every non-raw native capability", () => {
   const fixture = placeholderFiles();
   const valid = validConfig(fixture);
   assert.throws(
@@ -56,13 +71,36 @@ test("rejects ambient fields, unknown bindings and unapproved mutations", () => 
             ...valid.tools[0],
             policy: {
               ...valid.tools[0]!.policy,
-              approvalRequirement: "none",
+              effect: "mutation",
+              recovery: "reconcilable",
+              capability: "workspace.write",
+              approvalRequirement: "perAction",
             },
           },
         ],
       }),
     hasMessage("device_tool_policy_invalid"),
   );
+  for (const definition of [
+    { ...valid.tools[0]!.definition, name: "run_shell" },
+    {
+      schemaVersion: "crewon.tool-definition.v0" as const,
+      kind: "custom" as const,
+      name: "read_file",
+      description: "Raw input cannot bypass the native allowlist.",
+      execution: "serial" as const,
+      inputFormat: "text" as const,
+    },
+  ]) {
+    assert.throws(
+      () =>
+        parseDeviceToolRuntimeConfig({
+          ...valid,
+          tools: [{ ...valid.tools[0], definition }],
+        }),
+      hasMessage("device_tool_native_allowlist_invalid"),
+    );
+  }
   assert.throws(
     () =>
       parseDeviceToolRuntimeConfig({
@@ -85,10 +123,7 @@ test("rejects ambient fields, unknown bindings and unapproved mutations", () => 
           },
         ],
       }),
-    (error) =>
-      error instanceof Error &&
-      "code" in error &&
-      error.code === "tool_execution_policy_invalid",
+    hasMessage("device_tool_native_allowlist_invalid"),
   );
 });
 
@@ -148,22 +183,41 @@ function validConfig(fixture: ReturnType<typeof placeholderFiles>) {
         definition: {
           schemaVersion: "crewon.tool-definition.v0" as const,
           kind: "function" as const,
-          name: "workspace_write",
-          description: "Writes one bounded workspace file.",
+          name: "read_file",
+          description: "Reads one bounded workspace file.",
           execution: "serial" as const,
-          inputSchema: { type: "object" },
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              schemaVersion: { const: "crewon.device-filesystem-read-arguments.v0" },
+              workspaceIncarnationId: { type: "string" },
+              relativePathSegments: {
+                type: "array",
+                items: { type: "string" },
+                minItems: 1,
+              },
+              encoding: { const: "utf8" },
+            },
+            required: [
+              "schemaVersion",
+              "workspaceIncarnationId",
+              "relativePathSegments",
+              "encoding",
+            ],
+          },
         },
         policy: {
-          effect: "mutation" as const,
-          recovery: "reconcilable" as const,
+          effect: "readOnly" as const,
+          recovery: "replaySafe" as const,
           resourceBindingId: null,
           credentialBindingId: null,
           executionTarget: {
             kind: "device" as const,
             bindingId: "device-binding-1",
           },
-          capability: "workspace.write",
-          approvalRequirement: "perAction" as const,
+          capability: "workspace.read_file.raw_tool.v0",
+          approvalRequirement: "none" as const,
           limits: {
             timeoutMs: 30_000,
             maxOutputBytes: 64 * 1024,

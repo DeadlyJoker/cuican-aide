@@ -17,6 +17,7 @@ import { InMemoryToolBroker } from "@crewon/tool-broker";
 const MAX_CONFIG_BYTES = 1024 * 1024;
 const MAX_TOOLS = 128;
 const MAX_BINDINGS = 10_000;
+const RAW_READ_CAPABILITY = "workspace.read_file.raw_tool.v0";
 
 type DeviceToolRuntimeConfig = Readonly<{
   schemaVersion: "crewon.device-tool-runtime.v0";
@@ -41,7 +42,10 @@ type DeviceToolRuntimeConfig = Readonly<{
 }>;
 
 /** Loads one explicit Device deployment without ambient credentials or routes. */
-export function loadDeviceToolRuntime(path: string): ToolRuntimePort {
+export function loadDeviceToolRuntime(
+  path: string,
+  agentTools?: readonly ToolDefinition[],
+): ToolRuntimePort {
   const config = parseDeviceToolRuntimeConfig(
     readBoundedJson(
       path,
@@ -62,6 +66,19 @@ export function loadDeviceToolRuntime(path: string): ToolRuntimePort {
       "device_signing_private_key_invalid",
     ),
   );
+  if (agentTools !== undefined) {
+    for (const { definition } of config.tools) {
+      const released = agentTools.find(
+        (candidate) => toolKey(candidate) === toolKey(definition),
+      );
+      if (
+        released === undefined ||
+        stableJson(released) !== stableJson(definition)
+      ) {
+        throw new Error("device_tool_agent_version_mismatch");
+      }
+    }
+  }
   return new DeviceToolRuntime({
     definitions: config.tools.map(({ definition }) => definition),
     policies,
@@ -151,10 +168,17 @@ export function parseDeviceToolRuntimeConfig(
       toolKeys.has(key) ||
       policy.executionTarget.kind !== "device" ||
       !bindingIds.has(policy.executionTarget.bindingId) ||
-      (policy.effect === "mutation" &&
-        policy.approvalRequirement !== "perAction")
+      policy.effect !== "readOnly" ||
+      policy.recovery !== "replaySafe" ||
+      policy.capability !== RAW_READ_CAPABILITY ||
+      policy.approvalRequirement !== "none" ||
+      policy.resourceBindingId !== null ||
+      policy.credentialBindingId !== null
     ) {
       throw new Error("device_tool_policy_invalid");
+    }
+    if (!isNativeRawReadDefinition(definition)) {
+      throw new Error("device_tool_native_allowlist_invalid");
     }
     toolKeys.add(key);
     return { definition, policy };
@@ -366,6 +390,51 @@ function opaqueId(value: unknown, code: string): string {
 
 function toolKey(definition: ToolDefinition): string {
   return `${definition.kind}:${definition.name}`;
+}
+
+function isNativeRawReadDefinition(definition: ToolDefinition): boolean {
+  if (
+    definition.kind !== "function" ||
+    definition.name !== "read_file" ||
+    definition.execution !== "serial"
+  ) {
+    return false;
+  }
+  return stableJson(definition.inputSchema) === stableJson({
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      schemaVersion: {
+        const: "crewon.device-filesystem-read-arguments.v0",
+      },
+      workspaceIncarnationId: { type: "string" },
+      relativePathSegments: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 1,
+      },
+      encoding: { const: "utf8" },
+    },
+    required: [
+      "schemaVersion",
+      "workspaceIncarnationId",
+      "relativePathSegments",
+      "encoding",
+    ],
+  });
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (isPlainObject(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function hasExactKeys(

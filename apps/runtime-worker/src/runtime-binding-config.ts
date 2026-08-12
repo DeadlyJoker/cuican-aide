@@ -256,9 +256,10 @@ function runtimeBindings(
       materializationDigest: expectedMaterializationDigest,
       createTransport: (version) =>
         directResponsesTransport(binding.provider, version, apiKey),
-      createToolRuntime: () =>
+      createToolRuntime: (version) =>
         createBoundToolRuntime(
           binding,
+          version,
           expectedMaterializationDigest,
           remoteMcpDependencies,
         ),
@@ -322,6 +323,7 @@ function stableJson(value: unknown): string {
 
 async function createBoundToolRuntime(
   binding: RuntimeBindingConfig["bindings"][number],
+  version: CompiledAgentVersion,
   expectedMaterializationDigest: string,
   remoteMcpDependencies: RemoteMcpCompositionDependencies | undefined,
 ): Promise<ToolRuntimePort> {
@@ -349,7 +351,9 @@ async function createBoundToolRuntime(
       );
     }
     if (binding.deviceToolConfigPath !== null) {
-      runtimes.push(loadDeviceToolRuntime(binding.deviceToolConfigPath));
+      runtimes.push(
+        loadDeviceToolRuntime(binding.deviceToolConfigPath, version.tools),
+      );
     }
     if (binding.remoteMcpConfigPath !== null) {
       runtimes.push(
