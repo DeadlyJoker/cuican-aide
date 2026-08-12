@@ -4,6 +4,9 @@ import type {
   FrozenWorkflowVersionBinding,
 } from "@crewon/domain";
 
+/** Maximum UTF-8 bytes of the canonical JSON representation of any Workflow value. */
+export { MAX_WORKFLOW_VALUE_BYTES } from "@crewon/domain";
+
 export type WorkflowExecutionValue = Readonly<{
   schemaVersion: "crewon.workflow-execution-value.v0";
   valueId: string;

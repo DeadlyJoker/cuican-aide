@@ -71,6 +71,7 @@ import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
 import type { PriorModelCompactionResolverPort } from "./model-switch-compaction.ts";
 import type { AgentVersionRuntimeResolverPort } from "./agent-version-runtime.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
+import type { WorkflowRuntimeDispatcherPort } from "./workflow-runtime-dispatcher.ts";
 
 const ROUTE: RunRoute = {
   authorityId: "standalone-1",
@@ -116,6 +117,31 @@ test("completes a durable Run through the Direct Responses transport", async (co
       { role: "assistant", content: "done" },
     ],
   );
+  await worker.close();
+});
+
+test("keeps an ordinary Run isolated from an injected Workflow dispatcher", async (context) => {
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  let dispatches = 0;
+  const worker = fixture.worker({
+    transport: successfulTransport(),
+    workflowDispatcher: {
+      async dispatch() {
+        dispatches += 1;
+        throw new Error("ordinary_run_was_misrouted");
+      },
+      async cancel() {
+        dispatches += 1;
+        throw new Error("ordinary_run_was_misrouted");
+      },
+    },
+  });
+
+  assert.equal((await worker.wake()).kind, "completed");
+  assert.equal(dispatches, 0);
   await worker.close();
 });
 
@@ -8612,6 +8638,7 @@ async function createFixture(
       autoCompactAtContextBytes?: number | null;
       autoCompactAtTokens?: number | null;
       modelContextWindowTokens?: number;
+      workflowDispatcher?: WorkflowRuntimeDispatcherPort;
     }) => {
       const workerStore = options.store ?? store;
       const workerExecution =
@@ -8640,6 +8667,7 @@ async function createFixture(
           modelSwitchCompactionResolver: options.modelSwitchCompactionResolver,
           agentVersionRuntimeResolver: options.agentVersionRuntimeResolver,
           policy: options.policy ?? new PinnedRunExecutionPolicy(ROUTE),
+          workflowDispatcher: options.workflowDispatcher,
         },
         {
           ownerId: `worker-${ids.nextId("outboxLease")}`,
