@@ -102,7 +102,7 @@ by a different Store instance. No fake adapter may be used to claim an end-to-en
 | Node admission | 通过（SQLite Slices 1–2） | two real Workers hold distinct sibling leases and simultaneously running Steps/Attempts; mock adversarial suite separately covers replay and response-loss fencing |
 | Node settlement | 通过（SQLite Slices 1–2） | siblings settle right-before-left without authority reuse; Verification appears only after both dependencies terminate and receives frozen-order input |
 | Human Gate | 通过（SQLite Control） | strict public decision API plus real certified Worker proves approve→Verification→completed and reject→failed; internal receipt/resume authority is not exposed |
-| Reconciliation | 实现中（TS SQLite） | real Worker restart proves `possiblySent` dispatch is not resampled and its durable reconcile WorkItem is consumed from Store-derived evidence; `notDispatched` fresh retry and `responseObserved`/terminal settlement remain Slice 4 gates |
+| Reconciliation | 实现中（TS SQLite） | real Worker restart proves `possiblySent` is not resampled; `notDispatched` atomically retires the old Attempt/reconcile work and creates a new claim whose later fresh admission alone may sample. `responseObserved`/terminal-completed settlement remains the Slice 4 gate |
 | Terminal convergence | 通过（SQLite Slices 1–2 success path） | single and parallel success Runs reach canonical `completed` with one sample per node; sibling failure/cancel convergence remains a mandatory Slice 5 gate |
 | PostgreSQL real-host | 未验证 | focused real-host checks passed, but Slice 6 dual-process acceptance has not |
 | Packaged crash recovery | 未验证 | no packaged Workflow vertical acceptance |
