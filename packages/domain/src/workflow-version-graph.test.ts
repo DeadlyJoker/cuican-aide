@@ -91,6 +91,21 @@ test("requires dependent terminal Verification by an independent AgentVersion", 
       ),
     hasCode("workflow_verifier_not_independent"),
   );
+  const secondVerification: WorkflowGraphNode = {
+    nodeId: "verify-again",
+    kind: "verification",
+    dependsOn: ["verify"],
+    verifierAgentVersionId: "agent-verifier-v1",
+  };
+  assert.throws(
+    () =>
+      validateWorkflowGraph(
+        [...nodes, secondVerification],
+        ["collect"],
+        ["verify-again"],
+      ),
+    hasCode("workflow_verifier_not_independent"),
+  );
 });
 
 function graph(): readonly WorkflowGraphNode[] {

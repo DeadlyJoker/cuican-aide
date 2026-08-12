@@ -104,16 +104,16 @@ function validateIndependentVerifiers(
       for (const agentVersionId of ancestorAgents.get(dependency)!) {
         agents.add(agentVersionId);
       }
-      const dependencyNode = nodeById.get(dependency)!;
-      if (dependencyNode.kind === "agent") {
-        agents.add(dependencyNode.agentVersionId);
-      }
     }
     if (
       node.kind === "verification" &&
       agents.has(node.verifierAgentVersionId)
     ) {
       throw new WorkflowVersionError("workflow_verifier_not_independent");
+    }
+    if (node.kind === "agent") agents.add(node.agentVersionId);
+    if (node.kind === "verification") {
+      agents.add(node.verifierAgentVersionId);
     }
     ancestorAgents.set(nodeId, agents);
   }
