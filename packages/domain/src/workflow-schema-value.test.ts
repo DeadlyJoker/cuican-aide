@@ -57,6 +57,7 @@ test("uses UTF-8 bytes for string bounds and enforces enum values", () => {
   } as const;
   assert.equal(validateWorkflowSchemaValue("safe", enumerated), "safe");
   assertMismatch(() => validateWorkflowSchemaValue("other", enumerated));
+  assertMismatch(() => validateWorkflowSchemaValue("\ud800", bounded));
 });
 
 test("enforces safe integers and numeric minimum and maximum", () => {

@@ -14,9 +14,12 @@ function stabilize(
   }
   if (
     value === null ||
-    typeof value === "string" ||
     typeof value === "boolean"
   ) {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (!isWellFormedUnicode(value)) throw invalidJson();
     return value;
   }
   if (typeof value === "number") {
@@ -38,14 +41,16 @@ function stabilize(
     throw invalidJson();
   }
   ancestors.add(value);
-  const result: Record<string, unknown> = {};
-  for (const key of Object.keys(value).sort()) {
-    const item = value[key];
-    if (item === undefined) {
-      throw invalidJson();
-    }
-    result[key] = stabilize(item, ancestors, depth + 1);
-  }
+  const result = Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => {
+        if (!isWellFormedUnicode(key)) throw invalidJson();
+        const item = value[key];
+        if (item === undefined) throw invalidJson();
+        return [key, stabilize(item, ancestors, depth + 1)];
+      }),
+  );
   ancestors.delete(value);
   return result;
 }
@@ -60,4 +65,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   }
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function isWellFormedUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      if (index + 1 >= value.length) return false;
+      const next = value.charCodeAt(index + 1);
+      if (next < 0xdc00 || next > 0xdfff) return false;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
 }
