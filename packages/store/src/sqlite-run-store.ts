@@ -5453,12 +5453,15 @@ export class SqliteRunStore implements DomainStore {
     const compiled = durableVersion === null || this.#workflowDigester === null
       ? null : parseCompiledWorkflowVersion(
           durableVersion.definitionJson, this.#workflowDigester);
-    const root = this.#database.prepare(
+    const roots = this.#database.prepare(
       `SELECT value_id,value_digest,value_json FROM workflow_execution_values
        WHERE tenant_id=? AND run_id=? AND role='rootInput' AND node_id IS NULL`,
-    ).get(result.run.state.tenantId, result.run.state.runId) as
-      | { value_id: string; value_digest: string; value_json: string }
-      | undefined;
+    ).all(result.run.state.tenantId, result.run.state.runId) as unknown as {
+      value_id: string;
+      value_digest: string;
+      value_json: string;
+    }[];
+    const root = roots[0];
     const work = result.run.workItems[0];
     const event = result.run.events[0];
     const outbox = result.run.outbox[0];
@@ -5477,47 +5480,80 @@ export class SqliteRunStore implements DomainStore {
        FROM work_items WHERE tenant_id=? AND work_item_id=?`,
     ).get(result.run.state.tenantId, work.workItemId) as
       | WorkItemRow | undefined;
+    const generalReceipt = this.#database.prepare(
+      `SELECT count(*) AS count FROM idempotency_receipts
+       WHERE tenant_id=? AND run_id=? AND result_json=?`,
+    ).get(input.tenantId, receiptRunId, stableJson(result.run)) as
+      | { count: number }
+      | undefined;
     const ref = work?.payload.workflowInput as
       | { valueId?: unknown; valueDigest?: unknown }
       | undefined;
+    const binding = {
+      workflowId: durableVersion?.workflowId,
+      workflowVersionId: durableVersion?.workflowVersionId,
+      contentDigest: durableVersion?.contentDigest,
+    };
     if (run === null || durableVersion === null || compiled === null ||
         stableJson(durableVersion) !== stableJson(result.authority.workflowVersion) ||
         compiled.contentDigest !== durableVersion.contentDigest ||
         compiled.workflowId !== durableVersion.workflowId ||
         result.run.events.length !== 1 || result.run.outbox.length !== 1 ||
         result.run.workItems.length !== 1 || event?.type !== "run.created" ||
-        event.sequence !== 1 || stableJson(run) !== stableJson(result.run.state) ||
+        event.sequence !== 1 || event.identity.runId !== receiptRunId ||
+        event.data.tenantId !== input.tenantId ||
+        event.data.spaceId !== input.spaceId ||
+        event.data.threadId !== input.threadId ||
+        event.data.purpose !== "workflow" || event.data.goalBinding !== null ||
+        stableJson(run) !== stableJson(result.run.state) ||
         run.agentVersionId !== result.authority.route.agentVersionId ||
         run.authorityId !== result.authority.route.authorityId ||
         run.runtimeGeneration !== result.authority.route.runtimeGeneration ||
         run.policySnapshotId !== result.authority.route.policySnapshotId ||
         run.workspaceBindingId !== result.authority.route.workspaceBindingId ||
-        root === undefined || ref?.valueId !== root.value_id ||
+        roots.length !== 1 || root === undefined ||
+        ref?.valueId !== root.value_id ||
         ref.valueDigest !== root.value_digest ||
         this.#workflowDigester === null ||
         canonicalJson(JSON.parse(root.value_json)) !== root.value_json ||
+        canonicalJson(input.workflowInput) !== root.value_json ||
         this.#workflowDigester.sha256(root.value_json) !== root.value_digest ||
         stableJson(validateWorkflowSchemaValue(
           JSON.parse(root.value_json), compiled.inputSchema)) !== root.value_json ||
-        stableJson(event?.data.workflowVersionBinding) !== stableJson({
-          workflowId: durableVersion.workflowId,
-          workflowVersionId: durableVersion.workflowVersionId,
-          contentDigest: durableVersion.contentDigest }) ||
+        stableJson(event.data.workflowVersionBinding) !== stableJson(binding) ||
+        event.data.agentVersionId !== result.authority.route.agentVersionId ||
+        event.data.authorityId !== result.authority.route.authorityId ||
+        event.data.runtimeGeneration !== result.authority.route.runtimeGeneration ||
+        event.data.policySnapshotId !== result.authority.route.policySnapshotId ||
+        event.data.workspaceBindingId !== result.authority.route.workspaceBindingId ||
         storedEvent?.tenant_id !== input.tenantId ||
         storedEvent.run_id !== receiptRunId || storedEvent.sequence !== 1 ||
         storedEvent.event_id !== event.eventId ||
         storedEvent.event_json !== stableJson(event) ||
+        outbox?.tenantId !== input.tenantId || outbox.runId !== receiptRunId ||
+        outbox.topic !== "run.updated" ||
+        stableJson(outbox.payload) !== stableJson({
+          eventId: event.eventId,
+          eventType: event.type,
+          throughSequence: event.sequence,
+        }) ||
         storedOutbox?.tenant_id !== input.tenantId ||
         storedOutbox.run_id !== receiptRunId ||
         storedOutbox.message_id !== outbox.messageId ||
         storedOutbox?.topic !== outbox?.topic ||
         storedOutbox.created_at !== outbox.createdAt ||
         storedOutbox?.message_json !== stableJson(outbox) ||
+        work?.tenantId !== input.tenantId || work.runId !== receiptRunId ||
+        work.kind !== "run.execute" ||
+        work.payload.schemaVersion !== "crewon.workflow-scheduler-work-item.v1" ||
+        work.payload.trigger !== "workflowScheduler" ||
+        stableJson(work.payload.binding) !== stableJson(binding) ||
         storedWork?.tenant_id !== input.tenantId ||
         storedWork.run_id !== receiptRunId || storedWork.kind !== work.kind ||
         storedWork.work_item_id !== work.workItemId ||
         storedWork.created_at !== work.createdAt ||
-        storedWork?.work_item_json !== stableJson(work))
+        storedWork?.work_item_json !== stableJson(work) ||
+        generalReceipt === undefined || generalReceipt.count !== 1)
       throw new RunStoreError("workflow_run_admission_receipt_corrupt");
   }
 

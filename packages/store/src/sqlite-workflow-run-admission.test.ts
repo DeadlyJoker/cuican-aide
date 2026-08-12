@@ -107,9 +107,22 @@ test("SQLite Workflow admission replay fails closed on receipt and durable autho
     `UPDATE workflow_run_admission_receipts SET result_json=json_set(result_json,
       '$.authority.workflowVersion.contentDigest','sha256:${"f".repeat(64)}')`,
     "UPDATE run_events SET event_json='{}'",
+    `UPDATE workflow_run_admission_receipts SET result_json=json_set(result_json,
+      '$.run.events[0].data.threadId','other-thread');
+     UPDATE run_events SET event_json=json_set(event_json,
+      '$.data.threadId','other-thread')`,
     "UPDATE workflow_execution_values SET value_json='[]'",
     "UPDATE work_items SET work_item_json='{}'",
+    `UPDATE workflow_run_admission_receipts SET result_json=json_set(result_json,
+      '$.run.workItems[0].payload.binding.workflowVersionId','other-version');
+     UPDATE work_items SET work_item_json=json_set(work_item_json,
+      '$.payload.binding.workflowVersionId','other-version')`,
     "UPDATE outbox SET topic='tampered'",
+    `UPDATE workflow_run_admission_receipts SET result_json=json_set(result_json,
+      '$.run.outbox[0].payload.eventId','other-event');
+     UPDATE outbox SET message_json=json_set(message_json,
+      '$.payload.eventId','other-event')`,
+    "DELETE FROM idempotency_receipts",
   ]) {
     const path = await temporaryPath(context, sha256(mutation).slice(-8));
     const store = new SqliteRunStore(path, { workflowDigester: digester });
