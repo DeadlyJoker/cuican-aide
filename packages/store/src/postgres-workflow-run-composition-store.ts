@@ -36,6 +36,7 @@ import {
 } from "./postgres-workflow-run-admission.ts";
 import { schedulePostgresWorkflowReconciliation } from "./postgres-workflow-reconciliation.ts";
 import { reconcilePostgresWorkflowNode } from "./postgres-workflow-reconcile-node.ts";
+import { settlePreparedPostgresWorkflowNodeTerminal } from "./postgres-workflow-terminal-candidate.ts";
 import {
   admitPostgresWorkflowNodeWork,
   schedulePostgresWorkflowNodes,
@@ -338,8 +339,21 @@ export class PostgresWorkflowRunCompositionStore
     );
   }
 
-  async settlePreparedWorkflowNodeTerminal(): Promise<never> {
-    throw new RunStoreError("workflow_composition_contract_incomplete");
+  async settlePreparedWorkflowNodeTerminal(
+    input: Parameters<
+      WorkflowNodeContinuationStore["settlePreparedWorkflowNodeTerminal"]
+    >[0],
+  ): ReturnType<
+    WorkflowNodeContinuationStore["settlePreparedWorkflowNodeTerminal"]
+  > {
+    return this.#transaction(input.authority, (client) =>
+      settlePreparedPostgresWorkflowNodeTerminal(
+        client,
+        this.schemaSql(),
+        input,
+        this.#digester,
+      ),
+    );
   }
 
   async loadWorkflowNodeContinuation(

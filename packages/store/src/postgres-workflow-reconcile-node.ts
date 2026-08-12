@@ -17,9 +17,11 @@ import {
 } from "./postgres-model-dispatch-evidence.ts";
 import { convergePostgresWorkflowRun } from "./postgres-workflow-node-settlement.ts";
 import { stableJson } from "./store-invariants.ts";
+import { workflowAuthorityId } from "./workflow-run-composition-support.ts";
 import {
   completePostgresWorkflowLease,
   insertPostgresWorkflowReceipt,
+  insertPostgresWorkflowWorkItem,
   loadPostgresWorkflowAuthorities,
   loadPostgresWorkflowExecution,
   loadPostgresWorkflowReceipt,
@@ -152,7 +154,99 @@ export async function reconcilePostgresWorkflowNode(
   )
     throw new RunStoreError("workflow_reconciliation_evidence_missing");
   const evidenceStatus =
-    dispatch.status === "prepared" ? ("notDispatched" as const) : dispatch.status;
+    dispatch.status === "prepared"
+      ? ("notDispatched" as const)
+      : dispatch.status;
+  if (evidenceStatus === "notDispatched") {
+    await finishPostgresRunAttempt(client, schema, {
+      tenantId: input.tenantId,
+      runId: input.runId,
+      workItemId: attempt.workItemId,
+      leaseEpoch: attempt.leaseEpoch,
+      attempt: {
+        stepId: input.nodeId,
+        attemptId: attempt.attemptId,
+        status: "failed",
+        finishedAt: now,
+        checkpointDigest: null,
+        failure: { code: "workflow_model_not_dispatched", retryable: true },
+      },
+    });
+    const claimEpoch = input.claimEpoch + 1;
+    const claimAuthority = {
+      tenantId: input.tenantId,
+      runId: input.runId,
+      binding: input.binding,
+      nodeId: input.nodeId,
+      claimEpoch,
+      reconciliationOperationId: input.reconciliationOperationId,
+    };
+    const claimId = workflowAuthorityId("claim", claimAuthority, digester);
+    const workAuthority = {
+      ...claimAuthority,
+      claimId,
+      schedulerOperationId: input.reconciliationOperationId,
+    };
+    const workItemId = workflowAuthorityId("node", workAuthority, digester);
+    const next = {
+      ...execution,
+      revision: execution.revision + 1,
+      nodes: execution.nodes.map((candidate) =>
+        candidate.nodeId === input.nodeId
+          ? {
+              ...candidate,
+              status: "queued" as const,
+              claimId,
+              claimOperationId: input.reconciliationOperationId,
+              claimEpoch,
+              leaseExpiresAt: null,
+              gateRequestId: null,
+              resultDigest: null,
+              failureCode: null,
+            }
+          : candidate,
+      ),
+      updatedAt: now,
+    };
+    await writePostgresWorkflowExecution(client, schema, next, now);
+    await insertPostgresWorkflowWorkItem(
+      client,
+      schema,
+      workItemId,
+      input,
+      {
+        schemaVersion: "crewon.workflow-node-work-item.v0",
+        trigger: "workflowNode",
+        binding: input.binding,
+        nodeId: input.nodeId,
+        claimId,
+        claimEpoch,
+        schedulerOperationId: input.reconciliationOperationId,
+      },
+      now,
+    );
+    const result = {
+      disposition: "retryScheduled" as const,
+      evidenceStatus,
+      execution: next,
+      handoff: {
+        currentWorkItem: "completed" as const,
+        nextWorkItemId: workItemId,
+        kind: "node" as const,
+      },
+      runDisposition: "nonTerminal" as const,
+    };
+    await insertPostgresWorkflowReceipt(
+      client,
+      schema,
+      receiptInput,
+      "reconcileNode",
+      fingerprint,
+      result,
+    );
+    await completePostgresWorkflowLease(client, schema, input, now);
+    return structuredClone(result);
+  }
   if (evidenceStatus === "possiblySent")
     return {
       disposition: "retryRequired",
