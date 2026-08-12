@@ -22,8 +22,11 @@ export type CommitWorkflowRunStartInput = Readonly<{
   workflowInput: JsonValue;
   idempotency: IdempotencyDescriptor;
   /**
-   * Resolves a server-owned candidate outside the SQLite write transaction.
-   * Implementations must check a durable replay receipt before invoking it.
+   * Resolves the server-owned route candidate outside a write transaction.
+   * Implementations must receipt-probe first and must not invoke this callback
+   * or `prepare` for a replay. After a miss, they await this callback before
+   * opening a fresh write transaction, recheck the receipt, then revalidate
+   * the candidate against current release and deployment authorities.
    */
   resolveCandidateRoute: () => Promise<RunRoute>;
   prepare: (authority: WorkflowRunAdmissionAuthority) => Readonly<{
@@ -46,7 +49,7 @@ export type CommitWorkflowRunStartResult = Readonly<{
  * transaction, implementations must validate the tenant/space Thread, load
  * the immutable tenant WorkflowVersion, and revalidate the server-owned route
  * candidate plus every AgentVersion referenced by the Workflow against the
- * present in the tenant's currently active release with an exact immutable
+ * tenant's currently active release with an exact immutable
  * deployment content digest, authority, and workspace binding. This release
  * and deployment check must use the same transaction snapshot as admission.
  * The candidate callback runs only after an initial receipt miss and outside

@@ -37,6 +37,7 @@ import {
   UuidV7ApplicationIdGenerator,
 } from "./standalone-adapters.ts";
 import type { StandaloneControlApiRuntime } from "./standalone-composition.ts";
+import { selectWorkflowRunStartFactory } from "./workflow-production-composition-gate.ts";
 import {
   ControlProviderProbeService,
   TenantRoutedProviderProbeWorker,
@@ -215,7 +216,8 @@ async function composeProductionControlApi(
       // one compound admission transaction that also revalidates the active
       // release and every referenced deployment. Workflow execution schema
       // migration alone is not admission authority.
-      workflowRuns: null,
+      workflowRuns:
+        selectWorkflowRunStartFactory({ status: "disabled" })?.() ?? null,
       agentVersionCatalogs,
       artifacts,
       automations,

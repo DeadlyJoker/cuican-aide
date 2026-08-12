@@ -19,6 +19,7 @@ import type {
   CommitRunInput,
   IdempotencyDescriptor,
 } from "./run-store-port.ts";
+import type { RunRouteResolverPort } from "./run-commands.ts";
 import type {
   WorkflowRunInputAuthority,
   WorkflowSchedulerWorkItemPayload,

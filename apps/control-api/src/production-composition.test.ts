@@ -61,7 +61,10 @@ test("production keeps Workflow start disabled without compound Store admission"
     new URL("./production-composition.ts", import.meta.url),
     "utf8",
   );
-  assert.match(source, /workflowRuns: null/u);
+  assert.match(
+    source,
+    /selectWorkflowRunStartFactory\(\{ status: "disabled" \}\)/u,
+  );
   assert.doesNotMatch(source, /new WorkflowRunApplicationService/u);
   assert.match(source, /await workflowVersionStore\.migrate\(\)/u);
 });

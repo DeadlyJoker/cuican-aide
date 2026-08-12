@@ -44,6 +44,7 @@ import {
 } from "./provider-probe-worker-client.ts";
 import { LoopbackRuntimeWorkspaceWorkerClient } from "./workspace-runtime-worker-client.ts";
 import type { ProcessLocalActivationGate } from "./paused-admission.ts";
+import { selectWorkflowRunStartFactory } from "./workflow-production-composition-gate.ts";
 
 type ControlApiCompositionConfig = Readonly<{
   actor: ActorContext;
@@ -258,7 +259,8 @@ function composeControlApi(
       workflowVersions,
       // Keep parity with production: no two-step WorkflowVersion load plus Run
       // commit may masquerade as atomic Workflow start admission.
-      workflowRuns: null,
+      workflowRuns:
+        selectWorkflowRunStartFactory({ status: "disabled" })?.() ?? null,
       agentVersionCatalogs,
       artifacts,
       automations,
