@@ -145,7 +145,7 @@ if (postgresUrl === undefined) {
       };
       await assert.rejects(
         service(store).startWorkflowRun(actor(), command()),
-        /workflow_run_route_mismatch/u,
+        hasStoreCode("workflow_run_route_mismatch"),
       );
       assert.equal(store.prepareCalls, 0);
       for (const table of [
@@ -212,7 +212,7 @@ if (postgresUrl === undefined) {
       );
       await assert.rejects(
         service(reopened).startWorkflowRun(actor(), command()),
-        /workflow_run_admission_receipt_corrupt/u,
+        hasStoreCode("workflow_run_admission_receipt_corrupt"),
       );
       await reopened.close();
     } finally {
@@ -556,6 +556,12 @@ function barrier(parties: number) {
 }
 
 function hasStoreCode(code: string) {
-  return (error: unknown) =>
-    error instanceof RunStoreError && error.code === code;
+  return (error: unknown) => {
+    let current = error;
+    while (current instanceof Error) {
+      if (current instanceof RunStoreError && current.code === code) return true;
+      current = current.cause;
+    }
+    return false;
+  };
 }
