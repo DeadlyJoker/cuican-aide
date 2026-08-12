@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "crewon.agent-runtime-parity-matrix.v0",
+  "authorities": {
+    "ordinaryTs": "apps/runtime-worker/src/runtime-worker.ts",
+    "workflowTs": "apps/runtime-worker/src/workflow-agent-runtime-adapter.ts",
+    "rust": "codex-rs/core/src/session/turn.rs"
+  },
+  "sharedTsReducer": {
+    "engine": "apps/runtime-worker/src/agent-segment-execution-engine.ts",
+    "reducer": "apps/runtime-worker/src/agent-segment-state-machine.ts",
+    "consumers": ["ordinaryTs", "workflowTs"]
+  },
+  "sequenceMatrix": [
+    {
+      "caseId": "terminal",
+      "ordinaryTs": ["model.sample", "segment.started", "model.output", "segment.completed", "assistant.committed", "run.completed"],
+      "workflowTs": ["model.sample", "segment.started", "model.output", "segment.completed", "node.completed"],
+      "rust": ["model.sample", "assistant.item", "turn.completed"]
+    },
+    {
+      "caseId": "assistant-tool-mixed",
+      "ordinaryTs": ["model.sample", "assistant.continuation", "tool.requested", "tool.completed", "model.sample"],
+      "workflowTs": ["model.sample", "assistant.continuation", "tool.requested", "tool.completed", "model.sample"],
+      "rust": ["model.sample", "assistant.item", "tool.requested", "tool.completed", "model.sample"]
+    },
+    {
+      "caseId": "one-tool-then-final",
+      "ordinaryTs": ["model.sample", "tool.requested", "tool.completed", "model.sample", "run.completed"],
+      "workflowTs": ["model.sample", "tool.requested", "tool.completed", "model.sample", "node.completed"],
+      "rust": ["model.sample", "tool.requested", "tool.completed", "model.sample", "turn.completed"]
+    },
+    {
+      "caseId": "two-tool-rounds",
+      "ordinaryTs": ["model.sample", "tool.completed", "model.sample", "tool.completed", "model.sample"],
+      "workflowTs": ["model.sample", "tool.completed", "model.sample", "tool.completed", "model.sample"],
+      "rust": ["model.sample", "tool.completed", "model.sample", "tool.completed", "model.sample"]
+    },
+    {
+      "caseId": "stream-retry",
+      "ordinaryTs": ["attempt.1", "model.sample", "retry", "model.sample"],
+      "workflowTs": ["attempt.1", "model.sample", "retry", "model.sample"],
+      "rust": ["turn", "model.sample", "retry", "model.sample"]
+    },
+    {
+      "caseId": "cancel-terminal-race",
+      "ordinaryTs": ["terminal.observed", "cancel.fenced", "run.canceled"],
+      "workflowTs": ["terminal.observed", "cancel.fenced", "node.canceled"],
+      "rust": ["terminal.or.cancel.selected", "turn.completed.or.aborted"]
+    }
+  ],
+  "recoveryMatrix": [
+    {
+      "caseId": "completed-tool-receipt-replay",
+      "ordinaryTs": "replay receipt; no provider execute",
+      "workflowTs": "replay receipt; no recovery Attempt or provider call",
+      "rust": "tool output is rollout history; no durable provider receipt protocol"
+    },
+    {
+      "caseId": "possibly-sent-no-response",
+      "ordinaryTs": "unknown/reconcile; never blind re-POST",
+      "workflowTs": "unknown node outcome; never blind re-POST",
+      "rust": "in-process stream retry only; cross-process certainty is unavailable"
+    },
+    {
+      "caseId": "provider-checkpoint-crash-retrieve",
+      "ordinaryTs": "new durable Attempt retrieves predecessor response",
+      "workflowTs": "checkpoint belongs to admitted Attempt; continuation work is separately owned",
+      "rust": "no durable cross-process response retrieval"
+    }
+  ],
+  "identityAndBounds": {
+    "segmentId": "stable inside one model sample; a continuation sample gets a distinct segment",
+    "attempt": "stream retries stay inside the parent Attempt; process recovery may create a retry Attempt",
+    "eventSequence": "strictly increasing per segment and canonicalized before durable projection",
+    "providerState": "provider checkpoint and provider turn state are durable before continuation",
+    "toolHistory": "tool calls and results are canonical pairs and are bounded by context item/byte limits",
+    "hardCaps": ["maxOutputBytes", "maxToolRounds", "maxContextItems", "maxContextBytes"]
+  },
+  "redesigns": [
+    "Rust has no TS durable Run/Step/Attempt identity or cross-process model-dispatch receipt.",
+    "Workflow settlement is node-scoped and must not settle the root Run.",
+    "Workflow durable continuation ownership is audited separately while that implementation is in flight."
+  ],
+  "requiredCases": [
+    "terminal",
+    "assistant-tool-mixed",
+    "one-tool-then-final",
+    "two-tool-rounds",
+    "completed-tool-receipt-replay",
+    "possibly-sent-no-response",
+    "provider-checkpoint-crash-retrieve",
+    "cancel-terminal-race",
+    "stream-retry",
+    "max-tool-rounds-boundary"
+  ]
+}
