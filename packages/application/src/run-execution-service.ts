@@ -121,6 +121,13 @@ export type BeginToolExecutionResult = Readonly<{
   attempt: BeginRunAttemptResult | null;
 }>;
 
+export type ToolExecutionParentAuthority =
+  | Readonly<{ kind: "ordinary" }>
+  | Readonly<{
+      kind: "workflowAgentAttempt";
+      attempt: RunAttemptIdentity;
+    }>;
+
 export type RequireToolApprovalResult = Readonly<{
   disposition: "required" | "existing";
   approval: ToolApprovalState;
@@ -550,7 +557,7 @@ export class RunExecutionService {
     claim: WorkItemClaim,
     call: ToolExecutionCall,
     policy: ToolActionPolicy,
-    options: Readonly<{ suppliedAttempt?: RunAttemptIdentity }> = {},
+    parent: ToolExecutionParentAuthority = { kind: "ordinary" },
   ): Promise<BeginToolExecutionResult> {
     const state = await this.loadRun(claim);
     if (state.cancelRequested) {
@@ -565,6 +572,32 @@ export class RunExecutionService {
       policy,
     );
     try {
+      if (parent.kind === "workflowAgentAttempt") {
+        const parentAttempt = await this.#store.loadRunAttempt({
+          tenantId: state.tenantId,
+          runId: state.runId,
+          ...parent.attempt,
+        });
+        const parentStep = await this.#store.loadRunStep({
+          tenantId: state.tenantId,
+          runId: state.runId,
+          stepId: parent.attempt.stepId,
+        });
+        if (
+          parentAttempt?.status !== "running" ||
+          parentAttempt.workItemId !== claim.workItem.workItemId ||
+          parentAttempt.leaseEpoch !== claim.lease.epoch ||
+          parentStep?.kind !== "model" ||
+          parentStep.status !== "running" ||
+          parentStep.currentAttemptId !== parent.attempt.attemptId ||
+          call.segmentId !== `segment:${parent.attempt.attemptId}`
+        ) {
+          throw new ApplicationError(
+            "conflict",
+            "tool_parent_agent_attempt_not_current",
+          );
+        }
+      }
       const existing = await this.#store.loadToolExecutionReceiptByAction({
         tenantId: state.tenantId,
         runId: state.runId,
@@ -574,44 +607,22 @@ export class RunExecutionService {
         this.#validateToolActionIntent(existing, actionIntent);
         return { disposition: "existing", receipt: existing, attempt: null };
       }
-      const suppliedAttempt = options.suppliedAttempt;
-      const attempt =
-        suppliedAttempt === undefined
-          ? await this.#store.beginRunAttempt({
-              tenantId: state.tenantId,
-              lease: leaseInput(claim),
-              runId: state.runId,
-              stepId: `tool:${actionDigest.slice("sha256:".length)}`,
-              kind: "tool",
-              attemptId: this.#nextId("attempt"),
-              startedAt: this.#now(),
-            })
-          : null;
-      const exactAttempt =
-        attempt?.attempt ??
-        (await this.#store.loadRunAttempt({
-          tenantId: state.tenantId,
-          runId: state.runId,
-          ...suppliedAttempt!,
-        }));
-      if (
-        exactAttempt === null ||
-        exactAttempt.status !== "running" ||
-        exactAttempt.workItemId !== claim.workItem.workItemId ||
-        exactAttempt.leaseEpoch !== claim.lease.epoch
-      ) {
-        throw new ApplicationError(
-          "conflict",
-          "tool_supplied_attempt_not_current",
-        );
-      }
-      const stepId = exactAttempt.stepId;
+      const stepId = `tool:${actionDigest.slice("sha256:".length)}`;
+      const attempt = await this.#store.beginRunAttempt({
+        tenantId: state.tenantId,
+        lease: leaseInput(claim),
+        runId: state.runId,
+        stepId,
+        kind: "tool",
+        attemptId: this.#nextId("attempt"),
+        startedAt: this.#now(),
+      });
       const receipt = prepareToolExecutionReceipt({
         receiptId: this.#nextId("toolReceipt"),
         tenantId: state.tenantId,
         runId: state.runId,
         stepId,
-        attemptId: exactAttempt.attemptId,
+        attemptId: attempt.attempt.attemptId,
         workItemId: claim.workItem.workItemId,
         executionId: this.#nextId("toolExecution"),
         idempotencyKey: `${state.runId}/tool/${actionDigest.slice("sha256:".length)}`,
@@ -626,7 +637,7 @@ export class RunExecutionService {
         },
         effect: policy.effect,
         recovery: policy.recovery,
-        preparedAt: exactAttempt.startedAt,
+        preparedAt: attempt.attempt.startedAt,
       });
       return {
         disposition: "prepared",
