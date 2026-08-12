@@ -4,10 +4,11 @@ const MAX_ID_BYTES = 256;
 
 export type WorkflowWorkItemPayload =
   | Readonly<{
-      schemaVersion: "crewon.workflow-scheduler-work-item.v0";
+      schemaVersion: "crewon.workflow-scheduler-work-item.v1";
       trigger: "workflowScheduler";
       binding: FrozenWorkflowVersionBinding;
       schedulerOperationId: string;
+      workflowInput: Readonly<{ valueId: string; valueDigest: string }>;
     }>
   | Readonly<{
       schemaVersion: "crewon.workflow-node-work-item.v0";
@@ -48,14 +49,16 @@ export function parseWorkflowWorkItemPayload(
       "schedulerOperationId",
       "schemaVersion",
       "trigger",
+      "workflowInput",
     ]);
-    if (input.schemaVersion !== "crewon.workflow-scheduler-work-item.v0")
+    if (input.schemaVersion !== "crewon.workflow-scheduler-work-item.v1")
       invalid();
     return {
       schemaVersion: input.schemaVersion,
       trigger,
       binding: binding(input.binding),
       schedulerOperationId: id(input.schedulerOperationId),
+      workflowInput: valueRef(input.workflowInput),
     };
   }
   if (trigger === "workflowNode") {
@@ -147,6 +150,16 @@ function binding(input: unknown): FrozenWorkflowVersionBinding {
     workflowVersionId: id(value.workflowVersionId),
     contentDigest: id(value.contentDigest),
   };
+}
+
+function valueRef(
+  input: unknown,
+): Readonly<{ valueId: string; valueDigest: string }> {
+  if (typeof input !== "object" || input === null || Array.isArray(input))
+    invalid();
+  const value = input as Record<string, unknown>;
+  exact(value, ["valueDigest", "valueId"]);
+  return { valueId: id(value.valueId), valueDigest: id(value.valueDigest) };
 }
 
 function id(input: unknown): string {

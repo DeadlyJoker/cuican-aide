@@ -11,10 +11,11 @@ const binding = {
 test("strictly discriminates bounded Workflow WorkItem payloads", () => {
   assert.equal(
     parseWorkflowWorkItemPayload({
-      schemaVersion: "crewon.workflow-scheduler-work-item.v0",
+      schemaVersion: "crewon.workflow-scheduler-work-item.v1",
       trigger: "workflowScheduler",
       binding,
       schedulerOperationId: "schedule-1",
+      workflowInput: { valueId: "value-1", valueDigest: "sha256:value" },
     }).trigger,
     "workflowScheduler",
   );
@@ -60,10 +61,11 @@ test("strictly discriminates bounded Workflow WorkItem payloads", () => {
 test("rejects extras, partial reconciliation identity and oversized IDs", () => {
   for (const payload of [
     {
-      schemaVersion: "crewon.workflow-scheduler-work-item.v0",
+      schemaVersion: "crewon.workflow-scheduler-work-item.v1",
       trigger: "workflowScheduler",
       binding,
       schedulerOperationId: "schedule-1",
+      workflowInput: { valueId: "value-1", valueDigest: "sha256:value" },
       extra: true,
     },
     {

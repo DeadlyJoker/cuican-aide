@@ -288,10 +288,11 @@ function input(kind: "scheduler" | "node", claimId = "claim-1") {
   const payload =
     kind === "scheduler"
       ? {
-          schemaVersion: "crewon.workflow-scheduler-work-item.v0",
+          schemaVersion: "crewon.workflow-scheduler-work-item.v1",
           trigger: "workflowScheduler",
           binding,
           schedulerOperationId: "schedule-1",
+          workflowInput: { valueId: "value-1", valueDigest: digest("input") },
         }
       : {
           schemaVersion: "crewon.workflow-node-work-item.v0",
