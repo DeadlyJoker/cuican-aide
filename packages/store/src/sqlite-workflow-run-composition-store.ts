@@ -513,7 +513,7 @@ export class SqliteWorkflowRunCompositionStore
     try {
       this.#database.exec("BEGIN IMMEDIATE");
       const receiptInput = { ...input,
-        operationId: input.reconciliationOperationId };
+        operationId: `reconcile:${input.reconciliationOperationId}` };
       const replay = this.#receipt(
         receiptInput, "reconcileNode", fingerprint);
       if (replay !== null) {
@@ -547,17 +547,24 @@ export class SqliteWorkflowRunCompositionStore
             attemptId: step.currentAttemptId });
       if (step === null || attempt === null || attempt.status !== "running")
         throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+      const dispatchAuthority = this.#database.prepare(
+        `SELECT operation_id FROM model_dispatch_receipts
+         WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?
+         ORDER BY request_sequence DESC, revision DESC LIMIT 2`,
+      ).all(input.tenantId, input.runId, input.nodeId, attempt.attemptId) as
+        { operation_id: string }[];
+      if (dispatchAuthority.length !== 1)
+        throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
       const dispatch = loadSqliteModelDispatchReceipt(this.#database, {
         tenantId: input.tenantId, runId: input.runId, stepId: input.nodeId,
-        attemptId: attempt.attemptId, operationId: input.dispatchOperationId,
+        attemptId: attempt.attemptId,
+        operationId: dispatchAuthority[0]!.operation_id,
       });
       if (dispatch === null || dispatch.workItemId !== attempt.workItemId ||
           dispatch.leaseEpoch !== attempt.leaseEpoch)
         throw new RunStoreError("workflow_reconciliation_evidence_missing");
       const evidenceStatus = dispatch.status === "prepared"
         ? "notDispatched" as const : dispatch.status;
-      if (input.observedStatus !== evidenceStatus)
-        throw new RunStoreError("workflow_reconciliation_observation_forged");
       if (dispatch.status === "terminal" &&
           dispatch.terminalOutcome?.kind !== "completed") {
         const outcome = dispatch.terminalOutcome!.kind === "failed"
@@ -587,11 +594,18 @@ export class SqliteWorkflowRunCompositionStore
         this.#database.exec("COMMIT");
         return structuredClone(result);
       }
+      const completePossiblySent = evidenceStatus === "possiblySent";
       const result = { disposition: evidenceStatus === "notDispatched"
           ? "retryRequired" as const : "evidenceInsufficient" as const,
         evidenceStatus, execution: execution!, handoff: {
-          currentWorkItem: "retained" as const, nextWorkItemId: null,
+          currentWorkItem: completePossiblySent
+            ? "completed" as const : "retained" as const,
+          nextWorkItemId: null,
           kind: "none" as const }, runDisposition: "nonTerminal" as const };
+      if (completePossiblySent) {
+        this.#insertReceipt(receiptInput, "reconcileNode", fingerprint, result);
+        this.#completeLease(input, nowMs);
+      }
       this.#database.exec("COMMIT");
       return structuredClone(result);
     } catch (error) {

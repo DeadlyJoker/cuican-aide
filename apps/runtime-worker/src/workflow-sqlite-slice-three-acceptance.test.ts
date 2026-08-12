@@ -206,7 +206,7 @@ test("SQLite Slice 4 restart reconciles possibly-sent model work without resampl
   runtime = await openUncertainRuntime(path, config, samples, "slice-four-recovery-worker");
 
   const reconciled = await runtime.worker.wake();
-  assert.equal(reconciled.kind, "recovery");
+  assert.equal(reconciled.kind, "workflowRecovery");
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
   assert.equal(inspectReconciliation(path, runId).reconcilePending, 0);
 });

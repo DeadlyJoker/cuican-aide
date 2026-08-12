@@ -158,6 +158,44 @@ export class ProductionWorkflowRuntimeDispatcher
                 : "workflow_gate_settled",
           };
     }
+    if (payload.trigger === "workflowReconcile") {
+      if (payload.nodeId === null || payload.claimId === null ||
+          payload.claimEpoch === null)
+        throw new Error("workflow_reconciliation_scope_incomplete");
+      let reconciled;
+      try {
+        reconciled = await this.#store.reconcileWorkflowNode({
+          tenantId: input.run.tenantId, runId: input.run.runId,
+          lease: leaseInput(input.claim), binding,
+          nodeId: payload.nodeId, claimId: payload.claimId,
+          claimEpoch: payload.claimEpoch,
+          reconciliationOperationId: payload.reconciliationOperationId,
+        });
+      } catch (error) {
+        if (error instanceof Error &&
+            error.message === "reconciliation evidence provider is not composed")
+          throw new Error("workflow_reconciliation_contract_incomplete", { cause: error });
+        throw error;
+      }
+      switch (reconciled.disposition) {
+        case "evidenceInsufficient":
+          assertCompletedHandoff(reconciled.handoff);
+          return { kind: "recovery", runId: input.run.runId,
+            code: "workflow_reconciliation_evidence_insufficient" };
+        case "retryRequired":
+          if (reconciled.handoff.currentWorkItem !== "retained")
+            throw new Error("workflow_reconciliation_retry_handoff_invalid");
+          return { kind: "recovery", runId: input.run.runId,
+            code: "workflow_reconciliation_retry_required" };
+        case "settled":
+        case "replay":
+          assertCompletedHandoff(reconciled.handoff);
+          return reconciled.runDisposition === "terminalConverged"
+            ? { kind: "completed", runId: input.run.runId }
+            : { kind: "recovery", runId: input.run.runId,
+                code: "workflow_reconciliation_settled" };
+      }
+    }
     throw new Error("workflow_reconciliation_contract_incomplete");
   }
 

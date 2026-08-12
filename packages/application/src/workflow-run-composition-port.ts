@@ -218,8 +218,6 @@ export interface WorkflowRunCompositionStore {
     claimId: string;
     claimEpoch: number;
     reconciliationOperationId: string;
-    dispatchOperationId: string;
-    observedStatus: WorkflowDispatchEvidenceStatus;
   }): Promise<
     Readonly<{
       disposition: "retryRequired" | "evidenceInsufficient" | "settled" | "replay";
