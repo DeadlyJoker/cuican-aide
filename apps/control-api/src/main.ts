@@ -138,13 +138,17 @@ try {
       ),
       ...(activationGate === null ? {} : { activationGate }),
       ...(providerProbeWorkers === undefined ? {} : { providerProbeWorkers }),
-      workflowComposition: {
-        certification: {
-          storeCapabilities: WORKFLOW_PRODUCTION_STORE_CAPABILITIES,
-          modelDispatchEvidence: "durable" as const,
-          agentRuntime: "WorkflowAgentRuntimeAdapter" as const,
-        },
-      },
+      ...(connectionString === undefined
+        ? {
+            workflowComposition: {
+              certification: {
+                storeCapabilities: WORKFLOW_PRODUCTION_STORE_CAPABILITIES,
+                modelDispatchEvidence: "durable" as const,
+                agentRuntime: "WorkflowAgentRuntimeAdapter" as const,
+              },
+            },
+          }
+        : {}),
     };
     runtime = connectionString
       ? await createPostgresControlApi({
