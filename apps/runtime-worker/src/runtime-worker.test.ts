@@ -3043,6 +3043,59 @@ test("projects AR-040 top-level error payloads through the durable retry boundar
   }
 });
 
+test("commits AR-041 unknown-event streams as durable successful Runs", async (context) => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../packages/test-contracts/fixtures/responses-unknown-event.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as Readonly<{
+    events: readonly Readonly<Record<string, unknown>>[];
+    expected: Readonly<{ output: string; terminal: "completed" }>;
+  }>;
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+    },
+    {
+      fetch: async () =>
+        new Response(
+          reference.events
+            .map(
+              (event) =>
+                `event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`,
+            )
+            .join(""),
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+    },
+  );
+  const worker = fixture.worker({ transport });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: reference.expected.terminal,
+    runId: fixture.runId,
+  });
+  assert.deepEqual(
+    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: reference.expected.output },
+    ],
+  );
+  assert.equal((await fixture.loadRun()).failure, null);
+  assert.equal((await fixture.step())?.status, "completed");
+  await worker.close();
+});
+
 test("persists the AR-008 usage-limit snapshot and releases the Run without sampling retry", async (context) => {
   const reference = JSON.parse(
     readFileSync(

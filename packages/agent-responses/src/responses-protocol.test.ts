@@ -211,6 +211,19 @@ type GenericTerminalFixture = Readonly<{
   >;
 }>;
 
+type UnknownEventFixture = Readonly<{
+  caseId: string;
+  events: readonly Readonly<Record<string, unknown>>[];
+  expected: Readonly<{
+    stableEvents: readonly string[];
+    terminal: "completed";
+    output: string;
+    completedHistory: readonly ModelInputItem[];
+    usage: Readonly<Record<string, unknown>>;
+    responseId: string;
+  }>;
+}>;
+
 const postTerminalFixture = JSON.parse(
   readFileSync(
     new URL(
@@ -240,6 +253,114 @@ const topLevelErrorPayloadFixture = JSON.parse(
     "utf8",
   ),
 ) as TopLevelErrorPayloadFixture;
+
+const unknownEventFixture = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../test-contracts/fixtures/responses-unknown-event.reference.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as UnknownEventFixture;
+
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(`${unknownEventFixture.caseId}: ${sequencePolicy} ignores unknown non-terminal events`, () => {
+    const decoder = new ResponsesProtocolDecoder({
+      sequencePolicy,
+      completedCheckpoint: () => null,
+    });
+    const events = unknownEventFixture.events.flatMap((event) =>
+      decoder.accept(event),
+    );
+    decoder.finish();
+    const usage = events.find((event) => event.type === "usage");
+    assert.deepEqual(
+      {
+        stableEvents: events.map((event) => event.type),
+        terminal: events.at(-1)?.type ?? null,
+        output: events
+          .filter((event) => event.type === "output.delta")
+          .map((event) => event.delta)
+          .join(""),
+        completedHistory: decoder.completedHistoryItems,
+        usage:
+          usage?.type === "usage"
+            ? {
+                inputTokens: usage.inputTokens,
+                cachedInputTokens: usage.cachedInputTokens,
+                outputTokens: usage.outputTokens,
+                totalTokens: usage.totalTokens,
+              }
+            : null,
+        responseId: decoder.completedResponseId,
+      },
+      unknownEventFixture.expected,
+    );
+  });
+}
+
+test(`${unknownEventFixture.caseId}: framing and fail-closed boundaries remain strict`, () => {
+  const withoutFirstSequence = unknownEventFixture.events.map(
+    (event, index) =>
+      index === 0
+        ? Object.fromEntries(
+            Object.entries(event).filter(([key]) => key !== "sequence_number"),
+          )
+        : event,
+  );
+  const websocketDecoder = new ResponsesProtocolDecoder({
+    sequencePolicy: "whenPresent",
+    completedCheckpoint: () => null,
+  });
+  assert.doesNotThrow(() => {
+    for (const event of withoutFirstSequence) websocketDecoder.accept(event);
+    websocketDecoder.finish();
+  });
+
+  const httpDecoder = new ResponsesProtocolDecoder({
+    sequencePolicy: "required",
+    completedCheckpoint: () => null,
+  });
+  assert.throws(
+    () => httpDecoder.accept(withoutFirstSequence[0]),
+    (error) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_sequence_invalid",
+  );
+
+  const malformedKnownDecoder = new ResponsesProtocolDecoder({
+    sequencePolicy: "required",
+    completedCheckpoint: () => null,
+  });
+  malformedKnownDecoder.accept(unknownEventFixture.events[1]);
+  assert.throws(
+    () =>
+      malformedKnownDecoder.accept({
+        type: "response.output_text.delta",
+        sequence_number: 2,
+      }),
+    (error) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_delta_invalid",
+  );
+
+  const terminalDecoder = new ResponsesProtocolDecoder({
+    sequencePolicy: "required",
+    completedCheckpoint: () => null,
+  });
+  for (const event of unknownEventFixture.events) terminalDecoder.accept(event);
+  assert.throws(
+    () =>
+      terminalDecoder.accept({
+        type: "response.provider_future_notice",
+        sequence_number: 5,
+      }),
+    (error) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_event_after_terminal",
+  );
+});
 
 test(`${topLevelErrorPayloadFixture.caseId}: fatal denylist is explicit and stable`, () => {
   assert.deepEqual(topLevelErrorPayloadFixture.fatalProviderCodes, [

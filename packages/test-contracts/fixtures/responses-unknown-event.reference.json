@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "crewon.responses-unknown-event.v0",
+  "caseId": "AR-041-responses-unknown-event",
+  "events": [
+    { "type": "response.provider_future_notice", "sequence_number": 0, "payload": { "opaque": "ignored" } },
+    { "type": "response.created", "sequence_number": 1, "response": { "id": "resp-ar-041" } },
+    { "type": "response.output_text.delta", "sequence_number": 2, "delta": "done" },
+    { "type": "response.provider_future_progress", "sequence_number": 3, "payload": ["opaque"] },
+    {
+      "type": "response.completed",
+      "sequence_number": 4,
+      "response": {
+        "id": "resp-ar-041",
+        "status": "completed",
+        "usage": { "input_tokens": 4, "output_tokens": 1, "total_tokens": 5 }
+      }
+    }
+  ],
+  "expected": {
+    "stableEvents": ["output.delta", "usage", "completed"],
+    "terminal": "completed",
+    "output": "done",
+    "completedHistory": [
+      { "type": "message", "role": "assistant", "content": "done" }
+    ],
+    "usage": {
+      "inputTokens": 4,
+      "cachedInputTokens": 0,
+      "outputTokens": 1,
+      "totalTokens": 5
+    },
+    "responseId": "resp-ar-041"
+  }
+}

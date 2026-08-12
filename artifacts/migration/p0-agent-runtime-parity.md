@@ -83,7 +83,9 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-036 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS Responses protocol decoder                        | created 可省略 response id；后续 output 与 completed 的 late identity 仍需形成安全成功链路 | PARITY       | Rust+TS shared created-without-id fixture，覆盖 HTTP/SSE 与 WebSocket framing、success/failure 矩阵及 identity/status 负例      |
 | AR-037 | `crewon-api/src/sse/responses.rs::process_sse` + TS Responses protocol decoder                                  | 首个 failed/incomplete 是 terminal winner；后续 provider 事件全部不可见                   | PARITY       | shared poisoned post-terminal fixture 冻结 first-failure cutoff                                                                 |
 | AR-038 | `crewon-api/src/sse/responses.rs::process_sse` + TS Responses protocol decoder                                  | 顶层 `error` 是 terminal winner，并保留 provider retry 分类                                | PARITY       | shared poisoned top-level-error fixture 覆盖 retryable/non-retryable、无 output/history/usage/identity                         |
+| AR-039 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS decoder + Runtime Worker                       | generic failed/incomplete terminal 使用稳定 retryable 分类并在 budget 耗尽后 durable 失败 | PARITY       | shared generic-terminal fixture 覆盖 cutoff、分类与 durable retry exhaustion                                                     |
 | AR-040 | `crewon-api/src/sse/responses.rs::process_sse` + TS decoder + Runtime Worker                                    | 顶层 `error` 缺失/畸形 payload 与未来 provider code 使用同一 bounded terminal/retry 语义   | PARITY       | shared payload fixture 覆盖严格 cutoff、fatal denylist、默认 retryable 与 durable budget-exhausted 原子结算                    |
+| AR-041 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS decoder/HTTP transport + Runtime Worker         | 未知非终态 Responses 事件保持前向兼容；TS 仍按 HTTP/WS framing policy 校验 sequence       | PARITY       | shared unknown-event fixture 覆盖合法 sequence 的 Rust/TS 差分、Direct transport 与 Worker 成功提交；TS 另证 WS 可省略 sequence |
 
 ## 已有证据映射
 
@@ -341,3 +343,15 @@ retryable。fatal denylist 明确冻结为 `context_length_exceeded`、`insuffic
 `DirectResponsesTransport` 共同消费。首个顶层 error 是严格 cutoff，后续 output/history/usage/identity/checkpoint 均不可见；retryable
 terminal 只允许 sampling budget 内重试，预算耗尽后 Attempt、Run 与 Step 原子结算为同一 stable code、`retryable: false`，Work Item 不再
 release。completed 路径的 created、identity、status、output 与 usage 校验保持原样。
+
+### AR-041 Responses unknown event forward compatibility
+
+Rust `process_responses_event` 对无法识别但结构合法的 Responses event kind 使用默认忽略语义，因此 provider 在 created 前或流中加入未来
+非终态扩展事件时，不会把随后合法的 output/usage/completed 改写为失败。TS decoder 现在保持同一 event-kind 边界，但 framing 不宣称逐字段
+相同：Rust `ResponsesStreamEvent` 不读取 `sequence_number`；TS HTTP/SSE 的 `required` policy 仍要求未知事件带合法递增 sequence，WebSocket
+`whenPresent` policy 允许省略、存在时仍校验。通过 framing 后，未知 kind 不产生模型事件、不改写 history/identity/usage，也不成为 terminal；
+已知但 malformed 的事件仍 fail closed，terminal 后的未知事件仍被 first-terminal cutoff 拒绝。
+
+`responses-unknown-event.reference.json` 以合法 sequence 由 Rust `collect_events`、TS 两种 sequence policy、真实
+`DirectResponsesTransport` 与 Runtime Worker 共同消费，并冻结最终 assistant output、usage、response identity 与 durable completed Run；
+TS focused regression 另覆盖 `whenPresent` 缺 sequence、`required` 缺 sequence 拒绝、已知 malformed delta 拒绝与 terminal 后 unknown 拒绝。

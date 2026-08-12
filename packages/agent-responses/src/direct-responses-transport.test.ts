@@ -60,6 +60,57 @@ test("streams through a real self-hosted Responses-compatible HTTP server withou
   });
 });
 
+test("ignores shared AR-041 unknown events and completes the HTTP stream", async () => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../test-contracts/fixtures/responses-unknown-event.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as Readonly<{
+    events: readonly Readonly<Record<string, unknown>>[];
+    expected: Readonly<{
+      stableEvents: readonly string[];
+      output: string;
+      usage: Readonly<Record<string, unknown>>;
+    }>;
+  }>;
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+    },
+    { fetch: async () => responseStream(reference.events) },
+  );
+  const events = await collect(transport.stream(manualRequest(), signal()));
+  const usage = events.find((event) => event.type === "usage");
+  assert.deepEqual(
+    {
+      stableEvents: events.map((event) => event.type),
+      output: events
+        .filter((event) => event.type === "output.delta")
+        .map((event) => event.delta)
+        .join(""),
+      usage:
+        usage?.type === "usage"
+          ? {
+              inputTokens: usage.inputTokens,
+              cachedInputTokens: usage.cachedInputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.totalTokens,
+            }
+          : null,
+    },
+    {
+      stableEvents: reference.expected.stableEvents,
+      output: reference.expected.output,
+      usage: reference.expected.usage,
+    },
+  );
+});
+
 test("matches the shared Rust Responses Lite request profile", async () => {
   const reference = JSON.parse(
     readFileSync(

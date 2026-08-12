@@ -809,6 +809,85 @@ mod tests {
         expected: Value,
     }
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct UnknownEventFixture {
+        case_id: String,
+        events: Vec<Value>,
+        expected: Value,
+    }
+
+    #[tokio::test]
+    async fn unknown_events_are_ignored_from_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-unknown-event.reference.json"
+        )
+        .expect("unknown event fixture must exist");
+        let fixture: UnknownEventFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("unknown event fixture must be readable"),
+        )
+        .expect("unknown event fixture must parse");
+        let body = fixture
+            .events
+            .into_iter()
+            .map(|event| {
+                let kind = event["type"].as_str().expect("fixture event type");
+                format!("event: {kind}\ndata: {event}\n\n")
+            })
+            .collect::<String>();
+        let events = collect_events(&[body.as_bytes()]).await;
+        let mut stable_events = Vec::new();
+        let mut output = String::new();
+        let mut completed_history = Vec::new();
+        let mut usage = None;
+        let mut response_id = None;
+        for event in events {
+            match event {
+                Ok(ResponseEvent::Created) => {}
+                Ok(ResponseEvent::OutputTextDelta(delta)) => {
+                    stable_events.push("output.delta");
+                    output.push_str(&delta);
+                }
+                Ok(ResponseEvent::Completed {
+                    response_id: id,
+                    token_usage,
+                    ..
+                }) => {
+                    if let Some(token_usage) = token_usage {
+                        stable_events.push("usage");
+                        usage = Some(json!({
+                            "inputTokens": token_usage.input_tokens,
+                            "cachedInputTokens": token_usage.cached_input_tokens,
+                            "outputTokens": token_usage.output_tokens,
+                            "totalTokens": token_usage.total_tokens,
+                        }));
+                    }
+                    stable_events.push("completed");
+                    response_id = Some(id);
+                    completed_history.push(json!({
+                        "type": "message",
+                        "role": "assistant",
+                        "content": output,
+                    }));
+                }
+                event => panic!("unexpected unknown-event fixture event: {event:?}"),
+            }
+        }
+        assert_eq!(
+            json!({
+                "stableEvents": stable_events,
+                "terminal": "completed",
+                "output": output,
+                "completedHistory": completed_history,
+                "usage": usage,
+                "responseId": response_id,
+            }),
+            fixture.expected,
+            "{}",
+            fixture.case_id,
+        );
+    }
+
     #[tokio::test]
     async fn generic_terminal_is_retryable_and_cuts_off_poisoned_tail_from_shared_fixture() {
         let fixture_path = crewon_utils_cargo_bin::find_resource!(

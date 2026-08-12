@@ -207,7 +207,7 @@ export class ResponsesProtocolDecoder {
         requireCreated(this.#created);
         return [];
       default:
-        throw protocolError("responses_event_unsupported");
+        return [];
     }
   }
 
