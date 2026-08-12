@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { reduceRunLifecycleEvent, type RunState } from "@crewon/domain";
+import {
+  compileWorkflowVersion,
+  reduceRunLifecycleEvent,
+  serializeCompiledWorkflowVersion,
+  type RunState,
+} from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
 import type { AuthorizationPort } from "./authorization-port.ts";
@@ -27,7 +32,7 @@ test("atomically freezes WorkflowVersion provenance and enqueues bounded input w
   assert.deepEqual(event.data.workflowVersionBinding, {
     workflowId: "workflow-1",
     workflowVersionId: "version-1",
-    contentDigest: `sha256:${"a".repeat(64)}`,
+    contentDigest: store.authority.workflowVersion.contentDigest,
   });
   assert.equal(event.data.purpose, "workflow");
   assert.equal(event.data.collaborationMode, "default");
@@ -73,33 +78,54 @@ test("rejects oversized, overly deep and non-finite input before authorization o
   assert.equal(store.inputs.length, 0);
 });
 
+test("rejects required, type and additional-property schema mismatches before writes", async () => {
+  for (const input of [{}, { topic: 1 }, { topic: "safe", extra: true }]) {
+    const store = new RecordingStore();
+    await assert.rejects(
+      service(store).startWorkflowRun(actor(), {
+        ...command(),
+        input,
+      } as never),
+      hasError("validation", "workflow_input_schema_mismatch"),
+    );
+    assert.equal(store.lastCommit, null);
+    assert.equal(store.writeCount, 0);
+  }
+});
+
+test("rejects corrupt and digest-drift WorkflowVersions with zero writes", async () => {
+  for (const mutate of [
+    (store: RecordingStore) => {
+      store.authority.workflowVersion.definitionJson = "{}";
+    },
+    (store: RecordingStore) => {
+      store.authority.workflowVersion.contentDigest = `sha256:${"b".repeat(64)}`;
+    },
+  ]) {
+    const store = new RecordingStore();
+    mutate(store);
+    await assert.rejects(
+      service(store).startWorkflowRun(actor(), command()),
+      (error: unknown) =>
+        error instanceof ApplicationError && error.category === "internal",
+    );
+    assert.equal(store.lastCommit, null);
+    assert.equal(store.writeCount, 0);
+  }
+});
+
 class RecordingStore implements WorkflowRunAdmissionStore {
   readonly inputs: CommitWorkflowRunStartInput[] = [];
   lastCommit: ReturnType<CommitWorkflowRunStartInput["prepare"]> | null = null;
   error: Error | null = null;
-  readonly authority = {
-    workflowVersion: {
-      schemaVersion: "crewon.workflow-version-asset.v0",
-      tenantId: "tenant-1",
-      workflowId: "workflow-1",
-      workflowVersionId: "version-1",
-      contentDigest: `sha256:${"a".repeat(64)}`,
-      definitionJson: "{}",
-      createdAt: "2026-08-12T00:00:00Z",
-    },
-    route: {
-      authorityId: "server-authority",
-      runtimeGeneration: "ts-v0",
-      agentVersionId: "root-version",
-      policySnapshotId: "policy-1",
-      workspaceBindingId: "workspace-1",
-    },
-  } as const;
+  writeCount = 0;
+  readonly authority = workflowAuthority();
   async commitWorkflowRunStart(input: CommitWorkflowRunStartInput) {
     this.inputs.push(input);
     if (this.error) throw this.error;
     const commit = input.prepare(this.authority);
     this.lastCommit = commit;
+    this.writeCount += 1;
     let state: RunState | null = null;
     for (const event of commit.events)
       state = reduceRunLifecycleEvent(state, event);
@@ -135,7 +161,80 @@ function service(
     authorization,
     clock: { now: () => "2026-08-12T00:00:00Z" },
     ids: { nextId: () => ids.shift()! },
+    workflowDigester: { sha256 },
   });
+}
+
+function workflowAuthority() {
+  const workflow = compileWorkflowVersion(
+    {
+      schemaVersion: "crewon.workflow-version-source.v0",
+      workflowId: "workflow-1",
+      workflowVersionId: "version-1",
+      name: "Workflow",
+      description: "Workflow admission fixture",
+      inputSchema: objectSchema(),
+      outputSchema: objectSchema(),
+      entryNodeIds: ["node-1"],
+      outputNodeIds: ["verify-1"],
+      nodes: [
+        {
+          kind: "agent",
+          nodeId: "node-1",
+          title: "Node",
+          instruction: "Execute",
+          dependsOn: [],
+          inputSchema: objectSchema(),
+          outputSchema: objectSchema(),
+          agentVersionId: "node-agent-version",
+        },
+        {
+          kind: "verification",
+          nodeId: "verify-1",
+          title: "Verify",
+          instruction: "Verify",
+          dependsOn: ["node-1"],
+          inputSchema: objectSchema(),
+          outputSchema: objectSchema(),
+          verifierAgentVersionId: "verifier-version",
+        },
+      ],
+    },
+    { sha256 },
+  );
+  return {
+    workflowVersion: {
+      schemaVersion: "crewon.workflow-version-asset.v0" as const,
+      tenantId: "tenant-1",
+      workflowId: workflow.workflowId,
+      workflowVersionId: workflow.workflowVersionId,
+      contentDigest: workflow.contentDigest,
+      definitionJson: serializeCompiledWorkflowVersion(workflow),
+      createdAt: "2026-08-12T00:00:00Z",
+    },
+    route: {
+      authorityId: "server-authority",
+      runtimeGeneration: "ts-v0",
+      agentVersionId: "root-version",
+      policySnapshotId: "policy-1",
+      workspaceBindingId: "workspace-1",
+    },
+  };
+}
+
+function objectSchema() {
+  return {
+    type: "object" as const,
+    properties: {
+      topic: { type: "string" as const, maxLength: 32, enum: null },
+    },
+    required: ["topic"],
+    additionalProperties: false as const,
+  };
+}
+
+function sha256(value: string): string {
+  return `sha256:${Buffer.from(value).toString("hex").slice(0, 64).padEnd(64, "0")}`;
 }
 function actor() {
   return {
