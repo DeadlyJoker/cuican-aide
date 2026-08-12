@@ -25,6 +25,8 @@ import { createRunningCommitFixture } from "./run-store-conformance.test-support
 import { seedThread } from "./thread-store-conformance.test-support.ts";
 
 const postgresUrl = process.env.CREWON_TEST_POSTGRES_URL;
+const isDirectTestEntry =
+  process.argv[1]?.endsWith("postgres-workflow-run-admission.test.ts") === true;
 const digester = {
   sha256: (value: string) =>
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
@@ -37,9 +39,9 @@ const route = {
   policySnapshotId: "policy-1",
 } as const;
 
-if (postgresUrl === undefined) {
+if (postgresUrl === undefined && isDirectTestEntry) {
   test.skip("PostgreSQL Workflow Run admission requires CREWON_TEST_POSTGRES_URL", () => {});
-} else {
+} else if (isDirectTestEntry) {
   test("fresh then replay uses distinct specialized and general fingerprints", async () => {
     const fixture = await postgresFixture();
     try {
@@ -145,7 +147,7 @@ if (postgresUrl === undefined) {
       };
       await assert.rejects(
         service(store).startWorkflowRun(actor(), command()),
-        hasStoreCode("workflow_run_route_mismatch"),
+        hasCauseCode("workflow_run_route_mismatch"),
       );
       assert.equal(store.prepareCalls, 0);
       for (const table of [
@@ -212,7 +214,7 @@ if (postgresUrl === undefined) {
       );
       await assert.rejects(
         service(reopened).startWorkflowRun(actor(), command()),
-        hasStoreCode("workflow_run_admission_receipt_corrupt"),
+        hasCauseCode("workflow_run_admission_receipt_corrupt"),
       );
       await reopened.close();
     } finally {
@@ -555,7 +557,7 @@ function barrier(parties: number) {
   };
 }
 
-function hasStoreCode(code: string) {
+export function hasCauseCode(code: string) {
   return (error: unknown) => {
     let current = error;
     while (current instanceof Error) {

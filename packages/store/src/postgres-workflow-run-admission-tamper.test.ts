@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   actor,
   command,
+  hasCauseCode,
   postgresFixture,
   service,
 } from "./postgres-workflow-run-admission.test.ts";
@@ -78,7 +79,7 @@ if (postgresUrl === undefined) {
         await fixture.pool.query(tamper.mutate, [runId]);
         await assert.rejects(
           service(fixture.admission).startWorkflowRun(actor(), command()),
-          /workflow_run_admission_receipt_corrupt/u,
+          hasCauseCode("workflow_run_admission_receipt_corrupt"),
           tamper.name,
         );
         await fixture.pool.query(tamper.restore, [runId, tamper.original]);
@@ -91,7 +92,7 @@ if (postgresUrl === undefined) {
       );
       await assert.rejects(
         service(fixture.admission).startWorkflowRun(actor(), command()),
-        /workflow_run_admission_receipt_corrupt/u,
+        hasCauseCode("workflow_run_admission_receipt_corrupt"),
         "specialized receipt run_id",
       );
       await fixture.pool.query(
@@ -114,7 +115,7 @@ if (postgresUrl === undefined) {
       );
       await assert.rejects(
         service(fixture.admission).startWorkflowRun(actor(), command()),
-        /workflow_run_admission_receipt_corrupt/u,
+        hasCauseCode("workflow_run_admission_receipt_corrupt"),
         "general receipt descriptor",
       );
       await fixture.pool.query(
@@ -129,21 +130,21 @@ if (postgresUrl === undefined) {
         "workflow_run_admission_receipts",
         runId,
       );
-      await fixture.pool.query(
+      for (const statement of [
         `UPDATE ${fixture.schema}.outbox
-           SET message_json=jsonb_set(message_json,'{payload,throughSequence}','2')
-         WHERE run_id=$1;
-         UPDATE ${fixture.schema}.idempotency_receipts
-           SET result_json=jsonb_set(result_json,'{outbox,0,payload,throughSequence}','2')
-         WHERE run_id=$1;
-         UPDATE ${fixture.schema}.workflow_run_admission_receipts
-           SET result_json=jsonb_set(result_json,'{result,run,outbox,0,payload,throughSequence}','2')
+         SET message_json=jsonb_set(message_json,'{payload,throughSequence}','2')
          WHERE run_id=$1`,
-        [runId],
-      );
+        `UPDATE ${fixture.schema}.idempotency_receipts
+         SET result_json=jsonb_set(result_json,'{outbox,0,payload,throughSequence}','2')
+         WHERE run_id=$1`,
+        `UPDATE ${fixture.schema}.workflow_run_admission_receipts
+         SET result_json=jsonb_set(result_json,'{result,run,outbox,0,payload,throughSequence}','2')
+         WHERE run_id=$1`,
+      ])
+        await fixture.pool.query(statement, [runId]);
       await assert.rejects(
         service(fixture.admission).startWorkflowRun(actor(), command()),
-        /workflow_run_admission_receipt_corrupt/u,
+        hasCauseCode("workflow_run_admission_receipt_corrupt"),
         "correlated receipt and durable JSON tamper",
       );
       await fixture.pool.query(
