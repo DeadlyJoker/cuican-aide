@@ -3325,7 +3325,7 @@
         "properties": {
           "disposition": { "type": "string", "enum": ["recorded", "replay"] },
           "runId": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "nodeId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "nodeId": { "type": "string", "minLength": 1, "maxLength": 256 },
           "gateRequestId": {
             "type": "string",
             "minLength": 1,

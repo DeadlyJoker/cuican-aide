@@ -186,6 +186,31 @@ test("accepts only public Workflow Human Gate decision authority", () => {
       }),
     /workflow_gate_node_id_invalid/u,
   );
+  const schemas = openApi.components.schemas as Record<
+    string,
+    { properties: Record<string, { maxLength?: number }> }
+  >;
+  assert.equal(
+    schemas.DecideWorkflowHumanGateRequest!.properties.nodeId!.maxLength,
+    256,
+  );
+  assert.equal(
+    schemas.DecideWorkflowHumanGateRequest!.properties.claimId!.maxLength,
+    256,
+  );
+  assert.equal(
+    schemas.DecideWorkflowHumanGateRequest!.properties.gateRequestId!.maxLength,
+    256,
+  );
+  assert.equal(
+    schemas.WorkflowHumanGateDecisionResponse!.properties.nodeId!.maxLength,
+    256,
+  );
+  assert.equal(
+    schemas.WorkflowHumanGateDecisionResponse!.properties.gateRequestId!
+      .maxLength,
+    256,
+  );
 });
 
 test("parses only bounded Workflow Run start authority", () => {
