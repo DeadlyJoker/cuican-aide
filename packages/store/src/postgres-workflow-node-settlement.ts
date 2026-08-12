@@ -46,10 +46,11 @@ export async function settlePostgresWorkflowNode(
   schema: string,
   input: Input,
   digester: WorkflowContentDigester,
+  model?: Readonly<{ fingerprintAuthority: unknown; agentVersionId: string }>,
 ): Promise<Result> {
   const fingerprint = postgresWorkflowFingerprint(
     "settleNode",
-    input,
+    model?.fingerprintAuthority ?? input,
     digester,
   );
   const replay = await loadPostgresWorkflowReceipt(
@@ -105,6 +106,7 @@ export async function settlePostgresWorkflowNode(
     node.status !== "running" ||
     node.claimId !== input.claimId ||
     node.claimEpoch !== input.claimEpoch ||
+    (model !== undefined && node.agentVersionId !== model.agentVersionId) ||
     attempt.tenantId !== input.tenantId ||
     attempt.runId !== input.runId ||
     attempt.stepId !== input.stepId

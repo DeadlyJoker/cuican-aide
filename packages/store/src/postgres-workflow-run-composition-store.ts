@@ -3,6 +3,7 @@ import {
   type CommitWorkflowRunStartInput,
   type CommitWorkflowRunStartResult,
   type ModelDispatchEvidenceStore,
+  type WorkflowNodeContinuationStore,
   type WorkflowRunAdmissionStore,
   type WorkflowRunCompositionStore,
 } from "@crewon/application";
@@ -21,6 +22,7 @@ import {
   settlePostgresWorkflowGate,
 } from "./postgres-workflow-gate-settlement.ts";
 import { settlePostgresWorkflowNode } from "./postgres-workflow-node-settlement.ts";
+import { settlePostgresWorkflowNodeModelTerminal } from "./postgres-workflow-model-settlement.ts";
 import {
   commitPostgresWorkflowRunStart,
   readPostgresWorkflowRunStartReplay,
@@ -284,6 +286,23 @@ export class PostgresWorkflowRunCompositionStore
         this.schemaSql(),
         input,
         "terminal",
+      ),
+    );
+  }
+
+  async settleWorkflowNodeModelTerminal(
+    input: Parameters<
+      WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]
+    >[0],
+  ): ReturnType<
+    WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]
+  > {
+    return this.#transaction(input.authority, (client) =>
+      settlePostgresWorkflowNodeModelTerminal(
+        client,
+        this.schemaSql(),
+        input,
+        this.#digester,
       ),
     );
   }

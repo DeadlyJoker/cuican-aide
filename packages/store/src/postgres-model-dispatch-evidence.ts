@@ -178,7 +178,10 @@ export async function preparePostgresModelDispatch(
 export async function transitionPostgresModelDispatch(
   client: PoolClient,
   schema: string,
-  input: TransitionModelDispatchInput,
+  input:
+    | TransitionModelDispatchInput
+    | ObserveModelDispatchResponseInput
+    | TerminateModelDispatchInput,
   kind: "possiblySent" | "responseObserved" | "terminal",
 ): Promise<ModelDispatchReceipt> {
   const locator = {

@@ -8,6 +8,7 @@ import test from "node:test";
 import { Pool } from "pg";
 import {
   compileWorkflowVersion,
+  createWorkflowNodeTerminalEvidence,
   serializeCompiledWorkflowVersion,
   type RunState,
   type WorkflowVersionSource,
@@ -323,23 +324,92 @@ if (postgresUrl === undefined) {
         (await second.admitWorkflowNodeWork(admitInput)).disposition,
         "replay",
       );
-      const settlementInput = {
+      const dispatchPrepared = await store.prepareModelDispatch({
         tenantId: "tenant-1",
         runId: "run-1",
         lease: admitInput.lease,
+        attempt: {
+          stepId: work.nodeId,
+          attemptId: admitted.admission!.attempt.attemptId,
+        },
+        operationId: "model-agent-1",
+        requestSequence: 1,
+        operation: "dispatch",
+        requestDigest: digester.sha256("model-request"),
+        provider: {
+          agentVersionId: "agent-v1",
+          adapterName: "responses",
+          adapterVersion: "1",
+          modelId: "model-1",
+        },
+        preparedAt: "2026-08-12T00:00:01.000Z",
+      });
+      const dispatchSent = await store.markModelDispatchPossiblySent({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: admitInput.lease,
+        attempt: dispatchPrepared,
+        operationId: dispatchPrepared.operationId,
+        requestSequence: 1,
+        expectedRevision: dispatchPrepared.revision,
+        transitionedAt: "2026-08-12T00:00:02.000Z",
+      });
+      const dispatchObserved = await store.observeModelDispatchResponse({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: admitInput.lease,
+        attempt: dispatchPrepared,
+        operationId: dispatchPrepared.operationId,
+        requestSequence: 1,
+        expectedRevision: dispatchSent.revision,
+        checkpointDigest: digester.sha256("checkpoint"),
+        transitionedAt: "2026-08-12T00:00:03.000Z",
+      });
+      const evidence = createWorkflowNodeTerminalEvidence({
+        workflow,
+        nodeId: work.nodeId,
+        outcome: { status: "completed", value: {} },
+        digester,
+      });
+      const settlementInput = {
         binding,
         nodeId: work.nodeId,
-        claimId: work.claimId,
-        claimEpoch: work.claimEpoch,
-        stepId: work.nodeId,
-        attemptId: admitted.admission!.attempt.attemptId,
         operationId: "settle-agent-1",
-        outcome: { status: "completed" as const, value: {} },
+        evidence,
+        lease: admitInput.lease,
+        authority: {
+          tenantId: "tenant-1",
+          runId: "run-1",
+          workItemId: work.workItemId,
+          leaseEpoch: work.claimEpoch,
+          nodeId: work.nodeId,
+          nodeKind: "agent" as const,
+          claimId: work.claimId,
+          claimEpoch: work.claimEpoch,
+          agentVersionId: "agent-v1",
+          attempt: {
+            stepId: work.nodeId,
+            attemptId: admitted.admission!.attempt.attemptId,
+          },
+        },
+        dispatch: {
+          operationId: dispatchObserved.operationId,
+          requestSequence: dispatchObserved.requestSequence,
+          expectedRevision: dispatchObserved.revision,
+          status: "responseObserved" as const,
+        },
+        dispatchTerminalOutcome: {
+          kind: "completed" as const,
+          code: null,
+          certainty: "responseObserved" as const,
+        },
       };
-      const settled = await store.settleWorkflowNode(settlementInput);
+      const settled =
+        await store.settleWorkflowNodeModelTerminal(settlementInput);
       assert.equal(settled.disposition, "settled");
       assert.equal(
-        (await second.settleWorkflowNode(settlementInput)).disposition,
+        (await second.settleWorkflowNodeModelTerminal(settlementInput))
+          .disposition,
         "replay",
       );
       const completedLease = await pool.query(
@@ -358,7 +428,7 @@ if (postgresUrl === undefined) {
         SET result_json=jsonb_set(result_json,'{handoff,nextWorkItemId}','"forged"')
         WHERE operation_id='settle-agent-1'`);
       await assert.rejects(
-        second.settleWorkflowNode(settlementInput),
+        second.settleWorkflowNodeModelTerminal(settlementInput),
         /receipt_corrupt/u,
       );
 
