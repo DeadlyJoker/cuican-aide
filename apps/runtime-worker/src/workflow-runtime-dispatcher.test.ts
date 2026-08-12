@@ -61,7 +61,7 @@ test("scheduler receipt fanout never executes a node", async () => {
   let executions = 0;
   const dispatcher = create(fixture.store, async () => {
     executions += 1;
-    return { status: "completed", resultDigest: digest("x") };
+    return { status: "completed", value: { result: "x" } };
   });
   const outcome = await dispatcher.dispatch(input("scheduler"));
   assert.deepEqual(outcome, {
@@ -79,14 +79,14 @@ test("node admission replay performs zero duplicate side effects", async () => {
   let executions = 0;
   const dispatcher = create(fixture.store, async () => {
     executions += 1;
-    return { status: "completed", resultDigest: digest("x") };
+    return { status: "completed", value: { result: "x" } };
   });
   await dispatcher.dispatch(input("node"));
   assert.equal(executions, 0);
   assert.equal(fixture.settlements, 0);
 });
 
-test("fresh node admission fails closed before digest-only execution", async () => {
+test("fresh sibling admissions pass actual values and settle independently", async () => {
   const left = composition();
   const right = composition();
   const order: string[] = [];
@@ -96,19 +96,13 @@ test("fresh node admission fails closed before digest-only execution", async () 
   ) =>
     create(fixture.store, async (node) => {
       order.push(node.claimId);
-      return { status: "completed", resultDigest: digest(node.claimId) };
+      return { status: "completed", value: { claimId: node.claimId } };
     }).dispatch(input("node", claimId));
-  await assert.rejects(
-    run(right, "claim-right"),
-    /workflow_node_value_authority_unavailable/,
-  );
-  await assert.rejects(
-    run(left, "claim-left"),
-    /workflow_node_value_authority_unavailable/,
-  );
-  assert.deepEqual(order, []);
-  assert.equal(left.settlements, 0);
-  assert.equal(right.settlements, 0);
+  await run(right, "claim-right");
+  await run(left, "claim-left");
+  assert.deepEqual(order, ["claim-right", "claim-left"]);
+  assert.equal(left.settlements, 1);
+  assert.equal(right.settlements, 1);
 });
 
 function composition() {
@@ -194,6 +188,12 @@ function composition() {
           claim,
           step: { stepId: `step-${input.claimId}` } as never,
           attempt: { attemptId: `attempt-${input.claimId}` } as never,
+          inputValue: {
+            schemaVersion: "crewon.workflow-execution-value.v0",
+            valueId: `value-${input.claimId}`,
+            value: { input: input.claimId },
+            valueDigest: digest("input"),
+          },
         },
         handoff: {
           currentWorkItem: "retained",

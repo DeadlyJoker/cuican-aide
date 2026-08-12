@@ -3,12 +3,16 @@ import type {
   WorkflowRunCompositionStore,
   WorkflowVersionStore,
 } from "@crewon/application";
-import type { RunState, WorkflowContentDigester } from "@crewon/domain";
+import type {
+  RunState,
+  WorkflowContentDigester,
+  WorkflowSchemaValue,
+} from "@crewon/domain";
 import { loadFrozenWorkflowVersion } from "./workflow-version-runtime.ts";
 import { parseWorkflowWorkItemPayload } from "./workflow-work-item-payload.ts";
 
 export type WorkflowNodeOutcome =
-  | Readonly<{ status: "completed"; resultDigest: string }>
+  | Readonly<{ status: "completed"; value: WorkflowSchemaValue }>
   | Readonly<{ status: "failed"; failureCode: string }>
   | Readonly<{ status: "canceled" }>
   | Readonly<{ status: "unknown" }>;
@@ -19,7 +23,7 @@ export interface WorkflowAgentNodePort {
     runId: string;
     nodeId: string;
     agentVersionId: string;
-    inputDigest: string;
+    inputValue: import("@crewon/application").WorkflowExecutionValue;
     claimId: string;
     claimEpoch: number;
     stepId: string;
@@ -184,8 +188,77 @@ export class ProductionWorkflowRuntimeDispatcher
       admitted.handoff.nextWorkItemId !== null
     )
       throw new Error("workflow_fresh_admission_handoff_invalid");
-    void workflow;
-    throw new Error("workflow_node_value_authority_unavailable");
+    const node = workflow.nodes.find(
+      (candidate) => candidate.nodeId === payload.nodeId,
+    );
+    const agentVersionId =
+      node?.kind === "agent"
+        ? node.agentVersionId
+        : node?.kind === "verification"
+          ? node.verifierAgentVersionId
+          : null;
+    const state = admitted.execution.nodes.find(
+      (candidate) => candidate.nodeId === payload.nodeId,
+    );
+    if (
+      agentVersionId === null ||
+      state?.agentVersionId !== agentVersionId ||
+      admitted.admission.claim.claimId !== payload.claimId ||
+      admitted.admission.inputValue.valueDigest !==
+        admitted.admission.claim.inputDigest
+    )
+      throw new Error("workflow_node_execution_identity_mismatch");
+    let outcome: WorkflowNodeOutcome;
+    try {
+      outcome = await this.#agent.execute({
+        tenantId: input.run.tenantId,
+        runId: input.run.runId,
+        nodeId: payload.nodeId,
+        agentVersionId,
+        inputValue: admitted.admission.inputValue,
+        claimId: payload.claimId,
+        claimEpoch: payload.claimEpoch,
+        stepId: admitted.admission.step.stepId,
+        attemptId: admitted.admission.attempt.attemptId,
+      });
+      if (
+        outcome.status === "completed" &&
+        new TextEncoder().encode(JSON.stringify(outcome.value)).length >
+          256 * 1024
+      )
+        throw new Error("workflow_node_output_too_large");
+    } catch {
+      outcome = { status: "unknown" };
+    }
+    try {
+      const settled = await this.#composition.settleWorkflowNode({
+        tenantId: input.run.tenantId,
+        runId: input.run.runId,
+        lease: leaseInput(input.claim),
+        binding,
+        nodeId: payload.nodeId,
+        claimId: payload.claimId,
+        claimEpoch: payload.claimEpoch,
+        stepId: admitted.admission.step.stepId,
+        attemptId: admitted.admission.attempt.attemptId,
+        operationId: `node-settle:${payload.claimId}`,
+        outcome,
+      });
+      assertCompletedHandoff(settled.handoff);
+      return settled.runDisposition === "terminalConverged"
+        ? { kind: "completed", runId: input.run.runId }
+        : {
+            kind: "recovery",
+            runId: input.run.runId,
+            code: "workflow_node_settled",
+          };
+    } catch {
+      return {
+        kind: "recovery",
+        runId: input.run.runId,
+        code: "workflow_settlement_result_unknown",
+      };
+    }
   }
 }
 
