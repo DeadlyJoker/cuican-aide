@@ -5,7 +5,15 @@ import {
 import type { WorkflowContentDigester } from "@crewon/domain";
 import type { PoolClient } from "pg";
 
-import { loadPostgresRunStep } from "./postgres-execution-authority.ts";
+import {
+  finishPostgresRunAttempt,
+  loadPostgresRunAttempt,
+  loadPostgresRunStep,
+} from "./postgres-execution-authority.ts";
+import {
+  loadPostgresModelDispatchReceipt,
+  transitionPostgresModelDispatch,
+} from "./postgres-model-dispatch-evidence.ts";
 import {
   convergePostgresWorkflowRun,
   validatePostgresTerminalWorkflowRun,
@@ -63,7 +71,7 @@ export async function cancelPostgresWorkflowExecution(
   );
   if (run.rows[0]?.state_json.cancelRequested !== true)
     throw new RunStoreError("workflow_cancellation_not_requested");
-  const execution = await loadPostgresWorkflowExecution(
+  let execution = await loadPostgresWorkflowExecution(
     client,
     schema,
     input,
@@ -71,12 +79,20 @@ export async function cancelPostgresWorkflowExecution(
   );
   if (execution === null)
     throw new RunStoreError("workflow_execution_not_found");
-  if (
-    execution.nodes.some(
-      (node) => node.status === "running" || node.status === "unknown",
-    )
-  )
+  if (execution.nodes.some((node) => node.status === "unknown"))
     throw new RunStoreError("workflow_cancellation_reconciliation_required");
+  const running = execution.nodes.filter((node) => node.status === "running");
+  if (running.length > 1)
+    throw new RunStoreError("workflow_cancellation_reconciliation_required");
+  if (running[0] !== undefined)
+    execution = await cancelPreparedNode(
+      client,
+      schema,
+      input,
+      execution,
+      running[0],
+      now,
+    );
   const nodes = [];
   for (const node of execution.nodes) {
     if (node.status === "pending") {
@@ -137,6 +153,124 @@ export async function cancelPostgresWorkflowExecution(
   );
   await completePostgresWorkflowLease(client, schema, input, now);
   return structuredClone(result);
+}
+
+async function cancelPreparedNode(
+  client: PoolClient,
+  schema: string,
+  input: Input,
+  execution: NonNullable<
+    Awaited<ReturnType<typeof loadPostgresWorkflowExecution>>
+  >,
+  node: NonNullable<
+    Awaited<ReturnType<typeof loadPostgresWorkflowExecution>>
+  >["nodes"][number],
+  now: string,
+) {
+  const step = await loadPostgresRunStep(
+    client,
+    schema,
+    { tenantId: input.tenantId, runId: input.runId, stepId: node.nodeId },
+    true,
+  );
+  const attempt =
+    step?.currentAttemptId === null || step === null
+      ? null
+      : await loadPostgresRunAttempt(
+          client,
+          schema,
+          {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            stepId: node.nodeId,
+            attemptId: step.currentAttemptId,
+          },
+          true,
+        );
+  const dispatchRows =
+    attempt === null
+      ? { rows: [] }
+      : await client.query<{ operation_id: string }>(
+          `SELECT operation_id FROM ${schema}.model_dispatch_receipts
+           WHERE tenant_id=$1 AND run_id=$2 AND step_id=$3 AND attempt_id=$4
+           ORDER BY request_sequence DESC LIMIT 2`,
+          [input.tenantId, input.runId, node.nodeId, attempt.attemptId],
+        );
+  const dispatch =
+    dispatchRows.rows.length !== 1 || attempt === null
+      ? null
+      : await loadPostgresModelDispatchReceipt(
+          client,
+          schema,
+          {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            stepId: node.nodeId,
+            attemptId: attempt.attemptId,
+            operationId: dispatchRows.rows[0]!.operation_id,
+          },
+          true,
+        );
+  if (
+    step === null ||
+    attempt === null ||
+    dispatch === null ||
+    attempt.status !== "running" ||
+    attempt.workItemId !== input.lease.workItemId ||
+    attempt.leaseEpoch !== input.lease.leaseEpoch ||
+    dispatch.status !== "prepared" ||
+    dispatch.responseCheckpointDigest !== null
+  )
+    throw new RunStoreError("workflow_cancellation_reconciliation_required");
+  await transitionPostgresModelDispatch(
+    client,
+    schema,
+    {
+      tenantId: input.tenantId,
+      runId: input.runId,
+      lease: input.lease,
+      attempt: { stepId: node.nodeId, attemptId: attempt.attemptId },
+      operationId: dispatch.operationId,
+      requestSequence: dispatch.requestSequence,
+      expectedRevision: dispatch.revision,
+      transitionedAt: now,
+      outcome: {
+        kind: "canceled",
+        code: "user_requested",
+        certainty: "notSent",
+      },
+    },
+    "terminal",
+  );
+  await finishPostgresRunAttempt(client, schema, {
+    tenantId: input.tenantId,
+    runId: input.runId,
+    workItemId: attempt.workItemId,
+    leaseEpoch: attempt.leaseEpoch,
+    attempt: {
+      stepId: node.nodeId,
+      attemptId: attempt.attemptId,
+      status: "canceled",
+      finishedAt: now,
+      checkpointDigest: null,
+    },
+  });
+  return {
+    ...execution,
+    revision: execution.revision + 1,
+    nodes: execution.nodes.map((candidate) =>
+      candidate.nodeId === node.nodeId
+        ? {
+            ...candidate,
+            status: "canceled" as const,
+            leaseExpiresAt: null,
+            resultDigest: null,
+            failureCode: null,
+          }
+        : candidate,
+    ),
+    updatedAt: now,
+  };
 }
 
 async function cancelQueuedNode(
