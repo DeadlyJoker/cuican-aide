@@ -153,6 +153,64 @@ for (const decision of ["approve", "reject"] as const) test(
   },
 );
 
+test("SQLite Slice 4 restart reconciles possibly-sent model work without resampling", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-slice-four-"));
+  const path = join(directory, "runtime.sqlite");
+  let runtime: Awaited<ReturnType<typeof createStandaloneRuntimeWorker>> | undefined;
+  t.after(async () => {
+    if (runtime !== undefined) await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+  const samples = new Map<string, number>();
+  const versions = ["gate-agent-v1", "gate-verification-v1"].map(agentVersion);
+  const config = { ...baseConfig(), agentVersionDeployments: versions.map((version) => ({
+    schemaVersion: "crewon.agent-version-deployment.v0" as const, tenantId: "tenant-1",
+    agentVersionId: version.agentVersionId, contentDigest: version.contentDigest,
+    materializationDigest: digester.sha256(`materialization:${version.agentVersionId}`),
+    authorityId: `authority-${version.agentVersionId}`, workspaceBindingId: null })),
+    agentVersionRuntimeFactory: { create: ({ version }: { version: { agentVersionId: string } }) =>
+      uncertainNodeRuntime(version.agentVersionId, samples) } };
+  const setup = new SqliteRunStore(path, { workflowDigester: digester });
+  for (const version of versions) await setup.registerAgentVersion(createAgentVersionAsset({
+    tenantId: "tenant-1", version, createdAt: "2026-08-12T00:00:00.000Z" }));
+  await activateStandaloneRuntimeAgentVersionRelease({ ...config, databasePath: path,
+    actor: actor(), authorization: allow(), clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    activationId: "activate-slice-four" });
+  await new ThreadApplicationService({ store: setup, authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" }, ids: { nextId: () => "slice-four-thread" },
+    digester }).createThread(actor(), { kind: "thread.create",
+    idempotencyKey: "thread-slice-four", title: "Slice four" });
+  await setup.workflowVersionStore(digester).registerWorkflowVersion({
+    schemaVersion: "crewon.workflow-version-asset.v0", tenantId: "tenant-1",
+    workflowId: workflow.workflowId, workflowVersionId: workflow.workflowVersionId,
+    contentDigest: workflow.contentDigest, definitionJson: serializeCompiledWorkflowVersion(workflow),
+    createdAt: "2026-08-12T00:00:00.000Z" });
+  let id = 0;
+  const started = await new WorkflowRunApplicationService({ store: setup,
+    authorization: allow(), clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    workflowDigester: digester, ids: { nextId: (kind) => `${kind}-${++id}` },
+    routeResolver: { resolveRoute: async () => config.route },
+  }).startWorkflowRun(actor(), { kind: "workflowRun.start", idempotencyKey: "start-slice-four",
+    workflowVersionId: workflow.workflowVersionId, threadId: "slice-four-thread", input: {} });
+  const runId = started.run.state.runId;
+  await setup.close();
+
+  runtime = await openUncertainRuntime(path, config, samples, "slice-four-crashed-worker");
+  await runtime.worker.wake();
+  await runtime.worker.wake();
+  assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
+  assert.deepEqual(inspectReconciliation(path, runId), {
+    dispatchStatus: "possiblySent", nodeStatus: "unknown", reconcilePending: 1,
+  });
+  await runtime.close();
+  runtime = await openUncertainRuntime(path, config, samples, "slice-four-recovery-worker");
+
+  const reconciled = await runtime.worker.wake();
+  assert.equal(reconciled.kind, "recovery");
+  assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
+  assert.equal(inspectReconciliation(path, runId).reconcilePending, 0);
+});
+
 function inspect(path: string, runId: string) {
   const database = new DatabaseSync(path);
   try {
@@ -222,6 +280,31 @@ async function openRuntime(path: string, config: ReturnType<typeof baseConfig> &
       capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions: store.workflowVersionStore(digester),
       store: store as never, close: () => store.close() } });
 }
+async function openUncertainRuntime(path: string,
+  config: ReturnType<typeof baseConfig> & Record<string, unknown>, samples: Map<string, number>,
+  ownerId: string) {
+  const store = new SqliteRunStore(path, { workflowDigester: digester });
+  return createStandaloneRuntimeWorker({ ...config, databasePath: path, scanIntervalMs: null, ownerId,
+    additionalAgentVersionRuntimes: ["gate-agent-v1", "gate-verification-v1"].map(
+      (agentVersionId) => ({ tenantId: "tenant-1",
+        runtime: uncertainNodeRuntime(agentVersionId, samples) })),
+    workflowComposition: { certification: { schemaVersion: "crewon.workflow-runtime-certification.v0",
+      capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions: store.workflowVersionStore(digester),
+      store: store as never, close: () => store.close() } });
+}
+function inspectReconciliation(path: string, runId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const execution = JSON.parse(database.prepare(
+      "SELECT state_json FROM workflow_executions WHERE run_id=?").get(runId)!.state_json as string);
+    return { dispatchStatus: database.prepare(
+      "SELECT status FROM model_dispatch_receipts WHERE run_id=?").get(runId)?.status,
+      nodeStatus: execution.nodes.find((node: { nodeId: string }) => node.nodeId === "agent")?.status,
+      reconcilePending: database.prepare(`SELECT count(*) count FROM work_items WHERE run_id=?
+        AND status='pending' AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`)
+        .get(runId)!.count };
+  } finally { database.close(); }
+}
 function actor() { return { principalId: "principal", actorId: "actor", tenantId: "tenant-1", spaceId: "space-1" }; }
 function allow() { return { authorize: async () => ({ outcome: "allow" as const }) }; }
 function baseConfig() { return { runtimeTenantId: "tenant-1", route: { authorityId: "authority",
@@ -252,6 +335,25 @@ function nodeRuntime(agentVersionId: string, samples: Map<string, number>) {
         yield { ...base, sequence: 3, type: "model.output.delta", data: { delta: "{}" } };
         yield { ...base, sequence: 4, type: "segment.completed", data: { output: "{}" } };
       } } } as never;
+}
+function uncertainNodeRuntime(agentVersionId: string, samples: Map<string, number>) {
+  const version = agentVersion(agentVersionId);
+  return { version, policy: {} as never, toolRuntime: {
+    definitions: () => [], executionPolicy: () => null,
+    execute: async () => { throw new Error("tool forbidden"); },
+    reconcile: async () => { throw new Error("tool forbidden"); } },
+    kernel: { supportsModelDispatchEvidence: true,
+      modelIdentity: { adapterName: "test", adapterVersion: "1", modelId: "model" },
+    async *runSegment(contract: { runId: string; segmentId: string }, _signal: AbortSignal,
+      options: { controlSink?: Record<string, (value: unknown) => Promise<void>> }) {
+      samples.set(agentVersionId, (samples.get(agentVersionId) ?? 0) + 1);
+      const evidence = { operationId: `${contract.segmentId}:dispatch`, requestSequence: 1,
+        operation: "dispatch", requestDigest: digester.sha256(agentVersionId), provider: {
+          agentVersionId, adapterName: "test", adapterVersion: "1", modelId: "model" } };
+      await options.controlSink?.modelRequestPrepared?.(evidence);
+      await options.controlSink?.dispatchBoundaryCrossed?.(evidence);
+      throw new Error("provider_connection_lost_after_dispatch");
+    } } } as never;
 }
 function agentVersion(agentVersionId: string) { return compileAgentVersion({
   schemaVersion: "crewon.agent-version-source.v0", agentVersionId, runtimeGeneration: "ts-v0",
