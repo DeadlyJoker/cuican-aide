@@ -290,6 +290,9 @@ function composition() {
     store: null as unknown as WorkflowRuntimeStore,
   };
   fixture.store = {
+    async loadWorkflowExecution() {
+      return state();
+    },
     async commitWorkflowRunStart() {
       throw new Error("unused");
     },
