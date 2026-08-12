@@ -5,6 +5,7 @@ import type { PoolClient } from "pg";
 const SCHEMA_VERSION = 5;
 
 export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
+  try {
   database.exec(`CREATE TABLE IF NOT EXISTS workflow_execution_schema (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     version INTEGER NOT NULL
@@ -14,13 +15,16 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
     .get() as { version: number } | undefined;
   if (stored && stored.version > SCHEMA_VERSION)
     throw new RunStoreError("workflow_execution_schema_too_new");
-  if (!stored) {
+  let version = stored?.version;
+  if (version === undefined) {
     database.exec(sqliteTables);
     database.exec(sqliteCompositionTables);
     database
       .prepare("INSERT INTO workflow_execution_schema VALUES (1, ?)")
       .run(SCHEMA_VERSION);
-  } else if (stored.version === 1) {
+    version = SCHEMA_VERSION;
+  }
+  if (version === 1) {
     database.exec(
       "ALTER TABLE workflow_execution_receipts ADD COLUMN result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json))",
     );
@@ -29,27 +33,25 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
         "UPDATE workflow_execution_schema SET version=? WHERE singleton=1",
       )
       .run(2);
-    database.exec(sqliteCompositionTables);
-    database
-      .prepare(
-        "UPDATE workflow_execution_schema SET version=3 WHERE singleton=1",
-      )
-      .run();
-  } else if (stored.version === 2) {
-    database.exec(sqliteCompositionTables);
-    database
-      .prepare(
-        "UPDATE workflow_execution_schema SET version=3 WHERE singleton=1",
-      )
-      .run();
+    version = 2;
   }
-  if (stored?.version === 3) {
+  if (version === 2) {
+    database.exec(sqliteCompositionTables);
+    database
+      .prepare(
+        "UPDATE workflow_execution_schema SET version=3 WHERE singleton=1",
+      )
+      .run();
+    version = 3;
+  }
+  if (version === 3) {
     database.exec(sqliteValueTable);
     database
       .prepare("UPDATE workflow_execution_schema SET version=4 WHERE singleton=1")
       .run();
+    version = 4;
   }
-  if (stored?.version === 4) {
+  if (version === 4) {
     database.exec("ALTER TABLE workflow_execution_values RENAME TO workflow_execution_values_v4");
     database.exec(sqliteValueTable);
     database.exec(`INSERT INTO workflow_execution_values
@@ -58,8 +60,15 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
     database
       .prepare("UPDATE workflow_execution_schema SET version=5 WHERE singleton=1")
       .run();
+    version = 5;
   }
   assertSqliteShape(database);
+  } catch (error) {
+    if (error instanceof RunStoreError) throw error;
+    throw new RunStoreError("workflow_execution_schema_corrupt", {
+      cause: error instanceof Error ? error : undefined,
+    });
+  }
 }
 
 export async function migratePostgresWorkflowExecutions(
@@ -73,7 +82,7 @@ export async function migratePostgresWorkflowExecutions(
   const stored = await client.query<{ version: number }>(
     `SELECT version FROM ${schema}.workflow_execution_schema WHERE singleton=true`,
   );
-  const version = stored.rows[0]?.version;
+  let version = stored.rows[0]?.version;
   if (version !== undefined && version > SCHEMA_VERSION)
     throw new RunStoreError("workflow_execution_schema_too_new");
   if (version === undefined) {
@@ -82,7 +91,9 @@ export async function migratePostgresWorkflowExecutions(
       `INSERT INTO ${schema}.workflow_execution_schema(singleton, version) VALUES (true,$1)`,
       [SCHEMA_VERSION],
     );
-  } else if (version === 1) {
+    version = SCHEMA_VERSION;
+  }
+  if (version === 1) {
     await client.query(
       `ALTER TABLE ${schema}.workflow_execution_receipts ADD COLUMN result_json jsonb`,
     );
@@ -90,21 +101,21 @@ export async function migratePostgresWorkflowExecutions(
       `UPDATE ${schema}.workflow_execution_schema SET version=$1 WHERE singleton=true`,
       [2],
     );
+    version = 2;
+  }
+  if (version === 2) {
     await client.query(postgresCompositionTables(schema));
     await client.query(
       `UPDATE ${schema}.workflow_execution_schema SET version=3 WHERE singleton=true`,
     );
-  } else if (version === 2) {
-    await client.query(postgresCompositionTables(schema));
-    await client.query(
-      `UPDATE ${schema}.workflow_execution_schema SET version=3 WHERE singleton=true`,
-    );
+    version = 3;
   }
   if (version === 3) {
     await client.query(postgresValueTable(schema));
     await client.query(
       `UPDATE ${schema}.workflow_execution_schema SET version=4 WHERE singleton=true`,
     );
+    version = 4;
   }
   if (version === 4) {
     await client.query(
@@ -117,6 +128,7 @@ export async function migratePostgresWorkflowExecutions(
     await client.query(
       `UPDATE ${schema}.workflow_execution_schema SET version=5 WHERE singleton=true`,
     );
+    version = 5;
   }
   const columns = await client.query<{
     table_name: string;
@@ -132,6 +144,17 @@ export async function migratePostgresWorkflowExecutions(
     .sort();
   if (actual.join("\n") !== postgresColumns.join("\n"))
     throw new RunStoreError("workflow_execution_schema_corrupt");
+  const indexes = await client.query<{ indexname: string; indexdef: string }>(
+    `SELECT indexname,indexdef FROM pg_indexes WHERE schemaname=$1
+     AND tablename='workflow_execution_values'
+     AND indexname IN ('workflow_execution_values_global_role_uq','workflow_execution_values_node_role_uq')
+     ORDER BY indexname`,
+    [schema],
+  );
+  if (indexes.rows.map((row) => row.indexname).join("\n") !== [
+    "workflow_execution_values_global_role_uq",
+    "workflow_execution_values_node_role_uq",
+  ].join("\n")) throw new RunStoreError("workflow_execution_schema_corrupt");
 }
 
 const sqliteTables = `CREATE TABLE workflow_executions (
@@ -159,9 +182,12 @@ const sqliteValueTable = `CREATE TABLE workflow_execution_values (
   node_id TEXT, value_digest TEXT NOT NULL,
   value_json TEXT NOT NULL CHECK (json_valid(value_json)), created_at TEXT NOT NULL,
   PRIMARY KEY (tenant_id,run_id,value_id),
-  UNIQUE (tenant_id,run_id,role,node_id),
   FOREIGN KEY (tenant_id,run_id) REFERENCES run_snapshots(tenant_id,run_id)
-) STRICT;`;
+) STRICT;
+CREATE UNIQUE INDEX workflow_execution_values_global_role_uq
+  ON workflow_execution_values(tenant_id,run_id,role) WHERE node_id IS NULL;
+CREATE UNIQUE INDEX workflow_execution_values_node_role_uq
+  ON workflow_execution_values(tenant_id,run_id,role,node_id) WHERE node_id IS NOT NULL;`;
 
 const sqliteCompositionTables = `${sqliteValueTable}
 CREATE TABLE workflow_composition_receipts (
@@ -204,6 +230,14 @@ function assertSqliteShape(database: DatabaseSync): void {
     if (actual.join("\n") !== expected.join("\n"))
       throw new RunStoreError("workflow_execution_schema_corrupt");
   }
+  const indexes = database.prepare(
+    `SELECT name,sql FROM sqlite_master WHERE type='index'
+     AND tbl_name='workflow_execution_values' AND sql IS NOT NULL ORDER BY name`,
+  ).all() as { name: string; sql: string }[];
+  if (indexes.map((row) => row.name).join("\n") !== [
+    "workflow_execution_values_global_role_uq",
+    "workflow_execution_values_node_role_uq",
+  ].join("\n")) throw new RunStoreError("workflow_execution_schema_corrupt");
 }
 
 const sqliteColumns = {
@@ -300,8 +334,11 @@ function postgresValueTable(schema: string): string {
     node_id text, value_digest text NOT NULL, value_json jsonb NOT NULL,
     created_at timestamptz NOT NULL,
     PRIMARY KEY (tenant_id,run_id,value_id),
-    UNIQUE (tenant_id,run_id,role,node_id),
-    FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.run_snapshots(tenant_id,run_id));`;
+    FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.run_snapshots(tenant_id,run_id));
+  CREATE UNIQUE INDEX workflow_execution_values_global_role_uq
+    ON ${schema}.workflow_execution_values(tenant_id,run_id,role) WHERE node_id IS NULL;
+  CREATE UNIQUE INDEX workflow_execution_values_node_role_uq
+    ON ${schema}.workflow_execution_values(tenant_id,run_id,role,node_id) WHERE node_id IS NOT NULL;`;
 }
 
 const postgresColumns = [
