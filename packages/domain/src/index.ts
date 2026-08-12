@@ -15,3 +15,4 @@ export * from "./tool-execution-receipt.ts";
 export * from "./workflow-schema.ts";
 export * from "./workflow-version-error.ts";
 export * from "./workflow-version.ts";
+export * from "./workflow-version-codec.ts";
