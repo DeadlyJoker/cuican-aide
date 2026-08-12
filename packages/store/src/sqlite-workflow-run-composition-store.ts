@@ -770,6 +770,52 @@ export class SqliteWorkflowRunCompositionStore {
     }
   }
 
+  async reconcileWorkflowNode(
+    input: Parameters<WorkflowRunCompositionStore["reconcileWorkflowNode"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["reconcileWorkflowNode"]> {
+    const nowMs = readLeaseClock(this.#clock);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.#validateLease(input, nowMs);
+      assertCanonicalRun(this.#loadRun(input.tenantId, input.runId), input.binding);
+      const expectedPayload = {
+        schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+        trigger: "workflowReconcile", binding: input.binding,
+        nodeId: input.nodeId, claimId: input.claimId,
+        claimEpoch: input.claimEpoch,
+        reconciliationOperationId: input.reconciliationOperationId,
+      };
+      if (stableJson(this.#loadWorkItemPayload(input.lease.workItemId)) !==
+          stableJson(expectedPayload))
+        throw new RunStoreError("workflow_composition_work_item_mismatch");
+      const execution = this.#loadExecution(input.tenantId, input.runId);
+      const node = executionNode(input, execution);
+      if (node.status !== "unknown" || node.claimId !== input.claimId ||
+          node.claimEpoch !== input.claimEpoch)
+        throw new RunStoreError("workflow_composition_claim_mismatch");
+      const step = loadSqliteRunStep(this.#database, {
+        tenantId: input.tenantId, runId: input.runId, stepId: input.nodeId,
+      });
+      const attempt = step?.currentAttemptId === null || step === null ? null
+        : loadSqliteRunAttempt(this.#database, { tenantId: input.tenantId,
+            runId: input.runId, stepId: input.nodeId,
+            attemptId: step.currentAttemptId });
+      if (step === null || attempt === null || attempt.status !== "running")
+        throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+      // RunAttempt has no admitted-model dispatch checkpoint. An external
+      // observation cannot prove whether the model side effect was sent.
+      const result = { disposition: "evidenceInsufficient" as const,
+        execution: execution!, handoff: { currentWorkItem: "retained" as const,
+          nextWorkItemId: null, kind: "none" as const },
+        runDisposition: "nonTerminal" as const };
+      this.#database.exec("COMMIT");
+      return structuredClone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeCompositionError(error);
+    }
+  }
+
   async scheduleWorkflowNodes(
     input: Parameters<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>[0],
   ): ReturnType<WorkflowRunCompositionStore["scheduleWorkflowNodes"]> {
