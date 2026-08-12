@@ -1,6 +1,40 @@
 use super::*;
 use http::HeaderValue;
 use pretty_assertions::assert_eq;
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TurnStateReference {
+    header: String,
+    max_bytes: usize,
+    state: String,
+}
+
+fn reference() -> TurnStateReference {
+    let path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/provider-turn-state.reference.json"
+    )
+    .expect("provider turn-state reference fixture");
+    serde_json::from_slice(&std::fs::read(path).expect("read turn-state reference"))
+        .expect("parse turn-state reference")
+}
+
+#[test]
+fn matches_the_shared_typescript_turn_state_reference() {
+    let reference = reference();
+    assert_eq!(TURN_STATE_HEADER, reference.header);
+    assert_eq!(MAX_TURN_STATE_BYTES, reference.max_bytes);
+
+    let state = OnceLock::new();
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        TURN_STATE_HEADER,
+        HeaderValue::from_str(&reference.state).expect("reference header"),
+    );
+    observe_turn_state(&headers, &state).expect("shared bounded state");
+    assert_eq!(state.get(), Some(&reference.state));
+}
 
 #[test]
 fn accepts_one_bounded_value_and_rejects_duplicates_and_conflicts() {
