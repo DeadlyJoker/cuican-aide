@@ -2,17 +2,10 @@ import type {
   WorkflowAgentAttemptAuthority,
   WorkflowNodeContinuationCheckpoint,
 } from "@crewon/application";
-import type {
-  ModelDispatchReceipt,
-  WorkflowSchemaValue,
-} from "@crewon/domain";
+import type { ModelDispatchReceipt } from "@crewon/domain";
 import type { AgentHistoryItem } from "@crewon/agent-kernel";
 import type { ProviderCheckpoint } from "@crewon/contracts";
 
-import type {
-  WorkflowModelTerminalAuthority,
-  WorkflowNodeOutcome,
-} from "./workflow-runtime-dispatcher.ts";
 
 export type WorkflowDurableExecutionAuthority = Readonly<{
   tenantId: string;
@@ -60,6 +53,7 @@ export function workflowContinuationCheckpoint(input: Readonly<{
   }
   return {
     schemaVersion: "crewon.workflow-node-continuation.v0",
+    terminalCandidate: null,
     authority: workflowAttemptAuthority(input.authority),
     segmentId: input.segmentId,
     modelSampleIndex: input.modelSampleIndex,
@@ -74,41 +68,4 @@ export function workflowContinuationCheckpoint(input: Readonly<{
     },
     history: input.history,
   };
-}
-
-type TerminalOutcome =
-  | Readonly<{ status: "completed"; value: WorkflowSchemaValue }>
-  | Readonly<{ status: "failed"; failureCode: string }>
-  | Readonly<{ status: "canceled" }>;
-
-export function projectWorkflowModelTerminal(
-  outcome: TerminalOutcome,
-  dispatch: ModelDispatchReceipt | null,
-): WorkflowNodeOutcome {
-  if (dispatch === null) return outcome;
-  const certainty = dispatch.status === "responseObserved"
-    ? "responseObserved" as const
-    : dispatch.status === "prepared" ? "notSent" as const : null;
-  if (certainty === null ||
-      (outcome.status === "completed" && certainty !== "responseObserved")) {
-    return { status: "unknown" };
-  }
-  if (dispatch.status === "terminal") {
-    throw new Error("workflow_model_dispatch_already_terminal");
-  }
-  const modelTerminal: WorkflowModelTerminalAuthority = {
-    dispatch: {
-      operationId: dispatch.operationId,
-      requestSequence: dispatch.requestSequence,
-      expectedRevision: dispatch.revision,
-      status: dispatch.status,
-    },
-    dispatchTerminalOutcome: {
-      kind: outcome.status,
-      code: outcome.status === "failed" ? outcome.failureCode
-        : outcome.status === "canceled" ? "workflow_node_canceled" : null,
-      certainty,
-    },
-  };
-  return { ...outcome, modelTerminal };
 }

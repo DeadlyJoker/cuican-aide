@@ -615,6 +615,11 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
     return this.#workflow().settleWorkflowNodeModelTerminal(input);
   }
 
+  async settlePreparedWorkflowNodeTerminal(input: Parameters<
+    WorkflowNodeContinuationStore["settlePreparedWorkflowNodeTerminal"]>[0]) {
+    return this.#workflow().settlePreparedWorkflowNodeTerminal(input);
+  }
+
   constructor(path: string, options: {
     clock?: LeaseClock;
     workflowDigester?: WorkflowContentDigester;

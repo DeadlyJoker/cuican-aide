@@ -120,6 +120,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   afterToolDispatched?: RuntimeWorkerConfig["afterToolDispatched"];
   afterToolProviderResolved?: RuntimeWorkerConfig["afterToolProviderResolved"];
   afterToolReceiptCommitted?: RuntimeWorkerConfig["afterToolReceiptCommitted"];
+  /** Crash-boundary verification hook; omitted in production composition. */
+  afterWorkflowTerminalCandidateCommitted?: () => Promise<void>;
   providerProbe?: Readonly<{
     port: number;
     token: string;
@@ -402,6 +404,8 @@ async function composeRuntimeWorker(
               execution,
               store: workflow.store,
               leaseDurationMs: config.leaseDurationMs ?? 30_000,
+              afterTerminalCandidateCommitted:
+                config.afterWorkflowTerminalCandidateCommitted,
             }),
           }),
           leaseDurationMs: config.leaseDurationMs ?? 30_000,

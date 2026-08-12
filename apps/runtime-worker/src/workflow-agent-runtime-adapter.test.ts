@@ -231,10 +231,7 @@ test("shared engine consumes the supplied attempt and actual value without begin
       valueDigest: "sha256:value",
     },
   });
-  assert.deepEqual(outcome, {
-    status: "completed",
-    value: { answer: "done" },
-  });
+  assert.deepEqual(outcome, { status: "unknown" });
   assert.deepEqual(calls, [
     "renew",
     "event",
@@ -479,10 +476,7 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
       },
     },
   } as never;
-  assert.deepEqual(await engine.execute(input), {
-    status: "completed",
-    value: { answer: "done" },
-  });
+  assert.deepEqual(await engine.execute(input), { status: "unknown" });
   assert.equal(kernelRound, 2);
   assert.equal(toolExecutions, 1);
   assert.equal(committedToolAttempt, "tool-attempt-1");
@@ -490,7 +484,7 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
 
 test("workflow Tool round limit counts Tool batches instead of model samples", async () => {
   const pure = await runToolLimitScenario(0, 0);
-  assert.equal(pure.outcome.status, "completed");
+  assert.equal(pure.outcome.status, "unknown");
   assert.equal(pure.toolBegins, 0);
 
   const zero = await runToolLimitScenario(0, 1);
@@ -501,7 +495,7 @@ test("workflow Tool round limit counts Tool batches instead of model samples", a
   assert.equal(zero.toolBegins, 0);
 
   const one = await runToolLimitScenario(1, 1);
-  assert.equal(one.outcome.status, "completed");
+  assert.equal(one.outcome.status, "unknown");
   assert.equal(one.toolBegins, 1);
 
   const exceeded = await runToolLimitScenario(1, 2);
@@ -523,7 +517,7 @@ test("completed Tool receipt replay performs no recovery, execute, reconcile, or
     completedReplay: true,
     counters,
   });
-  assert.equal(result.outcome.status, "completed");
+  assert.equal(result.outcome.status, "unknown");
   assert.deepEqual(counters, {
     recovery: 0,
     execute: 0,
@@ -602,8 +596,12 @@ function workflowEngineDependencies(input: {
       async prepareModelDispatch() {},
       async markModelDispatchPossiblySent() {},
       async loadModelDispatchReceipt() {},
-      async commitWorkflowAssistantContinuation(input: { next: object }) {
+      async commitWorkflowAssistantContinuation(input: {
+        next: object; terminalResult: null | { status: string };
+      }) {
         return { ...input.next, revision: 1,
+          terminalCandidate: input.terminalResult === null ? null : {
+            candidateId: `sha256:${"c".repeat(64)}` },
           updatedAt: "2026-08-12T00:00:00.000Z" };
       },
       async commitWorkflowToolContinuation(input: {

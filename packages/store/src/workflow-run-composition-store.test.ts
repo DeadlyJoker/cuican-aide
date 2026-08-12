@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Pool } from "pg";
+import { RunStoreError } from "@crewon/application";
 import {
   compileWorkflowVersion,
   createWorkflowNodeTerminalEvidence,
@@ -257,7 +258,7 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
     checkpointDigest: digester.sha256("checkpoint"),
     transitionedAt: "2026-08-12T00:00:03.000Z",
   });
-  await store.commitWorkflowAssistantContinuation({
+  const continuation = await store.commitWorkflowAssistantContinuation({
     lease: nodeLease, authority, expectedContinuationRevision: null,
     next: { schemaVersion: "crewon.workflow-node-continuation.v0",
       authority, segmentId: "segment-1", modelSampleIndex: 0,
@@ -267,27 +268,27 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
         expectedRevision: observed.revision, status: "responseObserved",
       }, history: [] },
     committedAt: "2026-08-12T00:00:03.000Z",
+    terminalResult: { status: "completed", output: "{}" },
   });
   clock.set(Date.parse("2026-08-12T00:00:04.000Z"));
-  const evidence = createWorkflowNodeTerminalEvidence({
-    workflow, nodeId: work.nodeId, outcome: { status: "completed", value: {} },
-    digester,
-  });
+  assert.equal(continuation.terminalCandidate?.evidence.status, "completed");
   const terminalInput = {
-    binding, nodeId: work.nodeId, operationId: "settle-agent-model-1",
-    evidence, lease: nodeLease, authority,
-    dispatch: { operationId: observed.operationId, requestSequence: 1,
-      expectedRevision: observed.revision, status: "responseObserved" as const },
-    dispatchTerminalOutcome: { kind: "completed" as const, code: null,
-      certainty: "responseObserved" as const },
+    binding, operationId: "settle-agent-model-1", lease: nodeLease, authority,
+    candidateId: continuation.terminalCandidate!.candidateId,
   };
-  const settled = await store.settleWorkflowNodeModelTerminal(terminalInput);
+  const settled = await store.settlePreparedWorkflowNodeTerminal(terminalInput);
   assert.equal(settled.disposition, "settled");
   assert.equal(settled.continuation, null);
   assert.equal(await store.loadWorkflowNodeContinuation(authority), null);
-  assert.deepEqual(await store.settleWorkflowNodeModelTerminal(terminalInput), {
+  assert.deepEqual(await store.settlePreparedWorkflowNodeTerminal(terminalInput), {
     ...settled, disposition: "replay",
   });
+  await assert.rejects(
+    store.settlePreparedWorkflowNodeTerminal({ ...terminalInput,
+      candidateId: digester.sha256("different-terminal-candidate") }),
+    (error: unknown) => error instanceof RunStoreError &&
+      error.code === "workflow_composition_idempotency_conflict",
+  );
 });
 
 const postgresUrl = process.env.CREWON_TEST_POSTGRES_URL;
@@ -436,6 +437,7 @@ if (postgresUrl === undefined) {
           ],
         },
         committedAt: "2026-08-12T00:00:00.000Z",
+        terminalResult: null,
       };
       const continuation =
         await store.commitWorkflowAssistantContinuation(continuationInput);

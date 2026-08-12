@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { parseCanonicalAgentEvent } from "@crewon/contracts";
 import {
+  canonicalJson,
   RunStoreError,
   validateWorkflowNodeContinuationCheckpoint,
   type CommitWorkflowAssistantContinuationInput,
@@ -9,6 +10,9 @@ import {
   type WorkflowNodeContinuationCheckpoint,
 } from "@crewon/application";
 import {
+  createWorkflowNodeTerminalEvidence,
+  validateWorkflowDispatchTerminalCorrelation,
+  validateWorkflowNodeTerminalEvidence,
   reduceRunLifecycleEvent,
   resolveToolExecutionReceipt,
   type RunLifecycleEvent,
@@ -16,6 +20,7 @@ import {
   type ToolExecutionReceiptState,
   type WorkflowContentDigester,
 } from "@crewon/domain";
+import { parseBoundWorkflow } from "./workflow-run-composition-support.ts";
 
 import { readLeaseClock, type LeaseClock } from "./lease-clock.ts";
 import {
@@ -82,6 +87,24 @@ export class SqliteWorkflowNodeContinuationAuthority {
     }
   }
 
+  async loadForReconciliation(authority: WorkflowAgentAttemptAuthority) {
+    const row = this.#database.prepare(`SELECT checkpoint_json FROM workflow_node_continuations
+      WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?`).get(
+        authority.tenantId, authority.runId, authority.attempt.stepId,
+        authority.attempt.attemptId) as { checkpoint_json: string } | undefined;
+    if (row === undefined) return null;
+    try {
+      const checkpoint = validateWorkflowNodeContinuationCheckpoint(JSON.parse(row.checkpoint_json));
+      if (stableJson(checkpoint.authority) !== stableJson(authority))
+        throw new Error("authority mismatch");
+      this.#validateCheckpointCorrelation(authority, checkpoint);
+      return checkpoint;
+    } catch (error) {
+      throw new RunStoreError("workflow_node_continuation_corrupt", {
+        cause: error instanceof Error ? error : undefined });
+    }
+  }
+
   async commitAssistant(
     input: CommitWorkflowAssistantContinuationInput,
   ): Promise<WorkflowNodeContinuationCheckpoint> {
@@ -94,6 +117,7 @@ export class SqliteWorkflowNodeContinuationAuthority {
         throw new RunStoreError("workflow_node_continuation_revision_conflict");
       const checkpoint = validateWorkflowNodeContinuationCheckpoint({
         ...input.next,
+        terminalCandidate: this.#terminalCandidate(input),
         revision: (current?.revision ?? 0) + 1,
         updatedAt: input.committedAt,
       });
@@ -304,9 +328,18 @@ export class SqliteWorkflowNodeContinuationAuthority {
       runId: authority.runId,
       ...authority.attempt,
     });
-    if (attempt?.providerTurnState !== checkpoint.providerTurnState)
+    if (attempt?.status !== "running" ||
+        attempt.workItemId !== authority.workItemId ||
+        attempt.leaseEpoch !== authority.leaseEpoch ||
+        attempt.stepId !== authority.attempt.stepId ||
+        attempt.attemptId !== authority.attempt.attemptId ||
+        attempt.providerTurnState !== checkpoint.providerTurnState)
       throw new RunStoreError("workflow_node_continuation_authority_mismatch");
-    if (checkpoint.activeDispatch === null) return;
+    if (checkpoint.activeDispatch === null) {
+      if (checkpoint.terminalCandidate !== null)
+        throw new RunStoreError("workflow_terminal_candidate_dispatch_mismatch");
+      return;
+    }
     const dispatch = loadSqliteModelDispatchReceipt(this.#database, {
       tenantId: authority.tenantId,
       runId: authority.runId,
@@ -320,6 +353,21 @@ export class SqliteWorkflowNodeContinuationAuthority {
       dispatch.status !== checkpoint.activeDispatch.status
     )
       throw new RunStoreError("workflow_node_continuation_authority_mismatch");
+    if (checkpoint.terminalCandidate !== null) {
+      if (checkpoint.activeDispatch.status !== "responseObserved" ||
+          checkpoint.terminalCandidate.segmentId !== checkpoint.segmentId)
+        throw new RunStoreError("workflow_terminal_candidate_dispatch_mismatch");
+      const evidence = validateWorkflowNodeTerminalEvidence({
+        workflow: this.#loadBoundWorkflow(authority), nodeId: authority.nodeId,
+        evidence: checkpoint.terminalCandidate.evidence, digester: this.#digester });
+      validateWorkflowDispatchTerminalCorrelation({ dispatch:
+        checkpoint.terminalCandidate.dispatchTerminalOutcome, evidence });
+      const candidateId = this.#digester.sha256(canonicalJson({ authority,
+        segmentId: checkpoint.segmentId, evidence,
+        dispatchTerminalOutcome: checkpoint.terminalCandidate.dispatchTerminalOutcome }));
+      if (candidateId !== checkpoint.terminalCandidate.candidateId)
+        throw new RunStoreError("workflow_terminal_candidate_corrupt");
+    }
   }
 
   #validateToolCorrelation(
@@ -367,6 +415,7 @@ export class SqliteWorkflowNodeContinuationAuthority {
       throw new RunStoreError("workflow_node_continuation_revision_conflict");
     const next = validateWorkflowNodeContinuationCheckpoint({
       ...input.next,
+      terminalCandidate: null,
       revision: (current?.revision ?? 0) + 1,
       updatedAt: input.committedAt,
     });
@@ -496,6 +545,7 @@ export class SqliteWorkflowNodeContinuationAuthority {
       const continuation = this.#loadStoredCheckpoint(input.authority);
       const expected = validateWorkflowNodeContinuationCheckpoint({
         ...input.next,
+        terminalCandidate: null,
         revision: (input.expectedContinuationRevision ?? 0) + 1,
         updatedAt: input.committedAt,
       });
@@ -571,6 +621,52 @@ export class SqliteWorkflowNodeContinuationAuthority {
     return validateWorkflowNodeContinuationCheckpoint(
       JSON.parse(row.checkpoint_json),
     );
+  }
+
+  #terminalCandidate(input: CommitWorkflowAssistantContinuationInput) {
+    if (input.terminalResult === null) return null;
+    if (input.next.activeDispatch?.status !== "responseObserved")
+      throw new RunStoreError("workflow_terminal_candidate_dispatch_mismatch");
+    const workflow = this.#loadBoundWorkflow(input.authority);
+    let outcome;
+    if (input.terminalResult.status === "completed") {
+      let value: unknown;
+      try { value = JSON.parse(input.terminalResult.output); }
+      catch { throw new RunStoreError("workflow_terminal_candidate_invalid"); }
+      outcome = { status: "completed" as const,
+        value: value as import("@crewon/domain").WorkflowSchemaValue };
+    } else if (input.terminalResult.status === "failed") {
+      outcome = { ...input.terminalResult, certainty: "responseObserved" as const };
+    } else outcome = { status: "canceled" as const,
+      certainty: "responseObserved" as const };
+    const evidence = createWorkflowNodeTerminalEvidence({ workflow,
+      nodeId: input.authority.nodeId, outcome, digester: this.#digester });
+    const dispatchTerminalOutcome = { kind: input.terminalResult.status,
+      code: input.terminalResult.status === "failed" ? input.terminalResult.failureCode
+        : input.terminalResult.status === "canceled" ? "workflow_node_canceled" : null,
+      certainty: "responseObserved" as const };
+    return { schemaVersion: "crewon.workflow-node-terminal-candidate.v0" as const,
+      candidateId: this.#digester.sha256(canonicalJson({ authority: input.authority,
+        segmentId: input.next.segmentId, evidence, dispatchTerminalOutcome })),
+      segmentId: input.next.segmentId, evidence, dispatchTerminalOutcome };
+  }
+
+  #loadBoundWorkflow(authority: WorkflowAgentAttemptAuthority) {
+    const executionRow = this.#database.prepare(
+      "SELECT state_json FROM workflow_executions WHERE tenant_id=? AND run_id=?",
+    ).get(authority.tenantId, authority.runId) as
+      { state_json: string } | undefined;
+    if (executionRow === undefined)
+      throw new RunStoreError("workflow_execution_not_found");
+    const execution = decodeWorkflowExecutionState(executionRow.state_json);
+    const version = this.#database.prepare(`SELECT definition_json FROM workflow_versions
+      WHERE tenant_id=? AND workflow_version_id=? AND content_digest=?`).get(
+        authority.tenantId, execution.workflowVersionId,
+        execution.contentDigest) as { definition_json: string } | undefined;
+    if (version === undefined) throw new RunStoreError("workflow_version_not_found");
+    return parseBoundWorkflow(version.definition_json, {
+      workflowId: execution.workflowId, workflowVersionId: execution.workflowVersionId,
+      contentDigest: execution.contentDigest }, this.#digester);
   }
 
   #toolCompletedEventForReplay(

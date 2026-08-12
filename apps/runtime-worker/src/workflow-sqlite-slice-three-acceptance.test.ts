@@ -229,6 +229,70 @@ test("SQLite Slice 4 completes checkpoint-only reconciliation without resampling
   });
 });
 
+test("SQLite Slice 4 restart settles a Store-owned terminal candidate once", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-slice-four-candidate-"));
+  const path = join(directory, "runtime.sqlite");
+  let runtime: Awaited<ReturnType<typeof createStandaloneRuntimeWorker>> | undefined;
+  t.after(async () => { if (runtime !== undefined) await runtime.close();
+    await rm(directory, { recursive: true, force: true }); });
+  const samples = new Map<string, number>();
+  const versions = ["gate-agent-v1", "gate-verification-v1"].map(agentVersion);
+  let crash = true;
+  const config = { ...baseConfig(), agentVersionDeployments: versions.map((version) => ({
+    schemaVersion: "crewon.agent-version-deployment.v0" as const, tenantId: "tenant-1",
+    agentVersionId: version.agentVersionId, contentDigest: version.contentDigest,
+    materializationDigest: digester.sha256(`materialization:${version.agentVersionId}`),
+    authorityId: `authority-${version.agentVersionId}`, workspaceBindingId: null })),
+    agentVersionRuntimeFactory: { create: ({ version }: { version: { agentVersionId: string } }) =>
+      nodeRuntime(version.agentVersionId, samples) },
+    afterWorkflowTerminalCandidateCommitted: async () => {
+      if (crash) { crash = false; throw new WorkflowNodeSideEffectUncertainError(); }
+    } };
+  const setup = new SqliteRunStore(path, { workflowDigester: digester });
+  for (const version of versions) await setup.registerAgentVersion(createAgentVersionAsset({
+    tenantId: "tenant-1", version, createdAt: "2026-08-12T00:00:00.000Z" }));
+  await activateStandaloneRuntimeAgentVersionRelease({ ...config, databasePath: path,
+    actor: actor(), authorization: allow(), clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    activationId: "activate-terminal-candidate" });
+  await new ThreadApplicationService({ store: setup, authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" }, ids: { nextId: () => "candidate-thread" },
+    digester }).createThread(actor(), { kind: "thread.create",
+    idempotencyKey: "thread-terminal-candidate", title: "Candidate" });
+  await setup.workflowVersionStore(digester).registerWorkflowVersion({
+    schemaVersion: "crewon.workflow-version-asset.v0", tenantId: "tenant-1",
+    workflowId: workflow.workflowId, workflowVersionId: workflow.workflowVersionId,
+    contentDigest: workflow.contentDigest, definitionJson: serializeCompiledWorkflowVersion(workflow),
+    createdAt: "2026-08-12T00:00:00.000Z" });
+  let id = 0;
+  const started = await new WorkflowRunApplicationService({ store: setup,
+    authorization: allow(), clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    workflowDigester: digester, ids: { nextId: (kind) => `${kind}-${++id}` },
+    routeResolver: { resolveRoute: async () => config.route },
+  }).startWorkflowRun(actor(), { kind: "workflowRun.start",
+    idempotencyKey: "start-terminal-candidate", workflowVersionId: workflow.workflowVersionId,
+    threadId: "candidate-thread", input: {} });
+  const runId = started.run.state.runId;
+  await setup.close();
+  runtime = await openRuntime(path, config, samples, "candidate-crash-worker");
+  await runtime.worker.wake();
+  await runtime.worker.wake();
+  assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
+  assert.deepEqual(inspectReconciliation(path, runId), {
+    dispatchStatus: "responseObserved", continuationCount: 1,
+    terminalEventCount: 0, nodeStatus: "unknown", reconcilePending: 1 });
+  await runtime.close();
+  runtime = await openRuntime(path, config, samples, "candidate-reconcile-worker");
+  assert.deepEqual(await runtime.worker.wake(), { kind: "workflowRecovery", runId,
+    code: "workflow_reconciliation_settled" });
+  assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
+  assert.deepEqual(inspectReconciliation(path, runId), {
+    dispatchStatus: "terminal", continuationCount: 0,
+    terminalEventCount: 0, nodeStatus: "completed", reconcilePending: 0 });
+  const after = await runtime.worker.wake();
+  assert.notEqual(after.kind, "workflowRecovery");
+  assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
+});
+
 test("SQLite Slice 4 not-dispatched reconciliation grants only a new admission", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-slice-four-not-dispatched-"));
   const path = join(directory, "runtime.sqlite");

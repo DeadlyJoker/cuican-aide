@@ -151,6 +151,69 @@ export class SqliteWorkflowRunCompositionStore
     }
   }
 
+  async settlePreparedWorkflowNodeTerminal(input: Parameters<
+    WorkflowNodeContinuationStore["settlePreparedWorkflowNodeTerminal"]>[0]) {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    const fingerprint = this.#fingerprint("settleNode", input);
+    const receiptInput = { tenantId: input.authority.tenantId,
+      runId: input.authority.runId, operationId: input.operationId };
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const replay = this.#receipt(receiptInput, "settleNode", fingerprint) as
+        { candidateId?: unknown; evidence?: unknown } | null;
+      if (replay !== null) {
+        const dispatchRows = this.#database.prepare(`SELECT operation_id FROM model_dispatch_receipts
+          WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?
+          ORDER BY request_sequence DESC, revision DESC LIMIT 2`).all(
+            input.authority.tenantId, input.authority.runId,
+            input.authority.attempt.stepId, input.authority.attempt.attemptId) as
+          { operation_id: string }[];
+        const dispatch = dispatchRows.length === 1
+          ? loadSqliteModelDispatchReceipt(this.#database, {
+              tenantId: input.authority.tenantId, runId: input.authority.runId,
+              ...input.authority.attempt, operationId: dispatchRows[0]!.operation_id })
+          : null;
+        if (dispatch?.status !== "terminal" || dispatch.terminalOutcome === null ||
+            replay.evidence === undefined || replay.candidateId !== input.candidateId)
+          throw new RunStoreError("workflow_terminal_candidate_corrupt");
+        const result = settleSqliteWorkflowNodeModelTerminalWithinTransaction(
+          this.#nodeSettlementContext(), { binding: input.binding,
+            nodeId: input.authority.nodeId, operationId: input.operationId,
+            evidence: replay.evidence as Parameters<
+              WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]>[0]["evidence"],
+            lease: input.lease,
+            authority: input.authority, dispatch: {
+              operationId: dispatch.operationId,
+              requestSequence: dispatch.requestSequence,
+              expectedRevision: dispatch.revision - 1,
+              status: "responseObserved" },
+            dispatchTerminalOutcome: dispatch.terminalOutcome },
+          fingerprint, now, nowMs, "liveNode", input.candidateId);
+        this.#database.exec("COMMIT");
+        return result;
+      }
+      const checkpoint = await this.#continuations.load(input.authority);
+      const candidate = checkpoint?.terminalCandidate;
+      if (candidate === null || candidate === undefined ||
+          candidate.candidateId !== input.candidateId)
+        throw new RunStoreError("workflow_terminal_candidate_corrupt");
+      const terminalInput = { binding: input.binding,
+        nodeId: input.authority.nodeId, operationId: input.operationId,
+        evidence: candidate.evidence, lease: input.lease,
+        authority: input.authority, dispatch: checkpoint!.activeDispatch!,
+        dispatchTerminalOutcome: candidate.dispatchTerminalOutcome };
+      const result = settleSqliteWorkflowNodeModelTerminalWithinTransaction(
+        this.#nodeSettlementContext(), terminalInput,
+        fingerprint, now, nowMs, "liveNode", input.candidateId);
+      this.#database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeCompositionError(error);
+    }
+  }
+
   async settleWorkflowNode(
     input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
   ): ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]> {
@@ -567,29 +630,27 @@ export class SqliteWorkflowRunCompositionStore
       const evidenceStatus = dispatch.status === "prepared"
         ? "notDispatched" as const : dispatch.status;
       if (dispatch.status === "responseObserved") {
-        const dispatchOutcome = { kind: "failed" as const,
-          certainty: "responseObserved" as const,
+        const authority = { tenantId: input.tenantId, runId: input.runId,
+          workItemId: attempt.workItemId, leaseEpoch: attempt.leaseEpoch,
+          nodeId: input.nodeId,
+          nodeKind: node.kind === "verification" ? "verification" as const : "agent" as const,
+          claimId: input.claimId, claimEpoch: input.claimEpoch,
+          agentVersionId: node.agentVersionId!, attempt: {
+            stepId: input.nodeId, attemptId: attempt.attemptId } };
+        const checkpoint = await this.#continuations.loadForReconciliation(authority);
+        const candidate = checkpoint?.terminalCandidate ?? null;
+        const dispatchOutcome = candidate?.dispatchTerminalOutcome ?? {
+          kind: "failed" as const, certainty: "responseObserved" as const,
           code: "workflow_response_evidence_unavailable" };
-        const outcome = dispatchOutcome.kind === "failed"
-          ? { status: "failed" as const,
-              failureCode: dispatchOutcome.code ?? "model_dispatch_failed" }
-          : { status: "canceled" as const };
         const workflow = this.#loadWorkflow(input);
-        const evidence = createWorkflowNodeTerminalEvidence({ workflow,
-          nodeId: input.nodeId, outcome: outcome.status === "failed"
-            ? { ...outcome, certainty: dispatchOutcome.certainty }
-            : { status: "canceled", certainty: dispatchOutcome.certainty },
+        const evidence = candidate?.evidence ?? createWorkflowNodeTerminalEvidence({
+          workflow, nodeId: input.nodeId, outcome: { status: "failed",
+            failureCode: dispatchOutcome.code!, certainty: dispatchOutcome.certainty },
           digester: this.#digester });
         const settled = settleSqliteWorkflowNodeModelTerminalWithinTransaction(
           this.#nodeSettlementContext(), { binding: input.binding,
             nodeId: input.nodeId, operationId: `node-model-terminal:${input.claimId}`,
-            evidence, lease: input.lease, authority: { tenantId: input.tenantId,
-              runId: input.runId, workItemId: attempt.workItemId,
-              leaseEpoch: attempt.leaseEpoch, nodeId: input.nodeId,
-              nodeKind: node.kind === "verification" ? "verification" : "agent",
-              claimId: input.claimId, claimEpoch: input.claimEpoch,
-              agentVersionId: node.agentVersionId!, attempt: {
-                stepId: input.nodeId, attemptId: attempt.attemptId } },
+            evidence, lease: input.lease, authority,
             dispatch: { operationId: dispatch.operationId,
               requestSequence: dispatch.requestSequence,
               expectedRevision: dispatch.revision, status: dispatch.status },

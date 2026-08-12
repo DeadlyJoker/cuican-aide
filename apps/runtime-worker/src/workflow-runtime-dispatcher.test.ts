@@ -154,13 +154,10 @@ test("fresh sibling admissions pass actual values and settle independently", asy
   assert.equal(left.atomicSettlements, 1);
   assert.equal(right.atomicSettlements, 1);
   const exact = left.atomicInputs[0] as Record<string, unknown>;
-  assert.equal(exact.nodeId, "a");
+  assert.equal((exact.authority as { nodeId: string }).nodeId, "a");
   assert.equal((exact.authority as { workItemId: string }).workItemId,
     "work-claim-left");
-  assert.deepEqual((exact.dispatch as object), {
-    operationId: "dispatch-1", requestSequence: 1,
-    expectedRevision: 3, status: "responseObserved",
-  });
+  assert.equal(exact.candidateId, "candidate-1");
 });
 
 test("commit-response loss retries through nonfresh recovery without execution", async () => {
@@ -191,14 +188,13 @@ test("reports completed only for terminalConverged Store authority", async () =>
     "completed");
 });
 
-test("deterministic execution errors without model authority do not settle", async () => {
+test("deterministic local execution errors use ordinary settlement", async () => {
   const fixture = composition();
   const outcome = await create(fixture.store, async () => {
     throw new Error("workflow_node_output_json_invalid");
   }).dispatch(input("node"));
-  assert.deepEqual(outcome, { kind: "recovery", runId: "r",
-    code: "workflow_model_terminal_authority_unavailable" });
-  assert.equal(fixture.settlements, 0);
+  assert.deepEqual(outcome, { kind: "completed", runId: "r" });
+  assert.equal(fixture.settlements, 1);
   assert.equal(fixture.atomicSettlements, 0);
 });
 
@@ -436,6 +432,18 @@ function composition() {
         kind: "none" }, runDisposition: fixture.atomicRunDisposition,
         evidence: input.evidence };
     },
+    async settlePreparedWorkflowNodeTerminal(input) {
+      fixture.atomicSettlements += 1;
+      fixture.atomicInputs.push(input);
+      if (fixture.failSettlement) throw new Error("commit unknown");
+      fixture.settlementCommitted = true;
+      if (fixture.loseFirstSettlementResponse)
+        throw new Error("response lost after commit");
+      return { disposition: "settled", continuation: null,
+        handoff: { currentWorkItem: "completed", nextWorkItemId: null,
+          kind: "none" }, runDisposition: fixture.atomicRunDisposition,
+        evidence: {} as never };
+    },
     async loadModelDispatchReceipt() { return null; },
     async prepareModelDispatch() { throw new Error("unused"); },
     async markModelDispatchPossiblySent() { throw new Error("unused"); },
@@ -450,17 +458,9 @@ function terminal<T extends
   | { status: "failed"; failureCode: string }
   | { status: "canceled" }>(outcome: T) {
   return {
-    ...outcome,
-    modelTerminal: {
-      dispatch: { operationId: "dispatch-1", requestSequence: 1,
-        expectedRevision: 3, status: "responseObserved" as const },
-      dispatchTerminalOutcome: {
-        kind: outcome.status,
-        code: outcome.status === "failed" ? outcome.failureCode
-          : outcome.status === "canceled" ? "workflow_node_canceled" : null,
-        certainty: "responseObserved" as const,
-      },
-    },
+    status: "terminalCandidate" as const,
+    terminalStatus: outcome.status,
+    modelTerminal: { candidateId: "candidate-1" },
   };
 }
 

@@ -30,7 +30,6 @@ import type {
 } from "./workflow-runtime-dispatcher.ts";
 import { WorkflowNodeSideEffectUncertainError } from "./workflow-runtime-dispatcher.ts";
 import {
-  projectWorkflowModelTerminal,
   workflowAttemptAuthority,
   workflowContinuationCheckpoint,
   type WorkflowDurableExecutionAuthority,
@@ -80,6 +79,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
   readonly #store: WorkflowExecutionStore;
   readonly #leaseDurationMs: number;
   readonly #segments = new AgentSegmentExecutionEngine();
+  readonly #afterTerminalCandidateCommitted?: () => Promise<void>;
 
   get workflowStore(): WorkflowRuntimeStore {
     return this.#store;
@@ -89,10 +89,12 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     execution: RunExecutionService;
     store: WorkflowExecutionStore;
     leaseDurationMs: number;
+    afterTerminalCandidateCommitted?: () => Promise<void>;
   }) {
     this.#execution = dependencies.execution;
     this.#store = dependencies.store;
     this.#leaseDurationMs = dependencies.leaseDurationMs;
+    this.#afterTerminalCandidateCommitted = dependencies.afterTerminalCandidateCommitted;
   }
 
   async execute(
@@ -328,6 +330,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             }]),
       ];
       let continuationRevision = internal.continuationState?.revision ?? null;
+      let terminalCandidateId: string | null = null;
       const currentDispatch = dispatch as ModelDispatchReceipt | null;
       if (currentDispatch?.status === "responseObserved") {
         const committed = await this.#store.commitWorkflowAssistantContinuation({
@@ -345,15 +348,29 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             providerTurnState: executed.segment.providerTurnState,
           }),
           committedAt: new Date().toISOString(),
+          terminalResult: decision.kind === "settle" &&
+              decision.outcome.status === "completed"
+            ? { status: "completed", output: executed.segment.output! }
+            : decision.kind === "settle" && decision.outcome.status === "failed"
+              ? { status: "failed", failureCode: decision.outcome.failureCode }
+              : decision.kind === "settle" && decision.outcome.status === "canceled"
+                ? { status: "canceled" } : null,
         });
         continuationRevision = committed.revision;
+        terminalCandidateId = committed.terminalCandidate?.candidateId ?? null;
+        if (terminalCandidateId !== null)
+          await this.#afterTerminalCandidateCommitted?.();
       }
       if (decision.kind === "settle") {
         if (decision.outcome.status === "unknown" ||
-            decision.outcome.status === "approvalHandoffRequired") {
+            decision.outcome.status === "approvalHandoffRequired" ||
+            decision.outcome.status === "terminalCandidate") {
           return decision.outcome;
         }
-        return projectWorkflowModelTerminal(decision.outcome, currentDispatch);
+        return terminalCandidateId === null ? { status: "unknown" }
+          : { status: "terminalCandidate",
+              terminalStatus: decision.outcome.status,
+              modelTerminal: { candidateId: terminalCandidateId } };
       }
       if (
         executed.segment.requestedTools.length === 0 &&

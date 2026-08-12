@@ -37,12 +37,13 @@ export function settleSqliteWorkflowNodeModelTerminalWithinTransaction(
   now: string,
   nowMs: number,
   source: "liveNode" | "reconciliation" = "liveNode",
+  candidateId: string | null = null,
 ): Result {
   const settlement = ordinarySettlement(input);
   const replay = source === "liveNode"
     ? context.receipt(settlement, "settleNode", fingerprint) : null;
   if (replay !== null) {
-    validateReplay(context, input, settlement, replay);
+    validateReplay(context, input, settlement, replay, candidateId);
     return structuredClone({ ...(replay as Result), disposition: "replay" });
   }
   validateInputAuthority(context, input, source);
@@ -102,6 +103,7 @@ export function settleSqliteWorkflowNodeModelTerminalWithinTransaction(
         handoff: settled.handoff,
         runDisposition: settled.runDisposition,
         evidence: structuredClone(evidence),
+        ...(candidateId === null ? {} : { candidateId }),
       }),
     },
   );
@@ -252,6 +254,7 @@ function validateReplay(
   input: SettleWorkflowNodeModelTerminalInput,
   settlement: ReturnType<typeof ordinarySettlement>,
   replay: unknown,
+  candidateId: string | null,
 ): void {
   try {
     const result = replay as Result;
@@ -262,9 +265,11 @@ function validateReplay(
     });
     if (stableJson(evidence) !== stableJson(input.evidence) ||
         result.disposition !== "settled" || result.continuation !== null ||
+        (candidateId !== null &&
+          (result as Result & { candidateId?: unknown }).candidateId !== candidateId) ||
         stableJson(Object.keys(result).sort()) !== stableJson([
-          "continuation", "disposition", "evidence", "handoff",
-          "runDisposition",
+          ...(candidateId === null ? [] : ["candidateId"]), "continuation",
+          "disposition", "evidence", "handoff", "runDisposition",
         ])) corrupt();
     validateWorkflowDispatchTerminalCorrelation({
       dispatch: input.dispatchTerminalOutcome,

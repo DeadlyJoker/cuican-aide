@@ -84,6 +84,7 @@ test("enforces per-item, item-count and total continuation history caps", () => 
 function checkpoint(): WorkflowNodeContinuationCheckpoint {
   return {
     schemaVersion: "crewon.workflow-node-continuation.v0",
+    terminalCandidate: null,
     authority: {
       tenantId: "tenant-1",
       runId: "run-1",

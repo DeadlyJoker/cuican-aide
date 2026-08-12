@@ -505,6 +505,7 @@ function continuationInput(
       ],
     },
     committedAt: now,
+    terminalResult: null,
   };
 }
 

@@ -10,7 +10,6 @@ import type {
   WorkflowContentDigester,
   WorkflowSchemaValue,
 } from "@crewon/domain";
-import { createWorkflowNodeTerminalEvidence } from "@crewon/domain";
 import { loadFrozenWorkflowVersion } from "./workflow-version-runtime.ts";
 import { parseWorkflowWorkItemPayload } from "./workflow-work-item-payload.ts";
 
@@ -21,11 +20,13 @@ export type WorkflowNodeOutcome =
       modelTerminal?: WorkflowModelTerminalAuthority }>
   | Readonly<{ status: "canceled"; modelTerminal?: WorkflowModelTerminalAuthority }>
   | Readonly<{ status: "unknown" }>
+  | Readonly<{ status: "terminalCandidate";
+      terminalStatus: "completed" | "failed" | "canceled";
+      modelTerminal: WorkflowModelTerminalAuthority }>
   | Readonly<{ status: "approvalHandoffRequired" }>;
 
 export type WorkflowModelTerminalAuthority = Readonly<{
-  dispatch: import("@crewon/application").WorkflowNodeDispatchAuthority;
-  dispatchTerminalOutcome: import("@crewon/domain").ModelDispatchTerminalOutcome;
+  candidateId: string;
 }>;
 
 export interface WorkflowAgentNodePort {
@@ -319,16 +320,24 @@ export class ProductionWorkflowRuntimeDispatcher
               failureCode: deterministicNodeFailureCode(error),
             };
     }
-    if (outcome.status !== "unknown" && outcome.modelTerminal === undefined) {
-      return {
-        kind: "recovery",
-        runId: input.run.runId,
-        code: "workflow_model_terminal_authority_unavailable",
-      };
-    }
     try {
-      const settled = outcome.status === "unknown"
-        ? await this.#store.settleWorkflowNode({
+      const settled = outcome.status === "terminalCandidate"
+        ? await this.#store.settlePreparedWorkflowNodeTerminal({
+            binding,
+            operationId: `node-model-terminal:${payload.claimId}`,
+            candidateId: outcome.modelTerminal.candidateId,
+            lease: leaseInput(input.claim),
+            authority: {
+              tenantId: input.run.tenantId, runId: input.run.runId,
+              workItemId: input.claim.workItem.workItemId,
+              leaseEpoch: input.claim.lease.epoch, nodeId: payload.nodeId,
+              nodeKind: node.kind === "agent" ? "agent" : "verification",
+              claimId: payload.claimId, claimEpoch: payload.claimEpoch,
+              agentVersionId, attempt: { stepId: admitted.admission.step.stepId,
+                attemptId: admitted.admission.attempt.attemptId },
+            },
+          })
+        : await this.#store.settleWorkflowNode({
         tenantId: input.run.tenantId,
         runId: input.run.runId,
         lease: leaseInput(input.claim),
@@ -340,43 +349,7 @@ export class ProductionWorkflowRuntimeDispatcher
         attemptId: admitted.admission.attempt.attemptId,
         operationId: `node-settle:${payload.claimId}`,
         outcome,
-      })
-        : await this.#store.settleWorkflowNodeModelTerminal({
-            binding,
-            nodeId: payload.nodeId,
-            operationId: `node-model-terminal:${payload.claimId}`,
-            evidence: createWorkflowNodeTerminalEvidence({
-              workflow,
-              nodeId: payload.nodeId,
-              outcome: outcome.status === "completed"
-                ? { status: "completed", value: outcome.value }
-                : outcome.status === "failed"
-                  ? { status: "failed", failureCode: outcome.failureCode,
-                      certainty: outcome.modelTerminal!.dispatchTerminalOutcome.certainty }
-                  : { status: "canceled",
-                      certainty: outcome.modelTerminal!.dispatchTerminalOutcome.certainty },
-              digester: this.#digester,
-            }),
-            lease: leaseInput(input.claim),
-            authority: {
-              tenantId: input.run.tenantId,
-              runId: input.run.runId,
-              workItemId: input.claim.workItem.workItemId,
-              leaseEpoch: input.claim.lease.epoch,
-              nodeId: payload.nodeId,
-              nodeKind: node.kind === "agent" ? "agent" : "verification",
-              claimId: payload.claimId,
-              claimEpoch: payload.claimEpoch,
-              agentVersionId,
-              attempt: {
-                stepId: admitted.admission.step.stepId,
-                attemptId: admitted.admission.attempt.attemptId,
-              },
-            },
-            dispatch: outcome.modelTerminal!.dispatch,
-            dispatchTerminalOutcome:
-              outcome.modelTerminal!.dispatchTerminalOutcome,
-          });
+      });
       assertCompletedHandoff(settled.handoff);
       return settled.runDisposition === "terminalConverged"
         ? { kind: "completed", runId: input.run.runId }

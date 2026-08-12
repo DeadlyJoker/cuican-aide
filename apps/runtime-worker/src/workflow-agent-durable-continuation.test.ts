@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  projectWorkflowModelTerminal,
-  workflowContinuationCheckpoint,
-} from "./workflow-agent-durable-continuation.ts";
+import { workflowContinuationCheckpoint } from "./workflow-agent-durable-continuation.ts";
 
 const authority = {
   tenantId: "tenant-1", runId: "run-1", nodeId: "agent",
@@ -29,26 +26,6 @@ const dispatch = {
   updatedAt: "2026-08-12T00:00:03.000Z",
 };
 
-test("projects only exact response-observed model terminal authority", () => {
-  assert.deepEqual(
-    projectWorkflowModelTerminal({ status: "completed", value: {} }, dispatch),
-    {
-      status: "completed",
-      value: {},
-      modelTerminal: {
-        dispatch: { operationId: "dispatch-1", requestSequence: 1,
-          expectedRevision: 3, status: "responseObserved" },
-        dispatchTerminalOutcome: { kind: "completed", code: null,
-          certainty: "responseObserved" },
-      },
-    },
-  );
-  assert.deepEqual(projectWorkflowModelTerminal(
-    { status: "completed", value: {} },
-    { ...dispatch, status: "possiblySent" },
-  ), { status: "unknown" });
-});
-
 test("builds the exact durable continuation CAS payload", () => {
   assert.deepEqual(workflowContinuationCheckpoint({
     authority, segmentId: "segment-1", modelSampleIndex: 1,
@@ -57,6 +34,7 @@ test("builds the exact durable continuation CAS payload", () => {
     ], dispatch, providerCheckpoint: null, providerTurnState: null,
   }), {
     schemaVersion: "crewon.workflow-node-continuation.v0",
+    terminalCandidate: null,
     authority: { tenantId: "tenant-1", runId: "run-1", nodeId: "agent",
       nodeKind: "agent", agentVersionId: "agent-v1", claimId: "claim-1",
       claimEpoch: 1, attempt: { stepId: "agent", attemptId: "attempt-1" },

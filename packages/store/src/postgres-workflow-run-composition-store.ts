@@ -313,6 +313,10 @@ export class PostgresWorkflowRunCompositionStore
     );
   }
 
+  async settlePreparedWorkflowNodeTerminal(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
   async loadWorkflowNodeContinuation(
     authority: Parameters<
       WorkflowNodeContinuationStore["loadWorkflowNodeContinuation"]
@@ -358,7 +362,7 @@ export class PostgresWorkflowRunCompositionStore
         this.schemaSql(),
         input.authority,
         input.expectedContinuationRevision,
-        input.next,
+        { ...input.next, terminalCandidate: null },
         input.committedAt,
       );
     });
