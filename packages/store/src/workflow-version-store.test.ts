@@ -48,21 +48,42 @@ else {
 test("SQLite migration fails closed without replacing a newer authority", () => {
   const database = new DatabaseSync(":memory:");
   database.exec(
-    "CREATE TABLE workflow_version_schema(singleton INTEGER PRIMARY KEY, version INTEGER); INSERT INTO workflow_version_schema VALUES(1,2)",
+    "CREATE TABLE workflow_version_schema(singleton INTEGER PRIMARY KEY, version INTEGER); INSERT INTO workflow_version_schema VALUES(1,2); CREATE TABLE sentinel(value TEXT); INSERT INTO sentinel VALUES('preserve')",
   );
+  const before = sqliteState(database);
   assert.throws(
     () => new SqliteWorkflowVersionStore(database, digester),
     /workflow_version_schema_unsupported/,
   );
-  assert.equal(
-    (
-      database.prepare("SELECT version FROM workflow_version_schema").get() as {
-        version: number;
-      }
-    ).version,
-    2,
-  );
+  assert.deepEqual(sqliteState(database), before);
 });
+
+if (postgresUrl)
+  test("PostgreSQL newer migration rolls back without DDL side effects", async () => {
+    const schema = `workflow_newer_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    try {
+      await pool.query(`CREATE SCHEMA ${schema}; CREATE TABLE ${schema}.workflow_version_schema
+      (singleton boolean PRIMARY KEY, version integer); INSERT INTO ${schema}.workflow_version_schema VALUES(true,2)`);
+      const before = await postgresTables(pool, schema);
+      const client = await pool.connect();
+      try {
+        await assert.rejects(
+          import("./workflow-version-store.ts").then(
+            ({ migratePostgresWorkflowVersions }) =>
+              migratePostgresWorkflowVersions(client, schema),
+          ),
+          /workflow_version_schema_unsupported/,
+        );
+      } finally {
+        client.release();
+      }
+      assert.deepEqual(await postgresTables(pool, schema), before);
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await pool.end();
+    }
+  });
 
 function registerConformance(
   name: string,
@@ -89,6 +110,8 @@ function registerConformance(
       }),
     );
     await store.registerWorkflowVersion(asset("tenant-1", "version-2"));
+    for (const id of ["Z", "a"])
+      await store.registerWorkflowVersion(asset("tenant-1", id));
     await store.registerWorkflowVersion(asset("tenant-2", "version-3"));
     assert.deepEqual(
       (
@@ -99,7 +122,7 @@ function registerConformance(
           limit: 1,
         })
       ).map((x) => x.workflowVersionId),
-      ["version-1"],
+      ["Z"],
     );
     assert.equal(
       await store.loadWorkflowVersion({
@@ -108,7 +131,47 @@ function registerConformance(
       }),
       null,
     );
+    assert.deepEqual(
+      (
+        await store.listWorkflowVersions({
+          tenantId: "tenant-1",
+          workflowId: "workflow-1",
+          after: null,
+          limit: 100,
+        })
+      ).map((item) => item.workflowVersionId),
+      ["Z", "a", "version-1", "version-2"],
+    );
+    await assert.rejects(
+      store.listWorkflowVersions({
+        tenantId: "tenant-1",
+        workflowId: "workflow-1",
+        after: { workflowId: "workflow-1", workflowVersionId: "bad\0cursor" },
+        limit: 1,
+      }),
+      /workflow_version_cursor_invalid/,
+    );
   });
+}
+
+function sqliteState(database: DatabaseSync) {
+  return {
+    schema: database
+      .prepare(
+        "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name",
+      )
+      .all(),
+    version: database.prepare("SELECT * FROM workflow_version_schema").all(),
+    sentinel: database.prepare("SELECT * FROM sentinel").all(),
+  };
+}
+async function postgresTables(pool: Pool, schema: string) {
+  return (
+    await pool.query(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema=$1 ORDER BY table_name",
+      [schema],
+    )
+  ).rows;
 }
 
 function asset(tenantId: string, workflowVersionId: string) {

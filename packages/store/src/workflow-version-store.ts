@@ -44,11 +44,12 @@ export class InMemoryWorkflowVersionStore implements WorkflowVersionStore {
           asset.tenantId === input.tenantId &&
           asset.workflowId === input.workflowId,
       )
-      .sort((a, b) => a.workflowVersionId.localeCompare(b.workflowVersionId))
+      .sort((a, b) => compareUtf8(a.workflowVersionId, b.workflowVersionId))
       .filter(
         (asset) =>
           input.after === null ||
-          asset.workflowVersionId > input.after.workflowVersionId,
+          compareUtf8(asset.workflowVersionId, input.after.workflowVersionId) >
+            0,
       )
       .slice(0, input.limit)
       .map((asset) => structuredClone(asset));
@@ -77,7 +78,10 @@ export class SqliteWorkflowVersionStore implements WorkflowVersionStore {
         asset.definitionJson,
         asset.createdAt,
       );
-    const stored = await this.loadWorkflowVersion(asset);
+    const stored = await this.loadWorkflowVersion({
+      tenantId: asset.tenantId,
+      workflowVersionId: asset.workflowVersionId,
+    });
     if (!stored) throw new RunStoreError("workflow_version_store_failed");
     if (inserted.changes === 1)
       return { disposition: "registered" as const, asset: stored };
@@ -88,19 +92,24 @@ export class SqliteWorkflowVersionStore implements WorkflowVersionStore {
     workflowVersionId: string;
   }) {
     locator(input);
-    const row = this.#database
-      .prepare(
-        `SELECT * FROM workflow_versions WHERE tenant_id=? AND workflow_version_id=?`,
-      )
-      .get(input.tenantId, input.workflowVersionId) as Row | undefined;
-    return row ? decode(row, this.#digester) : null;
+    try {
+      const row = this.#database
+        .prepare(
+          `SELECT * FROM workflow_versions WHERE tenant_id=? AND workflow_version_id=?`,
+        )
+        .get(input.tenantId, input.workflowVersionId) as Row | undefined;
+      return row ? decode(row, this.#digester) : null;
+    } catch (error) {
+      throw corruption(error);
+    }
   }
   async listWorkflowVersions(input: ListInput) {
     listInput(input);
     const rows = this.#database
       .prepare(
         `SELECT * FROM workflow_versions WHERE tenant_id=? AND workflow_id=?
-      AND workflow_version_id>? ORDER BY workflow_version_id LIMIT ?`,
+      AND CAST(workflow_version_id AS BLOB)>CAST(? AS BLOB)
+      ORDER BY CAST(workflow_version_id AS BLOB) LIMIT ?`,
       )
       .all(
         input.tenantId,
@@ -108,7 +117,11 @@ export class SqliteWorkflowVersionStore implements WorkflowVersionStore {
         input.after?.workflowVersionId ?? "",
         input.limit,
       ) as unknown as Row[];
-    return rows.map((row) => decode(row, this.#digester));
+    try {
+      return rows.map((row) => decode(row, this.#digester));
+    } catch (error) {
+      throw corruption(error);
+    }
   }
 }
 
@@ -144,7 +157,10 @@ export class PostgresWorkflowVersionStore implements WorkflowVersionStore {
         asset.createdAt,
       ],
     );
-    const stored = await this.loadWorkflowVersion(asset);
+    const stored = await this.loadWorkflowVersion({
+      tenantId: asset.tenantId,
+      workflowVersionId: asset.workflowVersionId,
+    });
     if (!stored) throw new RunStoreError("workflow_version_store_failed");
     if (inserted.rowCount === 1)
       return { disposition: "registered" as const, asset: stored };
@@ -160,14 +176,19 @@ export class PostgresWorkflowVersionStore implements WorkflowVersionStore {
       definition_json, created_at::text FROM ${this.#schema}.workflow_versions WHERE tenant_id=$1 AND workflow_version_id=$2`,
       [input.tenantId, input.workflowVersionId],
     );
-    return result.rows[0] ? decode(result.rows[0], this.#digester) : null;
+    try {
+      return result.rows[0] ? decode(result.rows[0], this.#digester) : null;
+    } catch (error) {
+      throw corruption(error);
+    }
   }
   async listWorkflowVersions(input: ListInput) {
     listInput(input);
     const result = await this.#pool.query<Row>(
       `SELECT tenant_id, workflow_id, workflow_version_id, content_digest,
       definition_json, created_at::text FROM ${this.#schema}.workflow_versions WHERE tenant_id=$1 AND workflow_id=$2
-      AND workflow_version_id>$3 ORDER BY workflow_version_id LIMIT $4`,
+      AND workflow_version_id COLLATE "C">$3 COLLATE "C"
+      ORDER BY workflow_version_id COLLATE "C" LIMIT $4`,
       [
         input.tenantId,
         input.workflowId,
@@ -175,27 +196,58 @@ export class PostgresWorkflowVersionStore implements WorkflowVersionStore {
         input.limit,
       ],
     );
-    return result.rows.map((row) => decode(row, this.#digester));
+    try {
+      return result.rows.map((row) => decode(row, this.#digester));
+    } catch (error) {
+      throw corruption(error);
+    }
   }
 }
 
 export function migrateSqliteWorkflowVersions(database: DatabaseSync) {
-  database.exec(`CREATE TABLE IF NOT EXISTS workflow_version_schema (singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL);
-    INSERT INTO workflow_version_schema VALUES(1,1) ON CONFLICT DO NOTHING;
-    CREATE TABLE IF NOT EXISTS workflow_versions (tenant_id TEXT NOT NULL, workflow_id TEXT NOT NULL,
-      workflow_version_id TEXT NOT NULL, content_digest TEXT NOT NULL, definition_json TEXT NOT NULL CHECK(json_valid(definition_json)),
-      created_at TEXT NOT NULL, PRIMARY KEY(tenant_id, workflow_version_id)) STRICT;`);
-  const row = database
-    .prepare("SELECT version FROM workflow_version_schema WHERE singleton=1")
-    .get() as { version: number } | undefined;
-  if (row?.version !== WORKFLOW_VERSION_SCHEMA_VERSION)
-    throw new RunStoreError("workflow_version_schema_unsupported");
+  const present = database
+    .prepare(
+      "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='workflow_version_schema'",
+    )
+    .get();
+  if (present !== undefined) {
+    const row = database
+      .prepare("SELECT version FROM workflow_version_schema WHERE singleton=1")
+      .get() as { version: number } | undefined;
+    if (row?.version !== WORKFLOW_VERSION_SCHEMA_VERSION)
+      throw new RunStoreError("workflow_version_schema_unsupported");
+  }
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database.exec(`CREATE TABLE IF NOT EXISTS workflow_version_schema (singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL);
+      INSERT INTO workflow_version_schema VALUES(1,1) ON CONFLICT DO NOTHING;
+      CREATE TABLE IF NOT EXISTS workflow_versions (tenant_id TEXT NOT NULL, workflow_id TEXT NOT NULL,
+        workflow_version_id TEXT NOT NULL, content_digest TEXT NOT NULL, definition_json TEXT NOT NULL CHECK(json_valid(definition_json)),
+        created_at TEXT NOT NULL, PRIMARY KEY(tenant_id, workflow_version_id)) STRICT;`);
+    database.exec("COMMIT");
+  } catch (error) {
+    try {
+      database.exec("ROLLBACK");
+    } catch {}
+    throw error;
+  }
 }
 
 export async function migratePostgresWorkflowVersions(
   client: PoolClient,
   schema: string,
 ) {
+  const present = await client.query<{ present: string | null }>(
+    "SELECT to_regclass($1)::text AS present",
+    [`${schema}.workflow_version_schema`],
+  );
+  if (present.rows[0]?.present !== null) {
+    const existing = await client.query<{ version: number }>(
+      `SELECT version FROM ${schema}.workflow_version_schema WHERE singleton=true`,
+    );
+    if (existing.rows[0]?.version !== WORKFLOW_VERSION_SCHEMA_VERSION)
+      throw new RunStoreError("workflow_version_schema_unsupported");
+  }
   await client.query("BEGIN");
   try {
     await client.query(`CREATE TABLE IF NOT EXISTS ${schema}.workflow_version_schema
@@ -245,30 +297,118 @@ function validateAsset(
   asset: WorkflowVersionAsset,
   digester: WorkflowContentDigester,
 ) {
-  const compiled = parseCompiledWorkflowVersion(asset.definitionJson, digester);
+  if (
+    !isPlainObject(asset) ||
+    !hasExactKeys(asset, [
+      "contentDigest",
+      "createdAt",
+      "definitionJson",
+      "schemaVersion",
+      "tenantId",
+      "workflowId",
+      "workflowVersionId",
+    ]) ||
+    asset.schemaVersion !== "crewon.workflow-version-asset.v0"
+  )
+    throw new RunStoreError("workflow_version_asset_invalid");
+  boundedId(asset.tenantId, "workflow_version_tenant_invalid");
+  boundedId(asset.workflowId, "workflow_id_invalid");
+  boundedId(asset.workflowVersionId, "workflow_version_id_invalid");
+  if (
+    !/^sha256:[a-f0-9]{64}$/u.test(asset.contentDigest) ||
+    !canonicalUtc(asset.createdAt) ||
+    typeof asset.definitionJson !== "string"
+  )
+    throw new RunStoreError("workflow_version_asset_invalid");
+  let compiled;
+  try {
+    compiled = parseCompiledWorkflowVersion(asset.definitionJson, digester);
+  } catch (error) {
+    throw new RunStoreError("workflow_version_definition_invalid", {
+      cause: error,
+    });
+  }
   if (
     compiled.workflowId !== asset.workflowId ||
     compiled.workflowVersionId !== asset.workflowVersionId ||
     compiled.contentDigest !== asset.contentDigest
   )
     throw new RunStoreError("workflow_version_authority_mismatch");
-  if (!asset.tenantId || Number.isNaN(Date.parse(asset.createdAt)))
-    throw new RunStoreError("workflow_version_asset_invalid");
 }
 function locator(input: { tenantId: string; workflowVersionId: string }) {
-  if (!input.tenantId || !input.workflowVersionId)
+  if (
+    !isPlainObject(input) ||
+    !hasExactKeys(input, ["tenantId", "workflowVersionId"])
+  )
     throw new RunStoreError("workflow_version_locator_invalid");
+  boundedId(input.tenantId, "workflow_version_locator_invalid");
+  boundedId(input.workflowVersionId, "workflow_version_locator_invalid");
 }
 function listInput(input: ListInput) {
   if (
-    !input.tenantId ||
-    !input.workflowId ||
+    !isPlainObject(input) ||
+    !hasExactKeys(input, ["after", "limit", "tenantId", "workflowId"]) ||
     !Number.isSafeInteger(input.limit) ||
     input.limit < 1 ||
     input.limit > 100 ||
     (input.after !== null && input.after.workflowId !== input.workflowId)
   )
     throw new RunStoreError("workflow_version_list_invalid");
+  boundedId(input.tenantId, "workflow_version_list_invalid");
+  boundedId(input.workflowId, "workflow_version_list_invalid");
+  if (input.after !== null) {
+    if (
+      !isPlainObject(input.after) ||
+      !hasExactKeys(input.after, ["workflowId", "workflowVersionId"])
+    )
+      throw new RunStoreError("workflow_version_cursor_invalid");
+    boundedId(input.after.workflowId, "workflow_version_cursor_invalid");
+    boundedId(input.after.workflowVersionId, "workflow_version_cursor_invalid");
+  }
+}
+function compareUtf8(left: string, right: string) {
+  return Buffer.compare(Buffer.from(left), Buffer.from(right));
+}
+function boundedId(value: unknown, code: string) {
+  if (
+    typeof value !== "string" ||
+    Buffer.byteLength(value) > 512 ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(value)
+  )
+    throw new RunStoreError(code);
+}
+function canonicalUtc(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value) &&
+    !Number.isNaN(Date.parse(value)) &&
+    new Date(value).toISOString() === value
+  );
+}
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype ||
+      Object.getPrototypeOf(value) === null)
+  );
+}
+function hasExactKeys(value: object, expected: readonly string[]) {
+  const actual = Object.keys(value).sort();
+  const keys = [...expected].sort();
+  return (
+    actual.length === keys.length &&
+    actual.every((key, index) => key === keys[index])
+  );
+}
+function corruption(error: unknown) {
+  return error instanceof RunStoreError &&
+    error.code === "workflow_version_store_corrupt"
+    ? error
+    : new RunStoreError("workflow_version_store_corrupt", {
+        cause: error instanceof Error ? error : undefined,
+      });
 }
 function key(input: { tenantId: string; workflowVersionId: string }) {
   return `${input.tenantId}\0${input.workflowVersionId}`;

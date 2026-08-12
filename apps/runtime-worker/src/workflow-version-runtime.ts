@@ -41,17 +41,45 @@ export function readyWorkflowNodes(
   workflow: CompiledWorkflowVersion,
   settlements: readonly WorkflowNodeSettlement[],
 ): readonly WorkflowNodeDefinition[] {
-  const settled = new Map(
-    settlements.map((item) => [item.nodeId, item.status]),
-  );
-  if (
-    settlements.some(
-      (item) => !workflow.nodes.some((node) => node.nodeId === item.nodeId),
-    )
-  ) {
-    throw new Error("workflow_node_settlement_invalid");
+  const nodeById = new Map(workflow.nodes.map((node) => [node.nodeId, node]));
+  const settled = new Map<string, "completed" | "failed">();
+  let failed = false;
+  for (const settlement of settlements) {
+    if (
+      typeof settlement !== "object" ||
+      settlement === null ||
+      Object.keys(settlement).sort().join(",") !== "nodeId,status" ||
+      typeof settlement.nodeId !== "string" ||
+      (settlement.status !== "completed" && settlement.status !== "failed")
+    ) {
+      throw new Error("workflow_node_settlement_invalid");
+    }
+    const node = nodeById.get(settlement.nodeId);
+    if (
+      node === undefined ||
+      settled.has(settlement.nodeId) ||
+      failed ||
+      node.dependsOn.some(
+        (dependency) => settled.get(dependency) !== "completed",
+      )
+    ) {
+      throw new Error("workflow_node_settlement_invalid");
+    }
+    const ready = workflow.executionOrder.filter((nodeId) => {
+      const candidate = nodeById.get(nodeId)!;
+      return (
+        !settled.has(nodeId) &&
+        candidate.dependsOn.every(
+          (dependency) => settled.get(dependency) === "completed",
+        )
+      );
+    });
+    if (ready[0] !== settlement.nodeId)
+      throw new Error("workflow_node_settlement_invalid");
+    settled.set(settlement.nodeId, settlement.status);
+    failed = settlement.status === "failed";
   }
-  if (settlements.some((item) => item.status === "failed")) return [];
+  if (failed) return [];
   return workflow.executionOrder
     .map((nodeId) => workflow.nodes.find((node) => node.nodeId === nodeId)!)
     .filter(

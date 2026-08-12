@@ -69,3 +69,23 @@ test("schedules agent, then durable human gate, then independent verification", 
     ["verification"],
   );
 });
+
+test("rejects forged or non-canonical settlement histories", () => {
+  for (const settlements of [
+    [{ nodeId: "missing", status: "completed" }],
+    [
+      { nodeId: "agent", status: "completed" },
+      { nodeId: "agent", status: "completed" },
+    ],
+    [{ nodeId: "gate", status: "completed" }],
+    [{ nodeId: "verify", status: "completed" }],
+    [
+      { nodeId: "agent", status: "failed" },
+      { nodeId: "gate", status: "completed" },
+    ],
+  ] as const)
+    assert.throws(
+      () => readyWorkflowNodes(workflow, settlements),
+      /workflow_node_settlement_invalid/,
+    );
+});
