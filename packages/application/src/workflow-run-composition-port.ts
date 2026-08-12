@@ -36,6 +36,14 @@ export type WorkflowGatePublicationAuthority = Readonly<{
   approvalResumeWorkItemId: string;
 }>;
 
+export type WorkflowAtomicHandoff = Readonly<{
+  currentWorkItem: "completed" | "retained";
+  nextWorkItemId: string | null;
+  kind: "none" | "scheduler" | "reconcile";
+}>;
+
+export type WorkflowRunDisposition = "nonTerminal" | "terminalConverged";
+
 export interface WorkflowRunCompositionStore {
   scheduleWorkflowNodes(input: {
     tenantId: string;
@@ -50,6 +58,8 @@ export interface WorkflowRunCompositionStore {
       nodeWorkItems: readonly WorkflowNodeWorkAuthority[];
       gatePublications: readonly WorkflowGatePublicationAuthority[];
       reconciliationClaims: readonly WorkflowNodeClaim[];
+      handoff: WorkflowAtomicHandoff;
+      runDisposition: WorkflowRunDisposition;
     }>
   >;
 
@@ -69,17 +79,20 @@ export interface WorkflowRunCompositionStore {
         disposition: "fresh";
         execution: WorkflowExecutionState;
         admission: WorkflowNodeAttemptAdmission;
+        handoff: WorkflowAtomicHandoff;
       }>
     | Readonly<{
         disposition: "replay";
         execution: WorkflowExecutionState;
         admission: null;
+        handoff: WorkflowAtomicHandoff;
       }>
     | Readonly<{
         disposition: "reconcileRequired";
         execution: WorkflowExecutionState;
         admission: null;
         reconciliationClaim: WorkflowNodeClaim;
+        handoff: WorkflowAtomicHandoff;
       }>
   >;
 
@@ -97,9 +110,11 @@ export interface WorkflowRunCompositionStore {
     outcome: WorkflowAtomicNodeOutcome;
   }): Promise<
     Readonly<{
-      disposition: "settled" | "replay" | "reconcileRequired";
+      disposition: "settled" | "replay" | "reconciliationScheduled";
       execution: WorkflowExecutionState;
       schedulerContinuationWorkItemId: string | null;
+      handoff: WorkflowAtomicHandoff;
+      runDisposition: WorkflowRunDisposition;
     }>
   >;
 
@@ -135,9 +150,11 @@ export interface WorkflowRunCompositionStore {
     operationId: string;
   }): Promise<
     Readonly<{
-      disposition: "settled" | "replay" | "reconcileRequired";
+      disposition: "settled" | "replay" | "reconciliationScheduled";
       execution: WorkflowExecutionState;
       schedulerContinuationWorkItemId: string | null;
+      handoff: WorkflowAtomicHandoff;
+      runDisposition: WorkflowRunDisposition;
     }>
   >;
 
@@ -155,6 +172,23 @@ export interface WorkflowRunCompositionStore {
     Readonly<{
       disposition: "scheduled" | "replay";
       reconciliationWorkItemId: string;
+      handoff: WorkflowAtomicHandoff;
+    }>
+  >;
+
+  cancelWorkflowExecution(input: {
+    tenantId: string;
+    runId: string;
+    lease: WorkItemLeaseInput;
+    binding: FrozenWorkflowVersionBinding;
+    operationId: string;
+    reasonCode: string;
+  }): Promise<
+    Readonly<{
+      disposition: "canceled" | "replay" | "reconciliationScheduled";
+      execution: WorkflowExecutionState;
+      handoff: WorkflowAtomicHandoff;
+      runDisposition: WorkflowRunDisposition;
     }>
   >;
 }

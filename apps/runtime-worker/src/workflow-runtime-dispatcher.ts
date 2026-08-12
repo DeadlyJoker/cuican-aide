@@ -87,7 +87,8 @@ export class ProductionWorkflowRuntimeDispatcher
         binding,
         schedulerOperationId: payload.schedulerOperationId,
       });
-      return scheduled.execution.status === "completed"
+      assertCompletedHandoff(scheduled.handoff);
+      return scheduled.runDisposition === "terminalConverged"
         ? { kind: "completed", runId: input.run.runId }
         : {
             kind: "recovery",
@@ -113,28 +114,31 @@ export class ProductionWorkflowRuntimeDispatcher
         decisionReceiptId: payload.decisionReceiptId,
         operationId: `gate-settle:${payload.decisionReceiptId}`,
       });
-      return settled.execution.status === "completed"
+      assertCompletedHandoff(settled.handoff);
+      return settled.runDisposition === "terminalConverged"
         ? { kind: "completed", runId: input.run.runId }
         : {
             kind: "recovery",
             runId: input.run.runId,
             code:
-              settled.disposition === "reconcileRequired"
+              settled.disposition === "reconciliationScheduled"
                 ? "workflow_gate_reconcile_required"
                 : "workflow_gate_settled",
           };
     }
-    await this.#composition.scheduleWorkflowReconciliation({
-      tenantId: input.run.tenantId,
-      runId: input.run.runId,
-      lease: leaseInput(input.claim),
-      binding,
-      operationId: payload.reconciliationOperationId,
-      reasonCode: "workflow_reconciliation_claimed",
-      nodeId: payload.nodeId,
-      claimId: payload.claimId,
-      claimEpoch: payload.claimEpoch,
-    });
+    const reconciliation =
+      await this.#composition.scheduleWorkflowReconciliation({
+        tenantId: input.run.tenantId,
+        runId: input.run.runId,
+        lease: leaseInput(input.claim),
+        binding,
+        operationId: payload.reconciliationOperationId,
+        reasonCode: "workflow_reconciliation_claimed",
+        nodeId: payload.nodeId,
+        claimId: payload.claimId,
+        claimEpoch: payload.claimEpoch,
+      });
+    assertCompletedHandoff(reconciliation.handoff, "reconcile");
     return {
       kind: "recovery",
       runId: input.run.runId,
@@ -163,7 +167,8 @@ export class ProductionWorkflowRuntimeDispatcher
       admissionOperationId: `node-admit:${payload.claimId}:${input.claim.lease.epoch}`,
       attemptLeaseDurationMs: this.#leaseDurationMs,
     });
-    if (admitted.disposition !== "fresh")
+    if (admitted.disposition !== "fresh") {
+      assertNonFreshAdmissionHandoff(admitted.handoff, admitted.disposition);
       return {
         kind: "recovery",
         runId: input.run.runId,
@@ -172,6 +177,13 @@ export class ProductionWorkflowRuntimeDispatcher
             ? "workflow_node_admission_replayed"
             : "workflow_node_reconcile_required",
       };
+    }
+    if (
+      admitted.handoff.currentWorkItem !== "retained" ||
+      admitted.handoff.kind !== "none" ||
+      admitted.handoff.nextWorkItemId !== null
+    )
+      throw new Error("workflow_fresh_admission_handoff_invalid");
     const node = workflow.nodes.find(
       (candidate) => candidate.nodeId === payload.nodeId,
     );
@@ -220,7 +232,8 @@ export class ProductionWorkflowRuntimeDispatcher
         operationId: `node-settle:${payload.claimId}`,
         outcome,
       });
-      return settled.execution.status === "completed"
+      assertCompletedHandoff(settled.handoff);
+      return settled.runDisposition === "terminalConverged"
         ? { kind: "completed", runId: input.run.runId }
         : {
             kind: "recovery",
@@ -235,6 +248,30 @@ export class ProductionWorkflowRuntimeDispatcher
       };
     }
   }
+}
+
+function assertCompletedHandoff(
+  handoff: import("@crewon/application").WorkflowAtomicHandoff,
+  expectedKind?: "reconcile",
+): void {
+  if (
+    handoff.currentWorkItem !== "completed" ||
+    (expectedKind !== undefined && handoff.kind !== expectedKind) ||
+    (handoff.kind === "none"
+      ? handoff.nextWorkItemId !== null
+      : handoff.nextWorkItemId === null)
+  )
+    throw new Error("workflow_atomic_handoff_invalid");
+}
+
+function assertNonFreshAdmissionHandoff(
+  handoff: import("@crewon/application").WorkflowAtomicHandoff,
+  disposition: "replay" | "reconcileRequired",
+): void {
+  if (disposition === "reconcileRequired")
+    assertCompletedHandoff(handoff, "reconcile");
+  else if (handoff.currentWorkItem === "retained")
+    throw new Error("workflow_replay_handoff_ambiguous");
 }
 
 function leaseInput(claim: WorkItemClaim) {

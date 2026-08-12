@@ -167,11 +167,26 @@ function composition() {
         nodeWorkItems: [],
         gatePublications: [],
         reconciliationClaims: [],
+        handoff: {
+          currentWorkItem: "completed",
+          nextWorkItemId: null,
+          kind: "none",
+        },
+        runDisposition: "nonTerminal",
       };
     },
     async admitWorkflowNodeWork(input) {
       if (fixture.nodeDisposition === "replay")
-        return { disposition: "replay", execution: state(), admission: null };
+        return {
+          disposition: "replay",
+          execution: state(),
+          admission: null,
+          handoff: {
+            currentWorkItem: "completed",
+            nextWorkItemId: null,
+            kind: "none",
+          },
+        };
       const claim = {
         node: workflow.nodes[0]!,
         claimId: input.claimId,
@@ -190,6 +205,11 @@ function composition() {
           step: { stepId: `step-${input.claimId}` } as never,
           attempt: { attemptId: `attempt-${input.claimId}` } as never,
         },
+        handoff: {
+          currentWorkItem: "retained",
+          nextWorkItemId: null,
+          kind: "none",
+        },
       };
     },
     async settleWorkflowNode() {
@@ -199,6 +219,12 @@ function composition() {
         disposition: "settled",
         execution: state("completed"),
         schedulerContinuationWorkItemId: null,
+        handoff: {
+          currentWorkItem: "completed",
+          nextWorkItemId: null,
+          kind: "none",
+        },
+        runDisposition: "terminalConverged",
       };
     },
     async recordWorkflowHumanGateDecision() {
@@ -212,7 +238,15 @@ function composition() {
       return {
         disposition: "scheduled",
         reconciliationWorkItemId: "wf1:rec:hash",
+        handoff: {
+          currentWorkItem: "completed",
+          nextWorkItemId: "wf1:rec:hash",
+          kind: "reconcile",
+        },
       };
+    },
+    async cancelWorkflowExecution() {
+      throw new Error("not used");
     },
   };
   return fixture;
