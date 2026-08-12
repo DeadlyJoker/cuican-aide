@@ -1109,6 +1109,13 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     options: Readonly<{
       executionLease?: WorkItemLeaseInput;
       history?: ModelHistoryAppend;
+      workItemPayloadKind?:
+        | "default"
+        | "goalContinuation"
+        | "goalActivation"
+        | "automationInvocation"
+        | "workflowScheduler"
+        | "manualCompaction";
       beforeWrite?: (
         authority: Readonly<{
           current: RunState | null;
@@ -1243,7 +1250,8 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
       input.tenantId,
       input.events.at(-1)?.sequence ?? 0,
       (id) => workItemIds.has(id),
-      input.threadAdmission === undefined ? "default" : "manualCompaction",
+      options.workItemPayloadKind ??
+        (input.threadAdmission === undefined ? "default" : "manualCompaction"),
     );
     await options.beforeWrite?.({ current, next, thread });
     await writePostgresRunSnapshot(
