@@ -26,6 +26,10 @@ test("parity matrix names every required trace and all three runtimes", async ()
     ),
   );
   assert.deepEqual(matrix.requiredCases, requiredCases);
+  assert.deepEqual(Object.keys(matrix.evidence), [...requiredCases]);
+  for (const caseId of requiredCases) {
+    assert.ok(matrix.evidence[caseId].length >= 2, caseId);
+  }
   assert.deepEqual(matrix.sharedTsReducer.consumers, [
     "ordinaryTs",
     "workflowTs",

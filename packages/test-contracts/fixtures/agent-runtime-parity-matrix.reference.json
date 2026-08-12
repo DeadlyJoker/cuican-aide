@@ -81,6 +81,48 @@
     "Workflow settlement is node-scoped and must not settle the root Run.",
     "Workflow durable continuation ownership is audited separately while that implementation is in flight."
   ],
+  "evidence": {
+    "terminal": [
+      "runtime-worker.test.ts#completes a durable Run through the Direct Responses transport",
+      "codex-rs/core/src/session/turn.rs#run_turn"
+    ],
+    "assistant-tool-mixed": [
+      "runtime-worker.test.ts#deep-equals the Rust mixed completed assistant and Tool response trace",
+      "packages/test-contracts/fixtures/provider-end-turn-mixed-tool-continuation.reference.json"
+    ],
+    "one-tool-then-final": [
+      "runtime-worker.test.ts#allows the final model sample at the max Tool round boundary",
+      "workflow-agent-runtime-adapter.test.ts#workflow executes a durable Tool sub-attempt and continues the same Agent node"
+    ],
+    "two-tool-rounds": [
+      "workflow-agent-runtime-adapter.test.ts#workflow Tool round limit counts Tool batches instead of model samples",
+      "codex-rs/core/src/session/turn.rs#run_turn"
+    ],
+    "completed-tool-receipt-replay": [
+      "runtime-worker.test.ts#replays a committed Tool receipt after process loss without calling the provider",
+      "workflow-agent-runtime-adapter.test.ts#completed Tool receipt replay performs no recovery, execute, reconcile, or new Attempt"
+    ],
+    "possibly-sent-no-response": [
+      "workflow-agent-runtime-adapter.test.ts#workflow Direct dispatch fails closed before kernel when evidence Store is missing",
+      "packages/test-contracts/fixtures/provider-response-reconcile.reference.json"
+    ],
+    "provider-checkpoint-crash-retrieve": [
+      "runtime-worker.test.ts#retrieves a durable provider response after lease-loss without resampling",
+      "packages/test-contracts/fixtures/provider-response-reconcile.reference.json"
+    ],
+    "cancel-terminal-race": [
+      "agent-segment-execution-engine.test.ts#durable cancellation wins before an uncommitted terminal event",
+      "codex-rs/core/src/session/tests.rs#abort_regular_task_emits_marker_before_turn_aborted"
+    ],
+    "stream-retry": [
+      "runtime-worker.test.ts#retries an explicitly retryable model terminal within one Attempt",
+      "codex-rs/core/tests/suite/stream_no_completed.rs"
+    ],
+    "max-tool-rounds-boundary": [
+      "runtime-worker.test.ts#allows the final model sample at the max Tool round boundary",
+      "workflow-agent-runtime-adapter.test.ts#workflow Tool round limit counts Tool batches instead of model samples"
+    ]
+  },
   "requiredCases": [
     "terminal",
     "assistant-tool-mixed",

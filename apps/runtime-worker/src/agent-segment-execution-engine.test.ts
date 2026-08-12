@@ -82,6 +82,40 @@ test("ordinary authority preserves kernel evidence, checkpoint, event, and turn-
   assert.equal(result.segment.providerTurnState, "turn-1");
 });
 
+test("durable cancellation wins before an uncommitted terminal event", async () => {
+  const kernel: AgentKernelPort = {
+    modelIdentity: {
+      adapterName: "test",
+      adapterVersion: "1",
+      modelId: "model",
+    },
+    async *runSegment() {
+      yield event(1, "segment.started", { attempt: 1, model: "model" });
+      yield event(2, "segment.completed", { output: "" });
+    },
+  };
+  let cancellationChecks = 0;
+  const result = await new AgentSegmentExecutionEngine().execute({
+    kernel,
+    contract: contract(),
+    signal: new AbortController().signal,
+    providerTurnState: null,
+    authority: {
+      async renewLease() {},
+      async cancellationRequested() {
+        cancellationChecks += 1;
+        return cancellationChecks === 2;
+      },
+      async checkpointProviderResponse() {},
+      async persistImmediateEvent() {},
+      async recordProviderTurnState() {},
+    },
+  });
+  assert.equal(result.canceled, true);
+  assert.equal(result.segment.completed, false);
+  assert.equal(result.segment.lastAgentSequence, 1);
+});
+
 function event<T extends KernelAgentEvent["type"]>(
   sequence: number,
   type: T,
