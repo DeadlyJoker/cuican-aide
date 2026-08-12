@@ -74,6 +74,9 @@ test("scheduler receipt fanout never executes a node", async () => {
   });
   assert.equal(executions, 0);
   assert.equal(fixture.schedules, 1);
+  assert.deepEqual(fixture.workflowInputs, [
+    { valueId: "value-1", valueDigest: digest("input") },
+  ]);
 });
 
 test("node admission replay performs zero duplicate side effects", async () => {
@@ -181,13 +184,15 @@ function composition() {
     reconciliations: 0,
     cancellations: 0,
     outcomes: [] as unknown[],
+    workflowInputs: [] as unknown[],
     nodeDisposition: "fresh" as "fresh" | "replay",
     failSettlement: false,
     store: null as unknown as WorkflowRunCompositionStore,
   };
   fixture.store = {
-    async scheduleWorkflowNodes() {
+    async scheduleWorkflowNodes(input) {
       fixture.schedules += 1;
+      fixture.workflowInputs.push(input.workflowInput);
       return {
         disposition: "replay",
         execution: state(),

@@ -103,6 +103,7 @@ export class ProductionWorkflowRuntimeDispatcher
         lease: leaseInput(input.claim),
         binding,
         schedulerOperationId: payload.schedulerOperationId,
+        workflowInput: payload.workflowInput,
       });
       assertCompletedHandoff(scheduled.handoff);
       return scheduled.runDisposition === "terminalConverged"
