@@ -113,7 +113,10 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
     lease,
     binding,
     schedulerOperationId: "schedule-fanout-1",
-    workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") },
+    workflowInput: {
+      valueId: "root-value-1",
+      valueDigest: digester.sha256("{}"),
+    },
   });
   assert.equal(scheduled.disposition, "scheduled");
   assert.equal(scheduled.nodeWorkItems.length, 1);
@@ -247,6 +250,242 @@ if (postgresUrl === undefined) {
       await store.close();
     }
   });
+
+  test("PostgreSQL composition validates replay and fans out every recovery claim", async () => {
+    const schema = `workflow_replay_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({
+      pool,
+      schema,
+      digester,
+    });
+    try {
+      await seedPostgresComposition(pool, schema);
+      const scheduleInput = {
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease,
+        binding,
+        schedulerOperationId: "schedule-fanout-1",
+        workflowInput: {
+          valueId: "root-value-1",
+          valueDigest: digester.sha256("{}"),
+        },
+      } as const;
+      const fresh = await store.scheduleWorkflowNodes(scheduleInput);
+      assert.equal(fresh.disposition, "scheduled");
+      assert.deepEqual(await store.scheduleWorkflowNodes(scheduleInput), {
+        ...fresh,
+        disposition: "replay",
+      });
+      await assert.rejects(
+        store.scheduleWorkflowNodes({
+          ...scheduleInput,
+          workflowInput: { ...scheduleInput.workflowInput, valueId: "forged" },
+        }),
+        /idempotency_conflict/u,
+      );
+      const work = fresh.nodeWorkItems[0]!;
+      await pool.query(
+        `UPDATE ${schema}.work_items SET status='leased',
+        lease_owner_id='node-worker',lease_id='node-lease',lease_epoch=1,
+        lease_expires_at=clock_timestamp()+interval '1 minute' WHERE work_item_id=$1`,
+        [work.workItemId],
+      );
+      const admitInput = {
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: {
+          workItemId: work.workItemId,
+          ownerId: "node-worker",
+          leaseId: "node-lease",
+          leaseEpoch: 1,
+        },
+        binding,
+        nodeId: work.nodeId,
+        claimId: work.claimId,
+        claimEpoch: work.claimEpoch,
+        schedulerOperationId: "schedule-fanout-1",
+        admissionOperationId: "admit-1",
+        attemptLeaseDurationMs: 5_000,
+      } as const;
+      const admitted = await store.admitWorkflowNodeWork(admitInput);
+      assert.equal(admitted.disposition, "fresh");
+      const second = new PostgresWorkflowRunCompositionStore({
+        pool,
+        schema,
+        digester,
+      });
+      assert.equal(
+        (await second.admitWorkflowNodeWork(admitInput)).disposition,
+        "replay",
+      );
+
+      const executionRow = await pool.query<{
+        state_json: Record<string, unknown>;
+      }>(
+        `SELECT state_json FROM ${schema}.workflow_executions WHERE run_id='run-1'`,
+      );
+      const execution = executionRow.rows[0]!.state_json as {
+        revision: number;
+        nodes: Array<Record<string, unknown>>;
+        updatedAt: string;
+      };
+      execution.revision += 1;
+      execution.updatedAt = "2026-08-12T00:01:00.000Z";
+      execution.nodes = execution.nodes.map((node) =>
+        node.claimId === null
+          ? node
+          : {
+              ...node,
+              status: "unknown",
+              leaseExpiresAt: null,
+            },
+      );
+      await pool.query(
+        `UPDATE ${schema}.workflow_executions
+        SET revision=$1,state_json=$2,updated_at=$3 WHERE run_id='run-1'`,
+        [execution.revision, execution, execution.updatedAt],
+      );
+      await seedPostgresSchedulerWork(
+        pool,
+        schema,
+        "work-recover",
+        "schedule-recover",
+      );
+      const recovered = await store.scheduleWorkflowNodes({
+        ...scheduleInput,
+        lease: { ...lease, workItemId: "work-recover" },
+        schedulerOperationId: "schedule-recover",
+      });
+      assert.equal(recovered.disposition, "reconcileRequired");
+      assert.equal(recovered.reconciliationClaims.length, 2);
+      const recoveryRows = await pool.query<{
+        work_item_json: { payload: { trigger: string } };
+      }>(
+        `SELECT work_item_json FROM ${schema}.work_items
+         WHERE work_item_json->'payload'->>'trigger'='workflowReconcile'`,
+      );
+      assert.equal(recoveryRows.rowCount, 2);
+
+      await pool.query(`UPDATE ${schema}.workflow_composition_receipts
+        SET result_json=jsonb_set(result_json,'{execution,tenantId}','"tampered"')
+        WHERE operation_id='schedule-recover'`);
+      await assert.rejects(
+        store.scheduleWorkflowNodes({
+          ...scheduleInput,
+          lease: { ...lease, workItemId: "work-recover" },
+          schedulerOperationId: "schedule-recover",
+        }),
+        /receipt_corrupt/u,
+      );
+      await seedPostgresSchedulerWork(
+        pool,
+        schema,
+        "work-stale",
+        "schedule-stale",
+        "-1 second",
+      );
+      await assert.rejects(
+        store.scheduleWorkflowNodes({
+          ...scheduleInput,
+          lease: { ...lease, workItemId: "work-stale" },
+          schedulerOperationId: "schedule-stale",
+        }),
+        /stale_lease/u,
+      );
+      await pool.query(
+        `UPDATE ${schema}.workflow_execution_values
+        SET value_json=$1 WHERE role='rootInput'`,
+        [{ oversized: "x".repeat(33_000) }],
+      );
+      await seedPostgresSchedulerWork(pool, schema, "work-cap", "schedule-cap");
+      await assert.rejects(
+        store.scheduleWorkflowNodes({
+          ...scheduleInput,
+          lease: { ...lease, workItemId: "work-cap" },
+          schedulerOperationId: "schedule-cap",
+        }),
+        /workflow_execution_value_corrupt/u,
+      );
+      const rolledBack =
+        await pool.query(`SELECT status FROM ${schema}.work_items
+        WHERE work_item_id='work-cap'`);
+      assert.equal(rolledBack.rows[0]?.status, "leased");
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
+}
+
+async function seedPostgresComposition(
+  pool: Pool,
+  schema: string,
+): Promise<void> {
+  const run = runState();
+  await pool.query(
+    `INSERT INTO ${schema}.workflow_versions
+    (tenant_id,workflow_id,workflow_version_id,content_digest,definition_json,created_at)
+    VALUES ($1,$2,$3,$4,$5,$6)`,
+    [
+      "tenant-1",
+      workflow.workflowId,
+      workflow.workflowVersionId,
+      workflow.contentDigest,
+      serializeCompiledWorkflowVersion(workflow),
+      run.createdAt,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.run_snapshots
+    (tenant_id,space_id,run_id,revision,last_sequence,state_json,updated_at)
+    VALUES ('tenant-1','space-1','run-1',2,2,$1,$2)`,
+    [run, run.updatedAt],
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.workflow_execution_values
+    (tenant_id,run_id,value_id,role,node_id,value_digest,value_json,created_at)
+    VALUES ('tenant-1','run-1','root-value-1','rootInput',NULL,$1,'{}',$2)`,
+    [digester.sha256("{}"), run.createdAt],
+  );
+  await seedPostgresSchedulerWork(pool, schema, "work-1", "schedule-fanout-1");
+}
+
+async function seedPostgresSchedulerWork(
+  pool: Pool,
+  schema: string,
+  workItemId: string,
+  operationId: string,
+  expiry = "1 minute",
+): Promise<void> {
+  const now = "2026-08-12T00:00:00.000Z";
+  const payload = {
+    schemaVersion: "crewon.workflow-scheduler-work-item.v1",
+    trigger: "workflowScheduler",
+    binding,
+    schedulerOperationId: operationId,
+    workflowInput: {
+      valueId: "root-value-1",
+      valueDigest: digester.sha256("{}"),
+    },
+  };
+  const item = {
+    workItemId,
+    tenantId: "tenant-1",
+    runId: "run-1",
+    kind: "run.execute",
+    payload,
+    createdAt: now,
+  };
+  await pool.query(
+    `INSERT INTO ${schema}.work_items
+    (work_item_id,tenant_id,run_id,kind,work_item_json,created_at,status,available_at,
+     lease_owner_id,lease_id,lease_epoch,lease_expires_at,attempt_count)
+    VALUES ($1,'tenant-1','run-1','run.execute',$2,$3,'leased',$3,$4,$5,1,
+      clock_timestamp()+$6::interval,1)`,
+    [workItemId, item, now, lease.ownerId, lease.leaseId, expiry],
+  );
 }
 
 async function seed(
@@ -295,13 +534,23 @@ async function seed(
       "tenant-1",
       "run-1",
       "run.execute",
-      JSON.stringify({ workItemId: "work-1", tenantId: "tenant-1", runId: "run-1",
-        kind: "run.execute", createdAt: run.createdAt, payload: {
+      JSON.stringify({
+        workItemId: "work-1",
+        tenantId: "tenant-1",
+        runId: "run-1",
+        kind: "run.execute",
+        createdAt: run.createdAt,
+        payload: {
           schemaVersion: "crewon.workflow-scheduler-work-item.v1",
-          trigger: "workflowScheduler", binding,
+          trigger: "workflowScheduler",
+          binding,
           schedulerOperationId: "schedule-fanout-1",
-          workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") },
-        } }),
+          workflowInput: {
+            valueId: "root-value-1",
+            valueDigest: digester.sha256("{}"),
+          },
+        },
+      }),
       run.createdAt,
       0,
       lease.ownerId,
@@ -309,11 +558,13 @@ async function seed(
       lease.leaseEpoch,
       leaseExpiresAtMs,
     );
-  database.prepare(
-    `INSERT INTO workflow_execution_values
+  database
+    .prepare(
+      `INSERT INTO workflow_execution_values
      (tenant_id,run_id,value_id,role,node_id,value_digest,value_json,created_at)
      VALUES ('tenant-1','run-1','root-value-1','rootInput',NULL,?,?,?)`,
-  ).run(digester.sha256("{}"), "{}", run.createdAt);
+    )
+    .run(digester.sha256("{}"), "{}", run.createdAt);
   if (typeof databaseOrPath === "string") database.close();
 }
 
