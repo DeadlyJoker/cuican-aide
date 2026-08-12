@@ -10,6 +10,7 @@ import { ThreadApplicationService, WorkflowRunApplicationService } from "@crewon
 import { compileWorkflowVersion, serializeCompiledWorkflowVersion } from "@crewon/domain";
 import { SqliteRunStore } from "@crewon/store";
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
+import { WorkflowNodeSideEffectUncertainError } from "./workflow-runtime-dispatcher.ts";
 import { createStandaloneRuntimeWorker, WORKFLOW_RUNTIME_CAPABILITIES } from "./standalone-composition.ts";
 
 const digester = { sha256: (value: string) =>
@@ -211,6 +212,71 @@ test("SQLite Slice 4 restart reconciles possibly-sent model work without resampl
   assert.equal(inspectReconciliation(path, runId).reconcilePending, 0);
 });
 
+test("SQLite Slice 4 not-dispatched reconciliation grants only a new admission", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-slice-four-not-dispatched-"));
+  const path = join(directory, "runtime.sqlite");
+  let runtime: Awaited<ReturnType<typeof createStandaloneRuntimeWorker>> | undefined;
+  t.after(async () => {
+    if (runtime !== undefined) await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+  const samples = new Map<string, number>();
+  const versions = ["gate-agent-v1", "gate-verification-v1"].map(agentVersion);
+  const config = { ...baseConfig(), agentVersionDeployments: versions.map((version) => ({
+    schemaVersion: "crewon.agent-version-deployment.v0" as const, tenantId: "tenant-1",
+    agentVersionId: version.agentVersionId, contentDigest: version.contentDigest,
+    materializationDigest: digester.sha256(`materialization:${version.agentVersionId}`),
+    authorityId: `authority-${version.agentVersionId}`, workspaceBindingId: null })),
+    agentVersionRuntimeFactory: { create: ({ version }: { version: { agentVersionId: string } }) =>
+      preparedOnlyNodeRuntime(version.agentVersionId) } };
+  const setup = new SqliteRunStore(path, { workflowDigester: digester });
+  for (const version of versions) await setup.registerAgentVersion(createAgentVersionAsset({
+    tenantId: "tenant-1", version, createdAt: "2026-08-12T00:00:00.000Z" }));
+  await activateStandaloneRuntimeAgentVersionRelease({ ...config, databasePath: path,
+    actor: actor(), authorization: allow(), clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    activationId: "activate-slice-four-not-dispatched" });
+  await new ThreadApplicationService({ store: setup, authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" }, ids: { nextId: () => "not-dispatched-thread" },
+    digester }).createThread(actor(), { kind: "thread.create",
+    idempotencyKey: "thread-not-dispatched", title: "Not dispatched" });
+  await setup.workflowVersionStore(digester).registerWorkflowVersion({
+    schemaVersion: "crewon.workflow-version-asset.v0", tenantId: "tenant-1",
+    workflowId: workflow.workflowId, workflowVersionId: workflow.workflowVersionId,
+    contentDigest: workflow.contentDigest, definitionJson: serializeCompiledWorkflowVersion(workflow),
+    createdAt: "2026-08-12T00:00:00.000Z" });
+  let id = 0;
+  const started = await new WorkflowRunApplicationService({ store: setup,
+    authorization: allow(), clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    workflowDigester: digester, ids: { nextId: (kind) => `${kind}-${++id}` },
+    routeResolver: { resolveRoute: async () => config.route },
+  }).startWorkflowRun(actor(), { kind: "workflowRun.start",
+    idempotencyKey: "start-not-dispatched", workflowVersionId: workflow.workflowVersionId,
+    threadId: "not-dispatched-thread", input: {} });
+  const runId = started.run.state.runId;
+  await setup.close();
+  runtime = await openPreparedOnlyRuntime(path, config, "not-dispatched-crashed-worker");
+  await runtime.worker.wake();
+  await runtime.worker.wake();
+  assert.deepEqual(samples, new Map());
+  const before = inspectNodeAuthorities(path, runId);
+  assert.deepEqual(before.dispatchStatuses, ["prepared"]);
+  assert.equal(before.reconcilePending, 1);
+  await runtime.close();
+  runtime = await openPreparedOnlyRuntime(path, config, "not-dispatched-reconcile-worker");
+
+  await runtime.worker.wake();
+  const after = inspectNodeAuthorities(path, runId);
+  assert.deepEqual(samples, new Map());
+  assert.equal(after.reconcileCompleted, 1);
+  assert.equal(after.nodeWorkItems.length, 2);
+  assert.equal(new Set(after.nodeWorkItems.map(({ claimId }) => claimId)).size, 2);
+  assert.deepEqual(after.nodeWorkItems.map(({ claimEpoch }) => claimEpoch), [1, 2]);
+  await runtime.close();
+  runtime = await openRuntime(path, config, samples, "not-dispatched-fresh-worker");
+  await runtime.worker.wake();
+  assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
+});
+
 function inspect(path: string, runId: string) {
   const database = new DatabaseSync(path);
   try {
@@ -292,6 +358,16 @@ async function openUncertainRuntime(path: string,
       capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions: store.workflowVersionStore(digester),
       store: store as never, close: () => store.close() } });
 }
+async function openPreparedOnlyRuntime(path: string,
+  config: ReturnType<typeof baseConfig> & Record<string, unknown>, ownerId: string) {
+  const store = new SqliteRunStore(path, { workflowDigester: digester });
+  return createStandaloneRuntimeWorker({ ...config, databasePath: path, scanIntervalMs: null, ownerId,
+    additionalAgentVersionRuntimes: ["gate-agent-v1", "gate-verification-v1"].map(
+      (agentVersionId) => ({ tenantId: "tenant-1", runtime: preparedOnlyNodeRuntime(agentVersionId) })),
+    workflowComposition: { certification: { schemaVersion: "crewon.workflow-runtime-certification.v0",
+      capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions: store.workflowVersionStore(digester),
+      store: store as never, close: () => store.close() } });
+}
 function inspectReconciliation(path: string, runId: string) {
   const database = new DatabaseSync(path);
   try {
@@ -303,6 +379,23 @@ function inspectReconciliation(path: string, runId: string) {
       reconcilePending: database.prepare(`SELECT count(*) count FROM work_items WHERE run_id=?
         AND status='pending' AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`)
         .get(runId)!.count };
+  } finally { database.close(); }
+}
+function inspectNodeAuthorities(path: string, runId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const count = (status: string) => database.prepare(`SELECT count(*) count FROM work_items
+      WHERE run_id=? AND status=? AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`)
+      .get(runId, status)!.count;
+    return { dispatchStatuses: database.prepare(
+      "SELECT status FROM model_dispatch_receipts WHERE run_id=? ORDER BY rowid").all(runId)
+      .map(({ status }) => status), reconcilePending: count("pending"),
+      reconcileCompleted: count("completed"), nodeWorkItems: database.prepare(`SELECT
+        json_extract(work_item_json,'$.payload.claimId') claimId,
+        json_extract(work_item_json,'$.payload.claimEpoch') claimEpoch
+        FROM work_items WHERE run_id=? AND
+        json_extract(work_item_json,'$.payload.trigger')='workflowNode' ORDER BY work_item_order`)
+        .all(runId).map(({ claimId, claimEpoch }) => ({ claimId, claimEpoch })) };
   } finally { database.close(); }
 }
 function actor() { return { principalId: "principal", actorId: "actor", tenantId: "tenant-1", spaceId: "space-1" }; }
@@ -353,6 +446,23 @@ function uncertainNodeRuntime(agentVersionId: string, samples: Map<string, numbe
       await options.controlSink?.modelRequestPrepared?.(evidence);
       await options.controlSink?.dispatchBoundaryCrossed?.(evidence);
       throw new Error("provider_connection_lost_after_dispatch");
+    } } } as never;
+}
+function preparedOnlyNodeRuntime(agentVersionId: string) {
+  const version = agentVersion(agentVersionId);
+  return { version, policy: {} as never, toolRuntime: {
+    definitions: () => [], executionPolicy: () => null,
+    execute: async () => { throw new Error("tool forbidden"); },
+    reconcile: async () => { throw new Error("tool forbidden"); } },
+    kernel: { supportsModelDispatchEvidence: true,
+      modelIdentity: { adapterName: "test", adapterVersion: "1", modelId: "model" },
+    async *runSegment(contract: { runId: string; segmentId: string }, _signal: AbortSignal,
+      options: { controlSink?: Record<string, (value: unknown) => Promise<void>> }) {
+      const evidence = { operationId: `${contract.segmentId}:dispatch`, requestSequence: 1,
+        operation: "dispatch", requestDigest: digester.sha256(agentVersionId), provider: {
+          agentVersionId, adapterName: "test", adapterVersion: "1", modelId: "model" } };
+      await options.controlSink?.modelRequestPrepared?.(evidence);
+      throw new WorkflowNodeSideEffectUncertainError();
     } } } as never;
 }
 function agentVersion(agentVersionId: string) { return compileAgentVersion({
