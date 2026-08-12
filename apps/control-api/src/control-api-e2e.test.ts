@@ -177,7 +177,7 @@ for (const decision of ["approve", "reject"] as const)
           capabilities: WORKFLOW_RUNTIME_CAPABILITIES,
         },
         versions: workflowStore.workflowVersionStore(digest),
-        store: workflowStore as never,
+        store: workflowStore,
         close: () => workflowStore.close(),
       },
     });
