@@ -21,6 +21,11 @@
   `execution.accepted`，terminal 持久化后才允许 cumulative ACK；exact duplicate 返回 accepted-in-flight 或 terminal replay，
   changed binding/action digest fail closed。进程重启发现 accepted-only 时只持久化并重放 unknown outcome，绝不重新执行
   primitive；该 authority 当前没有接入 production WSS Hello 或 reconnect projection。
+- foundation dispatcher 的生命周期已对齐 dedicated read 模板：journal write transaction 内只做 bounded command/auth/binding
+  metadata admission 与 single-flight reserve；accepted commit 后才在 current-epoch permit 下获取 stable handle并立即释放 permit，
+  blocking read 在 permit 外执行，成功后再做 post-read epoch fence。handle acquisition/fence failure 落 unknown outcome，primitive
+  read error 落 failed。确定性 barrier 覆盖 acquire 不发生在 accepted transaction 内、阻塞 read 时高 epoch takeover 能完成、旧结果
+  只能落 unknown 而不能落 completed。
 - foundation 的显式 executor 验证表明 `workspace.read_file.v0` 专用 wire schema能够无损绑定 path、limits 和 action digest，
   但 production capability registry 尚未 advertise raw Tool primitive。没有 advertise shell/process mutation，也没有用
   capability/name string convention 偷渡参数。

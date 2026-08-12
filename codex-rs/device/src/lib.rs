@@ -10,6 +10,7 @@ mod native_connection;
 mod native_filesystem_read;
 mod native_runtime_binding;
 mod native_tool_dispatcher;
+mod native_tool_events;
 mod workspace_directory;
 mod workspace_file_read;
 mod workspace_list_dispatcher;

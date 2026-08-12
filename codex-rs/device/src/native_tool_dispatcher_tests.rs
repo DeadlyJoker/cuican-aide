@@ -1,5 +1,8 @@
-use std::cell::Cell;
 use std::fs;
+use std::sync::Arc;
+use std::sync::Barrier;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -27,12 +30,12 @@ use tempfile::TempDir;
 use super::NativeToolDispatchOutcome;
 use super::NativeToolExecutor;
 use super::NativeToolOrchestrator;
-use super::accepted;
 use crate::ConnectionEpochFence;
 use crate::DeviceCommandAuthorizer;
 use crate::NativeDeviceConnection;
 use crate::TrustedDeviceCommandKey;
 use crate::WorkspaceListCancellation;
+use crate::native_tool_events::accepted;
 
 #[derive(Deserialize)]
 struct Reference {
@@ -57,9 +60,12 @@ async fn takeover_after_durable_acceptance_yields_unknown_without_execution() {
         .expect("journal");
     let orchestrator =
         NativeToolOrchestrator::with_clock(journal, || timestamp("2026-08-08T00:00:04Z"));
-    let executions = Cell::new(0);
+    let acquisitions = AtomicU32::new(0);
+    let executions = AtomicU32::new(0);
     let executor = FakeExecutor {
+        acquisitions: &acquisitions,
         executions: &executions,
+        execution_barriers: None,
     };
     let mut newer = fixture.welcome.clone();
     newer.connection_epoch += 1;
@@ -71,6 +77,7 @@ async fn takeover_after_durable_acceptance_yields_unknown_without_execution() {
             &executor,
             &WorkspaceListCancellation::default(),
             |_| {
+                assert_eq!(acquisitions.load(Ordering::SeqCst), 0);
                 establish(&fence, &authorizer, &newer);
             },
         )
@@ -83,7 +90,68 @@ async fn takeover_after_durable_acceptance_yields_unknown_without_execution() {
         terminal,
         DeviceExecutionEvent::UnknownOutcome { .. }
     ));
-    assert_eq!(executions.get(), 0);
+    assert_eq!(acquisitions.load(Ordering::SeqCst), 1);
+    assert_eq!(executions.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn blocked_execution_allows_takeover_and_old_completion_becomes_unknown() {
+    let fixture = fixture();
+    let directory = TempDir::new().expect("state");
+    let fence =
+        ConnectionEpochFence::open("device-1", directory.path().join("epoch")).expect("fence");
+    let authorizer = authorizer(&fixture.key);
+    let connection = establish(&fence, &authorizer, &fixture.welcome);
+    let journal = tokio::runtime::Runtime::new()
+        .expect("runtime")
+        .block_on(DeviceWorkspaceJournal::open(
+            directory.path().join("journal.sqlite"),
+        ))
+        .expect("journal");
+    let orchestrator =
+        NativeToolOrchestrator::with_clock(journal, || timestamp("2026-08-08T00:00:04Z"));
+    let acquisitions = AtomicU32::new(0);
+    let executions = AtomicU32::new(0);
+    let started = Arc::new(Barrier::new(2));
+    let release = Arc::new(Barrier::new(2));
+    let executor = FakeExecutor {
+        acquisitions: &acquisitions,
+        executions: &executions,
+        execution_barriers: Some((Arc::clone(&started), Arc::clone(&release))),
+    };
+    let frame = serde_json::to_vec(&fixture.command).expect("command");
+    let cancellation = WorkspaceListCancellation::default();
+    std::thread::scope(|scope| {
+        let dispatch = scope.spawn(|| {
+            tokio::runtime::Runtime::new()
+                .expect("dispatch runtime")
+                .block_on(orchestrator.dispatch(
+                    &connection,
+                    &frame,
+                    &executor,
+                    &cancellation,
+                    |_| {},
+                ))
+                .expect("dispatch")
+        });
+        started.wait();
+        let mut newer = fixture.welcome.clone();
+        newer.connection_epoch += 1;
+        newer.connection_id = "connection-new".to_string();
+        establish(&fence, &authorizer, &newer);
+        release.wait();
+        let NativeToolDispatchOutcome::FreshResolved { terminal, .. } =
+            dispatch.join().expect("dispatch thread")
+        else {
+            panic!("fresh outcome");
+        };
+        assert!(matches!(
+            terminal,
+            DeviceExecutionEvent::UnknownOutcome { .. }
+        ));
+    });
+    assert_eq!(acquisitions.load(Ordering::SeqCst), 1);
+    assert_eq!(executions.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
@@ -117,35 +185,51 @@ async fn accepted_only_restart_records_unknown_and_never_calls_executor() {
 }
 
 struct FakeExecutor<'a> {
-    executions: &'a Cell<u32>,
+    acquisitions: &'a AtomicU32,
+    executions: &'a AtomicU32,
+    execution_barriers: Option<(Arc<Barrier>, Arc<Barrier>)>,
 }
 impl NativeToolExecutor for FakeExecutor<'_> {
-    type Admitted<'a>
+    type Metadata = DeviceExecutionCommand;
+    type Acquired<'a>
         = DeviceExecutionCommand
     where
         Self: 'a;
     fn advertised_capabilities(&self) -> &'static [&'static str] {
         &["workspace.read"]
     }
-    fn admit<'a>(
-        &'a self,
+    fn admit_metadata(
+        &self,
         connection: &NativeDeviceConnection<'_>,
         frame: &[u8],
         now: DateTime<Utc>,
-        _cancellation: &WorkspaceListCancellation,
-    ) -> Result<(DeviceExecutionCommand, Self::Admitted<'a>), crate::NativeDeviceAdmissionError>
-    {
+    ) -> Result<(DeviceExecutionCommand, Self::Metadata), crate::NativeDeviceAdmissionError> {
         let verified = connection.verify_command(frame, now)?;
         let command = verified.command().clone();
-        connection.start_command(verified, now, |_| ())?;
         Ok((command.clone(), command))
+    }
+    fn acquire<'a>(
+        &'a self,
+        connection: &NativeDeviceConnection<'_>,
+        metadata: &Self::Metadata,
+        now: DateTime<Utc>,
+        _cancellation: &WorkspaceListCancellation,
+    ) -> Result<Self::Acquired<'a>, crate::NativeDeviceAdmissionError> {
+        self.acquisitions.fetch_add(1, Ordering::SeqCst);
+        let frame = serde_json::to_vec(metadata).expect("metadata command");
+        let verified = connection.verify_command(&frame, now)?;
+        connection.start_command(verified, now, |_| metadata.clone())
     }
     fn execute<'a>(
         &'a self,
-        _admitted: Self::Admitted<'a>,
+        _acquired: Self::Acquired<'a>,
         _cancellation: &WorkspaceListCancellation,
     ) -> Result<DeviceCompletedData, crate::NativeDeviceAdmissionError> {
-        self.executions.set(self.executions.get() + 1);
+        self.executions.fetch_add(1, Ordering::SeqCst);
+        if let Some((started, release)) = &self.execution_barriers {
+            started.wait();
+            release.wait();
+        }
         Ok(DeviceCompletedData {
             output: None,
             artifact_ref: None,
@@ -155,6 +239,16 @@ impl NativeToolExecutor for FakeExecutor<'_> {
             exit_code: None,
             exit_signal: None,
         })
+    }
+    fn validate_continuation(
+        &self,
+        connection: &NativeDeviceConnection<'_>,
+        metadata: &Self::Metadata,
+        now: DateTime<Utc>,
+    ) -> Result<(), crate::NativeDeviceAdmissionError> {
+        let frame = serde_json::to_vec(metadata).expect("metadata command");
+        let verified = connection.verify_command(&frame, now)?;
+        connection.start_command(verified, now, |_| ())
     }
 }
 

@@ -4,7 +4,6 @@ use crewon_device_protocol::DeviceExecutionEvent;
 use crewon_device_protocol::parse_device_execution_ack;
 use crewon_device_protocol::parse_device_execution_command;
 use crewon_device_protocol::parse_device_execution_event;
-use serde::Serialize;
 use sha2::Digest as _;
 use sha2::Sha256;
 
@@ -100,7 +99,7 @@ impl DeviceWorkspaceJournal {
         command: &DeviceExecutionCommand,
         admit: impl FnOnce() -> Result<(DeviceExecutionEvent, T), E>,
     ) -> Result<PrepareToolOutcome<T>, PrepareToolError<E>> {
-        let command_json = canonical_json(command).map_err(PrepareToolError::Journal)?;
+        let command_json = encode_command(command).map_err(PrepareToolError::Journal)?;
         let fingerprint = fingerprint(&command_json);
         let mut tx = self
             .pool
@@ -129,7 +128,7 @@ impl DeviceWorkspaceJournal {
         }
         let (accepted, admitted) = admit().map_err(PrepareToolError::Admission)?;
         validate_accepted(command, &accepted).map_err(PrepareToolError::Journal)?;
-        let accepted_json = canonical_json(&accepted).map_err(PrepareToolError::Journal)?;
+        let accepted_json = encode_event(&accepted).map_err(PrepareToolError::Journal)?;
         let envelope = envelope(&accepted);
         let inserted = sqlx::query("INSERT INTO tool_executions (execution_id, command_json, command_fingerprint, device_id, capability, lease_id, lease_epoch, action_digest, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(&command.execution_id).bind(command_json).bind(fingerprint)
@@ -186,7 +185,7 @@ impl DeviceWorkspaceJournal {
             tx.rollback().await?;
             return Ok(RecordToolTerminalOutcome::Replayed(existing));
         }
-        let json = canonical_json(terminal)?;
+        let json = encode_event(terminal)?;
         insert_event(&mut tx, terminal, &json).await?;
         let committed = load(&mut tx, &execution_id)
             .await?
@@ -199,7 +198,7 @@ impl DeviceWorkspaceJournal {
         &self,
         ack: &DeviceExecutionAck,
     ) -> Result<AcknowledgeToolOutcome, DeviceJournalError> {
-        let json = canonical_json(ack)?;
+        let json = encode_ack(ack)?;
         let parsed = parse_device_execution_ack(
             serde_json::from_str(&json).map_err(|_| authority("device_tool_ack_invalid"))?,
         )
@@ -431,7 +430,13 @@ fn envelope(event: &DeviceExecutionEvent) -> &crewon_device_protocol::DeviceExec
         | DeviceExecutionEvent::UnknownOutcome { envelope, .. } => envelope,
     }
 }
-fn canonical_json(value: &impl Serialize) -> Result<String, DeviceJournalError> {
+fn encode_command(value: &DeviceExecutionCommand) -> Result<String, DeviceJournalError> {
+    serde_json::to_string(value).map_err(|_| authority("device_tool_record_invalid"))
+}
+fn encode_event(value: &DeviceExecutionEvent) -> Result<String, DeviceJournalError> {
+    serde_json::to_string(value).map_err(|_| authority("device_tool_record_invalid"))
+}
+fn encode_ack(value: &DeviceExecutionAck) -> Result<String, DeviceJournalError> {
     serde_json::to_string(value).map_err(|_| authority("device_tool_record_invalid"))
 }
 fn fingerprint(value: &str) -> String {

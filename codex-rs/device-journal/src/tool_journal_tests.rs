@@ -8,8 +8,6 @@ use crewon_device_protocol::DeviceExecutionEventEnvelope;
 use crewon_device_protocol::DeviceUnknownOutcomeData;
 use crewon_device_protocol::parse_device_execution_command;
 use pretty_assertions::assert_eq;
-use serde::Deserialize;
-use serde_json::Value;
 use tempfile::TempDir;
 
 use crate::AcknowledgeToolOutcome;
@@ -17,17 +15,6 @@ use crate::DeviceWorkspaceJournal;
 use crate::PrepareToolOutcome;
 use crate::RecordToolTerminalOutcome;
 use crate::ToolJournalListQuery;
-
-#[derive(Deserialize)]
-struct Reference {
-    valid: ValidReference,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ValidReference {
-    filesystem_read_command: Value,
-}
 
 #[tokio::test]
 async fn accepted_and_terminal_are_durable_before_ack_and_replay_exactly() {
@@ -170,9 +157,11 @@ fn command() -> DeviceExecutionCommand {
         "../../packages/test-contracts/fixtures/device-protocol.reference.json"
     )
     .expect("fixture");
-    let fixture: Reference = serde_json::from_str(&fs::read_to_string(path).expect("read fixture"))
-        .expect("parse fixture");
-    parse_device_execution_command(fixture.valid.filesystem_read_command).expect("parse command")
+    let fixture: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(path).expect("read fixture"))
+            .expect("parse fixture");
+    parse_device_execution_command(fixture["valid"]["filesystemReadCommand"].clone())
+        .expect("parse command")
 }
 
 fn accepted(command: &DeviceExecutionCommand) -> DeviceExecutionEvent {

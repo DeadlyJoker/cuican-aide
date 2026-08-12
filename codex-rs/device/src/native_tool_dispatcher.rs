@@ -4,7 +4,6 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 
 use chrono::DateTime;
-use chrono::SecondsFormat;
 use chrono::Utc;
 use crewon_device_journal::AcknowledgeToolOutcome;
 use crewon_device_journal::DeviceWorkspaceJournal;
@@ -14,23 +13,23 @@ use crewon_device_journal::RecordToolTerminalOutcome;
 use crewon_device_journal::ToolJournalExecution;
 use crewon_device_journal::ToolJournalListQuery;
 use crewon_device_protocol::DEVICE_FILESYSTEM_READ_CAPABILITY;
-use crewon_device_protocol::DeviceAcceptedData;
 use crewon_device_protocol::DeviceCompletedData;
 use crewon_device_protocol::DeviceExecutionAck;
 use crewon_device_protocol::DeviceExecutionCommand;
 use crewon_device_protocol::DeviceExecutionEvent;
-use crewon_device_protocol::DeviceExecutionEventEnvelope;
-use crewon_device_protocol::DeviceUnknownOutcomeData;
 use crewon_device_protocol::parse_device_execution_command;
 use sha2::Digest as _;
 use sha2::Sha256;
-use uuid::Uuid;
 
 use crate::NativeDeviceAdmissionError;
 use crate::NativeDeviceConnection;
 use crate::WorkspaceDirectoryRegistry;
 use crate::WorkspaceListCancellation;
 use crate::native_connection::parse_bounded_json;
+use crate::native_tool_events::accepted;
+use crate::native_tool_events::completed;
+use crate::native_tool_events::failed;
+use crate::native_tool_events::unknown;
 
 /// Explicit native Tool primitive registry.
 ///
@@ -39,25 +38,40 @@ use crate::native_connection::parse_bounded_json;
 /// after the accepted event is durable. Implementations must never infer a
 /// primitive from a Tool name or translate it into a Workspace command.
 pub(crate) trait NativeToolExecutor {
-    type Admitted<'a>
+    type Metadata;
+    type Acquired<'a>
     where
         Self: 'a;
 
     fn advertised_capabilities(&self) -> &'static [&'static str];
 
-    fn admit<'a>(
-        &'a self,
+    fn admit_metadata(
+        &self,
         connection: &NativeDeviceConnection<'_>,
         command_frame: &[u8],
         now: DateTime<Utc>,
+    ) -> Result<(DeviceExecutionCommand, Self::Metadata), NativeDeviceAdmissionError>;
+
+    fn acquire<'a>(
+        &'a self,
+        connection: &NativeDeviceConnection<'_>,
+        metadata: &Self::Metadata,
+        now: DateTime<Utc>,
         cancellation: &WorkspaceListCancellation,
-    ) -> Result<(DeviceExecutionCommand, Self::Admitted<'a>), NativeDeviceAdmissionError>;
+    ) -> Result<Self::Acquired<'a>, NativeDeviceAdmissionError>;
 
     fn execute<'a>(
         &'a self,
-        admitted: Self::Admitted<'a>,
+        acquired: Self::Acquired<'a>,
         cancellation: &WorkspaceListCancellation,
     ) -> Result<DeviceCompletedData, NativeDeviceAdmissionError>;
+
+    fn validate_continuation(
+        &self,
+        connection: &NativeDeviceConnection<'_>,
+        metadata: &Self::Metadata,
+        now: DateTime<Utc>,
+    ) -> Result<(), NativeDeviceAdmissionError>;
 }
 
 /// The only currently production-enabled raw Tool primitive.
@@ -75,7 +89,8 @@ impl<'a> FilesystemReadToolExecutor<'a> {
 }
 
 impl NativeToolExecutor for FilesystemReadToolExecutor<'_> {
-    type Admitted<'a>
+    type Metadata = crewon_device_protocol::DeviceFilesystemReadCommand;
+    type Acquired<'a>
         = crate::workspace_file_read::WorkspaceFileReadLease<'a>
     where
         Self: 'a;
@@ -84,30 +99,38 @@ impl NativeToolExecutor for FilesystemReadToolExecutor<'_> {
         &[DEVICE_FILESYSTEM_READ_CAPABILITY]
     }
 
-    fn admit<'a>(
-        &'a self,
+    fn admit_metadata(
+        &self,
         connection: &NativeDeviceConnection<'_>,
         command_frame: &[u8],
         now: DateTime<Utc>,
-        cancellation: &WorkspaceListCancellation,
-    ) -> Result<(DeviceExecutionCommand, Self::Admitted<'a>), NativeDeviceAdmissionError> {
+    ) -> Result<(DeviceExecutionCommand, Self::Metadata), NativeDeviceAdmissionError> {
         let verified = connection.verify_filesystem_read_command(command_frame, now)?;
         let command = connection.admit_filesystem_read_metadata(verified, now, self.registry)?;
-        let lease = connection.acquire_filesystem_read_for_durable_dispatch(
-            &command,
+        Ok((command.command.clone(), command))
+    }
+
+    fn acquire<'a>(
+        &'a self,
+        connection: &NativeDeviceConnection<'_>,
+        metadata: &Self::Metadata,
+        now: DateTime<Utc>,
+        cancellation: &WorkspaceListCancellation,
+    ) -> Result<Self::Acquired<'a>, NativeDeviceAdmissionError> {
+        connection.acquire_filesystem_read_for_durable_dispatch(
+            metadata,
             now,
             self.registry,
             cancellation,
-        )?;
-        Ok((command.command, lease))
+        )
     }
 
     fn execute<'a>(
         &'a self,
-        admitted: Self::Admitted<'a>,
+        acquired: Self::Acquired<'a>,
         cancellation: &WorkspaceListCancellation,
     ) -> Result<DeviceCompletedData, NativeDeviceAdmissionError> {
-        let result = admitted
+        let result = acquired
             .read(cancellation)
             .map_err(NativeDeviceAdmissionError::from_workspace)?;
         let empty = format!("sha256:{:x}", Sha256::digest([]));
@@ -120,6 +143,15 @@ impl NativeToolExecutor for FilesystemReadToolExecutor<'_> {
             exit_code: None,
             exit_signal: None,
         })
+    }
+
+    fn validate_continuation(
+        &self,
+        connection: &NativeDeviceConnection<'_>,
+        metadata: &Self::Metadata,
+        now: DateTime<Utc>,
+    ) -> Result<(), NativeDeviceAdmissionError> {
+        connection.validate_filesystem_read_continuation(metadata, now)
     }
 }
 
@@ -218,15 +250,15 @@ impl NativeToolOrchestrator {
             .journal
             .prepare_tool_with_admission(&raw, || {
                 let now = (self.now)();
-                let (command, admitted) =
-                    executor.admit(connection, command_frame, now, cancellation)?;
+                let (command, metadata) =
+                    executor.admit_metadata(connection, command_frame, now)?;
                 if command != raw {
                     return Err(NativeDeviceAdmissionError::new(
                         "device_tool_command_authority_mismatch",
                     ));
                 }
                 let running = RunningGuard::reserve(&command.execution_id)?;
-                Ok((accepted(&command, now), (admitted, running)))
+                Ok((accepted(&command, now), (metadata, running)))
             })
             .await;
         let prepared = match prepared {
@@ -246,17 +278,26 @@ impl NativeToolOrchestrator {
             PrepareToolOutcome::TerminalReplay(execution) => terminal_replay(execution),
             PrepareToolOutcome::New {
                 execution,
-                admitted: (admitted, running),
+                admitted: (metadata, running),
             } => {
                 observer(&execution.accepted);
-                let terminal = match connection.start_command(
-                    connection.verify_command(command_frame, (self.now)())?,
-                    (self.now)(),
-                    |_| executor.execute(admitted, cancellation),
-                ) {
-                    Ok(Ok(result)) => completed(&execution, result, (self.now)())?,
-                    Ok(Err(error)) => failed(&execution, error.code, (self.now)())?,
+                let acquired = executor.acquire(connection, &metadata, (self.now)(), cancellation);
+                let terminal = match acquired {
                     Err(_) => unknown(&execution, (self.now)())?,
+                    Ok(acquired) => {
+                        let result = executor.execute(acquired, cancellation);
+                        if executor
+                            .validate_continuation(connection, &metadata, (self.now)())
+                            .is_err()
+                        {
+                            unknown(&execution, (self.now)())?
+                        } else {
+                            match result {
+                                Ok(result) => completed(&execution, result, (self.now)())?,
+                                Err(error) => failed(&execution, error.code, (self.now)())?,
+                            }
+                        }
+                    }
                 };
                 let recorded = self
                     .journal
@@ -390,81 +431,6 @@ fn is_running(id: &str) -> Result<bool, NativeDeviceAdmissionError> {
         .contains(id))
 }
 
-fn accepted(command: &DeviceExecutionCommand, now: DateTime<Utc>) -> DeviceExecutionEvent {
-    DeviceExecutionEvent::Accepted {
-        envelope: event_envelope(command, format!("tool-receipt-{}", Uuid::new_v4()), 1, now),
-        data: DeviceAcceptedData {
-            lease_epoch: command.lease_epoch,
-            action_digest: command.action_digest.clone(),
-        },
-    }
-}
-fn completed(
-    execution: &ToolJournalExecution,
-    data: DeviceCompletedData,
-    now: DateTime<Utc>,
-) -> Result<DeviceExecutionEvent, NativeDeviceAdmissionError> {
-    Ok(DeviceExecutionEvent::Completed {
-        envelope: terminal_envelope(execution, now)?,
-        data,
-    })
-}
-fn failed(
-    execution: &ToolJournalExecution,
-    code: &str,
-    now: DateTime<Utc>,
-) -> Result<DeviceExecutionEvent, NativeDeviceAdmissionError> {
-    Ok(DeviceExecutionEvent::Failed {
-        envelope: terminal_envelope(execution, now)?,
-        data: crewon_device_protocol::DeviceFailedData {
-            code: code.to_string(),
-            retryable: false,
-        },
-    })
-}
-fn unknown(
-    execution: &ToolJournalExecution,
-    now: DateTime<Utc>,
-) -> Result<DeviceExecutionEvent, NativeDeviceAdmissionError> {
-    Ok(DeviceExecutionEvent::UnknownOutcome {
-        envelope: terminal_envelope(execution, now)?,
-        data: DeviceUnknownOutcomeData {
-            provider_receipt_id: None,
-        },
-    })
-}
-fn terminal_envelope(
-    execution: &ToolJournalExecution,
-    now: DateTime<Utc>,
-) -> Result<DeviceExecutionEventEnvelope, NativeDeviceAdmissionError> {
-    let DeviceExecutionEvent::Accepted { envelope, .. } = &execution.accepted else {
-        return Err(NativeDeviceAdmissionError::new(
-            "device_journal_authority_corrupt",
-        ));
-    };
-    Ok(event_envelope(
-        &execution.command,
-        envelope.receipt_id.clone(),
-        2,
-        now,
-    ))
-}
-fn event_envelope(
-    command: &DeviceExecutionCommand,
-    receipt_id: String,
-    sequence: u64,
-    now: DateTime<Utc>,
-) -> DeviceExecutionEventEnvelope {
-    DeviceExecutionEventEnvelope {
-        schema_version: "crewon.device-event.v0".to_string(),
-        protocol_version: command.protocol_version,
-        device_id: command.device_id.clone(),
-        execution_id: command.execution_id.clone(),
-        receipt_id,
-        sequence,
-        observed_at: now.to_rfc3339_opts(SecondsFormat::Millis, true),
-    }
-}
 fn terminal_replay(
     execution: ToolJournalExecution,
 ) -> Result<NativeToolDispatchOutcome, NativeDeviceAdmissionError> {
