@@ -541,6 +541,8 @@ export class SqliteWorkflowRunCompositionStore {
           : outcome,
         resultDigest: outcome.status === "completed" ? node.inputDigest! : undefined, now });
       this.#writeExecution(next, now);
+      const runDisposition = this.#convergeTerminalRun(
+        input, this.#loadWorkflow(input), next, now, nowMs);
       let schedulerContinuationWorkItemId: string | null = null;
       if (
         next.status === "running" &&
@@ -582,7 +584,7 @@ export class SqliteWorkflowRunCompositionStore {
           nextWorkItemId: schedulerContinuationWorkItemId,
           kind: schedulerContinuationWorkItemId === null ? "none" as const : "scheduler" as const,
         },
-        runDisposition: "nonTerminal" as const,
+        runDisposition,
       };
       this.#insertReceipt(input, "settleGate", fingerprint, result);
       this.#completeLease(input, nowMs);
