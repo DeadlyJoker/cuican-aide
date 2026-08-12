@@ -1467,6 +1467,60 @@ if (postgresUrl === undefined) {
       await store.close();
     }
   });
+
+  test("PostgreSQL not-dispatched reconciliation creates one new node authority", async () => {
+    const schema = `workflow_retry_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
+    try {
+      await seedPostgresComposition(pool, schema);
+      const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+        lease, binding, schedulerOperationId: "schedule-fanout-1",
+        workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+      const work = scheduled.nodeWorkItems[0]!;
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',lease_owner_id='node-worker',
+        lease_id='node-lease',lease_epoch=1,lease_expires_at=clock_timestamp()+interval '1 minute'
+        WHERE work_item_id=$1`, [work.workItemId]);
+      const nodeLease = { workItemId: work.workItemId, ownerId: "node-worker",
+        leaseId: "node-lease", leaseEpoch: 1 } as const;
+      const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, binding, nodeId: work.nodeId, claimId: work.claimId,
+        claimEpoch: work.claimEpoch, schedulerOperationId: "schedule-fanout-1",
+        admissionOperationId: "admit-retry", attemptLeaseDurationMs: 30_000 });
+      const attempt = admitted.admission!.attempt;
+      await store.prepareModelDispatch({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, attempt: { stepId: attempt.stepId, attemptId: attempt.attemptId },
+        operationId: "dispatch-retry", requestSequence: 1, operation: "dispatch",
+        requestDigest: digester.sha256("request"), provider: { agentVersionId: "agent-v1",
+          adapterName: "responses", adapterVersion: "1", modelId: "model-1" },
+        preparedAt: "2026-08-13T00:00:00.000Z" });
+      const unknown = await store.settleWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, binding, nodeId: work.nodeId, claimId: work.claimId,
+        claimEpoch: work.claimEpoch, stepId: attempt.stepId, attemptId: attempt.attemptId,
+        operationId: "unknown-retry", outcome: { status: "unknown" } });
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',
+        lease_owner_id='reconcile-worker',lease_id='reconcile-lease',lease_epoch=1,
+        lease_expires_at=clock_timestamp()+interval '1 minute' WHERE work_item_id=$1`,
+        [unknown.handoff.nextWorkItemId]);
+      const input = { tenantId: "tenant-1", runId: "run-1", lease: {
+        workItemId: unknown.handoff.nextWorkItemId!, ownerId: "reconcile-worker",
+        leaseId: "reconcile-lease", leaseEpoch: 1 }, binding, nodeId: work.nodeId,
+        claimId: work.claimId, claimEpoch: work.claimEpoch,
+        reconciliationOperationId: "unknown-retry" } as const;
+      const retried = await store.reconcileWorkflowNode(input);
+      assert.deepEqual([retried.disposition, retried.evidenceStatus,
+        retried.handoff.kind], ["retryScheduled", "notDispatched", "node"]);
+      assert.equal(retried.execution.nodes.find((node) => node.nodeId === work.nodeId)?.claimEpoch,
+        work.claimEpoch + 1);
+      const count = await pool.query<{ count: number }>(`SELECT count(*)::int count
+        FROM ${schema}.work_items WHERE work_item_id=$1`, [retried.handoff.nextWorkItemId]);
+      assert.equal(count.rows[0]?.count, 1);
+      assert.equal((await store.reconcileWorkflowNode(input)).disposition, "replay");
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
 }
 
 async function seedPostgresComposition(
