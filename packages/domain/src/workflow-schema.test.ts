@@ -82,6 +82,12 @@ test("rejects injected, unbounded, missing and excessively nested schemas", () =
         value: { type: "string", maxLength: 0, enum: null },
       },
     },
+    {
+      ...base,
+      properties: {
+        value: { type: "string", maxLength: 8, enum: ["\ud800"] },
+      },
+    },
     nested,
   ]) {
     assert.throws(
