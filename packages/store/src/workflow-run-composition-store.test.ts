@@ -1219,6 +1219,52 @@ if (postgresUrl === undefined) {
       await store.close();
     }
   });
+
+  test("PostgreSQL cancellation atomically closes queued and waiting gate nodes", async () => {
+    const schema = `workflow_cancel_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
+    try {
+      await seedPostgresComposition(pool, schema);
+      const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+        lease, binding, schedulerOperationId: "schedule-fanout-1",
+        workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+      assert.deepEqual([scheduled.nodeWorkItems.length, scheduled.gatePublications.length], [1, 1]);
+      const run = await pool.query<{ state_json: Record<string, unknown> }>(
+        `SELECT state_json FROM ${schema}.run_snapshots WHERE run_id='run-1'`);
+      await pool.query(`UPDATE ${schema}.run_snapshots SET state_json=$1 WHERE run_id='run-1'`,
+        [{ ...run.rows[0]!.state_json, cancelRequested: true }]);
+      const cancelWork = { workItemId: "cancel-work-1", tenantId: "tenant-1", runId: "run-1",
+        kind: "run.execute", payload: { schemaVersion: "crewon.workflow-cancel-work-item.v0",
+          trigger: "workflowCancel", binding, cancellationOperationId: "cancel-1" },
+        createdAt: "2026-08-13T00:00:00.000Z" };
+      await pool.query(`INSERT INTO ${schema}.work_items
+        (work_item_id,tenant_id,run_id,kind,work_item_json,created_at,status,available_at,
+         lease_owner_id,lease_id,lease_epoch,lease_expires_at,attempt_count)
+        VALUES ($1,'tenant-1','run-1','run.execute',$2,$3,'leased',$3,
+          'cancel-worker','cancel-lease',1,clock_timestamp()+interval '1 minute',1)`,
+        [cancelWork.workItemId, cancelWork, cancelWork.createdAt]);
+      const input = { tenantId: "tenant-1", runId: "run-1", lease: {
+        workItemId: cancelWork.workItemId, ownerId: "cancel-worker",
+        leaseId: "cancel-lease", leaseEpoch: 1 }, binding,
+        operationId: "cancel-1", reasonCode: "user_requested" } as const;
+      const canceled = await store.cancelWorkflowExecution(input);
+      assert.deepEqual([canceled.disposition, canceled.runDisposition, canceled.execution.status],
+        ["canceled", "terminalConverged", "canceled"]);
+      assert.ok(canceled.execution.nodes.every((node) => node.status === "canceled"));
+      assert.equal((await store.cancelWorkflowExecution(input)).disposition, "replay");
+      const durable = await pool.query(`SELECT
+        (SELECT state_json->>'status' FROM ${schema}.run_snapshots WHERE run_id='run-1') run_status,
+        (SELECT status FROM ${schema}.work_items WHERE work_item_id='cancel-work-1') cancel_status,
+        (SELECT status FROM ${schema}.work_items WHERE work_item_json->'payload'->>'trigger'='workflowNode') node_status,
+        (SELECT status FROM ${schema}.workflow_gate_requests WHERE run_id='run-1') gate_status`);
+      assert.deepEqual(durable.rows[0], { run_status: "canceled", cancel_status: "completed",
+        node_status: "completed", gate_status: "canceled" });
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
 }
 
 async function seedPostgresComposition(

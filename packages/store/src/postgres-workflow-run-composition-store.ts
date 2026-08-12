@@ -21,6 +21,7 @@ import {
   recordPostgresWorkflowGateDecision,
   settlePostgresWorkflowGate,
 } from "./postgres-workflow-gate-settlement.ts";
+import { cancelPostgresWorkflowExecution } from "./postgres-workflow-cancellation.ts";
 import { settlePostgresWorkflowNode } from "./postgres-workflow-node-settlement.ts";
 import { settlePostgresWorkflowNodeModelTerminal } from "./postgres-workflow-model-settlement.ts";
 import {
@@ -234,11 +235,18 @@ export class PostgresWorkflowRunCompositionStore
   }
 
   async cancelWorkflowExecution(
-    _input: Parameters<
+    input: Parameters<
       WorkflowRunCompositionStore["cancelWorkflowExecution"]
     >[0],
   ): ReturnType<WorkflowRunCompositionStore["cancelWorkflowExecution"]> {
-    throw new RunStoreError("workflow_composition_contract_incomplete");
+    return this.#transaction(input, (client) =>
+      cancelPostgresWorkflowExecution(
+        client,
+        this.schemaSql(),
+        input,
+        this.#digester,
+      ),
+    );
   }
 
   async loadModelDispatchReceipt(
