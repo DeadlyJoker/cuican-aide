@@ -22,9 +22,9 @@ export class AgentSegmentStateMachine {
   providerCheckpoint: ProviderCheckpoint | null = null;
   checkpointSequence: number | null = null;
   completedSequence: number | null = null;
-  latestUsage: Extract<KernelAgentEvent, { type: "usage.recorded" }>[
-    "data"
-  ] | null = null;
+  latestUsage:
+    | Extract<KernelAgentEvent, { type: "usage.recorded" }>["data"]
+    | null = null;
   lastAgentSequence = 0;
   checkpointEvent: Extract<
     KernelAgentEvent,
@@ -49,6 +49,9 @@ export class AgentSegmentStateMachine {
   }
 
   accept(event: KernelAgentEvent): AgentSegmentImmediateAction {
+    if (event.sequence !== this.lastAgentSequence + 1) {
+      throw new AgentKernelError("segment_sequence_mismatch", false);
+    }
     this.lastAgentSequence = event.sequence;
     if (event.type === "segment.provider_response_created") {
       this.providerCheckpoint = event.data.checkpoint;
@@ -82,7 +85,10 @@ export class AgentSegmentStateMachine {
       this.assistantContinuation = event;
       return { kind: "none" };
     }
-    if (event.type === "segment.started" || event.type === "rate_limit.updated") {
+    if (
+      event.type === "segment.started" ||
+      event.type === "rate_limit.updated"
+    ) {
       return { kind: "persistEvent", event };
     }
     this.bufferedEvents.push(event);

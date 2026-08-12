@@ -13,6 +13,10 @@ pub(crate) mod sse;
 pub(crate) mod telemetry;
 pub(crate) mod turn_state;
 
+#[cfg(test)]
+#[path = "agent_segment_reduction_tests.rs"]
+mod agent_segment_reduction_tests;
+
 pub use crate::requests::headers::build_session_headers;
 pub use crewon_client::RequestTelemetry;
 pub use crewon_client::ReqwestTransport;
