@@ -24,6 +24,11 @@ import {
 import { settlePostgresWorkflowNode } from "./postgres-workflow-node-settlement.ts";
 import { settlePostgresWorkflowNodeModelTerminal } from "./postgres-workflow-model-settlement.ts";
 import {
+  loadPostgresWorkflowNodeContinuation,
+  migratePostgresWorkflowNodeContinuations,
+  writePostgresWorkflowNodeContinuation,
+} from "./postgres-workflow-node-continuation.ts";
+import {
   commitPostgresWorkflowRunStart,
   readPostgresWorkflowRunStartReplay,
 } from "./postgres-workflow-run-admission.ts";
@@ -83,6 +88,7 @@ export class PostgresWorkflowRunCompositionStore
       );
       await migratePostgresWorkflowExecutions(client, this.schema);
       await migratePostgresModelDispatchEvidence(client, this.schemaSql());
+      await migratePostgresWorkflowNodeContinuations(client, this.schemaSql());
       await client.query("COMMIT");
     } catch (error) {
       await rollbackPostgres(client);
@@ -305,6 +311,57 @@ export class PostgresWorkflowRunCompositionStore
         this.#digester,
       ),
     );
+  }
+
+  async loadWorkflowNodeContinuation(
+    authority: Parameters<
+      WorkflowNodeContinuationStore["loadWorkflowNodeContinuation"]
+    >[0],
+  ): ReturnType<WorkflowNodeContinuationStore["loadWorkflowNodeContinuation"]> {
+    this.assertOpen();
+    return this.#loadWorkflowNodeContinuation(authority);
+  }
+
+  async #loadWorkflowNodeContinuation(
+    authority: Parameters<
+      WorkflowNodeContinuationStore["loadWorkflowNodeContinuation"]
+    >[0],
+  ) {
+    const client = await this.pool.connect();
+    try {
+      return await loadPostgresWorkflowNodeContinuation(
+        client,
+        this.schemaSql(),
+        authority,
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  async commitWorkflowAssistantContinuation(
+    input: Parameters<
+      WorkflowNodeContinuationStore["commitWorkflowAssistantContinuation"]
+    >[0],
+  ): ReturnType<
+    WorkflowNodeContinuationStore["commitWorkflowAssistantContinuation"]
+  > {
+    return this.#transaction(input.authority, async (client) => {
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.authority.tenantId,
+        input.authority.runId,
+        input.lease,
+      );
+      return writePostgresWorkflowNodeContinuation(
+        client,
+        this.schemaSql(),
+        input.authority,
+        input.expectedContinuationRevision,
+        input.next,
+        input.committedAt,
+      );
+    });
   }
 
   async #modelDispatchTransaction<T>(

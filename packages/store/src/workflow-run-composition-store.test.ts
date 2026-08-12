@@ -324,6 +324,66 @@ if (postgresUrl === undefined) {
         (await second.admitWorkflowNodeWork(admitInput)).disposition,
         "replay",
       );
+      const authority = {
+        tenantId: "tenant-1",
+        runId: "run-1",
+        workItemId: work.workItemId,
+        leaseEpoch: work.claimEpoch,
+        nodeId: work.nodeId,
+        nodeKind: "agent" as const,
+        claimId: work.claimId,
+        claimEpoch: work.claimEpoch,
+        agentVersionId: "agent-v1",
+        attempt: {
+          stepId: work.nodeId,
+          attemptId: admitted.admission!.attempt.attemptId,
+        },
+      };
+      const continuationInput = {
+        lease: admitInput.lease,
+        authority,
+        expectedContinuationRevision: null,
+        next: {
+          schemaVersion: "crewon.workflow-node-continuation.v0" as const,
+          authority,
+          segmentId: "segment-1",
+          modelSampleIndex: 0,
+          toolRoundsConsumed: 0,
+          providerCheckpoint: null,
+          providerTurnState: null,
+          activeDispatch: null,
+          history: [
+            {
+              type: "message" as const,
+              role: "user" as const,
+              content: "continue",
+            },
+          ],
+        },
+        committedAt: "2026-08-12T00:00:00.000Z",
+      };
+      const continuation =
+        await store.commitWorkflowAssistantContinuation(continuationInput);
+      assert.deepEqual(
+        await second.loadWorkflowNodeContinuation(authority),
+        continuation,
+      );
+      await assert.rejects(
+        second.commitWorkflowAssistantContinuation({
+          ...continuationInput,
+          next: {
+            ...continuationInput.next,
+            history: [
+              {
+                type: "message",
+                role: "user",
+                content: "x".repeat(40 * 1024 + 1),
+              },
+            ],
+          },
+        }),
+        /workflow_node_continuation_invalid/u,
+      );
       const dispatchPrepared = await store.prepareModelDispatch({
         tenantId: "tenant-1",
         runId: "run-1",
@@ -377,21 +437,7 @@ if (postgresUrl === undefined) {
         operationId: "settle-agent-1",
         evidence,
         lease: admitInput.lease,
-        authority: {
-          tenantId: "tenant-1",
-          runId: "run-1",
-          workItemId: work.workItemId,
-          leaseEpoch: work.claimEpoch,
-          nodeId: work.nodeId,
-          nodeKind: "agent" as const,
-          claimId: work.claimId,
-          claimEpoch: work.claimEpoch,
-          agentVersionId: "agent-v1",
-          attempt: {
-            stepId: work.nodeId,
-            attemptId: admitted.admission!.attempt.attemptId,
-          },
-        },
+        authority,
         dispatch: {
           operationId: dispatchObserved.operationId,
           requestSequence: dispatchObserved.requestSequence,
