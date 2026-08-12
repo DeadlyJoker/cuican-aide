@@ -396,6 +396,49 @@ Gate 报告为通过。
   ACK 1/2、`acknowledged_through=2`，累计计数为 Gateway 8、Device `7/14/14`，route 保持 epoch 16。最终正常 SIGTERM 后进程树和端口
   再次全部清理。
 
+## Remote MCP production transport Gate、AR-041 与严格 credential admission
+
+- `bbd6317cc` 在 released runtime manifest 与 v3 native credential envelope 上安装真实 production runtime factory、egress、credential
+  lease 和 remote protocol parser，并以 hermetic `PinnedHttpPort` 承载 production composition 边界。远端已经提交 mutation receipt、transport
+  随后抛错时，首次执行保守结算为 `possiblySent`；销毁并重建 runtime 后，同一 execution identity 只做 passive reconcile，远端
+  `executeCount=1`，调用阶段严格为 execute → reconcile。Gate 同时验证 POST endpoint/path、pinned address、256 KiB 上限、唯一 hashed
+  idempotency key，以及 bearer 只出现在 Authorization sink、不进入 manifest、body 或 error。该用例不伪装成同一测试内的本地
+  `tool_execution_receipts` 证明；Store 层由既有真实 SQLite restart/recovery 用例独立覆盖。
+- AR-041 由 `a952104d5`、`7b2f3c1d6`、`1dd9e2f64` 统一 TS/Rust 对未来 Responses event 的前向兼容：结构合法但未知的 event kind
+  被忽略并继续解析；HTTP/SSE 仍要求有效单调 sequence，WebSocket 只在 sequence 存在时验证。review 中先关闭了 Rust 已知 reasoning
+  event 被默认分支误吞的缺口，再保留 `response.output_item.added` 与 `response.custom_tool_call_input.delta` 作为有意的 framing no-op，
+  完整 authority 继续来自对应 `done` event。当前只有 Rust 已知、用户可见但 TS 尚未投影的 reasoning delta/part fail closed；已知畸形
+  event 和首个 terminal 后的任何 tail 仍严格失败。共享 fixture 同时覆盖 Rust、TS 两种 framing、Direct transport 和 durable Worker。
+- Stage G follow-up `bff45da38`、`b3674781a` 将 Remote MCP provider/released manifest 的完整严格解析移动到任何 macOS keyring 读取之前。
+  provider、server、tool descriptor/policy、binding correlation、approval、limit、production HTTPS/standalone loopback endpoint，以及 32 KiB、
+  depth 16、nodes 4096 的 schema 上限均先验证；required-nullable 字段精确区分 missing 与 explicit `null`。畸形 manifest 的 secret read
+  count 为 0，合法 explicit-null manifest 只读取一次；无 Remote MCP 时继续使用 v1/v2 wire 且不读取 secret。review 同时删除了只被测试
+  调用一次的泛型 helper，将 credential resolution 直接保留在拥有顺序不变量的 production 路径中。
+- 最新主工作层组合回归使用官方 Node 24：Agent Responses typecheck 与 `63/63` tests 通过；Runtime Worker typecheck 与
+  `268 passed + 1 PostgreSQL-unconfigured skip` 通过；Rust `crewon-api 133/133`、Tauri `106/106` 通过。Tauri 套件使用真实 staged
+  sidecar，包含 guardian process 与 credential zero-read/one-read 回归；没有把 worktree 中因空 placeholder sidecar 导致的 6 条环境失败
+  作为主分支结果。
+- 2026-08-12 08:33:20 +0800 重建的 `Crewon.app` 包含上述提交。四个 native staged/bundled SHA-256 全量一致：app-server
+  `53b9c4c486f4369545d1bbfdd33ff3c84d644238e4400a2607c8c3065ca73bb3`、Device
+  `f05f704aa00bec970515c1dd11a97c412faeeb4515ad55220d16c522dd0d8b79`、guardian
+  `83fc5ab3741117383ff98ed172ab8284e7311ca31bf40b5a6f96d70aa74ac884`、Node
+  `f480e325ee0ca9cb9eef00b5ca6057a2a104807a1b073f1bc373a55c67facff5`。五个 runtime staged/bundled hash 也全量一致：Control
+  `69c8c4de81c5f9d2a3f327c16c9d31dbd7467779a9f1a89f36cf72dc20998f75`、Worker
+  `24a695257d7f54dd65ae16e61fcd341a6d8613e0c1b5b8c1c1b572b972425375`、Release
+  `3a40d956bcc7992fa271a47b02f1962acf14df23671c92fe200604f13250f378`、Provider coordinator
+  `90d99992464a29cf3ebd140bec01c449dce5284e410677d3ae74103812a67812`、Gateway
+  `9a0c8967e881c040191734a7a091fd9fcd9e3dd69b22c9cc9a1e36b839d3106d`。`.app` 与 updater tarball 均已生成；命令仍只在 bundle
+  完成后因缺少 `TAURI_SIGNING_PRIVATE_KEY` 返回 1。
+- 最新 packaged smoke 继续复用隔离 HOME `/private/tmp/crewon-packaged-smoke.LxwDwe`，route 从 persisted epoch 16 精确推进到 17，
+  connection 为 `native-connection-b2749fa0-dadb-4935-bb23-b369f6905204`。heartbeat 在不改变 connection/epoch 的前提下持续延长 lease。
+  idempotency key `packaged-stage-h-ar041-strict-admission-v1` 返回 `201 completed`，Workspace list 为 `README.md`、`alpha`、`beta`，
+  `truncated=false`。Gateway 累计 9 条 dispatch，本次 record 为 accepted sequence 1、completed sequence 2、resolution completed，均绑定
+  connection epoch 17；Rust Device journal 累计 execution/event/ACK `8/16/16`，本次 `acknowledged_through=2` 且 ACK 1/2 完整。正常
+  SIGTERM GUI 后约 0.5 秒内全部 bundle process、guardian/watchdog 均退出，端口 3210/6176 释放。
+- 本阶段没有把 hermetic production transport Gate 外推成真实 packaged keyring + controlled remote TLS endpoint 验收；该组合、动态 secret
+  rotation、远端 network partition/chaos 仍需独立环境证据。PostgreSQL 条件套件、Windows real-host、发布签名/notarization 和仓库级完整
+  `just test` 也仍按未验证处理。
+
 ## 尚未关闭的完整迁移 Gate
 
 - Windows real-host：stable directory handle / UTF-16 / reparse rejection、Job Object 全树清理、NSIS 与 packaged smoke。
@@ -403,7 +446,8 @@ Gate 报告为通过。
 - updater 私钥、Apple signing/notarization、DMG 与发布凭据。
 - 本轮没有 PostgreSQL URL，因此 56 个 Store / Gateway / Worker / Control 条件测试没有被报告为通过；Team 仍需真实 Identity/PIM、
   跨副本 quota/rate、backup/restore、network partition/chaos 与 rolling compatibility 证据。
-- Workflow/Office/Human Gate、Memory、Resource/PIM、远程 mutation MCP/plugin/skill、Config 与 legacy app-server cutover 仍需后续纵切。
+- Workflow/Office/Human Gate、Memory、Resource/PIM、真实 packaged keyring + controlled remote TLS MCP、plugin/skill、Config 与 legacy
+  app-server cutover 仍需后续纵切。
 - Rust core 只运行了与本轮变更对应的 focused suite；仓库级完整 `just test` 仍须按仓库规则单独获准后运行。
 
 因此本轮证明的是基础 Agent P0 completed-item 边界和 Native Workspace 四进程纵切已在当前分支落地，而不是完整产品迁移或生产发布已经完成。
