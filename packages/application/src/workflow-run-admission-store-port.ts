@@ -21,8 +21,11 @@ export type CommitWorkflowRunStartInput = Readonly<{
   workflowVersionId: string;
   workflowInput: JsonValue;
   idempotency: IdempotencyDescriptor;
-  /** Server-resolved candidate; the Store revalidates it in its write transaction. */
-  candidateRoute: RunRoute;
+  /**
+   * Resolves a server-owned candidate outside the SQLite write transaction.
+   * Implementations must check a durable replay receipt before invoking it.
+   */
+  resolveCandidateRoute: () => Promise<RunRoute>;
   prepare: (authority: WorkflowRunAdmissionAuthority) => Readonly<{
     commit: CommitRunInput;
     workflowInputValue: WorkflowRunInputAuthority;

@@ -3450,23 +3450,15 @@ export class SqliteRunStore implements DomainStore {
     if (this.#workflowDigester === null)
       throw new RunStoreError("workflow_run_admission_not_configured");
     const workflowDigester = this.#workflowDigester;
+    const replay = this.#readWorkflowAdmissionReplay(input);
+    if (replay !== null) return replay;
+    const candidateRoute = await input.resolveCandidateRoute();
     try {
       this.#database.exec("BEGIN IMMEDIATE");
-      const prior = this.#database.prepare(
-        `SELECT tenant_id,fingerprint,result_json FROM workflow_run_admission_receipts
-         WHERE scope=? AND idempotency_key=?`,
-      ).get(input.idempotency.scope, input.idempotency.key) as
-        | { tenant_id: string; fingerprint: string; result_json: string }
-        | undefined;
-      if (prior !== undefined) {
-        if (prior.tenant_id !== input.tenantId ||
-            prior.fingerprint !== input.idempotency.requestFingerprint)
-          throw new RunStoreError("idempotency_conflict");
-        const result = parseStoredJson<CommitWorkflowRunStartResult>(
-          prior.result_json, "workflow_run_admission_receipt_invalid");
-        this.#validateWorkflowAdmissionReplay(result);
+      const concurrentReplay = this.#loadWorkflowAdmissionReplay(input);
+      if (concurrentReplay !== null) {
         this.#database.exec("COMMIT");
-        return clone(result);
+        return concurrentReplay;
       }
       const thread = this.#loadThread({ tenantId: input.tenantId,
         threadId: input.threadId });
@@ -3531,7 +3523,7 @@ export class SqliteRunStore implements DomainStore {
       if (compiledDefault.agentVersionId !== defaultAsset.agentVersionId ||
           compiledDefault.contentDigest !== defaultAsset.contentDigest)
         throw new RunStoreError("workflow_run_route_mismatch");
-      const route = input.candidateRoute;
+      const route = candidateRoute;
       if (route.agentVersionId !== defaultDeployment.agentVersionId ||
           route.authorityId !== defaultDeployment.authorityId ||
           route.workspaceBindingId !== defaultDeployment.workspaceBindingId ||
@@ -5358,6 +5350,39 @@ export class SqliteRunStore implements DomainStore {
         canonicalJson(JSON.parse(root.value_json)) !== root.value_json ||
         this.#workflowDigester.sha256(root.value_json) !== root.value_digest)
       throw new RunStoreError("workflow_run_admission_receipt_corrupt");
+  }
+
+  #readWorkflowAdmissionReplay(
+    input: CommitWorkflowRunStartInput,
+  ): CommitWorkflowRunStartResult | null {
+    try {
+      this.#database.exec("BEGIN");
+      const result = this.#loadWorkflowAdmissionReplay(input);
+      this.#database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  #loadWorkflowAdmissionReplay(
+    input: CommitWorkflowRunStartInput,
+  ): CommitWorkflowRunStartResult | null {
+    const prior = this.#database.prepare(
+      `SELECT tenant_id,fingerprint,result_json FROM workflow_run_admission_receipts
+       WHERE scope=? AND idempotency_key=?`,
+    ).get(input.idempotency.scope, input.idempotency.key) as
+      | { tenant_id: string; fingerprint: string; result_json: string }
+      | undefined;
+    if (prior === undefined) return null;
+    if (prior.tenant_id !== input.tenantId ||
+        prior.fingerprint !== input.idempotency.requestFingerprint)
+      throw new RunStoreError("idempotency_conflict");
+    const result = parseStoredJson<CommitWorkflowRunStartResult>(
+      prior.result_json, "workflow_run_admission_receipt_invalid");
+    this.#validateWorkflowAdmissionReplay(result);
+    return clone({ ...result, run: { ...result.run, disposition: "replayed" } });
   }
 
   #validateWorkflowPreparedCommit(
