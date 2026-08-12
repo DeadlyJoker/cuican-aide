@@ -561,7 +561,7 @@ export class SqliteWorkflowRunCompositionStore
       const receiptInput = { ...input,
         operationId: input.reconciliationOperationId };
       const replay = this.#receipt(
-        receiptInput, "settleNode", fingerprint);
+        receiptInput, "reconcileNode", fingerprint);
       if (replay !== null) {
         this.#database.exec("COMMIT");
         return structuredClone({ ...(replay as object), disposition: "replay" } as
@@ -628,7 +628,7 @@ export class SqliteWorkflowRunCompositionStore
           execution: next, handoff: { currentWorkItem: "completed" as const,
             nextWorkItemId: null, kind: "none" as const }, runDisposition };
         this.#insertReceipt(
-          receiptInput, "settleNode", fingerprint, result);
+          receiptInput, "reconcileNode", fingerprint, result);
         this.#completeLease(input, nowMs);
         this.#database.exec("COMMIT");
         return structuredClone(result);
@@ -845,9 +845,15 @@ export class SqliteWorkflowRunCompositionStore
       }
       this.#writeExecution(execution, now);
       const reconciliationWorkItemIds = recovery.map((claim) => {
+        const reconciliationOperationId = workflowAuthorityId("reconcile", {
+          tenantId: input.tenantId, runId: input.runId, binding: input.binding,
+          schedulerOperationId: input.schedulerOperationId,
+          nodeId: claim.node.nodeId, claimId: claim.claimId,
+          claimEpoch: claim.claimEpoch,
+        }, this.#digester);
         const reconciliationWorkItemId = workflowAuthorityId("reconcile", {
           tenantId: input.tenantId, runId: input.runId, binding: input.binding,
-          operationId: input.schedulerOperationId, nodeId: claim.node.nodeId,
+          operationId: reconciliationOperationId, nodeId: claim.node.nodeId,
           claimId: claim.claimId, claimEpoch: claim.claimEpoch,
         }, this.#digester);
         this.#insertWorkflowWorkItem(reconciliationWorkItemId, input, {
@@ -855,7 +861,7 @@ export class SqliteWorkflowRunCompositionStore
           trigger: "workflowReconcile", binding: input.binding,
           nodeId: claim.node.nodeId, claimId: claim.claimId,
           claimEpoch: claim.claimEpoch,
-          reconciliationOperationId: input.schedulerOperationId,
+          reconciliationOperationId,
         }, now, nowMs);
         return reconciliationWorkItemId;
       });

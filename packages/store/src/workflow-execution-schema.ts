@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { RunStoreError } from "@crewon/application";
 import type { PoolClient } from "pg";
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
   try {
@@ -78,6 +78,20 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
         )
         .run();
       version = 6;
+    }
+    if (version === 6) {
+      database.exec(`ALTER TABLE workflow_composition_receipts
+      RENAME TO workflow_composition_receipts_v6;
+      CREATE TABLE workflow_composition_receipts (
+        tenant_id TEXT NOT NULL, run_id TEXT NOT NULL, operation_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation','reconcileNode','cancelExecution')),
+        fingerprint TEXT NOT NULL, result_json TEXT NOT NULL CHECK (json_valid(result_json)),
+        PRIMARY KEY (tenant_id,run_id,operation_id),
+        FOREIGN KEY (tenant_id,run_id) REFERENCES workflow_executions(tenant_id,run_id));
+      INSERT INTO workflow_composition_receipts SELECT * FROM workflow_composition_receipts_v6;
+      DROP TABLE workflow_composition_receipts_v6;
+      UPDATE workflow_execution_schema SET version=7 WHERE singleton=1`);
+      version = 7;
     }
     assertSqliteShape(database);
   } catch (error) {
@@ -158,6 +172,17 @@ export async function migratePostgresWorkflowExecutions(
     );
     version = 6;
   }
+  if (version === 6) {
+    await client.query(`ALTER TABLE ${schema}.workflow_composition_receipts
+      DROP CONSTRAINT workflow_composition_receipts_kind_check`);
+    await client.query(`ALTER TABLE ${schema}.workflow_composition_receipts
+      ADD CONSTRAINT workflow_composition_receipts_kind_check CHECK
+      (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation','reconcileNode','cancelExecution'))`);
+    await client.query(
+      `UPDATE ${schema}.workflow_execution_schema SET version=7 WHERE singleton=true`,
+    );
+    version = 7;
+  }
   const columns = await client.query<{
     table_name: string;
     column_name: string;
@@ -235,7 +260,7 @@ CREATE TABLE workflow_composition_receipts (
   tenant_id TEXT NOT NULL,
   run_id TEXT NOT NULL,
   operation_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation','cancelExecution')),
+  kind TEXT NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation','reconcileNode','cancelExecution')),
   fingerprint TEXT NOT NULL,
   result_json TEXT NOT NULL CHECK (json_valid(result_json)),
   PRIMARY KEY (tenant_id, run_id, operation_id),
@@ -366,7 +391,7 @@ function postgresCompositionTables(schema: string): string {
   ${postgresAdmissionTable(schema)}
   CREATE TABLE ${schema}.workflow_composition_receipts (
     tenant_id text NOT NULL, run_id text NOT NULL, operation_id text NOT NULL,
-    kind text NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation','cancelExecution')),
+    kind text NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation','reconcileNode','cancelExecution')),
     fingerprint text NOT NULL, result_json jsonb NOT NULL,
     PRIMARY KEY (tenant_id,run_id,operation_id),
     FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.workflow_executions(tenant_id,run_id));
