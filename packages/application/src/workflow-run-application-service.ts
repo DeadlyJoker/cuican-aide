@@ -19,6 +19,10 @@ import type {
   CommitRunInput,
   IdempotencyDescriptor,
 } from "./run-store-port.ts";
+import type {
+  WorkflowRunInputAuthority,
+  WorkflowSchedulerWorkItemPayload,
+} from "./durable-queue-port.ts";
 import { RunStoreError } from "./run-store-port.ts";
 import type {
   CommitWorkflowRunStartResult,
@@ -92,7 +96,10 @@ export class WorkflowRunApplicationService {
     workflowInput: JsonValue,
     idempotency: IdempotencyDescriptor,
     authority: WorkflowRunAdmissionAuthority,
-  ): CommitRunInput {
+  ): Readonly<{
+    commit: CommitRunInput;
+    workflowInputValue: WorkflowRunInputAuthority;
+  }> {
     let workflow;
     try {
       workflow = parseCompiledWorkflowVersion(
@@ -138,7 +145,22 @@ export class WorkflowRunApplicationService {
       throw error;
     }
     const occurredAt = this.#now();
+    const canonicalWorkflowInput = canonicalJson(validatedWorkflowInput);
+    const valueId = this.#nextId("workflowExecutionValue");
+    const valueDigest = this.#workflowDigester.sha256(canonicalWorkflowInput);
+    const workflowInputAuthority: WorkflowRunInputAuthority = {
+      schemaVersion: "crewon.workflow-execution-value.v0",
+      valueId,
+      value: validatedWorkflowInput,
+      valueDigest,
+    };
+    const schedulerOperationId = this.#nextId("workflowSchedulerOperation");
     const runId = this.#nextId("run");
+    const binding = {
+      workflowId: authority.workflowVersion.workflowId,
+      workflowVersionId: authority.workflowVersion.workflowVersionId,
+      contentDigest: authority.workflowVersion.contentDigest,
+    };
     const event: Extract<RunLifecycleEvent, { type: "run.created" }> = {
       schemaVersion: "crewon.run-event.v0",
       identity: { runId },
@@ -153,16 +175,12 @@ export class WorkflowRunApplicationService {
         createdByActorId: actor.actorId,
         ...authority.route,
         purpose: "workflow",
-        workflowVersionBinding: {
-          workflowId: authority.workflowVersion.workflowId,
-          workflowVersionId: authority.workflowVersion.workflowVersionId,
-          contentDigest: authority.workflowVersion.contentDigest,
-        },
+        workflowVersionBinding: binding,
         collaborationMode: "default",
         goalBinding: null,
       },
     };
-    return {
+    const commit: CommitRunInput = {
       tenantId: actor.tenantId,
       idempotency,
       expectedRevision: 0,
@@ -188,13 +206,17 @@ export class WorkflowRunApplicationService {
           runId,
           kind: "run.execute",
           payload: {
-            throughSequence: 1,
-            workflowInput: validatedWorkflowInput,
-          },
+            schemaVersion: "crewon.workflow-scheduler-work-item.v1",
+            trigger: "workflowScheduler",
+            binding,
+            schedulerOperationId,
+            workflowInput: { valueId, valueDigest },
+          } satisfies WorkflowSchedulerWorkItemPayload,
           createdAt: occurredAt,
         },
       ],
     };
+    return { commit, workflowInputValue: workflowInputAuthority };
   }
 
   async #authorize(actor: ActorContext, threadId: string): Promise<void> {
