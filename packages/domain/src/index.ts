@@ -16,6 +16,7 @@ export * from "./tool-approval.ts";
 export * from "./tool-execution-receipt.ts";
 export * from "./workflow-schema.ts";
 export * from "./workflow-schema-value.ts";
+export * from "./workflow-node-terminal-value.ts";
 export * from "./workflow-value-flow.ts";
 export * from "./workflow-version-error.ts";
 export * from "./workflow-version.ts";
