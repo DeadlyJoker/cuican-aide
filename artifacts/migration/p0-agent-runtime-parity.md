@@ -349,9 +349,13 @@ release。completed 路径的 created、identity、status、output 与 usage 校
 Rust `process_responses_event` 对无法识别但结构合法的 Responses event kind 使用默认忽略语义，因此 provider 在 created 前或流中加入未来
 非终态扩展事件时，不会把随后合法的 output/usage/completed 改写为失败。TS decoder 现在保持同一 event-kind 边界，但 framing 不宣称逐字段
 相同：Rust `ResponsesStreamEvent` 不读取 `sequence_number`；TS HTTP/SSE 的 `required` policy 仍要求未知事件带合法递增 sequence，WebSocket
-`whenPresent` policy 允许省略、存在时仍校验。通过 framing 后，未知 kind 不产生模型事件、不改写 history/identity/usage，也不成为 terminal；
-已知但 malformed 的事件仍 fail closed，terminal 后的未知事件仍被 first-terminal cutoff 拒绝。
+`whenPresent` policy 允许省略、存在时仍校验。通过 framing 后，真正未知的 kind 不产生模型事件、不改写 history/identity/usage，也不成为
+terminal。AR-041 不宣称 reasoning 或增量 Tool input parity：Rust 已处理而 TS 尚无等价 `ModelTransportEvent` 的
+`response.reasoning_summary_text.delta`、`response.reasoning_text.delta`、`response.reasoning_summary_part.added`、
+`response.custom_tool_call_input.delta` 与 `response.output_item.added` 均显式保持 `responses_event_unsupported` fail closed，不能落入未来
+kind ignore。已知但 malformed 的事件仍 fail closed，terminal 后的未知事件仍被 first-terminal cutoff 拒绝。
 
 `responses-unknown-event.reference.json` 以合法 sequence 由 Rust `collect_events`、TS 两种 sequence policy、真实
 `DirectResponsesTransport` 与 Runtime Worker 共同消费，并冻结最终 assistant output、usage、response identity 与 durable completed Run；
-TS focused regression 另覆盖 `whenPresent` 缺 sequence、`required` 缺 sequence 拒绝、已知 malformed delta 拒绝与 terminal 后 unknown 拒绝。
+TS focused regression 另覆盖 `whenPresent` 缺 sequence、`required` 缺 sequence 拒绝、上述五种 Rust-known/TS-unprojected kind、已知
+malformed delta 与 terminal 后 unknown 拒绝。

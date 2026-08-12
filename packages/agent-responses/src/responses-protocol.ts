@@ -196,16 +196,20 @@ export class ResponsesProtocolDecoder {
         return [{ type: "output.item.completed", item }];
       }
       case "response.in_progress":
-      case "response.output_item.added":
       case "response.content_part.added":
       case "response.content_part.done":
       case "response.output_text.done":
       case "response.function_call_arguments.delta":
       case "response.function_call_arguments.done":
-      case "response.custom_tool_call_input.delta":
       case "response.custom_tool_call_input.done":
         requireCreated(this.#created);
         return [];
+      case "response.custom_tool_call_input.delta":
+      case "response.reasoning_summary_text.delta":
+      case "response.reasoning_text.delta":
+      case "response.output_item.added":
+      case "response.reasoning_summary_part.added":
+        throw protocolError("responses_event_unsupported");
       default:
         return [];
     }

@@ -362,6 +362,49 @@ test(`${unknownEventFixture.caseId}: framing and fail-closed boundaries remain s
   );
 });
 
+test(`${unknownEventFixture.caseId}: Rust-known events without TS projections remain unsupported`, () => {
+  const unsupportedRustKnownEvents = [
+    {
+      type: "response.custom_tool_call_input.delta",
+      delta: "{}",
+      item_id: "item-1",
+    },
+    {
+      type: "response.reasoning_summary_text.delta",
+      delta: "summary",
+      summary_index: 0,
+    },
+    {
+      type: "response.reasoning_text.delta",
+      delta: "reasoning",
+      content_index: 0,
+    },
+    {
+      type: "response.output_item.added",
+      item: { type: "message", role: "assistant", content: [] },
+    },
+    {
+      type: "response.reasoning_summary_part.added",
+      summary_index: 0,
+    },
+  ] as const;
+
+  for (const [index, event] of unsupportedRustKnownEvents.entries()) {
+    const decoder = new ResponsesProtocolDecoder({
+      sequencePolicy: "required",
+      completedCheckpoint: () => null,
+    });
+    decoder.accept(unknownEventFixture.events[1]);
+    assert.throws(
+      () => decoder.accept({ ...event, sequence_number: index + 2 }),
+      (error) =>
+        error instanceof ModelTransportError &&
+        error.code === "responses_event_unsupported",
+      event.type,
+    );
+  }
+});
+
 test(`${topLevelErrorPayloadFixture.caseId}: fatal denylist is explicit and stable`, () => {
   assert.deepEqual(topLevelErrorPayloadFixture.fatalProviderCodes, [
     "context_length_exceeded",
