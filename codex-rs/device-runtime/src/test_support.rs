@@ -7,6 +7,7 @@ use chrono::Duration;
 use chrono::SecondsFormat;
 use chrono::Utc;
 use crewon_device::TrustedDeviceCommandKey;
+use crewon_device_protocol::DEVICE_RAW_FILESYSTEM_READ_CAPABILITY;
 use crewon_device_protocol::DeviceFilesystemReadAcceptedData;
 use crewon_device_protocol::DeviceFilesystemReadCommand;
 use crewon_device_protocol::DeviceFilesystemReadCompletedData;
@@ -118,6 +119,26 @@ pub(crate) fn signed_read_command(
             .sign(
                 canonical_device_command_signing_payload(&command.command)
                     .expect("canonical read signing payload")
+                    .as_bytes(),
+            )
+            .to_bytes(),
+    );
+    command
+}
+
+pub(crate) fn signed_raw_read_command(
+    fixture: &RuntimeFixture,
+    suffix: u16,
+) -> DeviceFilesystemReadCommand {
+    let mut command = signed_read_command(fixture, suffix);
+    command.command.capability = DEVICE_RAW_FILESYSTEM_READ_CAPABILITY.to_string();
+    command.command.authorization.signature = "A".repeat(86);
+    command.command.authorization.signature = URL_SAFE_NO_PAD.encode(
+        fixture
+            .signing_key
+            .sign(
+                canonical_device_command_signing_payload(&command.command)
+                    .expect("canonical raw read signing payload")
                     .as_bytes(),
             )
             .to_bytes(),

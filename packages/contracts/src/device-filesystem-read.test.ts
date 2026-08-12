@@ -9,6 +9,7 @@ import {
   parseDeviceFilesystemReadAck,
   parseDeviceFilesystemReadEvent,
   parseDeviceFilesystemReadResult,
+  parseDeviceRawFilesystemReadCommand,
 } from "./device-filesystem-read.ts";
 
 const fixture = JSON.parse(
@@ -39,6 +40,19 @@ test("parses the shared bounded filesystem read command", () => {
       digestUtf8,
     ),
     (fixture.valid.filesystemReadEvents[0] as any).commandDigest,
+  );
+});
+
+test("keeps dedicated and raw Tool read capability parsers disjoint", () => {
+  const raw = structuredClone(fixture.valid.filesystemReadCommand) as any;
+  raw.capability = "workspace.read_file.raw_tool.v0";
+  assert.equal(
+    parseDeviceRawFilesystemReadCommand(raw).capability,
+    "workspace.read_file.raw_tool.v0",
+  );
+  assert.throws(
+    () => parseDeviceFilesystemReadCommand(raw),
+    /device_filesystem_read_command_invalid/,
   );
 });
 

@@ -34,6 +34,8 @@ pub use tool_journal::AcknowledgeToolOutcome;
 pub use tool_journal::PrepareToolError;
 pub use tool_journal::PrepareToolOutcome;
 pub use tool_journal::RecordToolTerminalOutcome;
+pub use tool_journal::ToolJournalAcknowledgement;
+pub use tool_journal::ToolJournalAcknowledgementPage;
 pub use tool_journal::ToolJournalExecution;
 pub use tool_journal::ToolJournalListQuery;
 pub use tool_journal::ToolJournalPage;

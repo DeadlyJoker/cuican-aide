@@ -23,6 +23,7 @@ use super::parse_device_filesystem_read_command;
 use super::parse_device_filesystem_read_event;
 use super::parse_device_gateway_welcome;
 use super::parse_device_hello;
+use super::parse_device_raw_filesystem_read_command;
 use super::parse_device_workspace_list_command;
 use super::verify_device_command_authorization;
 use super::verify_device_workspace_list_command_authorization;
@@ -85,6 +86,21 @@ fn matches_typescript_device_protocol_reference_and_fail_closed_codes() {
     let read_command =
         parse_device_filesystem_read_command(fixture.valid.filesystem_read_command.clone())
             .expect("parse filesystem read command for digest");
+    let mut raw_read = fixture.valid.filesystem_read_command.clone();
+    raw_read["capability"] = Value::String("workspace.read_file.raw_tool.v0".to_string());
+    assert_eq!(
+        parse_device_raw_filesystem_read_command(raw_read.clone())
+            .expect("parse raw Tool filesystem read")
+            .command
+            .capability,
+        "workspace.read_file.raw_tool.v0",
+    );
+    assert_eq!(
+        parse_device_filesystem_read_command(raw_read)
+            .expect_err("dedicated read parser must reject raw Tool capability")
+            .code,
+        "device_filesystem_read_command_invalid",
+    );
     assert_eq!(
         canonical_device_filesystem_read_command_digest(&read_command)
             .expect("digest filesystem read command"),

@@ -2,11 +2,14 @@ use std::sync::Arc;
 
 use chrono::SecondsFormat;
 use chrono::Utc;
+use crewon_device_protocol::DeviceExecutionAck;
 use crewon_device_protocol::DeviceExecutionCancel;
+use crewon_device_protocol::DeviceExecutionEvent;
 use crewon_device_protocol::DeviceFilesystemReadAck;
 use crewon_device_protocol::DeviceFilesystemReadEvent;
 use crewon_device_protocol::DeviceHello;
 use crewon_device_protocol::DeviceWorkspaceListEvent;
+use crewon_device_protocol::parse_device_execution_event;
 use crewon_device_protocol::parse_device_filesystem_read_event;
 use crewon_device_protocol::parse_device_hello;
 use crewon_device_protocol::parse_device_workspace_list_event;
@@ -20,10 +23,10 @@ use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
 use super::Outbound;
-use super::build_hello;
-use super::collect_replay_events;
 use super::enqueue_replay_events;
 use super::run_socket_with_ready;
+use crate::projection::build_hello;
+use crate::projection::collect_replay_events;
 use crate::runtime::MAX_SOCKET_MESSAGE_BYTES;
 use crate::runtime::RuntimeEvent;
 use crate::test_support::ServerPin;
@@ -33,6 +36,7 @@ use crate::test_support::read_accepted_event;
 use crate::test_support::read_completed_event;
 use crate::test_support::runtime_fixture;
 use crate::test_support::signed_command;
+use crate::test_support::signed_raw_read_command;
 use crate::test_support::signed_read_command;
 use crate::test_support::terminal_event;
 use crate::test_support::welcome;
@@ -60,7 +64,11 @@ async fn real_mtls_wss_sends_hello_then_accepted_terminal_and_survives_late_canc
         let hello = receive_hello(&mut socket).await;
         assert_eq!(
             hello.capabilities,
-            vec!["workspace.list_top_level.v0", "workspace.read_file.v0"]
+            vec![
+                "workspace.list_top_level.v0",
+                "workspace.read_file.v0",
+                "workspace.read_file.raw_tool.v0",
+            ]
         );
         assert!(hello.last_acknowledged.is_empty());
         socket
@@ -173,7 +181,11 @@ async fn real_mtls_wss_executes_and_acknowledges_workspace_read_without_regressi
         let hello = receive_hello(&mut socket).await;
         assert_eq!(
             hello.capabilities,
-            vec!["workspace.list_top_level.v0", "workspace.read_file.v0"]
+            vec![
+                "workspace.list_top_level.v0",
+                "workspace.read_file.v0",
+                "workspace.read_file.raw_tool.v0",
+            ]
         );
         socket
             .send(Message::text(
@@ -224,6 +236,72 @@ async fn real_mtls_wss_executes_and_acknowledges_workspace_read_without_regressi
         .await
         .expect("load read")
         .expect("read execution");
+    assert_eq!(execution.acknowledged_through, 2);
+}
+
+#[tokio::test]
+async fn real_mtls_wss_raw_read_uses_tool_receipts_and_cumulative_ack() {
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind WSS listener");
+    let url = Url::parse(&format!(
+        "wss://localhost:{}/device/v1",
+        listener.local_addr().expect("listener address").port()
+    ))
+    .expect("gateway URL");
+    let fixture = runtime_fixture(url, ServerPin::Required).await;
+    let command = signed_raw_read_command(&fixture, 190);
+    let execution_id = command.command.execution_id.clone();
+    let server_config = Arc::clone(&fixture.server_config);
+    let server_command = command.command.clone();
+    let server = tokio::spawn(async move {
+        let mut socket = accept_wss(&listener, server_config).await;
+        let hello = receive_hello(&mut socket).await;
+        assert!(
+            hello
+                .capabilities
+                .contains(&"workspace.read_file.raw_tool.v0".to_string())
+        );
+        socket
+            .send(Message::text(
+                serde_json::to_string(&welcome(&hello, 7)).expect("welcome"),
+            ))
+            .await
+            .expect("send welcome");
+        socket
+            .send(Message::text(
+                serde_json::to_string(&server_command).expect("raw read command"),
+            ))
+            .await
+            .expect("send raw read");
+        let accepted = receive_tool_event(&mut socket).await;
+        let terminal = receive_tool_event(&mut socket).await;
+        assert!(matches!(accepted, DeviceExecutionEvent::Accepted { .. }));
+        let DeviceExecutionEvent::Completed { data, .. } = &terminal else {
+            panic!("completed raw read required");
+        };
+        assert_eq!(data.output.as_deref(), Some("alpha"));
+        socket
+            .send(Message::text(
+                serde_json::to_string(&tool_ack(&terminal, 2)).expect("tool ACK"),
+            ))
+            .await
+            .expect("send tool ACK");
+        socket.close(None).await.expect("close");
+    });
+    let socket = fixture.runtime.connect_socket().await.expect("connect");
+    run_socket_with_ready(Arc::clone(&fixture.runtime.state), socket, &|_| {})
+        .await
+        .expect("run raw read session");
+    server.await.expect("server");
+    let execution = fixture
+        .runtime
+        .state
+        .journal
+        .get_tool(&execution_id)
+        .await
+        .expect("load tool")
+        .expect("tool execution");
     assert_eq!(execution.acknowledged_through, 2);
 }
 
@@ -684,6 +762,43 @@ where
     .expect("parse read event")
 }
 
+async fn receive_tool_event<Stream>(
+    socket: &mut tokio_tungstenite::WebSocketStream<Stream>,
+) -> DeviceExecutionEvent
+where
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let Message::Text(text) = socket
+        .next()
+        .await
+        .expect("tool event frame")
+        .expect("read tool event")
+    else {
+        panic!("text tool event required");
+    };
+    parse_device_execution_event(serde_json::from_str(text.as_str()).expect("tool event JSON"))
+        .expect("parse tool event")
+}
+
+fn tool_ack(event: &DeviceExecutionEvent, through_sequence: u64) -> DeviceExecutionAck {
+    let envelope = match event {
+        DeviceExecutionEvent::Accepted { envelope, .. }
+        | DeviceExecutionEvent::Output { envelope, .. }
+        | DeviceExecutionEvent::Completed { envelope, .. }
+        | DeviceExecutionEvent::Failed { envelope, .. }
+        | DeviceExecutionEvent::Canceled { envelope, .. }
+        | DeviceExecutionEvent::UnknownOutcome { envelope, .. } => envelope,
+    };
+    DeviceExecutionAck {
+        schema_version: "crewon.device-ack.v0".to_string(),
+        protocol_version: envelope.protocol_version,
+        device_id: envelope.device_id.clone(),
+        execution_id: envelope.execution_id.clone(),
+        through_sequence,
+        acknowledged_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+    }
+}
+
 fn read_sequence(event: &DeviceFilesystemReadEvent) -> u64 {
     match event {
         DeviceFilesystemReadEvent::Accepted { envelope, .. }
@@ -739,6 +854,14 @@ fn runtime_event_sequence(event: &RuntimeEvent) -> u64 {
             | crewon_device_protocol::DeviceFilesystemReadEvent::UnknownOutcome {
                 envelope, ..
             } => envelope.sequence,
+        },
+        RuntimeEvent::Tool(event) => match event {
+            DeviceExecutionEvent::Accepted { envelope, .. }
+            | DeviceExecutionEvent::Output { envelope, .. }
+            | DeviceExecutionEvent::Completed { envelope, .. }
+            | DeviceExecutionEvent::Failed { envelope, .. }
+            | DeviceExecutionEvent::Canceled { envelope, .. }
+            | DeviceExecutionEvent::UnknownOutcome { envelope, .. } => envelope.sequence,
         },
     }
 }

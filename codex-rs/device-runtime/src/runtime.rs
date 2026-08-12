@@ -10,6 +10,7 @@ use crewon_device::ConnectionEpochFence;
 use crewon_device::DeviceCommandAuthorizer;
 use crewon_device::NativeDeviceRuntimeBinding;
 use crewon_device::NativeFilesystemReadOrchestrator;
+use crewon_device::NativeToolOrchestrator;
 use crewon_device::NativeWorkspaceListOrchestrator;
 use crewon_device::WorkspaceDirectoryRegistry;
 use crewon_device::WorkspaceListCancellation;
@@ -34,6 +35,7 @@ pub(crate) const MAX_UNACKNOWLEDGED_EXECUTIONS: usize = 64;
 pub(crate) const MAX_SOCKET_MESSAGE_BYTES: usize = 128 * 1024;
 pub(crate) const WORKSPACE_LIST_CAPABILITY: &str = "workspace.list_top_level.v0";
 pub(crate) const WORKSPACE_READ_CAPABILITY: &str = "workspace.read_file.v0";
+pub(crate) const RAW_WORKSPACE_READ_CAPABILITY: &str = "workspace.read_file.raw_tool.v0";
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct DeviceRuntime {
@@ -65,6 +67,7 @@ pub(crate) struct DeviceRuntimeState {
     pub journal: DeviceWorkspaceJournal,
     pub orchestrator: NativeWorkspaceListOrchestrator,
     pub read_orchestrator: NativeFilesystemReadOrchestrator,
+    pub tool_orchestrator: NativeToolOrchestrator,
     pub registry: Arc<WorkspaceDirectoryRegistry>,
     pub fence: Arc<ConnectionEpochFence>,
     pub authorizer: Arc<DeviceCommandAuthorizer>,
@@ -78,6 +81,7 @@ pub(crate) struct DeviceRuntimeState {
 pub(crate) enum RuntimeEvent {
     WorkspaceList(crewon_device_protocol::DeviceWorkspaceListEvent),
     FilesystemRead(crewon_device_protocol::DeviceFilesystemReadEvent),
+    Tool(crewon_device_protocol::DeviceExecutionEvent),
 }
 
 #[derive(Clone)]
@@ -134,6 +138,7 @@ impl DeviceRuntime {
         })?;
         let orchestrator = NativeWorkspaceListOrchestrator::new(journal.clone());
         let read_orchestrator = NativeFilesystemReadOrchestrator::new(journal.clone());
+        let tool_orchestrator = NativeToolOrchestrator::new(journal.clone());
         let (events, _) = tokio::sync::broadcast::channel(256);
         Ok(Self {
             state: Arc::new(DeviceRuntimeState {
@@ -143,6 +148,7 @@ impl DeviceRuntime {
                 journal,
                 orchestrator,
                 read_orchestrator,
+                tool_orchestrator,
                 registry,
                 fence: Arc::new(fence),
                 authorizer: Arc::new(authorizer),

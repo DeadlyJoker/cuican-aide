@@ -3,13 +3,16 @@ use std::sync::Arc;
 use crewon_device::AcceptedGatewayConnection;
 use crewon_device::NativeDeviceConnection;
 use crewon_device::NativeFilesystemReadDispatchOutcome;
+use crewon_device::NativeToolDispatchOutcome;
 use crewon_device::NativeWorkspaceListDispatchOutcome;
 use crewon_device::WorkspaceListCancellation;
 use crewon_device_protocol::DeviceExecutionCancel;
+use crewon_device_protocol::DeviceExecutionCommand;
 use crewon_device_protocol::DeviceFilesystemReadCommand;
 use crewon_device_protocol::DeviceFilesystemReadEvent;
 use crewon_device_protocol::DeviceWorkspaceListCommand;
 use crewon_device_protocol::DeviceWorkspaceListEvent;
+use crewon_device_protocol::parse_device_execution_command;
 use crewon_device_protocol::parse_device_filesystem_read_command;
 use crewon_device_protocol::parse_device_workspace_list_command;
 use serde_json::Value;
@@ -33,6 +36,7 @@ pub(crate) struct DispatchRequest {
 enum DispatchCommand {
     WorkspaceList(DeviceWorkspaceListCommand),
     FilesystemRead(DeviceFilesystemReadCommand),
+    Tool(DeviceExecutionCommand),
 }
 
 pub(crate) fn enqueue_command(
@@ -96,6 +100,46 @@ pub(crate) fn enqueue_filesystem_read(
                 &command.command.execution_id,
                 &command.command.lease_id,
                 command.command.lease_epoch,
+            );
+        }
+        return Err(DeviceRuntimeError::new(
+            "device_runtime_dispatch_capacity_exceeded",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn enqueue_tool(
+    state: &Arc<DeviceRuntimeState>,
+    frame: &[u8],
+    value: Value,
+    dispatch_tx: &mpsc::Sender<DispatchRequest>,
+) -> Result<(), DeviceRuntimeError> {
+    let command = parse_device_execution_command(value).map_err(|error| {
+        DeviceRuntimeError::with_source("device_runtime_command_invalid", error)
+    })?;
+    if command.device_id != state.device_id {
+        return Err(DeviceRuntimeError::new("device_runtime_command_invalid"));
+    }
+    let (cancellation, owns_cancellation) = register_identity(
+        state,
+        &command.execution_id,
+        &command.lease_id,
+        command.lease_epoch,
+    )?;
+    let request = DispatchRequest {
+        command_frame: frame.to_vec(),
+        command: DispatchCommand::Tool(command.clone()),
+        cancellation,
+        owns_cancellation,
+    };
+    if dispatch_tx.try_send(request).is_err() {
+        if owns_cancellation {
+            remove_owned_identity(
+                state,
+                &command.execution_id,
+                &command.lease_id,
+                command.lease_epoch,
             );
         }
         return Err(DeviceRuntimeError::new(
@@ -183,6 +227,19 @@ fn dispatch_blocking(
                 },
             ))
             .map(DispatchOutcome::FilesystemRead),
+        DispatchCommand::Tool(_) => handle
+            .block_on(state.tool_orchestrator.dispatch_filesystem_read(
+                &connection,
+                &request.command_frame,
+                &state.registry,
+                &request.cancellation,
+                move |accepted| {
+                    let _ = observer_state
+                        .events
+                        .send(RuntimeEvent::Tool(accepted.clone()));
+                },
+            ))
+            .map(DispatchOutcome::Tool),
     }
     .map_err(|error| DeviceRuntimeError::with_source("device_runtime_dispatch_failed", error));
     if request.owns_cancellation {
@@ -194,6 +251,12 @@ fn dispatch_blocking(
                 &command.command.lease_id,
                 command.command.lease_epoch,
             ),
+            DispatchCommand::Tool(command) => remove_owned_identity(
+                &state,
+                &command.execution_id,
+                &command.lease_id,
+                command.lease_epoch,
+            ),
         }
     }
     outcome
@@ -202,6 +265,7 @@ fn dispatch_blocking(
 enum DispatchOutcome {
     WorkspaceList(NativeWorkspaceListDispatchOutcome),
     FilesystemRead(NativeFilesystemReadDispatchOutcome),
+    Tool(NativeToolDispatchOutcome),
 }
 
 fn outcome_events(outcome: DispatchOutcome) -> Vec<RuntimeEvent> {
@@ -214,6 +278,23 @@ fn outcome_events(outcome: DispatchOutcome) -> Vec<RuntimeEvent> {
             .into_iter()
             .map(RuntimeEvent::WorkspaceList)
             .collect(),
+        DispatchOutcome::Tool(outcome) => tool_outcome_events(outcome)
+            .into_iter()
+            .map(RuntimeEvent::Tool)
+            .collect(),
+    }
+}
+
+fn tool_outcome_events(
+    outcome: NativeToolDispatchOutcome,
+) -> Vec<crewon_device_protocol::DeviceExecutionEvent> {
+    match outcome {
+        NativeToolDispatchOutcome::FreshResolved { terminal, .. } => vec![terminal],
+        NativeToolDispatchOutcome::AcceptedInFlight { accepted } => vec![accepted],
+        NativeToolDispatchOutcome::RecoveredUnknownOutcome { accepted, terminal }
+        | NativeToolDispatchOutcome::TerminalReplay { accepted, terminal } => {
+            vec![accepted, terminal]
+        }
     }
 }
 

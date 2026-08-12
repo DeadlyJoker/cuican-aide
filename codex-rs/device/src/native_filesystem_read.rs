@@ -5,6 +5,7 @@ use chrono::Utc;
 use crewon_device_protocol::DeviceFilesystemReadCommand;
 use crewon_device_protocol::MAX_DEVICE_COMMAND_BYTES;
 use crewon_device_protocol::parse_device_filesystem_read_command;
+use crewon_device_protocol::parse_device_raw_filesystem_read_command;
 
 use crate::AcceptedGatewayConnection;
 use crate::DeviceCommandAuthorizer;
@@ -34,6 +35,23 @@ impl DeviceCommandAuthorizer {
         self.verify(&command.command, now)?;
         Ok(command)
     }
+
+    pub(crate) fn verify_raw_filesystem_read_command(
+        &self,
+        frame: &[u8],
+        now: DateTime<Utc>,
+    ) -> Result<DeviceFilesystemReadCommand, NativeDeviceAdmissionError> {
+        let value = parse_bounded_json(
+            frame,
+            MAX_DEVICE_COMMAND_BYTES,
+            "device_filesystem_read_command_invalid",
+            "device_command_too_large",
+        )?;
+        let command = parse_device_raw_filesystem_read_command(value)
+            .map_err(NativeDeviceAdmissionError::from_protocol)?;
+        self.verify(&command.command, now)?;
+        Ok(command)
+    }
 }
 
 impl NativeDeviceConnection<'_> {
@@ -45,6 +63,24 @@ impl NativeDeviceConnection<'_> {
         let command = self
             .authorizer
             .verify_filesystem_read_command(command_frame, now)?;
+        self.validate_filesystem_read_binding(&command, now)?;
+        Ok(VerifiedDeviceFilesystemReadCommand {
+            connection: self.accepted.clone(),
+            runtime_binding: self.runtime_binding.clone().ok_or_else(|| {
+                NativeDeviceAdmissionError::new("device_workspace_runtime_unavailable")
+            })?,
+            command,
+        })
+    }
+
+    pub(crate) fn verify_raw_filesystem_read_command(
+        &self,
+        command_frame: &[u8],
+        now: DateTime<Utc>,
+    ) -> Result<VerifiedDeviceFilesystemReadCommand, NativeDeviceAdmissionError> {
+        let command = self
+            .authorizer
+            .verify_raw_filesystem_read_command(command_frame, now)?;
         self.validate_filesystem_read_binding(&command, now)?;
         Ok(VerifiedDeviceFilesystemReadCommand {
             connection: self.accepted.clone(),

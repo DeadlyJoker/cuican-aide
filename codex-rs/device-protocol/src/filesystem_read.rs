@@ -10,6 +10,7 @@ use crate::canonical_device_command_signing_payload;
 use crate::parse_device_execution_command;
 
 pub const DEVICE_FILESYSTEM_READ_CAPABILITY: &str = "workspace.read_file.v0";
+pub const DEVICE_RAW_FILESYSTEM_READ_CAPABILITY: &str = "workspace.read_file.raw_tool.v0";
 pub const MAX_DEVICE_FILESYSTEM_READ_BYTES: u64 = 64 * 1024;
 pub const MAX_DEVICE_FILESYSTEM_READ_TIMEOUT_MS: u64 = 30_000;
 
@@ -38,8 +39,24 @@ pub struct DeviceFilesystemReadCommand {
 pub fn parse_device_filesystem_read_command(
     value: Value,
 ) -> Result<DeviceFilesystemReadCommand, DeviceProtocolError> {
+    parse_device_filesystem_read_command_for_capability(value, DEVICE_FILESYSTEM_READ_CAPABILITY)
+}
+
+pub fn parse_device_raw_filesystem_read_command(
+    value: Value,
+) -> Result<DeviceFilesystemReadCommand, DeviceProtocolError> {
+    parse_device_filesystem_read_command_for_capability(
+        value,
+        DEVICE_RAW_FILESYSTEM_READ_CAPABILITY,
+    )
+}
+
+fn parse_device_filesystem_read_command_for_capability(
+    value: Value,
+    capability: &str,
+) -> Result<DeviceFilesystemReadCommand, DeviceProtocolError> {
     let command = parse_device_execution_command(value)?;
-    if command.capability != DEVICE_FILESYSTEM_READ_CAPABILITY
+    if command.capability != capability
         || command.payload_ref.is_some()
         || command.authorization.approval_proof.is_some()
         || command.limits.max_output_bytes > MAX_DEVICE_FILESYSTEM_READ_BYTES

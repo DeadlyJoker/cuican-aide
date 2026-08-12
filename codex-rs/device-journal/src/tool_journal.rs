@@ -67,7 +67,54 @@ pub struct ToolJournalPage {
     pub next_cursor: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolJournalAcknowledgement {
+    pub execution_id: String,
+    pub through_sequence: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolJournalAcknowledgementPage {
+    pub acknowledgements: Vec<ToolJournalAcknowledgement>,
+    pub next_cursor: Option<String>,
+}
+
 impl DeviceWorkspaceJournal {
+    pub async fn list_tool_acknowledgements(
+        &self,
+        query: &ToolJournalListQuery,
+    ) -> Result<ToolJournalAcknowledgementPage, DeviceJournalError> {
+        if query.limit == 0 || query.limit > crate::MAX_JOURNAL_PAGE_SIZE {
+            return Err(authority("device_tool_page_invalid"));
+        }
+        let after = query.after_execution_id.as_deref().unwrap_or("");
+        let mut tx = self.pool.begin().await?;
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT execution_id FROM tool_executions WHERE acknowledged_through > 0 AND execution_id > ? ORDER BY execution_id LIMIT ?",
+        )
+        .bind(after)
+        .bind(i64::from(query.limit) + 1)
+        .fetch_all(&mut *tx)
+        .await?;
+        let has_more = ids.len() > usize::from(query.limit);
+        let selected = &ids[..ids.len().min(usize::from(query.limit))];
+        let mut acknowledgements = Vec::with_capacity(selected.len());
+        for execution_id in selected {
+            let execution = load(&mut tx, execution_id)
+                .await?
+                .ok_or_else(|| authority("device_journal_authority_corrupt"))?;
+            acknowledgements.push(ToolJournalAcknowledgement {
+                execution_id: execution_id.clone(),
+                through_sequence: execution.acknowledged_through,
+            });
+        }
+        tx.commit().await?;
+        Ok(ToolJournalAcknowledgementPage {
+            next_cursor: has_more.then(|| selected.last().cloned()).flatten(),
+            acknowledgements,
+        })
+    }
+
     pub async fn get_tool(
         &self,
         execution_id: &str,

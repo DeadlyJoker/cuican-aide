@@ -12,7 +12,7 @@ use crewon_device_journal::PrepareToolOutcome;
 use crewon_device_journal::RecordToolTerminalOutcome;
 use crewon_device_journal::ToolJournalExecution;
 use crewon_device_journal::ToolJournalListQuery;
-use crewon_device_protocol::DEVICE_FILESYSTEM_READ_CAPABILITY;
+use crewon_device_protocol::DEVICE_RAW_FILESYSTEM_READ_CAPABILITY;
 use crewon_device_protocol::DeviceCompletedData;
 use crewon_device_protocol::DeviceExecutionAck;
 use crewon_device_protocol::DeviceExecutionCommand;
@@ -96,7 +96,7 @@ impl NativeToolExecutor for FilesystemReadToolExecutor<'_> {
         Self: 'a;
 
     fn advertised_capabilities(&self) -> &'static [&'static str] {
-        &[DEVICE_FILESYSTEM_READ_CAPABILITY]
+        &[DEVICE_RAW_FILESYSTEM_READ_CAPABILITY]
     }
 
     fn admit_metadata(
@@ -105,7 +105,7 @@ impl NativeToolExecutor for FilesystemReadToolExecutor<'_> {
         command_frame: &[u8],
         now: DateTime<Utc>,
     ) -> Result<(DeviceExecutionCommand, Self::Metadata), NativeDeviceAdmissionError> {
-        let verified = connection.verify_filesystem_read_command(command_frame, now)?;
+        let verified = connection.verify_raw_filesystem_read_command(command_frame, now)?;
         let command = connection.admit_filesystem_read_metadata(verified, now, self.registry)?;
         Ok((command.command.clone(), command))
     }

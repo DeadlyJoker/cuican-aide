@@ -1,6 +1,7 @@
 mod bootstrap;
 mod diagnostics;
 mod dispatch;
+mod projection;
 mod runtime;
 mod session;
 mod tls;

@@ -7,6 +7,8 @@ import {
 
 export const DEVICE_FILESYSTEM_READ_CAPABILITY =
   "workspace.read_file.v0" as const;
+export const DEVICE_RAW_FILESYSTEM_READ_CAPABILITY =
+  "workspace.read_file.raw_tool.v0" as const;
 export const DEVICE_FILESYSTEM_READ_MAX_BYTES = 64 * 1024;
 export const DEVICE_FILESYSTEM_READ_MAX_TIMEOUT_MS = 30_000;
 
@@ -20,6 +22,13 @@ export type DeviceFilesystemReadArguments = Readonly<{
 export type DeviceFilesystemReadCommand = DeviceExecutionCommand &
   Readonly<{
     capability: typeof DEVICE_FILESYSTEM_READ_CAPABILITY;
+    arguments: DeviceFilesystemReadArguments;
+    payloadRef: null;
+  }>;
+
+export type DeviceRawFilesystemReadCommand = DeviceExecutionCommand &
+  Readonly<{
+    capability: typeof DEVICE_RAW_FILESYSTEM_READ_CAPABILITY;
     arguments: DeviceFilesystemReadArguments;
     payloadRef: null;
   }>;
@@ -298,9 +307,30 @@ export function parseDeviceFilesystemReadResult(
 export function parseDeviceFilesystemReadCommand(
   input: unknown,
 ): DeviceFilesystemReadCommand {
+  return parseFilesystemReadCommandForCapability(
+    input,
+    DEVICE_FILESYSTEM_READ_CAPABILITY,
+  ) as DeviceFilesystemReadCommand;
+}
+
+export function parseDeviceRawFilesystemReadCommand(
+  input: unknown,
+): DeviceRawFilesystemReadCommand {
+  return parseFilesystemReadCommandForCapability(
+    input,
+    DEVICE_RAW_FILESYSTEM_READ_CAPABILITY,
+  ) as DeviceRawFilesystemReadCommand;
+}
+
+function parseFilesystemReadCommandForCapability(
+  input: unknown,
+  capability:
+    | typeof DEVICE_FILESYSTEM_READ_CAPABILITY
+    | typeof DEVICE_RAW_FILESYSTEM_READ_CAPABILITY,
+): DeviceExecutionCommand {
   const command = parseDeviceExecutionCommand(input);
   if (
-    command.capability !== DEVICE_FILESYSTEM_READ_CAPABILITY ||
+    command.capability !== capability ||
     command.payloadRef !== null ||
     command.authorization.approvalProof !== null ||
     command.limits.maxOutputBytes > DEVICE_FILESYSTEM_READ_MAX_BYTES ||
@@ -345,7 +375,7 @@ export function parseDeviceFilesystemReadCommand(
       throw new ContractValidationError("device_filesystem_read_path_invalid");
     }
   }
-  return structuredClone(command) as DeviceFilesystemReadCommand;
+  return structuredClone(command);
 }
 
 export function canonicalDeviceFilesystemReadCommandDigest(
